@@ -1,4 +1,4 @@
-"""Abstract base class for database-backed destination implementations."""
+"""Database-backed destinations: partitions are rows selected by a filter in a table."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import warnings
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
-from enum import Enum
-from typing import Any, ClassVar
+from dataclasses import dataclass
+from typing import Any
 
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
@@ -15,46 +15,45 @@ from interloper.errors import ConfigError
 from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition
-from interloper.representation import REPRESENTATIONS, Representation
+from interloper.representation import Representation
 from interloper.resource.fields import SelectField
 from interloper.utils.data import is_empty
 
 
-class WriteDisposition(str, Enum):
-    """How a write operation should behave relative to existing data.
+@dataclass(frozen=True)
+class PartitionFilter:
+    """The rows one partition covers: a column, and either a value or half-open bounds.
 
-    Members:
-        REPLACE: Delete existing rows (scoped to the active partition when
-            partitioned) before inserting new data.
-        APPEND: Insert new rows without touching existing data.
+    Exactly one of ``value`` and ``bounds`` is set. A backend renders it in its
+    dialect: ``column = value``, or ``column >= start AND column < end``.
+
+    Attributes:
+        column: The partition column.
+        value: The partition id the rows carry, for a partition matched by equality.
+        bounds: The ``(start, end)`` of a time partition, ``end`` excluded.
     """
 
-    REPLACE = "replace"
-    APPEND = "append"
+    column: str
+    value: Any = None
+    bounds: tuple[Any, Any] | None = None
 
 
 class DatabaseDestination(Destination):
-    """Abstract base class for database-backed destination implementations.
+    """A destination whose partitions are rows selected by a filter in a table.
 
-    Provides the partition-aware write/read dispatch logic that is common to any
-    database backend (SQL, NoSQL, data-warehouse, etc.).  Subclasses only need to
-    implement a small set of abstract hooks for the actual database operations.
+    A backend writes its SQL dialect and nothing else: :meth:`insert`,
+    :meth:`delete`, :meth:`select` and :meth:`count`, each receiving the
+    table and the dataset the asset resolves to and, where a partition is
+    involved, a :class:`PartitionFilter` the base has already resolved
+    (half-open bounds for a time partition, equality otherwise). The base
+    owns replacing: a partition's rows are deleted before its data is
+    inserted, a window in one batch. Reads come back in whatever
+    representation the backend holds natively; a consumer that wants records
+    asks :attr:`~interloper.asset.upstream.Upstream.records`.
 
-    The target table name and schema are derived from the asset at call time
-    (``asset.table`` -> table, ``asset.dataset`` -> schema) and passed as
-    parameters to every hook.  The destination instance itself holds **no** table
-    identity and can be safely shared across multiple assets.
-
-    Data converts to the universal ``list[dict]`` row format through its
-    registered :class:`~interloper.representation.Representation`.  Reads
-    materialize rows into the representation named by ``read_representation``
-    (``"rows"`` by default; e.g. ``"dataframe"`` for pandas-native backends).
+    The destination instance holds no table identity and is shared across
+    assets: ``asset.table`` and ``asset.dataset`` name the target at call time.
     """
-
-    # Backend traits, not instance configuration: class-level so they never
-    # appear in the destination's config schema (the UI form) or its specs.
-    write_disposition: ClassVar[WriteDisposition] = WriteDisposition.REPLACE
-    read_representation: ClassVar[str] = "rows"
 
     # Instance configuration: backends set a default via the @destination
     # decorator; users can override it per configured destination in the UI.
@@ -69,182 +68,80 @@ class DatabaseDestination(Destination):
         ),
     )
 
-    # -- Transaction hook ------------------------------------------------------
+    # -- Backend hooks ---------------------------------------------------------
+
+    @abstractmethod
+    def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
+        """Insert data in its native representation, creating the table if the backend must.
+
+        The one hook that receives the whole context: a table created on first
+        write takes its columns from ``context.schema``, its partitioning and
+        description from ``context.asset``. A row backend views the data as
+        records through ``Representation.of(data).to_records(data)``; a
+        columnar one loads it natively.
+
+        Args:
+            table: Target table name.
+            dataset: The dataset (database schema) holding the table, or ``None`` for the backend default.
+            data: The data to insert (rows, a DataFrame, ...).
+            context: IO context carrying the asset and the effective schema.
+        """
+
+    @abstractmethod
+    def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
+        """Delete the rows a filter selects, or every row.
+
+        Args:
+            table: Target table name.
+            dataset: The dataset (database schema) holding the table, or ``None`` for the backend default.
+            where: The rows to delete; ``None`` for the whole table.
+        """
+
+    @abstractmethod
+    def select(self, table: str, dataset: str | None, where: PartitionFilter | None) -> Any:
+        """Select the rows a filter selects, or every row, in the backend's native representation.
+
+        Args:
+            table: Target table name.
+            dataset: The dataset (database schema) holding the table, or ``None`` for the backend default.
+            where: The rows to select; ``None`` for the whole table.
+
+        Returns:
+            The rows, as whatever table type the backend produces natively.
+        """
+
+    @abstractmethod
+    def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
+        """Count rows grouped by the values of a column.
+
+        Args:
+            table: Target table name.
+            dataset: The dataset (database schema) holding the table, or ``None`` for the backend default.
+            column: The column to group by.
+
+        Returns:
+            Each distinct value, as a string, to its row count.
+        """
 
     @contextmanager
-    def _transaction(self) -> Iterator[None]:
-        """Context manager wrapping write operations.
+    def transaction(self) -> Iterator[None]:
+        """Wrap one write, a delete followed by an insert.
 
-        Override to provide transactional guarantees (e.g. SQL
-        ``BEGIN ... COMMIT``).  The default implementation is a no-op.
+        Override to make the pair atomic (``BEGIN ... COMMIT``); the default
+        does nothing.
+
+        Yields:
+            ``None``; the write runs inside the block.
         """
         yield
 
-    # -- Abstract database operations ------------------------------------------
-
-    @abstractmethod
-    def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
-        """Insert rows into the target table.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            rows: Rows to insert, each a column-name → value mapping.
-        """
-
-    @abstractmethod
-    def _delete_all(self, table: str, schema: str | None) -> None:
-        """Delete all rows from the target table.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-        """
-
-    @abstractmethod
-    def _delete_partition(self, table: str, schema: str | None, column: str, value: Any) -> None:
-        """Delete rows matching a single partition value.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Partition column to match on.
-            value: Partition value whose rows are deleted.
-        """
-
-    @abstractmethod
-    def _delete_partition_range(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        start: Any,
-        end: Any,
-    ) -> None:
-        """Delete rows whose *column* falls in ``[start, end)``.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Partition column to match on.
-            start: Inclusive lower bound of the range.
-            end: Exclusive upper bound of the range.
-        """
-
-    @abstractmethod
-    def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
-        """Select all rows from the target table.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-        """
-
-    @abstractmethod
-    def _select_partition(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        value: Any,
-    ) -> list[dict[str, Any]]:
-        """Select rows matching a single partition value.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Partition column to match on.
-            value: Partition value whose rows are selected.
-        """
-
-    @abstractmethod
-    def _select_partition_range(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        start: Any,
-        end: Any,
-    ) -> list[dict[str, Any]]:
-        """Select rows whose *column* falls in ``[start, end)``.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Partition column to match on.
-            start: Inclusive lower bound of the range.
-            end: Exclusive upper bound of the range.
-        """
-
-    # -- Introspection ---------------------------------------------------------
-
-    @abstractmethod
-    def _count_by_partition(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-    ) -> dict[str, int]:
-        """Return row counts grouped by the values of the given column.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Column to group the counts by.
-        """
-
-    def partition_row_counts(self, context: IOContext) -> dict[str, int]:
-        """Return row counts grouped by the asset's partition column.
-
-        Args:
-            context: IO context whose asset supplies the table, dataset, and
-                partition column.
-        """
-        return self._count_by_partition(
-            context.asset.table,
-            context.asset.dataset or None,
-            self._partition_column(context),
-        )
-
-    # -- Data conversion -------------------------------------------------------
-
-    def _from_rows(self, rows: list[dict[str, Any]]) -> Any:
-        """Materialize database rows into the configured read representation.
-
-        Args:
-            rows: Rows read from the database, each a column-name → value mapping.
-
-        Returns:
-            Data in the ``read_representation`` format.
-        """
-        return REPRESENTATIONS[self.read_representation].from_records(rows)
-
     # -- Destination interface -------------------------------------------------
 
-    def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
-        """Insert data in its native format.
-
-        The default implementation views the data as records through its
-        representation and delegates to :meth:`_insert`.  Columnar backends
-        can override this to
-        consume the data natively (e.g. a DataFrame straight into a Parquet
-        load job) and use ``context.schema`` for typed loads.
-
-        Args:
-            table: Target table name.
-            schema: Database schema.
-            data: The data in its native format (DataFrame, list[dict], ...).
-            context: IO context carrying the asset and effective schema.
-        """
-        rows = Representation.of(data).to_records(data)
-        if rows:
-            self._insert(table, schema, rows)
-
     def write(self, context: IOContext, data: Any) -> None:
-        """Write data to the database table, a window as one batch.
+        """Write data to the table, a window as one batch.
 
         Rows carry the partition column, so a database need not store per
-        partition: a window clears every partition it covers and inserts the
+        partition: a window deletes every partition it covers and inserts the
         whole batch once, instead of one :meth:`write_partition` per partition
         (one load job rather than one per day). A single partition, or the
         whole, is one :meth:`write_partition`. The write-time schema strategy
@@ -262,43 +159,104 @@ class DatabaseDestination(Destination):
         if not context.window:
             self.write_partition(context, context.partitions[0], data)
             return
-        table, schema = context.asset.table, context.asset.dataset or None
-        with self._transaction():
-            self._clear(table, schema, context, context.partitions)
-            self._insert_data(table, schema, data, context)
+        table, dataset = self._target(context)
+        with self.transaction():
+            for partition in context.partitions:
+                self.delete(table, dataset, self._filter(context, partition))
+            self.insert(table, dataset, data, context)
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Replace one partition's rows: clear it, then insert the data.
-
-        With ``REPLACE`` the partition's rows are deleted first; with ``APPEND``
-        the data is inserted on top of whatever is there.
+        """Replace one partition's rows: delete them, then insert the data.
 
         Args:
             context: IO context carrying the target asset and the effective schema.
             partition: The partition being stored, or ``None`` for the whole table.
             data: The data to store, in its native representation.
         """
-        table, schema = context.asset.table, context.asset.dataset or None
-        with self._transaction():
-            self._clear(table, schema, context, [partition])
-            self._insert_data(table, schema, data, context)
+        table, dataset = self._target(context)
+        with self.transaction():
+            self.delete(table, dataset, self._filter(context, partition))
+            self.insert(table, dataset, data, context)
 
-    def _clear(self, table: str, schema: str | None, context: IOContext, partitions: list[Partition | None]) -> None:
-        """Delete the rows of the given partitions when the write disposition replaces.
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Load one partition from the table.
 
         Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            context: IO context whose asset supplies the partition column.
-            partitions: The partitions to clear; ``None`` clears the whole table.
+            context: IO context whose asset supplies the table, dataset, and
+                partition column.
+            partition: The partition to load, or ``None`` for the whole table.
+
+        Returns:
+            The partition's rows, in the backend's native representation.
         """
-        if self.write_disposition is not WriteDisposition.REPLACE:
-            return
-        for partition in partitions:
-            if partition is None:
-                self._delete_all(table, schema)
-            else:
-                self._clear_partition(table, schema, self._partition_column(context), partition)
+        table, dataset = self._target(context)
+        return self.select(table, dataset, self._filter(context, partition))
+
+    def partition_row_counts(self, context: IOContext) -> dict[str, int]:
+        """Return row counts grouped by the asset's partition column.
+
+        Args:
+            context: IO context whose asset supplies the table, dataset, and
+                partition column.
+
+        Returns:
+            Each partition value, as a string, to its row count.
+        """
+        table, dataset = self._target(context)
+        return self.count(table, dataset, self._partition_column(context))
+
+    # -- Internals -------------------------------------------------------------
+
+    @staticmethod
+    def _target(context: IOContext) -> tuple[str, str | None]:
+        """The table and dataset the context's asset resolves to.
+
+        Args:
+            context: IO context carrying the asset.
+
+        Returns:
+            The table name and the dataset, ``None`` when the asset has none.
+        """
+        return context.asset.table, context.asset.dataset or None
+
+    @staticmethod
+    def _partition_column(context: IOContext) -> str:
+        """The asset's partition column, which a partitioned write or read guarantees exists.
+
+        Args:
+            context: IO context whose asset is partitioned.
+
+        Returns:
+            The partition column name.
+
+        Raises:
+            ConfigError: If the asset declares no partitioning.
+        """
+        if context.asset.partitioning is None:
+            raise ConfigError(f"Asset '{context.asset.key}' is not partitioned")
+        return context.asset.partitioning.column
+
+    def _filter(self, context: IOContext, partition: Partition | None) -> PartitionFilter | None:
+        """The rows one partition covers, resolved for a backend.
+
+        A time partition's rows may carry values anywhere inside its period
+        (a monthly partition whose rows hold daily dates), so equality on the
+        period start would miss them; its filter is the half-open bounds.
+        Any other partition matches its id.
+
+        Args:
+            context: IO context whose asset supplies the partition column.
+            partition: The partition, or ``None`` for the whole table.
+
+        Returns:
+            The filter, or ``None`` for the whole table.
+        """
+        if partition is None:
+            return None
+        column = self._partition_column(context)
+        if isinstance(partition, TimePartition):
+            return PartitionFilter(column, bounds=partition.bounds)
+        return PartitionFilter(column, value=partition.id)
 
     def _warn_missing_partition_column(self, data: Any, context: IOContext) -> None:
         """Warn when partitioned data lacks its partition column, since reads by partition would find nothing.
@@ -320,33 +278,16 @@ class DatabaseDestination(Destination):
                 stacklevel=3,
             )
 
-    @staticmethod
-    def _partition_column(context: IOContext) -> str:
-        """The asset's partition column, which a partitioned write or read guarantees exists.
-
-        Args:
-            context: IO context whose asset is partitioned.
-
-        Returns:
-            The partition column name.
-
-        Raises:
-            ConfigError: If the asset declares no partitioning.
-        """
-        if context.asset.partitioning is None:
-            raise ConfigError(f"Asset '{context.asset.key}' is not partitioned")
-        return context.asset.partitioning.column
-
     def _apply_materialization_strategy(self, data: Any, context: IOContext) -> Any:
         """Enforce this backend's write-time schema strategy.
 
         A backend declares how strictly its physical types demand
         schema-shaped data: ``AUTO`` trusts the conformed data as-is,
         ``STRICT`` validates it against the effective schema (failing
-        loudly), and ``RECONCILE`` aligns columns and coerces values — for
+        loudly), and ``RECONCILE`` aligns columns and coerces values, for
         backends whose typed load path rejects representations that lax
-        validation lets through (e.g. ISO date strings against a DATE
-        column). No-op when no effective schema was resolved.
+        validation lets through (ISO date strings against a DATE column, say).
+        No-op when no effective schema was resolved.
 
         Args:
             data: The data about to be written, in its native representation.
@@ -364,43 +305,3 @@ class DatabaseDestination(Destination):
             return conformer.reconcile(data, context.schema)
         conformer.validate(data, context.schema, strict=True)
         return data
-
-    def _clear_partition(self, table: str, schema: str | None, column: str, partition: Partition) -> None:
-        """Delete one partition's rows: by bounds for a time partition, by id otherwise.
-
-        A time partition's rows may carry values anywhere inside the period
-        (a monthly partition whose rows hold daily dates), so equality on the
-        period start would miss them; the half-open bounds cannot.
-
-        Args:
-            table: Target table name.
-            schema: Database schema holding the table, or ``None`` for the backend default.
-            column: Partition column to match on.
-            partition: The partition whose rows are deleted.
-        """
-        if isinstance(partition, TimePartition):
-            start, end = partition.bounds
-            self._delete_partition_range(table, schema, column, start, end)
-        else:
-            self._delete_partition(table, schema, column, partition.id)
-
-    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
-        """Load one partition from the database table.
-
-        Args:
-            context: IO context whose asset supplies the table, dataset, and
-                partition column.
-            partition: The partition to load, or ``None`` for the whole table.
-
-        Returns:
-            The partition's rows, materialized into the read representation.
-        """
-        table = context.asset.table
-        schema = context.asset.dataset or None
-        if partition is None:
-            return self._from_rows(self._select_all(table, schema))
-        column = self._partition_column(context)
-        if isinstance(partition, TimePartition):
-            start, end = partition.bounds
-            return self._from_rows(self._select_partition_range(table, schema, column, start, end))
-        return self._from_rows(self._select_partition(table, schema, column, partition.id))

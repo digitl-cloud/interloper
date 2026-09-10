@@ -9,7 +9,6 @@ import uuid
 from typing import Any
 
 import interloper as il
-from interloper.representation import Representation
 
 from interloper_assets.campaign_matcher import schemas
 
@@ -99,7 +98,7 @@ class CampaignMatcher(il.Source):
                 context.logger.warning(f"No data for upstream '{leg.asset.qualified_key}' in this partition; skipped")
                 continue
             source = leg.asset.source
-            for row in Representation.of(leg.data).to_records(leg.data):
+            for row in leg.records:
                 name = _first(row, "campaign_name", "name", "campaign")
                 rows.append(
                     {

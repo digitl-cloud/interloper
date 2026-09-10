@@ -100,10 +100,10 @@ class TestOverrideChannel:
     def test_a_decorated_subclass_widens_what_is_accepted(self):
         # A decorated subclass may carry fields and ClassVars the anchor never
         # declares, so it is the class the routing introspects.
-        classvars, fields = _route(DatabaseDestination, {"read_representation": "dataframe"})
+        classvars, fields = _route(DatabaseDestination, {"materialization_strategy": "reconcile"})
 
-        assert classvars == {"read_representation": "dataframe"}
-        assert fields == {}
+        assert classvars == {}
+        assert fields == {"materialization_strategy": "reconcile"}
 
 
 class TestRelationChannel:

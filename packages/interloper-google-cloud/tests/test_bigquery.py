@@ -10,6 +10,7 @@ import interloper as il
 import pytest
 from google.cloud import bigquery
 from interloper.destination import IOContext
+from interloper.destination.database import PartitionFilter
 from interloper.errors import ConfigError
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -166,7 +167,7 @@ class TestInsert:
             {"campaign_id": 456, "cost": 1.5, "clicks": float("nan")},
         ]
 
-        dest._insert("tbl", "ds", rows)
+        dest._load_rows("ds.tbl", rows, None)
 
         sent_rows = mock_client.load_table_from_json.call_args.args[0]
         assert sent_rows == [
@@ -346,7 +347,7 @@ class TestInsertData:
         dest, mock_client = _make_destination(dataset="ds")
         df = pd.DataFrame([{"id": 1, "cost": np.nan, "day": datetime.date(2024, 1, 1)}])
 
-        dest._insert_data("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+        dest.insert("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
 
         call = mock_client.load_table_from_dataframe.call_args
         sent_df, ref = call.args
@@ -361,7 +362,7 @@ class TestInsertData:
         df = pd.DataFrame([{"id": 1, "cost": 1.0, "day": datetime.date(2024, 1, 1), "extra": "x"}])
 
         with pytest.warns(UserWarning, match="not in the schema"):
-            dest._insert_data("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
+            dest.insert("tbl", "ds", df, _ctx(_plain_asset(), _RowSchema))
 
         sent_df = mock_client.load_table_from_dataframe.call_args.args[0]
         assert "extra" not in sent_df.columns
@@ -372,7 +373,7 @@ class TestInsertData:
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
 
         created = mock_client.create_table.call_args.args[0]
         assert [f.name for f in created.schema] == ["id", "cost", "day"]
@@ -383,7 +384,7 @@ class TestInsertData:
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
 
-        dest._insert_data("tbl", "ds", [{"a": None}, {"a": 2}], _ctx(_plain_asset(), None))
+        dest.insert("tbl", "ds", [{"a": None}, {"a": 2}], _ctx(_plain_asset(), None))
 
         created = mock_client.create_table.call_args.args[0]
         assert [(f.name, f.field_type) for f in created.schema] == [("a", "INTEGER")]
@@ -395,7 +396,7 @@ class TestInsertData:
         mock_client.get_table.side_effect = NotFound("nope")
         mock_client.create_table.side_effect = Conflict("Already Exists: Table ds.tbl")
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 2.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 2.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
 
         assert mock_client.create_table.called
         assert mock_client.load_table_from_json.call_args.args[0] == [{"id": 1, "cost": 2.0, "day": None}]
@@ -407,14 +408,14 @@ class TestInsertData:
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
 
-        dest._insert_data("tbl", "ds", pd.DataFrame([{"a": 1}]), _ctx(_plain_asset(), None))
+        dest.insert("tbl", "ds", pd.DataFrame([{"a": 1}]), _ctx(_plain_asset(), None))
 
         assert not mock_client.create_table.called
         assert mock_client.load_table_from_dataframe.called
 
     def test_rows_load_carries_schema(self):
         dest, mock_client = _make_destination(dataset="ds")
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": float("nan"), "day": None}], _ctx(_plain_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": float("nan"), "day": None}], _ctx(_plain_asset(), _RowSchema))
 
         call = mock_client.load_table_from_json.call_args
         assert call.args[0] == [{"id": 1, "cost": None, "day": None}]  # NaN sanitized
@@ -491,7 +492,7 @@ class TestCreateTableMetadata:
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
 
         created = mock_client.create_table.call_args.args[0]
         assert created.time_partitioning is not None
@@ -506,7 +507,7 @@ class TestCreateTableMetadata:
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
 
         created = mock_client.create_table.call_args.args[0]
         assert created.time_partitioning is None
@@ -519,7 +520,7 @@ class TestCreateTableMetadata:
         mock_client.get_table.side_effect = NotFound("nope")
 
         rows = [{"id": 1, "day": datetime.date(2024, 1, 1)}]
-        dest._insert_data("tbl", "ds", rows, _ctx(_partitioned_asset(), None))
+        dest.insert("tbl", "ds", rows, _ctx(_partitioned_asset(), None))
 
         created = mock_client.create_table.call_args.args[0]
         assert created.time_partitioning is not None
@@ -533,7 +534,7 @@ class TestCreateTableMetadata:
         mock_client.get_table.side_effect = NotFound("nope")
 
         df = pd.DataFrame([{"id": 1, "day": datetime.date(2024, 1, 1)}])
-        dest._insert_data("tbl", "ds", df, _ctx(_partitioned_asset(), None))
+        dest.insert("tbl", "ds", df, _ctx(_partitioned_asset(), None))
 
         assert not mock_client.create_table.called
         job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
@@ -546,7 +547,7 @@ class TestCreateTableMetadata:
         dest, mock_client = _make_destination(dataset="ds")
 
         df = pd.DataFrame([{"id": 1, "day": datetime.date(2024, 1, 1)}])
-        dest._insert_data("tbl", "ds", df, _ctx(_partitioned_asset(), None))
+        dest.insert("tbl", "ds", df, _ctx(_partitioned_asset(), None))
 
         job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
         assert job_config.time_partitioning is None
@@ -599,7 +600,7 @@ class TestMergeFieldDescriptions:
             bigquery.SchemaField("day", "DATE", mode="NULLABLE"),
         ]
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
 
         table, update_fields = mock_client.update_table.call_args.args
         assert set(update_fields) == {"schema", "description"}
@@ -616,7 +617,7 @@ class TestMergeFieldDescriptions:
         ]
         existing.description = "Daily rows."
 
-        dest._insert_data("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
+        dest.insert("tbl", "ds", [{"id": 1, "cost": 1.0, "day": None}], _ctx(_partitioned_asset(), _RowSchema))
 
         assert not mock_client.update_table.called
 
@@ -656,42 +657,64 @@ class TestPartitionParam:
         assert param.type_ == "TIMESTAMP"
         assert param.value == dt.datetime(2024, 2, 1)  # noqa: DTZ001
 
-    def test_delete_partition_range_builds_a_half_open_predicate(self):
+    def test_a_bounds_filter_deletes_by_a_half_open_predicate(self):
         import datetime as dt
 
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
-
-        dest._delete_partition_range("tbl", "ds", "day", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
-
+        dest.delete("tbl", "ds", PartitionFilter("day", bounds=(dt.date(2024, 2, 1), dt.date(2024, 3, 1))))
         query = mock_client.query.call_args.args[0]
+        assert query.startswith("DELETE FROM")
         assert ">= @partition_start" in query
         assert "< @partition_end" in query
         params = mock_client.query.call_args.kwargs["job_config"].query_parameters
         assert [p.name for p in params] == ["partition_start", "partition_end"]
 
-    def test_delete_partition_uses_column_type(self):
+    def test_a_value_filter_deletes_by_equality_typed_from_the_column(self):
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
-
-        dest._delete_partition("tbl", "ds", "day", "2024-01-01")
-
+        dest.delete("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
+        assert "= @partition_value" in mock_client.query.call_args.args[0]
         job_config = mock_client.query.call_args.kwargs["job_config"]
         assert job_config.query_parameters[0].type_ == "DATE"
 
-    def test_select_partition_uses_column_type(self):
+    def test_no_filter_truncates_the_table(self):
+        dest, mock_client = _make_destination(dataset="ds")
+        dest.delete("tbl", "ds", None)
+        assert mock_client.query.call_args.args[0].startswith("TRUNCATE TABLE")
+
+    def test_a_missing_table_has_nothing_to_delete(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        dest.delete("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
+        assert not mock_client.query.called
+
+    def test_select_returns_the_clients_dataframe_natively(self):
+        import pandas as pd
+
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "TIMESTAMP")]
-        mock_client.query.return_value.result.return_value = []
-
-        dest._select_partition("tbl", "ds", "day", "2024-01-01")
-
+        frame = pd.DataFrame([{"day": "2024-01-01"}])
+        mock_client.query.return_value.result.return_value.to_dataframe.return_value = frame
+        result = dest.select("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
+        assert result is frame
         job_config = mock_client.query.call_args.kwargs["job_config"]
         param = job_config.query_parameters[0]
         assert param.type_ == "TIMESTAMP"
         # Date-only strings are coerced to datetime for client serialization
         # (which normalizes them to UTC).
         assert param.value == datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+
+    def test_select_on_a_missing_table_is_data_not_found(self):
+        from google.cloud.exceptions import NotFound
+        from interloper.errors import DataNotFoundError
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        with pytest.raises(DataNotFoundError, match="Has the asset been materialized"):
+            dest.select("tbl", "ds", None)
 
 
 class TestDefinition:

@@ -57,19 +57,19 @@ Reference: https://docs.interloper.dev/guide/destinations/
    Reconcile on read against `context.schema`: destinations store strings, dependent assets
    expect the schema's types.
 
-2. **Databases**: `from interloper.destination.database import DatabaseDestination,
-   WriteDisposition` (not exported on `il`). Implement the eight hooks: `_insert`,
-   `_delete_all`, `_delete_partition`, `_delete_partition_range`, `_select_all`,
-   `_select_partition`, `_select_partition_range`, `_count_by_partition`, each taking
-   `(table, schema, ...)` where `schema` is the dataset name (possibly `None`), not the
-   `il.Schema` class that `IOContext.schema` carries. Time partitions only exercise the
-   `_range` hooks. Every hook must tolerate a table that does not exist yet, since `write`
-   skips empty data and a read or delete can come first; `_transaction()` on the base wraps
-   delete-then-insert. Ranges are half-open
-   `[start, end)` with `dt.date` bounds; store dates so the comparison works (ISO text sorts
-   lexically). The default `WriteDisposition.REPLACE` deletes the range before inserting, so a
-   rewrite never duplicates. The base read does not restore types: override `read_partition` to
-   call `context.schema.reconcile(rows)` when a schema is present.
+2. **Databases**: `from interloper.destination import DatabaseDestination, PartitionFilter` (not
+   exported on `il`). Implement four hooks, each starting with `(table, dataset, ...)`:
+   `insert(table, dataset, data, context)` (view the data as rows with
+   `Representation.of(data).to_records(data)`, or load it natively; `context.schema` and
+   `context.asset.partitioning` are what a table created on first write is shaped from),
+   `delete(table, dataset, where)`, `select(table, dataset, where)` and `count(table, dataset,
+   column)`. `where` is `None` for the whole table or a `PartitionFilter`: render `where.value` as
+   `column = value`, `where.bounds` as `column >= start AND column < end` (half-open, `dt.date`
+   bounds; store dates so the comparison works). Every hook must tolerate a table that does not
+   exist yet, since `write` skips empty data and a read or delete can come first; override
+   `transaction()` to make delete-then-insert atomic. The base always deletes a partition before
+   inserting it, so a rewrite never duplicates. `select` returns whatever your client produces
+   natively (a DataFrame, an Arrow table, rows); consumers that want rows read `leg.records`.
 
 3. **Verify** with a two-asset daily source:
 
@@ -98,7 +98,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
 |------|-----|
 | Fields of `IOContext` | `asset`, `partition_or_window`, `metadata`, `schema` |
 | Rows from a DataFrame or list | `Representation.of(data).to_records(data)` |
-| Append instead of replace | `write_disposition: WriteDisposition = WriteDisposition.APPEND` on the database destination |
+| Rows the consumer can iterate whatever the destination | `leg.records` on an `il.Upstream` |
 | Credentials for the sink | a connection relation: `connection: MyConnection` on the class body, or `relations={"connection": il.Relation(MyConnection)}` on the decorator |
 | Cached client on the instance | private attribute `_client: Client | None = None`, plain assignment works |
 | Built-ins to imitate | `il.CSVDestination` (partitioned files), `il.FileDestination` (same layout, pickled objects), `il.MemoryDestination` |

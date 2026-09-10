@@ -146,34 +146,32 @@ a window clears every partition it covers and inserts the whole batch once.
 
 ### Database destinations
 
-`DatabaseDestination` (imported from `interloper.destination`, together with
-`WriteDisposition`) targets stores addressed by table and schema. Its `write_partition` clears one
-partition and inserts; its `write` batches a window into one insert. Reads and writes reduce to a
-small set of row operations:
+`DatabaseDestination` (imported from `interloper.destination`, together with `PartitionFilter`)
+is a destination whose partitions are rows selected by a filter in a table. A backend writes its
+SQL dialect and nothing else, in four hooks that all start with the table and the dataset the
+asset resolves to:
 
 | Hook | Called for |
 |------|-----------|
-| `_insert(table, schema, rows)` | writing records |
-| `_delete_all(table, schema)` | replacing an unpartitioned asset |
-| `_delete_partition(table, schema, column, value)` | replacing a non-time partition |
-| `_delete_partition_range(table, schema, column, start, end)` | replacing a time partition, by half-open bounds |
-| `_select_all(table, schema)` | reading an unpartitioned asset |
-| `_select_partition(table, schema, column, value)` | reading a non-time partition |
-| `_select_partition_range(table, schema, column, start, end)` | reading a time partition |
-| `_count_by_partition(table, schema, column)` | `partition_row_counts` |
+| `insert(table, dataset, data, context)` | writing; the data arrives in its native representation, `Representation.of(data).to_records(data)` views it as rows. The one hook that gets the whole context, since a table created on first write takes its columns from `context.schema` and its partitioning and description from `context.asset` |
+| `delete(table, dataset, where)` | replacing; `where` is a `PartitionFilter` or `None` for the whole table |
+| `select(table, dataset, where)` | reading; returns whatever table type the backend produces natively |
+| `count(table, dataset, column)` | `partition_row_counts`; rows grouped by the column's values |
 
-Optional overrides: `_transaction()` (a context manager around each write, a no-op by
-default), and `_insert_data(table, schema, data, context)` for backends that load a native
-representation directly (a DataFrame into a Parquet load job) using `context.schema`.
+A `PartitionFilter` is a column and either a `value` (a partition matched by its id) or half-open
+`bounds` (a time partition, whose rows may carry any date inside the period). The base resolves
+it from the partition, so a backend only renders `column = value` or
+`column >= start AND column < end` in its dialect. `transaction()` is an optional context
+manager around each delete-then-insert, a no-op by default.
 
 Behaviour the base class owns:
 
-- **Write disposition**: `write_disposition = WriteDisposition.REPLACE` (default) deletes the
-  matching partition before inserting; `APPEND` never deletes. A class attribute, not a field.
+- **Replacing**: a partition's rows are deleted before its data is inserted; a window deletes
+  every partition it covers and inserts the batch once.
 - **Time partitions are scoped by bounds**, not by equality, because rows of a monthly partition
   carry daily dates.
-- **Read representation**: rows are materialized into the representation named by
-  `read_representation` (`"rows"` by default; `"dataframe"` for pandas-native backends).
+- **Reads are native**: `read` hands back what `select` returned, a DataFrame from BigQuery, rows
+  from a row store. A consumer indifferent to the destination reads `il.Upstream.records`.
 - **Write-time strategy**: the `materialization_strategy` field lets a backend demand
   schema-shaped data: `STRICT` validates against the effective schema before writing,
   `RECONCILE` coerces, `AUTO` trusts the conformed data. It is set as a default via the decorator

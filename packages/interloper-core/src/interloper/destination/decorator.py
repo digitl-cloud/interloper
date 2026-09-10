@@ -67,7 +67,7 @@ def destination(
             and field defaults the decorated class declares, or
             :class:`~interloper.destination.base.Destination` itself for a
             plain class (``key``, ``name``, ``icon``, ``tags``, and
-            ``read_representation`` / ``materialization_strategy`` on a
+            ``materialization_strategy`` on a
             :class:`~interloper.destination.database.DatabaseDestination`);
             see the class. An unknown name is a ``TypeError`` at decoration.
 

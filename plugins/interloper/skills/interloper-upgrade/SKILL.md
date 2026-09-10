@@ -84,6 +84,10 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | spec `upstreams: {orders: [id]}` | `orders: {ref: id}`, a list for a `many` relation |
    | `DependencyNotFoundError` | `ConfigError` from `validate_relations` |
    | `class X(il.PartitionedDestination)` with `_write_scope` / `_read_scope` | `class X(il.Destination)` with `write_partition` / `read_partition`; the partition dispatch is the base class's |
+   | `DatabaseDestination` hooks `_insert`, `_delete_all`, `_delete_partition`, `_delete_partition_range`, `_select_all`, `_select_partition`, `_select_partition_range`, `_count_by_partition`, `_transaction` | public `insert(table, dataset, data, context)`, `delete(table, dataset, where)`, `select(table, dataset, where)`, `count(table, dataset, column)`, `transaction()`; `where: PartitionFilter | None` (`.value` or half-open `.bounds`); the second positional is the dataset, `schema` now only ever means an `il.Schema` |
+   | `write_disposition = WriteDisposition.APPEND` | gone: a partition is always deleted before its data is inserted |
+   | `read_representation = "dataframe"` / `@destination(read_representation=...)` | gone: `_select` returns the backend's native type; consumers read `leg.records` |
+   | `Representation.of(leg.data).to_records(leg.data)` in an asset | `leg.records` |
 
    A relation left unbound is resolved when it is read: an explicit `default=`, else the target
    class built from the environment. So a connection that used to resolve through the cascade
