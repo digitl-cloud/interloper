@@ -260,7 +260,7 @@ class BigQueryDestination(DatabaseDestination):
                 tp = _time_partitioning(partitioning, bq_schema)
                 self._create_table(table, dataset, bq_schema, time_partitioning=tp, description=description)
             elif not isinstance(data, pd.DataFrame):
-                rows = Representation.of(data).to_records(data)
+                rows = Representation.of(data).records
                 if not rows:
                     return
                 inferred = _infer_bq_schema(rows)
@@ -276,7 +276,7 @@ class BigQueryDestination(DatabaseDestination):
             tp = _time_partitioning(partitioning, bq_schema) if creating and bq_schema is None else None
             self._load_dataframe(ref, data, bq_schema, time_partitioning=tp)
         else:
-            rows = Representation.of(data).to_records(data)
+            rows = Representation.of(data).records
             if rows:
                 self._load_rows(ref, rows, bq_schema)
 

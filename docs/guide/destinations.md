@@ -153,7 +153,7 @@ asset resolves to:
 
 | Hook | Called for |
 |------|-----------|
-| `insert(table, dataset, data, context)` | writing; the data arrives in its native representation, `Representation.of(data).to_records(data)` views it as rows. The one hook that gets the whole context, since a table created on first write takes its columns from `context.schema` and its partitioning and description from `context.asset` |
+| `insert(table, dataset, data, context)` | writing; the data arrives in its native representation; `Representation.of(data).records` views it as rows and `.to("dataframe")` converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from `context.schema` and its partitioning and description from `context.asset` |
 | `delete(table, dataset, where)` | replacing; `where` is a `PartitionFilter` or `None` for the whole table |
 | `select(table, dataset, where)` | reading; returns whatever table type the backend produces natively |
 | `count(table, dataset, column)` | `partition_row_counts`; rows grouped by the column's values |

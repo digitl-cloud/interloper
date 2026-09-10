@@ -3,7 +3,7 @@
 import pytest
 
 from interloper.errors import NormalizerError
-from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation
+from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation, View
 
 
 class TestRegistry:
@@ -27,17 +27,66 @@ class TestRegistry:
 
 
 class TestResolution:
-    """Representation.of resolves from the data itself."""
+    """Representation.of resolves from the data itself and binds to it."""
 
     def test_lists_resolve_to_rows(self):
-        assert isinstance(Representation.of([{"a": 1}]), RowsRepresentation)
+        view = Representation.of([{"a": 1}])
+        assert isinstance(view, View)
+        assert isinstance(view.representation, RowsRepresentation)
+        assert view.key == "rows"
 
     def test_unmatched_data_falls_back_to_rows(self):
-        assert isinstance(Representation.of("anything"), RowsRepresentation)
+        assert isinstance(Representation.of("anything").representation, RowsRepresentation)
 
     def test_dataframes_resolve_to_the_pandas_representation(self):
         pd = pytest.importorskip("pandas")
         assert Representation.of(pd.DataFrame()).key == "dataframe"
+
+
+class TestView:
+    """The bound view delegates to its representation with the data applied."""
+
+    def test_records(self):
+        assert Representation.of([{"a": 1}]).records == [{"a": 1}]
+        assert Representation.of({"a": 1}).records == [{"a": 1}]
+
+    def test_columns(self):
+        assert Representation.of([{"a": 1, "b": 2}]).columns == ["a", "b"]
+
+    def test_conformer(self):
+        assert Representation.of([{"a": 1}]).conformer is RowsRepresentation().conformer
+
+    def test_filters(self):
+        rows = [{"day": "2024-01-01", "n": 1}, {"day": "2024-01-02", "n": 2}]
+        view = Representation.of(rows)
+        assert view.filter_eq("day", "2024-01-02") == [rows[1]]
+        assert view.filter_range("day", "2024-01-01", "2024-01-02") == [rows[0]]
+
+    def test_to_the_same_representation_returns_the_data_itself(self):
+        rows = [{"a": 1}]
+        assert Representation.of(rows).to("rows") is rows
+
+    def test_to_rows_coerces_data_the_rows_representation_only_falls_back_to(self):
+        assert Representation.of({"a": 1}).to("rows") == [{"a": 1}]
+
+    def test_to_dataframe_builds_from_records(self):
+        pd = pytest.importorskip("pandas")
+        frame = Representation.of([{"a": 1}, {"a": 2}]).to("dataframe")
+        pd.testing.assert_frame_equal(frame, pd.DataFrame({"a": [1, 2]}))
+
+    def test_a_dataframe_to_dataframe_is_the_same_object(self):
+        pd = pytest.importorskip("pandas")
+        frame = pd.DataFrame({"a": [1]})
+        assert Representation.of(frame).to("dataframe") is frame
+
+    def test_a_dataframe_to_rows_goes_through_records(self):
+        pd = pytest.importorskip("pandas")
+        frame = pd.DataFrame({"a": [1.0, float("nan")]})
+        assert Representation.of(frame).to("rows") == [{"a": 1.0}, {"a": None}]
+
+    def test_unknown_target_names_the_registry(self):
+        with pytest.raises(KeyError, match="'polars' is not registered"):
+            Representation.of([{"a": 1}]).to("polars")
 
 
 class TestRowsRepresentation:

@@ -38,7 +38,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
            return base / f"{context.asset.partitioning.column}={partition.id}" / "data.jsonl"
 
        def write_partition(self, context, partition, data) -> None:
-           rows = Representation.of(data).to_records(data)          # list[dict] from any representation
+           rows = Representation.of(data).records                   # list[dict] from any representation
            path = self._path(context, partition)
            path.parent.mkdir(parents=True, exist_ok=True)
            path.write_text("".join(json.dumps(row, default=str) + "\n" for row in rows))
@@ -60,7 +60,8 @@ Reference: https://docs.interloper.dev/guide/destinations/
 2. **Databases**: `from interloper.destination import DatabaseDestination, PartitionFilter` (not
    exported on `il`). Implement four hooks, each starting with `(table, dataset, ...)`:
    `insert(table, dataset, data, context)` (view the data as rows with
-   `Representation.of(data).to_records(data)`, or load it natively; `context.schema` and
+   `Representation.of(data).records`, or convert it for a native load with
+   `Representation.of(data).to("dataframe")`; `context.schema` and
    `context.asset.partitioning` are what a table created on first write is shaped from),
    `delete(table, dataset, where)`, `select(table, dataset, where)` and `count(table, dataset,
    column)`. `where` is `None` for the whole table or a `PartitionFilter`: render `where.value` as
@@ -97,7 +98,8 @@ Reference: https://docs.interloper.dev/guide/destinations/
 | Need | Use |
 |------|-----|
 | Fields of `IOContext` | `asset`, `partition_or_window`, `metadata`, `schema` |
-| Rows from a DataFrame or list | `Representation.of(data).to_records(data)` |
+| Rows from a DataFrame or list | `Representation.of(data).records` |
+| A DataFrame from rows or a DataFrame | `Representation.of(data).to("dataframe")` |
 | Rows the consumer can iterate whatever the destination | `leg.records` on an `il.Upstream` |
 | Credentials for the sink | a connection relation: `connection: MyConnection` on the class body, or `relations={"connection": il.Relation(MyConnection)}` on the decorator |
 | Cached client on the instance | private attribute `_client: Client | None = None`, plain assignment works |

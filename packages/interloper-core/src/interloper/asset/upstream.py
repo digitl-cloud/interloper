@@ -45,4 +45,4 @@ class Upstream:
         """
         if self.data is None:
             return []
-        return Representation.of(self.data).to_records(self.data)
+        return Representation.of(self.data).records

@@ -88,6 +88,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | `write_disposition = WriteDisposition.APPEND` | gone: a partition is always deleted before its data is inserted |
    | `read_representation = "dataframe"` / `@destination(read_representation=...)` | gone: `_select` returns the backend's native type; consumers read `leg.records` |
    | `Representation.of(leg.data).to_records(leg.data)` in an asset | `leg.records` |
+   | `Representation.of(data).to_records(data)` / `.columns(data)` / `.filter_eq(data, column, value)` | `Representation.of(data)` is a bound `View`: `.records`, `.columns`, `.filter_eq(column, value)`, and `.to("dataframe")` to convert |
 
    A relation left unbound is resolved when it is read: an explicit `default=`, else the target
    class built from the environment. So a connection that used to resolve through the cascade

@@ -77,8 +77,9 @@ class DatabaseDestination(Destination):
         The one hook that receives the whole context: a table created on first
         write takes its columns from ``context.schema``, its partitioning and
         description from ``context.asset``. A row backend views the data as
-        records through ``Representation.of(data).to_records(data)``; a
-        columnar one loads it natively.
+        records through ``Representation.of(data).records``; a columnar one
+        converts with ``Representation.of(data).to("dataframe")`` and loads
+        natively.
 
         Args:
             table: Target table name.
@@ -268,7 +269,7 @@ class DatabaseDestination(Destination):
         if context.partition_or_window is None or context.asset.partitioning is None:
             return
         column = context.asset.partitioning.column
-        columns = Representation.of(data).columns(data)
+        columns = Representation.of(data).columns
         if columns and column not in columns:
             warnings.warn(
                 f"Partition column '{column}' not found in data for asset "

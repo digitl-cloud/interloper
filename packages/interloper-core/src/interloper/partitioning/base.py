@@ -47,10 +47,10 @@ class Partition(ABC):
         """
         from interloper.representation import Representation
 
-        representation = Representation.of(data)
-        if not representation.matches(data):
+        view = Representation.of(data)
+        if not view.representation.matches(data):
             return data
-        return representation.filter_eq(data, column, self.id)
+        return view.filter_eq(column, self.id)
 
 
 @dataclass(frozen=True)
