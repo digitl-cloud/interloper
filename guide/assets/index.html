@@ -2137,10 +2137,12 @@ functions are awaited on the event loop. Either way the engine never blocks:</p>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">connection</span><span class="o">.</span><span class="n">client</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"/events"</span><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="what-an-asset-can-return">What an asset can return<a class="headerlink" href="#what-an-asset-can-return" title="Permanent link">&para;</a></h3>
-<p>Anything. Tabular data is what destinations and schemas are built for: a <code>list[dict]</code>, a
-single <code>dict</code>, pydantic models or a list of them, a generator of rows, or a pandas DataFrame
-when <code>interloper-pandas</code> is installed. Non-tabular objects pass through untouched when the asset
-declares no schema, which is what a <code>FileDestination</code> storing pickles expects.</p>
+<p>Anything. Tabular data is what destinations and schemas are built for: a <code>list[dict]</code>, or a
+pandas DataFrame when <code>interloper-pandas</code> is installed. As a convenience the asset unwraps a few
+Python shapes into rows before anything else sees them: a single <code>dict</code> becomes one row,
+pydantic models or a list of them are dumped, a generator of rows is consumed, and <code>None</code> is no
+rows. Non-tabular objects pass through untouched when the asset declares no schema, which is
+what a <code>FileDestination</code> storing pickles expects; with a schema they are an error.</p>
 <h2 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
 <p>Every parameter of <code>data()</code> declares a <strong>relation</strong>, read off its annotation. <code>self</code>, <code>context</code>,
 <code>source</code> and <code>**kwargs</code> are reserved and declare nothing.</p>

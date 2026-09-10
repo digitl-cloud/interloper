@@ -2096,8 +2096,8 @@ an asset returning non-tabular data raises <code>AssetError</code> too. Schema m
 <ol>
 <li>The data's <a href="../../extending/representations/">representation</a> is resolved: rows, or a
    DataFrame when <code>interloper-pandas</code> is installed.</li>
-<li>The data is canonicalized (<code>dict</code>, models, generators become <code>list[dict]</code>). Non-tabular
-   data without a schema passes through untouched.</li>
+<li>Data no representation matches is not a table: without a schema it passes through untouched,
+   with one it is an error naming the type.</li>
 <li>Without a schema, one is inferred and becomes the effective schema. Inference never fails a
    materialization; on error the effective schema is <code>None</code>.</li>
 <li>With a schema, <code>STRICT</code> validates and <code>AUTO</code>/<code>RECONCILE</code> reconcile.</li>
