@@ -1454,6 +1454,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#viewing-and-converting-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Viewing and converting data
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-a-conformer-provides" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2012,23 +2023,41 @@ same recipe.</p>
 </span></code></pre></div>
 <p><code>filter_eq</code> and <code>filter_range</code> are how partitions slice data on write; <code>filter_range</code> compares
 values as ISO-8601 strings (<code>iso_label()</code>), which is what lets a date compare against a
-datetime and keeps half-open bounds exact. <code>to_records</code> is what destinations use when they store
-records, and what <code>il.Upstream.records</code> uses so a consumer can read any upstream as rows,
-whatever its destination handed back.</p>
+datetime and keeps half-open bounds exact. <code>to_records</code> and <code>from_records</code> are the conversion
+protocol: records are the hub every representation converts through.</p>
 <p>Representations are stateless, never serialized and not user-configurable.</p>
+<h2 id="viewing-and-converting-data">Viewing and converting data<a class="headerlink" href="#viewing-and-converting-data" title="Permanent link">&para;</a></h2>
+<p><code>Representation.of(data)</code> resolves the representation matching the data and binds it to the data
+as a <code>View</code>, so a caller never names the data twice:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.representation</span><span class="w"> </span><span class="kn">import</span> <span class="n">Representation</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">view</span> <span class="o">=</span> <span class="n">Representation</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">view</span><span class="o">.</span><span class="n">key</span>                       <span class="c1"># "rows" or "dataframe"</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">view</span><span class="o">.</span><span class="n">records</span>                   <span class="c1"># list[dict], missing values as None</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">view</span><span class="o">.</span><span class="n">columns</span>                   <span class="c1"># column names, [] when not discoverable</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">view</span><span class="o">.</span><span class="n">conformer</span>                 <span class="c1"># the schema operations for this representation</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">view</span><span class="o">.</span><span class="n">filter_eq</span><span class="p">(</span><span class="s2">"id"</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>        <span class="c1"># the partition filters, in the data's own type</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">view</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"dataframe"</span><span class="p">)</span>           <span class="c1"># the data in any registered representation</span>
+</span></code></pre></div>
+<p><code>to(key)</code> returns the data itself when it is already in the target representation, and otherwise
+rebuilds it from records (<code>target.from_records(view.records)</code>). A representation that is
+registered converts to and from every other one with no pairwise code, and an unknown key fails
+with the registry's error naming the registered keys. A destination that loads one type natively
+converts everything to it in one line: BigQuery does <code>Representation.of(data).to("dataframe")</code>
+and has a single load path.</p>
 <h2 id="what-a-conformer-provides">What a conformer provides<a class="headerlink" href="#what-a-conformer-provides" title="Permanent link">&para;</a></h2>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ArrowConformer</span><span class="p">(</span><span class="n">Conformer</span><span class="p">):</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span> <span class="o">...</span>                          <span class="c1"># canonicalize raw output; NormalizerError if not tabular</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span> <span class="o">...</span>  <span class="c1"># SchemaError on mismatch</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">reconcile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">schema</span><span class="p">):</span> <span class="o">...</span>                <span class="c1"># align columns, coerce values</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Schema</span><span class="p">]:</span> <span class="o">...</span>         <span class="c1"># a Schema from the data</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ArrowConformer</span><span class="p">(</span><span class="n">Conformer</span><span class="p">):</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span> <span class="o">...</span>                          <span class="c1"># canonicalize raw output; NormalizerError if not tabular</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">schema</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span> <span class="o">...</span>  <span class="c1"># SchemaError on mismatch</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">reconcile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">schema</span><span class="p">):</span> <span class="o">...</span>                <span class="c1"># align columns, coerce values</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">Schema</span><span class="p">]:</span> <span class="o">...</span>         <span class="c1"># a Schema from the data</span>
 </span></code></pre></div>
 <p>The <a href="../../guide/schema/#the-conform-step">conform step</a> calls <code>prepare</code> once, then <code>validate</code>,
 <code>reconcile</code> or <code>infer</code> depending on the materialization strategy. <code>il.Schema.field_specs()</code>
 gives the type contract to map onto the library's dtypes.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.representations"</span><span class="k">]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">arrow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.arrow:ARROW_REPRESENTATION"</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.representations"</span><span class="k">]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">arrow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.arrow:ARROW_REPRESENTATION"</span>
 </span></code></pre></div>
 <p>The entry may point at an instance or a class. The registry keys it by the representation's own
 <code>key</code>. <code>Representation.of(data)</code> checks every non-rows representation first and falls back to
@@ -2038,10 +2067,11 @@ rows, whose record coercion rejects non-tabular data with a clear error.</p>
 <li>Conform resolves the conformer through <code>Representation.of(result)</code>.</li>
 <li><code>Partition.slice()</code> and <code>TimePartition.slice()</code> filter through the representation, so window
   writes split correctly for any table type.</li>
-<li>Destinations that store records convert through <code>to_records</code>; a destination reads back in
-  the representation it holds natively (a DataFrame from BigQuery, rows from a file), and
-  <code>il.Upstream.records</code> converts for the consumer that wants rows. A producer never chooses a
-  representation on a consumer's behalf.</li>
+<li>Destinations that store records read <code>Representation.of(data).records</code>; one that loads a
+  single type natively converts with <code>.to(key)</code>. A destination reads back in the representation
+  it holds natively (a DataFrame from BigQuery, rows from a file), and <code>il.Upstream.records</code>
+  converts for the consumer that wants rows. A producer never chooses a representation on a
+  consumer's behalf.</li>
 </ul>
 
 

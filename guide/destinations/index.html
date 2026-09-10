@@ -2220,7 +2220,7 @@ asset resolves to:</p>
 <tbody>
 <tr>
 <td><code>insert(table, dataset, data, context)</code></td>
-<td>writing; the data arrives in its native representation, <code>Representation.of(data).to_records(data)</code> views it as rows. The one hook that gets the whole context, since a table created on first write takes its columns from <code>context.schema</code> and its partitioning and description from <code>context.asset</code></td>
+<td>writing; the data arrives in its native representation; <code>Representation.of(data).records</code> views it as rows and <code>.to("dataframe")</code> converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from <code>context.schema</code> and its partitioning and description from <code>context.asset</code></td>
 </tr>
 <tr>
 <td><code>delete(table, dataset, where)</code></td>
