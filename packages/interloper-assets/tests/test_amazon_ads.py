@@ -89,4 +89,4 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        Representation.of(normalized).conformer.validate(normalized, schemas.ProductsCampaignsStats)  # must not raise
+        Representation.of(normalized).validate(schemas.ProductsCampaignsStats)  # must not raise

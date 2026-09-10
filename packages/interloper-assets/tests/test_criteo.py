@@ -66,7 +66,7 @@ class TestSpecRoundtrip:
         row: dict[str, object] = {col: None for col in ADS_COLUMNS}
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        Representation.of(normalized).conformer.validate(normalized, AdsStats)  # must not raise
+        Representation.of(normalized).validate(AdsStats)  # must not raise
 
     def test_campaigns_row_conforms_after_roundtrip(self):
         child = self._child_asset("campaigns_stats")
@@ -75,4 +75,4 @@ class TestSpecRoundtrip:
         row: dict[str, object] = {col: None for col in CAMPAIGNS_COLUMNS}
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        Representation.of(normalized).conformer.validate(normalized, CampaignsStats)  # must not raise
+        Representation.of(normalized).validate(CampaignsStats)  # must not raise

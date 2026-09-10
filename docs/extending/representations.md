@@ -1,16 +1,15 @@
-# Representations & conformers
+# Representations
 
-The core never names a concrete table library. A **representation** answers "what kind of table
-is this, and how do I view it generically" for one data type, and bundles the **conformer** that
-implements schema operations on that type. The core ships the `rows` representation
-(`list[dict]`); `interloper-pandas` ships `dataframe`. Adding a third (polars, Arrow) is the
-same recipe.
+The core never names a concrete table library. A **representation** is everything core needs to
+know about one table type: what it is, how to view it generically, how to slice it by partition,
+and how to check it against a schema. The core ships the `rows` representation (`list[dict]`);
+`interloper-pandas` ships `dataframe`. Adding a third (polars, Arrow) is one class and one entry
+point.
 
 ## What a representation provides
 
 ```py
 from interloper.representation import Representation
-from interloper.conformer import Conformer
 
 class ArrowRepresentation(Representation):
     key = "arrow"
@@ -21,16 +20,18 @@ class ArrowRepresentation(Representation):
     def columns(self, data) -> list[str]: ...                  # [] when not discoverable
     def filter_eq(self, data, column, value): ...              # rows where column == value (as strings)
     def filter_range(self, data, column, start, end): ...      # rows where start <= column < end (ISO labels)
-
-    @property
-    def conformer(self) -> Conformer:
-        return ARROW_CONFORMER
+    def validate(self, data, schema, *, strict=False): ...     # SchemaError on mismatch
+    def reconcile(self, data, schema): ...                     # align columns, coerce values
+    def infer(self, data) -> type[il.Schema]: ...              # a Schema from the data
 ```
 
 `filter_eq` and `filter_range` are how partitions slice data on write; `filter_range` compares
 values as ISO-8601 strings (`iso_label()`), which is what lets a date compare against a
 datetime and keeps half-open bounds exact. `to_records` and `from_records` are the conversion
-protocol: records are the hub every representation converts through.
+protocol: records are the hub every representation converts through. `validate`, `reconcile`
+and `infer` are what the [conform step](../guide/schema.md#the-conform-step) calls depending on
+the materialization strategy; `il.Schema.field_specs()` gives the type contract to map onto the
+library's dtypes, and the pandas implementation vectorizes them over columns.
 
 Representations are stateless, never serialized and not user-configurable.
 
@@ -46,8 +47,10 @@ view = Representation.of(data)
 view.key                       # "rows" or "dataframe"
 view.records                   # list[dict], missing values as None
 view.columns                   # column names, [] when not discoverable
-view.conformer                 # the schema operations for this representation
 view.filter_eq("id", 3)        # the partition filters, in the data's own type
+view.validate(schema)          # the schema operations, on the data's own type
+view.reconcile(schema)
+view.infer()
 view.to("dataframe")           # the data in any registered representation
 ```
 
@@ -57,19 +60,6 @@ registered converts to and from every other one with no pairwise code, and an un
 with the registry's error naming the registered keys. A destination that loads one type natively
 converts everything to it in one line: BigQuery does `Representation.of(data).to("dataframe")`
 and has a single load path.
-
-## What a conformer provides
-
-```py
-class ArrowConformer(Conformer):
-    def validate(self, data, schema, *, strict=False): ...  # SchemaError on mismatch
-    def reconcile(self, data, schema): ...                # align columns, coerce values
-    def infer(self, data) -> type[il.Schema]: ...         # a Schema from the data
-```
-
-The [conform step](../guide/schema.md#the-conform-step) calls `validate`, `reconcile` or
-`infer` depending on the materialization strategy. `il.Schema.field_specs()`
-gives the type contract to map onto the library's dtypes.
 
 ## Registering
 
@@ -87,7 +77,8 @@ representation.
 
 ## Where it is used
 
-- Conform resolves the conformer through `Representation.of(result)`.
+- Conform resolves the data's view through `Representation.of(result)` and calls `validate`,
+  `reconcile` or `infer` on it.
 - `Partition.slice()` and `TimePartition.slice()` filter through the representation, so window
   writes split correctly for any table type.
 - Destinations that store records read `Representation.of(data).records`; one that loads a

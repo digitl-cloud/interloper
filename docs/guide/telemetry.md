@@ -65,7 +65,7 @@ interloper.runner.run                          Runner.run
     ├── interloper.normalizer.normalize        only when a normalizer is configured
     ├── interloper.asset.conform
     │   ├── interloper.asset.infer_schema      AUTO without a declared schema
-    │   └── interloper.conformer.reconcile     with a declared schema
+    │   └── interloper.representation.reconcile  with a declared schema
     └── interloper.destination.write           per destination
 ```
 

@@ -1593,7 +1593,7 @@ class TestNonMaterializableAssets:
 
 
 class TestConformEdgeCases:
-    """What ``_normalize_and_conform`` does with data the conformer cannot shape."""
+    """What ``_normalize_and_conform`` does with data no representation matches."""
 
     async def test_non_tabular_data_without_a_schema_passes_through(self):
         # Arbitrary objects bound for a FileDestination have no contract to
@@ -1633,9 +1633,9 @@ class TestConformEdgeCases:
         assert asset._effective_schema is StrictConformSchema
 
     def test_failed_inference_leaves_no_effective_schema(self, monkeypatch: pytest.MonkeyPatch):
-        # Inference is best-effort metadata; a conformer that cannot infer
-        # must not fail the materialization.
-        from interloper.conformer.base import RowsConformer
+        # Inference is best-effort metadata; a representation that cannot
+        # infer must not fail the materialization.
+        from interloper.representation import RowsRepresentation
 
         @il.asset()
         def rows() -> list[dict[str, Any]]:
@@ -1643,7 +1643,7 @@ class TestConformEdgeCases:
 
         asset = rows(id="rows")
         monkeypatch.setattr(
-            RowsConformer, "infer", lambda self, data: (_ for _ in ()).throw(RuntimeError("cannot infer"))
+            RowsRepresentation, "infer", lambda self, data: (_ for _ in ()).throw(RuntimeError("cannot infer"))
         )
 
         assert asset._normalize_and_conform([{"a": 1}]) == [{"a": 1}]

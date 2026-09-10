@@ -4,7 +4,7 @@ TikTok integrated reports return each row as ``{"dimensions": {...},
 "metrics": {...}}``; the source's ``TiktokStatsNormalizer`` merges both into a
 flat record (de-prefixed) before column normalization. Entity records carry
 list/dict fields (``ad_texts``, ``image_ids``, …) that the flat schemas type as
-strings; the conformer JSON-encodes those nested values when casting to the
+strings; reconciliation JSON-encodes those nested values when casting to the
 declared ``str`` type, so the entity assets need no bespoke normalizer. These
 tests pin both reshapes, that every asset gets the right
 normalizer, and that the normalizer survives the host→child spec round-trip and
@@ -55,7 +55,7 @@ class TestSourceNormalizer:
 
     def test_entity_assets_use_the_base_normalizer(self):
         # Entity assets use a plain DataFrameNormalizer (not the stats reshape);
-        # nested str-field encoding is handled downstream by the conformer.
+        # nested str-field encoding is handled downstream by reconciliation.
         for key in ("ads", "campaigns", "advertisers"):
             asset = next(a for a in _source().assets if type(a).key == key)
             assert isinstance(asset.normalizer, DataFrameNormalizer), key
@@ -103,7 +103,7 @@ class TestSpecRoundtripAndReconcile:
             }
         ]
         normalized = child.normalizer.normalize(rows)
-        reconciled = Representation.of(normalized).conformer.reconcile(normalized, schemas.AdsStats)
+        reconciled = Representation.of(normalized).reconcile(schemas.AdsStats)
         assert float(reconciled.loc[0, "spend"]) == 12.5
         assert int(reconciled.loc[0, "clicks"]) == 3
 
@@ -113,6 +113,6 @@ class TestSpecRoundtripAndReconcile:
         rows = [{"ad_id": "456", "ad_name": "My Ad", "ad_texts": ["hello"], "image_ids": ["img1"]}]
         normalized = child.normalizer.normalize(rows)
         # list fields land as JSON strings on the str-typed schema columns
-        reconciled = Representation.of(normalized).conformer.reconcile(normalized, schemas.Ads)
+        reconciled = Representation.of(normalized).reconcile(schemas.Ads)
         assert reconciled.loc[0, "ad_texts"] == '["hello"]'
         assert reconciled.loc[0, "image_ids"] == '["img1"]'

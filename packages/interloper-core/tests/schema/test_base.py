@@ -146,7 +146,7 @@ class TestReconcile:
 
     def test_int_values_coerced_to_str_fields(self):
         # Pydantic's lax mode never coerces int -> str; reconcile must, to
-        # match the DataFrame conformer's astype("string").
+        # match the DataFrame representation's astype("string").
         rows = ShadowingSchema.reconcile([{"id": 1, "cost": 2.0, "name": 42, "day": "mon"}])
         assert rows[0]["name"] == "42"
 

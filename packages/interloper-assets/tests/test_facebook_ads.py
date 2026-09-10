@@ -97,7 +97,7 @@ class TestSpecRoundtripAndReconcile:
         ]
         normalized = child.normalizer.normalize(rows)
         assert "actions_link_click" in normalized.columns
-        out = Representation.of(normalized).conformer.reconcile(normalized, schemas.AdsStats)
+        out = Representation.of(normalized).reconcile(schemas.AdsStats)
         assert int(out.loc[0, "actions_link_click"]) == 7
 
     def test_sparse_row_passes_validation(self):
@@ -107,14 +107,14 @@ class TestSpecRoundtripAndReconcile:
         optional, so absent action types are not 'Field required' errors.
         """
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
-        Representation.of(df).conformer.validate(df, schemas.AdsStats)  # must not raise
+        Representation.of(df).validate(schemas.AdsStats)  # must not raise
 
     def test_entity_row_flattens_creative_and_reconciles(self):
         child = self._child("ads")
         rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
         normalized = child.normalizer.normalize(rows)
         assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
-        Representation.of(normalized).conformer.reconcile(normalized, schemas.Ads)  # must not raise
+        Representation.of(normalized).reconcile(schemas.Ads)  # must not raise
 
 
 def test_isinstance_of_dataframe_normalizer():

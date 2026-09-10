@@ -252,7 +252,7 @@ class Schema(Serializable):
         """Reconcile rows against this schema.
 
         Fields are coerced one by one through per-field ``TypeAdapter``s —
-        the row-wise mirror of the DataFrame conformer's column-wise casts.
+        the row-wise mirror of the DataFrame representation's column-wise casts.
         Extra keys are dropped (their union logged as a warning), missing
         fields get their default (or ``None``, which pydantic accepts only
         for nullable fields), and scalar ``str`` fields are stringified

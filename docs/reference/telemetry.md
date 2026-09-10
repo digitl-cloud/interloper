@@ -12,7 +12,7 @@
 | `interloper.normalizer.normalize` | `Normalizer.normalize()` | Only when a normalizer is configured. |
 | `interloper.asset.conform` | the conform step | |
 | `interloper.asset.infer_schema` | schema inference | Only under `AUTO` without a declared schema. |
-| `interloper.conformer.reconcile` | `Conformer.reconcile()` | Only with a declared schema under `AUTO` or `RECONCILE`. |
+| `interloper.representation.reconcile` | `Representation.reconcile()` | Only with a declared schema under `AUTO` or `RECONCILE`. |
 | `interloper.destination.write` | `Destination.write()` | One per destination; adds `interloper.destination.key`. |
 | `interloper.dag.materialize` | `DAG.materialize_async()` | Root when a DAG is driven directly. Attribute `interloper.dag.operation_count`. |
 | `interloper.dag_spec.reconstruct` | `DAGSpec.reconstruct()` | Attribute `interloper.dag.spec_items`. |

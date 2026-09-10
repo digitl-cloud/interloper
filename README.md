@@ -206,7 +206,7 @@ The [documentation](https://docs.interloper.dev) has a page per concept, an exte
 | Package | Provides |
 |---------|----------|
 | [`interloper-core`](packages/interloper-core) | The framework |
-| [`interloper-pandas`](packages/interloper-pandas) | pandas DataFrame representation, conformer and normalizer |
+| [`interloper-pandas`](packages/interloper-pandas) | pandas DataFrame representation and normalizer |
 | [`interloper-google-cloud`](packages/interloper-google-cloud) | Google Cloud connection, BigQuery and GCS destinations |
 | [`interloper-slack`](packages/interloper-slack) | Slack connection and notification hook |
 | [`interloper-assets`](packages/interloper-assets) | Ready-made sources for advertising, analytics and commerce platforms |

@@ -1,9 +1,16 @@
 """Tests for ``interloper.representation.base``."""
 
 import pytest
+from pydantic import Field
 
-from interloper.errors import RepresentationError
+from interloper.errors import RepresentationError, SchemaError
 from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation, View
+from interloper.schema import Schema
+
+
+class UserSchema(Schema):
+    user_id: int | None = Field(...)
+    name: str | None = Field(...)
 
 
 class TestRegistry:
@@ -57,8 +64,11 @@ class TestView:
     def test_columns(self):
         assert Representation.of([{"a": 1, "b": 2}]).columns == ["a", "b"]
 
-    def test_conformer(self):
-        assert Representation.of([{"a": 1}]).conformer is RowsRepresentation().conformer
+    def test_schema_ops_apply_to_the_bound_data(self):
+        view = Representation.of([{"user_id": "1", "name": "a", "extra": True}])
+        view.validate(UserSchema)
+        assert view.reconcile(UserSchema) == [{"user_id": 1, "name": "a"}]
+        assert {s.name: s.type for s in view.infer().field_specs()} == {"user_id": str, "name": str, "extra": bool}
 
     def test_filters(self):
         rows = [{"day": "2024-01-01", "n": 1}, {"day": "2024-01-02", "n": 2}]
@@ -146,7 +156,19 @@ class TestRowsRepresentation:
         rows = [{"d": "2024-01-01", "v": 1}, {"d": "2024-01-02", "v": 2}]
         assert RowsRepresentation().filter_eq(rows, "d", "2024-01-02") == [{"d": "2024-01-02", "v": 2}]
 
-    def test_conformer_is_rows_conformer(self):
-        from interloper.conformer import RowsConformer
+    def test_validate_passes(self):
+        RowsRepresentation().validate([{"user_id": 1, "name": "a"}], UserSchema)
 
-        assert isinstance(RowsRepresentation().conformer, RowsConformer)
+    def test_validate_fails_on_missing_required(self):
+        with pytest.raises(SchemaError, match="Field required"):
+            RowsRepresentation().validate([{"user_id": 1}], UserSchema)
+
+    def test_reconcile_coerces_and_aligns(self):
+        rows = RowsRepresentation().reconcile([{"user_id": "1", "name": "a", "extra": True}], UserSchema)
+        assert rows == [{"user_id": 1, "name": "a"}]
+
+    def test_infer(self):
+        inferred = RowsRepresentation().infer([{"a": 1, "b": "x"}])
+        specs = {s.name: s for s in inferred.field_specs()}
+        assert specs["a"].type is int
+        assert specs["b"].type is str
