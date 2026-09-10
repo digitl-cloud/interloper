@@ -5,19 +5,9 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Any, ClassVar
 
-from interloper.component import Component, ComponentDefinition
+from interloper.component import Component
 from interloper.destination.context import IOContext
 from interloper.partitioning.base import Partition
-from interloper.utils.text import to_label
-
-
-class DestinationDefinition(ComponentDefinition):
-    """Definition of a destination with its config schema inlined.
-
-    Cross-entity references use keys: ``relations`` names the kinds and keys
-    that may fill each declared link. Same-entity data is inlined:
-    ``config_schema`` is the destination's own JSON Schema.
-    """
 
 
 class Destination(Component):
@@ -52,32 +42,6 @@ class Destination(Component):
     """
 
     tags: ClassVar[list[str]] = []
-
-    @classmethod
-    def definition(cls) -> DestinationDefinition:
-        """Produce a structured definition of this destination class.
-
-        The config schema is inlined; relations reference their targets by key.
-
-        Returns:
-            A DestinationDefinition with metadata and JSON Schema.
-        """
-        from interloper.resource.fields import validate_fetch_field_providers
-        from interloper.utils.imports import get_object_path
-
-        validate_fetch_field_providers(cls, cls.relations)
-
-        return DestinationDefinition(
-            kind=cls.kind,
-            key=cls.key,
-            path=get_object_path(cls),
-            name=cls.name or to_label(cls.__name__),
-            icon=cls.icon,
-            description=cls.__doc__ or "",
-            tags=list(cls.tags),
-            config_schema=cls.config_schema(),
-            relations=dict(cls.relations),
-        )
 
     @abstractmethod
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:

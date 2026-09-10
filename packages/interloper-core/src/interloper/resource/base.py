@@ -7,7 +7,6 @@ from typing import ClassVar
 from pydantic_settings import BaseSettings
 
 from interloper.component import Component, ComponentDefinition
-from interloper.utils.text import to_label
 
 
 class ResourceDefinition(ComponentDefinition):
@@ -58,17 +57,4 @@ class Resource(BaseSettings, Component):
         Returns:
             A ResourceDefinition with metadata and JSON Schema.
         """
-        from interloper.utils.imports import get_object_path
-
-        return ResourceDefinition(
-            kind=cls.kind,
-            key=cls.key,
-            path=get_object_path(cls),
-            name=cls.name or to_label(cls.__name__),
-            icon=cls.icon,
-            description=cls.__doc__ or "",
-            tags=list(getattr(cls, "tags", [])),
-            config_schema=cls.config_schema(),
-            state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
-            relations=dict(cls.relations),
-        )
+        return ResourceDefinition(**dict(super().definition()))
