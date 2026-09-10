@@ -31,27 +31,8 @@ class ShopConnection(il.Connection):
     """Connection the shop source binds."""
 
 
-class Warehouse(il.Destination):
+class Warehouse(il.MemoryDestination):
     """Destination the test sources write to."""
-
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        """Never read by these tests.
-
-        Args:
-            context: The IO context of the read.
-
-        Returns:
-            Nothing; the destination is a persistence fixture only.
-        """
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        """Never written by these tests.
-
-        Args:
-            context: The IO context of the write.
-            data: The payload that would be written.
-        """
 
 
 class Shop(il.Source):

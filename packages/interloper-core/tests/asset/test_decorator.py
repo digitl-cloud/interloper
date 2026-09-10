@@ -18,27 +18,8 @@ class DecoratorConfig(il.Config):
     value: str = ""
 
 
-class DecoratorDestination(il.Destination):
+class DecoratorDestination(il.MemoryDestination):
     """Destination fixture declared through the decorator."""
-
-    def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-        """Unused.
-
-        Args:
-            context: Ignored IO context.
-
-        Returns:
-            Nothing.
-        """
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover - not exercised
-        """Unused.
-
-        Args:
-            context: Ignored IO context.
-            data: Ignored payload.
-        """
 
 
 class DecoratorSchema(il.Schema):

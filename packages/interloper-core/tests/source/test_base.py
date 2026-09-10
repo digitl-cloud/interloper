@@ -29,20 +29,12 @@ class FakeConnection(il.Connection):
     token: str = il.SecretField()
 
 
-class FakeDestination(il.Destination):
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
+class FakeDestination(il.MemoryDestination):
+    """A destination-shaped fixture."""
 
 
-class FakeOtherDestination(il.Destination):
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
+class FakeOtherDestination(il.MemoryDestination):
+    """A destination-shaped fixture."""
 
 
 class FakeSource(il.Source):

@@ -122,7 +122,15 @@ class JSONDestination(il.Destination):
 
     def read_partition(self, context: il.IOContext, partition: il.Partition | None) -> Any:
         return json.loads(self._path(context, partition).read_text())
+
+    def partition_row_counts(self, context: il.IOContext) -> dict[str, int]:
+        base = Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
+        column = context.asset.partitioning.column
+        return {p.name.split("=", 1)[1]: len(json.loads((p / "data.json").read_text())) for p in base.glob(f"{column}=*")}
 ```
+
+These three hooks are the whole contract, and they are abstract: a destination missing one cannot be
+instantiated. `partition_row_counts` feeds `asset.partition_row_counts()` and the coverage view.
 
 `write()` and `read()` are the base class's: a window write is split into one `write_partition` call
 per partition, slicing the data through its [representation](../extending/representations.md)
@@ -136,9 +144,6 @@ The decorator accepts the class's public ClassVars and field defaults, plus `rel
 [decorators reference](../reference/decorators.md). A destination's own connection is a relation,
 declared as an annotation or through `relations=`; see
 [Resources](resources.md#relations-on-sources-and-destinations).
-
-Override `partition_row_counts(context)` to report rows per partition; `asset.partition_row_counts()`
-and coverage tooling call it.
 
 A backend whose storage is not per partition may override `write()` or `read()`
 wholesale. `DatabaseDestination` below does that for writes: rows carry the partition column, so

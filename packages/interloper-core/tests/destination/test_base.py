@@ -39,16 +39,10 @@ class FakeConnection(il.Connection):
         return []
 
 
-class FakeDestination(il.Destination):
+class FakeDestination(il.MemoryDestination):
     """Destination fixture declaring its connection as an annotation."""
 
     connection: FakeConnection
-
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
 
 
 class TestDefinition:
@@ -77,43 +71,25 @@ class TestFetchProviderValidation:
     """``FetchField(provider=...)`` resolves through the declared relations."""
 
     def test_provider_on_a_declared_relation_is_accepted(self):
-        class Valid(il.Destination):
+        class Valid(il.MemoryDestination):
             connection: FakeConnection
             dataset: str = il.FetchField(provider="connection.datasets", value_key="id")
-
-            def read(self, context: Any) -> Any:  # pragma: no cover
-                return None
-
-            def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-                pass
 
         fetch = Valid.definition().config_schema["properties"]["dataset"]["x-fetch"]
         assert fetch["provider"] == "connection.datasets"
 
     def test_provider_on_an_undeclared_relation_is_rejected(self):
-        class Undeclared(il.Destination):
+        class Undeclared(il.MemoryDestination):
             connection: FakeConnection
             dataset: str = il.FetchField(provider="other.datasets")
-
-            def read(self, context: Any) -> Any:  # pragma: no cover
-                return None
-
-            def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-                pass
 
         with pytest.raises(TypeError, match="not declared"):
             Undeclared.definition()
 
     def test_provider_naming_an_unmarked_method_is_rejected(self):
-        class Unmarked(il.Destination):
+        class Unmarked(il.MemoryDestination):
             connection: FakeConnection
             dataset: str = il.FetchField(provider="connection.not_a_provider")
-
-            def read(self, context: Any) -> Any:  # pragma: no cover
-                return None
-
-            def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-                pass
 
         with pytest.raises(TypeError, match="not a @fetch_field_provider"):
             Unmarked.definition()
@@ -136,6 +112,9 @@ class RecordingPartitions(il.Destination):
     def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
         self.calls.append(("read", partition.id if partition else None, None))
         return {"partition": partition.id if partition else None}
+
+    def partition_row_counts(self, context: IOContext) -> dict[str, int]:
+        return {}
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
@@ -239,13 +218,24 @@ class TestReadDispatch:
 
 
 class TestHookContract:
-    """The partition hooks are the contract; the templates say which one is missing."""
+    """The three partition hooks are the contract, enforced at instantiation."""
 
-    def test_missing_hooks_raise_naming_the_hook(self):
+    def test_a_destination_without_the_hooks_cannot_be_instantiated(self):
         class Bare(il.Destination):
             pass
 
-        with pytest.raises(NotImplementedError, match="Bare must implement write_partition"):
-            Bare(id="b").write(io_context(plain_asset()), [])
-        with pytest.raises(NotImplementedError, match="Bare must implement read_partition"):
-            Bare(id="b").read(io_context(plain_asset()))
+        with pytest.raises(TypeError, match="abstract.*(partition_row_counts|read_partition|write_partition)"):
+            Bare(id="b")
+
+    def test_the_three_hooks_are_the_whole_contract(self):
+        class Minimal(il.Destination):
+            def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+                pass
+
+            def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+                return []
+
+            def partition_row_counts(self, context: IOContext) -> dict[str, int]:
+                return {}
+
+        assert Minimal(id="m").read(io_context(plain_asset())) == []
