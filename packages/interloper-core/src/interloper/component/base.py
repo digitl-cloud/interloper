@@ -21,7 +21,6 @@ from interloper.component.relation import ComponentIdentity, Relation, unwrap_op
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
-from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
@@ -595,13 +594,23 @@ class Component(Serializable):
     def definition(cls) -> ComponentDefinition:
         """Produce a structured definition of this component class.
 
+        The one place a class is described. A kind whose definition carries
+        more (a source's assets, an asset's schema) builds its own model from
+        this one: ``SourceDefinition(**dict(super().definition()), assets=...)``.
+        Every ``FetchField`` provider the class declares is checked against its
+        relations first, so a misnamed provider fails at catalog-build time
+        rather than in a form.
+
         Returns:
             A ComponentDefinition with metadata derived from the class.
         """
+        from interloper.resource.fields import validate_fetch_field_providers
+
+        validate_fetch_field_providers(cls, cls.relations)
         return ComponentDefinition(
             kind=cls.kind,
             key=cls.key,
-            path=get_object_path(cls),
+            path=cls.classpath(),
             name=cls.name or to_label(cls.__name__),
             icon=cls.icon,
             description=cls.__doc__ or "",

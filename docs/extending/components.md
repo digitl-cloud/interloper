@@ -44,8 +44,12 @@ On top of `Serializable`:
 | `internal_fields` | class | Fields hidden from the config schema. |
 
 `definition()` returns a `ComponentDefinition` (kind, key, path, name, icon, description, tags,
-`config_schema`, `state_schema`, `relations`). Subclasses return richer definitions of their own
-(`SourceDefinition`, `AssetDefinition`, `ResourceDefinition`, `DestinationDefinition`).
+`config_schema`, `state_schema`, `relations`); it is the one place a class is described, and every
+`FetchField` provider is checked against the relations there. A kind whose definition carries more
+builds its own model from the base one, `SourceDefinition(**dict(super().definition()), assets=...)`:
+`SourceDefinition` adds `assets`, `AssetDefinition` adds `asset_schema` and `partitioning`,
+`ResourceDefinition` adds `provider`, `checkable` and `renewable`. A destination describes nothing
+beyond the base, so `Destination.definition()` returns a plain `ComponentDefinition`.
 
 ### Kinds and anchors
 

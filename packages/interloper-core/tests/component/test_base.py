@@ -183,6 +183,13 @@ class TestDefinition:
     def test_definition_returns_component_definition(self):
         assert isinstance(FakeComponent.definition(), ComponentDefinition)
 
+    def test_fetch_field_providers_are_validated_for_every_kind(self):
+        class Needy(il.Asset):
+            region: str = il.FetchField(provider="connection.regions", value_key="id")
+
+        with pytest.raises(TypeError, match="references relation 'connection', which is not declared"):
+            Needy.definition()
+
     def test_definition_fields_populated(self):
         defn = FakeComponent.definition()
         assert defn.kind == "fake_component"

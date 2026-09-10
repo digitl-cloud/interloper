@@ -13,10 +13,9 @@ from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
-from interloper.resource.fields import InputField, SelectField, validate_fetch_field_providers
+from interloper.resource.fields import InputField, SelectField
 from interloper.serializable import IgnoredDescriptor
-from interloper.utils.imports import get_object_path
-from interloper.utils.text import to_label, validate_key
+from interloper.utils.text import validate_key
 
 if TYPE_CHECKING:
     from interloper.destination import Destination
@@ -362,20 +361,8 @@ class Source(Component, Workload):
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        validate_fetch_field_providers(cls, cls.relations)
-
-        return SourceDefinition(
-            kind=cls.kind,
-            key=cls.key,
-            path=get_object_path(cls),
-            name=cls.name or to_label(cls.__name__),
-            icon=cls.icon,
-            description=cls.__doc__ or "",
-            tags=list(cls.tags),
-            config_schema=cls.config_schema(),
-            relations=dict(cls.relations),
-            assets=[asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types],
-        )
+        assets = [asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types]
+        return SourceDefinition(**dict(super().definition()), assets=assets)
 
     # -- Reconfiguration -------------------------------------------------------
 
