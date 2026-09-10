@@ -107,7 +107,7 @@ class TestSpecRoundtripAndReconcile:
         optional, so absent action types are not 'Field required' errors.
         """
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
-        Representation.of(df).validate(schemas.AdsStats)  # must not raise
+        Representation.of(df).reconcile(schemas.AdsStats, strict=True)  # must not raise
 
     def test_entity_row_flattens_creative_and_reconciles(self):
         child = self._child("ads")

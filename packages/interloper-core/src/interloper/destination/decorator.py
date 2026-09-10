@@ -66,10 +66,8 @@ def destination(
         **overrides: Definition metadata and behaviour: the public ClassVars
             and field defaults the decorated class declares, or
             :class:`~interloper.destination.base.Destination` itself for a
-            plain class (``key``, ``name``, ``icon``, ``tags``, and
-            ``materialization_strategy`` on a
-            :class:`~interloper.destination.database.DatabaseDestination`);
-            see the class. An unknown name is a ``TypeError`` at decoration.
+            plain class (``key``, ``name``, ``icon``, ``tags``); see the
+            class. An unknown name is a ``TypeError`` at decoration.
 
     Returns:
         A Destination subclass.

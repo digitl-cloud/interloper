@@ -6,6 +6,7 @@
 # unresolvable.
 
 import asyncio
+import datetime
 import datetime as dt
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -1183,15 +1184,41 @@ class TestConform:
         result = await users().run_async()
         assert isinstance(result, pd.DataFrame)
 
-    async def test_strategy_requires_schema(self):
+    async def test_strict_requires_schema(self):
         from interloper.normalizer import MaterializationStrategy
 
-        @il.asset(materialization_strategy=MaterializationStrategy.RECONCILE)
+        @il.asset(materialization_strategy=MaterializationStrategy.STRICT)
         def users() -> list[dict[str, Any]]:
             return [{"a": 1}]
 
         with pytest.raises(AssetError, match="requires a schema"):
             await users().run_async()
+
+    async def test_strict_returns_canonical_values(self):
+        # Validation is lax on values (an ISO string passes for a date), so a
+        # strict asset still hands destinations the declared types.
+        from interloper.normalizer import MaterializationStrategy
+
+        class Daily(il.Schema):
+            day: datetime.date | None = None
+            n: int | None = None
+
+        @il.asset(schema=Daily, materialization_strategy=MaterializationStrategy.STRICT)
+        def rows() -> list[dict[str, Any]]:
+            return [{"day": "2026-09-09", "n": "1"}]
+
+        assert await rows().run_async() == [{"day": datetime.date(2026, 9, 9), "n": 1}]
+
+    async def test_strict_rejects_extra_columns(self):
+        from interloper.errors import SchemaError
+        from interloper.normalizer import MaterializationStrategy
+
+        @il.asset(schema=ConformSchema, materialization_strategy=MaterializationStrategy.STRICT)
+        def rows() -> list[dict[str, Any]]:
+            return [{"user_id": 1, "name": "a", "extra": True}]
+
+        with pytest.raises(SchemaError, match="extra fields"):
+            await rows().run_async()
 
     async def test_reconcile_without_normalizer(self):
         from interloper.normalizer import MaterializationStrategy
@@ -1619,7 +1646,7 @@ class TestConformEdgeCases:
         with pytest.raises(AssetError, match="declares a schema but returned data that cannot be checked"):
             asset._normalize_and_conform(object())
 
-    def test_strict_returns_the_validated_data_unchanged(self):
+    def test_strict_returns_the_validated_data_equal(self):
         from interloper.normalizer import MaterializationStrategy
 
         @il.asset(schema=StrictConformSchema, materialization_strategy=MaterializationStrategy.STRICT)

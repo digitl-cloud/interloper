@@ -35,23 +35,23 @@ the data columns.
 
 ## Materialization strategy
 
-The strategy decides how strictly the conform step enforces the schema. Set it on the asset, or
-on the source as a default for assets still on `AUTO`:
+The strategy decides what the conform step treats as an error. Both strategies hand destinations
+data in the schema's canonical types, so nothing downstream re-checks it. Set it on the asset, or
+on the source as a default for assets still on the default:
 
-| Strategy | Schema required | Behaviour |
-|----------|-----------------|-----------|
-| `AUTO` (default) | no | Reconcile when a schema is declared; infer one from the data otherwise. |
-| `STRICT` | yes | Validate every row. Extra columns, missing required columns and wrong types fail the materialization. |
-| `RECONCILE` | yes | Align columns to the schema (drop extras with a warning, fill missing with defaults or `None`) and coerce values. |
+| Strategy | Schema declared | Schema absent |
+|----------|-----------------|---------------|
+| `RECONCILE` (default) | Align columns to the schema (drop extras with a warning, fill missing nullables with `None`) and coerce values. | Infer a schema from the data; it becomes the effective schema for destinations. |
+| `STRICT` | Extra columns, missing required columns and values the schema rejects fail the materialization; values that pass are coerced to the declared types. | `AssetError`: a strict asset must declare its contract. |
 
 ```py
 @il.asset(schema=AdsStats, materialization_strategy=il.MaterializationStrategy.STRICT)
 def ads_stats(self, ...): ...
 ```
 
-A strategy that requires a schema, used without one, raises `AssetError`. A declared schema on
-an asset returning non-tabular data raises `AssetError` too. Schema mismatches raise
-`SchemaError`.
+A declared schema on an asset returning non-tabular data raises `AssetError`. Schema mismatches
+raise `SchemaError`. Configs and manifests written before 0.78 may still spell the default
+`auto`; it reads as `reconcile`.
 
 ## The conform step
 
@@ -63,7 +63,7 @@ Conform runs on every `run()` and `materialize()`, after the [normalizer](normal
    with one it is an error naming the type.
 3. Without a schema, one is inferred and becomes the effective schema. Inference never fails a
    materialization; on error the effective schema is `None`.
-4. With a schema, `STRICT` validates and `AUTO`/`RECONCILE` reconcile.
+4. With a schema, the data is reconciled once: `RECONCILE` repairs mismatches, `STRICT` refuses them.
 
 The effective schema reaches destinations as `IOContext.schema`.
 

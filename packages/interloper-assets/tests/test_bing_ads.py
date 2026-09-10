@@ -80,7 +80,7 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        Representation.of(normalized).validate(AdsStats)  # must not raise
+        Representation.of(normalized).reconcile(AdsStats)  # must not raise
 
 
 def _web_fault(detail: SimpleNamespace) -> WebFault:

@@ -88,7 +88,7 @@ class TestHeaderNormalization:
         normalized = _normalizer().normalize(rows)
         view = Representation.of(normalized)
         df = view.reconcile(schemas.CampaignsStats)
-        Representation.of(df).validate(schemas.CampaignsStats)  # must not raise
+        Representation.of(df).reconcile(schemas.CampaignsStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["active_view_pct_viewable_impressions"] == 85.5
         assert record["active_view_viewable_impressions"] == 90

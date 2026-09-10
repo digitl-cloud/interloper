@@ -77,15 +77,15 @@ class TestDataFrameRepresentation:
         assert out["v"].tolist() == [2]
 
 
-class TestDataFrameValidate:
+class TestDataFrameStrictReconcile:
     """Null-safe validation on DataFrames."""
 
     def test_valid_data_passes(self):
-        DataFrameRepresentation().validate(pd.DataFrame({"user_id": [1], "name": ["a"]}), UserSchema)
+        DataFrameRepresentation().reconcile(pd.DataFrame({"user_id": [1], "name": ["a"]}), UserSchema, strict=True)
 
     def test_invalid_data_raises(self):
         with pytest.raises(SchemaError, match="Schema validation failed"):
-            DataFrameRepresentation().validate(pd.DataFrame({"user_id": [1], "name": [123]}), UserSchema)
+            DataFrameRepresentation().reconcile(pd.DataFrame({"user_id": [1], "name": [123]}), UserSchema, strict=True)
 
     def test_nan_in_nullable_int_column_passes(self):
         import numpy as np
@@ -94,7 +94,7 @@ class TestDataFrameValidate:
             id: int | None = Field(...)
 
         # NaN forces float64 dtype; the records view must yield None, not nan
-        DataFrameRepresentation().validate(pd.DataFrame({"id": [1.0, np.nan]}), S)
+        DataFrameRepresentation().reconcile(pd.DataFrame({"id": [1.0, np.nan]}), S, strict=True)
 
 
 class TestDataFrameReconcile:
@@ -164,11 +164,11 @@ class TestDataFrameJsonEncoding:
 
     def test_validate_accepts_list_for_str_field(self):
         df = pd.DataFrame({"id": ["1"], "tracking_specs": [[{"action.type": ["x"]}]]})
-        DataFrameRepresentation().validate(df, JsonSchema)
+        DataFrameRepresentation().reconcile(df, JsonSchema, strict=True)
 
     def test_validate_accepts_dict_for_str_field(self):
         df = pd.DataFrame({"id": ["1"], "tracking_specs": [{"a": 1}]})
-        DataFrameRepresentation().validate(df, JsonSchema)
+        DataFrameRepresentation().reconcile(df, JsonSchema, strict=True)
 
     def test_reconcile_serializes_to_valid_json_not_repr(self):
         df = pd.DataFrame({"id": ["1"], "tracking_specs": [[{"a": 1}]]})
@@ -181,7 +181,7 @@ class TestDataFrameJsonEncoding:
 
     def test_scalar_strings_and_nulls_pass_through(self):
         df = pd.DataFrame({"id": ["1", "2"], "tracking_specs": ["plain", None]})
-        DataFrameRepresentation().validate(df, JsonSchema)
+        DataFrameRepresentation().reconcile(df, JsonSchema, strict=True)
         out = DataFrameRepresentation().reconcile(df, JsonSchema)
         assert out["tracking_specs"].iloc[0] == "plain"
         assert pd.isna(out["tracking_specs"].iloc[1])

@@ -454,7 +454,7 @@ class TestResolution:
         source = FakeTrickleSource(normalizer=normalizer)
         assert source.assets[0].normalizer is normalizer
 
-    def test_trickles_materialization_strategy_when_asset_is_auto(self):
+    def test_trickles_materialization_strategy_when_asset_is_on_the_default(self):
         class FakeTrickleSource(il.Source):
             class FakeChild(il.Asset):
                 pass
@@ -465,26 +465,26 @@ class TestResolution:
     def test_preserves_asset_own_materialization_strategy(self):
         class FakeTrickleSource(il.Source):
             class FakeChild(il.Asset):
-                materialization_strategy: MaterializationStrategy = MaterializationStrategy.RECONCILE
+                materialization_strategy: MaterializationStrategy = MaterializationStrategy.STRICT
 
-        source = FakeTrickleSource(materialization_strategy=MaterializationStrategy.STRICT)
-        assert source.assets[0].materialization_strategy == MaterializationStrategy.RECONCILE
+        source = FakeTrickleSource(materialization_strategy=MaterializationStrategy.RECONCILE)
+        assert source.assets[0].materialization_strategy == MaterializationStrategy.STRICT
 
-    def test_default_strategy_is_auto_and_overrides_nothing(self):
-        # The AUTO default pre-fills the UI select; like the old None default
-        # it must leave every asset's own strategy alone.
+    def test_default_strategy_is_reconcile_and_overrides_nothing(self):
+        # The RECONCILE default pre-fills the UI select; like the old None
+        # default it must leave every asset's own strategy alone.
         class FakeTrickleSource(il.Source):
-            class AutoChild(il.Asset):
+            class DefaultChild(il.Asset):
                 pass
 
-            class ReconcilingChild(il.Asset):
-                materialization_strategy: MaterializationStrategy = MaterializationStrategy.RECONCILE
+            class StrictChild(il.Asset):
+                materialization_strategy: MaterializationStrategy = MaterializationStrategy.STRICT
 
         source = FakeTrickleSource()
-        assert source.materialization_strategy == MaterializationStrategy.AUTO
+        assert source.materialization_strategy == MaterializationStrategy.RECONCILE
         by_key = {type(a).key: a.materialization_strategy for a in source.assets}
-        assert by_key["auto_child"] == MaterializationStrategy.AUTO
-        assert by_key["reconciling_child"] == MaterializationStrategy.RECONCILE
+        assert by_key["default_child"] == MaterializationStrategy.RECONCILE
+        assert by_key["strict_child"] == MaterializationStrategy.STRICT
 
     def test_legacy_null_strategy_still_hydrates(self):
         # Older configs stored materialization_strategy: null (the UI wrote
@@ -495,7 +495,7 @@ class TestResolution:
 
         source = FakeTrickleSource(materialization_strategy=None)
         assert source.materialization_strategy is None
-        assert source.assets[0].materialization_strategy == MaterializationStrategy.AUTO
+        assert source.assets[0].materialization_strategy == MaterializationStrategy.RECONCILE
 
     def test_trickles_default_destination_key(self):
         class FakeTrickleSource(il.Source):

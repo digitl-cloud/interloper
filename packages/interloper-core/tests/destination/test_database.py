@@ -211,84 +211,16 @@ class DateSchema(il.Schema):
     day: datetime.date | None = None
 
 
-class TestMaterializationStrategy:
-    """Write-time schema enforcement declared as a backend trait."""
+class TestWriteTrustsConformedData:
+    """Conform already shaped the data; a destination never re-conforms it."""
 
-    def test_auto_trusts_conformed_data(self):
+    def test_rows_reach_insert_untouched(self):
         destination = RecordingDatabase(id="db")
         rows = [{"name": "a", "day": "2026-07-13"}]
         destination.write(make_io_context(plain_asset(), schema=DateSchema), rows)
         assert destination.calls[-1][1][2] == rows
 
-    def test_reconcile_coerces_rows_to_the_effective_schema(self):
-        class ReconcilingDatabase(RecordingDatabase):
-            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
+    def test_no_strategy_in_the_config_schema(self):
+        assert "materialization_strategy" not in RecordingDatabase.config_schema().get("properties", {})
 
-        destination = ReconcilingDatabase(id="db")
-        destination.write(make_io_context(plain_asset(), schema=DateSchema), [{"name": "a", "day": "2026-07-13"}])
-        inserted = destination.calls[-1][1][2]
-        assert inserted == [{"name": "a", "day": datetime.date(2026, 7, 13)}]
 
-    def test_reconcile_coerces_dataframes(self):
-        pd = pytest.importorskip("pandas")
-
-        class ReconcilingDatabase(RecordingDatabase):
-            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
-
-        destination = ReconcilingDatabase(id="db")
-        destination.write(
-            make_io_context(plain_asset(), schema=DateSchema), pd.DataFrame([{"name": "a", "day": "2026-07-13"}])
-        )
-        inserted = destination.calls[-1][1][2]
-        assert inserted[0]["day"] == datetime.date(2026, 7, 13)
-
-    def test_reconcile_without_schema_is_a_noop(self):
-        class ReconcilingDatabase(RecordingDatabase):
-            materialization_strategy: il.MaterializationStrategy = il.MaterializationStrategy.RECONCILE
-
-        destination = ReconcilingDatabase(id="db")
-        rows = [{"name": "a", "day": "2026-07-13"}]
-        destination.write(make_io_context(plain_asset()), rows)
-        assert destination.calls[-1][1][2] == rows
-
-    def test_decorator_sets_the_field_default(self):
-        from interloper.destination import destination
-
-        @destination(materialization_strategy=il.MaterializationStrategy.RECONCILE)
-        class DecoratedDatabase(RecordingDatabase):
-            pass
-
-        assert DecoratedDatabase(id="db").materialization_strategy is il.MaterializationStrategy.RECONCILE
-        assert RecordingDatabase(id="db").materialization_strategy is il.MaterializationStrategy.AUTO
-
-    def test_decorator_default_override_keeps_field_metadata(self):
-        # Regression: the decorator's default override used to rebuild the
-        # FieldInfo from scratch, dropping title/description/x-info — the UI
-        # then fell back to the enum's class name and docstring.
-        from interloper.destination import destination
-
-        @destination(materialization_strategy=il.MaterializationStrategy.RECONCILE)
-        class DecoratedDatabase(RecordingDatabase):
-            pass
-
-        prop = DecoratedDatabase.config_schema()["properties"]["materialization_strategy"]
-        assert prop["default"] == "reconcile"
-        assert prop["title"] == "Materialization Strategy"
-        assert prop["description"] == "How strictly written data must match the effective schema."
-        assert "'Reconcile' aligns columns" in prop["x-info"]
-
-    def test_instance_override_beats_the_class_default(self):
-        destination = RecordingDatabase(id="db", materialization_strategy=il.MaterializationStrategy.RECONCILE)
-        destination.write(make_io_context(plain_asset(), schema=DateSchema), [{"name": "a", "day": "2026-07-13"}])
-        assert destination.calls[-1][1][2] == [{"name": "a", "day": datetime.date(2026, 7, 13)}]
-
-    def test_strategy_renders_in_the_config_schema(self):
-        schema = RecordingDatabase.config_schema()
-        prop = schema["properties"]["materialization_strategy"]
-        ref = prop.get("$ref") or prop.get("allOf", [{}])[0].get("$ref", "")
-        enum_def = schema["$defs"][ref.split("/")[-1]]
-        assert set(enum_def["enum"]) == {"auto", "strict", "reconcile"}
-        # Short inline description; the long per-value text lives in the tooltip.
-        assert prop["title"] == "Materialization Strategy"
-        assert prop["description"] == "How strictly written data must match the effective schema."
-        assert "'Reconcile' aligns columns" in prop["x-info"]

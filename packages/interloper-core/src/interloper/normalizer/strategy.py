@@ -1,21 +1,37 @@
-"""Materialization strategy for controlling schema enforcement and data reconciliation."""
+"""Materialization strategy: how strictly the conform step enforces the schema."""
+
+from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 
 class MaterializationStrategy(str, Enum):
-    """Controls how data is validated and reconciled during materialization.
+    """How the conform step enforces an asset's schema.
+
+    Both strategies hand destinations data in the schema's canonical types;
+    they differ in what counts as an error.
 
     Attributes:
-        AUTO: Infer a schema if none is provided; reconcile against the
-            schema when one is declared.
-        STRICT: Schema is required.  Data is validated against the schema
-            and materialization fails on any mismatch.
-        RECONCILE: Schema is required.  Columns are aligned to match the
-            schema (extras dropped, missing filled), and values are coerced
-            to the schema's types.
+        RECONCILE: The default. Align columns to the schema (extras dropped
+            with a warning, missing nullables filled) and coerce values. With
+            no schema declared, infer one from the data for the destinations.
+        STRICT: Schema required. Extra columns, missing required columns and
+            values the schema rejects fail the materialization; values that
+            pass are still coerced to the declared types.
     """
 
-    AUTO = "auto"
     STRICT = "strict"
     RECONCILE = "reconcile"
+
+    @classmethod
+    def _missing_(cls, value: Any) -> MaterializationStrategy | None:
+        """Read the retired ``auto`` value, which stored configs and manifests still carry, as ``RECONCILE``.
+
+        Args:
+            value: The value no member matched.
+
+        Returns:
+            ``RECONCILE`` for ``"auto"``, else ``None`` so the enum raises as usual.
+        """
+        return cls.RECONCILE if value == "auto" else None

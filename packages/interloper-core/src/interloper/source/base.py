@@ -121,14 +121,13 @@ class Source(Component, Workload):
     # State
     normalizer: Normalizer | None = Field(default=None)
     materialization_strategy: MaterializationStrategy | None = SelectField(
-        default=MaterializationStrategy.AUTO,
+        default=MaterializationStrategy.RECONCILE,
         label="Materialization Strategy",
         description="Default strategy for this source's assets.",
         info=(
-            "'Auto' coerces data to the schema (or infers a schema when "
-            "none is declared), 'Strict' fails on any mismatch, 'Reconcile' "
-            "requires a schema and coerces values to it. Assets declaring "
-            "their own strategy keep it."
+            "'Reconcile' coerces data to the schema (or infers a schema when "
+            "none is declared); 'Strict' requires a schema and fails on any "
+            "mismatch. Assets declaring their own strategy keep it."
         ),
     )
     assets: list[Asset] = Field(default_factory=list)
@@ -575,6 +574,6 @@ class Source(Component, Workload):
                 asset.normalizer = self.normalizer
             if (
                 self.materialization_strategy is not None
-                and asset.materialization_strategy == MaterializationStrategy.AUTO
+                and asset.materialization_strategy is MaterializationStrategy.RECONCILE
             ):
                 asset.materialization_strategy = self.materialization_strategy

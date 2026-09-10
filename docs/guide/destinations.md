@@ -172,10 +172,8 @@ Behaviour the base class owns:
   carry daily dates.
 - **Reads are native**: `read` hands back what `select` returned, a DataFrame from BigQuery, rows
   from a row store. A consumer indifferent to the destination reads `il.Upstream.records`.
-- **Write-time strategy**: the `materialization_strategy` field lets a backend demand
-  schema-shaped data: `STRICT` validates against the effective schema before writing,
-  `RECONCILE` coerces, `AUTO` trusts the conformed data. It is set as a default via the decorator
-  and overridable per configured destination.
+- **Data arrives conformed**: the asset's conform step already put the data in the effective
+  schema's canonical types, so a backend never re-validates or coerces before writing.
 - A warning is emitted when the partition column is missing from written data, since
   downstream reads by partition would then return nothing.
 

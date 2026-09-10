@@ -67,7 +67,7 @@ class TestNormalizer:
         assert set(df.columns) <= set(schemas.AdGroupsStats.model_fields)
         view = Representation.of(df)
         conformed = view.reconcile(schemas.AdGroupsStats)
-        Representation.of(conformed).validate(schemas.AdGroupsStats)  # must not raise
+        Representation.of(conformed).reconcile(schemas.AdGroupsStats, strict=True)  # must not raise
         record = conformed.to_dict("records")[0]
         assert record["impressions"] == 1000
         assert record["player_25pct_complete"] == 7

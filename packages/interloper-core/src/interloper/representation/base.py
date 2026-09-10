@@ -143,23 +143,19 @@ class Representation(ABC):
         """
 
     @abstractmethod
-    def validate(self, data: Any, schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate *data* against *schema*; raise :class:`SchemaError` on mismatch.
+    def reconcile(self, data: Any, schema: type[Schema], *, strict: bool = False) -> Any:
+        """Return *data* in *schema*'s canonical types.
 
-        Args:
-            data: The table to validate, in this representation's own type.
-            schema: The schema to validate against.
-            strict: When ``True``, columns absent from the schema are a
-                mismatch too; defaults to ``False``.
-        """
-
-    @abstractmethod
-    def reconcile(self, data: Any, schema: type[Schema]) -> Any:
-        """Align *data* to *schema* (drop extras, add missing) and coerce values.
+        Non-strict repairs the shape: extra columns are dropped, missing
+        nullable columns are filled, values are coerced. Strict refuses
+        instead: an extra column, a missing required column or a value the
+        schema rejects is a :class:`SchemaError`. Either way the result
+        carries the declared types, so destinations never re-check it.
 
         Args:
             data: The table to reconcile, in this representation's own type.
             schema: The schema to align the data to.
+            strict: Refuse mismatches instead of repairing them; defaults to ``False``.
         """
 
     @abstractmethod
@@ -239,26 +235,17 @@ class View:
         """
         return self.representation.columns(self.data)
 
-    def validate(self, schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate the data against *schema*; raise :class:`SchemaError` on mismatch.
-
-        Args:
-            schema: The schema to validate against.
-            strict: When ``True``, columns absent from the schema are a
-                mismatch too; defaults to ``False``.
-        """
-        self.representation.validate(self.data, schema, strict=strict)
-
-    def reconcile(self, schema: type[Schema]) -> Any:
-        """Align the data to *schema* (drop extras, add missing) and coerce values.
+    def reconcile(self, schema: type[Schema], *, strict: bool = False) -> Any:
+        """Return the data in *schema*'s canonical types (see :meth:`Representation.reconcile`).
 
         Args:
             schema: The schema to align the data to.
+            strict: Refuse mismatches instead of repairing them; defaults to ``False``.
 
         Returns:
             The reconciled data, in the data's own representation.
         """
-        return self.representation.reconcile(self.data, schema)
+        return self.representation.reconcile(self.data, schema, strict=strict)
 
     def infer(self) -> type[Schema]:
         """Infer a :class:`Schema` from the data.
@@ -395,27 +382,22 @@ class RowsRepresentation(Representation):
         lo, hi = iso_label(start), iso_label(end)
         return [row for row in data if lo <= iso_label(row.get(column)) < hi]
 
-    def validate(self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate each row against the schema.
-
-        Args:
-            data: Rows to validate.
-            schema: The schema to validate against.
-            strict: When ``True``, columns absent from the schema are a
-                mismatch too; defaults to ``False``.
-        """
-        schema.validate_rows(data, strict=strict)
-
-    def reconcile(self, data: list[dict[str, Any]], schema: type[Schema]) -> list[dict[str, Any]]:
-        """Reconcile rows against the schema.
+    def reconcile(
+        self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False
+    ) -> list[dict[str, Any]]:
+        """Reconcile rows against the schema, row-wise through pydantic.
 
         Args:
             data: Rows to reconcile.
             schema: The schema to align the rows to.
+            strict: Validate every row first, refusing extra or missing
+                columns and values the schema rejects; defaults to ``False``.
 
         Returns:
-            Reconciled rows with columns aligned and values coerced.
+            Rows with columns aligned and values coerced to the schema's types.
         """
+        if strict:
+            schema.validate_rows(data, strict=True)
         return schema.reconcile(data)
 
     def infer(self, data: list[dict[str, Any]]) -> type[Schema]:

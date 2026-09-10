@@ -12,11 +12,9 @@ from typing import Any
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.errors import ConfigError
-from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition
 from interloper.representation import Representation
-from interloper.resource.fields import SelectField
 from interloper.utils.data import is_empty
 
 
@@ -54,19 +52,6 @@ class DatabaseDestination(Destination):
     The destination instance holds no table identity and is shared across
     assets: ``asset.table`` and ``asset.dataset`` name the target at call time.
     """
-
-    # Instance configuration: backends set a default via the @destination
-    # decorator; users can override it per configured destination in the UI.
-    materialization_strategy: MaterializationStrategy = SelectField(
-        default=MaterializationStrategy.AUTO,
-        label="Materialization Strategy",
-        description="How strictly written data must match the effective schema.",
-        info=(
-            "'Auto' trusts the conformed data as-is, 'Strict' validates it "
-            "and fails on mismatch, 'Reconcile' aligns columns and coerces "
-            "values to the schema before writing."
-        ),
-    )
 
     # -- Backend hooks ---------------------------------------------------------
 
@@ -155,7 +140,6 @@ class DatabaseDestination(Destination):
         """
         if is_empty(data):
             return
-        data = self._apply_materialization_strategy(data, context)
         self._warn_missing_partition_column(data, context)
         if not context.window:
             self.write_partition(context, context.partitions[0], data)
@@ -279,30 +263,3 @@ class DatabaseDestination(Destination):
                 stacklevel=3,
             )
 
-    def _apply_materialization_strategy(self, data: Any, context: IOContext) -> Any:
-        """Enforce this backend's write-time schema strategy.
-
-        A backend declares how strictly its physical types demand
-        schema-shaped data: ``AUTO`` trusts the conformed data as-is,
-        ``STRICT`` validates it against the effective schema (failing
-        loudly), and ``RECONCILE`` aligns columns and coerces values, for
-        backends whose typed load path rejects representations that lax
-        validation lets through (ISO date strings against a DATE column, say).
-        No-op when no effective schema was resolved.
-
-        Args:
-            data: The data about to be written, in its native representation.
-            context: IO context whose ``schema`` is the effective schema, or
-                ``None`` when none could be resolved.
-
-        Returns:
-            The data to write, coerced under ``RECONCILE``.
-        """
-        strategy = self.materialization_strategy
-        if strategy is MaterializationStrategy.AUTO or context.schema is None:
-            return data
-        view = Representation.of(data)
-        if strategy is MaterializationStrategy.RECONCILE:
-            return view.reconcile(context.schema)
-        view.validate(context.schema, strict=True)
-        return data
