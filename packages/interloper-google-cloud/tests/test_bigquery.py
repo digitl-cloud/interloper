@@ -243,18 +243,6 @@ class TestTableExists:
         assert dest._table_exists("tbl", None) is False
 
 
-# -- dispose -------------------------------------------------------------------
-
-
-class TestDispose:
-    """Lifecycle: dispose closes the client."""
-
-    def test_dispose_closes_client(self):
-        dest, mock_client = _make_destination()
-        dest.dispose()
-        mock_client.close.assert_called_once()
-
-
 # -- Schema-driven loads -------------------------------------------------------
 
 

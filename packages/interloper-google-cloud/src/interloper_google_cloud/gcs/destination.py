@@ -237,10 +237,3 @@ class GCSDestination(Destination):
                 row_count = len(self._format.deserialize(blob.download_as_bytes()))
             counts[value] = counts.get(value, 0) + int(row_count)
         return counts
-
-    # -- Lifecycle -------------------------------------------------------------
-
-    def dispose(self) -> None:
-        """Close the storage client, if one was ever built."""
-        if self.client:
-            self.client.close()

@@ -414,13 +414,6 @@ class BigQueryDestination(DatabaseDestination):
         rows = self.client.query(query).result()
         return {row["partition_value"]: row["cnt"] for row in rows}
 
-    # -- Lifecycle -------------------------------------------------------------
-
-    def dispose(self) -> None:
-        """Close the BigQuery client, if one was ever built."""
-        if self.client:
-            self.client.close()
-
 
 # -- Utility functions ---------------------------------------------------------
 
