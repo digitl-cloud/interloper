@@ -18,10 +18,8 @@ from pydantic import BaseModel, Field
 from interloper_google_cloud.bigquery.destination import (
     BigQueryDestination,
     _bq_to_py_type,
-    _infer_bq_schema,
     _merge_field_descriptions,
     _partition_param,
-    _py_to_bq_type,
     _schema_to_bq_fields,
     _time_partitioning,
 )
@@ -65,55 +63,6 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     return dest, mock_client
 
 
-# -- _py_to_bq_type ------------------------------------------------------------
-
-
-class TestPyToBqType:
-    """Map BigQuery field types from Python values."""
-
-    def test_bool(self):
-        assert _py_to_bq_type(True) == "BOOLEAN"
-        assert _py_to_bq_type(False) == "BOOLEAN"
-
-    def test_int(self):
-        assert _py_to_bq_type(42) == "INTEGER"
-        assert _py_to_bq_type(0) == "INTEGER"
-        assert _py_to_bq_type(-1) == "INTEGER"
-
-    def test_float(self):
-        assert _py_to_bq_type(3.14) == "FLOAT"
-        assert _py_to_bq_type(0.0) == "FLOAT"
-
-    def test_decimal(self):
-        assert _py_to_bq_type(Decimal("9.99")) == "NUMERIC"
-
-    def test_datetime(self):
-        assert _py_to_bq_type(datetime.datetime(2024, 1, 1, 12, 0)) == "TIMESTAMP"  # noqa: DTZ001 — naive is the case under test
-
-    def test_date(self):
-        assert _py_to_bq_type(datetime.date(2024, 1, 1)) == "DATE"
-
-    def test_bytes(self):
-        assert _py_to_bq_type(b"raw") == "BYTES"
-
-    def test_string(self):
-        assert _py_to_bq_type("hello") == "STRING"
-
-    def test_none_falls_back_to_string(self):
-        assert _py_to_bq_type(None) == "STRING"
-
-    def test_list_falls_back_to_string(self):
-        assert _py_to_bq_type([1, 2, 3]) == "STRING"
-
-    def test_dict_falls_back_to_string(self):
-        assert _py_to_bq_type({"a": 1}) == "STRING"
-
-    def test_bool_before_int(self):
-        """Bool is a subclass of int -- ensure bool wins."""
-        assert _py_to_bq_type(True) == "BOOLEAN"
-        assert _py_to_bq_type(True) != "INTEGER"
-
-
 # -- _bq_to_py_type ------------------------------------------------------------
 
 
@@ -153,30 +102,34 @@ class TestBqToPyType:
         assert _bq_to_py_type(True) == "BOOL"
 
 
-# -- _insert -------------------------------------------------------------------
+# -- insert --------------------------------------------------------------------
 
 
 class TestInsert:
-    """Load-job payload construction."""
+    """Every representation reaches BigQuery through one DataFrame load job."""
 
-    def test_nan_sent_to_bigquery_as_null(self):
-        """Pandas NaN must reach the load job as JSON null, not the invalid token NaN."""
+    def test_rows_are_converted_to_a_dataframe(self):
+        import pandas as pd
+
         dest, mock_client = _make_destination(dataset="ds")
-        rows = [
-            {"campaign_id": 123, "cost": float("nan"), "clicks": 5.0},
-            {"campaign_id": 456, "cost": 1.5, "clicks": float("nan")},
-        ]
+        rows = [{"campaign_id": 123, "cost": 1.5}, {"campaign_id": 456, "cost": 2.5}]
 
-        dest._load_rows("ds.tbl", rows, None)
+        dest.insert("tbl", "ds", rows, _ctx(_plain_asset(), None))
 
-        sent_rows = mock_client.load_table_from_json.call_args.args[0]
-        assert sent_rows == [
-            {"campaign_id": 123, "cost": None, "clicks": 5.0},
-            {"campaign_id": 456, "cost": 1.5, "clicks": None},
-        ]
-        # The serialised payload must be valid JSON (no bare NaN token).
-        for row in sent_rows:
-            assert "NaN" not in json.dumps(row)
+        sent_df, ref = mock_client.load_table_from_dataframe.call_args.args
+        assert ref == "test-proj.ds.tbl"
+        pd.testing.assert_frame_equal(sent_df, pd.DataFrame(rows))
+        assert not mock_client.load_table_from_json.called
+
+    def test_a_dataframe_is_loaded_as_is(self):
+        import pandas as pd
+
+        dest, mock_client = _make_destination(dataset="ds")
+        df = pd.DataFrame([{"campaign_id": 123, "cost": 1.5}])
+
+        dest.insert("tbl", "ds", df, _ctx(_plain_asset(), None))
+
+        assert mock_client.load_table_from_dataframe.call_args.args[0] is df
 
 
 # -- _resolve_dataset ----------------------------------------------------------
@@ -309,24 +262,8 @@ class TestSchemaToBqFields:
         assert fields["address"].fields[1].description is None
 
 
-class TestInferBqSchema:
-    """Value-based fallback inference scans all rows."""
-
-    def test_none_in_first_row_resolved_from_later_rows(self):
-        fields = {f.name: f.field_type for f in _infer_bq_schema([{"a": None, "b": 1}, {"a": 2.5, "b": 2}])}
-        assert fields == {"a": "FLOAT", "b": "INTEGER"}
-
-    def test_int_widens_to_float(self):
-        fields = {f.name: f.field_type for f in _infer_bq_schema([{"a": 1}, {"a": 2.5}])}
-        assert fields == {"a": "FLOAT"}
-
-    def test_all_null_column_falls_back_to_string(self):
-        fields = {f.name: f.field_type for f in _infer_bq_schema([{"a": None}])}
-        assert fields == {"a": "STRING"}
-
-
 class TestInsertData:
-    """Native insert dispatch: DataFrame → Parquet load, rows → JSON load."""
+    """Schema-driven table creation and load-job configuration."""
 
     def test_dataframe_loads_with_explicit_schema(self):
         import numpy as np
@@ -366,7 +303,7 @@ class TestInsertData:
         created = mock_client.create_table.call_args.args[0]
         assert [f.name for f in created.schema] == ["id", "cost", "day"]
 
-    def test_table_created_from_inference_without_schema(self):
+    def test_rows_without_schema_let_the_load_job_create_the_table(self):
         from google.cloud.exceptions import NotFound
 
         dest, mock_client = _make_destination(dataset="ds")
@@ -374,8 +311,23 @@ class TestInsertData:
 
         dest.insert("tbl", "ds", [{"a": None}, {"a": 2}], _ctx(_plain_asset(), None))
 
-        created = mock_client.create_table.call_args.args[0]
-        assert [(f.name, f.field_type) for f in created.schema] == [("a", "INTEGER")]
+        assert not mock_client.create_table.called
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.schema is None
+        assert job_config.time_partitioning is None
+
+    def test_partitioned_rows_without_schema_carry_the_partitioning_on_the_load_job(self):
+        from google.cloud.exceptions import NotFound
+
+        dest, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("nope")
+        rows = [{"day": datetime.date(2024, 1, 1), "a": 1}]
+
+        dest.insert("tbl", "ds", rows, _ctx(_partitioned_asset(), None))
+
+        job_config = mock_client.load_table_from_dataframe.call_args.kwargs["job_config"]
+        assert job_config.time_partitioning.field == "day"
+        assert job_config.time_partitioning.type_ == "DAY"
 
     def test_a_table_created_by_a_concurrent_run_is_loaded_into_not_an_error(self):
         from google.cloud.exceptions import Conflict, NotFound
@@ -387,7 +339,8 @@ class TestInsertData:
         dest.insert("tbl", "ds", [{"id": 1, "cost": 2.0, "day": None}], _ctx(_plain_asset(), _RowSchema))
 
         assert mock_client.create_table.called
-        assert mock_client.load_table_from_json.call_args.args[0] == [{"id": 1, "cost": 2.0, "day": None}]
+        sent_df = mock_client.load_table_from_dataframe.call_args.args[0]
+        assert sent_df.to_dict("records") == [{"id": 1, "cost": 2.0, "day": None}]
 
     def test_dataframe_without_schema_lets_load_job_create_table(self):
         import pandas as pd
@@ -403,10 +356,11 @@ class TestInsertData:
 
     def test_rows_load_carries_schema(self):
         dest, mock_client = _make_destination(dataset="ds")
-        dest.insert("tbl", "ds", [{"id": 1, "cost": float("nan"), "day": None}], _ctx(_plain_asset(), _RowSchema))
 
-        call = mock_client.load_table_from_json.call_args
-        assert call.args[0] == [{"id": 1, "cost": None, "day": None}]  # NaN sanitized
+        dest.insert("tbl", "ds", [{"id": 1, "cost": None, "day": None}], _ctx(_plain_asset(), _RowSchema))
+
+        call = mock_client.load_table_from_dataframe.call_args
+        assert list(call.args[0].columns) == ["id", "cost", "day"]
         assert [f.name for f in call.kwargs["job_config"].schema] == ["id", "cost", "day"]
 
 
@@ -500,19 +454,6 @@ class TestCreateTableMetadata:
         created = mock_client.create_table.call_args.args[0]
         assert created.time_partitioning is None
         assert created.description is None
-
-    def test_inferred_schema_table_partitioned_on_date_column(self):
-        from google.cloud.exceptions import NotFound
-
-        dest, mock_client = _make_destination(dataset="ds")
-        mock_client.get_table.side_effect = NotFound("nope")
-
-        rows = [{"id": 1, "day": datetime.date(2024, 1, 1)}]
-        dest.insert("tbl", "ds", rows, _ctx(_partitioned_asset(), None))
-
-        created = mock_client.create_table.call_args.args[0]
-        assert created.time_partitioning is not None
-        assert created.time_partitioning.field == "day"
 
     def test_dataframe_without_schema_partitions_via_load_job(self):
         import pandas as pd
