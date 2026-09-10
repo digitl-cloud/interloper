@@ -29,9 +29,9 @@ class ArrowRepresentation(Representation):
 
 `filter_eq` and `filter_range` are how partitions slice data on write; `filter_range` compares
 values as ISO-8601 strings (`iso_label()`), which is what lets a date compare against a
-datetime and keeps half-open bounds exact. `to_records` and `from_records` are what
-destinations use when they store records, and what `DatabaseDestination` uses to materialize
-reads into `read_representation`.
+datetime and keeps half-open bounds exact. `to_records` is what destinations use when they store
+records, and what `il.Upstream.records` uses so a consumer can read any upstream as rows,
+whatever its destination handed back.
 
 Representations are stateless, never serialized and not user-configurable.
 
@@ -65,7 +65,7 @@ rows, whose record coercion rejects non-tabular data with a clear error.
 - Conform resolves the conformer through `Representation.of(result)`.
 - `Partition.slice()` and `TimePartition.slice()` filter through the representation, so window
   writes split correctly for any table type.
-- `Destination` and `DatabaseDestination` convert through `to_records` and
-  `from_records`.
-- `DatabaseDestination.read_representation` and `@destination(read_representation=...)` name
-  the representation reads should materialize into.
+- Destinations that store records convert through `to_records`; a destination reads back in
+  the representation it holds natively (a DataFrame from BigQuery, rows from a file), and
+  `il.Upstream.records` converts for the consumer that wants rows. A producer never chooses a
+  representation on a consumer's behalf.

@@ -17,7 +17,7 @@ from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
 from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination
+from interloper.destination.database import DatabaseDestination, PartitionFilter
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.normalizer import MaterializationStrategy
 from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
@@ -34,7 +34,6 @@ from interloper_google_cloud.serialization import json_default, replace_non_fini
     name="BigQuery",
     icon="icon:bigquery",
     tags=["Cloud"],
-    read_representation="dataframe",
     # The DataFrame write path is a typed parquet load: values that pass lax
     # schema validation but don't match the physical column type (e.g. ISO
     # date strings against DATE) fail the load, so coerce at the boundary.
@@ -85,22 +84,22 @@ class BigQueryDestination(DatabaseDestination):
 
     # -- Helpers ---------------------------------------------------------------
 
-    def _resolve_dataset(self, schema: str | None) -> str:
+    def _resolve_dataset(self, dataset: str | None) -> str:
         """Return the BigQuery dataset to use.
 
-        Prefers ``schema`` (from the asset's ``dataset``).  Falls back to
+        Prefers *dataset* (the asset's).  Falls back to
         the destination's ``dataset`` field.
 
         Args:
-            schema: Schema parameter from the asset context.
+            dataset: The asset's dataset, or ``None`` to fall back to the destination's default.
 
         Returns:
             The resolved dataset name.
 
         Raises:
-            ConfigError: If neither *schema* nor *dataset* is set.
+            ConfigError: If neither the asset nor the destination names a dataset.
         """
-        ds = schema or self.default_dataset
+        ds = dataset or self.default_dataset
         if ds is None:
             raise ConfigError(
                 "BigQueryDestination requires a dataset. Either set 'dataset' on the asset "
@@ -108,50 +107,50 @@ class BigQueryDestination(DatabaseDestination):
             )
         return ds
 
-    def _table_ref(self, table: str, schema: str | None) -> str:
+    def _table_ref(self, table: str, dataset: str | None) -> str:
         """Build a fully-qualified BigQuery table reference.
 
         Args:
             table: Table name.
-            schema: Schema (dataset) override.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
 
         Returns:
             ``project.dataset.table`` string.
         """
-        ds = self._resolve_dataset(schema)
+        ds = self._resolve_dataset(dataset)
         return f"{self.project}.{ds}.{table}"
 
-    def _get_table(self, table: str, schema: str | None) -> bigquery.Table | None:
+    def _get_table(self, table: str, dataset: str | None) -> bigquery.Table | None:
         """Fetch a BigQuery table.
 
         Args:
             table: Table name.
-            schema: Schema (dataset) override.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
 
         Returns:
             The table, or ``None`` if it does not exist.
         """
         try:
-            return self.client.get_table(self._table_ref(table, schema))
+            return self.client.get_table(self._table_ref(table, dataset))
         except NotFound:
             return None
 
-    def _table_exists(self, table: str, schema: str | None) -> bool:
+    def _table_exists(self, table: str, dataset: str | None) -> bool:
         """Check whether a BigQuery table exists.
 
         Args:
             table: Table name.
-            schema: Schema (dataset) override.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
 
         Returns:
             ``True`` if the table exists, ``False`` otherwise.
         """
-        return self._get_table(table, schema) is not None
+        return self._get_table(table, dataset) is not None
 
     def _create_table(
         self,
         table: str,
-        schema: str | None,
+        dataset: str | None,
         bq_schema: list[bigquery.SchemaField],
         time_partitioning: bigquery.TimePartitioning | None = None,
         description: str | None = None,
@@ -165,12 +164,12 @@ class BigQueryDestination(DatabaseDestination):
 
         Args:
             table: Target table name.
-            schema: Database schema (dataset).
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
             bq_schema: BigQuery field definitions.
             time_partitioning: Time partitioning spec, if the asset is partitioned.
             description: Table description (the asset's description).
         """
-        bq_table = bigquery.Table(self._table_ref(table, schema), schema=bq_schema)
+        bq_table = bigquery.Table(self._table_ref(table, dataset), schema=bq_schema)
         bq_table.time_partitioning = time_partitioning
         bq_table.description = description
         try:
@@ -209,13 +208,13 @@ class BigQueryDestination(DatabaseDestination):
         if update_fields:
             self.client.update_table(bq_table, update_fields)
 
-    def _ensure_dataset(self, schema: str | None) -> None:
+    def _ensure_dataset(self, dataset: str | None) -> None:
         """Create the BigQuery dataset if it does not already exist.
 
         Args:
-            schema: Schema (dataset) override.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
         """
-        ds = self._resolve_dataset(schema)
+        ds = self._resolve_dataset(dataset)
         dataset_ref = bigquery.DatasetReference(self.project, ds)
         try:
             self.client.get_dataset(dataset_ref)
@@ -229,7 +228,7 @@ class BigQueryDestination(DatabaseDestination):
 
     # -- DatabaseDestination hooks ---------------------------------------------
 
-    def _insert_data(self, table: str, schema: str | None, data: Any, context: IOContext) -> None:
+    def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
         """Insert data into BigQuery, schema-driven when a schema is available.
 
         The effective schema from the IO context (declared on the asset, or
@@ -245,7 +244,7 @@ class BigQueryDestination(DatabaseDestination):
 
         Args:
             table: Target table name.
-            schema: Database schema (dataset).
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
             data: The data in its native format.
             context: IO context carrying the asset and effective schema.
         """
@@ -253,26 +252,26 @@ class BigQueryDestination(DatabaseDestination):
         description = _asset_description(context.asset)
         partitioning = context.asset.partitioning
 
-        bq_table = self._get_table(table, schema)
+        bq_table = self._get_table(table, dataset)
         creating = bq_table is None
         if creating:
-            self._ensure_dataset(schema)
+            self._ensure_dataset(dataset)
             if bq_schema is not None:
                 tp = _time_partitioning(partitioning, bq_schema)
-                self._create_table(table, schema, bq_schema, time_partitioning=tp, description=description)
+                self._create_table(table, dataset, bq_schema, time_partitioning=tp, description=description)
             elif not isinstance(data, pd.DataFrame):
                 rows = Representation.of(data).to_records(data)
                 if not rows:
                     return
                 inferred = _infer_bq_schema(rows)
                 tp = _time_partitioning(partitioning, inferred)
-                self._create_table(table, schema, inferred, time_partitioning=tp, description=description)
+                self._create_table(table, dataset, inferred, time_partitioning=tp, description=description)
             # DataFrame without schema: the load job creates the table from dtypes,
             # with the partitioning spec passed on the job config below.
         else:
             self._sync_table_metadata(bq_table, bq_schema, description)
 
-        ref = self._table_ref(table, schema)
+        ref = self._table_ref(table, dataset)
         if isinstance(data, pd.DataFrame):
             tp = _time_partitioning(partitioning, bq_schema) if creating and bq_schema is None else None
             self._load_dataframe(ref, data, bq_schema, time_partitioning=tp)
@@ -341,183 +340,63 @@ class BigQueryDestination(DatabaseDestination):
         job = self.client.load_table_from_json(safe_rows, ref, job_config=job_config)
         job.result()
 
-    def _insert(self, table: str, schema: str | None, rows: list[dict[str, Any]]) -> None:
-        """Insert rows into BigQuery using a JSON load job.
+    def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
+        """Delete the rows a filter selects, or truncate the table.
+
+        A table that does not exist has nothing to delete.
 
         Args:
             table: Target table name.
-            schema: Database schema (dataset).
-            rows: Row data as list of dicts.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+            where: The rows to delete; ``None`` for the whole table.
         """
-        self._load_rows(self._table_ref(table, schema), rows, None)
-
-    def _delete_all(self, table: str, schema: str | None) -> None:
-        """Truncate all rows from the BigQuery table.
-
-        No-op when the table does not exist yet.
-
-        Args:
-            table: Target table name.
-            schema: Database schema (dataset).
-        """
-        if not self._table_exists(table, schema):
-            return
-        ref = self._table_ref(table, schema)
-        self.client.query(f"TRUNCATE TABLE `{ref}`").result()
-
-    def _delete_partition(self, table: str, schema: str | None, column: str, value: Any) -> None:
-        """Delete rows matching a partition value.
-
-        No-op when the table does not exist yet.
-
-        Args:
-            table: Target table name.
-            schema: Database schema (dataset).
-            column: Partition column name.
-            value: Partition value to match.
-        """
-        bq_table = self._get_table(table, schema)
+        bq_table = self._get_table(table, dataset)
         if bq_table is None:
             return
-        ref = self._table_ref(table, schema)
-        query = f"DELETE FROM `{ref}` WHERE `{column}` = @partition_value"
-        job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
-        self.client.query(query, job_config=job_config).result()
-
-    def _delete_partition_range(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        start: Any,
-        end: Any,
-    ) -> None:
-        """Delete rows whose *column* falls in ``[start, end)``.
-
-        No-op when the table does not exist yet.
-
-        Args:
-            table: Target table name.
-            schema: Database schema (dataset).
-            column: Partition column name.
-            start: The period's first instant (inclusive).
-            end: The period's end (exclusive).
-        """
-        bq_table = self._get_table(table, schema)
-        if bq_table is None:
+        ref = self._table_ref(table, dataset)
+        if where is None:
+            self.client.query(f"TRUNCATE TABLE `{ref}`").result()
             return
-        ref = self._table_ref(table, schema)
-        query = f"DELETE FROM `{ref}` WHERE `{column}` >= @partition_start AND `{column}` < @partition_end"
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                _partition_param(bq_table, column, start, name="partition_start"),
-                _partition_param(bq_table, column, end, name="partition_end"),
-            ]
-        )
-        self.client.query(query, job_config=job_config).result()
+        predicate, parameters = _predicate(bq_table, where)
+        job_config = bigquery.QueryJobConfig(query_parameters=parameters)
+        self.client.query(f"DELETE FROM `{ref}` WHERE {predicate}", job_config=job_config).result()
 
-    def _select_all(self, table: str, schema: str | None) -> list[dict[str, Any]]:
-        """Select all rows from the BigQuery table.
+    def select(self, table: str, dataset: str | None, where: PartitionFilter | None) -> pd.DataFrame:
+        """Select the rows a filter selects, or every row, as a DataFrame.
+
+        The client builds the frame from the query's Arrow result, so column
+        types survive the read without a pass through Python records.
 
         Args:
             table: Target table name.
-            schema: Database schema (dataset).
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+            where: The rows to select; ``None`` for the whole table.
 
         Returns:
-            All rows as list of dicts.
+            The selected rows.
 
         Raises:
-            DataNotFoundError: If the table does not exist.
+            DataNotFoundError: If the table does not exist yet.
         """
-        if not self._table_exists(table, schema):
-            qualified = self._table_ref(table, schema)
-            raise DataNotFoundError(f"Table '{qualified}' does not exist. Has the asset been materialized?")
-        ref = self._table_ref(table, schema)
-        rows = self.client.query(f"SELECT * FROM `{ref}`").result()
-        return [dict(row) for row in rows]
-
-    def _select_partition(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        value: Any,
-    ) -> list[dict[str, Any]]:
-        """Select rows matching a partition value.
-
-        Args:
-            table: Target table name.
-            schema: Database schema (dataset).
-            column: Partition column name.
-            value: Partition value to match.
-
-        Returns:
-            Matching rows as list of dicts.
-
-        Raises:
-            DataNotFoundError: If the table does not exist.
-        """
-        bq_table = self._get_table(table, schema)
+        bq_table = self._get_table(table, dataset)
+        ref = self._table_ref(table, dataset)
         if bq_table is None:
-            qualified = self._table_ref(table, schema)
-            raise DataNotFoundError(f"Table '{qualified}' does not exist. Has the asset been materialized?")
-        ref = self._table_ref(table, schema)
-        query = f"SELECT * FROM `{ref}` WHERE `{column}` = @partition_value"
-        job_config = bigquery.QueryJobConfig(query_parameters=[_partition_param(bq_table, column, value)])
-        rows = self.client.query(query, job_config=job_config).result()
-        return [dict(row) for row in rows]
-
-    def _select_partition_range(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-        start: Any,
-        end: Any,
-    ) -> list[dict[str, Any]]:
-        """Select rows whose *column* falls in ``[start, end)``.
-
-        Args:
-            table: Target table name.
-            schema: Database schema (dataset).
-            column: Partition column name.
-            start: The period's first instant (inclusive).
-            end: The period's end (exclusive).
-
-        Returns:
-            Matching rows as list of dicts.
-
-        Raises:
-            DataNotFoundError: If the table does not exist.
-        """
-        bq_table = self._get_table(table, schema)
-        if bq_table is None:
-            qualified = self._table_ref(table, schema)
-            raise DataNotFoundError(f"Table '{qualified}' does not exist. Has the asset been materialized?")
-        ref = self._table_ref(table, schema)
-        query = f"SELECT * FROM `{ref}` WHERE `{column}` >= @partition_start AND `{column}` < @partition_end"
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                _partition_param(bq_table, column, start, name="partition_start"),
-                _partition_param(bq_table, column, end, name="partition_end"),
-            ]
-        )
-        rows = self.client.query(query, job_config=job_config).result()
-        return [dict(row) for row in rows]
+            raise DataNotFoundError(f"Table '{ref}' does not exist. Has the asset been materialized?")
+        if where is None:
+            return self.client.query(f"SELECT * FROM `{ref}`").result().to_dataframe()
+        predicate, parameters = _predicate(bq_table, where)
+        job_config = bigquery.QueryJobConfig(query_parameters=parameters)
+        query = self.client.query(f"SELECT * FROM `{ref}` WHERE {predicate}", job_config=job_config)
+        return query.result().to_dataframe()
 
     # -- Introspection ---------------------------------------------------------
 
-    def _count_by_partition(
-        self,
-        table: str,
-        schema: str | None,
-        column: str,
-    ) -> dict[str, int]:
+    def count(self, table: str, dataset: str | None, column: str) -> dict[str, int]:
         """Return row counts grouped by partition column via BigQuery SQL.
 
         Args:
             table: Target table name.
-            schema: Database schema (dataset).
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
             column: Column to group by.
 
         Returns:
@@ -526,11 +405,11 @@ class BigQueryDestination(DatabaseDestination):
         Raises:
             DataNotFoundError: If the table does not exist.
         """
-        if not self._table_exists(table, schema):
-            ref = self._table_ref(table, schema)
+        if not self._table_exists(table, dataset):
+            ref = self._table_ref(table, dataset)
             raise DataNotFoundError(f"Table '{ref}' does not exist. Has the asset been materialized?")
 
-        ref = self._table_ref(table, schema)
+        ref = self._table_ref(table, dataset)
         query = f"SELECT CAST(`{column}` AS STRING) AS partition_value, COUNT(*) AS cnt FROM `{ref}` GROUP BY 1"
         rows = self.client.query(query).result()
         return {row["partition_value"]: row["cnt"] for row in rows}
@@ -718,6 +597,29 @@ _BQ_FIELD_TO_PARAM_TYPE = {
     "BYTES": "BYTES",
     "STRING": "STRING",
 }
+
+
+def _predicate(bq_table: bigquery.Table, where: PartitionFilter) -> tuple[str, list[bigquery.ScalarQueryParameter]]:
+    """Render a partition filter as a parameterised SQL predicate.
+
+    Args:
+        bq_table: The target table, for the column's type.
+        where: The filter to render.
+
+    Returns:
+        The predicate text and the typed parameters it names.
+    """
+    column = where.column
+    if where.bounds is None:
+        return f"`{column}` = @partition_value", [_partition_param(bq_table, column, where.value)]
+    start, end = where.bounds
+    return (
+        f"`{column}` >= @partition_start AND `{column}` < @partition_end",
+        [
+            _partition_param(bq_table, column, start, name="partition_start"),
+            _partition_param(bq_table, column, end, name="partition_end"),
+        ],
+    )
 
 
 def _partition_param(

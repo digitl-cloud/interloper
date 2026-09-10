@@ -6,7 +6,7 @@ else:
 
 1. **Definition metadata and behaviour**, as plain keyword arguments: the
    anchor's public ``ClassVar`` annotations (``key``, ``name``, ``icon``,
-   ``tags``, ``schema``, ``partitioning``, ``read_representation``, ``oauth``,
+   ``tags``, ``schema``, ``partitioning``, ``oauth``,
    ...) and its Pydantic field defaults (``dataset``,
    ``default_destination_key``, ``normalizer``, ``materialization_strategy``,
    ...). :func:`_route` sorts them by introspecting the anchor, so nothing is
@@ -52,8 +52,8 @@ def decorate(
 
     The routing introspects the decorated class when it already extends the
     anchor, and the anchor itself otherwise: a decorated subclass may carry
-    ClassVars and fields the anchor never declares (``read_representation`` on
-    a ``DatabaseDestination``, ``oauth`` on an ``OAuthConnection``), and those
+    ClassVars and fields the anchor never declares (``materialization_strategy``
+    on a ``DatabaseDestination``, ``oauth`` on an ``OAuthConnection``), and those
     are legitimate overrides.
 
     Args:

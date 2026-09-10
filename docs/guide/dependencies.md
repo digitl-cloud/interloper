@@ -196,12 +196,13 @@ travels inside its own source's document. See [Specs](specs.md).
 ## Reading upstream data
 
 Each leg is read from the upstream's `default_destination_key` destination, or its first, scoped
-to the partition the run consumes. `il.Upstream` carries two attributes:
+to the partition the run consumes. `il.Upstream` carries the asset and its data, plus one accessor:
 
 | Attribute | Meaning |
 |-----------|---------|
 | `asset` | The upstream asset the data came from; its `source`, `key` and `id` tell the legs apart. |
-| `data` | Whatever that destination's `read()` yields: rows for the built-in destinations, a DataFrame for DataFrame-native ones. |
+| `data` | Whatever that destination's `read()` yields: rows for the built-in destinations, a DataFrame for BigQuery; `None` when nothing is materialized for the partition. |
+| `records` | The data as `list[dict]` whatever the destination handed back, `[]` when nothing is materialized. The one line a consumer needs to be indifferent to where its upstream is stored. |
 
 `data` is `None`, with a `LOG` warning naming the leg, when the upstream has nothing
 materialized where the destination looks: no table or object for that scope at all

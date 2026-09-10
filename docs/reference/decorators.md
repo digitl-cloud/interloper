@@ -12,7 +12,7 @@ already extends that anchor:
 
 | A name that is | Becomes |
 |----------------|---------|
-| a public `ClassVar` of the anchor (`key`, `name`, `icon`, `tags`, `schema`, `partitioning`, `read_representation`, `oauth`, ...) | a class attribute of the built class |
+| a public `ClassVar` of the anchor (`key`, `name`, `icon`, `tags`, `schema`, `partitioning`, `oauth`, ...) | a class attribute of the built class |
 | a field of the anchor (`dataset`, `default_destination_key`, `normalizer`, `materialization_strategy`, `auto_renew`, ...) | the default of that field |
 
 Nothing is hand-maintained per kind: the accepted names are whatever the anchor declares, so an

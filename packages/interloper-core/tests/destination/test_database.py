@@ -7,9 +7,9 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.destination.database import DatabaseDestination, WriteDisposition
-from interloper.errors import NormalizerError
+from interloper.destination.database import DatabaseDestination, PartitionFilter
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.representation import Representation
 
 
 class RecordingDatabase(DatabaseDestination):
@@ -21,30 +21,17 @@ class RecordingDatabase(DatabaseDestination):
         super().model_post_init(context)
         object.__setattr__(self, "calls", [])
 
-    def _insert(self, table, schema, rows):
-        self.calls.append(("insert", (table, schema, rows)))
+    def insert(self, table, dataset, data, context):
+        self.calls.append(("insert", (table, dataset, Representation.of(data).to_records(data))))
 
-    def _delete_all(self, table, schema):
-        self.calls.append(("delete_all", (table, schema)))
+    def delete(self, table, dataset, where):
+        self.calls.append(("delete", (table, dataset, where)))
 
-    def _delete_partition(self, table, schema, column, value):
-        self.calls.append(("delete_partition", (table, schema, column, value)))
-
-    def _delete_partition_range(self, table, schema, column, start, end):
-        self.calls.append(("delete_partition_range", (table, schema, column, start, end)))
-
-    def _select_all(self, table, schema):
+    def select(self, table, dataset, where):
+        self.calls.append(("select", (table, dataset, where)))
         return []
 
-    def _select_partition(self, table, schema, column, value):
-        self.calls.append(("select_partition", (table, schema, column, value)))
-        return []
-
-    def _select_partition_range(self, table, schema, column, start, end):
-        self.calls.append(("select_partition_range", (table, schema, column, start, end)))
-        return []
-
-    def _count_by_partition(self, table, schema, column):
+    def count(self, table, dataset, column):
         return {}
 
 
@@ -78,16 +65,7 @@ class TestWrite:
         destination = RecordingDatabase(id="db")
         rows = [{"a": 1}]
         destination.write(make_io_context(plain_asset()), rows)
-        assert [c[0] for c in destination.calls] == ["delete_all", "insert"]
-        assert destination.calls[1][1][2] == rows
-
-    def test_append_skips_deletes(self):
-        class AppendDatabase(RecordingDatabase):
-            write_disposition = WriteDisposition.APPEND
-
-        destination = AppendDatabase(id="db")
-        destination.write(make_io_context(plain_asset()), [{"a": 1}])
-        assert [c[0] for c in destination.calls] == ["insert"]
+        assert destination.calls == [("delete", ("plain_asset", None, None)), ("insert", ("plain_asset", None, rows))]
 
     def test_single_time_partition_deletes_its_bounds(self):
         # A time partition's rows may carry any value inside the period, so
@@ -95,10 +73,8 @@ class TestWrite:
         destination = RecordingDatabase(id="db")
         partition = TimePartition(datetime.date(2024, 1, 1))
         destination.write(make_io_context(partitioned_asset(), partition), [{"date": "2024-01-01"}])
-        assert destination.calls[0] == (
-            "delete_partition_range",
-            ("partitioned_asset", None, "date", datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)),
-        )
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
+        assert destination.calls[0] == ("delete", ("partitioned_asset", None, where))
         assert destination.calls[1][0] == "insert"
 
     def test_non_time_partition_deletes_by_id(self):
@@ -110,14 +86,14 @@ class TestWrite:
 
         destination = RecordingDatabase(id="db")
         destination.write(make_io_context(regional(), Partition("eu")), [{"region": "eu"}])
-        assert destination.calls[0] == ("delete_partition", ("regional", None, "region", "eu"))
+        assert destination.calls[0] == ("delete", ("regional", None, PartitionFilter("region", value="eu")))
 
     def test_window_deletes_each_partition_inserts_once(self):
         destination = RecordingDatabase(id="db")
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 3))
         rows = [{"date": "2024-01-01"}, {"date": "2024-01-02"}, {"date": "2024-01-03"}]
         destination.write(make_io_context(partitioned_asset(), window), rows)
-        deletes = [c for c in destination.calls if c[0] == "delete_partition_range"]
+        deletes = [c for c in destination.calls if c[0] == "delete"]
         inserts = [c for c in destination.calls if c[0] == "insert"]
         assert len(deletes) == 3
         assert len(inserts) == 1
@@ -130,19 +106,15 @@ class TestWrite:
         destination = RecordingDatabase(id="db")
         partition = TimePartition(datetime.date(2024, 2, 10), il.TimeGranularity.MONTH)
         destination.write(make_io_context(monthly(), partition), [{"date": "2024-02-10"}])
-        assert destination.calls[0] == (
-            "delete_partition_range",
-            ("monthly", None, "date", datetime.date(2024, 2, 1), datetime.date(2024, 3, 1)),
-        )
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 2, 1), datetime.date(2024, 3, 1)))
+        assert destination.calls[0] == ("delete", ("monthly", None, where))
 
     def test_time_partition_reads_by_bounds(self):
         destination = RecordingDatabase(id="db")
         partition = TimePartition(datetime.date(2024, 1, 1))
         destination.read(make_io_context(partitioned_asset(), partition))
-        assert destination.calls[0] == (
-            "select_partition_range",
-            ("partitioned_asset", None, "date", datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)),
-        )
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
+        assert destination.calls[0] == ("select", ("partitioned_asset", None, where))
 
     def test_empty_data_is_a_noop(self):
         destination = RecordingDatabase(id="db")
@@ -156,7 +128,7 @@ class TestWrite:
         rows = [{"a": 1}]
         destination.write(make_io_context(asset), rows)
         assert destination.calls == [
-            ("delete_all", ("discriminated_rows__42", "discriminated_source")),
+            ("delete", ("discriminated_rows__42", "discriminated_source", None)),
             ("insert", ("discriminated_rows__42", "discriminated_source", rows)),
         ]
 
@@ -178,18 +150,13 @@ class TestWrite:
 
 
 class TestInsertDataHook:
-    """Native-format insert hook."""
-
-    def test_default_converts_to_rows(self):
-        destination = RecordingDatabase(id="db")
-        destination._insert_data("t", None, [{"a": 1}], make_io_context(plain_asset()))
-        assert destination.calls == [("insert", ("t", None, [{"a": 1}]))]
+    """The insert hook receives the data natively, with the effective schema on the context."""
 
     def test_override_receives_native_data(self):
         captured: dict[str, Any] = {}
 
         class NativeDatabase(RecordingDatabase):
-            def _insert_data(self, table, schema, data, context):
+            def insert(self, table, dataset, data, context):
                 captured["data"] = data
                 captured["schema"] = context.schema
 
@@ -203,59 +170,38 @@ class TestInsertDataHook:
         assert captured["schema"] is MySchema
 
 
-class TestClassLevelTraits:
-    """write_disposition / read_representation are backend traits, not config."""
+class TestPartitionFilter:
+    """The base resolves a partition into the filter a backend renders."""
 
-    def test_traits_are_not_config_schema_fields(self):
-        # Regression: as pydantic fields they leaked into the UI config form.
-        properties = RecordingDatabase.definition().config_schema.get("properties", {})
-        assert "read_representation" not in properties
-        assert "write_disposition" not in properties
+    def test_the_whole_table_is_no_filter(self):
+        assert RecordingDatabase(id="db")._filter(make_io_context(plain_asset()), None) is None
 
-    def test_traits_are_not_model_fields(self):
-        assert "read_representation" not in RecordingDatabase.model_fields
-        assert "write_disposition" not in RecordingDatabase.model_fields
+    def test_a_time_partition_filters_by_half_open_bounds(self):
+        partition = TimePartition(datetime.date(2024, 1, 1))
+        where = RecordingDatabase(id="db")._filter(make_io_context(partitioned_asset(), partition), partition)
+        assert where == PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
 
-    def test_read_representation_via_decorator(self):
-        from interloper.destination import destination
+    def test_any_other_partition_filters_by_its_id(self):
+        from interloper.partitioning.base import Partition, PartitionConfig
 
-        @destination(name="Traited", read_representation="dataframe")
-        class TraitedDB(RecordingDatabase):
-            pass
+        @il.asset(partitioning=PartitionConfig(column="region"))
+        def regional(context: il.ExecutionContext) -> list:
+            return []
 
-        assert TraitedDB.read_representation == "dataframe"
-        assert "read_representation" not in TraitedDB.definition().config_schema.get("properties", {})
+        where = RecordingDatabase(id="db")._filter(make_io_context(regional(), Partition("eu")), Partition("eu"))
+        assert where == PartitionFilter("region", value="eu")
 
 
-class TestRecordsConversion:
-    """Data converts to records through its representation."""
+class TestNativeReads:
+    """A read hands back whatever the backend returns; the base converts nothing."""
 
-    def test_insert_data_converts_dataframe(self):
-        pd = pytest.importorskip("pandas")
+    def test_read_returns_the_select_result_as_is(self):
+        class FrameDatabase(RecordingDatabase):
+            def select(self, table, dataset, where):
+                return {"native": (table, where)}
 
-        destination = RecordingDatabase(id="db")
-        destination._insert_data("t", None, pd.DataFrame([{"a": 1}]), make_io_context(plain_asset()))
-        assert destination.calls == [("insert", ("t", None, [{"a": 1}]))]
-
-    def test_insert_data_passes_rows_through(self):
-        destination = RecordingDatabase(id="db")
-        destination._insert_data("t", None, [{"a": 1}], make_io_context(plain_asset()))
-        assert destination.calls == [("insert", ("t", None, [{"a": 1}]))]
-
-    def test_unsupported_type_raises(self):
-        destination = RecordingDatabase(id="db")
-        with pytest.raises(NormalizerError, match="does not support type"):
-            destination._insert_data("t", None, 42, make_io_context(plain_asset()))
-
-    def test_from_rows_uses_read_representation(self):
-        pd = pytest.importorskip("pandas")
-
-        class DataFrameReadDatabase(RecordingDatabase):
-            read_representation = "dataframe"
-
-        out = DataFrameReadDatabase(id="db")._from_rows([{"a": 1}])
-        assert isinstance(out, pd.DataFrame)
-        assert RecordingDatabase(id="db")._from_rows([{"a": 1}]) == [{"a": 1}]
+        result = FrameDatabase(id="db").read(make_io_context(plain_asset()))
+        assert result == {"native": ("plain_asset", None)}
 
 
 class DateSchema(il.Schema):
