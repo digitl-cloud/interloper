@@ -950,17 +950,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#partition-aware-destinations" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Partition-aware destinations
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#database-destinations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2160,7 +2149,7 @@ instance, meant for tests:</p>
 </tr>
 <tr>
 <td><code>partition_or_window</code></td>
-<td>The scope of this call, or <code>None</code> for an unpartitioned asset.</td>
+<td>The partition or window of this call, or <code>None</code> for an unpartitioned asset.</td>
 </tr>
 <tr>
 <td><code>schema</code></td>
@@ -2173,8 +2162,9 @@ instance, meant for tests:</p>
 </tbody>
 </table>
 <h2 id="custom-destinations">Custom destinations<a class="headerlink" href="#custom-destinations" title="Permanent link">&para;</a></h2>
-<p>Subclass <code>il.Destination</code>, or decorate a plain class with <code>@il.destination</code>, and implement
-<code>read()</code> and <code>write()</code>. Both may be sync or <code>async def</code>:</p>
+<p>A destination stores data one <strong>partition</strong> at a time, <code>None</code> standing for the whole of an
+unpartitioned asset. Subclass <code>il.Destination</code>, or decorate a plain class with <code>@il.destination</code>,
+and implement the two partition hooks. Both may be sync or <code>async def</code>:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
@@ -2185,44 +2175,40 @@ instance, meant for tests:</p>
 </span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">class</span><span class="w"> </span><span class="nc">JSONDestination</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">Destination</span><span class="p">):</span>
 </span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">base_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
 </span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">dataset</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span><span class="si">}</span><span class="s2">.json"</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>        <span class="n">path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">))</span>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>        <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">dataset</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span><span class="si">}</span><span class="s2">.json"</span>
-</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">,</span> <span class="n">partition</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Partition</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="n">base</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">dataset</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span> <span class="o">/</span> <span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="k">if</span> <span class="n">partition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>            <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="s2">"data.json"</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">partitioning</span><span class="o">.</span><span class="n">column</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">partition</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">"</span> <span class="o">/</span> <span class="s2">"data.json"</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">write_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">,</span> <span class="n">partition</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Partition</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">partition</span><span class="p">)</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>        <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>        <span class="n">path</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="nb">str</span><span class="p">))</span>
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">read_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">,</span> <span class="n">partition</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Partition</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">partition</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
 </span></code></pre></div>
-<p>This form writes one file per asset and ignores <code>context.partition_or_window</code>: a partition
-rewrite replaces every partition and a window lands in one file. It suits unpartitioned assets;
-partitioned ones belong on <code>il.PartitionedDestination</code> below.</p>
+<p><code>write()</code> and <code>read()</code> are the base class's: a window write is split into one <code>write_partition</code> call
+per partition, slicing the data through its <a href="../../extending/representations/">representation</a>
+on the partition column; a window read returns one result per partition, newest first. A
+destination written this way is partition-correct by construction, and <code>CSVDestination</code>,
+<code>FileDestination</code>, <code>MemoryDestination</code> and <code>GCSDestination</code> are all built exactly like this. The
+partitions a context covers are on the context itself, <code>context.partitions</code> and <code>context.slices(data)</code>,
+for a backend that needs them.</p>
 <p>The decorator accepts the class's public ClassVars and field defaults, plus <code>relations=</code>; see the
 <a href="../../reference/decorators/">decorators reference</a>. A destination's own connection is a relation,
 declared as an annotation or through <code>relations=</code>; see
 <a href="../resources/#relations-on-sources-and-destinations">Resources</a>.</p>
 <p>Override <code>partition_row_counts(context)</code> to report rows per partition; <code>asset.partition_row_counts()</code>
 and coverage tooling call it.</p>
-<h3 id="partition-aware-destinations">Partition-aware destinations<a class="headerlink" href="#partition-aware-destinations" title="Permanent link">&para;</a></h3>
-<p><code>il.PartitionedDestination</code> implements the partition dispatch once. Subclasses implement two
-scope hooks and are partition-correct by construction:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">JSONDestination</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">PartitionedDestination</span><span class="p">):</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">base_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_write_scope</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">partition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>        <span class="c1"># partition is None for the unpartitioned whole</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="o">...</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_read_scope</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">partition</span><span class="p">):</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>        <span class="o">...</span>
-</span></code></pre></div>
-<p>A window write is split into one <code>_write_scope</code> call per partition, slicing the data through
-its <a href="../../extending/representations/">representation</a> on the partition column. A window read
-returns one result per partition, newest first. <code>CSVDestination</code> and <code>MemoryDestination</code> are
-built this way.</p>
+<p>A backend whose storage is not per partition may override <code>write()</code> or <code>read()</code>
+wholesale. <code>DatabaseDestination</code> below does that for writes: rows carry the partition column, so
+a window clears every partition it covers and inserts the whole batch once.</p>
 <h3 id="database-destinations">Database destinations<a class="headerlink" href="#database-destinations" title="Permanent link">&para;</a></h3>
 <p><code>DatabaseDestination</code> (imported from <code>interloper.destination</code>, together with
-<code>WriteDisposition</code>) targets stores addressed by table and schema. Reads and writes reduce to a
+<code>WriteDisposition</code>) targets stores addressed by table and schema. Its <code>write_partition</code> clears one
+partition and inserts; its <code>write</code> batches a window into one insert. Reads and writes reduce to a
 small set of row operations:</p>
 <table>
 <thead>
@@ -2272,7 +2258,7 @@ representation directly (a DataFrame into a Parquet load job) using <code>contex
 <p>Behaviour the base class owns:</p>
 <ul>
 <li><strong>Write disposition</strong>: <code>write_disposition = WriteDisposition.REPLACE</code> (default) deletes the
-  matching scope before inserting; <code>APPEND</code> never deletes. A class attribute, not a field.</li>
+  matching partition before inserting; <code>APPEND</code> never deletes. A class attribute, not a field.</li>
 <li><strong>Time partitions are scoped by bounds</strong>, not by equality, because rows of a monthly partition
   carry daily dates.</li>
 <li><strong>Read representation</strong>: rows are materialized into the representation named by
