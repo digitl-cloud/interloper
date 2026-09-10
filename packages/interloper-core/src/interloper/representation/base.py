@@ -4,7 +4,9 @@ A :class:`Representation` answers "what kind of table is this, and how do I
 view it generically?" for exactly one data representation. It bundles the
 generic table views (records, columns, partition filtering) with the
 representation's :class:`~interloper.conformer.Conformer`, so core never
-names a concrete dataframe library anywhere.
+names a concrete dataframe library anywhere. ``Representation.of(data)``
+binds the matching representation to the data as a :class:`View`, whose
+``to(key)`` converts between registered representations through records.
 
 Every representation — the rows built-in (``list[dict]``) included — is
 declared as a package entry point under the ``interloper.representations``
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import datetime as dt
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from interloper.conformer import ROWS_CONFORMER, Conformer
@@ -145,8 +148,8 @@ class Representation(ABC):
         """The schema operations for this representation."""
 
     @classmethod
-    def of(cls, data: Any) -> Representation:
-        """Resolve the representation matching *data*.
+    def of(cls, data: Any) -> View:
+        """Resolve the representation matching *data* and bind it to the data.
 
         Non-rows representations are checked first; everything unmatched
         falls back to rows, whose record coercion rejects non-tabular data
@@ -156,12 +159,112 @@ class Representation(ABC):
             data: The table whose representation to resolve, of any type.
 
         Returns:
-            The representation for *data*.
+            The data viewed through its representation: ``.records``,
+            ``.columns``, ``.conformer``, the partition filters, and
+            ``.to(key)`` to convert it to any registered representation.
         """
         for key, instance in REPRESENTATIONS.items():
             if key != RowsRepresentation.key and instance.matches(data):
-                return instance
-        return REPRESENTATIONS[RowsRepresentation.key]
+                return View(instance, data)
+        return View(REPRESENTATIONS[RowsRepresentation.key], data)
+
+
+@dataclass(frozen=True)
+class View:
+    """A representation bound to the data it views.
+
+    What :meth:`Representation.of` returns: the generic table views with the
+    data already applied, so a caller reads ``view.records`` or converts with
+    ``view.to("dataframe")`` without naming the data twice.
+
+    Attributes:
+        representation: The representation matching the data (rows when none matched).
+        data: The table being viewed.
+    """
+
+    representation: Representation
+    data: Any
+
+    @property
+    def key(self) -> str:
+        """The bound representation's registry key.
+
+        Returns:
+            The key, e.g. ``"rows"`` or ``"dataframe"``.
+        """
+        return self.representation.key
+
+    @property
+    def records(self) -> list[dict[str, Any]]:
+        """The data as ``list[dict]`` records (missing values as ``None``).
+
+        Returns:
+            One mapping per row.
+        """
+        return self.representation.to_records(self.data)
+
+    @property
+    def columns(self) -> list[str]:
+        """The data's column names.
+
+        Returns:
+            The names, empty when not discoverable.
+        """
+        return self.representation.columns(self.data)
+
+    @property
+    def conformer(self) -> Conformer:
+        """The schema operations for the data's representation.
+
+        Returns:
+            The bound representation's conformer.
+        """
+        return self.representation.conformer
+
+    def filter_eq(self, column: str, value: Any) -> Any:
+        """Return the subset of the data whose *column* equals *value* (compared as strings).
+
+        Args:
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            value: The value each kept row's *column* must equal.
+
+        Returns:
+            The matching rows, in the data's own representation.
+        """
+        return self.representation.filter_eq(self.data, column, value)
+
+    def filter_range(self, column: str, start: Any, end: Any) -> Any:
+        """Return the rows whose *column* falls in ``[start, end)``.
+
+        Args:
+            column: Name of the column to compare; rows missing it compare as ``None``.
+            start: Inclusive lower bound of the range.
+            end: Exclusive upper bound of the range.
+
+        Returns:
+            The matching rows, in the data's own representation.
+        """
+        return self.representation.filter_range(self.data, column, start, end)
+
+    def to(self, key: str) -> Any:
+        """Convert the data to the representation registered under *key*.
+
+        Data already in the target representation is returned as is. Anything
+        else is rebuilt from its records view, the one conversion every
+        representation implements, so a new representation converts to and
+        from every existing one the moment it is registered. An unknown key
+        fails with the registry's error naming the registered keys.
+
+        Args:
+            key: The target representation's key, e.g. ``"dataframe"``.
+
+        Returns:
+            The data in the target representation.
+        """
+        target = REPRESENTATIONS[key]
+        if target is self.representation and target.matches(self.data):
+            return self.data
+        return target.from_records(self.records)
 
 
 class RowsRepresentation(Representation):

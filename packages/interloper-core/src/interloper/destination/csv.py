@@ -71,7 +71,7 @@ class CSVDestination(Destination):
                 unpartitioned whole.
             data: The partition's slice of the data, in its native representation.
         """
-        rows = Representation.of(data).to_records(data)
+        rows = Representation.of(data).records
         self._write_csv(self._partition_path(context, partition), rows)
 
     def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:

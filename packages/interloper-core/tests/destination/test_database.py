@@ -22,7 +22,7 @@ class RecordingDatabase(DatabaseDestination):
         object.__setattr__(self, "calls", [])
 
     def insert(self, table, dataset, data, context):
-        self.calls.append(("insert", (table, dataset, Representation.of(data).to_records(data))))
+        self.calls.append(("insert", (table, dataset, Representation.of(data).records)))
 
     def delete(self, table, dataset, where):
         self.calls.append(("delete", (table, dataset, where)))

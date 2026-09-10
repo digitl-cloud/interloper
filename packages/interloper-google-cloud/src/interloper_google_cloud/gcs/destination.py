@@ -162,7 +162,7 @@ class GCSDestination(Destination):
             data: The rows to write.
 
         """
-        rows = Representation.of(data).to_records(data)
+        rows = Representation.of(data).records
         if partition is not None:
             assert context.asset.partitioning
             column = context.asset.partitioning.column
