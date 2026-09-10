@@ -102,30 +102,20 @@ class DataFrameRepresentation(Representation):
         labels = data[column].map(iso_label)
         return data[(labels >= iso_label(start)) & (labels < iso_label(end))]
 
-    def validate(self, data: pd.DataFrame, schema: type[Schema], *, strict: bool = False) -> None:
-        """Validate via a null-safe records view (``NaN``/``NaT`` → ``None``).
-
-        Missing values in numeric columns validate correctly against
-        nullable fields instead of failing as ``nan`` floats.
-
-        Args:
-            data: The DataFrame to validate.
-            schema: The schema to validate against.
-            strict: Whether unknown columns are rejected.
-        """
-        data = _encode_json_str_columns(data, schema)
-        schema.validate_rows(dataframe_to_records(data), strict=strict)
-
-    def reconcile(self, data: pd.DataFrame, schema: type[Schema]) -> pd.DataFrame:
+    def reconcile(self, data: pd.DataFrame, schema: type[Schema], *, strict: bool = False) -> pd.DataFrame:
         """Reconcile using vectorized column-wise casts from the field specs.
 
-        No per-row pydantic validation — this scales to warehouse-sized
-        frames. Uses nullable pandas dtypes (``Int64``, ``Float64``,
-        ``boolean``, ``string``) so missing values survive as ``pd.NA``.
+        Non-strict runs no per-row pydantic validation, so it scales to
+        warehouse-sized frames. Strict first validates a null-safe records
+        view (``NaN``/``NaT`` as ``None``, so missing numeric values pass
+        nullable fields) and refuses extra or missing columns. Uses nullable
+        pandas dtypes (``Int64``, ``Float64``, ``boolean``, ``string``) so
+        missing values survive as ``pd.NA``.
 
         Args:
             data: The DataFrame to reconcile.
             schema: The schema whose field specs drive the casts.
+            strict: Refuse mismatches instead of repairing them; defaults to ``False``.
 
         Returns:
             Reconciled DataFrame.
@@ -136,6 +126,8 @@ class DataFrameRepresentation(Representation):
                 column contains nulls.
         """
         data = _encode_json_str_columns(data, schema)
+        if strict:
+            schema.validate_rows(dataframe_to_records(data), strict=True)
         specs = schema.field_specs()
         dropped = set(data.columns) - {spec.name for spec in specs}
         if dropped:

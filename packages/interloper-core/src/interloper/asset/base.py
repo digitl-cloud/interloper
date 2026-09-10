@@ -133,13 +133,13 @@ class Asset(Component, Operation):
     default_destination_key: str = Field(default="")
     materializable: bool = Field(default=True)
     materialization_strategy: MaterializationStrategy = SelectField(
-        default=MaterializationStrategy.AUTO,
+        default=MaterializationStrategy.RECONCILE,
         label="Materialization Strategy",
         description="How this asset's data is checked against its schema.",
         info=(
-            "'Auto' coerces data to the schema (or infers a schema when "
-            "none is declared), 'Strict' fails on any mismatch, "
-            "'Reconcile' requires a schema and coerces values to it."
+            "'Reconcile' coerces data to the schema (or infers a schema when "
+            "none is declared); 'Strict' requires a schema and fails on any "
+            "mismatch. Both write the schema's types."
         ),
     )
     normalizer: Normalizer | None = Field(default=None)
@@ -916,16 +916,14 @@ class Asset(Component, Operation):
     def _conform(self, result: Any) -> Any:
         """Enforce the asset's schema according to the materialization strategy.
 
-        AUTO: reconcile when a schema is declared, infer one otherwise.
-        STRICT: schema required; reject extra, missing, or mistyped fields.
-        RECONCILE: schema required; align columns and coerce values.
-
-        The schema operations come from a single :class:`Conformer`, resolved
-        once from the data's representation (rows or DataFrame). Data no
+        One pass: with a schema, ``RECONCILE`` aligns and coerces while
+        ``STRICT`` refuses extra, missing or invalid columns; both hand
+        destinations the schema's canonical types. Without a schema,
+        ``RECONCILE`` infers one and ``STRICT`` is an error. Data no
         representation matches is not a table: without a schema it passes
         through untouched (arbitrary objects bound for a file destination),
-        with one it is an error. The effective schema (declared, or inferred under AUTO) is
-        carried to destinations via ``IOContext.schema``.
+        with one it is an error. The effective schema (declared, or inferred)
+        is carried to destinations via ``IOContext.schema``.
 
         Args:
             result: The data to conform, already normalized when a normalizer
@@ -935,14 +933,14 @@ class Asset(Component, Operation):
             The conformed result.
 
         Raises:
-            AssetError: If the strategy requires a schema but none is declared,
-                or if a schema is declared but the data is not tabular.
+            AssetError: If ``STRICT`` is set without a schema, or if a schema
+                is declared but the data is not tabular.
         """
         strategy = self.materialization_strategy
         schema = self.schema
 
-        if schema is None and strategy != MaterializationStrategy.AUTO:
-            raise AssetError(f"Asset '{self.key}': strategy='{strategy.value}' requires a schema.")
+        if schema is None and strategy is MaterializationStrategy.STRICT:
+            raise AssetError(f"Asset '{self.key}': strategy='strict' requires a schema.")
 
         try:
             view = Representation.of(result)
@@ -960,11 +958,8 @@ class Asset(Component, Operation):
             return result
 
         self._effective_schema = schema
-        if strategy == MaterializationStrategy.STRICT:
-            view.validate(schema, strict=True)
-            return result
         with tracer().start_as_current_span("interloper.representation.reconcile", attributes=self._span_attributes()):
-            return view.reconcile(schema)
+            return view.reconcile(schema, strict=strategy is MaterializationStrategy.STRICT)
 
     def _infer_schema(self, view: View) -> type[Schema] | None:
         """Best-effort schema inference for the IO boundary (AUTO, no declared schema).

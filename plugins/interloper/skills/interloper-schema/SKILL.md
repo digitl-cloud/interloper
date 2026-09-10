@@ -38,9 +38,8 @@ Reference: https://docs.interloper.dev/guide/schema/ and https://docs.interloper
 
    | Strategy | With a declared schema |
    |----------|------------------------|
-   | `AUTO` (default) | reconciles: coerces `"12034"` to `int`, drops extra columns with a warning, fills missing nullable columns with `None`, fails on values it cannot parse. Without a schema it infers one for the destination. |
-   | `RECONCILE` | same as AUTO but explicit and requires the schema |
-   | `STRICT` | validates only, never transforms: `"12034"` passes for `int` and an ISO string passes for `date`, both stay strings; extra or missing columns fail. For detecting contract drift, not for typing. |
+   | `RECONCILE` (default) | coerces `"12034"` to `int`, drops extra columns with a warning, fills missing nullable columns with `None`, fails on values it cannot parse. Without a schema it infers one for the destination. |
+   | `STRICT` | extra or missing columns and values the schema rejects fail the materialization; values that pass are still coerced to the declared types. Requires a schema. For detecting contract drift. |
 
 3. **Normalizer** for the reshaping the schema cannot do. Options: `normalize_columns_names`
    (snake_case, default on), `flatten_max_level` (nesting depth to flatten, default `0` is off),

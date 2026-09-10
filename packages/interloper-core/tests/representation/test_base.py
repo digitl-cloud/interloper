@@ -66,8 +66,9 @@ class TestView:
 
     def test_schema_ops_apply_to_the_bound_data(self):
         view = Representation.of([{"user_id": "1", "name": "a", "extra": True}])
-        view.validate(UserSchema)
         assert view.reconcile(UserSchema) == [{"user_id": 1, "name": "a"}]
+        with pytest.raises(SchemaError, match="extra fields"):
+            view.reconcile(UserSchema, strict=True)
         assert {s.name: s.type for s in view.infer().field_specs()} == {"user_id": str, "name": str, "extra": bool}
 
     def test_filters(self):
@@ -156,15 +157,20 @@ class TestRowsRepresentation:
         rows = [{"d": "2024-01-01", "v": 1}, {"d": "2024-01-02", "v": 2}]
         assert RowsRepresentation().filter_eq(rows, "d", "2024-01-02") == [{"d": "2024-01-02", "v": 2}]
 
-    def test_validate_passes(self):
-        RowsRepresentation().validate([{"user_id": 1, "name": "a"}], UserSchema)
-
-    def test_validate_fails_on_missing_required(self):
-        with pytest.raises(SchemaError, match="Field required"):
-            RowsRepresentation().validate([{"user_id": 1}], UserSchema)
-
     def test_reconcile_coerces_and_aligns(self):
         rows = RowsRepresentation().reconcile([{"user_id": "1", "name": "a", "extra": True}], UserSchema)
+        assert rows == [{"user_id": 1, "name": "a"}]
+
+    def test_strict_reconcile_refuses_extra_columns(self):
+        with pytest.raises(SchemaError, match="extra fields"):
+            RowsRepresentation().reconcile([{"user_id": 1, "name": "a", "extra": True}], UserSchema, strict=True)
+
+    def test_strict_reconcile_refuses_missing_required(self):
+        with pytest.raises(SchemaError, match="missing required fields"):
+            RowsRepresentation().reconcile([{"user_id": 1}], UserSchema, strict=True)
+
+    def test_strict_reconcile_still_returns_canonical_values(self):
+        rows = RowsRepresentation().reconcile([{"user_id": "1", "name": "a"}], UserSchema, strict=True)
         assert rows == [{"user_id": 1, "name": "a"}]
 
     def test_infer(self):

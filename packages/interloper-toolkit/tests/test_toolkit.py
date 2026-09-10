@@ -67,10 +67,10 @@ CATALOG_DUMP: dict[str, Any] = {
         "name": "Facebook Ads",
         "config_schema": {
             "$defs": {
-                "MaterializationStrategy": {"enum": ["auto", "strict", "reconcile"], "type": "string"},
+                "MaterializationStrategy": {"enum": ["strict", "reconcile"], "type": "string"},
             },
             "properties": {
-                "materialization_strategy": {"$ref": "#/$defs/MaterializationStrategy", "default": "auto"},
+                "materialization_strategy": {"$ref": "#/$defs/MaterializationStrategy", "default": "reconcile"},
             },
         },
         "assets": [
@@ -285,8 +285,8 @@ class TestCatalog:
 
         assert result.status == "success"
         strategy = result.definition["config_schema"]["properties"]["materialization_strategy"]
-        assert strategy["enum"] == ["auto", "strict", "reconcile"]
-        assert strategy["default"] == "auto"
+        assert strategy["enum"] == ["strict", "reconcile"]
+        assert strategy["default"] == "reconcile"
         serialized = json.dumps(result.definition)
         assert "$ref" not in serialized
         assert "$defs" not in serialized

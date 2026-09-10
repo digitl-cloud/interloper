@@ -73,7 +73,7 @@ class TestReshape:
         normalized = DataFrameNormalizer().normalize(rows)
         view = Representation.of(normalized)
         df = view.reconcile(schemas.FacebookStats)
-        Representation.of(df).validate(schemas.FacebookStats)  # must not raise
+        Representation.of(df).reconcile(schemas.FacebookStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["date"] == dt.date(2026, 7, 10)
         assert record["engagement_rate"] == 0.12

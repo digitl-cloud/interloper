@@ -95,4 +95,4 @@ class TestSpecRoundtrip:
         assert "sellable_on_hand_inventory_cost_amount" in normalized.columns
         assert "aged_90_plus_days_sellable_inventory_cost_amount" in normalized.columns
 
-        Representation.of(normalized).validate(schemas.VendorInventoryRetailManufacturingStats)  # must not raise
+        Representation.of(normalized).reconcile(schemas.VendorInventoryRetailManufacturingStats)  # must not raise

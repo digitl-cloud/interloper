@@ -90,6 +90,9 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | `Representation.of(leg.data).to_records(leg.data)` in an asset | `leg.records` |
    | `Representation.of(x)` falling back to rows for a dict / generator / model / opaque object | raises `RepresentationError`; the asset unwraps dict / models / generators / `None` to rows right after `data()`, opaque objects still pass through conform when no schema is declared |
    | `interloper.conformer` (`Conformer`, `RowsConformer`), `interloper_pandas.conformer` (`DataFrameConformer`), `Representation.conformer`, `View.conformer` | gone: `validate(data, schema, strict=)`, `reconcile(data, schema)` and `infer(data)` are methods on `Representation` (a table type is one class), and `Representation.of(data).validate(schema)` / `.reconcile(schema)` / `.infer()` on the bound view; the reconcile span is `interloper.representation.reconcile` |
+   | `MaterializationStrategy.AUTO` | gone: `RECONCILE` is the default and infers when no schema is declared; stored `auto` reads as `reconcile`. `STRICT` now returns canonical values too (validated, then coerced) |
+   | `materialization_strategy` on a `DatabaseDestination` / `@destination(materialization_strategy=...)` | gone: conform runs once on the asset and destinations receive canonical data; migration 018 strips the stored key |
+   | `Representation.validate(data, schema, strict=)` / `view.validate(schema)` | `reconcile(data, schema, strict=True)` / `view.reconcile(schema, strict=True)` |
    | `Conformer.prepare`, `coerce_to_records`, `Normalizer._coerce` | gone: normalizers take `list[dict]` (`DataFrameNormalizer` also a DataFrame) and raise `NormalizerError` for anything else |
    | `Representation.of(data).to_records(data)` / `.columns(data)` / `.filter_eq(data, column, value)` | `Representation.of(data)` is a bound `View`: `.records`, `.columns`, `.filter_eq(column, value)`, and `.to("dataframe")` to convert |
 

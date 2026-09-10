@@ -10,7 +10,6 @@ import pytest
 
 import interloper as il
 from interloper.component.decorator import _relations, _route
-from interloper.destination.database import DatabaseDestination
 
 
 class DecoratorConnection(il.Connection):
@@ -100,10 +99,10 @@ class TestOverrideChannel:
     def test_a_decorated_subclass_widens_what_is_accepted(self):
         # A decorated subclass may carry fields and ClassVars the anchor never
         # declares, so it is the class the routing introspects.
-        classvars, fields = _route(DatabaseDestination, {"materialization_strategy": "reconcile"})
+        classvars, fields = _route(il.CSVDestination, {"base_path": "/data"})
 
         assert classvars == {}
-        assert fields == {"materialization_strategy": "reconcile"}
+        assert fields == {"base_path": "/data"}
 
 
 class TestRelationChannel:

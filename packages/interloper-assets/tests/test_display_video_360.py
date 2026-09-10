@@ -110,7 +110,7 @@ class TestReports:
         normalized = _source().normalizer.normalize(rows)
         view = Representation.of(normalized)
         df = view.reconcile(schemas.LineItemsStats)
-        Representation.of(df).validate(schemas.LineItemsStats)  # must not raise
+        Representation.of(df).reconcile(schemas.LineItemsStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["active_view_pct_viewable_impressions"] == "85.5"
         assert record["impressions"] == 100
@@ -131,7 +131,7 @@ class TestNormalizerMapping:
 
         view = Representation.of(normalized)
         df = view.reconcile(schemas.Partners)
-        Representation.of(df).validate(schemas.Partners)  # must not raise
+        Representation.of(df).reconcile(schemas.Partners, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["ad_server_config_measurement_config_dv_360_to_cm_cost_reporting_enabled"] is True
         assert record["data_access_config_sdf_config_admin_email"] == "admin@digitl.com"
