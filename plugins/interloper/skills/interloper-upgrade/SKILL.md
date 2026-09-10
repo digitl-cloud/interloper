@@ -88,6 +88,8 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | `write_disposition = WriteDisposition.APPEND` | gone: a partition is always deleted before its data is inserted |
    | `read_representation = "dataframe"` / `@destination(read_representation=...)` | gone: `_select` returns the backend's native type; consumers read `leg.records` |
    | `Representation.of(leg.data).to_records(leg.data)` in an asset | `leg.records` |
+   | `Representation.of(x)` falling back to rows for a dict / generator / model / opaque object | raises `RepresentationError`; the asset unwraps dict / models / generators / `None` to rows right after `data()`, opaque objects still pass through conform when no schema is declared |
+   | `Conformer.prepare`, `coerce_to_records`, `Normalizer._coerce` | gone: normalizers take `list[dict]` (`DataFrameNormalizer` also a DataFrame) and raise `NormalizerError` for anything else |
    | `Representation.of(data).to_records(data)` / `.columns(data)` / `.filter_eq(data, column, value)` | `Representation.of(data)` is a bound `View`: `.records`, `.columns`, `.filter_eq(column, value)`, and `.to("dataframe")` to convert |
 
    A relation left unbound is resolved when it is read: an explicit `default=`, else the target

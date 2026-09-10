@@ -2,7 +2,7 @@
 
 import pytest
 
-from interloper.errors import NormalizerError
+from interloper.errors import RepresentationError
 from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation, View
 
 
@@ -35,8 +35,13 @@ class TestResolution:
         assert isinstance(view.representation, RowsRepresentation)
         assert view.key == "rows"
 
-    def test_unmatched_data_falls_back_to_rows(self):
-        assert isinstance(Representation.of("anything").representation, RowsRepresentation)
+    def test_unmatched_data_is_an_explicit_error(self):
+        with pytest.raises(RepresentationError, match="No representation matches int.*dataframe.*rows"):
+            Representation.of(42)
+
+    def test_a_dict_is_not_a_table(self):
+        with pytest.raises(RepresentationError, match="dict"):
+            Representation.of({"a": 1})
 
     def test_dataframes_resolve_to_the_pandas_representation(self):
         pd = pytest.importorskip("pandas")
@@ -48,7 +53,6 @@ class TestView:
 
     def test_records(self):
         assert Representation.of([{"a": 1}]).records == [{"a": 1}]
-        assert Representation.of({"a": 1}).records == [{"a": 1}]
 
     def test_columns(self):
         assert Representation.of([{"a": 1, "b": 2}]).columns == ["a", "b"]
@@ -65,9 +69,6 @@ class TestView:
     def test_to_the_same_representation_returns_the_data_itself(self):
         rows = [{"a": 1}]
         assert Representation.of(rows).to("rows") is rows
-
-    def test_to_rows_coerces_data_the_rows_representation_only_falls_back_to(self):
-        assert Representation.of({"a": 1}).to("rows") == [{"a": 1}]
 
     def test_to_dataframe_builds_from_records(self):
         pd = pytest.importorskip("pandas")
@@ -102,13 +103,6 @@ class TestRowsRepresentation:
     def test_to_records_passes_lists_through(self):
         rows = [{"a": 1}]
         assert RowsRepresentation().to_records(rows) is rows
-
-    def test_to_records_coerces_tabular_shapes(self):
-        assert RowsRepresentation().to_records({"a": 1}) == [{"a": 1}]
-
-    def test_to_records_rejects_non_tabular(self):
-        with pytest.raises(NormalizerError, match="does not support type"):
-            RowsRepresentation().to_records(42)
 
     def test_from_records_is_identity(self):
         rows = [{"a": 1}]

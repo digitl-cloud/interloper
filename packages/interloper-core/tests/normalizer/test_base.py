@@ -1,6 +1,20 @@
 """Tests for ``interloper.normalizer.base``."""
 
+import pytest
+
+from interloper.errors import NormalizerError
 from interloper.normalizer import Normalizer
+
+
+class TestInput:
+    """A normalizer reshapes rows; it does not unwrap other shapes."""
+
+    def test_rows_pass(self):
+        assert Normalizer(normalize_columns_names=False, fill_missing=False).normalize([{"a": 1}]) == [{"a": 1}]
+
+    def test_anything_else_is_an_explicit_error(self):
+        with pytest.raises(NormalizerError, match="expects list\\[dict\\].*dict"):
+            Normalizer().normalize({"a": 1})
 
 
 class TestColumnName:

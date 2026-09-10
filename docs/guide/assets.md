@@ -57,10 +57,12 @@ async def events(self) -> list[dict]:
 
 ### What an asset can return
 
-Anything. Tabular data is what destinations and schemas are built for: a `list[dict]`, a
-single `dict`, pydantic models or a list of them, a generator of rows, or a pandas DataFrame
-when `interloper-pandas` is installed. Non-tabular objects pass through untouched when the asset
-declares no schema, which is what a `FileDestination` storing pickles expects.
+Anything. Tabular data is what destinations and schemas are built for: a `list[dict]`, or a
+pandas DataFrame when `interloper-pandas` is installed. As a convenience the asset unwraps a few
+Python shapes into rows before anything else sees them: a single `dict` becomes one row,
+pydantic models or a list of them are dumped, a generator of rows is consumed, and `None` is no
+rows. Non-tabular objects pass through untouched when the asset declares no schema, which is
+what a `FileDestination` storing pickles expects; with a schema they are an error.
 
 ## Parameters
 

@@ -14,7 +14,6 @@ Helpers exported from `interloper` (`il.run`, `il.bounded_gather`) and `interlop
 
 | Function | Purpose |
 |----------|---------|
-| `coerce_to_records(data)` | `dict`, `list[dict]`, pydantic models, generators or `None` to `list[dict]`. Raises `NormalizerError` otherwise. |
 | `is_empty(data)` | `True` only when positively empty: `None`, an object with a boolean `empty` attribute set (DataFrames), or a sized container of length zero. Lazy iterables are never consumed and count as non-empty. |
 
 ## Text

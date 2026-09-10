@@ -361,10 +361,7 @@ class TimePartition(Partition):
         """
         from interloper.representation import Representation
 
-        view = Representation.of(data)
-        if not view.representation.matches(data):
-            return data
-        return view.filter_range(column, *self.bounds)
+        return Representation.of(data).filter_range(column, *self.bounds)
 
 
 @dataclass(frozen=True)

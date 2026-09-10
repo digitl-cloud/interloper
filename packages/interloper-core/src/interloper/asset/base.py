@@ -6,9 +6,10 @@ import asyncio
 import inspect
 import traceback
 import warnings
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
-from pydantic import Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr
 from typing_extensions import Self
 
 from interloper.asset.context import ExecutionContext
@@ -20,8 +21,8 @@ from interloper.errors import (
     AssetError,
     DataNotFoundError,
     DestinationError,
-    NormalizerError,
     PartitionError,
+    RepresentationError,
     format_exception,
 )
 from interloper.events import EventBus, EventType
@@ -485,7 +486,7 @@ class Asset(Component, Operation):
         )
         try:
             with tracer().start_as_current_span("interloper.asset.data", attributes=span_attrs):
-                result = await invoke(self.data, **kwargs)
+                result = self._unwrap(await invoke(self.data, **kwargs))
             EventBus.emit(
                 EventType.ASSET_DATA_COMPLETED,
                 metadata={**exec_meta, "message": f"Executed '{self.key}'"},
@@ -862,6 +863,34 @@ class Asset(Component, Operation):
 
         return result
 
+    @staticmethod
+    def _unwrap(result: Any) -> Any:
+        """Turn the Python shapes ``data()`` may return besides a table into rows.
+
+        The one place the framework is lenient about what an asset returns: a
+        generator is consumed, a pydantic model or a list of them is dumped, a
+        lone dict becomes one row, and ``None`` is no rows. Everything else,
+        tables included, is returned untouched, so downstream only ever sees
+        a registered representation or an opaque object.
+
+        Args:
+            result: The raw value returned by ``data()``.
+
+        Returns:
+            The rows, or the result unchanged when it is not one of those shapes.
+        """
+        if result is None:
+            return []
+        if isinstance(result, Iterator):
+            result = list(result)
+        if isinstance(result, BaseModel):
+            return [result.model_dump()]
+        if isinstance(result, dict):
+            return [result]
+        if isinstance(result, list) and result and isinstance(result[0], BaseModel):
+            return [item.model_dump() if isinstance(item, BaseModel) else item for item in result]
+        return result
+
     def _normalize_and_conform(self, result: Any) -> Any:
         """Apply optional normalization, then always conform to the schema.
 
@@ -872,7 +901,7 @@ class Asset(Component, Operation):
         is always a checked contract.
 
         Args:
-            result: The raw value returned by ``data()``.
+            result: The value returned by ``data()``, unwrapped to a table or an opaque object.
 
         Returns:
             The normalized and conformed result.
@@ -893,10 +922,10 @@ class Asset(Component, Operation):
         RECONCILE: schema required; align columns and coerce values.
 
         The schema operations come from a single :class:`Conformer`, resolved
-        once from the data's representation (rows or DataFrame). Tabular data
-        is canonicalized on the way in (dict / model / generator →
-        ``list[dict]``); non-tabular data without a schema passes through
-        untouched. The effective schema (declared, or inferred under AUTO) is
+        once from the data's representation (rows or DataFrame). Data no
+        representation matches is not a table: without a schema it passes
+        through untouched (arbitrary objects bound for a file destination),
+        with one it is an error. The effective schema (declared, or inferred under AUTO) is
         carried to destinations via ``IOContext.schema``.
 
         Args:
@@ -916,13 +945,10 @@ class Asset(Component, Operation):
         if schema is None and strategy != MaterializationStrategy.AUTO:
             raise AssetError(f"Asset '{self.key}': strategy='{strategy.value}' requires a schema.")
 
-        conformer = Representation.of(result).conformer
         try:
-            result = conformer.prepare(result)
-        except NormalizerError as e:
+            conformer = Representation.of(result).conformer
+        except RepresentationError as e:
             if schema is None:
-                # Non-tabular data without a contract (e.g. arbitrary objects
-                # bound for a FileDestination) passes through untouched.
                 self._effective_schema = None
                 return result
             raise AssetError(

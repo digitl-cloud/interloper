@@ -6,6 +6,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
+
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 
 
@@ -67,12 +69,11 @@ class TestPartitionSlice:
 
         assert StringPartition("2026-06-01").slice(rows, "date") == []
 
-    def test_unrecognised_data_passes_through_unchanged(self):
-        # Nothing can split an arbitrary object, so it reaches the
-        # destination whole rather than being dropped.
-        payload = object()
+    def test_unrecognised_data_cannot_be_sliced(self):
+        from interloper.errors import RepresentationError
 
-        assert StringPartition("2026-06-01").slice(payload, "date") is payload
+        with pytest.raises(RepresentationError, match="object"):
+            StringPartition("2026-06-01").slice(object(), "date")
 
 
 class TestPartitionWindowIdentity:

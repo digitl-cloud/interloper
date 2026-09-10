@@ -112,18 +112,26 @@ class TestWindows:
 
         assert pages == [[{"date": "2024-01-02", "v": 2}], [{"date": "2024-01-01", "v": 1}]]
 
-    def test_a_non_tabular_payload_is_stored_whole_under_each_partition(self, tmp_path: Path):
-        # No representation can slice an arbitrary object, so it passes through
-        # the split unchanged rather than being dropped.
+    def test_a_non_tabular_payload_cannot_be_written_over_a_window(self, tmp_path: Path):
+        # Nothing can split an arbitrary object by partition; refusing beats
+        # storing the whole object under every partition of the window.
+        from interloper.errors import RepresentationError
+
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
+
+        with pytest.raises(RepresentationError, match="dict"):
+            dest.write(IOContext(asset=asset, partition_or_window=window), {"blob": object.__doc__})
+
+    def test_a_non_tabular_payload_is_stored_whole_for_a_single_partition(self, tmp_path: Path):
+        dest = FileDestination(id="file", base_path=str(tmp_path))
+        asset = partitioned_asset()
         payload = {"blob": object.__doc__}
 
-        dest.write(IOContext(asset=asset, partition_or_window=window), payload)
+        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), payload)
 
         assert dest.read(IOContext(asset=asset, partition_or_window=_partition(1))) == payload
-        assert dest.read(IOContext(asset=asset, partition_or_window=_partition(2))) == payload
 
 
 class TestPathLayout:

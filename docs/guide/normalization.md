@@ -1,9 +1,10 @@
 # Normalization
 
-A normalizer reshapes raw asset output before it is checked against the schema: it coerces the
-input to rows, flattens nested records, renames columns and aligns keys. Normalization is
-optional and configurable; the [conform step](schema.md#the-conform-step) that follows it always
-runs.
+A normalizer reshapes rows before they are checked against the schema: it flattens nested
+records, renames columns and aligns keys. It receives `list[dict]` (the asset has already
+unwrapped generators, models and lone dicts; see [what an asset can return](assets.md#what-an-asset-can-return)).
+Normalization is optional and configurable; the [conform step](schema.md#the-conform-step) that
+follows it always runs.
 
 ## Using a normalizer
 
@@ -55,8 +56,7 @@ base for the standard transformations, or override `column_name()` for a naming 
 
 ```py
 class PivotActions(il.Normalizer):
-    def normalize(self, data):
-        rows = self._coerce(data)
+    def normalize(self, rows):
         for row in rows:
             for action in row.pop("actions", []) or []:
                 row[f"actions_{action['action_type']}"] = action["value"]

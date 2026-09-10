@@ -64,8 +64,7 @@ class IOContext:
 
         A window's data is split on the asset's partition column through the
         data's representation; a single partition, or the whole, receives the
-        data as is. Data whose representation is not recognised cannot be
-        split and is handed to every partition as is.
+        data as is.
 
         Args:
             data: The data being written, in its native representation.

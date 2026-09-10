@@ -1063,6 +1063,63 @@ class TestAsyncAndSyncData:
         assert captured["data"] == [{"id": 1}]
 
 
+class TestReturnShapes:
+    """What ``data()`` may return besides a table, unwrapped once at the boundary."""
+
+    async def test_a_dict_is_one_row(self):
+        @il.asset
+        def one() -> Any:
+            return {"user_id": 1}
+
+        assert await one().run_async() == [{"user_id": 1}]
+
+    async def test_a_model_is_one_row(self):
+        @il.asset
+        def one() -> Any:
+            return ConformSchema(user_id=1, name="a")
+
+        assert await one().run_async() == [{"user_id": 1, "name": "a"}]
+
+    async def test_a_list_of_models_is_rows(self):
+        @il.asset
+        def many() -> Any:
+            return [ConformSchema(user_id=1, name="a"), ConformSchema(user_id=2, name="b")]
+
+        assert await many().run_async() == [{"user_id": 1, "name": "a"}, {"user_id": 2, "name": "b"}]
+
+    async def test_a_generator_is_consumed(self):
+        @il.asset
+        def rows() -> Any:
+            yield {"user_id": 1}
+            yield {"user_id": 2}
+
+        assert await rows().run_async() == [{"user_id": 1}, {"user_id": 2}]
+
+    async def test_none_is_no_rows(self):
+        @il.asset
+        def nothing() -> Any:
+            return None
+
+        assert await nothing().run_async() == []
+
+    async def test_the_normalizer_receives_the_unwrapped_rows(self):
+        @il.asset(normalizer=il.Normalizer(fill_missing=False))
+        def rows() -> Any:
+            yield {"userId": 1}
+
+        assert await rows().run_async() == [{"user_id": 1}]
+
+    async def test_a_table_is_untouched(self):
+        pd = pytest.importorskip("pandas")
+        frame = pd.DataFrame([{"user_id": 1}])
+
+        @il.asset
+        def table() -> Any:
+            return frame
+
+        assert await table().run_async() is frame
+
+
 class TestConform:
     """Schema enforcement runs whether or not a normalizer is configured."""
 
