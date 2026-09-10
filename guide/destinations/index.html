@@ -2249,10 +2249,8 @@ manager around each delete-then-insert, a no-op by default.</p>
   carry daily dates.</li>
 <li><strong>Reads are native</strong>: <code>read</code> hands back what <code>select</code> returned, a DataFrame from BigQuery, rows
   from a row store. A consumer indifferent to the destination reads <code>il.Upstream.records</code>.</li>
-<li><strong>Write-time strategy</strong>: the <code>materialization_strategy</code> field lets a backend demand
-  schema-shaped data: <code>STRICT</code> validates against the effective schema before writing,
-  <code>RECONCILE</code> coerces, <code>AUTO</code> trusts the conformed data. It is set as a default via the decorator
-  and overridable per configured destination.</li>
+<li><strong>Data arrives conformed</strong>: the asset's conform step already put the data in the effective
+  schema's canonical types, so a backend never re-validates or coerces before writing.</li>
 <li>A warning is emitted when the partition column is missing from written data, since
   downstream reads by partition would then return nothing.</li>
 </ul>

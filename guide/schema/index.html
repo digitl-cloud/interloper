@@ -2057,40 +2057,36 @@ the metadata destinations use for typed loads.</p>
 integrations map to their native type systems; <code>AdsStats.json_schema()</code> is the JSON Schema of
 the data columns.</p>
 <h2 id="materialization-strategy">Materialization strategy<a class="headerlink" href="#materialization-strategy" title="Permanent link">&para;</a></h2>
-<p>The strategy decides how strictly the conform step enforces the schema. Set it on the asset, or
-on the source as a default for assets still on <code>AUTO</code>:</p>
+<p>The strategy decides what the conform step treats as an error. Both strategies hand destinations
+data in the schema's canonical types, so nothing downstream re-checks it. Set it on the asset, or
+on the source as a default for assets still on the default:</p>
 <table>
 <thead>
 <tr>
 <th>Strategy</th>
-<th>Schema required</th>
-<th>Behaviour</th>
+<th>Schema declared</th>
+<th>Schema absent</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>AUTO</code> (default)</td>
-<td>no</td>
-<td>Reconcile when a schema is declared; infer one from the data otherwise.</td>
+<td><code>RECONCILE</code> (default)</td>
+<td>Align columns to the schema (drop extras with a warning, fill missing nullables with <code>None</code>) and coerce values.</td>
+<td>Infer a schema from the data; it becomes the effective schema for destinations.</td>
 </tr>
 <tr>
 <td><code>STRICT</code></td>
-<td>yes</td>
-<td>Validate every row. Extra columns, missing required columns and wrong types fail the materialization.</td>
-</tr>
-<tr>
-<td><code>RECONCILE</code></td>
-<td>yes</td>
-<td>Align columns to the schema (drop extras with a warning, fill missing with defaults or <code>None</code>) and coerce values.</td>
+<td>Extra columns, missing required columns and values the schema rejects fail the materialization; values that pass are coerced to the declared types.</td>
+<td><code>AssetError</code>: a strict asset must declare its contract.</td>
 </tr>
 </tbody>
 </table>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">schema</span><span class="o">=</span><span class="n">AdsStats</span><span class="p">,</span> <span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">STRICT</span><span class="p">)</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span> <span class="o">...</span>
 </span></code></pre></div>
-<p>A strategy that requires a schema, used without one, raises <code>AssetError</code>. A declared schema on
-an asset returning non-tabular data raises <code>AssetError</code> too. Schema mismatches raise
-<code>SchemaError</code>.</p>
+<p>A declared schema on an asset returning non-tabular data raises <code>AssetError</code>. Schema mismatches
+raise <code>SchemaError</code>. Configs and manifests written before 0.78 may still spell the default
+<code>auto</code>; it reads as <code>reconcile</code>.</p>
 <h2 id="the-conform-step">The conform step<a class="headerlink" href="#the-conform-step" title="Permanent link">&para;</a></h2>
 <p>Conform runs on every <code>run()</code> and <code>materialize()</code>, after the <a href="../normalization/">normalizer</a>:</p>
 <ol>
@@ -2100,7 +2096,7 @@ an asset returning non-tabular data raises <code>AssetError</code> too. Schema m
    with one it is an error naming the type.</li>
 <li>Without a schema, one is inferred and becomes the effective schema. Inference never fails a
    materialization; on error the effective schema is <code>None</code>.</li>
-<li>With a schema, <code>STRICT</code> validates and <code>AUTO</code>/<code>RECONCILE</code> reconcile.</li>
+<li>With a schema, the data is reconciled once: <code>RECONCILE</code> repairs mismatches, <code>STRICT</code> refuses them.</li>
 </ol>
 <p>The effective schema reaches destinations as <code>IOContext.schema</code>.</p>
 <h2 id="schema-operations">Schema operations<a class="headerlink" href="#schema-operations" title="Permanent link">&para;</a></h2>
