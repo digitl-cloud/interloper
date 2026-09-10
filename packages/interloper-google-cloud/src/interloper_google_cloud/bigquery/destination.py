@@ -26,7 +26,6 @@ from interloper.resource.fields import FetchField, InputField, SelectField
 from interloper.schema import FieldSpec, Schema
 
 from interloper_google_cloud.connection import GoogleCloudConnection
-from interloper_google_cloud.serialization import json_default, replace_non_finite
 
 
 @destination(
@@ -34,9 +33,9 @@ from interloper_google_cloud.serialization import json_default, replace_non_fini
     name="BigQuery",
     icon="icon:bigquery",
     tags=["Cloud"],
-    # The DataFrame write path is a typed parquet load: values that pass lax
-    # schema validation but don't match the physical column type (e.g. ISO
-    # date strings against DATE) fail the load, so coerce at the boundary.
+    # Writes are typed parquet loads: values that pass lax schema validation
+    # but don't match the physical column type (e.g. ISO date strings against
+    # DATE) fail the load, so coerce at the boundary.
     materialization_strategy=MaterializationStrategy.RECONCILE,
 )
 class BigQueryDestination(DatabaseDestination):
@@ -229,58 +228,46 @@ class BigQueryDestination(DatabaseDestination):
     # -- DatabaseDestination hooks ---------------------------------------------
 
     def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
-        """Insert data into BigQuery, schema-driven when a schema is available.
+        """Insert data into BigQuery through one Parquet load job, whatever its representation.
 
-        The effective schema from the IO context (declared on the asset, or
-        inferred during conform) drives both table DDL and the load job's
-        schema, so the table shape is deterministic and stable across
-        partitions.  DataFrames load natively via Parquet
-        (``load_table_from_dataframe``); other data falls back to the
-        JSON-rows path.
+        The data is converted to a DataFrame (``Representation.of(data).to("dataframe")``)
+        and loaded with ``load_table_from_dataframe``. The effective schema
+        from the IO context (declared on the asset, or inferred during
+        conform) drives both table DDL and the load job's schema, so the
+        table shape is deterministic and stable across partitions. Without a
+        schema, the load job creates the table from the frame's dtypes.
 
-        New tables are created with the asset's partitioning (daily time
-        partitioning on the partition column) and carry field and table
-        descriptions; on existing tables, descriptions are kept in sync.
+        New tables are created with the asset's partitioning (time
+        partitioning on the partition column at the asset's granularity) and
+        carry field and table descriptions; on existing tables, descriptions
+        are kept in sync.
 
         Args:
             table: Target table name.
             dataset: The BigQuery dataset, or ``None`` for the destination's default.
-            data: The data in its native format.
+            data: The data in its native representation.
             context: IO context carrying the asset and effective schema.
         """
+        frame = Representation.of(data).to("dataframe")
         bq_schema = _schema_to_bq_fields(context.schema) if context.schema is not None else None
         description = _asset_description(context.asset)
         partitioning = context.asset.partitioning
 
         bq_table = self._get_table(table, dataset)
-        creating = bq_table is None
-        if creating:
-            self._ensure_dataset(dataset)
-            if bq_schema is not None:
-                tp = _time_partitioning(partitioning, bq_schema)
-                self._create_table(table, dataset, bq_schema, time_partitioning=tp, description=description)
-            elif not isinstance(data, pd.DataFrame):
-                rows = Representation.of(data).records
-                if not rows:
-                    return
-                inferred = _infer_bq_schema(rows)
-                tp = _time_partitioning(partitioning, inferred)
-                self._create_table(table, dataset, inferred, time_partitioning=tp, description=description)
-            # DataFrame without schema: the load job creates the table from dtypes,
-            # with the partitioning spec passed on the job config below.
-        else:
+        time_partitioning = None
+        if bq_table is not None:
             self._sync_table_metadata(bq_table, bq_schema, description)
-
-        ref = self._table_ref(table, dataset)
-        if isinstance(data, pd.DataFrame):
-            tp = _time_partitioning(partitioning, bq_schema) if creating and bq_schema is None else None
-            self._load_dataframe(ref, data, bq_schema, time_partitioning=tp)
+        elif bq_schema is not None:
+            self._ensure_dataset(dataset)
+            tp = _time_partitioning(partitioning, bq_schema)
+            self._create_table(table, dataset, bq_schema, time_partitioning=tp, description=description)
         else:
-            rows = Representation.of(data).records
-            if rows:
-                self._load_rows(ref, rows, bq_schema)
+            self._ensure_dataset(dataset)
+            time_partitioning = _time_partitioning(partitioning, None)
 
-    def _load_dataframe(
+        self._load(self._table_ref(table, dataset), frame, bq_schema, time_partitioning=time_partitioning)
+
+    def _load(
         self,
         ref: str,
         df: pd.DataFrame,
@@ -319,25 +306,6 @@ class BigQueryDestination(DatabaseDestination):
             job_config.schema = [field for field in bq_schema if field.name in present]
 
         job = self.client.load_table_from_dataframe(df, ref, job_config=job_config)
-        job.result()
-
-    def _load_rows(self, ref: str, rows: list[dict[str, Any]], bq_schema: list[bigquery.SchemaField] | None) -> None:
-        """Load row dicts via a newline-delimited JSON load job.
-
-        Args:
-            ref: Fully-qualified table reference.
-            rows: Row data as list of dicts.
-            bq_schema: BigQuery field definitions, or ``None`` to autodetect.
-        """
-        job_config = bigquery.LoadJobConfig(
-            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
-            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        )
-        if bq_schema is not None:
-            job_config.schema = bq_schema
-        safe_rows = [replace_non_finite(json.loads(json.dumps(row, default=json_default))) for row in rows]
-
-        job = self.client.load_table_from_json(safe_rows, ref, job_config=job_config)
         job.result()
 
     def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
@@ -703,67 +671,6 @@ def _py_type_to_bq_type(py_type: Any) -> str:
     if issubclass(py_type, datetime.date):
         return "DATE"
     if issubclass(py_type, bytes):
-        return "BYTES"
-    return "STRING"
-
-
-def _infer_bq_schema(rows: list[dict[str, Any]]) -> list[bigquery.SchemaField]:
-    """Infer a BigQuery schema from row values, scanning all rows.
-
-    Unlike first-row inference, a column that is ``None`` in early rows takes
-    its type from the first non-null value anywhere; ``int`` widens to
-    ``FLOAT`` when mixed with floats.  All-null columns fall back to STRING.
-
-    Args:
-        rows: Row data (non-empty).
-
-    Returns:
-        Inferred field definitions, all NULLABLE.
-    """
-    types_seen: dict[str, set[str]] = {}
-    for row in rows:
-        for key, value in row.items():
-            seen = types_seen.setdefault(key, set())
-            if value is not None:
-                seen.add(_py_to_bq_type(value))
-
-    fields = []
-    for key, seen in types_seen.items():
-        if not seen:
-            bq_type = "STRING"
-        elif len(seen) == 1:
-            bq_type = next(iter(seen))
-        elif seen == {"INTEGER", "FLOAT"}:
-            bq_type = "FLOAT"
-        else:
-            bq_type = "STRING"
-        fields.append(bigquery.SchemaField(key, bq_type, mode="NULLABLE"))
-    return fields
-
-
-def _py_to_bq_type(value: Any) -> str:
-    """Infer a BigQuery field type from a Python value.
-
-    Args:
-        value: The value to inspect.
-
-    Returns:
-        The inferred BigQuery field type name.
-
-    """
-    if isinstance(value, bool):
-        return "BOOLEAN"
-    if isinstance(value, int):
-        return "INTEGER"
-    if isinstance(value, float):
-        return "FLOAT"
-    if isinstance(value, Decimal):
-        return "NUMERIC"
-    if isinstance(value, datetime.datetime):
-        return "TIMESTAMP"
-    if isinstance(value, datetime.date):
-        return "DATE"
-    if isinstance(value, bytes):
         return "BYTES"
     return "STRING"
 
