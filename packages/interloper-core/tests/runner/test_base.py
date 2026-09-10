@@ -343,7 +343,7 @@ class TestTelemetrySpans:
         assert infer.parent is not None
         assert infer.parent.span_id == spans["interloper.asset.conform"].context.span_id
         # Nothing to reconcile against without a declared schema.
-        assert "interloper.conformer.reconcile" not in spans
+        assert "interloper.representation.reconcile" not in spans
 
     async def test_reconcile_is_traced_when_a_schema_is_declared(self, span_exporter):
         il.MemoryDestination.clear()
@@ -358,7 +358,7 @@ class TestTelemetrySpans:
         await AsyncRunner().run(il.DAG(declared(id="declared", destinations=[il.MemoryDestination()])))
 
         spans = {s.name: s for s in span_exporter.get_finished_spans()}
-        reconcile = spans["interloper.conformer.reconcile"]
+        reconcile = spans["interloper.representation.reconcile"]
         assert reconcile.parent is not None
         assert reconcile.parent.span_id == spans["interloper.asset.conform"].context.span_id
         assert "interloper.asset.infer_schema" not in spans

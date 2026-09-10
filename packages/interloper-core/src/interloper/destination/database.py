@@ -301,8 +301,8 @@ class DatabaseDestination(Destination):
         strategy = self.materialization_strategy
         if strategy is MaterializationStrategy.AUTO or context.schema is None:
             return data
-        conformer = Representation.of(data).conformer
+        view = Representation.of(data)
         if strategy is MaterializationStrategy.RECONCILE:
-            return conformer.reconcile(data, context.schema)
-        conformer.validate(data, context.schema, strict=True)
+            return view.reconcile(context.schema)
+        view.validate(context.schema, strict=True)
         return data

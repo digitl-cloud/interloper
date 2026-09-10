@@ -65,9 +65,9 @@ class TestNormalizer:
     def test_row_conforms_to_schema(self):
         df = _normalizer().normalize([_ROW])
         assert set(df.columns) <= set(schemas.AdGroupsStats.model_fields)
-        conformer = Representation.of(df).conformer
-        conformed = conformer.reconcile(df, schemas.AdGroupsStats)
-        conformer.validate(conformed, schemas.AdGroupsStats)  # must not raise
+        view = Representation.of(df)
+        conformed = view.reconcile(schemas.AdGroupsStats)
+        Representation.of(conformed).validate(schemas.AdGroupsStats)  # must not raise
         record = conformed.to_dict("records")[0]
         assert record["impressions"] == 1000
         assert record["player_25pct_complete"] == 7

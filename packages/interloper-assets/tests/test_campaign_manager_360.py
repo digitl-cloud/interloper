@@ -86,9 +86,9 @@ class TestHeaderNormalization:
     def test_parsed_report_conforms_to_schema(self):
         rows = _parse_report_csv(BytesIO(_REPORT_FILE))
         normalized = _normalizer().normalize(rows)
-        conformer = Representation.of(normalized).conformer
-        df = conformer.reconcile(normalized, schemas.CampaignsStats)
-        conformer.validate(df, schemas.CampaignsStats)  # must not raise
+        view = Representation.of(normalized)
+        df = view.reconcile(schemas.CampaignsStats)
+        Representation.of(df).validate(schemas.CampaignsStats)  # must not raise
         record = df.to_dict("records")[0]
         assert record["active_view_pct_viewable_impressions"] == 85.5
         assert record["active_view_viewable_impressions"] == 90

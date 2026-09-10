@@ -8,7 +8,7 @@ description: Use when typing, validating or reshaping the rows an Interloper ass
 ## Overview
 
 Every asset result goes through two steps: the normalizer reshapes rows (flatten, rename), the
-conformer applies the schema (validate or coerce). Both run in `run()` and `materialize()`.
+data's representation applies the schema (validate or coerce). Both run in `run()` and `materialize()`.
 Declaring the schema is what makes CSV or database read-backs typed for dependent assets.
 Reference: https://docs.interloper.dev/guide/schema/ and https://docs.interloper.dev/guide/normalization/
 

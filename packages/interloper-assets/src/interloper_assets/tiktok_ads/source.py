@@ -61,7 +61,7 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 
 
 # Entity records carry list/dict fields (``ad_texts``, ``image_ids``,
-# ``special_industries``, …) that the schemas type as strings; the conformer
+# ``special_industries``, …) that the schemas type as strings; reconciliation
 # JSON-encodes those nested values when casting to the declared ``str`` type.
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
 

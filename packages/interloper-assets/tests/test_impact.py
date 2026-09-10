@@ -80,4 +80,4 @@ class TestSpecRoundtripAndReconcile:
         df = _to_df([record], dt.date(2026, 6, 10))
         normalized = child.normalizer.normalize(df)
         assert {"id", "campaign_id", "sub_id_1", "amount", "date"} <= set(normalized.columns)
-        Representation.of(normalized).conformer.reconcile(normalized, schemas.Actions)  # must not raise
+        Representation.of(normalized).reconcile(schemas.Actions)  # must not raise

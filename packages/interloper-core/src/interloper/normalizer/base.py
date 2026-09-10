@@ -1,4 +1,4 @@
-"""Normalizer: data reshaping (coercion, flattening, column naming). Schema ops live in interloper.conformer."""
+"""Normalizer: data reshaping (flattening, column naming). Schema ops live on the data's representation."""
 
 from __future__ import annotations
 

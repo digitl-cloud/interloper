@@ -2,9 +2,9 @@
 
 A :class:`Representation` answers "what kind of table is this, and how do I
 view it generically?" for exactly one data representation. It bundles the
-generic table views (records, columns, partition filtering) with the
-representation's :class:`~interloper.conformer.Conformer`, so core never
-names a concrete dataframe library anywhere. ``Representation.of(data)``
+generic table views (records, columns, partition filtering) with the schema
+operations on that type (validate, reconcile, infer), so core never names a
+concrete dataframe library anywhere. ``Representation.of(data)``
 binds the matching representation to the data as a :class:`View`, whose
 ``to(key)`` converts between registered representations through records.
 
@@ -27,9 +27,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from interloper.conformer import ROWS_CONFORMER, Conformer
 from interloper.errors import RepresentationError
 from interloper.registry import Registry
+from interloper.schema import Schema
 
 
 def _adopt_representation(_name: str, loaded: Any) -> tuple[str, Representation]:
@@ -78,8 +78,8 @@ class Representation(ABC):
     """Generic table views and schema operations for one data representation.
 
     Representations are pure mechanism: stateless, never serialized, and
-    not user-configurable. ``key`` identifies the representation in
-    configuration (e.g. a destination's preferred read representation).
+    not user-configurable. ``key`` identifies the representation in the
+    registry and in ``View.to(key)``.
     """
 
     key: ClassVar[str]
@@ -142,10 +142,33 @@ class Representation(ABC):
             end: Exclusive upper bound of the range.
         """
 
-    @property
     @abstractmethod
-    def conformer(self) -> Conformer:
-        """The schema operations for this representation."""
+    def validate(self, data: Any, schema: type[Schema], *, strict: bool = False) -> None:
+        """Validate *data* against *schema*; raise :class:`SchemaError` on mismatch.
+
+        Args:
+            data: The table to validate, in this representation's own type.
+            schema: The schema to validate against.
+            strict: When ``True``, columns absent from the schema are a
+                mismatch too; defaults to ``False``.
+        """
+
+    @abstractmethod
+    def reconcile(self, data: Any, schema: type[Schema]) -> Any:
+        """Align *data* to *schema* (drop extras, add missing) and coerce values.
+
+        Args:
+            data: The table to reconcile, in this representation's own type.
+            schema: The schema to align the data to.
+        """
+
+    @abstractmethod
+    def infer(self, data: Any) -> type[Schema]:
+        """Infer a :class:`Schema` from *data*.
+
+        Args:
+            data: The table to infer from, in this representation's own type.
+        """
 
     @classmethod
     def of(cls, data: Any) -> View:
@@ -216,14 +239,34 @@ class View:
         """
         return self.representation.columns(self.data)
 
-    @property
-    def conformer(self) -> Conformer:
-        """The schema operations for the data's representation.
+    def validate(self, schema: type[Schema], *, strict: bool = False) -> None:
+        """Validate the data against *schema*; raise :class:`SchemaError` on mismatch.
+
+        Args:
+            schema: The schema to validate against.
+            strict: When ``True``, columns absent from the schema are a
+                mismatch too; defaults to ``False``.
+        """
+        self.representation.validate(self.data, schema, strict=strict)
+
+    def reconcile(self, schema: type[Schema]) -> Any:
+        """Align the data to *schema* (drop extras, add missing) and coerce values.
+
+        Args:
+            schema: The schema to align the data to.
 
         Returns:
-            The bound representation's conformer.
+            The reconciled data, in the data's own representation.
         """
-        return self.representation.conformer
+        return self.representation.reconcile(self.data, schema)
+
+    def infer(self) -> type[Schema]:
+        """Infer a :class:`Schema` from the data.
+
+        Returns:
+            A dynamically created Schema subclass.
+        """
+        return self.representation.infer(self.data)
 
     def filter_eq(self, column: str, value: Any) -> Any:
         """Return the subset of the data whose *column* equals *value* (compared as strings).
@@ -352,11 +395,36 @@ class RowsRepresentation(Representation):
         lo, hi = iso_label(start), iso_label(end)
         return [row for row in data if lo <= iso_label(row.get(column)) < hi]
 
-    @property
-    def conformer(self) -> Conformer:
-        """The row-wise conformer.
+    def validate(self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False) -> None:
+        """Validate each row against the schema.
+
+        Args:
+            data: Rows to validate.
+            schema: The schema to validate against.
+            strict: When ``True``, columns absent from the schema are a
+                mismatch too; defaults to ``False``.
+        """
+        schema.validate_rows(data, strict=strict)
+
+    def reconcile(self, data: list[dict[str, Any]], schema: type[Schema]) -> list[dict[str, Any]]:
+        """Reconcile rows against the schema.
+
+        Args:
+            data: Rows to reconcile.
+            schema: The schema to align the rows to.
 
         Returns:
-            The shared :class:`RowsConformer` instance.
+            Reconciled rows with columns aligned and values coerced.
         """
-        return ROWS_CONFORMER
+        return schema.reconcile(data)
+
+    def infer(self, data: list[dict[str, Any]]) -> type[Schema]:
+        """Infer a Schema by scanning row values.
+
+        Args:
+            data: Rows whose values are scanned to derive the field types.
+
+        Returns:
+            A dynamically created Schema subclass.
+        """
+        return Schema.infer(data)

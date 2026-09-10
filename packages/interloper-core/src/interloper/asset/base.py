@@ -15,7 +15,6 @@ from typing_extensions import Self
 from interloper.asset.context import ExecutionContext
 from interloper.asset.upstream import Upstream
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation, unwrap_optional
-from interloper.conformer import Conformer
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
@@ -36,7 +35,7 @@ from interloper.partitioning import (
     TimePartitionConfig,
     TimePartitionWindow,
 )
-from interloper.representation import Representation
+from interloper.representation import Representation, View
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
 from interloper.telemetry import attributes as telemetry_attributes
@@ -946,7 +945,7 @@ class Asset(Component, Operation):
             raise AssetError(f"Asset '{self.key}': strategy='{strategy.value}' requires a schema.")
 
         try:
-            conformer = Representation.of(result).conformer
+            view = Representation.of(result)
         except RepresentationError as e:
             if schema is None:
                 self._effective_schema = None
@@ -957,34 +956,33 @@ class Asset(Component, Operation):
 
         if schema is None:
             with tracer().start_as_current_span("interloper.asset.infer_schema", attributes=self._span_attributes()):
-                self._effective_schema = self._infer_schema(conformer, result)
+                self._effective_schema = self._infer_schema(view)
             return result
 
         self._effective_schema = schema
         if strategy == MaterializationStrategy.STRICT:
-            conformer.validate(result, schema, strict=True)
+            view.validate(schema, strict=True)
             return result
-        with tracer().start_as_current_span("interloper.conformer.reconcile", attributes=self._span_attributes()):
-            return conformer.reconcile(result, schema)
+        with tracer().start_as_current_span("interloper.representation.reconcile", attributes=self._span_attributes()):
+            return view.reconcile(schema)
 
-    def _infer_schema(self, conformer: Conformer, result: Any) -> type[Schema] | None:
+    def _infer_schema(self, view: View) -> type[Schema] | None:
         """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
 
         Inference is metadata for destinations (DDL, typed loads): it must
         never fail a materialization, so any inference error yields ``None``.
 
         Args:
-            conformer: The conformer resolved for *result*.
-            result: The prepared (canonical) data.
+            view: The data bound to its representation.
 
         Returns:
             The inferred schema, or ``None`` when the data is empty or
             inference fails.
         """
-        if is_empty(result):
+        if is_empty(view.data):
             return None
         try:
-            return conformer.infer(result)
+            return view.infer()
         except Exception:  # noqa: BLE001 - inference is best-effort metadata
             return None
 

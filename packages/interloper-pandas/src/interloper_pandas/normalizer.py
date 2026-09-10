@@ -16,7 +16,7 @@ class DataFrameNormalizer(Normalizer):
     are performed using native pandas operations for efficiency.
 
     Reshaping only: schema operations (validate, reconcile, infer) live in
-    :mod:`interloper.conformer`, resolved from the data type.
+    the data's representation, resolved from its type.
 
     Usage::
 
