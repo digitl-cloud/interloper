@@ -9,7 +9,8 @@ description: Use when writing a custom Interloper destination (files, object sto
 
 The base class does the partition bookkeeping; you implement partition-level IO, where the
 partition is `None` for the whole of an unpartitioned asset. `il.Destination` for files and objects:
-implement `write_partition` and `read_partition`, windows are split and gathered for you.
+implement `write_partition`, `read_partition` and `partition_row_counts` (all three abstract), windows
+are split and gathered for you.
 `DatabaseDestination` for SQL: delete-then-insert by partition range, a window in one batch.
 Overriding `write`/`read` wholesale is for a backend whose storage is not per partition,
 and is how a destination ends up clobbering every partition on each write when done by accident.

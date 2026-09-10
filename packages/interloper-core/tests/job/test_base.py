@@ -28,14 +28,8 @@ class FakeSource(il.Source):
     asset_types: ClassVar[list[type[il.Asset]]] = [FakeAsset]
 
 
-class FakeJobDestination(il.Destination):
+class FakeJobDestination(il.MemoryDestination):
     """Destination fixture for cascade tests."""
-
-    def write(self, context: il.IOContext, data: object) -> None:  # pragma: no cover
-        pass
-
-    def read(self, context: il.IOContext) -> object:  # pragma: no cover
-        return None
 
 
 class FakeOtherJobDestination(FakeJobDestination):

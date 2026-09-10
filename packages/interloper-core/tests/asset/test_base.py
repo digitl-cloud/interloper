@@ -44,32 +44,18 @@ class Cfg(il.Config):
     threshold: int = il.InputField(default=1)
 
 
-class FakeDestination(il.Destination):
-    def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover - not exercised
-        pass
+class FakeDestination(il.MemoryDestination):
+    """A destination-shaped fixture."""
 
 
-class FakeOtherDestination(il.Destination):
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
+class FakeOtherDestination(il.MemoryDestination):
+    """A destination-shaped fixture."""
 
 
-class NeedyDestination(il.Destination):
+class NeedyDestination(il.MemoryDestination):
     """Destination fixture with a required field, so its relation never fills itself."""
 
     bucket: str
-
-    def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover - not exercised
-        pass
 
 
 class FakeAsset(il.Asset):
@@ -1029,10 +1015,7 @@ class TestAsyncAndSyncData:
     def test_materialize_is_callable_directly_from_sync_code(self):
         captured: dict[str, Any] = {}
 
-        class CapturingDestination(il.Destination):
-            def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-                return None
-
+        class CapturingDestination(il.MemoryDestination):
             def write(self, context: Any, data: Any) -> None:
                 captured["data"] = data
 
@@ -1048,10 +1031,7 @@ class TestAsyncAndSyncData:
         # must await it natively rather than hand it a coroutine to a thread.
         captured: dict[str, Any] = {}
 
-        class AsyncDestination(il.Destination):
-            def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-                return None
-
+        class AsyncDestination(il.MemoryDestination):
             async def write(self, context: Any, data: Any) -> None:
                 captured["data"] = data
 
@@ -1258,10 +1238,7 @@ class TestConform:
     async def test_iocontext_carries_schema_to_destination(self):
         captured: dict[str, Any] = {}
 
-        class CapturingDestination(il.Destination):
-            def read(self, context: Any) -> Any:
-                return None
-
+        class CapturingDestination(il.MemoryDestination):
             def write(self, context: Any, data: Any) -> None:
                 captured["schema"] = context.schema
 
@@ -1276,10 +1253,7 @@ class TestConform:
     async def test_iocontext_carries_inferred_schema_when_undeclared(self):
         captured: dict[str, Any] = {}
 
-        class CapturingDestination(il.Destination):
-            def read(self, context: Any) -> Any:
-                return None
-
+        class CapturingDestination(il.MemoryDestination):
             def write(self, context: Any, data: Any) -> None:
                 captured["schema"] = context.schema
 
@@ -1390,14 +1364,11 @@ class TestUpstreamReads:
         assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
 
     def test_other_read_errors_fail_the_asset(self):
-        class Broken(il.Destination):
+        class Broken(il.MemoryDestination):
             """Destination whose reads always fail for a reason other than missing data."""
 
             def read(self, context: il.IOContext) -> Any:
                 raise RuntimeError("boom")
-
-            def write(self, context: il.IOContext, data: Any) -> None:
-                return None
 
         mem = il.MemoryDestination()
         one = FbLike(destinations=[Broken()])
@@ -1454,14 +1425,11 @@ class TestUpstreamReads:
             {"date": dt.date(2030, 5, 5), "got": False}
         ]
 
-        class Broken(il.Destination):
+        class Broken(il.MemoryDestination):
             """Destination whose reads always fail for a reason other than missing data."""
 
             def read(self, context: il.IOContext) -> Any:
                 raise RuntimeError("boom")
-
-            def write(self, context: il.IOContext, data: Any) -> None:
-                return None
 
         broken = FbLike(destinations=[Broken()])
         asset = lenient(destinations=[mem], c=broken.campaigns)  # ty: ignore[unknown-argument]
@@ -1513,7 +1481,7 @@ class TestUpstreamReadFailures:
             await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
 
     async def test_a_failing_read_is_wrapped_and_reported(self):
-        class BrokenReadDestination(il.Destination):
+        class BrokenReadDestination(il.MemoryDestination):
             """Destination whose reads always fail."""
 
             def read(self, context: Any) -> Any:
@@ -1526,14 +1494,6 @@ class TestUpstreamReadFailures:
                     RuntimeError: Always.
                 """
                 raise RuntimeError("backend down")
-
-            def write(self, context: Any, data: Any) -> None:
-                """Accept and drop the data.
-
-                Args:
-                    context: Ignored IO context.
-                    data: Ignored payload.
-                """
 
         one = FbLike(destinations=[BrokenReadDestination()])
 
@@ -1562,19 +1522,8 @@ class TestDestinationWriteFailures:
     """A write failure is reported before it propagates."""
 
     async def test_a_failing_write_emits_the_failure_event(self):
-        class BrokenWriteDestination(il.Destination):
+        class BrokenWriteDestination(il.MemoryDestination):
             """Destination whose writes always fail."""
-
-            def read(self, context: Any) -> Any:  # pragma: no cover - not exercised
-                """Unused.
-
-                Args:
-                    context: Ignored IO context.
-
-                Returns:
-                    Nothing.
-                """
-                return None
 
             def write(self, context: Any, data: Any) -> None:
                 """Fail every write.

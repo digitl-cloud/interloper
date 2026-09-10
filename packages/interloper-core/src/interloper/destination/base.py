@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Any, ClassVar
 
 from interloper.component import Component, ComponentDefinition
@@ -23,8 +24,9 @@ class Destination(Component):
     """A component that reads and writes asset data, one partition at a time.
 
     A destination stores data per **partition**, ``None`` standing for the
-    whole of an unpartitioned asset. Subclass and implement
-    :meth:`write_partition` and :meth:`read_partition` for a single one;
+    whole of an unpartitioned asset. The contract is three hooks:
+    :meth:`write_partition` and :meth:`read_partition` for a single
+    partition, and :meth:`partition_row_counts` for the coverage view.
     :meth:`write` and :meth:`read` own the rest, splitting a window write into
     one call per partition and gathering a window read into one result per
     partition, so a destination is partition-correct by construction. A
@@ -77,6 +79,7 @@ class Destination(Component):
             relations=dict(cls.relations),
         )
 
+    @abstractmethod
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
         """Store *data* for one partition.
 
@@ -85,13 +88,9 @@ class Destination(Component):
             partition: The partition being stored, or ``None`` for the
                 unpartitioned whole.
             data: The partition's slice of the data to store.
-
-        Raises:
-            NotImplementedError: Every destination implements this, unless it
-                overrides :meth:`write` for storage that is not per partition.
         """
-        raise NotImplementedError(f"{type(self).__name__} must implement write_partition()")
 
+    @abstractmethod
     def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
         """Load one partition.
 
@@ -99,12 +98,7 @@ class Destination(Component):
             context: IO context carrying the target asset and the effective schema.
             partition: The partition to load, or ``None`` for the unpartitioned
                 whole.
-
-        Raises:
-            NotImplementedError: Every destination implements this, unless it
-                overrides :meth:`read` for storage that is not per partition.
         """
-        raise NotImplementedError(f"{type(self).__name__} must implement read_partition()")
 
     def write(self, context: IOContext, data: Any) -> None:
         """Write data, one partition at a time.
@@ -135,6 +129,7 @@ class Destination(Component):
         results = [self.read_partition(context, partition) for partition in context.partitions]
         return results if context.window else results[0]
 
+    @abstractmethod
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by the asset's partition column.
 
@@ -149,4 +144,3 @@ class Destination(Component):
         Returns:
             Mapping from partition value (as string) to row count.
         """
-        raise NotImplementedError("partition_row_counts is not implemented")

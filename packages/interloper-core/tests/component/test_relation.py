@@ -110,14 +110,8 @@ class TestRelation:
             Relation(Needy).fallback()
 
     def test_a_required_field_on_a_plain_component_keeps_it_unfillable(self) -> None:
-        class Needy(il.Destination):
+        class Needy(il.MemoryDestination):
             bucket: str
-
-            def read(self, context: il.IOContext) -> None:
-                return None
-
-            def write(self, context: il.IOContext, data: object) -> None:
-                return None
 
         assert Relation(Needy).has_fallback is False
         assert Relation(Needy).fallback() is None

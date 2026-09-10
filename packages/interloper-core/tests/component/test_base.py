@@ -236,28 +236,16 @@ class Cfg(il.Config):
     threshold: int = il.InputField(default=1)
 
 
-class Dest(il.Destination):
+class Dest(il.MemoryDestination):
     """Destination declaring its connection by annotation."""
 
     connection: Conn
 
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
 
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
-
-
-class NeedyDest(il.Destination):
+class NeedyDest(il.MemoryDestination):
     """Destination with a required field, so a relation targeting it can never fill itself."""
 
     bucket: str
-
-    def read(self, context: Any) -> Any:  # pragma: no cover
-        return None
-
-    def write(self, context: Any, data: Any) -> None:  # pragma: no cover
-        pass
 
 
 class Widget(il.Source):
