@@ -252,6 +252,21 @@ def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
     assert (store.count_calls[0]["after"], store.count_calls[0]["before"]) == window
 
 
+def test_list_runs_forwards_the_target_filters(store: FakeStore) -> None:
+    """The target's kind, type and a name search narrow both the listing and its count."""
+    app = _app(store)
+    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+
+    client = TestClient(app)
+    filters = {"q": "swaro", "component_kind": "job", "component_key": "facebook_ads"}
+    resp = client.get("/runs/", params=filters)
+
+    assert resp.status_code == 200
+    assert {key: store.list_calls[0][key] for key in filters} == filters
+    assert {key: store.count_calls[0][key] for key in filters} == filters
+
+
 def test_list_runs_without_window_passes_none(store: FakeStore) -> None:
     app = _app(store)
     app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())

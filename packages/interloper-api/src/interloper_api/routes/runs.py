@@ -198,6 +198,9 @@ def list_runs(
     status: str | None = None,
     after: dt.datetime | None = None,
     before: dt.datetime | None = None,
+    q: str | None = None,
+    component_kind: str | None = None,
+    component_key: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[RunResponse]:
@@ -218,6 +221,11 @@ def list_runs(
         status: Keep only runs in this status; None applies no filter.
         after: Start of the overlap window; None leaves it open-ended.
         before: End of the overlap window; None leaves it open-ended.
+        q: Keep only runs whose target's name or key contains this text,
+            case-insensitively; None applies no search.
+        component_kind: Keep only runs targeting a component of this kind; None applies no filter.
+        component_key: Keep only runs targeting a component of this type (catalog key); None
+            applies no filter.
         limit: Maximum number of runs on the page.
         offset: Number of matching runs to skip before the page starts.
         user: The authenticated user, required to hold at least the ``viewer`` role.
@@ -228,7 +236,15 @@ def list_runs(
         The matching page of runs, as response models.
     """
     total = store.runs.count(
-        org_id, component_id=component_id, backfill_id=backfill_id, status=status, after=after, before=before
+        org_id,
+        component_id=component_id,
+        backfill_id=backfill_id,
+        status=status,
+        after=after,
+        before=before,
+        q=q,
+        component_kind=component_kind,
+        component_key=component_key,
     )
     response.headers["X-Total-Count"] = str(total)
     runs = store.runs.list_all(
@@ -238,6 +254,9 @@ def list_runs(
         status=status,
         after=after,
         before=before,
+        q=q,
+        component_kind=component_kind,
+        component_key=component_key,
         limit=limit,
         offset=offset,
     )
