@@ -2,6 +2,340 @@
 
 <!-- version list -->
 
+## v0.78.0 (2026-09-14)
+
+### Bug Fixes
+
+- **app**: Delete preview follows on_delete alone, matching the store
+  ([`38bfbde`](https://github.com/digitl-cloud/interloper/commit/38bfbde0aeaa4e024257c5a0161192184808a5f2))
+
+- **app**: Section the connection details form
+  ([`963c714`](https://github.com/digitl-cloud/interloper/commit/963c714e1065c4e48b9da012c2566dac614c1859))
+
+- **app**: The graph repoints a single-valued upstream; cross-source wiring reports failures
+  ([`b1b43d6`](https://github.com/digitl-cloud/interloper/commit/b1b43d6c23b24d83b9d570b9da5589e19ceeef25))
+
+- **assets**: The matcher manifest no longer redeclares the job's destination; a test loads it
+  ([`803a45f`](https://github.com/digitl-cloud/interloper/commit/803a45f82882973ccb144c6452e627ed746b13f0))
+
+- **assets**: The matcher reads campaign id and name across connector schemas
+  ([`48c5c5d`](https://github.com/digitl-cloud/interloper/commit/48c5c5dbc53747d1cb9bfcc50a67204026ac33a3))
+
+- **core**: A missing CSV scope is DataNotFoundError, so upstream legs arrive as None
+  ([`a836275`](https://github.com/digitl-cloud/interloper/commit/a83627553a8ce1256c70586f386189b696473fc5))
+
+- **core**: A missing file-destination scope is DataNotFoundError
+  ([`2b0eacc`](https://github.com/digitl-cloud/interloper/commit/2b0eacce144c0c649db69298c1db4fa5332ad75a))
+
+- **core**: An optional inferred upstream detaches when its target is deleted
+  ([`08cd0e5`](https://github.com/digitl-cloud/interloper/commit/08cd0e54f8004a5fcff9fbf55e1eb0129ad22477))
+
+- **core**: Fetch-provider validation handles kind-declared relations; name replaces slot
+  ([`398137d`](https://github.com/digitl-cloud/interloper/commit/398137df654dbf43bf81ab97fc06c9d3fe90124e))
+
+- **core**: Id-based trickle detection on copies; forbid unknown Relation kwargs; reject uncollected
+  Component annotations
+  ([`3620dd8`](https://github.com/digitl-cloud/interloper/commit/3620dd82c0a42728d6521f0277b572cae9f329cd))
+
+- **core**: One write path for bindings; assignment trickles and single relations repoint
+  ([`8144955`](https://github.com/digitl-cloud/interloper/commit/81449555940f70cbadf2a5132f6209b5102bc22e))
+
+- **core**: Read upstream data from the configured default destination
+  ([`9a06d08`](https://github.com/digitl-cloud/interloper/commit/9a06d086c6ad4c3c30fe6b48dfd9925579e1ac96))
+
+- **core**: Reject several upstreams on a single-valued slot
+  ([`b35e46f`](https://github.com/digitl-cloud/interloper/commit/b35e46f19179ca6266deecb31befc20a926bc732))
+
+- **core**: Skip an optional upstream that is absent from the DAG instead of raising KeyError
+  ([`a750f73`](https://github.com/digitl-cloud/interloper/commit/a750f7337f1b6d9302dd5d79d2d6f2a58f576328))
+
+- **db**: A drifted child surfaces as ComponentDriftError; single-relation duplicates and drift are
+  tested
+  ([`a126762`](https://github.com/digitl-cloud/interloper/commit/a126762110eb65302ff92ae37bad75150d12132d))
+
+- **db**: On_delete alone decides whether a referrer blocks a delete
+  ([`cd07cbb`](https://github.com/digitl-cloud/interloper/commit/cd07cbb8492c71107c7dbbddbb6504df0ce8c33d))
+
+- **db**: Sibling rows come from Source.sibling_bindings; locks on every write; self-edge and
+  cross-instance guards
+  ([`b9284e7`](https://github.com/digitl-cloud/interloper/commit/b9284e77a5582596b743f766128655584f2bdda0))
+
+- **db**: The relation store reads kinds, keys and local as properties
+  ([`ec52ed4`](https://github.com/digitl-cloud/interloper/commit/ec52ed4adb85c4f25fc2bf15e062df00244f494f))
+
+- **dev**: The seed binds the demo job target by relation name
+  ([`01a1291`](https://github.com/digitl-cloud/interloper/commit/01a12916ad05ed2f6760189eca6ba5dc05d21661))
+
+- **google-cloud**: A BigQuery table created by a concurrent run is not an error
+  ([`e517712`](https://github.com/digitl-cloud/interloper/commit/e517712a963359c3275b242730075cbf516a559d))
+
+- **realtime**: Run and backfill notifications carry the target's identity
+  ([`15ce631`](https://github.com/digitl-cloud/interloper/commit/15ce63157453d33cc475b400e125cdd744cfb560))
+
+### Chores
+
+- **core**: Remove the unraised DependencyContractError and sweep retired names
+  ([`d51fad6`](https://github.com/digitl-cloud/interloper/commit/d51fad648d69a364c59a8f228386d98e9c5096e3))
+
+- **deps**: Upgrade every Python, frontend and tooling dependency
+  ([`46a2ce1`](https://github.com/digitl-cloud/interloper/commit/46a2ce16a209acc66a9a6695362f133d5daddf15))
+
+- **dev**: Add the campaign matcher to the dev catalog
+  ([`e213fd6`](https://github.com/digitl-cloud/interloper/commit/e213fd6c863116c40752749fe761f33a496b2950))
+
+- **platform**: Migration round trip verified; sweep retired names and em-dashes
+  ([`e5fbf21`](https://github.com/digitl-cloud/interloper/commit/e5fbf21e1967b35320ae034f2354a160ea52fa09))
+
+### Code Style
+
+- **agent**: Drop the em-dashes from the collection agent's description
+  ([`73e3a3d`](https://github.com/digitl-cloud/interloper/commit/73e3a3dba25a7ea5707b1952c98590e606ae8930))
+
+- **core**: Drop the em-dash from the AssetIdentity docstring
+  ([`f96ae5e`](https://github.com/digitl-cloud/interloper/commit/f96ae5e233729b691ac2de50be8d38fe0f3bdd83))
+
+- **db**: Sort the relation store imports after the identity rename
+  ([`c492386`](https://github.com/digitl-cloud/interloper/commit/c492386efe1d112d03a2bd66c80a079fb0432052))
+
+### Documentation
+
+- Assets read self.connection; upstreams are il.Upstream everywhere the docs show one
+  ([`750c4fd`](https://github.com/digitl-cloud/interloper/commit/750c4fd0f8969012dd694b323973662f60af843a))
+
+- Campaign matcher manifest and fan-in guide section
+  ([`dc21e3e`](https://github.com/digitl-cloud/interloper/commit/dc21e3ef038c8f9f1c1c05d780610d183f7debc9))
+
+- Describe the Relation model, annotation and explicit forms, and spec references
+  ([`cb99538`](https://github.com/digitl-cloud/interloper/commit/cb995381a2335f3cc1b17fe9d00e4248c53bed56))
+
+- Document depends_on, il.Dependency, upstreams and DAG resolution of declared keys
+  ([`996b511`](https://github.com/digitl-cloud/interloper/commit/996b5110b702290d8ce2a920c522dbc8103516a9))
+
+- Drop an em-dash and complete the DependencyContractError docstring
+  ([`a9e709b`](https://github.com/digitl-cloud/interloper/commit/a9e709b92cd8bb60083e6d3d3681e7efcb6d6755))
+
+- Manifest examples stop redeclaring what cascades; the specs example is valid YAML
+  ([`cf9776f`](https://github.com/digitl-cloud/interloper/commit/cf9776f256dddc05b6005727cc9ab6ee2167c6ca))
+
+- State that missing upstream data yields None for every slot and name the ambiguity error
+  ([`119473a`](https://github.com/digitl-cloud/interloper/commit/119473ad5280c217aa574f1e6f78ba49213bb89d))
+
+- State when an upstream leg is None and refresh stale dependency names
+  ([`427d5c5`](https://github.com/digitl-cloud/interloper/commit/427d5c5a14b16c10adc587825fd1048c2a59531e))
+
+- The spec guide manifest parses; fan-in section without the duplicate block
+  ([`c4f3632`](https://github.com/digitl-cloud/interloper/commit/c4f3632cc31f38ac0d7e83e29e0603c223862b54))
+
+- Writing a kind, step by step; the decorator section follows the engine
+  ([`5143bb0`](https://github.com/digitl-cloud/interloper/commit/5143bb022ff546575fd3f87e3bf5879c8043df58))
+
+- **core**: Docstring corrections parked from the phase 1 review
+  ([`3a9dca3`](https://github.com/digitl-cloud/interloper/commit/3a9dca3c459648eadf2b509257b43a71c7305374))
+
+### Features
+
+- Filter runs by their target's kind, type and name
+  ([`6497839`](https://github.com/digitl-cloud/interloper/commit/64978398124a58d69d2611968118751dd51d102d))
+
+- Rename the asset-to-asset relation to upstream and its wiring field to upstreams
+  ([`7117432`](https://github.com/digitl-cloud/interloper/commit/71174326d723f3f441a363b3ae34210bbdcd777c))
+
+- **agent**: Bind source connections and destinations by relation name
+  ([`ceb04a6`](https://github.com/digitl-cloud/interloper/commit/ceb04a6867aa6c005f74ee0645add8ccc1a4a64e))
+
+- **agent**: Expose bind_relation and unbind_relation on the collection agent
+  ([`8722d78`](https://github.com/digitl-cloud/interloper/commit/8722d78339d55af9421c1c28bf997544d1c96a2c))
+
+- **api**: Relations are addressed by name; org-wide list filters by kinds
+  ([`71c0fe6`](https://github.com/digitl-cloud/interloper/commit/71c0fe6a082d2fe1187aaaef2b6a72db1aaab14f))
+
+- **app**: Components and executions hubs with routed views
+  ([`9a43d73`](https://github.com/digitl-cloud/interloper/commit/9a43d73c09964ced42b22c7c8363c3573492f513))
+
+- **app**: Components store addresses relations by name
+  ([`0461492`](https://github.com/digitl-cloud/interloper/commit/046149281967840fef00e8718e649d3df5c26e79))
+
+- **app**: Graph pairs assets by relation name and key list
+  ([`b52d06d`](https://github.com/digitl-cloud/interloper/commit/b52d06d8f943f12d102cc60cded8344abd011719))
+
+- **app**: Relation types keyed by name; resource and upstream views derived by kind
+  ([`06770af`](https://github.com/digitl-cloud/interloper/commit/06770afd798ea236e49e73c2325bf4044d7034bd))
+
+- **app**: Tab strip flush under the navbar on tabbed pages
+  ([`5b7efe1`](https://github.com/digitl-cloud/interloper/commit/5b7efe120938d63ca69a949e032bd3b6249d48da))
+
+- **app**: Type and enabled filters on the entity pages
+  ([`abe46ab`](https://github.com/digitl-cloud/interloper/commit/abe46ab12c22e4fd4364277543528c204ceac002))
+
+- **app**: Wizard, asset select and pages bind relations by name; many-valued upstream picker
+  ([`a5998dd`](https://github.com/digitl-cloud/interloper/commit/a5998ddaa9a873fdaca00d9b45f1368d42dd80ea))
+
+- **assets**: Campaign matcher source with a many-valued wildcard upstream over every campaigns
+  asset
+  ([`f8dbeb7`](https://github.com/digitl-cloud/interloper/commit/f8dbeb7f861daacbe4aeed4c1cbd247f97bf349d))
+
+- **assets**: Describe the campaign matcher's columns
+  ([`38fabf3`](https://github.com/digitl-cloud/interloper/commit/38fabf37633f228e11733138c64596ffa2781fe6))
+
+- **assets**: The campaign matcher matches: normalised keys, stable match ids, platform and account
+  ([`f15de6c`](https://github.com/digitl-cloud/interloper/commit/f15de6c83c4303625252700072285e71443b7d96))
+
+- **core**: Add the Relation primitive, ComponentIdentity and the Bound descriptor
+  ([`43da1d8`](https://github.com/digitl-cloud/interloper/commit/43da1d8d30542c087eaa82ee2a5d9508ee9ec208))
+
+- **core**: Assets infer relations from data() and inject bound instances and Upstream legs
+  ([`9f9cdc4`](https://github.com/digitl-cloud/interloper/commit/9f9cdc4b019e48a00372d52f4c03ef760c7d540b))
+
+- **core**: Component declares and binds relations through one Relation map
+  ([`977cf22`](https://github.com/digitl-cloud/interloper/commit/977cf2200e048414df73f6c060196d8c7670f214))
+
+- **core**: DAG edges from bound relations; bound upstreams outside the run join read-only
+  ([`dc0808f`](https://github.com/digitl-cloud/interloper/commit/dc0808f57f54754b0d05c42d00036a88e178417b))
+
+- **core**: Declare upstreams with depends_on and wire them as lists
+  ([`090de31`](https://github.com/digitl-cloud/interloper/commit/090de311105e0a43477dcf392f759ab41960a5c7))
+
+- **core**: Kinds declare anchor relations; sources bind siblings and trickle
+  ([`cacb052`](https://github.com/digitl-cloud/interloper/commit/cacb0520569dfad0a5336982cd9fb3ca578dde41))
+
+- **core**: Manifests are to_spec() output; parented targets serialise as references
+  ([`f0ab20d`](https://github.com/digitl-cloud/interloper/commit/f0ab20df49880d6b964750dfd6f7a639f91377a7))
+
+- **core**: Match upstream keys through AssetIdentity.satisfies with a source wildcard
+  ([`d8b234f`](https://github.com/digitl-cloud/interloper/commit/d8b234f8599411d21b782b12576f4174a9217b66))
+
+- **core**: On_rebind is the public hook for a binding change; unbind shares the write path
+  ([`d94b142`](https://github.com/digitl-cloud/interloper/commit/d94b142be8751eea74b9d9dff1f9e5c8ba62c1ac))
+
+- **core**: One decorator engine with three channels; destinations= becomes relations=
+  ([`5a772ea`](https://github.com/digitl-cloud/interloper/commit/5a772ea55c72b6f433c67426f37dc02cd3911b07))
+
+- **core**: Read every upstream slot through one path, missing legs as None
+  ([`90fa530`](https://github.com/digitl-cloud/interloper/commit/90fa530ecc4cc0dcc13cfa8d768d6128de58881e))
+
+- **core**: Rename RelationSlot to Dependency with optional and many flags
+  ([`b88a3f7`](https://github.com/digitl-cloud/interloper/commit/b88a3f7340897c714fec25471d595dbb15f5262a))
+
+- **core**: Require equal partition granularity across upstream edges
+  ([`3de8acb`](https://github.com/digitl-cloud/interloper/commit/3de8acb4e0d6d26ba578523ac7c22dc91303e659))
+
+- **core**: Resolve declared upstreams in the DAG and check the whole contract at build
+  ([`f1a8085`](https://github.com/digitl-cloud/interloper/commit/f1a808598a60dc2f214755884cb2bc4658841676))
+
+- **core**: Trickle, defaults, relation validation and definition on Component
+  ([`9226b81`](https://github.com/digitl-cloud/interloper/commit/9226b8153b53f2a38a15c89743830138523f1996))
+
+- **db**: Component store reads relations by name; guards through on_delete
+  ([`8c297c0`](https://github.com/digitl-cloud/interloper/commit/8c297c00004b70ea489be66eadacb1fc3582db13))
+
+- **db**: Hydrate relations by name; parented targets become references resolved through the store
+  ([`2b242b0`](https://github.com/digitl-cloud/interloper/commit/2b242b072d1dbd8e6be8318a5c55ac5f3fd7c00a))
+
+- **db**: Key component relations by name; rewrite migration 017
+  ([`867e3e1`](https://github.com/digitl-cloud/interloper/commit/867e3e1811a6fd947e96e33eefaca2447a5942aa))
+
+- **db**: RelationStore binds by name through Relation.accepts
+  ([`815d84f`](https://github.com/digitl-cloud/interloper/commit/815d84fa7bf6e44cc1d4282635054fb5f224e37f))
+
+- **toolkit**: Lineage by asset kinds; generic bind_relation and unbind_relation tools
+  ([`961b904`](https://github.com/digitl-cloud/interloper/commit/961b904fb03599c0d946da9ab831e854b95e1740))
+
+### Refactoring
+
+- **app**: Name the resource wizard steps and fetch providers after relations
+  ([`f31172a`](https://github.com/digitl-cloud/interloper/commit/f31172ad320c83a256be1bed3d49d4c956ab27fd))
+
+- **app**: Resource refs by dst_kind; clean the relation type comments and dead fields
+  ([`fa3b8de`](https://github.com/digitl-cloud/interloper/commit/fa3b8dedab17690923b55974ea79313c1eb64487))
+
+- **assets**: Campaign_matches drops source_key and source_id; descriptions read as product copy
+  ([`8cd2f09`](https://github.com/digitl-cloud/interloper/commit/8cd2f0953bc82f64128132940ec2b88f99f7ebbb))
+
+- **assets**: Declare connections by annotation and upstreams as il.Upstream
+  ([`d11f609`](https://github.com/digitl-cloud/interloper/commit/d11f6095f473ea13e2399ea60aedd5b6ad42f1b7))
+
+- **assets**: Source-owned assets read self.connection instead of redeclaring it
+  ([`d4476dc`](https://github.com/digitl-cloud/interloper/commit/d4476dc8bac2b0c1b38480fd0256b841ea19edcb))
+
+- **core**: A database backend writes insert, delete, select and count in its dialect; reads are
+  native
+  ([`fc74b95`](https://github.com/digitl-cloud/interloper/commit/fc74b95960bbf1dbc773c4d613ddd30892f66083))
+
+- **core**: A table type is one class; Conformer folds into Representation
+  ([`9f1bffb`](https://github.com/digitl-cloud/interloper/commit/9f1bffb7a6ce3dfd015f3279042aace28d49a008))
+
+- **core**: Assets unwrap their return shapes once; Representation.of raises for unmatched data
+  ([`07f7dc9`](https://github.com/digitl-cloud/interloper/commit/07f7dc997d7dcae216b771a8d85778905d80f2f0))
+
+- **core**: Component reads top-down
+  ([`aaea169`](https://github.com/digitl-cloud/interloper/commit/aaea169b95dbb11b6447487e753e84798a59a8fb))
+
+- **core**: Definitions are built once, in Component.definition
+  ([`885cd4a`](https://github.com/digitl-cloud/interloper/commit/885cd4a2c653b00fac843c790c0748ef75bc00da))
+
+- **core**: Destination stores one partition at a time; PartitionedDestination folds into it
+  ([`11c8427`](https://github.com/digitl-cloud/interloper/commit/11c84272669f6d67b0c87c16f4bcd42f08f799a7))
+
+- **core**: Drop _data_fn and _defer_validation from the component surface
+  ([`ce2a43e`](https://github.com/digitl-cloud/interloper/commit/ce2a43eb55cc4ea7169b36217f0d2a0fae7c8bad))
+
+- **core**: Drop the unused public methods from the component surface
+  ([`f733a72`](https://github.com/digitl-cloud/interloper/commit/f733a72b34f6edead283fa9459a41a42ca3ef139))
+
+- **core**: One conform pass; strategies are RECONCILE and STRICT
+  ([`0d38be5`](https://github.com/digitl-cloud/interloper/commit/0d38be5d6bce7217bddd76a8d032ff3102e22630))
+
+- **core**: One SerializationContext for writing and reading a manifest; kinds own no serialisation
+  ([`7b482e2`](https://github.com/digitl-cloud/interloper/commit/7b482e2714e3021052236d1e28c3405d92c80319))
+
+- **core**: Reconstruction keeps its own state in a Document; Component drops the reference helpers
+  ([`9f88818`](https://github.com/digitl-cloud/interloper/commit/9f888185715192b1dad4385697617895459aa7ca))
+
+- **core**: Relation completeness is checked where the graph is whole, not in __init__
+  ([`9f81dd5`](https://github.com/digitl-cloud/interloper/commit/9f81dd5f432cdbc36c54b1337901650cfe56835a))
+
+- **core**: Relation reads as a declaration: kinds and keys are properties, local, has_fallback
+  ([`de6d687`](https://github.com/digitl-cloud/interloper/commit/de6d6873112c11798b31d1743b7ce05f4bcdddec))
+
+- **core**: Relation.name and Relation.target are derived, not declared
+  ([`67cc0fd`](https://github.com/digitl-cloud/interloper/commit/67cc0fd6e18cfdff67a68b285daf29c99e6998cd))
+
+- **core**: Representation.of(data) returns a View bound to the data, with to(key) conversion
+  ([`bb8bb60`](https://github.com/digitl-cloud/interloper/commit/bb8bb606236be4e66f96f19cb0b580dbfb9692aa))
+
+- **core**: Source reads top-down; the hook body is the hook
+  ([`c28576d`](https://github.com/digitl-cloud/interloper/commit/c28576d82489ce7575485ec91095fc71c0e93ee5))
+
+- **core**: The relation collector is a class-creation internal, not API
+  ([`078d062`](https://github.com/digitl-cloud/interloper/commit/078d06211141dbaad84fa7b85b9794323859cc4a))
+
+- **core**: The three destination hooks are abstract
+  ([`ffe4bdc`](https://github.com/digitl-cloud/interloper/commit/ffe4bdc87848dd8c827ad6b9f7ca99a3a1f0c591))
+
+- **google-cloud**: BigQuery loads every representation through one DataFrame path
+  ([`fc6aa88`](https://github.com/digitl-cloud/interloper/commit/fc6aa8844d9a4b27005f35bdce74390768c312fc))
+
+- **google-cloud**: Drop dispose() from the BigQuery and GCS destinations
+  ([`5d4ebbb`](https://github.com/digitl-cloud/interloper/commit/5d4ebbbb9daa3deddcc1355d727d7a0fc73b2c80))
+
+- **google-cloud**: One type table for BigQuery, in standard SQL names
+  ([`1ac036f`](https://github.com/digitl-cloud/interloper/commit/1ac036f05db4e4e0454af0e18011e333be65385a))
+
+- **scheduler**: Hooks match on the watches relation; the DAG joins read-only upstreams
+  ([`e5b6f7d`](https://github.com/digitl-cloud/interloper/commit/e5b6f7d32f9996101efb747bbd9e9fab53078f33))
+
+### Testing
+
+- **agent**: A source without connection relations rejects a connection
+  ([`21b7631`](https://github.com/digitl-cloud/interloper/commit/21b7631866d29cb57305252d8dfa21b1de21afbd))
+
+- **core**: Pin sibling wiring and optional inference under depends_on
+  ([`308bd72`](https://github.com/digitl-cloud/interloper/commit/308bd7299ef97adf115af4a63a4efaa9155afd92))
+
+- **db**: Hydration tests read bindings through the relation attributes
+  ([`e0b0efc`](https://github.com/digitl-cloud/interloper/commit/e0b0efcbc4f32c32489c1567e90a68f8a4926680))
+
+
 ## v0.77.0 (2026-09-09)
 
 ### Features
