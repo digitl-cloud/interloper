@@ -47,7 +47,7 @@ class TestDataFrameNormalize:
 
     def test_anything_but_rows_or_a_frame_is_an_explicit_error(self):
         n = DataFrameNormalizer()
-        with pytest.raises(NormalizerError, match="expects list\\[dict\\] or a DataFrame.*dict"):
+        with pytest.raises(NormalizerError, match=r"expects list\[dict\] or a DataFrame.*dict"):
             n.normalize({"a": 1})
         with pytest.raises(NormalizerError):
             n.normalize(None)

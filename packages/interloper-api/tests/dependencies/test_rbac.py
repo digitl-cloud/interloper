@@ -206,7 +206,7 @@ def _gate_client(gate: Any, store: FakeStore | Store, user: Profile) -> TestClie
     router = APIRouter()
 
     @router.get("/gated")
-    def gated(caller: Any = Depends(gate)) -> dict[str, str]:
+    def gated(caller: Any = Depends(gate)) -> dict[str, str]:  # noqa: FAST002 - `gate` is a closure variable
         return {"email": caller.email}
 
     app = FastAPI()

@@ -72,7 +72,7 @@ snapchat = "interloper.oauth.providers:SNAPCHAT"
 tiktok = "interloper.oauth.providers:TIKTOK"
 
 [build-system]
-requires = ["uv_build>=0.11.5,<0.12"]
+requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -96,7 +96,7 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "D101", "D102", "D104", "B018"]
+"tests/**" = ["ANN", "D101", "D102", "D104", "B018", "RUF069", "PLW0108"]
 
 # Pytest is configured once, at the workspace root: a per-package
 # [tool.pytest.ini_options] block would make it the rootdir for any run

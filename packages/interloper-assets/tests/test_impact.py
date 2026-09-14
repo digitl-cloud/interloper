@@ -23,7 +23,7 @@ from interloper_assets.impact.source import Impact, _to_df
 
 
 def _source() -> Any:
-    return Impact(id="src-1", program_id="123")  # ty: ignore[unknown-argument]
+    return Impact(id="src-1", program_id="123")
 
 
 class TestSource:

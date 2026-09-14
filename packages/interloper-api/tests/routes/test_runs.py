@@ -89,12 +89,24 @@ class FakeStore:
         return SimpleNamespace(id=uuid4())
 
 
-def _client(store: FakeStore) -> TestClient:
+def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
-    return TestClient(app)
+    return app
+
+
+def _client(store: FakeStore) -> TestClient:
+    """A client for the probe app.
+
+    Args:
+        store: The fake store the routes resolve against.
+
+    Returns:
+        The client.
+    """
+    return TestClient(_app(store))
 
 
 @pytest.fixture
@@ -199,9 +211,9 @@ def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
 
     store.components.get = lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID, kind="job")
     store.runs.create = _raise
-    client = _client(store)
+    app = _app(store)
 
-    @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
+    @app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
     async def _quota_handler(_request, exc: QuotaExceededError):
         from fastapi.responses import JSONResponse
 
@@ -210,6 +222,7 @@ def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
             content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
         )
 
+    client = TestClient(app)
     resp = client.post("/runs/", json={"component_id": str(uuid4())})
     assert resp.status_code == 429
     detail = resp.json()["detail"]
@@ -222,10 +235,11 @@ def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
 
 def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
     """A timeline view asks for one window; both the listing and its count honour it."""
-    client = _client(store)
-    client.app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    client.app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+    app = _app(store)
+    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
 
+    client = TestClient(app)
     resp = client.get("/runs/", params={"after": "2026-02-04T00:00:00Z", "before": "2026-02-05T00:00:00Z"})
 
     assert resp.status_code == 200
@@ -239,10 +253,11 @@ def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
 
 
 def test_list_runs_without_window_passes_none(store: FakeStore) -> None:
-    client = _client(store)
-    client.app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    client.app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+    app = _app(store)
+    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
 
+    client = TestClient(app)
     assert client.get("/runs/").status_code == 200
     assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == (None, None)
 

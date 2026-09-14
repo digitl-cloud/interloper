@@ -300,7 +300,11 @@ class BigQueryDestination(DatabaseDestination):
             df = df[present]
             job_config.schema = [field for field in bq_schema if field.name in present]
 
-        job = self.client.load_table_from_dataframe(df, ref, job_config=job_config)
+        # The client deprecates this in favour of pandas_gbq.to_gbq(), which
+        # wraps this same call without exposing the job config we rely on.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=PendingDeprecationWarning, module="google.cloud.bigquery")
+            job = self.client.load_table_from_dataframe(df, ref, job_config=job_config)
         job.result()
 
     def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
@@ -619,7 +623,7 @@ def _partition_param(
     ):
         # A date bound against a datetime-typed column: promote to midnight so
         # the client serializes it in the parameter's declared type.
-        value = datetime.datetime(value.year, value.month, value.day)  # noqa: DTZ001 — a label, not an instant
+        value = datetime.datetime(value.year, value.month, value.day)
     if param_type == "DATE" and isinstance(value, datetime.datetime):
         # A datetime bound against a DATE column loses sub-day precision by
         # definition; the caller guards hourly-on-DATE at table creation.

@@ -1,6 +1,7 @@
 """Tests for the shared JSON serialization helpers."""
 
 import datetime
+import math
 from decimal import Decimal
 
 import pytest
@@ -19,7 +20,7 @@ class TestReplaceNonFinite:
         assert replace_non_finite(float("-inf")) is None
 
     def test_finite_float_unchanged(self):
-        assert replace_non_finite(3.14) == 3.14
+        assert replace_non_finite(math.pi) == math.pi
         assert replace_non_finite(0.0) == 0.0
 
     def test_non_float_unchanged(self):
@@ -46,7 +47,7 @@ class TestJsonDefault:
         assert json_default(datetime.date(2024, 1, 2)) == "2024-01-02"
 
     def test_datetime(self):
-        assert json_default(datetime.datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05"  # noqa: DTZ001 — naive is the case under test
+        assert json_default(datetime.datetime(2024, 1, 2, 3, 4, 5)) == "2024-01-02T03:04:05"
 
     def test_decimal(self):
         assert json_default(Decimal("9.99")) == "9.99"

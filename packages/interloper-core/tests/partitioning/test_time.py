@@ -30,8 +30,8 @@ class TestTimeGranularityTruncate:
         assert granularity.truncate(dt.date(2026, 5, 20)) == expected
 
     def test_hour_keeps_time_and_drops_minutes(self) -> None:
-        truncated = TimeGranularity.HOUR.truncate(dt.datetime(2026, 5, 20, 13, 47, 12))  # noqa: DTZ001
-        assert truncated == dt.datetime(2026, 5, 20, 13, 0)  # noqa: DTZ001
+        truncated = TimeGranularity.HOUR.truncate(dt.datetime(2026, 5, 20, 13, 47, 12))
+        assert truncated == dt.datetime(2026, 5, 20, 13, 0)
 
     def test_coerces_iso_string(self) -> None:
         assert TimeGranularity.MONTH.truncate("2026-05-20") == dt.date(2026, 5, 1)
@@ -61,8 +61,8 @@ class TestTimeGranularityAdvance:
         assert TimeGranularity.MONTH.advance(dt.date(2026, 2, 1), -14) == dt.date(2024, 12, 1)
 
     def test_hour_advances_by_hours(self) -> None:
-        start = dt.datetime(2026, 1, 1, 23, 0)  # noqa: DTZ001
-        assert TimeGranularity.HOUR.advance(start, 2) == dt.datetime(2026, 1, 2, 1, 0)  # noqa: DTZ001
+        start = dt.datetime(2026, 1, 1, 23, 0)
+        assert TimeGranularity.HOUR.advance(start, 2) == dt.datetime(2026, 1, 2, 1, 0)
 
 
 class TestTimeGranularityBounds:
@@ -91,8 +91,8 @@ class TestTimeGranularityPeriodsBetween:
         assert granularity.periods_between(start, end) == expected
 
     def test_hour_counts_hours(self) -> None:
-        start = dt.datetime(2026, 1, 1, 0, 0)  # noqa: DTZ001
-        end = dt.datetime(2026, 1, 1, 5, 30)  # noqa: DTZ001
+        start = dt.datetime(2026, 1, 1, 0, 0)
+        end = dt.datetime(2026, 1, 1, 5, 30)
         assert TimeGranularity.HOUR.periods_between(start, end) == 5
 
 
@@ -100,7 +100,7 @@ class TestTimeGranularityIdentity:
     @pytest.mark.parametrize(
         ("granularity", "value", "key"),
         [
-            (TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13, 45), "2026-08-21T13"),  # noqa: DTZ001
+            (TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13, 45), "2026-08-21T13"),
             (TimeGranularity.DAY, dt.date(2026, 8, 21), "2026-08-21"),
             (TimeGranularity.MONTH, dt.date(2026, 8, 21), "2026-08"),
             (TimeGranularity.YEAR, dt.date(2026, 8, 21), "2026"),
@@ -129,7 +129,7 @@ class TestTimePartitionFromKey:
             ("2026", TimeGranularity.YEAR, dt.date(2026, 1, 1)),
             ("2026-08", TimeGranularity.MONTH, dt.date(2026, 8, 1)),
             ("2026-08-21", TimeGranularity.DAY, dt.date(2026, 8, 21)),
-            ("2026-08-21T13", TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13)),  # noqa: DTZ001
+            ("2026-08-21T13", TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13)),
         ],
     )
     def test_the_key_shape_carries_the_granularity(
@@ -314,7 +314,7 @@ class TestTimePartitionWindowLookback:
         local_now = dt.datetime(2026, 8, 18, 6, 30, tzinfo=dt.timezone.utc).astimezone(ZoneInfo("Asia/Kathmandu"))
         window = TimePartitionWindow.lookback(local_now, lookback=1, granularity=TimeGranularity.HOUR)
         assert window is not None
-        assert (window.start, window.end) == (dt.datetime(2026, 8, 18, 5), dt.datetime(2026, 8, 18, 5))  # noqa: DTZ001
+        assert (window.start, window.end) == (dt.datetime(2026, 8, 18, 5), dt.datetime(2026, 8, 18, 5))
 
     def test_a_date_is_an_acceptable_reference(self) -> None:
         window = TimePartitionWindow.lookback(dt.date(2026, 8, 18), lookback=1)

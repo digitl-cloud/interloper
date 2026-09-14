@@ -141,7 +141,7 @@ class TestMain:
         monkeypatch.setattr(sys, "argv", ["interloper", "launch", "0" * 8 + "-0000-0000-0000-" + "0" * 12])
         monkeypatch.setattr(
             "interloper.cli.commands.launch._cmd_launch",
-            lambda args: seen.append(args),
+            seen.append,
         )
 
         cli_main.main()

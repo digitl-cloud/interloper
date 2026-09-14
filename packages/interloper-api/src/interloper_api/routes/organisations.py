@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request
-from interloper_db import Profile, Store
+from fastapi import APIRouter, Cookie, HTTPException, Request
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_admin, require_viewer
+from interloper_api.dependencies import (
+    AdminDep,
+    CurrentUserDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
+)
 from interloper_api.notifications import InvitationEmail
 
 logger = logging.getLogger(__name__)
@@ -115,9 +120,9 @@ def _send_invitation_email(
 @router.post("", status_code=201)
 def create_organisation(
     body: CreateOrganisationRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
-    session_token: str | None = Cookie(default=None),
+    user: CurrentUserDep,
+    store: StoreDep,
+    session_token: Annotated[str | None, Cookie()] = None,
 ) -> OrganisationResponse:
     """Create a new organisation. The creating user becomes its admin.
 
@@ -141,8 +146,8 @@ def create_organisation(
 
 @router.get("")
 def list_organisations(
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> list[OrganisationResponse]:
     """List all organisations the user belongs to.
 
@@ -162,9 +167,9 @@ def list_organisations(
 
 @router.get("/members")
 def list_members(
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> list[MemberResponse]:
     """List all members of the current organisation.
 
@@ -192,9 +197,9 @@ def list_members(
 @router.delete("/members/{user_id}")
 def remove_member(
     user_id: UUID,
-    user: Profile = Depends(require_admin),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: AdminDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Remove a member from the organisation. Requires admin role.
 
@@ -223,9 +228,9 @@ def remove_member(
 
 @router.get("/invitations")
 def list_invitations(
-    user: Profile = Depends(require_admin),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: AdminDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> list[InvitationResponse]:
     """List pending invitations for the current organisation. Requires admin role.
 
@@ -254,9 +259,9 @@ def list_invitations(
 def invite_member(
     body: InviteRequest,
     request: Request,
-    user: Profile = Depends(require_admin),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: AdminDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> InvitationResponse:
     """Invite a user to the organisation by email. Requires admin role.
 
@@ -300,9 +305,9 @@ def invite_member(
 @router.delete("/invitations/{invitation_id}")
 def cancel_invitation(
     invitation_id: UUID,
-    user: Profile = Depends(require_admin),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: AdminDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Cancel a pending invitation. Requires admin role.
 
@@ -332,9 +337,9 @@ def cancel_invitation(
 def resend_invitation(
     invitation_id: UUID,
     request: Request,
-    user: Profile = Depends(require_admin),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: AdminDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Resend an invitation (recreates with fresh expiry). Requires admin role.
 

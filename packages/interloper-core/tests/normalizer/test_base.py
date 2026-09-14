@@ -13,7 +13,7 @@ class TestInput:
         assert Normalizer(normalize_columns_names=False, fill_missing=False).normalize([{"a": 1}]) == [{"a": 1}]
 
     def test_anything_else_is_an_explicit_error(self):
-        with pytest.raises(NormalizerError, match="expects list\\[dict\\].*dict"):
+        with pytest.raises(NormalizerError, match=r"expects list\[dict\].*dict"):
             Normalizer().normalize({"a": 1})
 
 

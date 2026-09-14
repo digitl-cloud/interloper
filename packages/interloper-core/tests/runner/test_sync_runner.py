@@ -144,7 +144,7 @@ class TestBlockingWalk:
             return upstream.data
 
         first = upstream(id="upstream", destinations=[_memory()])
-        dag = il.DAG(first, downstream(id="downstream", destinations=[_memory()], upstream=first))  # ty: ignore[unknown-argument]
+        dag = il.DAG(first, downstream(id="downstream", destinations=[_memory()], upstream=first))
         runner = ThreadRunner()
 
         il.run(runner.run(dag))

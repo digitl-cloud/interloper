@@ -4,19 +4,24 @@ from __future__ import annotations
 
 from contextlib import suppress
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from interloper.errors import NotFoundError
-from interloper_db import Organisation, Profile, Store
+from interloper_db import Organisation, Store
 from pydantic import BaseModel, Field
 
-from interloper_api.dependencies import get_auth_config, get_current_user, get_features, get_store
+from interloper_api.dependencies import (
+    AuthConfigDep,
+    CurrentUserDep,
+    StoreDep,
+    get_features,
+)
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -83,8 +88,8 @@ class AuthUserResponse(BaseModel):
 
 @router.get("/google")
 def google_login(
+    auth_config: AuthConfigDep,
     redirect: str | None = None,
-    auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
     """Redirect user to Google's OAuth consent screen.
 
@@ -123,9 +128,9 @@ def google_login(
 @router.get("/google/callback")
 def google_callback(
     code: str,
+    store: StoreDep,
+    auth_config: AuthConfigDep,
     state: str | None = None,
-    store: Store = Depends(get_store),
-    auth_config: Any = Depends(get_auth_config),
 ) -> RedirectResponse:
     """Exchange Google authorization code for tokens, upsert profile, create session.
 
@@ -224,8 +229,8 @@ def google_callback(
 @router.post("/logout")
 def logout(
     response: Response,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Delete all sessions for the current user and clear the cookie.
 
@@ -247,8 +252,8 @@ def logout(
 
 @router.get("/me")
 def get_me(
-    store: Store = Depends(get_store),
-    session_token: str | None = Cookie(default=None),
+    store: StoreDep,
+    session_token: Annotated[str | None, Cookie()] = None,
 ) -> AuthUserResponse:
     """Return the current user and their active organisation (if any).
 
@@ -328,8 +333,8 @@ class ProfileResponse(BaseModel):
 @router.patch("/me")
 def update_me(
     body: UpdateMeRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> ProfileResponse:
     """Update the current user's profile (display name, timezone).
 
@@ -366,9 +371,9 @@ class SwitchOrgRequest(BaseModel):
 @router.post("/switch-org")
 def switch_org(
     body: SwitchOrgRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
-    session_token: str | None = Cookie(default=None),
+    user: CurrentUserDep,
+    store: StoreDep,
+    session_token: Annotated[str | None, Cookie()] = None,
 ) -> dict[str, str]:
     """Switch the session's active organisation. User must be a member.
 
@@ -403,9 +408,9 @@ class AcceptInviteRequest(BaseModel):
 @router.post("/accept-invite")
 def accept_invite(
     body: AcceptInviteRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
-    session_token: str | None = Cookie(default=None),
+    user: CurrentUserDep,
+    store: StoreDep,
+    session_token: Annotated[str | None, Cookie()] = None,
 ) -> dict[str, str]:
     """Accept an organisation invitation using its token.
 

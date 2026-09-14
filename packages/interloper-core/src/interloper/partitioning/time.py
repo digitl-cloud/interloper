@@ -204,7 +204,7 @@ class TimeGranularity(str, Enum):
         if self.key_format is None:
             raise NotImplementedError(self._no_id_format_message())
         try:
-            parsed = dt.datetime.strptime(key, self.key_format)  # noqa: DTZ007 — a label, not an instant
+            parsed = dt.datetime.strptime(key, self.key_format)
         except ValueError as e:
             raise ValueError(
                 f"Partition key {key!r} is not a {self.value} key (expected the shape {self.key_format!r})."

@@ -60,7 +60,7 @@ def _make_destination(**overrides: Any) -> tuple[GCSDestination, MagicMock, Magi
         prefix=overrides.get("prefix", None),
         connection=conn,
     )
-    object.__setattr__(dest, "client", mock_client)
+    object.__setattr__(dest, "client", mock_client)  # noqa: PLC2801 - bypasses pydantic's __setattr__
     return dest, mock_client, mock_blob
 
 
@@ -176,7 +176,7 @@ class TestBlobName:
     def test_prefix_and_dataset(self):
         dest, _, _ = _make_destination(prefix="lake/raw/")
         asset = _plain_asset()
-        object.__setattr__(asset, "dataset", "ds")
+        object.__setattr__(asset, "dataset", "ds")  # noqa: PLC2801 - bypasses pydantic's __setattr__
         assert dest._blob_name(_ctx(asset, None), None) == "lake/raw/ds/plain_asset/data.parquet"
 
 
@@ -283,7 +283,7 @@ class TestRead:
     def test_missing_object_raises(self):
         dest, _, mock_blob = _make_destination()
         mock_blob.download_as_bytes.side_effect = NotFound("nope")
-        with pytest.raises(DataNotFoundError, match="gs://test-bucket/plain_asset/data.parquet"):
+        with pytest.raises(DataNotFoundError, match=r"gs://test-bucket/plain_asset/data\.parquet"):
             dest.read(_ctx(_plain_asset(), None))
 
 

@@ -105,7 +105,7 @@ class RecordingPartitions(il.Destination):
 
     def model_post_init(self, context: Any) -> None:
         super().model_post_init(context)
-        object.__setattr__(self, "calls", [])
+        object.__setattr__(self, "calls", [])  # noqa: PLC2801 - bypasses pydantic's __setattr__
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
         self.calls.append(("write", partition.id if partition else None, data))
@@ -225,7 +225,7 @@ class TestHookContract:
         class Bare(il.Destination):
             pass
 
-        with pytest.raises(TypeError, match="abstract.*(partition_row_counts|read_partition|write_partition)"):
+        with pytest.raises(TypeError, match=r"abstract.*(partition_row_counts|read_partition|write_partition)"):
             Bare(id="b")
 
     def test_the_three_hooks_are_the_whole_contract(self):

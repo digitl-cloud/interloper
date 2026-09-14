@@ -1013,7 +1013,7 @@ class TestLoadDrift:
         assert sorted(child.key for child in source.children) == ["rows", "totals"]
         reader = Store(catalog=il.Catalog.from_assets([WireUpNarrowedSource]))
 
-        with pytest.raises(ComponentDriftError, match="Asset 'totals' .* is no longer declared by source"):
+        with pytest.raises(ComponentDriftError, match=r"Asset 'totals' .* is no longer declared by source"):
             reader.components.load(source.id)
 
 

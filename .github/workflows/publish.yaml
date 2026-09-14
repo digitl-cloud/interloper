@@ -91,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout (released tag)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.tag }}
 
@@ -160,7 +160,7 @@ jobs:
 
     steps:
       - name: Checkout (released tag)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.tag }}
           fetch-depth: 0

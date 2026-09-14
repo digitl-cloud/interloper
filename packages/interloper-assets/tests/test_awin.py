@@ -25,7 +25,7 @@ from interloper_assets.awin.source import Awin, AwinTransactionsNormalizer, _res
 
 
 def _source() -> Any:
-    return Awin(id="src-1", advertiser_id="12345")  # ty: ignore[unknown-argument]
+    return Awin(id="src-1", advertiser_id="12345")
 
 
 class TestSourceNormalizer:

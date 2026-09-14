@@ -322,4 +322,4 @@ def dataframe_to_records(data: pd.DataFrame) -> list[dict[str, Any]]:
     Returns:
         Rows as a list of dicts with ``None`` for missing values.
     """
-    return data.astype(object).where(pd.notnull(data), None).to_dict("records")
+    return data.astype(object).where(pd.notna(data), None).to_dict("records")

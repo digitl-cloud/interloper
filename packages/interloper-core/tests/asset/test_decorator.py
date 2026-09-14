@@ -205,7 +205,7 @@ class TestSignatureShapes:
                 """
                 return [{"greeting": self.greeting}]
 
-        source = WithMethodAsset(greeting="hi")  # ty: ignore[unknown-argument]
+        source = WithMethodAsset(greeting="hi")
 
         assert await source.rows.run_async() == [{"greeting": "hi"}]
 
@@ -225,7 +225,7 @@ class TestSignatureShapes:
                 """
                 return [{"greeting": self.greeting}]
 
-        source = WithAsyncMethodAsset(greeting="hi")  # ty: ignore[unknown-argument]
+        source = WithAsyncMethodAsset(greeting="hi")
 
         assert await source.rows.run_async() == [{"greeting": "hi"}]
 

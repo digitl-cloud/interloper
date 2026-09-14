@@ -173,7 +173,7 @@ class TestPartitionDateGranularity:
             partition_or_window=TimePartition(dt.date(2026, 6, 1), TimeGranularity.MONTH),
         )
 
-        with pytest.raises(AttributeError, match="partitioned by month. Use `context.partition`"):
+        with pytest.raises(AttributeError, match=r"partitioned by month\. Use `context\.partition`"):
             _ = context.partition_date
 
 

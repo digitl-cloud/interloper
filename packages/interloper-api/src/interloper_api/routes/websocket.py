@@ -105,7 +105,8 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
             logger.info("[Realtime] NOTIFY listener started")
 
             while True:
-                if _select.select([connection], [], [], 1.0):
+                readable, _, _ = _select.select([connection], [], [], 1.0)
+                if readable:
                     connection.poll()
                     while connection.notifies:
                         notify = connection.notifies.pop(0)

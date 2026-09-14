@@ -31,7 +31,7 @@ from interloper_assets.bing_ads.source import BingAds, _translate_soap_fault
 
 
 def _source() -> Any:
-    return BingAds(id="src-1", account_id="123")  # ty: ignore[unknown-argument]
+    return BingAds(id="src-1", account_id="123")
 
 
 class TestSourceNormalizer:
@@ -73,7 +73,7 @@ class TestSpecRoundtrip:
 
         # One row with every requested report column, as Bing returns them.
         # All schema fields are required-nullable, so None is valid everywhere.
-        row: dict[str, object] = {col: None for col in constants.AD_PERFORMANCE_FIELDS}
+        row: dict[str, object] = dict.fromkeys(constants.AD_PERFORMANCE_FIELDS)
         row["TimePeriod"] = "2026-06-10"
         df = pd.DataFrame([row])
 

@@ -792,7 +792,7 @@ class ComponentStore:
         for sibling in siblings:
             overlap = mine & (targets(sibling.config) or set())
             if overlap:
-                dataset, table = sorted(overlap)[0]
+                dataset, table = min(overlap)
                 raise ConfigError(
                     f"Source '{db_source.key}' already has an instance materializing to '{dataset}.{table}'. "
                     f"Configure a distinct discriminator (or dataset) so the two don't overwrite each other's data."

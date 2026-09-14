@@ -103,7 +103,7 @@ class ConsoleEventHandler:
             A :mod:`logging` level constant.
         """
         if event.type is EventType.LOG:
-            level = logging.getLevelName(str(event.metadata.get("level", "INFO")))
+            level = getattr(logging, str(event.metadata.get("level", "INFO")).upper(), None)
             return level if isinstance(level, int) else logging.INFO
         return _EVENT_LEVELS.get(event.type, logging.INFO)
 

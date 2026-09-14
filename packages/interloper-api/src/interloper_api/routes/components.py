@@ -21,8 +21,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
-from interloper.catalog.base import Catalog
+from fastapi import APIRouter, HTTPException, Query
 from interloper.component import KINDS
 from interloper.connection.base import Connection
 from interloper.errors import (
@@ -37,17 +36,17 @@ from interloper.errors import (
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
-from interloper_db import Component, ComponentStatus, Profile, Store
+from interloper_db import Component, ComponentStatus, Store
 from pydantic import BaseModel, Field, ValidationError
 
 from interloper_api.dependencies import (
-    get_catalog,
-    get_current_user,
-    get_org_id,
-    get_store,
+    CatalogDep,
+    CurrentUserDep,
+    EditorDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
     load_authorized,
-    require_editor,
-    require_viewer,
 )
 
 logger = logging.getLogger(__name__)
@@ -266,10 +265,10 @@ def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, lis
 
 @router.get("/")
 def list_components(
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
     kind: Annotated[list[str] | None, Query()] = None,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
 ) -> list[ComponentResponse]:
     """List the organisation's components, optionally filtered by kind(s).
 
@@ -288,12 +287,12 @@ def list_components(
 
 @router.get("/relations")
 def list_relations(
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
     name: str | None = None,
     src_kind: str | None = None,
     dst_kind: str | None = None,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
 ) -> list[RelationResponse]:
     """List the organisation's component relations, optionally filtered.
 
@@ -323,9 +322,9 @@ def list_relations(
 @router.post("/", status_code=201)
 def create_component(
     body: ComponentCreateRequest,
-    user: Profile = Depends(require_editor),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: EditorDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> ComponentResponse:
     """Create a component of any kind.
 
@@ -364,8 +363,8 @@ def create_component(
 @router.get("/{component_id}")
 def get_component(
     component_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> ComponentResponse:
     """Get a single component by ID, including its decoded config payload.
 
@@ -385,8 +384,8 @@ def get_component(
 def update_component(
     component_id: UUID,
     body: ComponentUpdateRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> ComponentResponse:
     """Update a component's spec. Omitted facets are untouched.
 
@@ -427,8 +426,8 @@ def update_component(
 @router.delete("/{component_id}")
 def delete_component(
     component_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Delete a component. Refused (409) while other components are bound to it.
 
@@ -463,8 +462,8 @@ def delete_component(
 def add_relation(
     component_id: UUID,
     body: RelationCreateRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> RelationResponse:
     """Add one relation from a component (e.g. a dependency edge).
 
@@ -507,8 +506,8 @@ def remove_relation(
     component_id: UUID,
     name: str,
     dst_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> None:
     """Remove a component's relation of one name toward one destination.
 
@@ -537,8 +536,8 @@ def remove_relation(
 @router.get("/{component_id}/partition-row-counts")
 def get_partition_row_counts(
     component_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> PartitionRowCountsResponse:
     """Get row counts grouped by partition for an asset.
 
@@ -626,8 +625,8 @@ class ResolveRequest(BaseModel):
 @router.post("/resolve")
 async def resolve_fetch_field(
     body: ResolveRequest,
-    catalog: Catalog = Depends(get_catalog),
-    _user: Profile = Depends(require_viewer),
+    catalog: CatalogDep,
+    _user: ViewerDep,
 ) -> list[dict[str, Any]]:
     """Resolve the options for a ``FetchField(provider=...)`` field.
 
@@ -769,8 +768,8 @@ class CheckResponse(BaseModel):
 @router.post("/check")
 async def check_connection(
     body: CheckRequest,
-    catalog: Catalog = Depends(get_catalog),
-    _user: Profile = Depends(require_viewer),
+    catalog: CatalogDep,
+    _user: ViewerDep,
 ) -> CheckResponse:
     """Check a connection's candidate config, statically and (when supported) live.
 

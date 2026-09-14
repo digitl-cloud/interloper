@@ -1,0 +1,7 @@
+patchedDependencies:
+  'vaul-vue@0.4.1': patches/vaul-vue@0.4.1.patch
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - esbuild
+  - unrs-resolver
+  - vue-demi

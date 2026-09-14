@@ -8,7 +8,7 @@ arguments.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -74,20 +74,20 @@ def _client(store: FakeStore) -> TestClient:
     router = APIRouter()
 
     @router.get("/user")
-    def read_user(user: Any = Depends(get_current_user)) -> dict[str, str]:
+    def read_user(user: Annotated[Any, Depends(get_current_user)]) -> dict[str, str]:
         return {"email": user.email}
 
     @router.get("/session")
-    def read_session(context: Any = Depends(get_session_context)) -> dict[str, str]:
+    def read_session(context: Annotated[Any, Depends(get_session_context)]) -> dict[str, str]:
         profile, session_row = context
         return {"email": profile.email, "session": str(session_row.id)}
 
     @router.get("/org")
-    def read_org(org: Any = Depends(get_current_org)) -> dict[str, str]:
+    def read_org(org: Annotated[Any, Depends(get_current_org)]) -> dict[str, str]:
         return {"name": org.name}
 
     @router.get("/org-id")
-    def read_org_id(org_id: UUID = Depends(get_org_id)) -> dict[str, str]:
+    def read_org_id(org_id: Annotated[UUID, Depends(get_org_id)]) -> dict[str, str]:
         return {"org_id": str(org_id)}
 
     app = FastAPI()

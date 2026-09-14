@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
@@ -191,3 +191,11 @@ def require_super_admin(
     if not user.is_super_admin:
         raise HTTPException(status_code=403, detail="Requires super-admin privileges")
     return user
+
+
+# -- Dependency aliases --------------------------------------------------------
+
+ViewerDep = Annotated[Profile, Depends(require_viewer)]
+EditorDep = Annotated[Profile, Depends(require_editor)]
+AdminDep = Annotated[Profile, Depends(require_admin)]
+SuperAdminDep = Annotated[Profile, Depends(require_super_admin)]

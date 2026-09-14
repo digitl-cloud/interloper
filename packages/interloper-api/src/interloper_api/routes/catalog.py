@@ -5,15 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.catalog.base import Catalog
 
-from interloper_api.dependencies import get_catalog, require_viewer
+from interloper_api.dependencies import CatalogDep, require_viewer
 
 router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(require_viewer)])
 
 
 @router.get("/")
-def list_catalog(catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
+def list_catalog(catalog: CatalogDep) -> dict[str, Any]:
     """Return the full catalog.
 
     Args:
@@ -26,7 +25,7 @@ def list_catalog(catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
 
 
 @router.get("/resource-kinds")
-def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
+def list_resource_kinds(catalog: CatalogDep) -> list[str]:
     """Return distinct resource kinds from the catalog.
 
     A resource kind is any registered kind anchored under ``Resource``
@@ -51,7 +50,7 @@ def list_resource_kinds(catalog: Catalog = Depends(get_catalog)) -> list[str]:
 
 
 @router.get("/{key}")
-def get_definition(key: str, catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
+def get_definition(key: str, catalog: CatalogDep) -> dict[str, Any]:
     """Return a single component definition by key.
 
     Args:
@@ -71,7 +70,7 @@ def get_definition(key: str, catalog: Catalog = Depends(get_catalog)) -> dict[st
 
 
 @router.get("/kind/{kind}")
-def list_by_kind(kind: str, catalog: Catalog = Depends(get_catalog)) -> dict[str, Any]:
+def list_by_kind(kind: str, catalog: CatalogDep) -> dict[str, Any]:
     """Return all catalog entries matching a kind (source, asset, resource, destination).
 
     Args:

@@ -46,7 +46,7 @@ def _profile() -> SimpleNamespace:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     """Mount the agent router with the runner stubbed out.
 
     Args:
@@ -54,7 +54,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
             real ADK Runner.
 
     Returns:
-        A client for the probe app.
+        The probe app.
     """
     monkeypatch.setattr(agent_module, "_get_runner", lambda store, catalog: SimpleNamespace())
     app = FastAPI()
@@ -64,6 +64,19 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[get_org_id] = lambda: _ORG_ID
     app.dependency_overrides[require_viewer] = _profile
     app.dependency_overrides[require_editor] = _profile
+    return app
+
+
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    """A client for the probe app.
+
+    Args:
+        app: The probe app.
+
+    Returns:
+        The client.
+    """
     return TestClient(app)
 
 
@@ -163,10 +176,10 @@ class TestListSessions:
     def test_no_sessions_is_an_empty_list(self, client: TestClient) -> None:
         assert client.get("/agent/sessions").json() == []
 
-    def test_another_users_sessions_are_not_listed(self, client: TestClient) -> None:
+    def test_another_users_sessions_are_not_listed(self, app: FastAPI, client: TestClient) -> None:
         client.post("/agent/sessions")
         other = SimpleNamespace(id=uuid4(), email="bob@example.com", is_super_admin=False)
-        client.app.dependency_overrides[require_viewer] = lambda: other
+        app.dependency_overrides[require_viewer] = lambda: other
 
         assert client.get("/agent/sessions").json() == []
 

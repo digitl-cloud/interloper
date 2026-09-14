@@ -17,7 +17,7 @@ docker = "interloper_docker.runner:DockerRunner"
 docker = "interloper_docker.launcher:DockerLauncher"
 
 [build-system]
-requires = ["uv_build>=0.11.5,<0.12"]
+requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
@@ -39,4 +39,4 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

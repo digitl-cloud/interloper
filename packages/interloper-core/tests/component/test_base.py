@@ -352,7 +352,7 @@ class TestBind:
 
     def test_wrong_kind_rejected(self):
         with pytest.raises(ConfigError, match="connection"):
-            Widget(connection=Cfg())  # ty: ignore[invalid-argument-type]
+            Widget(connection=Cfg())
 
     def test_a_relation_refuses_the_component_itself(self):
         peer = Peer()
@@ -407,7 +407,7 @@ class TestBind:
 
     def test_unknown_kwarg_is_a_type_error(self):
         with pytest.raises(TypeError, match="unexpected"):
-            Widget(connection=Conn(api_secret="s"), nope=1)  # ty: ignore[unknown-argument]
+            Widget(connection=Conn(api_secret="s"), nope=1)
 
 
 class TestSetAttrRelations:
@@ -885,8 +885,8 @@ class TestStrictInitKwargs:
     """Unknown init kwargs fail loudly instead of being silently dropped."""
 
     def test_unknown_kwarg_raises(self):
-        with pytest.raises(TypeError, match="unexpected keyword argument.*nope"):
-            FakeComponent(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
+        with pytest.raises(TypeError, match=r"unexpected keyword argument.*nope"):
+            FakeComponent(nope=1)  # type: ignore[call-arg]
 
 
 class TestPublicApi:

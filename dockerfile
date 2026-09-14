@@ -168,11 +168,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # QEMU for the linux/arm64 target — emulating that bundler is what made the
 # multi-arch frontend build hang. Only the final nginx runtime stage below
 # is built per-target-arch (a trivial COPY).
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build-spa
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build-spa
 
 WORKDIR /app
 RUN corepack enable
-COPY packages/interloper-app/app/package.json packages/interloper-app/app/pnpm-lock.yaml ./
+COPY packages/interloper-app/app/package.json packages/interloper-app/app/pnpm-lock.yaml packages/interloper-app/app/pnpm-workspace.yaml ./
 COPY packages/interloper-app/app/patches/ patches/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY packages/interloper-app/app/ ./

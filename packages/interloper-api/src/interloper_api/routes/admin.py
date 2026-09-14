@@ -16,12 +16,16 @@ from importlib import metadata
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from interloper_db import Profile, Store
+from fastapi import APIRouter, HTTPException, Request
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
-from interloper_api.dependencies import get_admin_config, get_quota_defaults, get_store, require_super_admin
+from interloper_api.dependencies import (
+    AdminConfigDep,
+    QuotaDefaultsDep,
+    StoreDep,
+    SuperAdminDep,
+)
 from interloper_api.notifications import InvitationEmail
 
 logger = logging.getLogger(__name__)
@@ -647,8 +651,8 @@ def _send_invitation_email(
 
 @router.get("/config")
 def get_instance_config(
-    user: Profile = Depends(require_super_admin),
-    config: Any = Depends(get_admin_config),
+    user: SuperAdminDep,
+    config: AdminConfigDep,
 ) -> AdminConfigResponse:
     """Read-only snapshot of the instance configuration (secrets redacted).
 
@@ -673,9 +677,9 @@ def get_instance_config(
 
 @router.get("/quotas")
 def get_quotas(
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
-    quota_defaults: Any = Depends(get_quota_defaults),
+    user: SuperAdminDep,
+    store: StoreDep,
+    quota_defaults: QuotaDefaultsDep,
 ) -> AdminQuotasResponse:
     """Quota limits and current-period usage for every organisation.
 
@@ -730,8 +734,8 @@ def get_quotas(
 def update_org_quota(
     org_id: UUID,
     body: AdminQuotaUpdateRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> AdminQuotaLimits:
     """Set an organisation's quota overrides; omitted keys keep their value, null clears one.
 
@@ -784,8 +788,8 @@ def _activity_title(entry: dict[str, Any]) -> tuple[str, str | None]:
 @router.get("/organisations/{org_id}/activity")
 def get_organisation_activity(
     org_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> list[AdminActivityEntry]:
     """Derived activity feed for one organisation, newest first.
 
@@ -813,8 +817,8 @@ def get_organisation_activity(
 
 @router.get("/users")
 def list_all_users(
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> list[AdminUserResponse]:
     """List every user profile with the organisations it belongs to.
 
@@ -842,8 +846,8 @@ def list_all_users(
 @router.delete("/users/{user_id}")
 def delete_user(
     user_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations.
 
@@ -869,8 +873,8 @@ def delete_user(
 
 @router.get("/organisations")
 def list_all_organisations(
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> list[AdminOrganisationResponse]:
     """List every organisation with its member count, soft-deleted ones included.
 
@@ -896,8 +900,8 @@ def list_all_organisations(
 @router.post("/organisations", status_code=201)
 def create_organisation(
     body: CreateOrganisationRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> AdminOrganisationResponse:
     """Create an organisation. The super-admin is not added as a member.
 
@@ -922,8 +926,8 @@ def create_organisation(
 def update_organisation(
     org_id: UUID,
     body: UpdateOrganisationRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> AdminOrganisationResponse:
     """Rename an organisation.
 
@@ -950,8 +954,8 @@ def update_organisation(
 def delete_organisation(
     org_id: UUID,
     body: DeleteOrganisationRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Soft-delete an organisation: purges its data, keeps execution history and the usage ledger.
 
@@ -983,8 +987,8 @@ def delete_organisation(
 @router.get("/organisations/{org_id}/members")
 def list_members(
     org_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> list[MemberResponse]:
     """List all members of any organisation.
 
@@ -1014,8 +1018,8 @@ def list_members(
 def join_organisation(
     org_id: UUID,
     body: JoinOrganisationRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> MemberResponse:
     """Add the calling super-admin to any organisation — no invitation needed.
 
@@ -1049,8 +1053,8 @@ def update_member_role(
     org_id: UUID,
     user_id: UUID,
     body: UpdateRoleRequest,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Change a member's role in any organisation.
 
@@ -1073,8 +1077,8 @@ def update_member_role(
 def remove_member(
     org_id: UUID,
     user_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Remove a member from any organisation.
 
@@ -1097,8 +1101,8 @@ def remove_member(
 @router.get("/organisations/{org_id}/invitations")
 def list_invitations(
     org_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> list[InvitationResponse]:
     """List pending invitations for any organisation.
 
@@ -1128,8 +1132,8 @@ def invite_member(
     org_id: UUID,
     body: InviteRequest,
     request: Request,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> InvitationResponse:
     """Invite a user to any organisation by email.
 
@@ -1171,8 +1175,8 @@ def invite_member(
 def cancel_invitation(
     org_id: UUID,
     invitation_id: UUID,
-    user: Profile = Depends(require_super_admin),
-    store: Store = Depends(get_store),
+    user: SuperAdminDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Cancel a pending invitation in any organisation.
 

@@ -4,19 +4,18 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
 from interloper_db.models import Backfill
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
+    CurrentUserDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
     authorize_org_member,
-    get_current_user,
-    get_org_id,
-    get_store,
     load_authorized,
-    require_viewer,
 )
 
 router = APIRouter(prefix="/backfills", tags=["backfills"])
@@ -96,10 +95,10 @@ class BackfillResponse(BaseModel):
 
 @router.get("/")
 def list_backfills(
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
     active_only: bool = False,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
 ) -> list[BackfillResponse]:
     """List backfills for the current organisation.
 
@@ -123,8 +122,8 @@ def list_backfills(
 @router.post("/", status_code=201)
 def create_backfill(
     body: BackfillCreateRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> BackfillResponse:
     """Queue a backfill for a job over a partition-key range.
 
@@ -160,8 +159,8 @@ def create_backfill(
 @router.get("/{backfill_id}")
 def get_backfill(
     backfill_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> BackfillResponse:
     """Get a single backfill by ID. Authorized by membership in the backfill's org.
 
@@ -187,8 +186,8 @@ def get_backfill(
 @router.post("/{backfill_id}/cancel")
 def cancel_backfill(
     backfill_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> BackfillResponse:
     """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain.
 

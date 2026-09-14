@@ -311,10 +311,14 @@ def _print_plan(
     lines: list[str] = []
     if name:
         lines.append(f"Run:       {name}")
-    lines.append(f"Runner:    {runner_name}")
-    lines.append(f"Partition: {partition if partition is not None else '(none)'}")
-    lines.append(f"Operations: {len(materializable)} materializable / {len(dag.operations)} total")
-    lines.append("")
+    lines.extend(
+        [
+            f"Runner:    {runner_name}",
+            f"Partition: {partition if partition is not None else '(none)'}",
+            f"Operations: {len(materializable)} materializable / {len(dag.operations)} total",
+            "",
+        ]
+    )
     for level, generation in enumerate(dag.topological_generations(), start=1):
         lines.append(f"  {level}. {', '.join(operation.qualified_key for operation in generation)}")
     print("\n".join(lines))

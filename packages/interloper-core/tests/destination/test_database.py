@@ -19,7 +19,7 @@ class RecordingDatabase(DatabaseDestination):
 
     def model_post_init(self, context: Any) -> None:
         super().model_post_init(context)
-        object.__setattr__(self, "calls", [])
+        object.__setattr__(self, "calls", [])  # noqa: PLC2801 - bypasses pydantic's __setattr__
 
     def insert(self, table, dataset, data, context):
         self.calls.append(("insert", (table, dataset, Representation.of(data).records)))

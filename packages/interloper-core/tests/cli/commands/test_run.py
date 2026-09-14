@@ -338,7 +338,7 @@ class TestRunPathsMode:
     """``interloper run <import path>...`` resolves classes and instantiates them."""
 
     def test_an_unimportable_path_is_a_clean_error(self) -> None:
-        with pytest.raises(SystemExit, match="failed to import 'nope.NotAModule'"):
+        with pytest.raises(SystemExit, match=r"failed to import 'nope\.NotAModule'"):
             _cmd_run(_args(target=["nope.NotAModule"]))
 
     def test_a_missing_attribute_is_a_clean_error(self) -> None:

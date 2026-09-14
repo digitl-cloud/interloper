@@ -28,7 +28,7 @@ _ASSET_KEY = "vendor_inventory_retail_manufacturing_stats"
 
 
 def _source() -> Any:
-    return AmazonSellingPartner(id="src-1", marketplace="A1PA6795UKMFR9")  # ty: ignore[unknown-argument]
+    return AmazonSellingPartner(id="src-1", marketplace="A1PA6795UKMFR9")
 
 
 class TestSourceNormalizer:

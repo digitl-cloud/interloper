@@ -223,11 +223,11 @@ def listener_harness(monkeypatch: pytest.MonkeyPatch) -> Any:
         scheduled: list[tuple[str, dict[str, object]]] = []
         selects = {"count": 0}
 
-        def fake_select(*args: object) -> list[object]:
+        def fake_select(*args: object) -> tuple[list[object], list[object], list[object]]:
             selects["count"] += 1
             if selects["count"] > 1:
                 raise StopListener("one pass only")
-            return [connection]
+            return [connection], [], []
 
         def fake_schedule(coroutine: Any, loop: Any) -> None:
             # The manager coroutine is not awaited here; close it so Python

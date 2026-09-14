@@ -189,7 +189,7 @@ def _profile(*, is_super_admin: bool):
     )
 
 
-def _client(store: FakeStore, *, is_super_admin: bool) -> TestClient:
+def _app(store: FakeStore, *, is_super_admin: bool) -> FastAPI:
     app = FastAPI()
     app.include_router(admin_module.router)
 
@@ -201,7 +201,20 @@ def _client(store: FakeStore, *, is_super_admin: bool) -> TestClient:
 
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: _profile(is_super_admin=is_super_admin)
-    return TestClient(app)
+    return app
+
+
+def _client(store: FakeStore, *, is_super_admin: bool) -> TestClient:
+    """A client for the probe app.
+
+    Args:
+        store: The fake store the routes resolve against.
+        is_super_admin: Whether the caller is a super-admin.
+
+    Returns:
+        The client.
+    """
+    return TestClient(_app(store, is_super_admin=is_super_admin))
 
 
 @pytest.fixture
@@ -273,9 +286,10 @@ def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
 
 
 def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespace) -> None:
-    client = _client(store, is_super_admin=True)
+    app = _app(store, is_super_admin=True)
     snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
-    client.app.dependency_overrides[get_admin_config] = lambda: snapshot
+    app.dependency_overrides[get_admin_config] = lambda: snapshot
+    client = TestClient(app)
     resp = client.get("/admin/config")
     assert resp.status_code == 200
     assert resp.json()["deployment"]["launcher"]["type"] == "kubernetes"
@@ -295,10 +309,11 @@ def test_non_super_admin_cannot_read_quotas(store: FakeStore) -> None:
 def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
     from interloper_api.dependencies import get_quota_defaults
 
-    client = _client(store, is_super_admin=True)
-    client.app.dependency_overrides[get_quota_defaults] = lambda: SimpleNamespace(
+    app = _app(store, is_super_admin=True)
+    app.dependency_overrides[get_quota_defaults] = lambda: SimpleNamespace(
         max_sources=10, max_assets_per_source=20, max_successful_runs_per_month=100
     )
+    client = TestClient(app)
     resp = client.get("/admin/quotas")
     assert resp.status_code == 200
     body = resp.json()
@@ -326,8 +341,9 @@ def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
 def test_quota_overview_defaults_absent_means_unlimited(store: FakeStore) -> None:
     from interloper_api.dependencies import get_quota_defaults
 
-    client = _client(store, is_super_admin=True)
-    client.app.dependency_overrides[get_quota_defaults] = lambda: None
+    app = _app(store, is_super_admin=True)
+    app.dependency_overrides[get_quota_defaults] = lambda: None
+    client = TestClient(app)
     resp = client.get("/admin/quotas")
     assert resp.status_code == 200
     body = resp.json()
@@ -364,9 +380,10 @@ def test_delete_user(store: FakeStore) -> None:
 
 
 def test_cannot_delete_own_account(store: FakeStore) -> None:
-    client = _client(store, is_super_admin=True)
+    app = _app(store, is_super_admin=True)
     me = _profile(is_super_admin=True)
-    client.app.dependency_overrides[get_current_user] = lambda: me
+    app.dependency_overrides[get_current_user] = lambda: me
+    client = TestClient(app)
     resp = client.delete(f"/admin/users/{me.id}")
     assert resp.status_code == 400
     assert store.deleted_profiles == []
