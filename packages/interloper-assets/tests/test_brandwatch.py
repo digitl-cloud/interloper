@@ -33,7 +33,7 @@ _NETWORK_SCHEMA = {
 
 
 def _source() -> Any:
-    return Brandwatch(id="src-1", channel_id="chan-1")  # ty: ignore[unknown-argument]
+    return Brandwatch(id="src-1", channel_id="chan-1")
 
 
 class TestMetricSchemaCoverage:

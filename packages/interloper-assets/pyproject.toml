@@ -19,7 +19,7 @@ facebook = ["facebook-business>=20.0.0"]
 assets = "interloper_assets"
 
 [build-system]
-requires = ["uv_build>=0.11.5,<0.12"]
+requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
@@ -46,4 +46,4 @@ convention = "google"
 "src/interloper_assets/*/*.py" = ["D100"]
 "src/interloper_assets/*/__init__.py" = ["D104"]
 "src/interloper_assets/*/schemas/__init__.py" = ["D104"]
-"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

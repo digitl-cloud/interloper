@@ -147,7 +147,7 @@ class DockerLauncher(Launcher):
                 name=container_name,
                 command=["interloper", "launch", str(run_id)],
                 environment=environment,
-                volumes=self._volumes if self._volumes else None,
+                volumes=self._volumes or None,
                 user="root" if self._runner_type == "docker" else None,
                 detach=True,
                 auto_remove=False,

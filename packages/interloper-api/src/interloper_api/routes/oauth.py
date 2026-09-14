@@ -23,12 +23,11 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from interloper.oauth import PROVIDERS, OAuthAppCredentials
-from interloper_db import Profile
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_current_user
+from interloper_api.dependencies import CurrentUserDep
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ def list_providers() -> list[ProviderInfo]:
 async def exchange_authorization_code(
     provider: str,
     body: AuthorizationCodeExchangeRequest,
-    _user: Profile = Depends(get_current_user),
+    _user: CurrentUserDep,
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens. Requires authentication.
 

@@ -143,7 +143,7 @@ class KubernetesRunner(SyncRunner):
             image_pull_policy=self.image_pull_policy,
             command=cmd[:1],
             args=cmd[1:],
-            env=env if env else None,
+            env=env or None,
             resources=resources,
         )
 
@@ -151,8 +151,8 @@ class KubernetesRunner(SyncRunner):
             containers=[container],
             restart_policy="Never",
             service_account_name=self.service_account_name,
-            node_selector=self.node_selector if self.node_selector else None,
-            tolerations=tolerations if tolerations else None,
+            node_selector=self.node_selector or None,
+            tolerations=tolerations or None,
             image_pull_secrets=[client.V1LocalObjectReference(name=s) for s in self.image_pull_secrets]
             if self.image_pull_secrets
             else None,

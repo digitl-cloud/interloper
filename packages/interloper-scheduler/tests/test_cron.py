@@ -399,7 +399,7 @@ class TestGranularityResolution:
         assert backfill.end_key == last_month.strftime("%Y-%m")
         assert backfill.start_key == month_before.strftime("%Y-%m")
         assert backfill.partitions == 2
-        assert sorted(r.partition_key for r in _runs(store)) == sorted(
+        assert sorted(r.partition_key or "" for r in _runs(store)) == sorted(
             [month_before.strftime("%Y-%m"), last_month.strftime("%Y-%m")]
         )
 
@@ -469,7 +469,7 @@ class TestNaiveCronResult:
 
             def get_next(self, _type: Any) -> dt.datetime:
                 # Naive on purpose: that is the branch under test.
-                return dt.datetime(2026, 6, 1, 2, 0)  # noqa: DTZ001
+                return dt.datetime(2026, 6, 1, 2, 0)
 
         monkeypatch.setattr(cron_module, "croniter", NaiveCroniter)
         controller = CronController(store=store)

@@ -6,19 +6,19 @@ import datetime as dt
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Event, Run
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
+    CurrentUserDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
     authorize_org_member,
-    get_current_user,
-    get_org_id,
-    get_store,
     load_authorized,
-    require_viewer,
 )
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -190,6 +190,9 @@ def _load_authorized_run(run_id: UUID, user: Profile, store: Store, *, minimum: 
 @router.get("/")
 def list_runs(
     response: Response,
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
     component_id: UUID | None = None,
     backfill_id: UUID | None = None,
     status: str | None = None,
@@ -197,9 +200,6 @@ def list_runs(
     before: dt.datetime | None = None,
     limit: int = 50,
     offset: int = 0,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
 ) -> list[RunResponse]:
     """List runs with optional filters.
 
@@ -247,8 +247,8 @@ def list_runs(
 @router.post("/", status_code=201)
 def create_run(
     body: RunCreateRequest,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> RunResponse:
     """Queue a single run targeting a component whose kind declares an operation.
 
@@ -275,8 +275,8 @@ def create_run(
 @router.get("/{run_id}")
 def get_run(
     run_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> RunResponse:
     """Get a single run by ID. Authorized by membership in the run's org.
 
@@ -295,8 +295,8 @@ def get_run(
 @router.get("/{run_id}/executions")
 def list_executions(
     run_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> list[ExecutionResponse]:
     """List operation executions for a run.
 
@@ -328,9 +328,9 @@ def list_executions(
 @router.post("/{run_id}/retry")
 def retry_run(
     run_id: UUID,
+    user: CurrentUserDep,
+    store: StoreDep,
     body: RetryRequest | None = None,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
 ) -> dict[str, str]:
     """Queue a retry of a failed run.
 
@@ -366,12 +366,12 @@ def retry_run(
 def list_run_events(
     run_id: UUID,
     response: Response,
+    user: CurrentUserDep,
+    store: StoreDep,
     limit: int = 100,
     offset: int = 0,
     component_id: Annotated[list[UUID] | None, Query()] = None,
     event_type: Annotated[list[str] | None, Query()] = None,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
 ) -> list[EventResponse]:
     """List events for a run, oldest first.
 

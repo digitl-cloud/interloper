@@ -178,7 +178,7 @@ class TestExtract:
         assert _extract({"a": {}}, "a.b", None) is None
 
     def test_a_missing_key_without_a_default_names_the_path(self):
-        with pytest.raises(KeyError, match="path 'a.b' not found"):
+        with pytest.raises(KeyError, match=r"path 'a\.b' not found"):
             _extract({"a": {}}, "a.b")
 
     def test_a_non_dict_along_the_path_uses_the_default(self):

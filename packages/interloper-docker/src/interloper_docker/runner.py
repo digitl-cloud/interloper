@@ -157,7 +157,7 @@ class DockerRunner(SyncRunner):
                 name=name,
                 command=cmd,
                 environment=env,
-                volumes=volumes if volumes else None,
+                volumes=volumes or None,
                 labels={"interloper.component_id": operation.id},
                 remove=False,
                 detach=True,

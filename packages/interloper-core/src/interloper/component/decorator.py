@@ -22,6 +22,7 @@ else:
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any, ClassVar, TypeVar, get_origin
 
@@ -161,7 +162,7 @@ def _classvar_names(anchor: type[Component]) -> set[str]:
     """
     names: set[str] = set()
     for base in anchor.__mro__:
-        for name, hint in base.__dict__.get("__annotations__", {}).items():
+        for name, hint in inspect.get_annotations(base).items():
             if name.startswith("_") or name in _RESERVED:
                 continue
             if _is_classvar(hint):

@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import math
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
@@ -53,7 +54,7 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
         default_dataset=overrides.get("dataset", None),
         connection=conn,
     )
-    object.__setattr__(dest, "client", mock_client)
+    object.__setattr__(dest, "client", mock_client)  # noqa: PLC2801 - bypasses pydantic's __setattr__
 
     # By default, the table "exists" with an empty schema and no description,
     # so the metadata-sync path is a no-op unless a test configures otherwise.
@@ -77,13 +78,13 @@ class TestBqToPyType:
         assert _bq_to_py_type(42) == "INT64"
 
     def test_float(self):
-        assert _bq_to_py_type(3.14) == "FLOAT64"
+        assert _bq_to_py_type(math.pi) == "FLOAT64"
 
     def test_decimal(self):
         assert _bq_to_py_type(Decimal("1.5")) == "NUMERIC"
 
     def test_datetime(self):
-        assert _bq_to_py_type(datetime.datetime(2024, 6, 15, 8, 30)) == "TIMESTAMP"  # noqa: DTZ001 — naive is the case under test
+        assert _bq_to_py_type(datetime.datetime(2024, 6, 15, 8, 30)) == "TIMESTAMP"
 
     def test_date(self):
         assert _bq_to_py_type(datetime.date(2024, 6, 15)) == "DATE"
@@ -584,7 +585,7 @@ class TestPartitionParam:
         table.schema = [bigquery.SchemaField("ts", "TIMESTAMP")]
         param = _partition_param(table, "ts", dt.date(2024, 2, 1), name="partition_start")
         assert param.type_ == "TIMESTAMP"
-        assert param.value == dt.datetime(2024, 2, 1)  # noqa: DTZ001
+        assert param.value == dt.datetime(2024, 2, 1)
 
     def test_a_bounds_filter_deletes_by_a_half_open_predicate(self):
         import datetime as dt

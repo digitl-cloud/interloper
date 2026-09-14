@@ -7,8 +7,9 @@ route reaches for an ambient global of its own.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
+from fastapi import Depends
 from interloper.catalog.base import Catalog
 from interloper_db import Store
 
@@ -169,3 +170,12 @@ def get_quota_defaults() -> Any:
         The QuotaSettings instance, or None if not configured.
     """
     return _quota_defaults
+
+
+# -- Dependency aliases --------------------------------------------------------
+
+StoreDep = Annotated[Store, Depends(get_store)]
+CatalogDep = Annotated[Catalog, Depends(get_catalog)]
+AuthConfigDep = Annotated[Any, Depends(get_auth_config)]
+AdminConfigDep = Annotated[Any, Depends(get_admin_config)]
+QuotaDefaultsDep = Annotated[Any, Depends(get_quota_defaults)]

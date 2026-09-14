@@ -62,7 +62,7 @@ class TestDefinition:
     def test_webhook_hook_has_no_targets(self):
         assert "targets" not in il.WebhookHook.relations
         with pytest.raises(TypeError, match="unexpected keyword argument"):
-            il.WebhookHook(url="https://x.test", targets=[])  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
+            il.WebhookHook(url="https://x.test", targets=[])  # type: ignore[call-arg]
 
     def test_state_model(self):
         assert il.KINDS["hook"].state_model is il.HookState

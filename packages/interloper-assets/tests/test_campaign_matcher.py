@@ -114,7 +114,7 @@ def test_platform_and_account_identify_the_campaign_owner() -> None:
         def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
             return [{"date": context.partition_date, "id": "1", "name": "x"}]
 
-    connector = Connector(account_id="act_42", destinations=[memory])  # ty: ignore[unknown-argument]
+    connector = Connector(account_id="act_42", destinations=[memory])
     rows = _matches(CampaignMatcher(destinations=[memory]), connector)
 
     assert (rows[0]["platform"], rows[0]["account"], rows[0]["campaign_id"]) == ("acct_like", "act_42", "1")
@@ -144,7 +144,7 @@ def test_key_pattern_on_the_source_matches_by_convention() -> None:
     memory = il.MemoryDestination()
     fb = _connector("fb_like", ["fb_summer26_awareness"])(destinations=[memory])
     tt = _connector("tt_like", ["tt_summer26_video"])(destinations=[memory])
-    matcher = CampaignMatcher(key_pattern=r"^[a-z]+_(?P<key>[a-z0-9]+)_", destinations=[memory])  # ty: ignore[unknown-argument]
+    matcher = CampaignMatcher(key_pattern=r"^[a-z]+_(?P<key>[a-z0-9]+)_", destinations=[memory])
 
     rows = _matches(matcher, fb, tt)
 
@@ -161,7 +161,7 @@ def test_similarity_threshold_merges_near_duplicates() -> None:
     assert len({r["match_id"] for r in strict}) == 2
 
     il.MemoryDestination.clear()
-    lenient = _matches(CampaignMatcher(similarity_threshold=0.9, destinations=[memory]), fb, tt)  # ty: ignore[unknown-argument]
+    lenient = _matches(CampaignMatcher(similarity_threshold=0.9, destinations=[memory]), fb, tt)
     assert len({r["match_id"] for r in lenient}) == 1
     assert {r["canonical_name"] for r in lenient} == {"summer sale 2026"}
     assert sorted(r["similarity"] for r in lenient) == [pytest.approx(0.9375), 1.0]

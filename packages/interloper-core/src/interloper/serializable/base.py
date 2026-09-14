@@ -14,6 +14,7 @@ binding what the references name (see :meth:`Spec.reconstruct`).
 from __future__ import annotations
 
 import copy
+import inspect
 import os
 import re
 import uuid
@@ -547,7 +548,7 @@ class Serializable(BaseModel):
         order: dict[str, None] = {}
         for klass in reversed(cls.__mro__):
             klass_fields = getattr(klass, "__pydantic_fields__", {})
-            for field_name in klass.__dict__.get("__annotations__", {}):
+            for field_name in inspect.get_annotations(klass):
                 if field_name in fields and field_name in klass_fields:
                     order.setdefault(field_name, None)
         reordered = {field_name: fields[field_name] for field_name in order}
@@ -675,8 +676,8 @@ class Serializable(BaseModel):
         namespace["__qualname__"] = decorated.__qualname__
 
         # Carry over annotations so Pydantic sees declared fields.
-        if "__annotations__" in decorated.__dict__:
-            namespace.setdefault("__annotations__", {}).update(decorated.__dict__["__annotations__"])
+        if own := inspect.get_annotations(decorated):
+            namespace.setdefault("__annotations__", {}).update(own)
 
         # Annotate decorator fields from the receiver's field definitions so
         # the metaclass registers them as field default overrides.

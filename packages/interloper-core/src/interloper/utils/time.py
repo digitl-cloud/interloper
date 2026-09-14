@@ -62,7 +62,7 @@ def coerce_to_datetime(value: object) -> dt.datetime:
             return value.astimezone(dt.timezone.utc).replace(tzinfo=None)
         return value
     if isinstance(value, dt.date):
-        return dt.datetime(value.year, value.month, value.day)  # noqa: DTZ001 — a label, not an instant
+        return dt.datetime(value.year, value.month, value.day)
     if isinstance(value, str):
         try:
             return coerce_to_datetime(dt.datetime.fromisoformat(value))

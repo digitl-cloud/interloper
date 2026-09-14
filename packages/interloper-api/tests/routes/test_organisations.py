@@ -119,7 +119,7 @@ def no_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def client(store: FakeStore, no_smtp: None) -> TestClient:
+def app(store: FakeStore, no_smtp: None) -> FastAPI:
     """Mount the organisations router with every gate satisfied.
 
     The role gates are overridden wholesale; ``test_rbac.py`` owns proving
@@ -130,7 +130,7 @@ def client(store: FakeStore, no_smtp: None) -> TestClient:
         no_smtp: Leaves email unconfigured unless a test says otherwise.
 
     Returns:
-        A client for the probe app.
+        The probe app.
     """
     app = FastAPI()
     app.include_router(organisations_module.router)
@@ -139,6 +139,19 @@ def client(store: FakeStore, no_smtp: None) -> TestClient:
     app.dependency_overrides[get_current_user] = _profile
     app.dependency_overrides[require_viewer] = _profile
     app.dependency_overrides[require_admin] = _profile
+    return app
+
+
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    """A client for the probe app.
+
+    Args:
+        app: The probe app.
+
+    Returns:
+        The client.
+    """
     return TestClient(app)
 
 
@@ -335,7 +348,7 @@ class TestInviteMember:
         ]
 
     def test_a_nameless_inviter_is_identified_by_email(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+        self, app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         sent: list[str] = []
         monkeypatch.setattr(
@@ -346,7 +359,7 @@ class TestInviteMember:
             "_send_invitation_email",
             lambda request, smtp_config, invitation, org_name, inviter_name: sent.append(inviter_name),
         )
-        client.app.dependency_overrides[require_admin] = lambda: _profile(name=None)
+        app.dependency_overrides[require_admin] = lambda: _profile(name=None)
 
         client.post("/organisations/invite", json={"email": "new@example.com"})
 

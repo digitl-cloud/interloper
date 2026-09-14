@@ -15,13 +15,14 @@ dependencies = [
     "interloper-pandas",
     "pyarrow>=14",
     "db-dtypes>=1.0",
+    "pandas-gbq>=0.26.1",
 ]
 
 [project.entry-points."interloper.components"]
 google_cloud = "interloper_google_cloud"
 
 [build-system]
-requires = ["uv_build>=0.11.5,<0.12"]
+requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
@@ -43,4 +44,4 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

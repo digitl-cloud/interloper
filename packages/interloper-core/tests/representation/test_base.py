@@ -43,7 +43,7 @@ class TestResolution:
         assert view.key == "rows"
 
     def test_unmatched_data_is_an_explicit_error(self):
-        with pytest.raises(RepresentationError, match="No representation matches int.*dataframe.*rows"):
+        with pytest.raises(RepresentationError, match=r"No representation matches int.*dataframe.*rows"):
             Representation.of(42)
 
     def test_a_dict_is_not_a_table(self):
@@ -138,7 +138,7 @@ class TestRowsRepresentation:
         rows = [
             {"d": "2024-01-31T23:00:00"},
             {"d": "2024-02-01 00:30:00"},
-            {"d": dt.datetime(2024, 2, 29, 23, 59)},  # noqa: DTZ001
+            {"d": dt.datetime(2024, 2, 29, 23, 59)},
             {"d": "2024-03-01T00:00:00"},
         ]
         out = RowsRepresentation().filter_range(rows, "d", dt.date(2024, 2, 1), dt.date(2024, 3, 1))
@@ -149,7 +149,7 @@ class TestRowsRepresentation:
 
         from interloper.representation import iso_label
 
-        assert iso_label(dt.datetime(2024, 2, 1, 10, 30)) == "2024-02-01T10:30:00"  # noqa: DTZ001
+        assert iso_label(dt.datetime(2024, 2, 1, 10, 30)) == "2024-02-01T10:30:00"
         assert iso_label("2024-02-01 10:30:00") == "2024-02-01T10:30:00"
         assert iso_label(dt.date(2024, 2, 1)) == "2024-02-01"
 

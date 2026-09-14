@@ -23,26 +23,26 @@ class TestCoerceToDate:
             coerce_to_date("not-a-date")
 
     def test_unsupported_type_raises_type_error(self) -> None:
-        with pytest.raises(TypeError, match="Expected a `datetime.date`"):
+        with pytest.raises(TypeError, match=r"Expected a `datetime\.date`"):
             coerce_to_date(20260101)
 
 
 class TestCoerceToDatetime:
     def test_returns_naive_datetime_unchanged(self) -> None:
-        value = dt.datetime(2026, 1, 1, 9, 30)  # noqa: DTZ001
+        value = dt.datetime(2026, 1, 1, 9, 30)
         assert coerce_to_datetime(value) is value
 
     def test_aware_datetime_becomes_naive_utc(self) -> None:
         # Labels are UTC: mixing aware and naive values would poison every
         # comparison downstream (bounds, clamps, window ordering).
         cet = dt.timezone(dt.timedelta(hours=2))
-        assert coerce_to_datetime(dt.datetime(2026, 1, 1, 9, 30, tzinfo=cet)) == dt.datetime(2026, 1, 1, 7, 30)  # noqa: DTZ001
+        assert coerce_to_datetime(dt.datetime(2026, 1, 1, 9, 30, tzinfo=cet)) == dt.datetime(2026, 1, 1, 7, 30)
 
     def test_date_becomes_midnight(self) -> None:
-        assert coerce_to_datetime(dt.date(2026, 1, 1)) == dt.datetime(2026, 1, 1)  # noqa: DTZ001
+        assert coerce_to_datetime(dt.date(2026, 1, 1)) == dt.datetime(2026, 1, 1)
 
     def test_iso_string_is_parsed(self) -> None:
-        assert coerce_to_datetime("2026-01-01T09:30") == dt.datetime(2026, 1, 1, 9, 30)  # noqa: DTZ001
+        assert coerce_to_datetime("2026-01-01T09:30") == dt.datetime(2026, 1, 1, 9, 30)
 
     def test_invalid_string_raises_type_error(self) -> None:
         with pytest.raises(TypeError, match="ISO-8601 datetime string"):
@@ -51,7 +51,7 @@ class TestCoerceToDatetime:
 
 class TestAssumeUtc:
     def test_naive_is_labelled_utc(self) -> None:
-        assert assume_utc(dt.datetime(2026, 7, 1, 9, 30)).tzinfo is dt.timezone.utc  # noqa: DTZ001
+        assert assume_utc(dt.datetime(2026, 7, 1, 9, 30)).tzinfo is dt.timezone.utc
 
     def test_aware_is_left_alone(self) -> None:
         berlin = dt.timezone(dt.timedelta(hours=2))
@@ -75,4 +75,4 @@ class TestMonthStart:
         assert month_start(dt.datetime(2026, 7, 1, 0, 30, tzinfo=berlin)) == dt.date(2026, 6, 1)
 
     def test_naive_is_read_as_utc(self) -> None:
-        assert month_start(dt.datetime(2026, 7, 1, 0, 30)) == dt.date(2026, 7, 1)  # noqa: DTZ001
+        assert month_start(dt.datetime(2026, 7, 1, 0, 30)) == dt.date(2026, 7, 1)

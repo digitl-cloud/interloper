@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Cookie, Depends, HTTPException
@@ -106,3 +107,9 @@ def get_org_id(
         The organisation UUID.
     """
     return org.id
+
+
+# -- Dependency aliases --------------------------------------------------------
+
+CurrentUserDep = Annotated[Profile, Depends(get_current_user)]
+OrgIdDep = Annotated[UUID, Depends(get_org_id)]

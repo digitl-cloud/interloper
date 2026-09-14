@@ -31,7 +31,7 @@ from interloper_assets.amazon_ads.source import AmazonAds
 
 
 def _source() -> Any:
-    return AmazonAds(id="src-1", profile_id="123")  # ty: ignore[unknown-argument]
+    return AmazonAds(id="src-1", profile_id="123")
 
 
 class TestSourceNormalizer:
@@ -82,7 +82,7 @@ class TestSpecRoundtrip:
 
         # One row with every requested report column, as Amazon returns them.
         # All schema fields are required-nullable, so None is valid everywhere.
-        row: dict[str, object] = {col: None for col in constants.PRODUCTS_CAMPAIGN_METRICS}
+        row: dict[str, object] = dict.fromkeys(constants.PRODUCTS_CAMPAIGN_METRICS)
         row["date"] = "2026-06-10"
         df = pd.DataFrame([row])
 

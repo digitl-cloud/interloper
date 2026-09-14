@@ -660,7 +660,9 @@ class Component(Serializable):
         for base in reversed(cls.__mro__[1:]):
             inherited.update(getattr(base, "relations", None) or {})
 
-        annotations: dict[str, Any] = cls.__dict__.get("__annotations__", {})
+        # The live dict, not inspect.get_annotations()'s copy: relation names are
+        # popped from it below so pydantic never sees them as fields.
+        annotations: dict[str, Any] = cls.__dict__.get("__annotations__", {})  # noqa: RUF063
         module = sys.modules.get(cls.__module__)
         namespace = vars(module) if module else {}
 

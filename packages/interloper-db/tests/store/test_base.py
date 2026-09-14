@@ -74,7 +74,7 @@ class TestTransaction:
         assert _count(component_db) == 2
 
     def test_error_rolls_back_the_whole_block(self, store: Store, component_db: Engine):
-        with pytest.raises(RuntimeError), store.transaction():
+        with pytest.raises(RuntimeError), store.transaction():  # noqa: PT012 - the block is the transaction under test
             _make(store, "a")
             _make(store, "b")
             raise RuntimeError("boom")
@@ -87,7 +87,7 @@ class TestTransaction:
 
     def test_nested_block_joins_the_outer_one(self, store: Store, component_db: Engine):
         # An inner block must not commit: the outermost one owns the outcome.
-        with pytest.raises(RuntimeError), store.transaction():
+        with pytest.raises(RuntimeError), store.transaction():  # noqa: PT012 - the block is the transaction under test
             _make(store, "a")
             with store.transaction():
                 _make(store, "b")

@@ -89,7 +89,7 @@ class BasePaginator(ABC):
     send → :meth:`update_state` → (:attr:`has_next`?) → :meth:`update_request`.
     """
 
-    def init_request(self, request: httpx.Request) -> None:
+    def init_request(self, request: httpx.Request) -> None:  # noqa: B027 - an optional hook, no-op by default
         """Set first-page params on the initial request (default: no-op).
 
         Args:

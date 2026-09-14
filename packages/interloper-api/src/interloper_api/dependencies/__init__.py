@@ -6,12 +6,18 @@ organisation per request; ``rbac`` gates handlers on the caller's role.
 """
 
 from interloper_api.dependencies.auth import (
+    CurrentUserDep,
+    OrgIdDep,
     get_current_org,
     get_current_user,
     get_org_id,
     get_session_context,
 )
 from interloper_api.dependencies.rbac import (
+    AdminDep,
+    EditorDep,
+    SuperAdminDep,
+    ViewerDep,
     authorize_org_member,
     load_authorized,
     require_admin,
@@ -20,6 +26,11 @@ from interloper_api.dependencies.rbac import (
     require_viewer,
 )
 from interloper_api.dependencies.state import (
+    AdminConfigDep,
+    AuthConfigDep,
+    CatalogDep,
+    QuotaDefaultsDep,
+    StoreDep,
     get_admin_config,
     get_auth_config,
     get_catalog,
@@ -37,6 +48,17 @@ from interloper_api.dependencies.state import (
 )
 
 __all__ = [
+    "AdminConfigDep",
+    "AdminDep",
+    "AuthConfigDep",
+    "CatalogDep",
+    "CurrentUserDep",
+    "EditorDep",
+    "OrgIdDep",
+    "QuotaDefaultsDep",
+    "StoreDep",
+    "SuperAdminDep",
+    "ViewerDep",
     "authorize_org_member",
     "get_admin_config",
     "get_auth_config",

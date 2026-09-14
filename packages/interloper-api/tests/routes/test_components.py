@@ -7,6 +7,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
+import httpx2
 import interloper as il
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -131,7 +132,7 @@ class TestResolve:
         assert resp.status_code == 400
 
 
-def _check(catalog: il.Catalog, config: dict) -> httpx.Response:
+def _check(catalog: il.Catalog, config: dict) -> httpx2.Response:
     return _client(catalog).post(
         "/components/check",
         json={"component_key": "facebook_ads_connection", "config": config},

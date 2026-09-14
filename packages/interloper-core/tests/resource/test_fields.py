@@ -100,7 +100,7 @@ class TestFetchField:
         assert "endpoint" not in fetch
 
     def test_rejects_malformed_provider(self):
-        with pytest.raises(ValueError, match="<name>.<method>"):
+        with pytest.raises(ValueError, match=r"<name>\.<method>"):
             il.FetchField(provider="things")
 
     def test_annotation_declared_relation_validates_and_is_exposed(self):

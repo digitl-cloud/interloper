@@ -33,7 +33,7 @@ CAMPAIGNS_COLUMNS = ["Day", "CampaignId", "Campaign", "Currency", *constants.STA
 
 
 def _source() -> Any:
-    return Criteo(id="src-1", advertiser_id="123")  # ty: ignore[unknown-argument]
+    return Criteo(id="src-1", advertiser_id="123")
 
 
 class TestSourceNormalizer:
@@ -63,7 +63,7 @@ class TestSpecRoundtrip:
         child = self._child_asset("ads_stats")
         assert isinstance(child.normalizer, DataFrameNormalizer)
 
-        row: dict[str, object] = {col: None for col in ADS_COLUMNS}
+        row: dict[str, object] = dict.fromkeys(ADS_COLUMNS)
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
         Representation.of(normalized).reconcile(AdsStats)  # must not raise
@@ -72,7 +72,7 @@ class TestSpecRoundtrip:
         child = self._child_asset("campaigns_stats")
         assert isinstance(child.normalizer, DataFrameNormalizer)
 
-        row: dict[str, object] = {col: None for col in CAMPAIGNS_COLUMNS}
+        row: dict[str, object] = dict.fromkeys(CAMPAIGNS_COLUMNS)
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
         Representation.of(normalized).reconcile(CampaignsStats)  # must not raise

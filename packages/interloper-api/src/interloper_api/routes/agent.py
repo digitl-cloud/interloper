@@ -12,9 +12,8 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from google.adk.apps import App
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
@@ -22,10 +21,16 @@ from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
 from interloper.catalog.base import Catalog
-from interloper_db import Profile, Store
+from interloper_db import Store
 from pydantic import BaseModel
 
-from interloper_api.dependencies import get_catalog, get_org_id, get_store, require_editor, require_viewer
+from interloper_api.dependencies import (
+    CatalogDep,
+    EditorDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +133,10 @@ class SessionResponse(BaseModel):
 
 @router.post("/sessions")
 async def create_session(
-    user: Profile = Depends(require_editor),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
-    catalog: Catalog = Depends(get_catalog),
+    user: EditorDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
+    catalog: CatalogDep,
 ) -> SessionResponse:
     """Create a new agent chat session.
 
@@ -159,7 +164,7 @@ async def create_session(
 
 @router.get("/sessions")
 async def list_sessions(
-    user: Profile = Depends(require_viewer),
+    user: ViewerDep,
 ) -> list[SessionResponse]:
     """List all agent sessions for the current user.
 
@@ -181,7 +186,7 @@ async def list_sessions(
 @router.get("/sessions/{session_id}")
 async def get_session(
     session_id: str,
-    user: Profile = Depends(require_viewer),
+    user: ViewerDep,
 ) -> Response:
     """Get a session with its full event history.
 
@@ -214,7 +219,7 @@ async def get_session(
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    user: Profile = Depends(require_editor),
+    user: EditorDep,
 ) -> dict[str, str]:
     """Delete an agent session.
 
@@ -248,9 +253,9 @@ async def delete_session(
 async def chat(
     session_id: str,
     body: ChatRequest,
-    user: Profile = Depends(require_editor),
-    store: Store = Depends(get_store),
-    catalog: Catalog = Depends(get_catalog),
+    user: EditorDep,
+    store: StoreDep,
+    catalog: CatalogDep,
 ) -> StreamingResponse:
     """Send a message and stream the agent's response as SSE.
 

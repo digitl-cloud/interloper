@@ -12,7 +12,7 @@ from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
 
 
 def _info(status: ExecutionStatus = ExecutionStatus.QUEUED, key: str = "source.asset") -> ExecutionInfo:
-    return ExecutionInfo(component_id=key, component_key=key.split(".")[-1], status=status)
+    return ExecutionInfo(component_id=key, component_key=key.rsplit(".", maxsplit=1)[-1], status=status)
 
 
 class TestExecutionInfoTransitions:

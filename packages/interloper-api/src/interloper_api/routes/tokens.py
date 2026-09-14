@@ -11,12 +11,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
 from pydantic import BaseModel, Field
 
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.dependencies import (
+    CurrentUserDep,
+    OrgIdDep,
+    StoreDep,
+    ViewerDep,
+)
 
 router = APIRouter(prefix="/tokens", tags=["tokens"])
 
@@ -56,9 +60,9 @@ class CreatedTokenResponse(TokenResponse):
 @router.post("", status_code=201)
 def create_token(
     body: CreateTokenRequest,
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> CreatedTokenResponse:
     """Create a personal access token scoped to the active organisation.
 
@@ -97,9 +101,9 @@ def create_token(
 
 @router.get("")
 def list_tokens(
-    user: Profile = Depends(require_viewer),
-    org_id: UUID = Depends(get_org_id),
-    store: Store = Depends(get_store),
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
 ) -> list[TokenResponse]:
     """List the caller's tokens in the active organisation.
 
@@ -119,8 +123,8 @@ def list_tokens(
 @router.delete("/{token_id}")
 def revoke_token(
     token_id: UUID,
-    user: Profile = Depends(get_current_user),
-    store: Store = Depends(get_store),
+    user: CurrentUserDep,
+    store: StoreDep,
 ) -> dict[str, str]:
     """Revoke a token.
 

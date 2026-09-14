@@ -24,7 +24,7 @@ class TestResourceEnvLoading:
 
             token: str
 
-        assert MyService().token == "from-env"  # ty: ignore[missing-argument]
+        assert MyService().token == "from-env"
 
     def test_explicit_value_overrides_env(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("RES_ENV_TEST2_TOKEN", "from-env")

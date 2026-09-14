@@ -170,8 +170,8 @@ class TestStrictInit:
     """Unknown init kwargs fail loudly instead of being silently dropped."""
 
     def test_unknown_kwarg_raises(self):
-        with pytest.raises(TypeError, match="unexpected keyword argument.*nope"):
-            FakeSerializable(nope=1)  # type: ignore[call-arg]  # ty: ignore[unknown-argument]
+        with pytest.raises(TypeError, match=r"unexpected keyword argument.*nope"):
+            FakeSerializable(nope=1)  # type: ignore[call-arg]
 
 
 class TestReferences:
@@ -264,7 +264,7 @@ class TestSerializationContext:
                 "assets": {"nope": {"orders": {"ref": "o"}}},
             },
         )
-        with pytest.raises(SpecError, match="no component was built for .* under 'orders'"):
+        with pytest.raises(SpecError, match=r"no component was built for .* under 'orders'"):
             spec.reconstruct()
 
 

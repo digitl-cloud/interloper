@@ -24,7 +24,7 @@ from interloper_assets.facebook_ads.source import FacebookActionsNormalizer, Fac
 
 
 def _source() -> Any:
-    return FacebookAds(id="src-1", account_id="123")  # ty: ignore[unknown-argument]
+    return FacebookAds(id="src-1", account_id="123")
 
 
 class TestSourceNormalizer:

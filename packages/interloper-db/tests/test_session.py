@@ -65,7 +65,7 @@ class TestTransaction:
             assert len(session.exec(select(Component)).all()) == 2
 
     def test_an_error_rolls_the_whole_block_back(self, component_db: Engine):
-        with pytest.raises(RuntimeError, match="boom"), transaction(component_db) as session:
+        with pytest.raises(RuntimeError, match="boom"), transaction(component_db) as session:  # noqa: PT012 - the block is the transaction under test
             session.add(Component(org_id=_ORG, kind="job", key="a"))
             raise RuntimeError("boom")
 

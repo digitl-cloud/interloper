@@ -26,7 +26,7 @@ class TestDecorator:
         connection = FakeConnection()
 
         assert Decorated.relations["connection"].target is FakeConnection
-        assert Decorated(connection=connection).connection is connection  # ty: ignore[unknown-argument, unresolved-attribute]
+        assert Decorated(connection=connection).connection is connection  # ty: ignore[unresolved-attribute]
 
     def test_relations_kwarg_declares_a_relation(self):
         @il.destination(relations={"connection": il.Relation(FakeConnection)})
@@ -39,4 +39,4 @@ class TestDecorator:
         class Decorated(il.MemoryDestination):
             """A destination-shaped fixture."""
         connection = FakeConnection()
-        assert Decorated(connection=connection).connection is connection  # ty: ignore[unknown-argument, unresolved-attribute]
+        assert Decorated(connection=connection).connection is connection  # ty: ignore[unresolved-attribute]

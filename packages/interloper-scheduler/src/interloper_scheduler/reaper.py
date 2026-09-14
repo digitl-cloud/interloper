@@ -167,9 +167,6 @@ class Reaper(Controller):
                 self._fail_run(run, error)
                 return True
 
-            if state.status == RunStatus.NOT_FOUND:
-                pass
-
         # 2. Timeout fallback — for launchers without introspection,
         # NOT_FOUND runs, or anything else. Naive timestamps (SQLite test
         # databases drop the offset) are treated as UTC.

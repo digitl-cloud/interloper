@@ -177,7 +177,7 @@ class KubernetesLauncher(Launcher):
             containers=[container],
             restart_policy="Never",
             service_account_name=self._service_account_name,
-            node_selector=self._node_selector if self._node_selector else None,
+            node_selector=self._node_selector or None,
             tolerations=self._build_tolerations() if self._tolerations else None,
             image_pull_secrets=[client.V1LocalObjectReference(name=s) for s in self._image_pull_secrets]
             if self._image_pull_secrets

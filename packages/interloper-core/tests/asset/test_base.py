@@ -457,7 +457,7 @@ class TestInjection:
                 return [{"date": context.partition_date, "n": len(orders.data or [])}]
 
         connection, memory = Conn(api_secret="s"), il.MemoryDestination()
-        shop = Shop(connection=connection, destinations=[memory])  # ty: ignore[unknown-argument]
+        shop = Shop(connection=connection, destinations=[memory])
 
         result = DAG(shop).materialize(TimePartition(dt.date(2026, 9, 1)))
 
@@ -534,7 +534,7 @@ class TestInjection:
 
         memory = make_destination(tmp_path)
         fb = FbLike(destinations=[memory])
-        asset = lonely(destinations=[memory], campaigns=fb.campaigns)  # ty: ignore[unknown-argument]
+        asset = lonely(destinations=[memory], campaigns=fb.campaigns)
         warnings_seen: list[Event] = []
 
         def handler(event: Event) -> None:
@@ -648,7 +648,7 @@ class TestInjection:
             return []
 
         fb = FbLike(destinations=[il.MemoryDestination()])
-        asset = consumer(destinations=[il.MemoryDestination()], campaigns=fb.campaigns)  # ty: ignore[unknown-argument]
+        asset = consumer(destinations=[il.MemoryDestination()], campaigns=fb.campaigns)
 
         with pytest.raises(AssetError, match="has upstreams but no DAG provided"):
             await asset.run_async()
@@ -1221,7 +1221,7 @@ class TestConform:
         def users() -> Any:
             return "not tabular"
 
-        with pytest.raises(AssetError, match="cannot[\\s\\S]*be checked"):
+        with pytest.raises(AssetError, match=r"cannot[\s\S]*be checked"):
             await users().run_async()
 
     async def test_auto_without_schema_infers_effective_schema(self):
@@ -1328,7 +1328,7 @@ class TestUpstreamReads:
     def test_many_slot_receives_one_upstream_per_leg(self):
         mem = il.MemoryDestination()
         one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])  # ty: ignore[unknown-argument]
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])
         partition = TimePartition(dt.date(2026, 1, 1))
 
         result = DAG(one, two, matcher).materialize(partition)
@@ -1343,7 +1343,7 @@ class TestUpstreamReads:
         one, two = FbLike(destinations=[mem]), TtLike(destinations=[mem])
         partition = TimePartition(dt.date(2026, 1, 1))
         DAG(one).materialize(partition)  # only provider one has data
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])  # ty: ignore[unknown-argument]
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns, two.campaigns])
         warnings_seen: list[Event] = []
 
         def handler(event: Event) -> None:
@@ -1372,7 +1372,7 @@ class TestUpstreamReads:
 
         mem = il.MemoryDestination()
         one = FbLike(destinations=[Broken()])
-        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns])  # ty: ignore[unknown-argument]
+        matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns])
         partition = TimePartition(dt.date(2026, 1, 1))
 
         result = DAG(one(materializable=False), matcher).materialize(partition)
@@ -1397,7 +1397,7 @@ class TestUpstreamReads:
         def single(context: il.ExecutionContext, c: il.Upstream) -> Any:
             return [{"date": context.partition_date, "ids": [row["id"] for row in c.data]}]
 
-        asset = single(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        asset = single(destinations=[mem], c=one.campaigns)
         DAG(one(materializable=False), asset).materialize(partition)
 
         assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
@@ -1415,7 +1415,7 @@ class TestUpstreamReads:
         def lenient(context: il.ExecutionContext, c: il.Upstream | None = None) -> Any:
             return [{"date": context.partition_date, "got": c is not None and c.data is not None}]
 
-        asset = lenient(destinations=[mem], c=one.campaigns)  # ty: ignore[unknown-argument]
+        asset = lenient(destinations=[mem], c=one.campaigns)
         partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
 
         result = DAG(one(materializable=False), asset).materialize(partition)
@@ -1432,7 +1432,7 @@ class TestUpstreamReads:
                 raise RuntimeError("boom")
 
         broken = FbLike(destinations=[Broken()])
-        asset = lenient(destinations=[mem], c=broken.campaigns)  # ty: ignore[unknown-argument]
+        asset = lenient(destinations=[mem], c=broken.campaigns)
         assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
 
     def test_an_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
@@ -1474,7 +1474,7 @@ class TestUpstreamReadFailures:
         def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
             return []
 
-        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)  # ty: ignore[unknown-argument]
+        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
         dag = DAG(one(materializable=False), asset)
 
         with pytest.raises(AssetError, match="No destination found for upstream asset 'campaigns'"):
@@ -1501,7 +1501,7 @@ class TestUpstreamReadFailures:
         def consumer(context: il.ExecutionContext, c: il.Upstream) -> Any:  # pragma: no cover - never reached
             return []
 
-        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)  # ty: ignore[unknown-argument]
+        asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
         dag = DAG(one(materializable=False), asset)
         captured: list[Event] = []
         EventBus.subscribe(captured.append)

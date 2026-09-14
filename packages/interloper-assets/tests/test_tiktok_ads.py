@@ -25,7 +25,7 @@ from interloper_assets.tiktok_ads.source import TiktokAds, TiktokStatsNormalizer
 
 
 def _source() -> Any:
-    return TiktokAds(id="src-1", advertiser_id="123")  # ty: ignore[unknown-argument]
+    return TiktokAds(id="src-1", advertiser_id="123")
 
 
 class TestSourceNormalizer:

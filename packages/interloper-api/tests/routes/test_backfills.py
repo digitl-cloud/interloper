@@ -66,12 +66,24 @@ class FakeStore:
         return _fake_backfill(backfill_id, status="canceled")
 
 
-def _client(store: FakeStore) -> TestClient:
+def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
     app.include_router(backfills_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
-    return TestClient(app)
+    return app
+
+
+def _client(store: FakeStore) -> TestClient:
+    """A client for the probe app.
+
+    Args:
+        store: The fake store the routes resolve against.
+
+    Returns:
+        The client.
+    """
+    return TestClient(_app(store))
 
 
 @pytest.fixture
@@ -131,9 +143,9 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
 
     store.components.get = lambda component_id, kind=None: _fake_backfill(component_id)
     store.runs.create_backfill = _raise
-    client = _client(store)
+    app = _app(store)
 
-    @client.app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
+    @app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
     async def _quota_handler(_request, exc: QuotaExceededError):
         from fastapi.responses import JSONResponse
 
@@ -142,6 +154,7 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
             content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
         )
 
+    client = TestClient(app)
     resp = client.post(
         "/backfills/",
         json={"component_id": str(uuid4()), "start_key": "2026-01-01", "end_key": "2026-01-31"},

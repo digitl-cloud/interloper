@@ -198,7 +198,7 @@ class TestRun:
     def test_reraise_wraps_a_cross_process_failure(self, importable_in_children: None) -> None:
         runner = MultiProcessRunner(max_workers=1, reraise=True)
 
-        with pytest.raises(RunnerError, match="failed: .*nope"):
+        with pytest.raises(RunnerError, match=r"failed: .*nope"):
             il.run(runner.run(il.DAG(ChainSource(destinations=[il.MemoryDestination()]))))
 
     def test_the_pool_is_torn_down_after_the_run(self, importable_in_children: None) -> None:

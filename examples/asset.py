@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import interloper as il
 
@@ -25,15 +25,19 @@ class SimpleConnection:
 @il.destination
 class SimpleDestination:
     table: str = "users"
-    store: list[Any] = []
+    store: ClassVar[dict[str, Any]] = {}
 
-    def read(self, context: il.IOContext) -> list[Any]:
-        """Read data from this destination."""
-        return self.store
+    def write_partition(self, context: il.IOContext, partition: il.Partition | None, data: Any) -> None:
+        """Keep one partition's data in memory."""
+        self.store[partition.id if partition else "all"] = data
 
-    def write(self, context: il.IOContext, data: Any) -> None:
-        """Write data to this destination."""
-        self.store.append(data)
+    def read_partition(self, context: il.IOContext, partition: il.Partition | None) -> Any:
+        """Return one partition's data."""
+        return self.store[partition.id if partition else "all"]
+
+    def partition_row_counts(self, context: il.IOContext) -> dict[str, int]:
+        """Count the rows held per partition."""
+        return {key: len(rows) for key, rows in self.store.items()}
 
 
 @il.asset(
