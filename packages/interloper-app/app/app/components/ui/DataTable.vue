@@ -10,6 +10,12 @@ const props = defineProps<{
     data: TData[]
     loading?: boolean
     searchPlaceholder?: string
+    /**
+     * Predicate the `#filters` controls narrow the rows with. The table keeps
+     * `data` for its empty state, so a filter that leaves nothing shows an
+     * empty table, not the collection's onboarding.
+     */
+    filter?: (row: TData) => boolean
     /** Extra context-menu / action items per row (prepended before edit & delete). */
     rowActions?: (item: TData) => DropdownMenuItem[][]
     /** When true, suppresses the built-in actions column and row menus. */
@@ -45,6 +51,7 @@ const emit = defineEmits<{
 const { confirm } = useConfirm()
 
 const globalFilter = ref('')
+const rows = computed(() => props.filter ? props.data.filter(props.filter) : props.data)
 const tableRef = useTemplateRef<{ tableApi: any }>('table')
 
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
@@ -182,6 +189,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     icon="i-lucide-search"
                     class="max-w-sm"
                     @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
+            <slot name="filters" />
 
             <div class="ml-auto flex items-center gap-2">
                 <slot name="toolbar" />
@@ -202,7 +210,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
         <UTable v-if="showTable"
                 ref="table"
                 v-model:pagination="pagination"
-                :data="data"
+                :data="rows"
                 :columns="columnsWithActions"
                 :loading="loading"
                 :global-filter="globalFilter"

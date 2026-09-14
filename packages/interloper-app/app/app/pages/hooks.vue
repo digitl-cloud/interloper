@@ -98,6 +98,14 @@ async function handleDelete(ids: string[]) {
         toast.add(inUseToast(e, 'Hook') ?? errorToast(e, 'Failed to delete hook'))
     }
 }
+
+const typeKey = ref<string | null>(null)
+const enabled = ref<boolean | null>(null)
+
+function matchesFilters(hook: ComponentRecord): boolean {
+    return (typeKey.value === null || hook.key === typeKey.value)
+        && (enabled.value === null || hookEnabled(hook) === enabled.value)
+}
 </script>
 
 <template>
@@ -110,6 +118,7 @@ async function handleDelete(ids: string[]) {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="hooks"
+                       :filter="matchesFilters"
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
@@ -117,6 +126,11 @@ async function handleDelete(ids: string[]) {
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.reload()">
+                <template #filters>
+                    <TypeFilter v-model="typeKey"
+                                :components="hooks" />
+                    <EnabledFilter v-model="enabled" />
+                </template>
 
                 <template #empty>
                     <EmptyState icon="i-carbon-lightning"

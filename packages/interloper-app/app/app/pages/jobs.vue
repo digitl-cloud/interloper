@@ -151,6 +151,8 @@ async function handleDelete(ids: string[]) {
         toast.add(inUseToast(e, 'Job') ?? errorToast(e, 'Failed to delete job'))
     }
 }
+
+const enabled = ref<boolean | null>(null)
 </script>
 
 <template>
@@ -163,6 +165,7 @@ async function handleDelete(ids: string[]) {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="jobs"
+                       :filter="row => enabled === null || jobEnabled(row) === enabled"
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :row-actions="rowActions"
@@ -171,6 +174,9 @@ async function handleDelete(ids: string[]) {
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.reload()">
+                <template #filters>
+                    <EnabledFilter v-model="enabled" />
+                </template>
 
                 <template #empty>
                     <EmptyState icon="i-lucide-calendar-clock"

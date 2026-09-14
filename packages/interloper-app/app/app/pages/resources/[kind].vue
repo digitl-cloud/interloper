@@ -203,6 +203,8 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
     catalogTitle: 'Available types',
     catalogDesc: `Pick a type to create a new ${kind.value}.`,
 })
+
+const typeKey = ref<string | null>(null)
 </script>
 
 <template>
@@ -215,6 +217,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="resources"
+                       :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
@@ -223,6 +226,10 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.reload()">
+                <template #filters>
+                    <TypeFilter v-model="typeKey"
+                                :components="resources" />
+                </template>
                 <template #empty>
                     <EmptyState :icon="KIND_ICONS[kind] ?? 'i-lucide-box'"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"
