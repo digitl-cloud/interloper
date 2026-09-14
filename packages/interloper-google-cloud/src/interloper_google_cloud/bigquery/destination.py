@@ -7,7 +7,6 @@ import inspect
 import json
 import warnings
 from collections.abc import Sequence
-from decimal import Decimal
 from functools import cached_property
 from typing import Any
 
@@ -22,8 +21,8 @@ from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField, SelectField
-from interloper.schema import FieldSpec, Schema
 
+from interloper_google_cloud.bigquery.types import TIME_PARTITIONABLE, column_type, parameter_type, to_fields
 from interloper_google_cloud.connection import GoogleCloudConnection
 
 
@@ -244,7 +243,7 @@ class BigQueryDestination(DatabaseDestination):
             context: IO context carrying the asset and effective schema.
         """
         frame = Representation.of(data).to("dataframe")
-        bq_schema = _schema_to_bq_fields(context.schema) if context.schema is not None else None
+        bq_schema = to_fields(context.schema.field_specs()) if context.schema is not None else None
         description = _asset_description(context.asset)
         partitioning = context.asset.partitioning
 
@@ -385,43 +384,6 @@ class BigQueryDestination(DatabaseDestination):
 # -- Utility functions ---------------------------------------------------------
 
 
-def _schema_to_bq_fields(schema: type[Schema]) -> list[bigquery.SchemaField]:
-    """Map an interloper Schema to BigQuery field definitions.
-
-    Args:
-        schema: The schema class to map.
-
-    Returns:
-        One ``SchemaField`` per data field, nested models as ``RECORD``.
-    """
-    return _specs_to_bq_fields(schema.field_specs())
-
-
-def _specs_to_bq_fields(specs: list[FieldSpec] | tuple[FieldSpec, ...]) -> list[bigquery.SchemaField]:
-    """Map field specs to BigQuery field definitions.
-
-    Args:
-        specs: The field specs to map.
-
-    Returns:
-        One ``SchemaField`` per spec, carrying the spec's description.
-    """
-    fields = []
-    for spec in specs:
-        mode = "REPEATED" if spec.repeated else ("NULLABLE" if spec.nullable else "REQUIRED")
-        # SchemaField's description default is a sentinel, not None — only pass it when set.
-        described: dict[str, Any] = {"description": spec.description} if spec.description else {}
-        if spec.fields is not None:
-            fields.append(
-                bigquery.SchemaField(
-                    spec.name, "RECORD", mode=mode, fields=_specs_to_bq_fields(spec.fields), **described
-                )
-            )
-        else:
-            fields.append(bigquery.SchemaField(spec.name, _py_type_to_bq_type(spec.type), mode=mode, **described))
-    return fields
-
-
 def _asset_description(asset: Any) -> str | None:
     """Return the asset's description (its class docstring), cleaned.
 
@@ -438,10 +400,6 @@ def _asset_description(asset: Any) -> str | None:
 
 
 # BigQuery time partitioning only supports DATE / DATETIME / TIMESTAMP columns.
-_TIME_PARTITIONABLE_TYPES = {"DATE", "DATETIME", "TIMESTAMP"}
-
-
-#: BigQuery's partitioning types, by the asset's declared granularity.
 _GRANULARITY_TO_BQ_TYPE = {
     TimeGranularity.HOUR: bigquery.TimePartitioningType.HOUR,
     TimeGranularity.DAY: bigquery.TimePartitioningType.DAY,
@@ -479,7 +437,7 @@ def _time_partitioning(
         field = next((f for f in bq_schema if f.name == config.column), None)
         unsupported = (
             field is None
-            or field.field_type not in _TIME_PARTITIONABLE_TYPES
+            or field.field_type not in TIME_PARTITIONABLE
             or (granularity is TimeGranularity.HOUR and field.field_type == "DATE")
         )
         if unsupported:
@@ -543,22 +501,6 @@ def _merge_field_descriptions(
 
 
 # BigQuery column type -> query parameter type, for partition predicates.
-_BQ_FIELD_TO_PARAM_TYPE = {
-    "BOOLEAN": "BOOL",
-    "BOOL": "BOOL",
-    "INTEGER": "INT64",
-    "INT64": "INT64",
-    "FLOAT": "FLOAT64",
-    "FLOAT64": "FLOAT64",
-    "NUMERIC": "NUMERIC",
-    "DATE": "DATE",
-    "DATETIME": "DATETIME",
-    "TIMESTAMP": "TIMESTAMP",
-    "BYTES": "BYTES",
-    "STRING": "STRING",
-}
-
-
 def _predicate(bq_table: bigquery.Table, where: PartitionFilter) -> tuple[str, list[bigquery.ScalarQueryParameter]]:
     """Render a partition filter as a parameterised SQL predicate.
 
@@ -608,9 +550,9 @@ def _partition_param(
     """
     field = next((f for f in bq_table.schema if f.name == column), None)
     if field is not None:
-        param_type = _BQ_FIELD_TO_PARAM_TYPE.get(field.field_type, "STRING")
+        param_type = parameter_type(field.field_type)
     else:
-        param_type = _bq_to_py_type(value)
+        param_type = column_type(type(value))
     if param_type in ("TIMESTAMP", "DATETIME") and isinstance(value, str):
         # The client serializes these from datetime objects; a date-only
         # string like "2024-01-01" (a TimePartition id) fails to format.
@@ -644,58 +586,3 @@ def _iso_string(value: Any) -> str:
     """
     return value.isoformat() if isinstance(value, (datetime.date, datetime.datetime)) else str(value)
 
-
-def _py_type_to_bq_type(py_type: Any) -> str:
-    """Map a Python *type* (from a FieldSpec) to a BigQuery column type.
-
-    Args:
-        py_type: The declared Python type.
-
-    Returns:
-        The BigQuery column type name.
-
-    """
-    if not isinstance(py_type, type):
-        return "STRING"  # typing.Any or unresolvable annotations
-    if issubclass(py_type, bool):
-        return "BOOLEAN"
-    if issubclass(py_type, int):
-        return "INTEGER"
-    if issubclass(py_type, float):
-        return "FLOAT"
-    if issubclass(py_type, Decimal):
-        return "NUMERIC"
-    if issubclass(py_type, datetime.datetime):
-        return "TIMESTAMP"
-    if issubclass(py_type, datetime.date):
-        return "DATE"
-    if issubclass(py_type, bytes):
-        return "BYTES"
-    return "STRING"
-
-
-def _bq_to_py_type(value: Any) -> str:
-    """Map a Python value to a BigQuery query parameter type.
-
-    Args:
-        value: The parameter value.
-
-    Returns:
-        The BigQuery query-parameter type name.
-
-    """
-    if isinstance(value, bool):
-        return "BOOL"
-    if isinstance(value, int):
-        return "INT64"
-    if isinstance(value, float):
-        return "FLOAT64"
-    if isinstance(value, Decimal):
-        return "NUMERIC"
-    if isinstance(value, datetime.datetime):
-        return "TIMESTAMP"
-    if isinstance(value, datetime.date):
-        return "DATE"
-    if isinstance(value, bytes):
-        return "BYTES"
-    return "STRING"
