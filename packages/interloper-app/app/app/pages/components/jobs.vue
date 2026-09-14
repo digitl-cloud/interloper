@@ -4,7 +4,7 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { jobCron, jobEnabled, jobTimezone, relationIds } from '~/types/component'
 
-definePageMeta({ title: 'Jobs' })
+definePageMeta({ title: 'Components', fullBleed: true })
 
 const USwitch = resolveComponent('USwitch')
 const EntityBadge = resolveComponent('EntityBadge')
@@ -162,7 +162,7 @@ const enabled = ref<boolean | null>(null)
                      label="New job"
                      @click="handleCreate" />
         </NavActions>
-        <div class="flex flex-col flex-1 min-h-0">
+        <NavComponentsHub>
             <DataTable :columns="columns"
                        :data="jobs"
                        :filter="row => enabled === null || jobEnabled(row) === enabled"
@@ -189,7 +189,7 @@ const enabled = ref<boolean | null>(null)
                     </EmptyState>
                 </template>
             </DataTable>
-        </div>
+        </NavComponentsHub>
 
         <WizardDrawer v-model:open="drawerOpen"
                       :default-title="editingJob ? 'Edit Job' : 'New Job'"

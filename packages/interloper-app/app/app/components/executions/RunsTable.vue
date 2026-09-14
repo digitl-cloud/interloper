@@ -15,8 +15,8 @@ const { runs, loading, total, pageIndex, pageSize, filters, filtered } = storeTo
 
 /**
  * Filters live in the store (the fetch, the pagination and the realtime gate
- * read them) and mirror to the route query so a filtered view is linkable
- * and survives the tab switch. The query is written, never watched: the
+ * read them) and mirror to the route query so a filtered view is linkable.
+ * The query is written, never watched: the
  * store is the single source of truth while this table is mounted.
  */
 const search = ref(String(route.query.q ?? ''))
@@ -144,7 +144,7 @@ function onPageChange(page: number) {
                 <UButton icon="i-lucide-calendar-plus"
                          label="Create a job"
                          class="mt-5"
-                         to="/jobs" />
+                         :to="kindPath('job')" />
             </EmptyState>
         </div>
 

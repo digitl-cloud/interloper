@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { resourceMap } from '~/types/component'
 
-definePageMeta({ title: 'Destinations' })
+definePageMeta({ title: 'Components', fullBleed: true })
 
 const UIcon = resolveComponent('UIcon')
 const EntityBadge = resolveComponent('EntityBadge')
@@ -105,7 +105,7 @@ const typeKey = ref<string | null>(null)
                      label="New destination"
                      @click="handleCreate" />
         </NavActions>
-        <div class="flex flex-col flex-1 min-h-0">
+        <NavComponentsHub>
             <DataTable :columns="columns"
                        :data="destinations"
                        :filter="row => typeKey === null || row.key === typeKey"
@@ -152,7 +152,7 @@ const typeKey = ref<string | null>(null)
                     </div>
                 </template>
             </DataTable>
-        </div>
+        </NavComponentsHub>
 
         <WizardDrawer v-model:open="drawerOpen"
                       default-title="New Destination"

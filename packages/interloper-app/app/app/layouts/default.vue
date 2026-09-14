@@ -26,21 +26,32 @@ const pageTitle = computed(() => pageHeader.value?.title ?? (route.meta.title as
 /** Pages that fill the navbar themselves (crumb + id + status) via #navbar-title. */
 const customNavbar = computed(() => !!route.meta.customNavbar)
 
-const navSections = useNavSections()
+const destinations = useNavDestinations()
 
-const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((section, index) => [
-    {
-        label: section.label,
-        type: 'label' as const,
-        class: index > 0 ? 'mt-2' : undefined,
-    },
-    ...section.pages.map(page => ({
-        label: page.label,
-        icon: page.icon,
-        to: page.to,
-        active: route.path === page.to || route.path.startsWith(`${page.to}/`),
+/**
+ * Hubs start folded and open whenever the route enters one, so the active
+ * view is never hidden; the user can fold them again.
+ */
+const openMenus = ref<string[]>([])
+watch(() => route.path, (path) => {
+    for (const page of destinations.value) {
+        if (page.views && isNavActive(page, path) && !openMenus.value.includes(page.to)) openMenus.value.push(page.to)
+    }
+}, { immediate: true })
+
+const items = computed<NavigationMenuItem[]>(() => destinations.value.map(page => ({
+    value: page.to,
+    label: page.label,
+    icon: page.icon,
+    to: page.to,
+    active: isNavActive(page, route.path),
+    children: page.views?.map(view => ({
+        label: view.label,
+        icon: view.icon,
+        to: view.to,
+        active: route.path === view.to || route.path.startsWith(`${view.to}/`),
     })),
-]))
+})))
 </script>
 
 <template>
@@ -75,8 +86,11 @@ const items = computed<NavigationMenuItem[]>(() => navSections.value.flatMap((se
                         </template>
                     </UButton>
 
-                    <UNavigationMenu :collapsed="collapsed"
+                    <UNavigationMenu v-model="openMenus"
+                                     :collapsed="collapsed"
                                      :items="items"
+                                     type="multiple"
+                                     popover
                                      color="neutral"
                                      orientation="vertical" />
                 </template>

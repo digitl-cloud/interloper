@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { hookEnabled, hookEvents, relationIds } from '~/types/component'
 
-definePageMeta({ title: 'Hooks' })
+definePageMeta({ title: 'Components', fullBleed: true })
 
 const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
@@ -115,7 +115,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                      label="New hook"
                      @click="handleCreate" />
         </NavActions>
-        <div class="flex flex-col flex-1 min-h-0">
+        <NavComponentsHub>
             <DataTable :columns="columns"
                        :data="hooks"
                        :filter="matchesFilters"
@@ -143,7 +143,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                     </EmptyState>
                 </template>
             </DataTable>
-        </div>
+        </NavComponentsHub>
 
         <WizardDrawer v-model:open="drawerOpen"
                       :default-title="editingHook ? 'Edit Hook' : 'New Hook'"

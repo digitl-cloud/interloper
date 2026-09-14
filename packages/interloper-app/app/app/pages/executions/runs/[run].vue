@@ -6,7 +6,7 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
-definePageMeta({ title: 'Run', orgSwitchTarget: '/executions?tab=runs', fullBleed: true, customNavbar: true })
+definePageMeta({ title: 'Run', orgSwitchTarget: '/executions/runs', fullBleed: true, customNavbar: true })
 
 const route = useRoute()
 const runId = route.params.run!.toString()
@@ -133,10 +133,10 @@ onUnmounted(() => {
 <template>
     <OrganizationGate :org-id="run?.org_id"
              :error="fetchError"
-             back-to="/executions?tab=runs"
+             back-to="/executions/runs"
              resource-label="run">
         <NavTitle>
-            <ULink to="/executions?tab=runs"
+            <ULink to="/executions/runs"
                    class="text-[15px] font-medium text-muted hover:text-highlighted">Runs</ULink>
             <span class="text-[15px] text-dimmed">/</span>
             <span class="truncate font-mono text-[15px] font-semibold">{{ runId }}</span>
