@@ -88,7 +88,7 @@ onUnmounted(() => {
                     <UButton icon="i-lucide-calendar-plus"
                              label="Create a job"
                              class="mt-5"
-                             to="/jobs" />
+                             :to="kindPath('job')" />
                 </EmptyState>
             </div>
 

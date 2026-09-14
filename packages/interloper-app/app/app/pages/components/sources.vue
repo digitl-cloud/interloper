@@ -4,7 +4,7 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
 
-definePageMeta({ title: 'Sources' })
+definePageMeta({ title: 'Components', fullBleed: true })
 
 const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
@@ -166,9 +166,8 @@ const typeKey = ref<string | null>(null)
                      label="New source"
                      @click="handleCreate" />
         </NavActions>
-        <DriftBanner />
-
-        <div class="flex flex-col flex-1 min-h-0">
+        <NavComponentsHub>
+            <DriftBanner />
             <DataTable :columns="columns"
                        :data="sources"
                        :filter="row => typeKey === null || row.key === typeKey"
@@ -190,7 +189,7 @@ const typeKey = ref<string | null>(null)
                                        @create-type="handleCreateFromCatalog" />
                 </template>
             </DataTable>
-        </div>
+        </NavComponentsHub>
 
         <WizardDrawer v-model:open="drawerOpen"
                       default-title="New Source"

@@ -22,9 +22,7 @@ defineProps<{
            class="shrink-0"
            :ui="{ list: 'px-6' }"
            @update:model-value="tab = String($event)" />
-    <div class="flex-1 min-h-0 w-full overflow-y-auto">
-        <div class="p-6 w-full">
-            <slot :name="tab" />
-        </div>
-    </div>
+    <PageFrame>
+        <slot :name="tab" />
+    </PageFrame>
 </template>

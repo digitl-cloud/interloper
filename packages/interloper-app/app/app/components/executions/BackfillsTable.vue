@@ -83,7 +83,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                 <UButton icon="i-lucide-calendar-plus"
                          label="Go to Jobs"
                          class="mt-5"
-                         to="/jobs" />
+                         :to="kindPath('job')" />
             </EmptyState>
         </div>
 

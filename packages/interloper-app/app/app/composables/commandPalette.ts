@@ -21,7 +21,7 @@ export function useCommandPalette() {
     const colorMode = useColorMode()
     const { open: agentOpen } = useAgentPanel()
     const { switchToOrg } = useOrgSwitch()
-    const sections = useNavSections()
+    const destinations = useNavDestinations()
     const assetNames = useAssetDisplayName()
     const assetIcons = useAssetIcon()
 
@@ -67,9 +67,9 @@ export function useCommandPalette() {
         const toItem = (page: NavPage): CommandPaletteItem => ({ ...page, onSelect: close })
 
         const actionItems: CommandPaletteItem[] = [
-            toItem({ label: 'New source…', icon: 'i-lucide-plus', to: '/sources?new=1' }),
+            toItem({ label: 'New source…', icon: 'i-lucide-plus', to: `${kindPath('source')}?new=1` }),
             ...componentsStore.byKind('job').map(job =>
-                toItem({ label: `Run job: ${job.name ?? job.key}`, icon: 'i-lucide-play', to: `/jobs?run=${job.id}` })),
+                toItem({ label: `Run job: ${job.name ?? job.key}`, icon: 'i-lucide-play', to: `${kindPath('job')}?run=${job.id}` })),
             {
                 label: colorMode.value === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
                 icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
@@ -118,7 +118,7 @@ export function useCommandPalette() {
         const searching = Boolean(searchTerm.value.trim())
 
         return [
-            { id: 'pages', label: 'Pages', items: sections.value.flatMap(section => section.pages.map(toItem)) },
+            { id: 'pages', label: 'Pages', items: destinations.value.flatMap(page => (page.views ?? [page]).map(toItem)) },
             // Entity groups only join in once the user types — the empty palette
             // stays a compact quick-nav instead of a dump of the whole collection.
             ...(searching ? entityGroups(close) : []),
@@ -154,7 +154,7 @@ export function useCommandPalette() {
                     label: source.name ?? source.key,
                     suffix: catalogStore.getSourceDefinition(source.key)?.name,
                     icon: componentIcon(source.key),
-                    to: '/sources',
+                    to: kindPath('source'),
                     onSelect: close,
                 })),
             },
@@ -178,7 +178,7 @@ export function useCommandPalette() {
                 items: componentsStore.byKind('destination').map(destination => ({
                     label: destination.name ?? destination.key,
                     icon: componentIcon(destination.key),
-                    to: '/destinations',
+                    to: kindPath('destination'),
                     onSelect: close,
                 })),
             },
@@ -188,7 +188,7 @@ export function useCommandPalette() {
                 items: componentsStore.byKind(kind).map(resource => ({
                     label: resource.name ?? resource.key,
                     icon: RESOURCE_KIND_ICONS[kind] ?? 'i-lucide-box',
-                    to: `/resources/${kind}`,
+                    to: kindPath(kind),
                     onSelect: close,
                 })),
             })),
@@ -198,7 +198,7 @@ export function useCommandPalette() {
                 items: componentsStore.byKind('job').map(job => ({
                     label: job.name ?? job.key,
                     icon: 'i-lucide-calendar-clock',
-                    to: '/jobs',
+                    to: kindPath('job'),
                     onSelect: close,
                 })),
             },

@@ -6,7 +6,7 @@ import type { Backfill } from '~/types/backfill'
 
 // orgSwitchTarget: this page is bespoke to one org's backfill — switching org
 // from the nav lands on the backfills list instead.
-definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions?tab=backfills', customNavbar: true })
+definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions/backfills', customNavbar: true })
 
 const UBadge = resolveComponent('UBadge')
 
@@ -115,11 +115,11 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
 <template>
     <OrganizationGate :org-id="backfill?.org_id"
              :error="fetchError"
-             back-to="/executions?tab=backfills"
+             back-to="/executions/backfills"
              resource-label="backfill">
         <div>
             <NavTitle>
-                <ULink to="/executions?tab=backfills"
+                <ULink to="/executions/backfills"
                        class="text-[15px] font-medium text-muted hover:text-highlighted">Backfills</ULink>
                 <span class="text-[15px] text-dimmed">/</span>
                 <span class="truncate font-mono text-[15px] font-semibold">{{ backfillId.substring(0, 8) }}</span>
