@@ -58,18 +58,15 @@ export const useTimelineStore = defineStore('timeline', () => {
         return new Date(run.completed_at).getTime() >= rangeStart.value
     }
 
-    function _upsert(run: Partial<Run> & { id: string }) {
+    function _upsert(run: Run) {
         const idx = runs.value.findIndex(r => r.id === run.id)
-        const existing = runs.value[idx]
-        if (idx >= 0 && existing) {
-            // Strip undefined values so realtime partials don't overwrite richer API data
-            const clean = Object.fromEntries(Object.entries(run).filter(([, v]) => v !== undefined)) as Partial<Run>
-            const merged = { ...existing, ...clean }
+        if (idx >= 0) {
+            const merged = { ...runs.value[idx], ...run }
             if (_inWindow(merged)) runs.value[idx] = merged
             else runs.value.splice(idx, 1)
         }
-        else if (_inWindow(run as Run)) {
-            runs.value.push(run as Run)
+        else if (_inWindow(run)) {
+            runs.value.push(run)
             total.value++
         }
     }
