@@ -2,8 +2,6 @@
 
 import datetime
 import json
-import math
-from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -18,12 +16,11 @@ from pydantic import BaseModel, Field
 
 from interloper_google_cloud.bigquery.destination import (
     BigQueryDestination,
-    _bq_to_py_type,
     _merge_field_descriptions,
     _partition_param,
-    _schema_to_bq_fields,
     _time_partitioning,
 )
+from interloper_google_cloud.bigquery.types import to_fields
 from interloper_google_cloud.connection import GoogleCloudConnection
 
 # A minimal service account key JSON for testing.
@@ -62,45 +59,6 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     mock_client.get_table.return_value.description = None
 
     return dest, mock_client
-
-
-# -- _bq_to_py_type ------------------------------------------------------------
-
-
-class TestBqToPyType:
-    """Map Python values to BigQuery query parameter types."""
-
-    def test_bool(self):
-        assert _bq_to_py_type(True) == "BOOL"
-        assert _bq_to_py_type(False) == "BOOL"
-
-    def test_int(self):
-        assert _bq_to_py_type(42) == "INT64"
-
-    def test_float(self):
-        assert _bq_to_py_type(math.pi) == "FLOAT64"
-
-    def test_decimal(self):
-        assert _bq_to_py_type(Decimal("1.5")) == "NUMERIC"
-
-    def test_datetime(self):
-        assert _bq_to_py_type(datetime.datetime(2024, 6, 15, 8, 30)) == "TIMESTAMP"
-
-    def test_date(self):
-        assert _bq_to_py_type(datetime.date(2024, 6, 15)) == "DATE"
-
-    def test_bytes(self):
-        assert _bq_to_py_type(b"\x00") == "BYTES"
-
-    def test_string(self):
-        assert _bq_to_py_type("text") == "STRING"
-
-    def test_none_falls_back_to_string(self):
-        assert _bq_to_py_type(None) == "STRING"
-
-    def test_bool_before_int(self):
-        """Bool is a subclass of int -- ensure bool wins."""
-        assert _bq_to_py_type(True) == "BOOL"
 
 
 # -- insert --------------------------------------------------------------------
@@ -232,37 +190,6 @@ def _partitioned_asset() -> list:
     return []
 
 
-class TestSchemaToBqFields:
-    """Schema → SchemaField mapping."""
-
-    def test_scalar_types_and_modes(self):
-        fields = _schema_to_bq_fields(_RowSchema)
-        assert [(f.name, f.field_type, f.mode) for f in fields] == [
-            ("id", "INTEGER", "NULLABLE"),
-            ("cost", "FLOAT", "NULLABLE"),
-            ("day", "DATE", "NULLABLE"),
-        ]
-
-    def test_nested_and_repeated(self):
-        fields = {f.name: f for f in _schema_to_bq_fields(_NestedSchema)}
-        assert fields["name"].mode == "REQUIRED"
-        assert fields["tags"].mode == "REPEATED"
-        assert fields["tags"].field_type == "STRING"
-        assert fields["address"].field_type == "RECORD"
-        assert [sub.name for sub in fields["address"].fields] == ["city", "zip"]
-
-    def test_descriptions_carried(self):
-        fields = {f.name: f for f in _schema_to_bq_fields(_RowSchema)}
-        assert fields["id"].description == "Row id"
-        assert fields["cost"].description is None
-
-    def test_nested_descriptions_carried(self):
-        fields = {f.name: f for f in _schema_to_bq_fields(_NestedSchema)}
-        assert fields["address"].description == "Postal address"
-        assert fields["address"].fields[0].description == "City name"
-        assert fields["address"].fields[1].description is None
-
-
 class TestInsertData:
     """Schema-driven table creation and load-job configuration."""
 
@@ -375,7 +302,7 @@ class TestTimePartitioning:
         assert _time_partitioning(None, None) is None
 
     def test_time_config_with_date_column(self):
-        tp = _time_partitioning(il.TimePartitionConfig(column="day"), _schema_to_bq_fields(_RowSchema))
+        tp = _time_partitioning(il.TimePartitionConfig(column="day"), to_fields(_RowSchema.field_specs()))
         assert tp is not None
         assert tp.type_ == "DAY"
         assert tp.field == "day"
@@ -386,7 +313,7 @@ class TestTimePartitioning:
         assert tp.field == "date"
 
     def test_generic_config_with_date_column(self):
-        tp = _time_partitioning(il.PartitionConfig(column="day"), _schema_to_bq_fields(_RowSchema))
+        tp = _time_partitioning(il.PartitionConfig(column="day"), to_fields(_RowSchema.field_specs()))
         assert tp is not None
         assert tp.field == "day"
 
@@ -395,12 +322,12 @@ class TestTimePartitioning:
 
     def test_non_time_column_warns_and_skips(self):
         with pytest.warns(UserWarning, match="not be time-partitioned"):
-            tp = _time_partitioning(il.TimePartitionConfig(column="id"), _schema_to_bq_fields(_RowSchema))
+            tp = _time_partitioning(il.TimePartitionConfig(column="id"), to_fields(_RowSchema.field_specs()))
         assert tp is None
 
     def test_missing_column_warns_and_skips(self):
         with pytest.warns(UserWarning, match="not be time-partitioned"):
-            tp = _time_partitioning(il.TimePartitionConfig(column="nope"), _schema_to_bq_fields(_RowSchema))
+            tp = _time_partitioning(il.TimePartitionConfig(column="nope"), to_fields(_RowSchema.field_specs()))
         assert tp is None
 
     @pytest.mark.parametrize(
@@ -413,7 +340,7 @@ class TestTimePartitioning:
     )
     def test_granularity_maps_to_the_bq_partitioning_type(self, granularity, bq_type):
         config = il.TimePartitionConfig(column="day", granularity=granularity)
-        tp = _time_partitioning(config, _schema_to_bq_fields(_RowSchema))
+        tp = _time_partitioning(config, to_fields(_RowSchema.field_specs()))
         assert tp is not None
         assert tp.type_ == bq_type
 
@@ -422,7 +349,7 @@ class TestTimePartitioning:
         # an unpartitioned table beats a failed create.
         config = il.TimePartitionConfig(column="day", granularity=il.TimeGranularity.HOUR)
         with pytest.warns(UserWarning, match="hourly partitioning needs DATETIME or TIMESTAMP"):
-            tp = _time_partitioning(config, _schema_to_bq_fields(_RowSchema))
+            tp = _time_partitioning(config, to_fields(_RowSchema.field_specs()))
         assert tp is None
 
 
