@@ -1,12 +1,12 @@
 <script setup lang="ts">
-definePageMeta({ title: 'Executions' })
+definePageMeta({ title: 'Executions', fullBleed: true })
 
 const route = useRoute()
 const router = useRouter()
 
 const items = [
-    { label: 'Runs', value: 'runs', slot: 'runs' },
-    { label: 'Backfills', value: 'backfills', slot: 'backfills' },
+    { label: 'Runs', value: 'runs', icon: 'i-lucide-activity' },
+    { label: 'Backfills', value: 'backfills', icon: 'i-lucide-history' },
 ]
 
 const activeTab = computed({
@@ -23,16 +23,14 @@ onMounted(() => {
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <UTabs :items="items"
-               variant="link"
-               :model-value="activeTab"
-               @update:model-value="activeTab = $event as string">
+        <PageTabs v-model="activeTab"
+                  :items="items">
             <template #runs>
                 <ExecutionsRunsTable />
             </template>
             <template #backfills>
                 <ExecutionsBackfillsTable />
             </template>
-        </UTabs>
+        </PageTabs>
     </div>
 </template>
