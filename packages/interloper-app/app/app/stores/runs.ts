@@ -1,5 +1,17 @@
 import type { Run } from '~/types/run'
 
+/** Target-side narrowing of the runs list; empty/null means no filter. */
+export interface RunFilters {
+    /** Case-insensitive match on the target's name or key. */
+    q: string
+    /** Target component kind. */
+    kind: string | null
+    /** Target type (catalog key). */
+    key: string | null
+}
+
+const NO_FILTERS: RunFilters = { q: '', kind: null, key: null }
+
 export const useRunsStore = defineStore('runs', () => {
     const { apiFetch, apiFetchRaw } = useApi()
     const orgStore = useOrganisationStore()
@@ -11,6 +23,7 @@ export const useRunsStore = defineStore('runs', () => {
     const total = ref(0)
     const pageSize = ref(50)
     const pageIndex = ref(0)
+    const filters = ref<RunFilters>({ ...NO_FILTERS })
     const loading = ref(false)
     const error = ref<Error | null>(null)
 
@@ -18,6 +31,7 @@ export const useRunsStore = defineStore('runs', () => {
      * Getters
      **********************/
     const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
+    const filtered = computed(() => filters.value.q !== '' || filters.value.kind !== null || filters.value.key !== null)
 
     /**********************
      * Internals
@@ -37,30 +51,46 @@ export const useRunsStore = defineStore('runs', () => {
         if (existed) total.value = Math.max(0, total.value - 1)
     }
 
+    /** The client-side reading of the active filters, for records arriving over realtime. */
+    function _matches(run: Run): boolean {
+        const { q, kind, key } = filters.value
+        if (kind && run.component_kind !== kind) return false
+        if (key && run.component_key !== key) return false
+        if (!q) return true
+        const needle = q.toLowerCase()
+        return [run.component_name, run.component_key].some(text => text?.toLowerCase().includes(needle))
+    }
+
+    /** A realtime record enters the list only if it matches the filters; one already listed is always refreshed. */
+    function _onRealtime(record: Run) {
+        if (findById(record.id) || _matches(record)) _upsert(record)
+    }
+
     /**********************
      * Realtime
      **********************/
     useRealtimeSubscription({
         table: 'runs',
         scope: () => orgStore.organisation?.id,
-        onInsert: (record: Record<string, any>) => _upsert(record as Run),
-        onUpdate: (record: Record<string, any>) => _upsert(record as Run),
+        onInsert: (record: Record<string, any>) => _onRealtime(record as Run),
+        onUpdate: (record: Record<string, any>) => _onRealtime(record as Run),
         onDelete: (record: Record<string, any>) => _remove(record.id),
     })
 
     /**********************
      * Actions
      **********************/
-    async function fetch(filters?: { componentId?: string; backfillId?: string; status?: string }) {
+    async function fetch() {
         loading.value = true
         error.value = null
         try {
             const params = new URLSearchParams()
             params.set('limit', String(pageSize.value))
             params.set('offset', String(pageIndex.value * pageSize.value))
-            if (filters?.componentId) params.set('component_id', filters.componentId)
-            if (filters?.backfillId) params.set('backfill_id', filters.backfillId)
-            if (filters?.status) params.set('status', filters.status)
+            const { q, kind, key } = filters.value
+            if (q) params.set('q', q)
+            if (kind) params.set('component_kind', kind)
+            if (key) params.set('component_key', key)
             const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
             runs.value = res._data ?? []
             total.value = Number(res.headers.get('X-Total-Count') ?? runs.value.length)
@@ -99,6 +129,22 @@ export const useRunsStore = defineStore('runs', () => {
         await fetch()
     }
 
+    /** Narrow the list; the page restarts at the first, since the old offset means nothing under new filters. */
+    async function setFilters(next: Partial<RunFilters>) {
+        filters.value = { ...filters.value, ...next }
+        pageIndex.value = 0
+        await fetch()
+    }
+
+    /**
+     * Drop the filters without refetching. The runs table calls this when it
+     * leaves, so the pages sharing this list (collection, sources) fetch it
+     * unfiltered on their own mount.
+     */
+    function clearFilters() {
+        filters.value = { ...NO_FILTERS }
+    }
+
     /**********************
      * Lookups
      **********************/
@@ -110,6 +156,7 @@ export const useRunsStore = defineStore('runs', () => {
         runs.value = []
         total.value = 0
         pageIndex.value = 0
+        clearFilters()
         loading.value = false
         error.value = null
     }
@@ -121,6 +168,8 @@ export const useRunsStore = defineStore('runs', () => {
         total,
         pageSize,
         pageIndex,
+        filters,
+        filtered,
         totalPages,
         loading,
         error,
@@ -129,6 +178,8 @@ export const useRunsStore = defineStore('runs', () => {
         createRun,
         retryRun,
         goToPage,
+        setFilters,
+        clearFilters,
         findById,
         _upsert,
         _remove,

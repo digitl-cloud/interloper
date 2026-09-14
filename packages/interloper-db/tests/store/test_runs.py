@@ -107,9 +107,9 @@ def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
         return {run.partition_key: run.status for run in runs if run.partition_key}
 
 
-def _component(store: Store, kind: str) -> UUID:
+def _component(store: Store, kind: str, key: str | None = None, name: str | None = None) -> UUID:
     with Session(store.engine) as session:
-        row = Component(id=uuid4(), org_id=_ORG_ID, kind=kind, key=kind, name=kind)
+        row = Component(id=uuid4(), org_id=_ORG_ID, kind=kind, key=key or kind, name=name or kind)
         session.add(row)
         session.commit()
         assert row.id is not None
@@ -555,7 +555,7 @@ class TestBackfillProgression:
 
 
 class TestRunFilters:
-    """``list_all``/``count`` narrow on component, backfill and status."""
+    """``list_all``/``count`` narrow on component, backfill, status and the target's identity."""
 
     def test_the_component_filter_narrows_the_listing(self, store: Store):
         target = _component(store, kind="source")
@@ -585,3 +585,29 @@ class TestRunFilters:
 
         assert store.runs.list_all(uuid4()) == []
         assert store.runs.count(uuid4()) == 0
+
+    def test_the_kind_filter_narrows_to_the_targets_kind(self, store: Store):
+        job = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
+        store.runs.create(_ORG_ID, component_id=_component(store, kind="source"))
+
+        assert [row.id for row in store.runs.list_all(_ORG_ID, component_kind="job")] == [job.id]
+        assert store.runs.count(_ORG_ID, component_kind="job") == 1
+
+    def test_the_key_filter_narrows_to_the_targets_type(self, store: Store):
+        facebook = store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="facebook_ads"))
+        store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="google_ads"))
+
+        assert [row.id for row in store.runs.list_all(_ORG_ID, component_key="facebook_ads")] == [facebook.id]
+        assert store.runs.count(_ORG_ID, component_key="facebook_ads") == 1
+
+    def test_the_search_matches_the_targets_name_or_key_case_insensitively(self, store: Store):
+        named = _component(store, kind="source", key="s1", name="Swarovski FB")
+        keyed = _component(store, kind="job", key="swarovski_daily")
+        by_name = store.runs.create(_ORG_ID, component_id=named)
+        by_key = store.runs.create(_ORG_ID, component_id=keyed)
+        store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="s2", name="Other"))
+        store.runs.create(_ORG_ID)
+
+        listed = {row.id for row in store.runs.list_all(_ORG_ID, q="SWARO")}
+        assert listed == {by_name.id, by_key.id}
+        assert store.runs.count(_ORG_ID, q="SWARO") == 2

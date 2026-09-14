@@ -146,6 +146,9 @@ class RunStore:
         status: str | None = None,
         after: datetime | None = None,
         before: datetime | None = None,
+        q: str | None = None,
+        component_kind: str | None = None,
+        component_key: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Run]:
@@ -158,6 +161,9 @@ class RunStore:
             status: Optional status filter.
             after: Keep runs still executing at or after this instant.
             before: Keep runs that had started by this instant.
+            q: Keep runs whose target's name or key contains this, case-insensitively.
+            component_kind: Keep runs whose target is of this kind.
+            component_key: Keep runs whose target is of this type (catalog key).
             limit: Max results (default 50).
             offset: Pagination offset.
 
@@ -167,7 +173,19 @@ class RunStore:
         with session_scope(self._engine) as session:
             statement = (
                 select(Run)
-                .where(*self._run_filters(org_id, component_id, backfill_id, status, after, before))
+                .where(
+                    *self._run_filters(
+                        org_id,
+                        component_id,
+                        backfill_id,
+                        status,
+                        after,
+                        before,
+                        q=q,
+                        component_kind=component_kind,
+                        component_key=component_key,
+                    )
+                )
                 .order_by(col(Run.created_at).desc())
                 .offset(offset)
                 .limit(limit)
@@ -184,8 +202,11 @@ class RunStore:
         status: str | None = None,
         after: datetime | None = None,
         before: datetime | None = None,
+        q: str | None = None,
+        component_kind: str | None = None,
+        component_key: str | None = None,
     ) -> int:
-        """Count runs matching the same filters as :meth:`list_runs`.
+        """Count runs matching the same filters as :meth:`list_all`.
 
         Args:
             org_id: Organisation UUID.
@@ -194,6 +215,9 @@ class RunStore:
             status: Optional status filter.
             after: Keep runs still executing at or after this instant.
             before: Keep runs that had started by this instant.
+            q: Keep runs whose target's name or key contains this, case-insensitively.
+            component_kind: Keep runs whose target is of this kind.
+            component_key: Keep runs whose target is of this type (catalog key).
 
         Returns:
             Total number of matching runs (ignoring limit/offset).
@@ -202,7 +226,19 @@ class RunStore:
             statement = (
                 select(func.count())
                 .select_from(Run)
-                .where(*self._run_filters(org_id, component_id, backfill_id, status, after, before))
+                .where(
+                    *self._run_filters(
+                        org_id,
+                        component_id,
+                        backfill_id,
+                        status,
+                        after,
+                        before,
+                        q=q,
+                        component_kind=component_kind,
+                        component_key=component_key,
+                    )
+                )
             )
             return session.exec(statement).one()
 
@@ -479,13 +515,20 @@ class RunStore:
         status: str | None,
         after: datetime | None = None,
         before: datetime | None = None,
+        *,
+        q: str | None = None,
+        component_kind: str | None = None,
+        component_key: str | None = None,
     ) -> list[Any]:
-        """The shared where-clauses of :meth:`RunStore.list_runs` / ``count_runs``.
+        """The shared where-clauses of :meth:`RunStore.list_all` / :meth:`RunStore.count`.
 
         ``after``/``before`` select the runs whose execution *overlaps* the window
         — a run occupies ``[started_at, completed_at)``, left open-ended while it
         is still running. Runs that never started occupy no time and so fall
         outside every window.
+
+        The target filters read the target component through the relationship,
+        so a run whose target was deleted matches none of them.
 
         Args:
             org_id: Organisation whose runs are listed; always applied.
@@ -498,11 +541,29 @@ class RunStore:
                 instant. ``None`` leaves the window open-ended in the past.
             before: Window end — keep runs that had started by this instant.
                 ``None`` leaves the window open-ended in the future.
+            q: Keep runs whose target's name or key contains this text,
+                case-insensitively; ``None`` applies no search.
+            component_kind: Keep runs whose target is of this kind; ``None``
+                applies no kind filter.
+            component_key: Keep runs whose target is of this type (catalog
+                key); ``None`` applies no type filter.
 
         Returns:
             Filter expressions for the given criteria.
         """
         filters: list[Any] = [Run.org_id == org_id]
+        target = col(Run.target)
+        if q:
+            filters.append(
+                target.has(
+                    col(Component.name).icontains(q, autoescape=True)
+                    | col(Component.key).icontains(q, autoescape=True)
+                )
+            )
+        if component_kind:
+            filters.append(target.has(col(Component.kind) == component_kind))
+        if component_key:
+            filters.append(target.has(col(Component.key) == component_key))
         if component_id:
             filters.append(Run.component_id == component_id)
         if backfill_id:
