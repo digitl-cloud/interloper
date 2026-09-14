@@ -22,16 +22,11 @@ export const useRunsStore = defineStore('runs', () => {
     /**********************
      * Internals
      **********************/
-    function _upsert(run: Partial<Run> & { id: string }) {
+    function _upsert(run: Run) {
         const idx = runs.value.findIndex(r => r.id === run.id)
-        const existing = runs.value[idx]
-        if (idx >= 0 && existing) {
-            // Strip undefined values so realtime partials don't overwrite richer API data
-            const clean = Object.fromEntries(Object.entries(run).filter(([, v]) => v !== undefined)) as Partial<Run>
-            runs.value[idx] = { ...existing, ...clean }
-        }
+        if (idx >= 0) runs.value[idx] = { ...runs.value[idx], ...run }
         else {
-            runs.value.unshift(run as Run)
+            runs.value.unshift(run)
             total.value++
         }
     }
