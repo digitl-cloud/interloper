@@ -3,7 +3,7 @@ import { h, resolveComponent } from 'vue'
 import type { TableColumn, TabsItem, DropdownMenuItem } from '@nuxt/ui'
 import type { PersonalAccessToken } from '~/types/token'
 
-definePageMeta({ title: 'Authentication', layout: 'settings' })
+definePageMeta({ title: 'Authentication', layout: 'settings', fullBleed: true })
 
 const UBadge = resolveComponent('UBadge')
 
@@ -31,12 +31,11 @@ onMounted(() => {
 })
 
 const items = computed<TabsItem[]>(() => [
-    { label: 'Sign in', value: 'signin', icon: 'i-lucide-log-in', slot: 'signin' },
+    { label: 'Sign in', value: 'signin', icon: 'i-lucide-log-in' },
     {
         label: 'Personal Access Tokens',
         value: 'tokens',
         icon: 'i-lucide-key',
-        slot: 'tokens',
         badge: loading.value ? undefined : tokens.value.length,
     },
 ])
@@ -151,12 +150,10 @@ const columns: TableColumn<PersonalAccessToken>[] = [
 
 <template>
     <div class="flex flex-col flex-1 min-h-0">
-        <UTabs :items="items"
-               variant="link"
-               :model-value="activeTab"
-               @update:model-value="activeTab = $event as string">
+        <PageTabs v-model="activeTab"
+                  :items="items">
             <template #signin>
-                <div class="mx-auto w-full max-w-[720px] pt-4">
+                <div class="mx-auto w-full max-w-[720px]">
                     <div class="mb-3 flex items-center gap-2">
                         <UIcon name="i-lucide-log-in"
                                class="size-4 text-muted" />
@@ -182,24 +179,22 @@ const columns: TableColumn<PersonalAccessToken>[] = [
             </template>
 
             <template #tokens>
-                <div class="pt-4">
-                    <DataTable :columns="columns"
-                               :data="tokens"
-                               :loading="loading"
-                               :row-actions="rowActions"
-                               bordered
-                               no-actions
-                               no-row-click
-                               search-placeholder="Search tokens...">
-                        <template #toolbar>
-                            <UButton icon="i-lucide-plus"
-                                     label="New token"
-                                     @click="createOpen = true" />
-                        </template>
-                    </DataTable>
-                </div>
+                <DataTable :columns="columns"
+                           :data="tokens"
+                           :loading="loading"
+                           :row-actions="rowActions"
+                           bordered
+                           no-actions
+                           no-row-click
+                           search-placeholder="Search tokens...">
+                    <template #toolbar>
+                        <UButton icon="i-lucide-plus"
+                                 label="New token"
+                                 @click="createOpen = true" />
+                    </template>
+                </DataTable>
             </template>
-        </UTabs>
+        </PageTabs>
 
         <SettingsTokenCreateModal v-model:open="createOpen"
                                   @created="loadTokens" />
