@@ -94,6 +94,8 @@ function handleSaved() {
     componentsStore.fetchAll(['destination'])
     drawerOpen.value = false
 }
+
+const typeKey = ref<string | null>(null)
 </script>
 
 <template>
@@ -106,6 +108,7 @@ function handleSaved() {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="destinations"
+                       :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :delete-impact="componentsStore.deleteImpact"
@@ -113,6 +116,10 @@ function handleSaved() {
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.reload()">
+                <template #filters>
+                    <TypeFilter v-model="typeKey"
+                                :components="destinations" />
+                </template>
 
                 <template #empty>
                     <EmptyState icon="i-lucide-hard-drive"

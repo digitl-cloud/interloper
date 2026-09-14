@@ -7,7 +7,6 @@
  * behind a component's key); the bulk buttons act on what the filters leave
  * visible, so selections made under another filter survive.
  */
-import { capitalize } from 'vue'
 import type { ComponentRecord } from '~/types/component'
 
 const selectedIds = defineModel<string[]>({ default: () => [] })
@@ -18,52 +17,22 @@ const props = defineProps<{
     noun?: string
 }>()
 
-const catalogStore = useCatalogStore()
+const kindFilter = ref<string | null>(null)
+const keyFilter = ref<string | null>(null)
 
-/** Sentinel for "no filter" — an empty value would clear the select. */
-const ALL = '__all__'
+/** Type choices follow the kind in view, so the two filters never contradict. */
+const byKind = computed(() => kindFilter.value
+    ? props.components.filter(component => component.kind === kindFilter.value)
+    : props.components)
 
-const kindFilter = ref(ALL)
-const keyFilter = ref(ALL)
+watch(kindFilter, () => { keyFilter.value = null })
 
-/** Display name of a component's type (source-owned assets live under their source). */
-function typeName(component: ComponentRecord): string {
-    const defn = component.kind === 'asset'
-        ? catalogStore.getAssetDefinition(component.key)
-        : catalogStore.catalog[component.key]
-    return defn?.name ?? component.key
-}
-
-const kindItems = computed(() => [
-    { label: 'All kinds', value: ALL },
-    ...[...new Set(props.components.map(c => c.kind))].sort()
-        .map(kind => ({ label: capitalize(kind), value: kind })),
-])
-
-/** Type choices for the kind in view, so the two filters never contradict. */
-const keyItems = computed(() => {
-    const names = new Map<string, string>()
-    for (const component of props.components) {
-        if (kindFilter.value !== ALL && component.kind !== kindFilter.value) continue
-        names.set(component.key, typeName(component))
-    }
-    return [
-        { label: 'All types', value: ALL },
-        ...[...names.entries()]
-            .sort(([, a], [, b]) => a.localeCompare(b))
-            .map(([key, label]) => ({ label, value: key })),
-    ]
-})
-
-watch(kindFilter, () => { keyFilter.value = ALL })
-
-const filtered = computed(() => props.components.filter(component =>
-    (kindFilter.value === ALL || component.kind === kindFilter.value)
-    && (keyFilter.value === ALL || component.key === keyFilter.value),
+const filtered = computed(() => byKind.value.filter(component =>
+    keyFilter.value === null || component.key === keyFilter.value,
 ))
 
-/** One choice plus the sentinel is no choice at all. */
-const showFilters = computed(() => kindItems.value.length > 2 || keyItems.value.length > 2)
+const kinds = computed(() => new Set(props.components.map(c => c.kind)).size)
+const keys = computed(() => new Set(props.components.map(c => c.key)).size)
 
 function toggle(id: string) {
     const idx = selectedIds.value.indexOf(id)
@@ -83,23 +52,15 @@ function deselectVisible() {
 
 <template>
     <div class="flex flex-col gap-3">
-        <div v-if="showFilters && components.length"
+        <!-- A single kind or type is no choice at all. -->
+        <div v-if="kinds > 1 || keys > 1"
              class="flex items-center gap-2">
-            <USelect v-if="kindItems.length > 2"
-                     v-model="kindFilter"
-                     :items="kindItems"
-                     value-key="value"
-                     size="sm"
-                     icon="i-lucide-shapes"
-                     class="w-40" />
-            <USelectMenu v-if="keyItems.length > 2"
-                         v-model="keyFilter"
-                         :items="keyItems"
-                         value-key="value"
-                         size="sm"
-                         icon="i-lucide-tag"
-                         :search-input="{ placeholder: 'Search types...' }"
-                         class="w-56" />
+            <KindFilter v-if="kinds > 1"
+                        v-model="kindFilter"
+                        :components="components" />
+            <TypeFilter v-if="keys > 1"
+                        v-model="keyFilter"
+                        :components="byKind" />
         </div>
 
         <div class="flex items-center justify-between">

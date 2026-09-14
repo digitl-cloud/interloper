@@ -155,6 +155,8 @@ async function handleDelete(ids: string[]) {
         toast.add(inUseToast(e, 'Source') ?? errorToast(e, 'Failed to delete source'))
     }
 }
+
+const typeKey = ref<string | null>(null)
 </script>
 
 <template>
@@ -169,6 +171,7 @@ async function handleDelete(ids: string[]) {
         <div class="flex flex-col flex-1 min-h-0">
             <DataTable :columns="columns"
                        :data="sources"
+                       :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
                        :error="componentsStore.error"
                        :row-actions="rowActions"
@@ -177,6 +180,10 @@ async function handleDelete(ids: string[]) {
                        @delete="handleDelete"
                        @edit="handleEdit"
                        @retry="componentsStore.reload()">
+                <template #filters>
+                    <TypeFilter v-model="typeKey"
+                                :components="sources" />
+                </template>
 
                 <template #empty>
                     <SourcesEmptyState @create="handleCreate"
