@@ -3,17 +3,15 @@
  * One turn's work trail: what the model thought and what it did, in order,
  * behind a single collapsible.
  *
- * Thinking and acting are one account, not two, so they share a disclosure: the
- * header is the Nuxt UI chat template's reasoning trigger, shimmering while the
- * turn is still working and settling into "Thought for N seconds". A turn whose
- * model reports no thoughts falls back to a plain count of its steps.
+ * Folded by default. The trigger is the turn's progress indicator, naming the
+ * step the trail is on while it runs and settling into how long the whole thing
+ * took, so the account is legible without opening anything.
  */
-// Resolved by name at runtime, so they have to be imported rather than left to
-// the template compiler's auto-import.
-import { UChatReasoning, UChatTool } from '#components'
 import type { AgentActivity, AgentStep } from '~/types/agent'
 
 const props = defineProps<{ steps: AgentStep[], cacheKey: string, seconds?: number, streaming?: boolean }>()
+
+const appConfig = useAppConfig()
 
 /** What each tool is doing, in the reader's terms rather than the function's. */
 const TOOL_LABELS: Record<string, string> = {
@@ -71,46 +69,36 @@ const ICONS: Record<AgentActivity['kind'], string> = {
 /** Cap the payload preview: a catalog listing runs to hundreds of kilobytes. */
 const PREVIEW_LIMIT = 4000
 
-const activities = computed(() => props.steps.filter(step => step.kind !== 'thought') as AgentActivity[])
-const failed = computed(() => activities.value.filter(a => a.state === 'error').length)
+/**
+ * The trigger's leading slot swaps its icon for the chevron on hover and while
+ * open, the way the Nuxt UI chat components do their own.
+ */
+const RESTING = 'absolute inset-0 size-4 transition-opacity duration-200 ease-out group-hover:opacity-0 group-data-[state=open]:opacity-0'
+const CHEVRON_SWAP = 'absolute inset-0 size-4 opacity-0 transition-[rotate,opacity] duration-200 ease-out group-hover:opacity-100 group-data-[state=open]:opacity-100 group-data-[state=open]:rotate-180 motion-reduce:transition-none'
+const CHEVRON_ALONE = 'size-4 shrink-0 transition-transform duration-200 ease-out group-data-[state=open]:rotate-180 motion-reduce:transition-none'
+
+const activities = computed(() => props.steps.filter((step): step is AgentActivity => step.kind !== 'thought'))
+const failed = computed(() => activities.value.filter(activity => activity.state === 'error').length)
+const thought = computed(() => props.steps.some(step => step.kind === 'thought'))
 
 /**
- * The thoughts, joined.
+ * What the trigger says while the turn runs: the step the trail is on.
  *
- * `UChatReasoning` decides whether there is anything to open from its `text`,
- * and an empty one means this model reported none, which is what sends the
- * trail to the plain-count header instead.
+ * The *last* step rather than the one still running, because a tool settles in
+ * milliseconds and the model then thinks for seconds. Keying on `running` put
+ * the name up for an instant and took it away again.
  */
-const reasoning = computed(() => props.steps.filter(step => step.kind === 'thought').map(step => step.text).join('\n\n'))
-
-/** The disclosure the trail hangs off: the reasoning trigger where there is reasoning, a step count otherwise. */
-const header = computed(() => {
-    if (reasoning.value) {
-        return {
-            is: UChatReasoning,
-            props: { text: reasoning.value, streaming: props.streaming, duration: props.seconds },
-        }
-    }
-    const count = activities.value.length
-    return {
-        is: UChatTool,
-        props: {
-            text: `${count} step${count === 1 ? '' : 's'}`,
-            suffix: failed.value ? `${failed.value} failed` : undefined,
-        },
-    }
+const current = computed(() => {
+    const last = props.steps[props.steps.length - 1]
+    return last && last.kind !== 'thought' ? label(last) : 'Thinking...'
 })
 
-/**
- * Both header components theme their body for preformatted prose, which this
- * one is not: it holds rendered markdown and step rows. The height cap earns
- * its keep while the turn is still writing, bounding a trail that has no end
- * in sight, but not once the reader has opened a finished one deliberately.
- */
-const ui = computed(() => ({
-    body: props.streaming ? 'whitespace-normal' : 'max-h-none whitespace-normal',
-    ...(failed.value ? { leadingIcon: 'text-error' } : {}),
-}))
+/** What it says once the turn is done: how long it thought, or what it did if it reported no thinking. */
+const settled = computed(() => {
+    if (!thought.value) return `${activities.value.length} step${activities.value.length === 1 ? '' : 's'}`
+    if (props.seconds === undefined) return 'Thought'
+    return `Thought for ${_duration(props.seconds)}`
+})
 
 function label(activity: AgentActivity) {
     if (activity.kind === 'transfer') return `Asking ${AGENT_LABELS[activity.name] ?? activity.name}`
@@ -126,6 +114,12 @@ function preview(payload: Record<string, any>) {
     return json.length > PREVIEW_LIMIT ? `${json.slice(0, PREVIEW_LIMIT)}\n\u2026` : json
 }
 
+function _duration(seconds: number) {
+    if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`
+    const minutes = Math.floor(seconds / 60)
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`
+}
+
 /** Fall back to the bare function name, made readable, for a tool with no label. */
 function _readable(name: string) {
     const words = name.replace(/_/g, ' ')
@@ -134,42 +128,62 @@ function _readable(name: string) {
 </script>
 
 <template>
-    <component :is="header.is"
-               v-bind="header.props"
-               :icon="failed ? 'i-lucide-triangle-alert' : undefined"
-               chevron="leading"
-               :ui="ui">
-        <div class="flex flex-col items-start gap-2">
-            <template v-for="step in props.steps"
-                      :key="step.id">
-                <MDC v-if="step.kind === 'thought'"
-                     :value="step.text"
-                     :cache-key="`${props.cacheKey}-${step.id}`"
-                     class="*:first:mt-0 *:last:mb-0" />
+    <UCollapsible>
+        <button type="button"
+                class="group flex w-full items-center gap-1.5 min-w-0 rounded-sm text-sm text-muted hover:text-default transition-colors">
+            <span class="relative size-4 shrink-0">
+                <AgentIndicator v-if="props.streaming"
+                                :class="RESTING" />
+                <UIcon v-else-if="failed"
+                       name="i-lucide-triangle-alert"
+                       :class="[RESTING, 'text-error']" />
+                <UIcon :name="appConfig.ui.icons.chevronDown"
+                       :class="props.streaming || failed ? CHEVRON_SWAP : CHEVRON_ALONE" />
+            </span>
 
-                <UChatTool v-else
-                           :text="label(step)"
-                           :icon="icon(step)"
-                           :loading="step.state === 'running'"
-                           :streaming="step.state === 'running'"
-                           chevron="leading"
-                           :ui="step.state === 'error' ? { leadingIcon: 'text-error' } : undefined">
-                    <div class="flex flex-col gap-2 py-1">
-                        <div v-if="step.args">
-                            <div class="eyebrow text-dimmed mb-1">Input</div>
-                            <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.args) }}</pre>
+            <UChatShimmer v-if="props.streaming"
+                          :text="current"
+                          class="truncate" />
+            <span v-else
+                  class="truncate">{{ settled }}</span>
+        </button>
+
+        <template #content>
+            <!-- Bounded while the trail is still being written, in full once the
+                 reader has opened a finished one. -->
+            <div class="flex flex-col items-start gap-2 pt-2 text-sm text-dimmed"
+                 :class="props.streaming && 'max-h-[200px] overflow-y-auto'">
+                <template v-for="step in props.steps"
+                          :key="step.id">
+                    <MDC v-if="step.kind === 'thought'"
+                         :value="step.text"
+                         :cache-key="`${props.cacheKey}-${step.id}`"
+                         class="*:first:mt-0 *:last:mb-0" />
+
+                    <UChatTool v-else
+                               :text="label(step)"
+                               :icon="icon(step)"
+                               :loading="step.state === 'running'"
+                               :streaming="step.state === 'running'"
+                               chevron="leading"
+                               :ui="step.state === 'error' ? { leadingIcon: 'text-error' } : undefined">
+                        <div class="flex flex-col gap-2 py-1">
+                            <div v-if="step.args">
+                                <div class="eyebrow text-dimmed mb-1">Input</div>
+                                <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.args) }}</pre>
+                            </div>
+                            <div v-if="step.response">
+                                <div class="eyebrow text-dimmed mb-1">Output</div>
+                                <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.response) }}</pre>
+                            </div>
+                            <p v-if="!step.args && !step.response"
+                               class="text-[12px] text-dimmed">
+                                No details.
+                            </p>
                         </div>
-                        <div v-if="step.response">
-                            <div class="eyebrow text-dimmed mb-1">Output</div>
-                            <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.response) }}</pre>
-                        </div>
-                        <p v-if="!step.args && !step.response"
-                           class="text-[12px] text-dimmed">
-                            No details.
-                        </p>
-                    </div>
-                </UChatTool>
-            </template>
-        </div>
-    </component>
+                    </UChatTool>
+                </template>
+            </div>
+        </template>
+    </UCollapsible>
 </template>
