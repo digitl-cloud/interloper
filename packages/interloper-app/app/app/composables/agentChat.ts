@@ -3,6 +3,7 @@ import type {
     AgentEvent,
     AgentFunctionCall,
     AgentFunctionResponse,
+    AgentStep,
     ChatMessage,
 } from '~/types/agent'
 
@@ -38,12 +39,14 @@ export function useAgentChat(sessionId: Ref<string>) {
     /**
      * True while the agent is busy with no thought summary to show for it.
      *
-     * A live summary says "Thinking..." itself, so the standalone cue is for the
-     * rest: the wait before the first one arrives, the stretch after it while
-     * tools run, and a model with no thoughts to report at all.
+     * A trail with thoughts in it says "Thinking..." itself, so the standalone
+     * cue is for the rest: the wait before the first one arrives, and a model
+     * with no thoughts to report at all.
      */
-    const thinking = computed(() =>
-        streaming.value && messages.value[messages.value.length - 1]?.reasoning === undefined)
+    const thinking = computed(() => {
+        const last = messages.value[messages.value.length - 1]
+        return streaming.value && !last?.steps?.some(step => step.kind === 'thought')
+    })
 
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
@@ -146,37 +149,49 @@ function _appendEvent(messages: ChatMessage[], event: AgentEvent, elapsed?: numb
     const role = event.author === 'user' ? 'user' as const : 'assistant' as const
 
     for (const part of event.content?.parts ?? []) {
-        if (part.text && part.thought) _appendReasoning(messages, part.text, elapsed)
+        if (part.text && part.thought) _appendThought(messages, part.text)
         else if (part.text) _appendText(messages, role, part.text)
         else if (part.functionCall) _startActivity(messages, part.functionCall)
         else if (part.functionResponse) _settleActivity(messages, part.functionResponse)
     }
+
+    // Credit the wait once per event: an event carrying two thoughts and a call
+    // is still one stretch of elapsed time, not three.
+    const trail = messages[messages.length - 1]
+    if (trail?.steps && elapsed) trail.workSeconds = (trail.workSeconds ?? 0) + elapsed
 }
 
 /** Append text to the trailing message when it is plain prose from the same author, else start one. */
 function _appendText(messages: ChatMessage[], role: 'user' | 'assistant', text: string) {
     const last = messages[messages.length - 1]
-    const plain = last && !last.activities && !last.connectionSetup && !last.selection
-        && !last.confirmation && last.reasoning === undefined
+    const plain = last && !last.steps && !last.connectionSetup && !last.selection && !last.confirmation
 
     if (plain && last.role === role) last.text += text
     else messages.push({ id: crypto.randomUUID(), role, text })
 }
 
-/** Append a thought summary to the trailing one, or start one timed by how long the model took to reach it. */
-function _appendReasoning(messages: ChatMessage[], text: string, elapsed?: number) {
+/** Append a thought summary to the trail, merging consecutive parts of the same one. */
+function _appendThought(messages: ChatMessage[], text: string) {
+    const steps = _trail(messages)
+    const last = steps[steps.length - 1]
+
+    if (last?.kind === 'thought') last.text += text
+    else steps.push({ id: crypto.randomUUID(), kind: 'thought', text })
+}
+
+/**
+ * The steps of the trail the running turn is building, started if it has none.
+ *
+ * Plain prose closes a trail: once the agent has said something out loud, what
+ * follows is a fresh stretch of work rather than more of the last one.
+ */
+function _trail(messages: ChatMessage[]): AgentStep[] {
     const last = messages[messages.length - 1]
-    if (last?.reasoning !== undefined) {
-        last.reasoning += text
-        return
-    }
-    messages.push({
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        text: '',
-        reasoning: text,
-        reasoningSeconds: elapsed,
-    })
+    if (last?.steps) return last.steps
+
+    const steps: AgentStep[] = []
+    messages.push({ id: crypto.randomUUID(), role: 'assistant', text: '', steps })
+    return steps
 }
 
 /**
@@ -192,22 +207,18 @@ function _elapsed(previous?: number, current?: number) {
     return seconds > 0 ? seconds : undefined
 }
 
-/** Open an activity row for a tool call, grouping consecutive calls into one message. */
+/** Open a step in the trail for a tool call. */
 function _startActivity(messages: ChatMessage[], call: AgentFunctionCall) {
     if (INTERACTION_TOOLS.has(call.name)) return
 
     const transfer = call.name === TRANSFER_TOOL
-    const activity: AgentActivity = {
+    _trail(messages).push({
         id: call.id || crypto.randomUUID(),
         name: transfer ? String(call.args?.agent_name ?? '') : call.name,
         kind: transfer ? 'transfer' : 'tool',
         state: 'running',
         args: transfer ? undefined : call.args,
-    }
-
-    const last = messages[messages.length - 1]
-    if (last?.activities) last.activities.push(activity)
-    else messages.push({ id: crypto.randomUUID(), role: 'assistant', text: '', activities: [activity] })
+    })
 }
 
 /** Close the activity a response answers, or raise the card an interaction tool stands for. */
@@ -261,14 +272,14 @@ function _extractCard(response: AgentFunctionResponse): Partial<ChatMessage> | n
  * otherwise the most recent still-running call of the same name is the match.
  */
 function _findActivity(messages: ChatMessage[], response: AgentFunctionResponse) {
-    const matches = (activity: AgentActivity) => {
-        if (activity.state !== 'running') return false
-        if (response.id) return activity.id === response.id
-        return response.name === TRANSFER_TOOL ? activity.kind === 'transfer' : activity.name === response.name
+    const matches = (step: AgentStep): step is AgentActivity => {
+        if (step.kind === 'thought' || step.state !== 'running') return false
+        if (response.id) return step.id === response.id
+        return response.name === TRANSFER_TOOL ? step.kind === 'transfer' : step.name === response.name
     }
 
     for (let i = messages.length - 1; i >= 0; i--) {
-        const found = messages[i]?.activities?.find(matches)
+        const found = messages[i]?.steps?.find(matches)
         if (found) return found
     }
     return undefined
@@ -291,8 +302,8 @@ function _failed(payload: Record<string, any> | undefined) {
 /** Close whatever is still running when a turn ends, so no row spins forever. */
 function _settleRunning(messages: ChatMessage[]) {
     for (const message of messages) {
-        for (const activity of message.activities ?? []) {
-            if (activity.state === 'running') activity.state = 'done'
+        for (const step of message.steps ?? []) {
+            if (step.kind !== 'thought' && step.state === 'running') step.state = 'done'
         }
     }
 }

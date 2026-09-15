@@ -104,6 +104,21 @@ export interface AgentActivity {
     response?: Record<string, any>
 }
 
+/** A thought summary the model emitted on its way to an answer. */
+export interface AgentThought {
+    id: string
+    kind: 'thought'
+    text: string
+}
+
+/**
+ * One entry in a turn's work trail: what the model thought, or what it did.
+ *
+ * Kept as a single ordered list because the two interleave, and the order is
+ * the account: thought, the tool it reached for, what it made of the result.
+ */
+export type AgentStep = AgentThought | AgentActivity
+
 /** Simplified chat message for UI rendering. */
 export interface ChatMessage {
     id: string
@@ -116,10 +131,8 @@ export interface ChatMessage {
     selection?: SelectionRequest
     /** When set, the message renders the inline confirmation summary card. */
     confirmation?: ConfirmationRequest
-    /** When set, the message renders the agent's tool calls and handovers. */
-    activities?: AgentActivity[]
-    /** When set, the message renders the model's thought summary. */
-    reasoning?: string
-    /** Whole seconds the model spent before producing that summary. */
-    reasoningSeconds?: number
+    /** When set, the message renders the turn's work trail: thoughts and steps, in order. */
+    steps?: AgentStep[]
+    /** Whole seconds that trail has taken so far. */
+    workSeconds?: number
 }

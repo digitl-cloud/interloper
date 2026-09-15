@@ -67,17 +67,15 @@ onMounted(async () => {
                                   :parts="[{ type: 'text', text: message.text }]"
                                   :variant="message.role === 'user' ? 'soft' : 'naked'"
                                   :side="message.role === 'user' ? 'right' : 'left'"
-                                  :icon="message.role === 'assistant' && !message.activities?.length && message.reasoning === undefined ? 'i-lucide-sparkles' : undefined"
+                                  :icon="message.role === 'assistant' && !message.steps?.length ? 'i-lucide-sparkles' : undefined"
                                   :ui="message.role === 'assistant' ? { body: 'flex-1' } : undefined">
                         <template #content>
                             <!-- Render the work trail or connect card, markdown for assistant, plain text for user -->
-                            <AgentReasoning v-if="message.reasoning !== undefined"
-                                            :text="message.reasoning"
-                                            :cache-key="message.id"
-                                            :streaming="message.id === liveMessageId"
-                                            :duration="message.reasoningSeconds" />
-                            <AgentActivityList v-else-if="message.activities?.length"
-                                               :activities="message.activities" />
+                            <AgentWork v-if="message.steps?.length"
+                                       :steps="message.steps"
+                                       :cache-key="message.id"
+                                       :streaming="message.id === liveMessageId"
+                                       :seconds="message.workSeconds" />
                             <AgentConnectCard v-else-if="message.connectionSetup"
                                               :request="message.connectionSetup"
                                               @created="onConnectionCreated" />
