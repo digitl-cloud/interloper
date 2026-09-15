@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v0.79.2 (2026-09-15)
+
+### Chores
+
+- **app**: Settle the work trail on "Thought for" alone
+  ([`ba16e63`](https://github.com/digitl-cloud/Interloper/commit/ba16e63eefc92386fe8f2d41cd1ca92f21947048))
+
+- **ci**: Publish the Helm chart to GHCR as an OCI artifact
+  ([`9d5e184`](https://github.com/digitl-cloud/Interloper/commit/9d5e184bf1cb952fab8db30f4a318cdfc82bc47f))
+
+### Documentation
+
+- Keep deployment tooling out of the release guide
+  ([`b3bd967`](https://github.com/digitl-cloud/Interloper/commit/b3bd967634e93f50b9bff0ffb63ddecc6400a69a))
+
+- **mcp**: Describe the deployment gap without naming our tooling
+  ([`76925cd`](https://github.com/digitl-cloud/Interloper/commit/76925cd3ac5488e388a445ef7a486c32a5f91dbd))
+
+### Features
+
+- **agent**: Show the model's thought summary while a turn runs
+  ([`4501ec6`](https://github.com/digitl-cloud/Interloper/commit/4501ec66794c19c43671aadb9961fc6d21040633))
+
+- **app**: Adopt the Nuxt UI chat template's thinking indicator
+  ([`6693942`](https://github.com/digitl-cloud/Interloper/commit/6693942d5d9167382e42c8a5e1630bc93401c17b))
+
+- **app**: Collapse the whole work trail behind one row
+  ([`2a93f20`](https://github.com/digitl-cloud/Interloper/commit/2a93f20a73bf2df44f050289ae218cd94668d570))
+
+- **app**: Fold the agent's work trail into a summary row
+  ([`f0e033e`](https://github.com/digitl-cloud/Interloper/commit/f0e033e9439ff486ed920ded0504515e8cf31dae))
+
+- **app**: Fold the steps into the thought summary
+  ([`cb1973f`](https://github.com/digitl-cloud/Interloper/commit/cb1973f8cc45763ea63a3d244c4762b5a8940670))
+
+- **app**: Make the agent's work trail its own progress indicator
+  ([`4b962d9`](https://github.com/digitl-cloud/Interloper/commit/4b962d9e148a3d2cba093bdb3634f13b85d2ecc3))
+
+- **app**: Name the running step on the folded work trail
+  ([`91a55a4`](https://github.com/digitl-cloud/Interloper/commit/91a55a440861701abbdd932603c0f03cf424e2df))
+
+- **app**: Show the agent's tool calls and handovers while it works
+  ([`ff92c13`](https://github.com/digitl-cloud/Interloper/commit/ff92c13f659ad8f5504c221b0410c4943baef09e))
+
+### Refactoring
+
+- **app**: Let the chat components do the work they were built for
+  ([`3320866`](https://github.com/digitl-cloud/Interloper/commit/3320866d6ebf377a88e21790d8571543e0414ce3))
+
+
 ## v0.79.1 (2026-09-15)
 
 ### Bug Fixes
