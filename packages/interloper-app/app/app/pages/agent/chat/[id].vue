@@ -4,7 +4,7 @@ definePageMeta({ layout: 'agent' })
 const route = useRoute()
 const sessionId = computed(() => route.params.id as string)
 
-const { messages, streaming, status, thinking, error, send, loadHistory } = useAgentChat(sessionId)
+const { messages, streaming, status, thinking, liveMessageId, error, send, loadHistory } = useAgentChat(sessionId)
 
 const input = ref('')
 
@@ -72,7 +72,8 @@ onMounted(async () => {
                         <template #content>
                             <!-- Render the work trail or connect card, markdown for assistant, plain text for user -->
                             <AgentActivityList v-if="message.activities?.length"
-                                               :activities="message.activities" />
+                                               :activities="message.activities"
+                                               :live="message.id === liveMessageId" />
                             <AgentConnectCard v-else-if="message.connectionSetup"
                                               :request="message.connectionSetup"
                                               @created="onConnectionCreated" />

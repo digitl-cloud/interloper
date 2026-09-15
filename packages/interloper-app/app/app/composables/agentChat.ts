@@ -36,6 +36,16 @@ export function useAgentChat(sessionId: Ref<string>) {
     const thinking = computed(() =>
         streaming.value && !messages.value.some(m => m.activities?.some(a => a.state === 'running')))
 
+    /**
+     * The message the running turn is still adding to, if any.
+     *
+     * An activity list stays open while it holds this id and folds once the
+     * turn moves past it, so the trail is expanded exactly while it is being
+     * written and quiet afterwards.
+     */
+    const liveMessageId = computed(() =>
+        streaming.value ? messages.value[messages.value.length - 1]?.id : undefined)
+
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
         const agentStore = useAgentStore()
@@ -115,7 +125,7 @@ export function useAgentChat(sessionId: Ref<string>) {
         }
     }
 
-    return { messages, streaming, status, thinking, error, send, loadHistory }
+    return { messages, streaming, status, thinking, liveMessageId, error, send, loadHistory }
 }
 
 /**
