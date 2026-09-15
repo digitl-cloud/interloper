@@ -9,7 +9,7 @@ const agentStore = useAgentStore()
 
 const sessionId = ref('')
 const sessionError = ref(false)
-const { messages, streaming, status, thinking, error, send } = useAgentChat(sessionId)
+const { messages, streaming, status, thinking, liveMessageId, error, send } = useAgentChat(sessionId)
 
 /**
  * Messages in the UIMessage shape UChatMessages expects. An activity group
@@ -129,7 +129,8 @@ const SUGGESTIONS = [
                                class="pb-2">
                     <template #content="{ message }">
                         <AgentActivityList v-if="(message as any).activities?.length"
-                                           :activities="(message as any).activities" />
+                                           :activities="(message as any).activities"
+                                           :live="message.id === liveMessageId" />
                         <AgentConnectCard v-else-if="(message as any).connectionSetup"
                                           :request="(message as any).connectionSetup"
                                           @created="onConnectionCreated" />
