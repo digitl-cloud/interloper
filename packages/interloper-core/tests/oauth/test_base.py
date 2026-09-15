@@ -97,6 +97,10 @@ class TestTokenFlows:
     def test_parse_refresh_without_rotation(self):
         assert self.SPEC.parse_refresh_token_response({"access_token": "a"}) == RefreshTokenResponse()
 
+    def test_parse_authorization_code_relays_the_rfc_shape(self):
+        payload = {"access_token": "a", "refresh_token": "rt", "expires_in": 60}
+        assert self.SPEC.parse_authorization_code_response(payload) == payload
+
 
 class TestAppCredentials:
     """In-house app credentials: the INTERLOPER_<PROVIDER>_* env convention."""

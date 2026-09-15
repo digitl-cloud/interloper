@@ -519,15 +519,13 @@ const visibleFields = computed(() => {
 })
 
 /**
- * Handle OAuth sign-in success — place the returned token into the connection's
+ * Handle OAuth sign-in success — place the issued token into the connection's
  * token field. The app credentials (client_id / client_secret) are resolved
  * server-side from env, so they're never part of the response.
  */
-function handleOAuthSuccess(tokens: Record<string, unknown>) {
+function handleOAuthSuccess(token: string) {
     const field = oauthTokenField.value
-    if (!field) return
-    const token = tokens.refresh_token ?? tokens.access_token
-    if (token !== undefined) data.value[field] = token
+    if (field) data.value[field] = token
 }
 
 const userStore = useUserStore()
