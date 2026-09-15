@@ -24,7 +24,9 @@ const props = defineProps<{
     noRowClick?: boolean
     /**
      * Design "bordered" table: an outer rounded frame replaces the floating
-     * header band (detail/settings pages); list pages keep the band.
+     * header band (detail/settings pages) and the table flows with the page.
+     * List pages keep the band, fill the panel and pin the footer to its
+     * bottom, the rows scrolling under the sticky header.
      */
     bordered?: boolean
     /**
@@ -168,7 +170,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
 </script>
 
 <template>
-    <div class="w-full flex flex-col gap-2">
+    <div class="w-full flex flex-col gap-2"
+         :class="!bordered && 'flex-1 min-h-0'">
         <UAlert v-if="error"
                 color="error"
                 icon="i-lucide-triangle-alert"
@@ -189,9 +192,9 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     icon="i-lucide-search"
                     class="max-w-sm"
                     @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
-            <slot name="filters" />
 
             <div class="ml-auto flex items-center gap-2">
+                <slot name="filters" />
                 <slot name="toolbar" />
 
                 <UButton v-if="selectedCount > 0"
@@ -220,8 +223,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     tr: noRowClick ? '' : 'cursor-pointer',
                     ...(bordered && { thead: '[&>tr]:bg-muted', th: 'first:pl-4', td: 'first:pl-4' }),
                 }"
-                :class="bordered && 'rounded-lg border border-default'"
-                class="max-h-[calc(100vh-16rem)]"
+                :class="bordered ? 'rounded-lg border border-default' : 'flex-1 min-h-0'"
                 @select="(_e: Event, row: any) => emit('edit', row.original)"
                 @contextmenu="onRowContextMenu">
             <template #actions-cell="{ row }">
@@ -245,6 +247,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
         </UDropdownMenu>
 
         <TableFooter v-if="showTable"
+                     class="shrink-0"
                      :page="pagination.pageIndex + 1"
                      :total="totalCount"
                      :page-size="PAGE_SIZE"
