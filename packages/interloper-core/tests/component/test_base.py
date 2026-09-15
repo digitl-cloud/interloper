@@ -122,6 +122,13 @@ class TestDiscriminator:
                 a: str = il.InputField(default="", discriminator=True)
                 b: str = il.InputField(default="", discriminator=True)
 
+    def test_discriminator_field_names_the_marked_field(self):
+        class FakeDiscriminated(Component):
+            account_id: str = il.InputField(default="", discriminator=True)
+
+        assert FakeDiscriminated.discriminator_field() == "account_id"
+        assert FakeComponent.discriminator_field() is None
+
     def test_instance_name_is_the_discriminator(self):
         class FakeShop(Component):
             shop_id: str = il.InputField(default="", discriminator=True)

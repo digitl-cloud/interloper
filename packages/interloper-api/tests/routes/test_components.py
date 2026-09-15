@@ -252,6 +252,7 @@ class TestPublicConfigDisclosure:
             status=lambda row, parent_key=None: "ok",
             decode_config=lambda row: decoded,
             public_config=lambda row: public,
+            discriminator=lambda row: None,
         )
         return cast(Store, SimpleNamespace(components=components))
 
@@ -274,6 +275,22 @@ class TestPublicConfigDisclosure:
             self._row("job", config={"enabled": True}), self._store({}, {}), include_config=False
         )
         assert response.config == {"enabled": True}
+
+
+class TestDiscriminatorDisclosure:
+    """Every response names the instance by its discriminator, list and detail alike."""
+
+    def test_response_carries_the_discriminator(self):
+        row = TestPublicConfigDisclosure._row("source", config={"account_id": "act_1"})
+        components = SimpleNamespace(
+            status=lambda row, parent_key=None: "ok",
+            decode_config=lambda row: row.config,
+            public_config=lambda row: {},
+            discriminator=lambda row: "act_1",
+        )
+        store = cast(Store, SimpleNamespace(components=components))
+        response = components_module.ComponentResponse.from_row(row, store, include_config=False)
+        assert response.discriminator == "act_1"
 
 
 class TestUnreadablePayload:
@@ -312,6 +329,7 @@ class TestUnreadablePayload:
             status=lambda row, parent_key=None: ComponentStatus.UNREADABLE,
             decode_config=_raise,
             public_config=_raise,
+            discriminator=lambda row: None,
         )
         return cast(Store, SimpleNamespace(components=components))
 
@@ -412,6 +430,7 @@ class CrudStore:
             status=lambda row, parent_key=None: ComponentStatus.OK,
             decode_config=lambda row: row.config or {},
             public_config=lambda row: {},
+            discriminator=lambda row: None,
         )
         self.relations = SimpleNamespace(
             list_all=self._list_relations,
@@ -979,7 +998,10 @@ class TestComponentResponseRelations:
             ]
         )
         store = cast(Store, SimpleNamespace(
-            components=SimpleNamespace(status=lambda row, parent_key=None: ComponentStatus.OK)
+            components=SimpleNamespace(
+                status=lambda row, parent_key=None: ComponentStatus.OK,
+                discriminator=lambda row: None,
+            )
         ))
 
         response = components_module.ComponentResponse.from_row(row, store, include_config=False)

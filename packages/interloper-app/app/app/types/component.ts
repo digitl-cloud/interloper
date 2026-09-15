@@ -35,6 +35,11 @@ export interface ComponentRecord {
     kind: string
     key: string
     name: string | null
+    /**
+     * The instance identifier the class discriminates on (an ad account id, a
+     * site URL). Disclosed on every response; `name` typically paraphrases it.
+     */
+    discriminator: string | null
     status: ComponentStatus
     /**
      * Secret kinds (connection/config/resource): decoded in detail responses;

@@ -90,12 +90,15 @@ function destinationsOf(source: ComponentRecord): ComponentRecord[] {
 
 const columns: TableColumn<ComponentRecord>[] = [
     {
-        accessorKey: 'name',
+        id: 'name',
         header: 'Source',
+        // The discriminator rides the accessor so the search box matches an account id as well as its name.
+        accessorFn: (row: ComponentRecord) => [row.name, row.discriminator].filter(Boolean).join(' '),
         cell: ({ row }) => {
+            const { name, discriminator } = row.original
             const children: any[] = [
                 h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
-                row.original.name,
+                name,
             ]
             const badge = statusBadge(sourceDrift(row.original))
             if (badge) {
@@ -108,7 +111,12 @@ const columns: TableColumn<ComponentRecord>[] = [
                     badge.label,
                 ])))
             }
-            return h('span', { class: 'flex items-center gap-2' }, children)
+            const title = h('span', { class: 'flex items-center gap-2' }, children)
+            if (!discriminator || discriminator === name) return title
+            return h('span', { class: 'flex flex-col gap-0.5' }, [
+                title,
+                h('span', { class: 'text-xs text-muted font-mono pl-6' }, discriminator),
+            ])
         },
     },
     {
