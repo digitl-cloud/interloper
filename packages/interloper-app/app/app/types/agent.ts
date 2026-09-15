@@ -25,6 +25,12 @@ export interface AgentFunctionResponse {
 /** A single part within an ADK event content. */
 export interface AgentEventPart {
     text?: string
+    /**
+     * Set on the model's thought summaries. The ADK leaves them on the event and
+     * merely keeps them out of the answer it assembles, so anything reading
+     * `text` has to tell the two apart itself.
+     */
+    thought?: boolean
     functionCall?: AgentFunctionCall
     functionResponse?: AgentFunctionResponse
 }
@@ -112,4 +118,8 @@ export interface ChatMessage {
     confirmation?: ConfirmationRequest
     /** When set, the message renders the agent's tool calls and handovers. */
     activities?: AgentActivity[]
+    /** When set, the message renders the model's thought summary. */
+    reasoning?: string
+    /** Whole seconds the model spent before producing that summary. */
+    reasoningSeconds?: number
 }

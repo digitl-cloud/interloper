@@ -29,21 +29,21 @@ export function useAgentChat(sessionId: Ref<string>) {
     /**
      * The message the running turn is still adding to, if any.
      *
-     * An activity list holding this id is the turn's progress indicator: it
-     * spins and names the step under way. Once the turn moves past it, it
-     * settles into a summary of what it did.
+     * A thought summary holding this id is still being reasoned out, which is
+     * what puts its collapsible in the open, shimmering state.
      */
     const liveMessageId = computed(() =>
         streaming.value ? messages.value[messages.value.length - 1]?.id : undefined)
 
     /**
-     * True while the agent is busy with no activity list to say so.
+     * True while the agent is busy with no thought summary to show for it.
      *
-     * A live list carries the cue itself, so the standalone one is for the rest:
-     * the wait before the first tool call, and a turn that only ever answers.
+     * A live summary says "Thinking..." itself, so the standalone cue is for the
+     * rest: the wait before the first one arrives, the stretch after it while
+     * tools run, and a model with no thoughts to report at all.
      */
     const thinking = computed(() =>
-        streaming.value && !messages.value[messages.value.length - 1]?.activities)
+        streaming.value && messages.value[messages.value.length - 1]?.reasoning === undefined)
 
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
@@ -53,7 +53,11 @@ export function useAgentChat(sessionId: Ref<string>) {
             if (!session?.events) return
 
             const restored: ChatMessage[] = []
-            for (const event of session.events) _appendEvent(restored, event)
+            let previous: number | undefined
+            for (const event of session.events) {
+                _appendEvent(restored, event, _elapsed(previous, event.timestamp))
+                previous = event.timestamp ?? previous
+            }
             _settleRunning(restored)
             messages.value = restored
         }
@@ -69,6 +73,10 @@ export function useAgentChat(sessionId: Ref<string>) {
         error.value = null
         messages.value.push({ id: crypto.randomUUID(), role: 'user', text })
         streaming.value = true
+
+        // ADK stamps events in epoch seconds, so the request start is the first
+        // mark to measure the model's opening think against.
+        let previous: number | undefined = Date.now() / 1000
 
         try {
             const response = await fetch(`/api/agent/sessions/${sessionId.value}/chat`, {
@@ -107,7 +115,8 @@ export function useAgentChat(sessionId: Ref<string>) {
                         const event: AgentEvent = JSON.parse(json)
                         // The message we just pushed locally comes back on the stream.
                         if (event.author === 'user') continue
-                        _appendEvent(messages.value, event)
+                        _appendEvent(messages.value, event, _elapsed(previous, event.timestamp))
+                        previous = event.timestamp ?? previous
                     }
                     catch {
                         // Skip malformed events
@@ -133,11 +142,12 @@ export function useAgentChat(sessionId: Ref<string>) {
  * Parts are walked in order so the rendered conversation keeps the agent's own
  * chronology: what it said, the tools it then called, what it said after.
  */
-function _appendEvent(messages: ChatMessage[], event: AgentEvent) {
+function _appendEvent(messages: ChatMessage[], event: AgentEvent, elapsed?: number) {
     const role = event.author === 'user' ? 'user' as const : 'assistant' as const
 
     for (const part of event.content?.parts ?? []) {
-        if (part.text) _appendText(messages, role, part.text)
+        if (part.text && part.thought) _appendReasoning(messages, part.text, elapsed)
+        else if (part.text) _appendText(messages, role, part.text)
         else if (part.functionCall) _startActivity(messages, part.functionCall)
         else if (part.functionResponse) _settleActivity(messages, part.functionResponse)
     }
@@ -146,10 +156,40 @@ function _appendEvent(messages: ChatMessage[], event: AgentEvent) {
 /** Append text to the trailing message when it is plain prose from the same author, else start one. */
 function _appendText(messages: ChatMessage[], role: 'user' | 'assistant', text: string) {
     const last = messages[messages.length - 1]
-    const plain = last && !last.activities && !last.connectionSetup && !last.selection && !last.confirmation
+    const plain = last && !last.activities && !last.connectionSetup && !last.selection
+        && !last.confirmation && last.reasoning === undefined
 
     if (plain && last.role === role) last.text += text
     else messages.push({ id: crypto.randomUUID(), role, text })
+}
+
+/** Append a thought summary to the trailing one, or start one timed by how long the model took to reach it. */
+function _appendReasoning(messages: ChatMessage[], text: string, elapsed?: number) {
+    const last = messages[messages.length - 1]
+    if (last?.reasoning !== undefined) {
+        last.reasoning += text
+        return
+    }
+    messages.push({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: '',
+        reasoning: text,
+        reasoningSeconds: elapsed,
+    })
+}
+
+/**
+ * Whole seconds between two ADK event timestamps.
+ *
+ * Undefined rather than zero when it rounds away or either end is missing:
+ * the reasoning collapsible reads a zero as "still thinking", where it treats
+ * an absent duration as the "no idea how long" it is.
+ */
+function _elapsed(previous?: number, current?: number) {
+    if (previous === undefined || current === undefined) return undefined
+    const seconds = Math.round(current - previous)
+    return seconds > 0 ? seconds : undefined
 }
 
 /** Open an activity row for a tool call, grouping consecutive calls into one message. */

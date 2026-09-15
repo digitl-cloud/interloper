@@ -12,22 +12,25 @@ const sessionError = ref(false)
 const { messages, streaming, status, thinking, liveMessageId, error, send } = useAgentChat(sessionId)
 
 /**
- * Messages in the UIMessage shape UChatMessages expects. An activity group
- * drops the assistant avatar: the rows read as one continuous trail of work
- * rather than a series of separate remarks.
+ * Messages in the UIMessage shape UChatMessages expects. A work trail or a
+ * thought summary drops the assistant avatar: both are an account of how the
+ * answer was reached, not a remark in their own right.
  */
 const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation || m.activities?.length)
+    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation
+        || m.activities?.length || m.reasoning !== undefined)
     .map(m => ({
         id: m.id,
         role: m.role,
         text: m.text,
         parts: [{ type: 'text' as const, text: m.text }],
-        icon: m.role === 'assistant' && !m.activities?.length ? 'i-lucide-sparkles' : undefined,
+        icon: m.role === 'assistant' && !m.activities?.length && m.reasoning === undefined ? 'i-lucide-sparkles' : undefined,
         connectionSetup: m.connectionSetup,
         selection: m.selection,
         confirmation: m.confirmation,
         activities: m.activities,
+        reasoning: m.reasoning,
+        reasoningSeconds: m.reasoningSeconds,
     })))
 
 /** Report a completed connection setup back into the chat so the agent continues. */
@@ -128,9 +131,13 @@ const SUGGESTIONS = [
                                :ui="{ viewport: 'top-auto bottom-3' }"
                                class="pb-2">
                     <template #content="{ message }">
-                        <AgentActivityList v-if="(message as any).activities?.length"
-                                           :activities="(message as any).activities"
-                                           :live="message.id === liveMessageId" />
+                        <AgentReasoning v-if="(message as any).reasoning !== undefined"
+                                        :text="(message as any).reasoning"
+                                        :cache-key="message.id"
+                                        :streaming="message.id === liveMessageId"
+                                        :duration="(message as any).reasoningSeconds" />
+                        <AgentActivityList v-else-if="(message as any).activities?.length"
+                                           :activities="(message as any).activities" />
                         <AgentConnectCard v-else-if="(message as any).connectionSetup"
                                           :request="(message as any).connectionSetup"
                                           @created="onConnectionCreated" />
