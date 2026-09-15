@@ -11,9 +11,9 @@ published in parallel:
    publishes every workspace package (in the `release` job).
 2. **Docker images → GHCR** — the `docker` job builds each component image and
    pushes it to `ghcr.io/<owner>/interloper-<role>` (see below).
-3. **Helm chart → GitHub Pages** — the `helm` job packages `chart/interloper`
-   and publishes it to the gh-pages Helm repo via `chart-releaser` (stable
-   releases only; see below).
+3. **Helm chart → GHCR** — the `helm` job packages `chart/interloper` and
+   pushes it as an OCI artifact beside the images (stable releases only; see
+   below).
 
 `semantic-release` bumps the chart's `version` and `appVersion` in
 [`chart/interloper/Chart.yaml`](chart/interloper/Chart.yaml) alongside the
@@ -27,11 +27,12 @@ Things to configure on the repo before the first release:
   the release commit and tag. These may be set at the repo or org level; if set
   on the org, make sure the `interloper` repository is granted access.
 - **PyPI trusted publishing** for each published package — see below.
-- **GitHub Pages** enabled with the `gh-pages` branch as source — see the Helm
-  section below.
+- **Package visibility** — the first chart push creates the `charts/interloper`
+  package as private. Make it public (repo → *Packages* → the package →
+  *Package settings*) so unauthenticated clients, Flux included, can pull it.
 
-The Docker push uses the built-in `GITHUB_TOKEN` (`packages: write`) — no extra
-secret needed.
+The Docker and Helm pushes use the built-in `GITHUB_TOKEN` (`packages: write`)
+— no extra secret needed.
 
 ## PyPI trusted publishing (one-time bootstrap)
 
@@ -130,30 +131,29 @@ secret; private images require an `imagePullSecrets` entry in the Helm values.
 > defaults to `ghcr.io/<owner>` so deployed charts pull the images that were
 > actually published.
 
-## Helm chart (GitHub Pages)
+## Helm chart (GHCR)
 
-The `helm` job runs [`chart-releaser`](https://github.com/helm/chart-releaser-action)
-on **stable** releases. It packages `chart/interloper`, creates a per-chart
-GitHub release (tagged `interloper-<version>`), and updates `index.yaml` on the
-`gh-pages` branch. Release candidates are skipped to keep the public repo clean.
+The `helm` job packages `chart/interloper` on **stable** releases and pushes it
+to `oci://ghcr.io/<owner>/charts`, so the chart is a registry artifact beside
+the images it deploys rather than an index file on a web host. Release
+candidates are skipped to keep the registry clean.
 
-One-time setup:
-
-1. Let the first stable release run — `chart-releaser` creates the `gh-pages`
-   branch and the initial `index.yaml`.
-2. Repo → *Settings* → *Pages* → set **Source** to *Deploy from a branch*,
-   branch `gh-pages`, folder `/ (root)`. The same branch carries the
-   documentation site (Docs workflow, `CNAME docs.interloper.dev`), so the
-   Helm repository is reachable at `https://docs.interloper.dev` and the
-   `github.io` URL redirects there.
-
-Consumers then add the repo and install:
+Consumers install straight from the registry (Helm 3.8+), with no `helm repo add`:
 
 ```bash
-helm repo add interloper https://docs.interloper.dev
-helm repo update
-helm install interloper interloper/interloper
+helm install interloper oci://ghcr.io/digitl-cloud/charts/interloper --version <version>
 ```
+
+Flux consumes the same URL through an OCI `HelmRepository`:
+
+```yaml
+spec:
+  type: oci
+  url: oci://ghcr.io/digitl-cloud/charts
+```
+
+Chart versions released before 0.79.1 live only in the old `gh-pages` index and
+its no-`v` GitHub releases, which stay put so existing installs keep resolving.
 
 > The chart's `home`/`sources` URLs in `Chart.yaml` currently read
 > `github.com/digitlcloud/interloper` (no hyphen) while the repo is

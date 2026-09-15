@@ -1,7 +1,8 @@
 name: Publish
 
-# Publishes the artifacts for a released tag: Docker images and the Helm
-# chart. Decoupled from the Release workflow so a failed publish can be
+# Publishes the artifacts for a released tag: the Docker images and the Helm
+# chart, all to GHCR. Decoupled from the Release workflow so a failed publish
+# can be
 # replayed without re-running semantic-release (which would find nothing to
 # release and skip everything).
 #
@@ -14,8 +15,7 @@ name: Publish
 #   - manually via workflow_dispatch with an existing tag, to re-publish
 #     after a transient failure.
 #
-# Every job is idempotent: Docker re-pushes the same image tags and
-# chart-releaser skips chart releases that already exist.
+# Every job is idempotent: re-running it re-pushes the same tags.
 
 on:
   release:
@@ -30,9 +30,8 @@ on:
 jobs:
   resolve:
     name: Resolve tag
-    # chart-releaser publishes its per-chart releases with GITHUB_TOKEN, which
-    # never triggers workflows — but guard on the `v` prefix anyway so only
-    # semantic-release tags are published.
+    # Only semantic-release tags are published: the no-`v` chart releases
+    # chart-releaser left behind must never re-trigger this workflow.
     if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
 
@@ -142,41 +141,40 @@ jobs:
           cache-to: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }},mode=max
 
   # ────────────────────────────────────────────────────────────────────
-  # Helm chart → GitHub Pages (chart-releaser)
+  # Helm chart → GitHub Container Registry (ghcr.io)
   #
-  # Packages chart/interloper and publishes it to the gh-pages Helm repo,
-  # creating a per-chart GitHub release. Stable releases only — RC chart
-  # versions would clutter the public repo. Chart `version`/`appVersion`
-  # are bumped by semantic-release, so the checked-out tag is ready to ship.
+  # Pushed as an OCI artifact beside the images it deploys, carrying the same
+  # version, so the chart needs no index file and no GitHub Pages. Stable
+  # releases only — RC chart versions would clutter the registry. Chart
+  # `version`/`appVersion` are bumped by semantic-release, so the checked-out
+  # tag is ready to ship.
   # ────────────────────────────────────────────────────────────────────
   helm:
-    name: Helm chart release
+    name: Helm chart
     needs: resolve
     if: needs.resolve.outputs.stable == 'true'
     runs-on: ubuntu-latest
 
     permissions:
-      contents: "write"
+      contents: "read"
+      packages: "write"
 
     steps:
       - name: Checkout (released tag)
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.resolve.outputs.tag }}
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Setup Helm
         uses: azure/setup-helm@v4
 
-      - name: Release chart
-        uses: helm/chart-releaser-action@v1
-        with:
-          charts_dir: chart
-          config: cr.yaml
-        env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GHCR
+        run: |
+          echo '${{ secrets.GITHUB_TOKEN }}' |
+            helm registry login ghcr.io --username '${{ github.actor }}' --password-stdin
+
+      - name: Package & Push
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          helm package chart/interloper --destination dist
+          helm push "dist/interloper-${{ needs.resolve.outputs.version }}.tgz" "oci://ghcr.io/${owner}/charts"

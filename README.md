@@ -228,12 +228,11 @@ One version for all packages, released together to PyPI.
 configured by `interloper.yaml` and `INTERLOPER_*` variables. Images are on
 [GHCR](https://github.com/orgs/digitl-cloud/packages?repo_name=interloper) as
 `interloper-<role>:<version>` for `api` (`-agent` flavour), `frontend`, `worker`, `scheduler`
-(`-k8s`, `-docker` flavours) and `mcp`; the Helm chart at
-`https://docs.interloper.dev`. See [RELEASING.md](RELEASING.md).
+(`-k8s`, `-docker` flavours) and `mcp`; the Helm chart alongside them as an OCI
+artifact. See [RELEASING.md](RELEASING.md).
 
 ```bash
-helm repo add interloper https://docs.interloper.dev
-helm install interloper interloper/interloper
+helm install interloper oci://ghcr.io/digitl-cloud/charts/interloper --version <version>
 ```
 
 ## Development
