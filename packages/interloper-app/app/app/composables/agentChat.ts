@@ -27,24 +27,23 @@ export function useAgentChat(sessionId: Ref<string>) {
     const status = computed(() => streaming.value ? 'streaming' as const : 'ready' as const)
 
     /**
-     * True while the agent is busy with nothing to show for it yet.
-     *
-     * A running activity carries its own spinner, so the generic cue is for
-     * the gaps: before the first tool call, and between a tool's result and
-     * whatever the model decides to do with it.
-     */
-    const thinking = computed(() =>
-        streaming.value && !messages.value.some(m => m.activities?.some(a => a.state === 'running')))
-
-    /**
      * The message the running turn is still adding to, if any.
      *
-     * An activity list stays open while it holds this id and folds once the
-     * turn moves past it, so the trail is expanded exactly while it is being
-     * written and quiet afterwards.
+     * An activity list holding this id is the turn's progress indicator: it
+     * spins and names the step under way. Once the turn moves past it, it
+     * settles into a summary of what it did.
      */
     const liveMessageId = computed(() =>
         streaming.value ? messages.value[messages.value.length - 1]?.id : undefined)
+
+    /**
+     * True while the agent is busy with no activity list to say so.
+     *
+     * A live list carries the cue itself, so the standalone one is for the rest:
+     * the wait before the first tool call, and a turn that only ever answers.
+     */
+    const thinking = computed(() =>
+        streaming.value && !messages.value[messages.value.length - 1]?.activities)
 
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
