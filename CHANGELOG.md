@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v0.79.0 (2026-09-15)
+
+### Bug Fixes
+
+- **google-cloud**: BigQuery loads may add the columns a declared schema gained
+  ([`6603a49`](https://github.com/digitl-cloud/interloper/commit/6603a490b760a8c13439142ad835b492eb2d1f37))
+
+### Chores
+
+- **db**: Fold the migration chain to the fresh-provisioning bootstrap
+  ([`8d9852c`](https://github.com/digitl-cloud/interloper/commit/8d9852cb351323f13c8acf9b2e4ce90a24b759ee))
+
+### Features
+
+- **app**: Backfills table filters by target and hides single partitions
+  ([`047380d`](https://github.com/digitl-cloud/interloper/commit/047380deec54704fe2dc317c7c43bdb353b55375))
+
+- **app**: List tables fill the panel with a ruled footer; filters sit right
+  ([`68ad098`](https://github.com/digitl-cloud/interloper/commit/68ad0984ef89e7200588f34f1d4d4093975b88be))
+
+- **assets**: Align Facebook AdsStats action columns with CampaignsStats
+  ([`e650928`](https://github.com/digitl-cloud/interloper/commit/e650928bc01bdeb0148fe6c25d5b15fd61273050))
+
+### Breaking Changes
+
+- **db**: Interloper db upgrade no longer carries a database forward from a release before this one.
+  Every live database is stamped past the new head and must be re-stamped before the new image
+  rolls: UPDATE alembic_version SET version_num = '003'.
+
+
 ## v0.78.0 (2026-09-14)
 
 ### Bug Fixes
