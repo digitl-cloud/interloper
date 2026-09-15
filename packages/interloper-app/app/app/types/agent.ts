@@ -8,11 +8,25 @@ export interface AgentSession {
     event_count: number
 }
 
+/** A tool call the model emitted. `id` is absent on providers that don't mint one. */
+export interface AgentFunctionCall {
+    id?: string
+    name: string
+    args?: Record<string, any>
+}
+
+/** The result of a tool call, carrying the `id` of the call it answers when there is one. */
+export interface AgentFunctionResponse {
+    id?: string
+    name: string
+    response?: Record<string, any>
+}
+
 /** A single part within an ADK event content. */
 export interface AgentEventPart {
     text?: string
-    functionCall?: { name: string; args: Record<string, any> }
-    functionResponse?: { name: string; response: Record<string, any> }
+    functionCall?: AgentFunctionCall
+    functionResponse?: AgentFunctionResponse
 }
 
 /** ADK event content. */
@@ -63,6 +77,27 @@ export interface ConfirmationRequest {
     items: { label: string, value: string }[]
 }
 
+/** How far along a tool call or handover is. */
+export type AgentActivityState = 'running' | 'done' | 'error'
+
+/**
+ * One step the agent took on its way to an answer: a tool call, or a handover
+ * to one of its specialists.
+ *
+ * Built from the functionCall/functionResponse parts the ADK already streams,
+ * so a turn that spends twenty seconds in tools shows what it is doing rather
+ * than nothing at all.
+ */
+export interface AgentActivity {
+    id: string
+    /** The tool's function name, or the target agent's name for a handover. */
+    name: string
+    kind: 'tool' | 'transfer'
+    state: AgentActivityState
+    args?: Record<string, any>
+    response?: Record<string, any>
+}
+
 /** Simplified chat message for UI rendering. */
 export interface ChatMessage {
     id: string
@@ -75,4 +110,6 @@ export interface ChatMessage {
     selection?: SelectionRequest
     /** When set, the message renders the inline confirmation summary card. */
     confirmation?: ConfirmationRequest
+    /** When set, the message renders the agent's tool calls and handovers. */
+    activities?: AgentActivity[]
 }

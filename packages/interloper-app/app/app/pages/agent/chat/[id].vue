@@ -4,14 +4,9 @@ definePageMeta({ layout: 'agent' })
 const route = useRoute()
 const sessionId = computed(() => route.params.id as string)
 
-const { messages, streaming, error, send, loadHistory } = useAgentChat(sessionId)
+const { messages, streaming, status, thinking, error, send, loadHistory } = useAgentChat(sessionId)
 
 const input = ref('')
-
-const status = computed(() => {
-    if (streaming.value) return 'streaming' as const
-    return 'ready' as const
-})
 
 function onSubmit(e: Event) {
     e.preventDefault()
@@ -72,11 +67,13 @@ onMounted(async () => {
                                   :parts="[{ type: 'text', text: message.text }]"
                                   :variant="message.role === 'user' ? 'soft' : 'naked'"
                                   :side="message.role === 'user' ? 'right' : 'left'"
-                                  :icon="message.role === 'assistant' ? 'i-lucide-sparkles' : undefined"
+                                  :icon="message.role === 'assistant' && !message.activities?.length ? 'i-lucide-sparkles' : undefined"
                                   :ui="message.role === 'assistant' ? { body: 'flex-1' } : undefined">
                         <template #content>
-                            <!-- Render the connect card, markdown for assistant, plain text for user -->
-                            <AgentConnectCard v-if="message.connectionSetup"
+                            <!-- Render the work trail or connect card, markdown for assistant, plain text for user -->
+                            <AgentActivityList v-if="message.activities?.length"
+                                               :activities="message.activities" />
+                            <AgentConnectCard v-else-if="message.connectionSetup"
                                               :request="message.connectionSetup"
                                               @created="onConnectionCreated" />
                             <AgentSelectCard v-else-if="message.selection"
@@ -95,6 +92,10 @@ onMounted(async () => {
                             </p>
                         </template>
                     </UChatMessage>
+
+                    <!-- Indented to the message content, past the leading icon. -->
+                    <AgentThinking v-if="thinking"
+                                   class="pl-11 pb-8" />
                 </UChatMessages>
 
                 <UChatPrompt v-model="input"

@@ -1,4 +1,16 @@
-import type { AgentEvent, ChatMessage, ConfirmationRequest, ConnectionSetupRequest, SelectionRequest } from '~/types/agent'
+import type {
+    AgentActivity,
+    AgentEvent,
+    AgentFunctionCall,
+    AgentFunctionResponse,
+    ChatMessage,
+} from '~/types/agent'
+
+/** Tools whose response raises an interactive card instead of an activity row. */
+const INTERACTION_TOOLS = new Set(['request_connection_setup', 'request_user_selection', 'request_confirmation'])
+
+/** The ADK's built-in handover tool. */
+const TRANSFER_TOOL = 'transfer_to_agent'
 
 /**
  * Composable for managing an agent chat session with SSE streaming.
@@ -11,6 +23,19 @@ export function useAgentChat(sessionId: Ref<string>) {
     const streaming = ref(false)
     const error = ref<Error | null>(null)
 
+    /** Status in the shape `UChatMessages` and `UChatPromptSubmit` expect. */
+    const status = computed(() => streaming.value ? 'streaming' as const : 'ready' as const)
+
+    /**
+     * True while the agent is busy with nothing to show for it yet.
+     *
+     * A running activity carries its own spinner, so the generic cue is for
+     * the gaps: before the first tool call, and between a tool's result and
+     * whatever the model decides to do with it.
+     */
+    const thinking = computed(() =>
+        streaming.value && !messages.value.some(m => m.activities?.some(a => a.state === 'running')))
+
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
         const agentStore = useAgentStore()
@@ -19,36 +44,8 @@ export function useAgentChat(sessionId: Ref<string>) {
             if (!session?.events) return
 
             const restored: ChatMessage[] = []
-            for (const event of session.events) {
-                const setup = _extractConnectionSetup(event)
-                if (setup) {
-                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
-                    continue
-                }
-                const selection = _extractSelection(event)
-                if (selection) {
-                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', selection })
-                    continue
-                }
-                const confirmation = _extractConfirmation(event)
-                if (confirmation) {
-                    restored.push({ id: event.id || crypto.randomUUID(), role: 'assistant', text: '', confirmation })
-                    continue
-                }
-
-                const text = _extractText(event)
-                if (!text) continue
-
-                const role = event.author === 'user' ? 'user' as const : 'assistant' as const
-                // Merge consecutive assistant messages from the same invocation
-                const last = restored[restored.length - 1]
-                if (role === 'assistant' && last?.role === 'assistant' && !last.connectionSetup && !last.selection && !last.confirmation) {
-                    last.text += text
-                }
-                else {
-                    restored.push({ id: event.id || crypto.randomUUID(), role, text })
-                }
-            }
+            for (const event of session.events) _appendEvent(restored, event)
+            _settleRunning(restored)
             messages.value = restored
         }
         catch (e) {
@@ -61,23 +58,7 @@ export function useAgentChat(sessionId: Ref<string>) {
         if (!text.trim() || streaming.value) return
 
         error.value = null
-
-        // Add user message
-        messages.value.push({
-            id: crypto.randomUUID(),
-            role: 'user',
-            text,
-        })
-
-        // Add placeholder for assistant response
-        const assistantId = crypto.randomUUID()
-        messages.value.push({
-            id: assistantId,
-            role: 'assistant',
-            text: '',
-            loading: true,
-        })
-
+        messages.value.push({ id: crypto.randomUUID(), role: 'user', text })
         streaming.value = true
 
         try {
@@ -115,26 +96,9 @@ export function useAgentChat(sessionId: Ref<string>) {
 
                     try {
                         const event: AgentEvent = JSON.parse(json)
-                        const setup = _extractConnectionSetup(event)
-                        if (setup) {
-                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', connectionSetup: setup })
-                        }
-                        const selection = _extractSelection(event)
-                        if (selection) {
-                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', selection })
-                        }
-                        const confirmation = _extractConfirmation(event)
-                        if (confirmation) {
-                            messages.value.push({ id: crypto.randomUUID(), role: 'assistant', text: '', confirmation })
-                        }
-                        const eventText = _extractText(event)
-                        if (eventText && event.author !== 'user') {
-                            const msg = messages.value.find(m => m.id === assistantId)
-                            if (msg) {
-                                msg.text += eventText
-                                msg.loading = false
-                            }
-                        }
+                        // The message we just pushed locally comes back on the stream.
+                        if (event.author === 'user') continue
+                        _appendEvent(messages.value, event)
                     }
                     catch {
                         // Skip malformed events
@@ -144,79 +108,142 @@ export function useAgentChat(sessionId: Ref<string>) {
         }
         catch (e) {
             error.value = e as Error
-            // Remove empty assistant placeholder on error
-            const msg = messages.value.find(m => m.id === assistantId)
-            if (msg && !msg.text) {
-                messages.value = messages.value.filter(m => m.id !== assistantId)
-            }
         }
         finally {
-            // Ensure loading state is cleared
-            const msg = messages.value.find(m => m.id === assistantId)
-            if (msg) msg.loading = false
+            _settleRunning(messages.value)
             streaming.value = false
         }
     }
 
-    return { messages, streaming, error, send, loadHistory }
-}
-
-/** Extract text content from an ADK event. */
-function _extractText(event: any): string {
-    if (!event?.content?.parts) return ''
-    return event.content.parts
-        .filter((p: any) => p.text)
-        .map((p: any) => p.text)
-        .join('')
+    return { messages, streaming, status, thinking, error, send, loadHistory }
 }
 
 /**
- * Extract a connection-setup request from an ADK event.
+ * Fold one ADK event into the message list.
+ *
+ * Parts are walked in order so the rendered conversation keeps the agent's own
+ * chronology: what it said, the tools it then called, what it said after.
+ */
+function _appendEvent(messages: ChatMessage[], event: AgentEvent) {
+    const role = event.author === 'user' ? 'user' as const : 'assistant' as const
+
+    for (const part of event.content?.parts ?? []) {
+        if (part.text) _appendText(messages, role, part.text)
+        else if (part.functionCall) _startActivity(messages, part.functionCall)
+        else if (part.functionResponse) _settleActivity(messages, part.functionResponse)
+    }
+}
+
+/** Append text to the trailing message when it is plain prose from the same author, else start one. */
+function _appendText(messages: ChatMessage[], role: 'user' | 'assistant', text: string) {
+    const last = messages[messages.length - 1]
+    const plain = last && !last.activities && !last.connectionSetup && !last.selection && !last.confirmation
+
+    if (plain && last.role === role) last.text += text
+    else messages.push({ id: crypto.randomUUID(), role, text })
+}
+
+/** Open an activity row for a tool call, grouping consecutive calls into one message. */
+function _startActivity(messages: ChatMessage[], call: AgentFunctionCall) {
+    if (INTERACTION_TOOLS.has(call.name)) return
+
+    const transfer = call.name === TRANSFER_TOOL
+    const activity: AgentActivity = {
+        id: call.id || crypto.randomUUID(),
+        name: transfer ? String(call.args?.agent_name ?? '') : call.name,
+        kind: transfer ? 'transfer' : 'tool',
+        state: 'running',
+        args: transfer ? undefined : call.args,
+    }
+
+    const last = messages[messages.length - 1]
+    if (last?.activities) last.activities.push(activity)
+    else messages.push({ id: crypto.randomUUID(), role: 'assistant', text: '', activities: [activity] })
+}
+
+/** Close the activity a response answers, or raise the card an interaction tool stands for. */
+function _settleActivity(messages: ChatMessage[], response: AgentFunctionResponse) {
+    const card = _extractCard(response)
+    if (card) {
+        messages.push({ id: crypto.randomUUID(), role: 'assistant', text: '', ...card })
+        return
+    }
+    if (INTERACTION_TOOLS.has(response.name)) return
+
+    const activity = _findActivity(messages, response)
+    if (!activity) return
+
+    activity.response = response.response
+    activity.state = _failed(response.response) ? 'error' : 'done'
+}
+
+/**
+ * The card an interaction tool's response stands for, if any.
  *
  * Keys on the tool's function *response* (not the call), so a card only
  * renders for requests the tool validated against the catalog.
  */
-function _extractConnectionSetup(event: any): ConnectionSetupRequest | null {
-    for (const part of event?.content?.parts ?? []) {
-        const fr = part.functionResponse
-        if (fr?.name !== 'request_connection_setup') continue
-        const response = fr.response
-        if (response?.status !== 'success' || !response.connection_key) continue
-        return { connectionKey: response.connection_key, name: response.name ?? undefined }
+function _extractCard(response: AgentFunctionResponse): Partial<ChatMessage> | null {
+    const payload = response.response
+    if (payload?.status !== 'success') return null
+
+    switch (response.name) {
+        case 'request_connection_setup':
+            return payload.connection_key
+                ? { connectionSetup: { connectionKey: payload.connection_key, name: payload.name ?? undefined } }
+                : null
+        case 'request_user_selection':
+            return payload.options?.length
+                ? { selection: { prompt: payload.prompt ?? '', options: payload.options, multi: !!payload.multi } }
+                : null
+        case 'request_confirmation':
+            return payload.items?.length
+                ? { confirmation: { title: payload.title ?? '', items: payload.items } }
+                : null
+        default:
+            return null
     }
-    return null
 }
 
 /**
- * Extract a selection request from an ADK event.
+ * The running activity a response belongs to.
  *
- * Keys on the request_user_selection tool's function response, so a card
- * only renders for requests the tool validated.
+ * Responses carry the id of the call they answer when the provider mints one;
+ * otherwise the most recent still-running call of the same name is the match.
  */
-function _extractSelection(event: any): SelectionRequest | null {
-    for (const part of event?.content?.parts ?? []) {
-        const fr = part.functionResponse
-        if (fr?.name !== 'request_user_selection') continue
-        const response = fr.response
-        if (response?.status !== 'success' || !response.options?.length) continue
-        return { prompt: response.prompt ?? '', options: response.options, multi: !!response.multi }
+function _findActivity(messages: ChatMessage[], response: AgentFunctionResponse) {
+    const matches = (activity: AgentActivity) => {
+        if (activity.state !== 'running') return false
+        if (response.id) return activity.id === response.id
+        return response.name === TRANSFER_TOOL ? activity.kind === 'transfer' : activity.name === response.name
     }
-    return null
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const found = messages[i]?.activities?.find(matches)
+        if (found) return found
+    }
+    return undefined
 }
 
 /**
- * Extract a confirmation summary from an ADK event.
+ * Whether a tool response reports a failure.
  *
- * Keys on the request_confirmation tool's function response, so a card
- * only renders for requests the tool validated.
+ * The agent's own tools answer with an explicit status — and some report a
+ * failed *subject* (an unreachable connection) as a successful call, so the
+ * status wins where it exists. The toolkit-backed tools return a plain payload
+ * and let the ADK wrap anything they raise as a bare `error` key.
  */
-function _extractConfirmation(event: any): ConfirmationRequest | null {
-    for (const part of event?.content?.parts ?? []) {
-        const fr = part.functionResponse
-        if (fr?.name !== 'request_confirmation') continue
-        const response = fr.response
-        if (response?.status !== 'success' || !response.items?.length) continue
-        return { title: response.title ?? '', items: response.items }
+function _failed(payload: Record<string, any> | undefined) {
+    if (!payload) return false
+    if (payload.status) return payload.status === 'error'
+    return 'error' in payload
+}
+
+/** Close whatever is still running when a turn ends, so no row spins forever. */
+function _settleRunning(messages: ChatMessage[]) {
+    for (const message of messages) {
+        for (const activity of message.activities ?? []) {
+            if (activity.state === 'running') activity.state = 'done'
+        }
     }
-    return null
 }
