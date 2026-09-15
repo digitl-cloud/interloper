@@ -7,7 +7,9 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from google.adk.agents import Agent
+from google.adk.planners import BuiltInPlanner
 from google.adk.tools.agent_tool import AgentTool
+from google.genai import types
 from interloper.settings import AppSettings
 
 from interloper_agent.prompts import (
@@ -69,6 +71,27 @@ def resolve_model(name: str | None = None) -> str | BaseLlm:
 _model = resolve_model()
 
 
+def resolve_planner() -> BuiltInPlanner | None:
+    """Resolve the planner that asks the model for thought summaries.
+
+    The app shows those summaries while a turn is in flight, which is the only
+    account of a long turn the model can give. ``BuiltInPlanner`` errors on a
+    model without built-in thinking, so it is reserved for the native Gemini
+    models; a LiteLLM-routed provider reports its reasoning by its own means or
+    not at all.
+
+    Returns:
+        The planner for a native Gemini model, else None.
+
+    """
+    if not isinstance(_model, str):
+        return None
+    return BuiltInPlanner(thinking_config=types.ThinkingConfig(include_thoughts=True))
+
+
+_planner = resolve_planner()
+
+
 def _catalog_tools() -> list:
     """The catalog toolset, shared by the routing agent and the consultant instance.
 
@@ -93,6 +116,7 @@ catalog_agent = Agent(
         "available to add, asset schemas, field search, and schema comparison."
     ),
     instruction=with_current_time(CATALOG_INSTRUCTION),
+    planner=_planner,
     tools=_catalog_tools(),
 )
 
@@ -108,6 +132,7 @@ catalog_consultant = Agent(
         "grounded answer back as a tool result."
     ),
     instruction=with_current_time(CATALOG_CONSULT_INSTRUCTION),
+    planner=_planner,
     tools=_catalog_tools(),
 )
 
@@ -123,6 +148,7 @@ collection_agent = Agent(
         "unbinds a component's relations by name (a source's connection, a job's targets)."
     ),
     instruction=with_current_time(COLLECTION_INSTRUCTION),
+    planner=_planner,
     tools=[
         collection.list_components,
         collection.request_connection_setup,
@@ -146,6 +172,7 @@ lineage_agent = Agent(
     model=_model,
     description="Analyzes asset dependencies — upstream/downstream traversal, impact analysis, and cross-source edges.",
     instruction=with_current_time(LINEAGE_INSTRUCTION),
+    planner=_planner,
     tools=[
         lineage.get_upstream,
         lineage.get_downstream,
@@ -164,6 +191,7 @@ scheduling_agent = Agent(
         "or edits cron jobs over the collection's sources."
     ),
     instruction=with_current_time(SCHEDULING_INSTRUCTION),
+    planner=_planner,
     tools=[
         scheduling.list_jobs,
         scheduling.get_job_health,
@@ -187,6 +215,7 @@ analytics_agent = Agent(
     model=_model,
     description="Provides run statistics, partition coverage analysis, and data freshness checks.",
     instruction=with_current_time(ANALYTICS_INSTRUCTION),
+    planner=_planner,
     tools=[
         analytics.run_history_summary,
         analytics.partition_coverage,
@@ -198,6 +227,7 @@ root_agent = Agent(
     name="InterloperAgent",
     model=_model,
     instruction=with_current_time(ROOT_INSTRUCTION),
+    planner=_planner,
     description="Main Interloper assistant that routes queries to specialized sub-agents.",
     sub_agents=[catalog_agent, collection_agent, lineage_agent, scheduling_agent, analytics_agent],
 )
