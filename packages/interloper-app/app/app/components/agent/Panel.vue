@@ -9,23 +9,25 @@ const agentStore = useAgentStore()
 
 const sessionId = ref('')
 const sessionError = ref(false)
-const { messages, streaming, error, send } = useAgentChat(sessionId)
+const { messages, streaming, status, thinking, error, send } = useAgentChat(sessionId)
 
 /**
- * Messages in the UIMessage shape UChatMessages expects. The empty assistant
- * placeholder (awaiting the first token) is dropped — that gap is what the
- * `submitted` status' thinking indicator covers.
+ * Messages in the UIMessage shape UChatMessages expects. An activity group
+ * drops the assistant avatar: the rows read as one continuous trail of work
+ * rather than a series of separate remarks.
  */
 const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation)
+    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation || m.activities?.length)
     .map(m => ({
         id: m.id,
         role: m.role,
         text: m.text,
         parts: [{ type: 'text' as const, text: m.text }],
+        icon: m.role === 'assistant' && !m.activities?.length ? 'i-lucide-sparkles' : undefined,
         connectionSetup: m.connectionSetup,
         selection: m.selection,
         confirmation: m.confirmation,
+        activities: m.activities,
     })))
 
 /** Report a completed connection setup back into the chat so the agent continues. */
@@ -42,12 +44,6 @@ function onSelection(labels: string[], values: string[]) {
 function onDecision(confirmed: boolean) {
     send(confirmed ? 'Confirmed — go ahead.' : 'Cancel that — do not proceed.')
 }
-
-const status = computed(() => {
-    if (!streaming.value) return 'ready' as const
-    const last = messages.value[messages.value.length - 1]
-    return last?.role === 'assistant' && !last.text ? 'submitted' as const : 'streaming' as const
-})
 
 /** Create the backing session the first time the panel opens. */
 watch(open, async (v) => {
@@ -126,13 +122,15 @@ const SUGGESTIONS = [
                                :status="status"
                                compact
                                should-auto-scroll
-                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
+                               :assistant="{ ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
                                :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
                                :ui="{ viewport: 'top-auto bottom-3' }"
                                class="pb-2">
                     <template #content="{ message }">
-                        <AgentConnectCard v-if="(message as any).connectionSetup"
+                        <AgentActivityList v-if="(message as any).activities?.length"
+                                           :activities="(message as any).activities" />
+                        <AgentConnectCard v-else-if="(message as any).connectionSetup"
                                           :request="(message as any).connectionSetup"
                                           @created="onConnectionCreated" />
                         <AgentSelectCard v-else-if="(message as any).selection"
@@ -147,6 +145,10 @@ const SUGGESTIONS = [
                              :class="['*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]', message.role === 'user' ? '[&_p]:whitespace-pre-wrap' : '']" />
                     </template>
                 </UChatMessages>
+
+                <!-- Indented to the message content, past the compact leading icon. -->
+                <AgentThinking v-if="thinking"
+                               class="pl-6.5 pb-2" />
 
                 <p v-if="error && !streaming"
                    class="text-[12.5px] text-error mt-1">
