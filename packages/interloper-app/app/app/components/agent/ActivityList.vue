@@ -1,9 +1,11 @@
 <script setup lang="ts">
 /**
- * The tool calls and specialist handovers of one assistant turn, as a list of
- * collapsible rows: a running step shimmers, a finished one opens onto the
- * payloads it exchanged. The list itself folds into a summary once the work it
- * describes is behind the reader.
+ * The tool calls and specialist handovers of one assistant turn.
+ *
+ * Collapsed to a single line, whose header is the turn's progress indicator:
+ * while the turn is live it spins and names the step under way, and once the
+ * turn is done it settles into a count. Opening it reveals every step, each of
+ * which in turn opens onto the payloads it exchanged.
  */
 import type { AgentActivity } from '~/types/agent'
 
@@ -66,27 +68,17 @@ const ICONS: Record<AgentActivity['kind'], string> = {
 const PREVIEW_LIMIT = 4000
 
 const failed = computed(() => props.activities.filter(a => a.state === 'error').length)
-const summary = computed(() => `${props.activities.length} step${props.activities.length === 1 ? '' : 's'}`)
+const running = computed(() => props.activities.find(a => a.state === 'running'))
 
 /**
- * Open while the turn is still adding to the list, folded once it has moved on,
- * and pinned either way the moment the reader takes the decision over.
- *
- * Liveness is the turn's, not the list's: collapsing the instant every step
- * happened to have settled would fold the list between one tool call and the
- * next, which is precisely when someone is watching it.
+ * What the header says: the step under way while the turn is live, falling back
+ * to the generic cue for the gaps between steps, and to a count once the turn
+ * is over and the individual steps stop being the point.
  */
-const open = ref(!!props.live)
-const pinned = ref(false)
-
-watch(() => props.live, (live) => {
-    if (!pinned.value) open.value = !!live
+const headerText = computed(() => {
+    if (!props.live) return `${props.activities.length} step${props.activities.length === 1 ? '' : 's'}`
+    return running.value ? label(running.value) : 'Thinking…'
 })
-
-function setOpen(value: boolean) {
-    pinned.value = true
-    open.value = value
-}
 
 function label(activity: AgentActivity) {
     if (activity.kind === 'transfer') return `Asking ${AGENT_LABELS[activity.name] ?? activity.name}`
@@ -110,12 +102,12 @@ function _readable(name: string) {
 </script>
 
 <template>
-    <UChatTool :text="summary"
-               :suffix="failed ? `${failed} failed` : undefined"
+    <UChatTool :text="headerText"
+               :suffix="!props.live && failed ? `${failed} failed` : undefined"
                :icon="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
-               :open="open"
-               :ui="failed ? { leadingIcon: 'text-error' } : undefined"
-               @update:open="setOpen">
+               :loading="props.live"
+               :streaming="props.live"
+               :ui="!props.live && failed ? { leadingIcon: 'text-error' } : undefined">
         <div class="flex flex-col items-start gap-0.5 py-1">
             <UChatTool v-for="activity in props.activities"
                        :key="activity.id"
