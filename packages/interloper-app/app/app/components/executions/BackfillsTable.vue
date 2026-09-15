@@ -4,7 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/vue-table'
 import type { Backfill } from '~/types/backfill'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
 const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')

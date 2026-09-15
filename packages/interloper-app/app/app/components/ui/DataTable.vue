@@ -3,7 +3,7 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/vue-table'
 import type { UsedByRef } from '~/utils/apiErrors'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
 const props = defineProps<{
     columns: TableColumn<TData>[]
