@@ -1,12 +1,13 @@
 <script setup lang="ts">
 /**
- * One turn's work trail: what the model thought and what it did, in order.
+ * One turn's work trail: what the model thought and what it did, in order,
+ * behind a row that collapses the lot.
  *
- * Each entry is the Nuxt UI chat component built for it, as a sibling row: a
- * thought is a `UChatReasoning`, which opens itself while the model is still
- * reasoning and settles into "Thought for N seconds"; a step is a `UChatTool`,
- * which shimmers its label while it runs and opens onto the payloads it
- * exchanged.
+ * Each entry is the Nuxt UI chat component built for it: a thought is a
+ * `UChatReasoning`, which opens itself while the model is still reasoning and
+ * settles into "Thought for N seconds"; a step is a `UChatTool`, which shimmers
+ * its label while it runs and opens onto the payloads it exchanged. They sit in
+ * the body of one more `UChatTool`, closed until asked for.
  */
 import type { AgentActivity, AgentStep } from '~/types/agent'
 
@@ -71,6 +72,36 @@ const PREVIEW_LIMIT = 4000
 /** Only the trail's last entry can still be in flight, and only while the turn is. */
 const live = computed(() => props.streaming ? props.steps[props.steps.length - 1] : undefined)
 
+const activities = computed(() => props.steps.filter((step): step is AgentActivity => step.kind !== 'thought'))
+const failed = computed(() => activities.value.filter(activity => activity.state === 'error').length)
+const seconds = computed(() => props.steps.reduce((total, step) => total + (step.kind === 'thought' ? step.seconds ?? 0 : 0), 0))
+const count = computed(() => `${activities.value.length} step${activities.value.length === 1 ? '' : 's'}`)
+
+/**
+ * What the closed trail says: the step it is on while the turn runs, and what
+ * the turn amounted to once it is done.
+ *
+ * The *last* step rather than the one still running, because a tool settles in
+ * milliseconds and the model then thinks for seconds. Keying on `running` put
+ * the name up for an instant and took it straight back down.
+ */
+const summaryText = computed(() => {
+    if (props.streaming) {
+        const last = props.steps[props.steps.length - 1]
+        return last && last.kind !== 'thought' ? label(last) : 'Thinking...'
+    }
+    return seconds.value ? `Thought for ${_duration(seconds.value)}` : count.value
+})
+
+/** The count rides alongside, unless something failed, which is worth the space instead. */
+const summarySuffix = computed(() => {
+    if (props.streaming) return undefined
+    if (failed.value) return `${failed.value} failed`
+    return seconds.value && activities.value.length ? count.value : undefined
+})
+
+const summaryIcon = computed(() => failed.value ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks')
+
 function label(activity: AgentActivity) {
     const running = activity.state === 'running'
     if (activity.kind === 'transfer') {
@@ -89,6 +120,12 @@ function preview(payload: Record<string, any>) {
     return json.length > PREVIEW_LIMIT ? `${json.slice(0, PREVIEW_LIMIT)}\n…` : json
 }
 
+function _duration(seconds: number) {
+    if (seconds < 60) return `${seconds} second${seconds === 1 ? '' : 's'}`
+    const minutes = Math.floor(seconds / 60)
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`
+}
+
 /** Fall back to the bare function name, made readable, for a tool with no label. */
 function _readable(name: string) {
     const words = name.replace(/_/g, ' ')
@@ -97,43 +134,51 @@ function _readable(name: string) {
 </script>
 
 <template>
-    <div class="flex flex-col items-start gap-1 w-full">
-        <template v-for="step in props.steps"
-                  :key="step.id">
-            <UChatReasoning v-if="step.kind === 'thought'"
-                            :text="step.text"
-                            :streaming="step === live"
-                            :duration="step.seconds"
-                            chevron="leading"
-                            class="w-full">
-                <MDC :value="step.text"
-                     :cache-key="step.id"
-                     class="*:first:mt-0 *:last:mb-0" />
-            </UChatReasoning>
+    <UChatTool :text="summaryText"
+               :suffix="summarySuffix"
+               :icon="summaryIcon"
+               :loading="props.streaming"
+               :streaming="props.streaming"
+               chevron="leading"
+               :ui="failed ? { leadingIcon: 'text-error' } : undefined">
+        <div class="flex flex-col items-start gap-1 w-full">
+            <template v-for="step in props.steps"
+                      :key="step.id">
+                <UChatReasoning v-if="step.kind === 'thought'"
+                                :text="step.text"
+                                :streaming="step === live"
+                                :duration="step.seconds"
+                                chevron="leading"
+                                class="w-full">
+                    <MDC :value="step.text"
+                         :cache-key="step.id"
+                         class="*:first:mt-0 *:last:mb-0" />
+                </UChatReasoning>
 
-            <UChatTool v-else
-                       :text="label(step)"
-                       :icon="icon(step)"
-                       :loading="step.state === 'running'"
-                       :streaming="step.state === 'running'"
-                       chevron="leading"
-                       class="w-full"
-                       :ui="step.state === 'error' ? { leadingIcon: 'text-error' } : undefined">
-                <div class="flex flex-col gap-2">
-                    <div v-if="step.args">
-                        <div class="eyebrow text-dimmed mb-1">Input</div>
-                        <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.args) }}</pre>
+                <UChatTool v-else
+                           :text="label(step)"
+                           :icon="icon(step)"
+                           :loading="step.state === 'running'"
+                           :streaming="step.state === 'running'"
+                           chevron="leading"
+                           class="w-full"
+                           :ui="step.state === 'error' ? { leadingIcon: 'text-error' } : undefined">
+                    <div class="flex flex-col gap-2">
+                        <div v-if="step.args">
+                            <div class="eyebrow text-dimmed mb-1">Input</div>
+                            <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.args) }}</pre>
+                        </div>
+                        <div v-if="step.response">
+                            <div class="eyebrow text-dimmed mb-1">Output</div>
+                            <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.response) }}</pre>
+                        </div>
+                        <p v-if="!step.args && !step.response"
+                           class="text-dimmed">
+                            No details.
+                        </p>
                     </div>
-                    <div v-if="step.response">
-                        <div class="eyebrow text-dimmed mb-1">Output</div>
-                        <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(step.response) }}</pre>
-                    </div>
-                    <p v-if="!step.args && !step.response"
-                       class="text-dimmed">
-                        No details.
-                    </p>
-                </div>
-            </UChatTool>
-        </template>
-    </div>
+                </UChatTool>
+            </template>
+        </div>
+    </UChatTool>
 </template>
