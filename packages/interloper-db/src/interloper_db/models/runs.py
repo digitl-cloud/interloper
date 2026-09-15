@@ -168,7 +168,7 @@ class Execution(SQLModel, table=True):
 
     One row per ``(run, operation)``: the current status derived from
     lifecycle events (severity then recency) plus the queued/started/completed
-    timestamps. The view itself is created by migration 016; ``create_all``
+    timestamps. The view itself is created by migration 002; ``create_all``
     skips view-backed models (see the ``is_view`` marker).
     """
 
