@@ -9,7 +9,7 @@ const agentStore = useAgentStore()
 
 const sessionId = ref('')
 const sessionError = ref(false)
-const { messages, streaming, status, thinking, liveMessageId, error, send } = useAgentChat(sessionId)
+const { messages, streaming, status, liveMessageId, error, send } = useAgentChat(sessionId)
 
 /**
  * Messages in the UIMessage shape UChatMessages expects. A work trail drops the
@@ -28,7 +28,6 @@ const displayMessages = computed(() => messages.value
         selection: m.selection,
         confirmation: m.confirmation,
         steps: m.steps,
-        workSeconds: m.workSeconds,
     })))
 
 /** Report a completed connection setup back into the chat so the agent continues. */
@@ -128,12 +127,14 @@ const SUGGESTIONS = [
                                :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
                                :ui="{ viewport: 'top-auto bottom-3' }"
                                class="pb-2">
+                    <template #indicator>
+                        <AgentThinking />
+                    </template>
+
                     <template #content="{ message }">
                         <AgentWork v-if="(message as any).steps?.length"
                                    :steps="(message as any).steps"
-                                   :cache-key="message.id"
-                                   :streaming="message.id === liveMessageId"
-                                   :seconds="(message as any).workSeconds" />
+                                   :streaming="message.id === liveMessageId" />
                         <AgentConnectCard v-else-if="(message as any).connectionSetup"
                                           :request="(message as any).connectionSetup"
                                           @created="onConnectionCreated" />
@@ -149,10 +150,6 @@ const SUGGESTIONS = [
                              :class="['*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]', message.role === 'user' ? '[&_p]:whitespace-pre-wrap' : '']" />
                     </template>
                 </UChatMessages>
-
-                <!-- Indented to the message content, past the compact leading icon. -->
-                <AgentThinking v-if="thinking"
-                               class="pl-6.5 pb-2" />
 
                 <p v-if="error && !streaming"
                    class="text-[12.5px] text-error mt-1">

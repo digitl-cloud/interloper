@@ -109,6 +109,8 @@ export interface AgentThought {
     id: string
     kind: 'thought'
     text: string
+    /** Whole seconds the model spent reaching it, for the collapsible's "Thought for N" label. */
+    seconds?: number
 }
 
 /**
@@ -133,6 +135,4 @@ export interface ChatMessage {
     confirmation?: ConfirmationRequest
     /** When set, the message renders the turn's work trail: thoughts and steps, in order. */
     steps?: AgentStep[]
-    /** Whole seconds that trail has taken so far. */
-    workSeconds?: number
 }

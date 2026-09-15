@@ -4,7 +4,7 @@ definePageMeta({ layout: 'agent' })
 const route = useRoute()
 const sessionId = computed(() => route.params.id as string)
 
-const { messages, streaming, status, thinking, liveMessageId, error, send, loadHistory } = useAgentChat(sessionId)
+const { messages, streaming, status, liveMessageId, error, send, loadHistory } = useAgentChat(sessionId)
 
 const input = ref('')
 
@@ -50,6 +50,10 @@ onMounted(async () => {
                                :status="status"
                                :spacing-offset="120"
                                class="pb-4 sm:pb-6">
+                    <template #indicator>
+                        <AgentThinking />
+                    </template>
+
                     <template v-if="!messages.length && !streaming">
                         <div class="flex flex-col items-center justify-center h-full text-muted py-12">
                             <UIcon name="i-lucide-sparkles"
@@ -73,9 +77,7 @@ onMounted(async () => {
                             <!-- Render the work trail or connect card, markdown for assistant, plain text for user -->
                             <AgentWork v-if="message.steps?.length"
                                        :steps="message.steps"
-                                       :cache-key="message.id"
-                                       :streaming="message.id === liveMessageId"
-                                       :seconds="message.workSeconds" />
+                                       :streaming="message.id === liveMessageId" />
                             <AgentConnectCard v-else-if="message.connectionSetup"
                                               :request="message.connectionSetup"
                                               @created="onConnectionCreated" />
@@ -95,10 +97,6 @@ onMounted(async () => {
                             </p>
                         </template>
                     </UChatMessage>
-
-                    <!-- Indented to the message content, past the leading icon. -->
-                    <AgentThinking v-if="thinking"
-                                   class="pl-11 pb-8" />
                 </UChatMessages>
 
                 <UChatPrompt v-model="input"
