@@ -111,6 +111,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         },
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
+    dateColumn<ComponentRecord>('created_at', 'Created'),
     {
         id: 'enabled',
         header: 'Enabled',
@@ -127,7 +128,6 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             }),
         ]),
     },
-    dateColumn<ComponentRecord>('created_at', 'Created'),
 ])
 
 function rowActions(job: ComponentRecord): DropdownMenuItem[][] {
