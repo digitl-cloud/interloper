@@ -111,7 +111,7 @@ const items = computed<NavigationMenuItem[]>(() => [
                 <slot v-if="route.meta.fullBleed" />
                 <div v-else
                      class="flex-1 min-h-0 w-full overflow-y-auto">
-                    <div class="p-6 w-full">
+                    <div class="p-6 w-full h-full flex flex-col">
                         <div v-if="pageHeader"
                              class="mb-6 max-w-[660px]">
                             <p v-if="pageHeader.eyebrow"

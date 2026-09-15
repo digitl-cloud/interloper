@@ -57,7 +57,10 @@ const items = computed<NavigationMenuItem[]>(() => destinations.value.map(page =
 <template>
     <div>
         <UDashboardGroup storage-key="dashboard-data"
-                         :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth}px` : '0px' }"
+                         :style="{
+                             'right': agentOpen && userStore.agentAvailable ? `${agentWidth}px` : '0px',
+                             '--launcher-inset': userStore.agentAvailable ? '3.5rem' : '0px',
+                         }"
                          :ui="{ base: `fixed top-0 bottom-0 left-0 flex overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
             <UDashboardSidebar collapsible
                                resizable
@@ -132,7 +135,7 @@ const items = computed<NavigationMenuItem[]>(() => destinations.value.map(page =
                     <slot v-if="route.meta.fullBleed" />
                     <div v-else
                          class="flex-1 min-h-0 w-full overflow-y-auto">
-                        <div class="p-6 w-full">
+                        <div class="p-6 w-full h-full flex flex-col">
                             <div v-if="pageHeader"
                                  class="mb-6 max-w-[660px]">
                                 <p v-if="pageHeader.eyebrow"
@@ -160,7 +163,8 @@ const items = computed<NavigationMenuItem[]>(() => destinations.value.map(page =
 
             <!-- Floating agent launcher. Positioned inside the dashboard group so it
                  slides left with the layout when the panel opens, instead of hiding
-                 under the panel. -->
+                 under the panel. Its footprint is --launcher-inset on the group, so
+                 bottom-right controls (table footers) can keep clear of it. -->
             <UButton v-if="userStore.agentAvailable"
                      icon="i-lucide-sparkles"
                      size="xl"

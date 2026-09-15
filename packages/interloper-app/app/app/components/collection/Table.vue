@@ -208,7 +208,7 @@ function onRowClick(row: any) {
 </script>
 
 <template>
-    <div class="w-full flex flex-col gap-4">
+    <div class="w-full flex flex-col gap-4 flex-1 min-h-0">
         <div class="flex items-center gap-3">
             <UInput v-model="globalFilter"
                     placeholder="Search collection..."
@@ -219,6 +219,7 @@ function onRowClick(row: any) {
                      size="xs"
                      :icon="allExpanded ? 'i-lucide-chevrons-down-up' : 'i-lucide-chevrons-up-down'"
                      :label="allExpanded ? 'Collapse all' : 'Expand all'"
+                     class="ml-auto"
                      @click="toggleAllExpanded" />
         </div>
 
@@ -230,7 +231,7 @@ function onRowClick(row: any) {
                 :grouping-options="groupingOptions"
                 :expanded-options="expandedOptions"
                 sticky
-                class="max-h-[calc(100vh-10rem)]"
+                class="flex-1 min-h-0"
                 :ui="{
                     th: 'text-center first:text-left',
                     td: 'empty:p-0 text-center first:text-left',
@@ -542,7 +543,7 @@ function onRowClick(row: any) {
             <div class="hidden" />
         </UDropdownMenu>
 
-        <TableFooter>
+        <TableFooter class="shrink-0">
             {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
             {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
         </TableFooter>

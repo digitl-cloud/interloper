@@ -121,10 +121,12 @@ function onPageChange(page: number) {
                     placeholder="Search runs by target..."
                     icon="i-lucide-search"
                     class="max-w-sm" />
-            <KindFilter v-model="kind"
-                        :components="componentsStore.components" />
-            <TypeFilter v-model="type"
-                        :components="typeChoices" />
+            <div class="ml-auto flex items-center gap-2">
+                <KindFilter v-model="kind"
+                            :components="componentsStore.components" />
+                <TypeFilter v-model="type"
+                            :components="typeChoices" />
+            </div>
         </div>
 
         <div v-if="!loading && runs.length === 0 && filtered"
@@ -154,10 +156,11 @@ function onPageChange(page: number) {
                     :loading="loading"
                     :sorting="[{ id: 'created_at', desc: true }]"
                     sticky
+                    class="flex-1 min-h-0"
                     :ui="{ tr: 'cursor-pointer' }"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
 
-            <TableFooter class="py-3"
+            <TableFooter class="shrink-0"
                          :page="pageIndex + 1"
                          :total="total"
                          :page-size="pageSize"

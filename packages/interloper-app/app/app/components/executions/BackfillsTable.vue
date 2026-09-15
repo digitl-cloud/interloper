@@ -97,7 +97,8 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     icon="i-lucide-search"
                     class="max-w-sm" />
             <UCheckbox v-model="showSinglePartition"
-                       label="Show single partition" />
+                       label="Show single partition"
+                       class="ml-auto" />
         </div>
 
         <div v-if="!loading && backfills.length === 0"
@@ -120,10 +121,11 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     :loading="loading"
                     :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
                     sticky
+                    class="flex-1 min-h-0"
                     :ui="{ tr: 'cursor-pointer' }"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
 
-            <TableFooter class="py-3"
+            <TableFooter class="shrink-0"
                          :page="pagination.pageIndex + 1"
                          :total="shown.length"
                          :page-size="PAGE_SIZE"
