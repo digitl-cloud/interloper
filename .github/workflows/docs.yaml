@@ -47,6 +47,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: ./site
-          keep_files: true
+          # Prune: the branch carries the built site and nothing else now.
+          keep_files: false
           cname: docs.interloper.dev
           commit_message: "docs: publish ${{ github.sha }}"
