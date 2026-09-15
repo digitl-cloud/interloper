@@ -81,6 +81,13 @@ function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
     ]]
 }
 
+/** The destination components a source is bound to, in relation order. */
+function destinationsOf(source: ComponentRecord): ComponentRecord[] {
+    return relationIds(source, 'destinations')
+        .map(id => componentsStore.byId(id))
+        .filter((d): d is ComponentRecord => !!d)
+}
+
 const columns: TableColumn<ComponentRecord>[] = [
     {
         accessorKey: 'name',
@@ -105,26 +112,27 @@ const columns: TableColumn<ComponentRecord>[] = [
         },
     },
     {
-        accessorKey: 'type',
+        id: 'type',
         header: 'Type',
+        accessorFn: (row: ComponentRecord) => typeName(row.key),
         cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
         ]),
     },
     {
-        accessorKey: 'assets',
+        id: 'assets',
         header: 'Assets',
+        accessorFn: (row: ComponentRecord) => row.children.length,
         cell: ({ row }) => h('span', { class: 'text-muted' },
             `${row.original.children.length} asset${row.original.children.length !== 1 ? 's' : ''}`),
     },
     {
-        accessorKey: 'destinations',
+        id: 'destinations',
         header: 'Destinations',
+        accessorFn: (row: ComponentRecord) => destinationsOf(row).map(d => d.name ?? d.key).join(', '),
         cell: ({ row }) => {
-            const dests = relationIds(row.original, 'destinations')
-                .map(id => componentsStore.byId(id))
-                .filter((d): d is ComponentRecord => !!d)
+            const dests = destinationsOf(row.original)
             if (dests.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = dests[0]!
             return h(EntityBadge, {
@@ -134,11 +142,7 @@ const columns: TableColumn<ComponentRecord>[] = [
             })
         },
     },
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
-    },
+    dateColumn<ComponentRecord>('created_at', 'Created'),
 ]
 
 function handleSaved() {

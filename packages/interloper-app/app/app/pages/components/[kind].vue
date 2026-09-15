@@ -62,7 +62,7 @@ function autoRenewColumn(): TableColumn<ComponentRecord> {
         return row.status === 'unreadable' ? 'unknown' : String(row.config?.auto_renew !== false)
     }
     return {
-        accessorKey: 'auto_renew',
+        id: 'auto_renew',
         header: 'Auto renew',
         accessorFn: sortValue,
         cell: ({ row }) => {
@@ -83,7 +83,7 @@ function autoRenewColumn(): TableColumn<ComponentRecord> {
 /** Connection renewal state reads as one badge, like the collection's Last run. */
 function lastRenewedColumn(): TableColumn<ComponentRecord> {
     return {
-        accessorKey: 'last_renewed_at',
+        id: 'last_renewed_at',
         header: 'Last renewed',
         accessorFn: (row: ComponentRecord) => row.state?.last_renewed_at ?? '',
         cell: ({ row }) => {
@@ -109,9 +109,8 @@ const tableStateColumns = computed<TableColumn<ComponentRecord>[]>(() => {
     return [
         autoRenewColumn(),
         ...stateColumns
-            .filter(column => (column as { accessorKey?: string }).accessorKey !== 'last_renewal_error')
-            .map(column =>
-                (column as { accessorKey?: string }).accessorKey === 'last_renewed_at' ? lastRenewedColumn() : column),
+            .filter(column => column.id !== 'last_renewal_error')
+            .map(column => (column.id === 'last_renewed_at' ? lastRenewedColumn() : column)),
     ]
 })
 
@@ -133,19 +132,16 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         },
     },
     {
-        accessorKey: 'key',
+        id: 'type',
         header: 'Type',
+        accessorFn: (row: ComponentRecord) => typeName(row.key),
         cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
         ]),
     },
     ...tableStateColumns.value,
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '-',
-    },
+    dateColumn<ComponentRecord>('created_at', 'Created'),
 ])
 
 // ── Renewal ──

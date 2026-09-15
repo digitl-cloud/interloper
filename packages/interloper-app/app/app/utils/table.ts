@@ -34,6 +34,19 @@ export function sortableHeader<T>(label: string) {
 }
 
 /**
+ * A sortable timestamp column. It orders on the raw ISO value — the
+ * formatted text would sort by day name — and renders it through `formatDate`.
+ */
+export function dateColumn<T>(key: keyof T & string, header: string): TableColumn<T> {
+    return {
+        accessorKey: key,
+        header,
+        cell: ({ row }: { row: { getValue: <V>(key: string) => V } }) =>
+            h('span', { class: 'text-muted' }, formatDate(row.getValue<string | null>(key)) || '—'),
+    } as TableColumn<T>
+}
+
+/**
  * Table columns for a component row's `state`, derived from its definition's
  * `state_schema`. Datetime values render via `formatDate`; `_id` values as a
  * short monospace id.
@@ -43,13 +56,14 @@ export function stateSchemaColumns(defn: ComponentDefinition | undefined): Table
     return stateColumns(defn).map((col) => {
         if (col.format === 'datetime') {
             return {
-                accessorKey: col.key,
+                id: col.key,
                 header: col.label,
-                accessorFn: (row: ComponentRecord) => row.state?.[col.key] ? formatDate(row.state[col.key]) : '—',
+                accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
+                cell: ({ row }: { row: { original: ComponentRecord } }) => formatDate(row.original.state?.[col.key]) || '—',
             } as TableColumn<ComponentRecord>
         }
         return {
-            accessorKey: col.key,
+            id: col.key,
             header: col.label,
             accessorFn: (row: ComponentRecord) => row.state?.[col.key] ?? '',
             cell: ({ row }: { row: { original: ComponentRecord } }) => {
