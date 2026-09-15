@@ -29,7 +29,7 @@ Things to configure on the repo before the first release:
 - **PyPI trusted publishing** for each published package — see below.
 - **Package visibility** — the first chart push creates the `charts/interloper`
   package as private. Make it public (repo → *Packages* → the package →
-  *Package settings*) so unauthenticated clients, Flux included, can pull it.
+  *Package settings*) so unauthenticated clients can pull it.
 
 The Docker and Helm pushes use the built-in `GITHUB_TOKEN` (`packages: write`)
 — no extra secret needed.
@@ -142,14 +142,6 @@ Consumers install straight from the registry (Helm 3.8+), with no `helm repo add
 
 ```bash
 helm install interloper oci://ghcr.io/digitl-cloud/charts/interloper --version <version>
-```
-
-Flux consumes the same URL through an OCI `HelmRepository`:
-
-```yaml
-spec:
-  type: oci
-  url: oci://ghcr.io/digitl-cloud/charts
 ```
 
 Chart versions released before 0.79.1 live only in the old `gh-pages` index and
