@@ -1,4 +1,4 @@
-"""Tests for migration ``019_target_notify``: run and backfill notifications carry the target's identity.
+"""Tests for migration ``003_realtime_notify``: run and backfill notifications carry the target's identity.
 
 The notify functions are Postgres triggers, so this module needs a live
 server. It reads a server DSN from ``INTERLOPER_TEST_POSTGRES_DSN``,
