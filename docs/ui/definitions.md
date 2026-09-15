@@ -107,6 +107,11 @@ The field marked `discriminator=True` (`x-discriminator`) names the instance: th
 the selected option's label (an ad account name rather than its id) as the component name, and
 the platform derives the per-instance table names from the same value.
 
+The value itself stays visible: every component response carries it as `discriminator`, the
+sources table shows it under the name and matches it in the search box, the command palette
+lists it next to the type, and a fetched option shows its id under its label in the picker. A
+user holding an account id from the warehouse or the vendor finds the source by it.
+
 ## State columns
 
 A kind with a `state_model` publishes `state_schema`. List pages add one column per property:

@@ -226,7 +226,7 @@ const { apiFetch } = useApi()
 
 /** Per-field fetch state: options, loading, error. */
 const fetchState = ref<Record<string, {
-    options: { label: string, value: string }[]
+    options: { label: string, value: string, description?: string }[]
     loading: boolean
     error: string | null
 }>>({})
@@ -242,7 +242,7 @@ function ensureFetchState(fieldKey: string) {
 }
 
 /** Update a single fetch state entry reactively. */
-function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: string, value: string }[], loading: boolean, error: string | null }>) {
+function updateFetchState(fieldKey: string, patch: Partial<{ options: { label: string, value: string, description?: string }[], loading: boolean, error: string | null }>) {
     fetchState.value = {
         ...fetchState.value,
         [fieldKey]: { ...fetchState.value[fieldKey]!, ...patch },
@@ -275,10 +275,12 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
         const items = Array.isArray(result) ? result : []
         updateFetchState(fieldKey, {
             loading: false,
-            options: items.map(item => ({
-                label: String(item[meta.label_key] ?? item[meta.value_key] ?? ''),
-                value: String(item[meta.value_key] ?? ''),
-            })),
+            options: items.map((item) => {
+                const label = String(item[meta.label_key] ?? item[meta.value_key] ?? '')
+                const value = String(item[meta.value_key] ?? '')
+                // The id under the label: it is what the warehouse and the vendor call the account.
+                return { label, value, description: label !== value ? value : undefined }
+            }),
         })
     }
     catch (e) {

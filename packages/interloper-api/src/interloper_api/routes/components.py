@@ -125,6 +125,11 @@ class ComponentResponse(BaseModel):
     A secret kind whose payload does not decrypt carries ``status``
     ``unreadable`` and no ``config`` at all, rather than a subset that was
     never read.
+
+    ``discriminator`` is the instance identifier (an ad account id, a site
+    URL) that ``name`` typically paraphrases. It is disclosed on every
+    response, list and detail alike, so a user holding the identifier from
+    the warehouse or the vendor can find the component by it.
     """
 
     id: UUID
@@ -132,6 +137,7 @@ class ComponentResponse(BaseModel):
     kind: str
     key: str
     name: str | None = None
+    discriminator: str | None = None
     status: ComponentStatus
     config: dict[str, Any] | None = None
     state: dict[str, Any] | None = None
@@ -191,6 +197,7 @@ class ComponentResponse(BaseModel):
             kind=row.kind,
             key=row.key,
             name=row.name,
+            discriminator=store.components.discriminator(row),
             status=status,
             config=config,
             state=row.state,

@@ -596,6 +596,43 @@ class TestDerivedNames:
         assert store.components._derived_name(row, {"random_failure_probability": "not-a-float"}) is None
 
 
+class TestDiscriminator:
+    """A row's discriminator is read off its stored config, without constructing the class."""
+
+    @pytest.fixture
+    def discriminated_store(self, component_db: Engine) -> Store:
+        """A store carrying the discriminated source.
+
+        Returns:
+            A store reading and writing the fixture database.
+        """
+        return Store(catalog=il.Catalog.from_assets([DiscriminatedSource]))
+
+    def test_discriminated_source_exposes_its_value(self, discriminated_store: Store):
+        row = discriminated_store.components.create(
+            _ORG, kind="source", key="discriminated_source", name="My account", config={"account_id": "act_1"}
+        )
+        assert discriminated_store.components.discriminator(row) == "act_1"
+
+    def test_blank_value_is_none(self, discriminated_store: Store):
+        row = discriminated_store.components.create(
+            _ORG, kind="source", key="discriminated_source", config={"account_id": ""}
+        )
+        assert discriminated_store.components.discriminator(row) is None
+
+    def test_undiscriminated_class_is_none(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        row = store.components.create(_ORG, kind="source", key="demo_source")
+        assert store.components.discriminator(row) is None
+
+    def test_drifted_key_is_none(self, discriminated_store: Store):
+        row = discriminated_store.components.create(
+            _ORG, kind="source", key="discriminated_source", config={"account_id": "act_1"}
+        )
+        reader = Store(catalog=il.Catalog(components={}))
+        assert reader.components.discriminator(row) is None
+
+
 class TestTelemetry:
     """Hydration is traced where it happens."""
 
