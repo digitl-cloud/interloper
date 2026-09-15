@@ -1,16 +1,15 @@
 <script setup lang="ts">
 /**
- * Dead-air cue for the stretches where the agent is working with nothing yet
- * to show: waiting on a model turn, or between a tool's result and the next
- * move. Steps that are themselves in flight carry their own spinner.
+ * Dead-air cue for the stretches where the agent is working with no activity
+ * list to say so: the wait before the first tool call, and a turn that only
+ * ever answers. Same pairing the Nuxt UI chat template uses for its own.
  */
 </script>
 
 <template>
-    <div class="flex items-center gap-2 text-muted">
-        <UIcon name="i-lucide-loader-circle"
-               class="size-3.5 shrink-0 animate-spin" />
-        <UChatShimmer text="Thinking…"
-                      class="text-[13px]" />
+    <div class="flex items-center gap-1.5 text-muted">
+        <AgentIndicator />
+        <UChatShimmer text="Thinking..."
+                      class="text-sm" />
     </div>
 </template>
