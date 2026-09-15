@@ -67,5 +67,5 @@ deploys it with `mcp.enabled=true` — the workload shares the release's
 Postgres/catalog configuration, sets `INTERLOPER_MCP_EXTERNAL_URL` from
 `mcp.externalUrl`, and the chart's HTTPRoute forwards `/mcp` and
 `/.well-known/oauth-protected-resource` on the app hostnames to it. What
-remains cluster-side is the environment values (Flux) and, if it should not
-share the app's identity, its own GSA/IAM DB user in terraform.
+remains for the operator is supplying the environment values and, if it should
+not share the app's identity, a database identity of its own.
