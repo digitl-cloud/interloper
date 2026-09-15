@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.79.1 (2026-09-15)
+
+### Bug Fixes
+
+- **app**: Sort table columns on the values they display
+  ([`7c879b4`](https://github.com/digitl-cloud/Interloper/commit/7c879b455b531e9486ab582c2625f3f5a850f399))
+
+### Chores
+
+- **app**: Increase datatable page size to 50
+  ([`8244719`](https://github.com/digitl-cloud/Interloper/commit/82447196d41ff65ce1a276c39bcc52f36d73c164))
+
+- **app**: Jobs table shows the enabled switch last
+  ([`c315395`](https://github.com/digitl-cloud/Interloper/commit/c315395a2ddf041b0e52c6ddbccd35c6bab87de0))
+
+
 ## v0.79.0 (2026-09-15)
 
 ### Bug Fixes
