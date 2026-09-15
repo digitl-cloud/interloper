@@ -144,10 +144,11 @@ Consumers install straight from the registry (Helm 3.8+), with no `helm repo add
 helm install interloper oci://ghcr.io/digitl-cloud/charts/interloper --version <version>
 ```
 
-Chart versions released before 0.79.1 live only in the old `gh-pages` index and
-its no-`v` GitHub releases, which stay put so existing installs keep resolving.
+Chart versions released before 0.79.1 predate the registry. The index that
+served them is gone, so `helm repo` no longer resolves them; their `.tgz`
+assets stay attached to the matching no-`v` GitHub releases and a direct URL
+still fetches them.
 
 > The chart's `home`/`sources` URLs in `Chart.yaml` currently read
 > `github.com/digitlcloud/interloper` (no hyphen) while the repo is
-> `digitl-cloud/interloper`. Fix those so the generated Pages URL
-> (`https://digitl-cloud.github.io/interloper`) and chart metadata line up.
+> `digitl-cloud/interloper`, so both links 404. Fix them to point at the repo.

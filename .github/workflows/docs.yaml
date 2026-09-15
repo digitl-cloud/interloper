@@ -3,9 +3,8 @@ name: Docs
 # Publishes the documentation site to GitHub Pages on every change to main.
 #
 # The site is built with zensical from docs/ + zensical.toml and pushed into
-# the gh-pages branch, which is also the Helm repository chart-releaser writes
-# index.yaml into (Publish workflow). keep_files leaves index.yaml alone, and
-# the CNAME file makes Pages serve the branch at docs.interloper.dev.
+# the gh-pages branch, which the CNAME file makes Pages serve at
+# docs.interloper.dev.
 
 on:
   push:
