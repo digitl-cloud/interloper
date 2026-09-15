@@ -37,16 +37,14 @@ export function useAgentChat(sessionId: Ref<string>) {
         streaming.value ? messages.value[messages.value.length - 1]?.id : undefined)
 
     /**
-     * True while the agent is busy with no thought summary to show for it.
+     * True while the agent is busy with no trail to say so.
      *
-     * A trail with thoughts in it says "Thinking..." itself, so the standalone
-     * cue is for the rest: the wait before the first one arrives, and a model
-     * with no thoughts to report at all.
+     * A live trail is its own indicator, so the standalone cue covers only what
+     * comes before the first one: the wait between sending and the model's first
+     * thought or tool call.
      */
-    const thinking = computed(() => {
-        const last = messages.value[messages.value.length - 1]
-        return streaming.value && !last?.steps?.some(step => step.kind === 'thought')
-    })
+    const thinking = computed(() =>
+        streaming.value && !messages.value[messages.value.length - 1]?.steps)
 
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
