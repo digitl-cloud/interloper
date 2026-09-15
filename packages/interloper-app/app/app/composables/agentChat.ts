@@ -24,8 +24,17 @@ export function useAgentChat(sessionId: Ref<string>) {
     const streaming = ref(false)
     const error = ref<Error | null>(null)
 
-    /** Status in the shape `UChatMessages` and `UChatPromptSubmit` expect. */
-    const status = computed(() => streaming.value ? 'streaming' as const : 'ready' as const)
+    /**
+     * Status in the shape `UChatMessages` and `UChatPromptSubmit` expect.
+     *
+     * `submitted` covers the wait before the turn has anything to show, which is
+     * what raises the messages list's own thinking indicator; from the first
+     * thought or step onwards those rows report the work themselves.
+     */
+    const status = computed(() => {
+        if (!streaming.value) return 'ready' as const
+        return messages.value[messages.value.length - 1]?.role === 'user' ? 'submitted' as const : 'streaming' as const
+    })
 
     /**
      * The message the running turn is still adding to, if any.
@@ -36,15 +45,6 @@ export function useAgentChat(sessionId: Ref<string>) {
     const liveMessageId = computed(() =>
         streaming.value ? messages.value[messages.value.length - 1]?.id : undefined)
 
-    /**
-     * True while the agent is busy with no trail to say so.
-     *
-     * A live trail is its own indicator, so the standalone cue covers only what
-     * comes before the first one: the wait between sending and the model's first
-     * thought or tool call.
-     */
-    const thinking = computed(() =>
-        streaming.value && !messages.value[messages.value.length - 1]?.steps)
 
     /** Load existing messages from a session's event history. */
     async function loadHistory() {
@@ -134,7 +134,7 @@ export function useAgentChat(sessionId: Ref<string>) {
         }
     }
 
-    return { messages, streaming, status, thinking, liveMessageId, error, send, loadHistory }
+    return { messages, streaming, status, liveMessageId, error, send, loadHistory }
 }
 
 /**
@@ -147,16 +147,11 @@ function _appendEvent(messages: ChatMessage[], event: AgentEvent, elapsed?: numb
     const role = event.author === 'user' ? 'user' as const : 'assistant' as const
 
     for (const part of event.content?.parts ?? []) {
-        if (part.text && part.thought) _appendThought(messages, part.text)
+        if (part.text && part.thought) _appendThought(messages, part.text, elapsed)
         else if (part.text) _appendText(messages, role, part.text)
         else if (part.functionCall) _startActivity(messages, part.functionCall)
         else if (part.functionResponse) _settleActivity(messages, part.functionResponse)
     }
-
-    // Credit the wait once per event: an event carrying two thoughts and a call
-    // is still one stretch of elapsed time, not three.
-    const trail = messages[messages.length - 1]
-    if (trail?.steps && elapsed) trail.workSeconds = (trail.workSeconds ?? 0) + elapsed
 }
 
 /** Append text to the trailing message when it is plain prose from the same author, else start one. */
@@ -168,13 +163,18 @@ function _appendText(messages: ChatMessage[], role: 'user' | 'assistant', text: 
     else messages.push({ id: crypto.randomUUID(), role, text })
 }
 
-/** Append a thought summary to the trail, merging consecutive parts of the same one. */
-function _appendThought(messages: ChatMessage[], text: string) {
+/**
+ * Append a thought summary to the trail, merging consecutive parts of the same one.
+ *
+ * The elapsed time belongs to the block the model spent it reaching, so only a
+ * new block takes it; further parts of one already open are the same wait.
+ */
+function _appendThought(messages: ChatMessage[], text: string, elapsed?: number) {
     const steps = _trail(messages)
     const last = steps[steps.length - 1]
 
     if (last?.kind === 'thought') last.text += text
-    else steps.push({ id: crypto.randomUUID(), kind: 'thought', text })
+    else steps.push({ id: crypto.randomUUID(), kind: 'thought', text, seconds: elapsed })
 }
 
 /**
