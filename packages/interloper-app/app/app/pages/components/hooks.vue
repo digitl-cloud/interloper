@@ -28,6 +28,13 @@ const {
 componentsStore.fetchAll()
 componentsStore.fetchRelations()
 
+/** The components a hook watches, in relation order. */
+function watchedBy(hook: ComponentRecord): ComponentRecord[] {
+    return relationIds(hook, 'watches')
+        .map(id => componentsStore.byId(id))
+        .filter((w): w is ComponentRecord => !!w)
+}
+
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         accessorKey: 'name',
@@ -35,7 +42,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name ?? ''),
     },
     {
-        accessorKey: 'key',
+        id: 'type',
         header: 'Type',
         accessorFn: (row: ComponentRecord) => catalogStore.catalog[row.key]?.name ?? row.key,
         cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
@@ -44,8 +51,9 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         ]),
     },
     {
-        accessorKey: 'events',
+        id: 'events',
         header: 'Events',
+        accessorFn: (row: ComponentRecord) => hookEvents(row).join(', '),
         cell: ({ row }) => h('div', { class: 'flex flex-wrap gap-1' }, hookEvents(row.original).map(event =>
             h(UBadge, {
                 key: event,
@@ -54,12 +62,11 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         )),
     },
     {
-        accessorKey: 'watches',
+        id: 'watches',
         header: 'Watches',
+        accessorFn: (row: ComponentRecord) => watchedBy(row).map(w => w.name ?? w.key).join(', '),
         cell: ({ row }) => {
-            const watched = relationIds(row.original, 'watches')
-                .map(id => componentsStore.byId(id))
-                .filter((w): w is ComponentRecord => !!w)
+            const watched = watchedBy(row.original)
             if (watched.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = watched[0]!
             return h(EntityBadge, {
@@ -70,18 +77,15 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         },
     },
     {
-        accessorKey: 'enabled',
+        id: 'status',
         header: 'Status',
+        accessorFn: (row: ComponentRecord) => String(hookEnabled(row)),
         cell: ({ row }) => h(UBadge, {
             color: hookEnabled(row.original) ? 'success' : 'neutral',
         }, () => hookEnabled(row.original) ? 'Enabled' : 'Disabled'),
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('hook')[0]),
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
-    },
+    dateColumn<ComponentRecord>('created_at', 'Created'),
 ])
 
 function handleSaved() {

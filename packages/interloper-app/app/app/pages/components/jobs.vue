@@ -73,6 +73,13 @@ async function setEnabled(job: ComponentRecord, enabled: boolean) {
     }
 }
 
+/** The components a job targets, in relation order. */
+function targetsOf(job: ComponentRecord): ComponentRecord[] {
+    return relationIds(job, 'targets')
+        .map(id => componentsStore.byId(id))
+        .filter((t): t is ComponentRecord => !!t)
+}
+
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         accessorKey: 'name',
@@ -80,20 +87,20 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
         cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name ?? ''),
     },
     {
-        accessorKey: 'cron',
+        id: 'schedule',
         header: 'Schedule',
+        accessorFn: (row: ComponentRecord) => scheduleSummary(jobCron(row), jobTimezone(row)),
         cell: ({ row }) => h('span', {
             class: 'text-muted',
             title: jobCron(row.original),
         }, scheduleSummary(jobCron(row.original), jobTimezone(row.original))),
     },
     {
-        accessorKey: 'target_ids',
+        id: 'targets',
         header: 'Targets',
+        accessorFn: (row: ComponentRecord) => targetsOf(row).map(t => t.name ?? t.key).join(', '),
         cell: ({ row }) => {
-            const targets = relationIds(row.original, 'targets')
-                .map(id => componentsStore.byId(id))
-                .filter((t): t is ComponentRecord => !!t)
+            const targets = targetsOf(row.original)
             if (targets.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = targets[0]!
             return h(EntityBadge, {
@@ -105,7 +112,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     },
     ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
     {
-        accessorKey: 'enabled',
+        id: 'enabled',
         header: 'Enabled',
         accessorFn: (row: ComponentRecord) => String(jobEnabled(row)),
         cell: ({ row }) => h('div', {
@@ -120,11 +127,7 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             }),
         ]),
     },
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
-    },
+    dateColumn<ComponentRecord>('created_at', 'Created'),
 ])
 
 function rowActions(job: ComponentRecord): DropdownMenuItem[][] {

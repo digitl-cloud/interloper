@@ -39,10 +39,17 @@ function typeName(key: string): string {
     return defn?.name ?? key
 }
 
+/** The connection a destination is bound to, if any. */
+function connectionOf(destination: ComponentRecord): ComponentRecord | undefined {
+    const id = resourceMap(destination).connection
+    return id ? componentsStore.byId(id) : undefined
+}
+
 const columns: TableColumn<ComponentRecord>[] = [
     {
-        accessorKey: 'key',
+        id: 'destination',
         header: 'Destination',
+        accessorFn: (row: ComponentRecord) => row.name ?? typeName(row.key),
         cell: ({ row }) => {
             const label = row.original.name ?? typeName(row.original.key)
             return h('span', { class: 'flex items-center gap-2' }, [
@@ -52,20 +59,20 @@ const columns: TableColumn<ComponentRecord>[] = [
         },
     },
     {
-        accessorKey: 'type',
+        id: 'type',
         header: 'Type',
+        accessorFn: (row: ComponentRecord) => typeName(row.key),
         cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
             h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
             typeName(row.original.key),
         ]),
     },
     {
-        accessorKey: 'resources',
+        id: 'connection',
         header: 'Connection',
+        accessorFn: (row: ComponentRecord) => connectionOf(row)?.name ?? connectionOf(row)?.key ?? '',
         cell: ({ row }) => {
-            const connId = resourceMap(row.original).connection
-            if (!connId) return h('span', { class: 'text-muted' }, '—')
-            const resource = componentsStore.byId(connId)
+            const resource = connectionOf(row.original)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, {
                 icon: componentIcon(resource.key, 'i-lucide-key-round'),
@@ -73,11 +80,7 @@ const columns: TableColumn<ComponentRecord>[] = [
             })
         },
     },
-    {
-        accessorKey: 'created_at',
-        header: 'Created',
-        accessorFn: (row: ComponentRecord) => row.created_at ? formatDate(row.created_at) : '—',
-    },
+    dateColumn<ComponentRecord>('created_at', 'Created'),
 ]
 
 async function handleDelete(ids: string[]) {
