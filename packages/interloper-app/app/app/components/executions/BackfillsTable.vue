@@ -19,8 +19,24 @@ onMounted(async () => {
     if (!loading.value) await backfillsStore.fetch()
 })
 
+/**
+ * The list is loaded whole, so filtering is local. Single-partition
+ * backfills are what a manual partition run creates; they outnumber real
+ * range backfills and hide them, so they stay out unless asked for.
+ */
+const search = ref('')
+const showSinglePartition = ref(false)
+const shown = computed(() => {
+    const needle = search.value.trim().toLowerCase()
+    return backfills.value.filter(backfill =>
+        (showSinglePartition.value || backfill.partitions !== 1)
+        && (!needle || [backfill.component_name, backfill.component_key].some(text => text?.toLowerCase().includes(needle))),
+    )
+})
+
 const pagination = ref({ pageIndex: 0, pageSize: PAGE_SIZE })
 const sorting = ref([{ id: 'started_at', desc: true }])
+watch(shown, () => { pagination.value = { ...pagination.value, pageIndex: 0 } })
 
 const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
@@ -74,7 +90,16 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
+    <div class="flex flex-col flex-1 min-h-0 gap-2">
+        <div class="flex items-center gap-3">
+            <UInput v-model="search"
+                    placeholder="Search backfills by target..."
+                    icon="i-lucide-search"
+                    class="max-w-sm" />
+            <UCheckbox v-model="showSinglePartition"
+                       label="Show single partition" />
+        </div>
+
         <div v-if="!loading && backfills.length === 0"
              class="w-full max-w-[1040px] mx-auto">
             <EmptyState icon="i-lucide-history"
@@ -90,7 +115,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
         <template v-else>
             <UTable v-model:pagination="pagination"
                     v-model:sorting="sorting"
-                    :data="backfills"
+                    :data="shown"
                     :columns="columns"
                     :loading="loading"
                     :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
@@ -100,10 +125,10 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
 
             <TableFooter class="py-3"
                          :page="pagination.pageIndex + 1"
-                         :total="backfills.length"
+                         :total="shown.length"
                          :page-size="PAGE_SIZE"
                          @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
-                {{ backfills.length }} backfill(s) total.
+                {{ shown.length }} backfill(s) total.
             </TableFooter>
         </template>
     </div>
