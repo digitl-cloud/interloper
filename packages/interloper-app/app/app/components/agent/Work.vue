@@ -90,14 +90,16 @@ const summaryText = computed(() => {
         const last = props.steps[props.steps.length - 1]
         return last && last.kind !== 'thought' ? label(last) : 'Thinking...'
     }
-    return seconds.value ? `Thought for ${_duration(seconds.value)}` : count.value
+    // Bare "Thought" where the timings never came through, which is the same
+    // thing UChatReasoning says of a block it could not time.
+    return seconds.value ? `Thought for ${_duration(seconds.value)}` : 'Thought'
 })
 
 /** The count rides alongside, unless something failed, which is worth the space instead. */
 const summarySuffix = computed(() => {
     if (props.streaming) return undefined
     if (failed.value) return `${failed.value} failed`
-    return seconds.value && activities.value.length ? count.value : undefined
+    return activities.value.length ? count.value : undefined
 })
 
 const summaryIcon = computed(() => failed.value ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks')
