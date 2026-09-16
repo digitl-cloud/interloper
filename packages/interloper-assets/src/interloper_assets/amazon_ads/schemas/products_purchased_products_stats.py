@@ -18,7 +18,7 @@ class ProductsPurchasedProductsStats(Schema):
     keyword: str | None = Field(..., description="The keyword")
     keyword_id: int | None = Field(..., description="The ID of the keyword")
     keyword_type: str | None = Field(..., description="The type of keyword")
-    kindle_edition_normalized_pages_read_14d: float | None = Field(
+    kindle_edition_normalized_pages_read_14d: int | None = Field(
         ..., description="The number of Kindle Edition Normalized Pages read in the last 14 days"
     )
     kindle_edition_normalized_pages_royalties_14d: float | None = Field(
@@ -27,20 +27,20 @@ class ProductsPurchasedProductsStats(Schema):
     match_type: str | None = Field(..., description="The type of match")
     portfolio_id: int | None = Field(..., description="The ID of the portfolio")
     purchased_asin: str | None = Field(..., description="The ASIN of the purchased product")
-    purchases_14d: float | None = Field(..., description="The number of purchases in the last 14 days")
-    purchases_1d: float | None = Field(..., description="The number of purchases in the last 1 day")
-    purchases_30d: float | None = Field(..., description="The number of purchases in the last 30 days")
-    purchases_7d: float | None = Field(..., description="The number of purchases in the last 7 days")
-    purchases_other_sku_14d: float | None = Field(
+    purchases_14d: int | None = Field(..., description="The number of purchases in the last 14 days")
+    purchases_1d: int | None = Field(..., description="The number of purchases in the last 1 day")
+    purchases_30d: int | None = Field(..., description="The number of purchases in the last 30 days")
+    purchases_7d: int | None = Field(..., description="The number of purchases in the last 7 days")
+    purchases_other_sku_14d: int | None = Field(
         ..., description="The number of purchases for other SKUs in the last 14 days"
     )
-    purchases_other_sku_1d: float | None = Field(
+    purchases_other_sku_1d: int | None = Field(
         ..., description="The number of purchases for other SKUs in the last 1 day"
     )
-    purchases_other_sku_30d: float | None = Field(
+    purchases_other_sku_30d: int | None = Field(
         ..., description="The number of purchases for other SKUs in the last 30 days"
     )
-    purchases_other_sku_7d: float | None = Field(
+    purchases_other_sku_7d: int | None = Field(
         ..., description="The number of purchases for other SKUs in the last 7 days"
     )
     sales_14d: float | None = Field(..., description="The sales in the last 14 days")
@@ -51,27 +51,27 @@ class ProductsPurchasedProductsStats(Schema):
     sales_other_sku_1d: float | None = Field(..., description="The sales for other SKUs in the last 1 day")
     sales_other_sku_30d: float | None = Field(..., description="The sales for other SKUs in the last 30 days")
     sales_other_sku_7d: float | None = Field(..., description="The sales for other SKUs in the last 7 days")
-    units_sold_clicks_14d: float | None = Field(
+    units_sold_clicks_14d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 14 days"
     )
-    units_sold_clicks_1d: float | None = Field(
+    units_sold_clicks_1d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 1 day"
     )
-    units_sold_clicks_30d: float | None = Field(
+    units_sold_clicks_30d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 30 days"
     )
-    units_sold_clicks_7d: float | None = Field(
+    units_sold_clicks_7d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 7 days"
     )
-    units_sold_other_sku_14d: float | None = Field(
+    units_sold_other_sku_14d: int | None = Field(
         ..., description="The number of units sold for other SKUs in the last 14 days"
     )
-    units_sold_other_sku_1d: float | None = Field(
+    units_sold_other_sku_1d: int | None = Field(
         ..., description="The number of units sold for other SKUs in the last 1 day"
     )
-    units_sold_other_sku_30d: float | None = Field(
+    units_sold_other_sku_30d: int | None = Field(
         ..., description="The number of units sold for other SKUs in the last 30 days"
     )
-    units_sold_other_sku_7d: float | None = Field(
+    units_sold_other_sku_7d: int | None = Field(
         ..., description="The number of units sold for other SKUs in the last 7 days"
     )

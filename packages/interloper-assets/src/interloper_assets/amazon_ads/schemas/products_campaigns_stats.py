@@ -22,7 +22,7 @@ class ProductsCampaignsStats(Schema):
     attributed_sales_same_sku_7d: float | None = Field(
         ..., description="The attributed sales for the same SKU within 7 days"
     )
-    campaign_applicable_budget_rule_name: float | None = Field(
+    campaign_applicable_budget_rule_name: str | None = Field(
         ..., description="The name of the applicable budget rule for the campaign"
     )
     campaign_applicable_budget_rule_id: int | None = Field(
@@ -39,35 +39,35 @@ class ProductsCampaignsStats(Schema):
     )
     campaign_status: str | None = Field(..., description="The status of the campaign")
     click_through_rate: float | None = Field(..., description="The click-through rate")
-    clicks: float | None = Field(..., description="The number of clicks")
+    clicks: int | None = Field(..., description="The number of clicks")
     cost: float | None = Field(..., description="The cost")
     cost_per_click: float | None = Field(..., description="The cost per click")
     date: datetime.date | None = Field(..., description="The date of the campaign")
-    impressions: float | None = Field(..., description="The number of impressions")
-    kindle_edition_normalized_pages_read_14d: float | None = Field(
+    impressions: int | None = Field(..., description="The number of impressions")
+    kindle_edition_normalized_pages_read_14d: int | None = Field(
         ..., description="The number of Kindle edition normalized pages read within 14 days"
     )
     kindle_edition_normalized_pages_royalties_14d: float | None = Field(
         ..., description="The royalties for Kindle edition normalized pages within 14 days"
     )
-    purchases_14d: float | None = Field(..., description="The purchases within 14 days")
-    purchases_1d: float | None = Field(..., description="The purchases within 1 day")
-    purchases_30d: float | None = Field(..., description="The purchases within 30 days")
-    purchases_7d: float | None = Field(..., description="The purchases within 7 days")
-    purchases_same_sku_14d: float | None = Field(..., description="The purchases for the same SKU within 14 days")
-    purchases_same_sku_1d: float | None = Field(..., description="The purchases for the same SKU within 1 day")
-    purchases_same_sku_30d: float | None = Field(..., description="The purchases for the same SKU within 30 days")
-    purchases_same_sku_7d: float | None = Field(..., description="The purchases for the same SKU within 7 days")
+    purchases_14d: int | None = Field(..., description="The purchases within 14 days")
+    purchases_1d: int | None = Field(..., description="The purchases within 1 day")
+    purchases_30d: int | None = Field(..., description="The purchases within 30 days")
+    purchases_7d: int | None = Field(..., description="The purchases within 7 days")
+    purchases_same_sku_14d: int | None = Field(..., description="The purchases for the same SKU within 14 days")
+    purchases_same_sku_1d: int | None = Field(..., description="The purchases for the same SKU within 1 day")
+    purchases_same_sku_30d: int | None = Field(..., description="The purchases for the same SKU within 30 days")
+    purchases_same_sku_7d: int | None = Field(..., description="The purchases for the same SKU within 7 days")
     sales_14d: float | None = Field(..., description="The sales within 14 days")
     sales_1d: float | None = Field(..., description="The sales within 1 day")
     sales_30d: float | None = Field(..., description="The sales within 30 days")
     sales_7d: float | None = Field(..., description="The sales within 7 days")
     spend: float | None = Field(..., description="The amount spent")
-    units_sold_clicks_14d: float | None = Field(..., description="The units sold through clicks within 14 days")
-    units_sold_clicks_1d: float | None = Field(..., description="The units sold through clicks within 1 day")
-    units_sold_clicks_30d: float | None = Field(..., description="The units sold through clicks within 30 days")
+    units_sold_clicks_14d: int | None = Field(..., description="The units sold through clicks within 14 days")
+    units_sold_clicks_1d: int | None = Field(..., description="The units sold through clicks within 1 day")
+    units_sold_clicks_30d: int | None = Field(..., description="The units sold through clicks within 30 days")
     units_sold_clicks_7d: int | None = Field(..., description="The units sold through clicks within 7 days")
-    units_sold_same_sku_14d: float | None = Field(..., description="The units sold for the same SKU within 14 days")
-    units_sold_same_sku_1d: float | None = Field(..., description="The units sold for the same SKU within 1 day")
-    units_sold_same_sku_30d: float | None = Field(..., description="The units sold for the same SKU within 30 days")
-    units_sold_same_sku_7d: float | None = Field(..., description="The units sold for the same SKU within 7 days")
+    units_sold_same_sku_14d: int | None = Field(..., description="The units sold for the same SKU within 14 days")
+    units_sold_same_sku_1d: int | None = Field(..., description="The units sold for the same SKU within 1 day")
+    units_sold_same_sku_30d: int | None = Field(..., description="The units sold for the same SKU within 30 days")
+    units_sold_same_sku_7d: int | None = Field(..., description="The units sold for the same SKU within 7 days")
