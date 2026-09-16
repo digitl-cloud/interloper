@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
-from interloper_db.models import Event, Run
+from interloper_db.models import Event, Execution, Run
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
@@ -111,6 +111,27 @@ class ExecutionResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: Execution) -> ExecutionResponse:
+        """Convert an executions-view row to its response model.
+
+        Args:
+            row: The execution row.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            run_id=row.run_id,
+            org_id=row.org_id,
+            component_id=row.component_id,
+            component_key=row.component_key or "",
+            status=row.status,
+            started_at=str(row.started_at) if row.started_at else None,
+            completed_at=str(row.completed_at) if row.completed_at else None,
+            created_at=str(row.created_at) if row.created_at else None,
+        )
 
 
 class EventResponse(BaseModel):
@@ -291,6 +312,25 @@ def create_run(
     return RunResponse.from_run(run)
 
 
+@router.get("/executions/latest")
+def list_latest_executions(
+    user: ViewerDep,
+    org_id: OrgIdDep,
+    store: StoreDep,
+) -> list[ExecutionResponse]:
+    """The latest execution of every asset in the active organisation.
+
+    Args:
+        user: The authenticated user.
+        org_id: The active organisation UUID.
+        store: The Store instance.
+
+    Returns:
+        One execution per asset that has ever run, as response models.
+    """
+    return [ExecutionResponse.from_row(row) for row in store.events.latest_executions(org_id)]
+
+
 @router.get("/{run_id}")
 def get_run(
     run_id: UUID,
@@ -328,20 +368,7 @@ def list_executions(
         The run's operation executions, as response models.
     """
     _load_authorized_run(run_id, user, store)
-    rows = store.events.list_executions(run_id)
-    return [
-        ExecutionResponse(
-            run_id=row.run_id,
-            org_id=row.org_id,
-            component_id=row.component_id,
-            component_key=row.component_key or "",
-            status=row.status,
-            started_at=str(row.started_at) if row.started_at else None,
-            completed_at=str(row.completed_at) if row.completed_at else None,
-            created_at=str(row.created_at) if row.created_at else None,
-        )
-        for row in rows
-    ]
+    return [ExecutionResponse.from_row(row) for row in store.events.list_executions(run_id)]
 
 
 @router.post("/{run_id}/retry")

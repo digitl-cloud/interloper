@@ -323,6 +323,37 @@ def test_list_executions_returns_the_runs_operations(store: FakeStore) -> None:
     assert [row["component_key"] for row in response.json()] == ["demo.a"]
 
 
+def test_latest_executions_report_the_orgs_newest_per_asset(store: FakeStore) -> None:
+    """``GET /runs/executions/latest`` lists the latest execution of every asset in the org."""
+    seen: list[UUID] = []
+
+    def latest_executions(org_id: UUID):
+        seen.append(org_id)
+        return [
+            SimpleNamespace(
+                run_id=uuid4(),
+                org_id=org_id,
+                component_id=uuid4(),
+                component_key="demo.a",
+                status="success",
+                started_at=None,
+                completed_at=None,
+                created_at=None,
+            )
+        ]
+
+    store.events = SimpleNamespace(latest_executions=latest_executions)
+    app = _app(store)
+    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+
+    response = TestClient(app).get("/runs/executions/latest")
+
+    assert response.status_code == 200
+    assert [row["component_key"] for row in response.json()] == ["demo.a"]
+    assert seen == [_ORG_ID]
+
+
 def test_retry_a_missing_run_is_a_404(store: FakeStore) -> None:
     """A run that vanished between the load and the retry is a 404, not a 500."""
     run_id = uuid4()

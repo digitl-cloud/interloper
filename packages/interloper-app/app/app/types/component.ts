@@ -35,6 +35,7 @@ export interface ComponentRecord {
     kind: string
     key: string
     name: string | null
+    discriminator: string | null
     status: ComponentStatus
     /**
      * Secret kinds (connection/config/resource): decoded in detail responses;

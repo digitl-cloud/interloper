@@ -12,6 +12,8 @@ const props = defineProps<{
     status?: NodeStatus
     /** VueFlow selection state — drives the blue selection ring. */
     selected?: boolean
+    /** Not owned by a source (a model over other assets): gets the function glyph. */
+    standalone?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -42,9 +44,17 @@ const hasUpstream = computed(() => targetConnections.value.length > 0)
 const isMaterializing = computed(() => materializingAssetIds?.value?.has(props.asset.id) ?? false)
 
 const label = computed(() => props.asset.key)
+const description = computed(() => props.assetDefn?.description ?? '')
 const tags = computed(() => props.assetDefn?.tags ?? [])
-/** Meta line under the key: live status info when present; catalog tags render as badges otherwise. */
 const statusLabel = computed(() => props.status?.label ?? null)
+const statusTextClass = computed(() => {
+    switch (props.status?.state) {
+        case 'failed': return 'text-error'
+        case 'attention': return 'text-warning'
+        case 'running': return 'text-info'
+        default: return 'text-dimmed'
+    }
+})
 const warnings = computed(() => getWarnings(props.asset.id, props.asset.key))
 const destinationBadge = computed(() => getBadgeForAssetId(props.asset.id))
 
@@ -96,12 +106,7 @@ const isRunnable = computed(() => {
 const showTargetHandle = computed(() => hasUpstream.value || !isRunnable.value || isValidTarget.value)
 const showSourceHandle = computed(() => hasDownstream.value || isValidSource.value)
 
-const ringClass = computed(() => {
-    if (props.selected) return 'ring-2 ring-primary'
-    if (isMissing.value) return 'ring-1 ring-[var(--ui-error)]/60'
-    if (props.status) return statusRingClass(props.status.state)
-    return ''
-})
+const frameClass = computed(() => ['border-[var(--graph-card-line)]', props.selected && 'outline-2 outline-primary outline-offset-4'])
 
 const contextMenuItems = computed<ContextMenuItem[][]>(() => {
     const items: ContextMenuItem[][] = [
@@ -146,7 +151,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="relative w-[240px] transition-opacity duration-200"
+        <div class="relative w-[256px] transition-opacity duration-200"
              :class="shouldFade && 'opacity-25'">
             <Handle v-if="showTargetHandle"
                     type="target"
@@ -160,108 +165,80 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                         !isRunnable && !isValidTarget && '!size-2.5 !bg-transparent !border-2 !border-warning animate-pulse-grow',
                     ]" />
 
-            <!-- Materializing spinner -->
-            <div v-if="isMaterializing"
-                 class="absolute -left-2 -top-2 z-10">
-                <UTooltip :delay-duration="0"
-                          :content="{ side: 'top', sideOffset: 6 }">
-                    <div class="flex size-5 items-center justify-center rounded-full border border-[var(--ui-border-accented)] bg-muted">
-                        <UIcon name="i-lucide-loader-2"
-                               class="size-3 shrink-0 animate-spin text-muted" />
-                    </div>
-                    <template #content>
-                        <div class="text-xs">Materializing</div>
-                    </template>
-                </UTooltip>
-            </div>
+            <GraphCornerBadge v-if="isMaterializing"
+                              icon="i-lucide-loader-2"
+                              corner="top-left"
+                              spin>
+                <div class="text-xs">Materializing</div>
+            </GraphCornerBadge>
 
-            <!-- Drift badge — the asset key no longer resolves against the catalog. -->
-            <UTooltip v-if="isMissing"
-                      :delay-duration="0"
-                      :content="{ side: 'top', sideOffset: 6 }"
-                      class="absolute -right-2 -top-2 z-10">
-                <div class="flex size-5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-error)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-error)_20%,var(--ui-bg))]">
-                    <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
-                           class="size-3 shrink-0 text-error" />
+            <!-- Drift: the asset key no longer resolves against the catalog. -->
+            <GraphCornerBadge v-if="isMissing"
+                              :icon="driftBadge?.icon ?? 'i-lucide-unplug'"
+                              corner="top-right"
+                              tone="error">
+                <div class="text-xs">{{ driftBadge?.label }}</div>
+            </GraphCornerBadge>
+
+            <GraphCornerBadge v-if="warnings.length > 0 && !isMissing"
+                              icon="i-lucide-triangle-alert"
+                              corner="top-right"
+                              tone="warning"
+                              :tooltip-ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }">
+                <div class="rounded-lg border border-default bg-default shadow-lg overflow-hidden">
+                    <table class="text-xs w-full">
+                        <tbody>
+                            <tr v-for="(w, i) in warnings"
+                                :key="i"
+                                class="border-b border-default last:border-b-0">
+                                <td class="px-3 py-2">
+                                    <div class="flex items-center gap-2">
+                                        <UIcon name="i-lucide-circle-alert"
+                                               class="size-3.5 shrink-0 text-warning" />
+                                        <span>{{ w.message }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <template #content>
-                    <div class="text-xs">{{ driftBadge?.label }}</div>
-                </template>
-            </UTooltip>
+            </GraphCornerBadge>
 
-            <!-- Warning badge -->
-            <UTooltip v-if="warnings.length > 0 && !isMissing"
-                      :delay-duration="0"
-                      :content="{ side: 'top', sideOffset: 6 }"
-                      :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
-                      class="absolute -right-2 -top-2 z-10">
-                <div class="flex size-5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-warning)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_20%,var(--ui-bg))]">
-                    <UIcon name="i-lucide-triangle-alert"
-                           class="size-3 shrink-0 text-warning" />
-                </div>
-                <template #content>
-                    <div class="rounded-lg border border-default bg-default shadow-lg overflow-hidden">
-                        <table class="text-xs w-full">
-                            <tbody>
-                                <tr v-for="(w, i) in warnings"
-                                    :key="i"
-                                    class="border-b border-default last:border-b-0">
-                                    <td class="px-3 py-2">
-                                        <div class="flex items-center gap-2">
-                                            <UIcon name="i-lucide-circle-alert"
-                                                   class="size-3.5 shrink-0 text-warning" />
-                                            <span>{{ w.message }}</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </template>
-            </UTooltip>
+            <GraphCornerBadge v-if="destinationBadge"
+                              :icon="destinationBadge.icon"
+                              corner="bottom-right"
+                              tone="primary"
+                              :count="destinationBadge.count">
+                <div class="text-xs">{{ destinationBadge.label }}</div>
+            </GraphCornerBadge>
 
-            <!-- Destination badge — bottom-right corner -->
-            <div v-if="destinationBadge"
-                 class="absolute -bottom-2 -right-2 z-10">
-                <UTooltip :delay-duration="0"
-                          :content="{ side: 'bottom', sideOffset: 6 }">
-                    <div class="relative flex size-6 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-primary)_25%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-primary)_10%,var(--ui-bg))]">
-                        <UIcon :name="destinationBadge.icon"
-                               class="size-3.5 shrink-0 text-highlighted" />
-                        <span v-if="destinationBadge.isMulti"
-                              class="absolute -right-0.5 -bottom-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-default px-0.5 text-[9px] font-semibold leading-none text-primary">
-                            {{ destinationBadge.count }}
-                        </span>
-                    </div>
-                    <template #content>
-                        <div class="text-xs">
-                            {{ destinationBadge.label }}
-                        </div>
-                    </template>
-                </UTooltip>
-            </div>
-
-            <div class="rounded-xl border-2 border-default bg-default px-4 py-3"
-                 :class="ringClass">
-                <div class="flex items-center gap-2">
-                    <UIcon name="i-lucide-box"
-                           class="size-4 shrink-0 text-primary" />
-                    <span class="min-w-0 flex-1 truncate font-mono text-[13px] font-semibold text-highlighted">{{ label }}</span>
-                    <span class="size-2 shrink-0 rounded-full"
+            <div class="graph-asset overflow-hidden rounded-xl border bg-default"
+                 :class="frameClass">
+                <div class="flex h-10 items-center gap-[9px] border-b border-[var(--graph-head-line)] bg-elevated px-3.5">
+                    <span v-if="standalone"
+                          class="w-[15px] shrink-0 text-center font-serif text-[15px] italic leading-none text-[var(--graph-model)]">ƒ</span>
+                    <UIcon v-else
+                           name="i-lucide-box"
+                           class="size-[15px] shrink-0 text-primary" />
+                    <span class="min-w-0 truncate font-mono text-[12.5px] font-semibold text-highlighted">{{ label }}</span>
+                    <span class="size-[7px] shrink-0 rounded-full"
                           :class="statusDotClass(status?.state ?? 'idle')" />
                 </div>
-                <div v-if="statusLabel || isMissing"
-                     class="mt-0.5 truncate pl-6 text-xs text-muted"
-                     :class="isMissing && 'italic text-dimmed'">
-                    {{ isMissing ? 'No catalog definition' : statusLabel }}
-                </div>
-                <div v-else-if="tags.length"
-                     class="mt-1.5 flex flex-wrap gap-1 pl-6">
-                    <UBadge v-for="tag in tags"
-                            :key="tag"
-                            :color="tagColor(tag)"
-                            size="sm"
-                            :label="tag" />
+                <div class="flex flex-col gap-[9px] px-3.5 pb-3 pt-2.5">
+                    <p class="line-clamp-2 h-[35px] text-xs leading-[1.45] text-muted"
+                       :class="isMissing && 'italic text-dimmed'">{{ isMissing ? 'No catalog definition' : description }}</p>
+                    <div class="flex min-w-0 items-center gap-2">
+                        <UBadge v-for="tag in tags"
+                                :key="tag"
+                                :color="tagColor(tag)"
+                                variant="soft"
+                                size="sm"
+                                class="shrink-0"
+                                :label="tag" />
+                        <span v-if="statusLabel"
+                              class="min-w-0 truncate text-[10.5px]"
+                              :class="statusTextClass">{{ statusLabel }}</span>
+                    </div>
                 </div>
             </div>
 

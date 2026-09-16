@@ -132,6 +132,7 @@ class ComponentResponse(BaseModel):
     kind: str
     key: str
     name: str | None = None
+    discriminator: str | None = None
     status: ComponentStatus
     config: dict[str, Any] | None = None
     state: dict[str, Any] | None = None
@@ -191,6 +192,7 @@ class ComponentResponse(BaseModel):
             kind=row.kind,
             key=row.key,
             name=row.name,
+            discriminator=store.components.discriminator(row),
             status=status,
             config=config,
             state=row.state,

@@ -157,7 +157,8 @@ whatever the owner cascades into its children is cascaded again.
 ### Discriminator
 
 One configuration field may carry `discriminator=True`. `discriminator` and `instance_name()`
-expose it; sources use it for per-instance table names. Two marked fields raise `TypeError`.
+expose its value, `discriminator_field()` its name for callers holding a config without an
+instance; sources use it for per-instance table names. Two marked fields raise `TypeError`.
 
 ## Writing a kind
 

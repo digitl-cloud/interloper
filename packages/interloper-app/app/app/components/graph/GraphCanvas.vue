@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
-import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
+import { MarkerType, VueFlow, useVueFlow, Panel } from '@vue-flow/core'
 import type { Node, Edge, Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -82,21 +82,27 @@ function toggleGroup(groupId: string) {
 }
 
 // Layout constants (assets render smaller in compact / run mode)
-const ASSET_W = props.compact ? 200 : 240
-const ASSET_H = props.compact ? 44 : 64
-// Wide enough that corner badges (hanging ~12px past a card's edge) never
-// touch the neighbouring card or its badges.
-const STACK_GAP = 28
+const ASSET_W = props.compact ? 200 : 256
+const ASSET_H = props.compact ? 44 : 128
+/** Vertical gap between stacked assets, and above the first one; fits two corner badges (8px each) with room to spare. */
+const ASSET_GAP = 20
+/** Vertical gap between the sources of a group, and above the first one. */
+const MEMBER_GAP = 20
 /** Horizontal gap between dependency ranks inside an expanded container. */
 const INNER_GAP_RANK = 48
-const SRC_PADDING = 16
-const GRP_PADDING = 24
-const SRC_HEADER_H = 68
-const SRC_BODY_TOP = 16
-/** Container width: one asset column plus side padding; collapsed cards match. */
-const SRC_W = ASSET_W + SRC_PADDING * 2
-const COLLAPSED_W = SRC_W
-const COLLAPSED_H = 76
+const SRC_PAD_X = 20
+const SRC_PAD_BOTTOM = 20
+const GRP_PAD_X = 20
+const GRP_PAD_BOTTOM = 20
+/** Header of a source nested in a group; a top-level source's header also holds its chip row. */
+const HEAD_H = 64
+const TOP_SOURCE_HEAD_H = 84
+/** Group header: its 36px tile with 20px above and below, matching the side padding. */
+const GRP_HEAD_H = 76
+/** Height each folded card adds under a collapsed nested source. */
+const LAYER_H = 6
+const SRC_W = ASSET_W + SRC_PAD_X * 2
+const GRP_W = SRC_W + GRP_PAD_X * 2
 
 // Actual measured heights from VueFlow's ResizeObserver
 const measuredHeights = ref(new Map<string, number>())
@@ -150,11 +156,9 @@ function isGroupExpanded(groupId: string): boolean {
     return expandedGroups.value.has(groupId)
 }
 
-/** Aggregate member statuses for the group card: attention > paused > idle. */
+/** The group card's dot: its members' materialization states rolled up. */
 function groupStatus(members: GraphSourceEntry[]): NodeStatus {
-    if (members.some(m => m.status?.state === 'attention')) return { state: 'attention' }
-    if (members.some(m => m.status?.state === 'paused')) return { state: 'paused' }
-    return { state: 'idle' }
+    return { state: rollupState(members.map(m => m.status?.state ?? 'pending')) }
 }
 
 // Clear measured heights for a source's assets when it collapses
@@ -203,7 +207,12 @@ function getInnerLayout(sourceId: string) {
         height: measuredHeights.value.get(c.asset.id) ?? ASSET_H,
     }))
 
-    return layoutDag(layoutNodes, intraEdges, { direction: 'LR', gapX: STACK_GAP, gapY: INNER_GAP_RANK })
+    return layoutDag(layoutNodes, intraEdges, { direction: 'LR', gapX: ASSET_GAP, gapY: INNER_GAP_RANK })
+}
+
+/** Folded cards drawn under a collapsed nested source, hinting at its assets. */
+function sourceLayers(sourceId: string): number {
+    return Math.min(2, Math.max(0, childEntries(sourceId).length - 1))
 }
 
 /** Whether a source is rendered as expanded child nodes on the canvas. */
@@ -215,14 +224,16 @@ function isNodesExpanded(sourceId: string): boolean {
 function getSourceDimensions(sourceId: string): { width: number; height: number } {
     const open = expandedSources.value.has(sourceId)
     const children = childEntries(sourceId)
+    const nested = groupOfSource.value.has(sourceId)
+    const head = nested ? HEAD_H : TOP_SOURCE_HEAD_H
     if (!open || children.length === 0) {
-        return { width: COLLAPSED_W, height: COLLAPSED_H }
+        return { width: SRC_W, height: head + (nested ? sourceLayers(sourceId) * LAYER_H : 0) }
     }
 
     const dag = getInnerLayout(sourceId)
     return {
-        width: Math.max(SRC_W, dag.width + SRC_PADDING * 2),
-        height: SRC_HEADER_H + SRC_BODY_TOP + dag.height + SRC_PADDING,
+        width: Math.max(SRC_W, dag.width + SRC_PAD_X * 2),
+        height: head + ASSET_GAP + dag.height + SRC_PAD_BOTTOM,
     }
 }
 
@@ -248,16 +259,16 @@ function getGroupInnerLayout(groupId: string) {
         const dims = getSourceDimensions(m.source.id)
         return { id: m.source.id, width: dims.width, height: dims.height }
     })
-    return layoutDag(layoutNodes, intraEdges, { direction: 'LR', gapX: STACK_GAP, gapY: INNER_GAP_RANK })
+    return layoutDag(layoutNodes, intraEdges, { direction: 'LR', gapX: MEMBER_GAP, gapY: INNER_GAP_RANK })
 }
 
 /** Group node dimensions — member dims already reflect their own expand state. */
 function getGroupDimensions(groupId: string): { width: number; height: number } {
-    if (!isGroupExpanded(groupId)) return { width: COLLAPSED_W, height: COLLAPSED_H }
+    if (!isGroupExpanded(groupId)) return { width: GRP_W, height: GRP_HEAD_H }
     const dag = getGroupInnerLayout(groupId)
     return {
-        width: Math.max(dag.width, SRC_W) + GRP_PADDING * 2,
-        height: SRC_HEADER_H + SRC_BODY_TOP + dag.height + GRP_PADDING,
+        width: Math.max(dag.width, SRC_W) + GRP_PAD_X * 2,
+        height: GRP_HEAD_H + MEMBER_GAP + dag.height + GRP_PAD_BOTTOM,
     }
 }
 
@@ -414,7 +425,6 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
         type: 'source',
         position: { x: pos.x, y: pos.y },
         parentNode: parent,
-        extent: parent ? 'parent' : undefined,
         width: dims.width,
         height: dims.height,
         connectable: !container,
@@ -424,6 +434,8 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
             sourceDefn: entry.sourceDefn,
             status: entry.status,
             open,
+            nested: !!parent,
+            layers: parent ? sourceLayers(source.id) : 1,
         },
     })
 
@@ -437,10 +449,9 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
                     id: child.asset.id,
                     type: 'asset',
                     parentNode: source.id,
-                    extent: 'parent',
                     position: {
-                        x: assetPos.x + SRC_PADDING,
-                        y: assetPos.y + SRC_HEADER_H + SRC_BODY_TOP,
+                        x: assetPos.x + SRC_PAD_X,
+                        y: assetPos.y + (parent ? HEAD_H : TOP_SOURCE_HEAD_H) + ASSET_GAP,
                     },
                     data: { asset: child.asset, assetDefn: child.assetDefn, source, status: child.status },
                     connectable: true,
@@ -488,6 +499,7 @@ const nodes = computed<Node[]>(() => {
                 sourceDefn: members[0]!.sourceDefn,
                 members,
                 open,
+                layers: Math.min(3, members.length),
                 status: groupStatus(members),
             },
         })
@@ -497,8 +509,8 @@ const nodes = computed<Node[]>(() => {
             for (const member of members) {
                 const memberPos = innerLayout.positions.get(member.source.id) ?? { x: 0, y: 0 }
                 pushSourceNodes(result, member, {
-                    x: memberPos.x + GRP_PADDING,
-                    y: memberPos.y + SRC_HEADER_H + SRC_BODY_TOP,
+                    x: memberPos.x + GRP_PAD_X,
+                    y: memberPos.y + GRP_HEAD_H + MEMBER_GAP,
                 }, groupId)
             }
         }
@@ -543,25 +555,24 @@ const edges = computed<Edge[]>(() => {
     const f = focus.value
     return baseEdges.value.map((e) => {
         const active = f?.edgeKeys.has(e.id) ?? false
-        const style = !f
-            ? { stroke: 'var(--graph-edge)', strokeWidth: 1.5 }
-            : active
-                ? { stroke: 'var(--ui-primary)', strokeWidth: 2.5 }
-                : { stroke: 'var(--graph-edge)', strokeWidth: 1.5, opacity: '0.15' }
+        const color = !f ? 'var(--graph-edge)' : active ? 'var(--ui-primary)' : 'var(--graph-edge-dim)'
         return {
             ...e,
             type: 'upstream',
             zIndex: active ? 1003 : 1001,
-            style,
+            style: { stroke: color, strokeWidth: active ? 2.4 : 1.6, strokeLinecap: 'round' },
+            markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
         }
     })
 })
 
 function onNodeClick({ node }: { node: Node }) {
     if (node.type === 'sourceGroup') {
+        anchorOn(node.id)
         toggleGroup(node.id)
     }
     else if (node.type === 'source') {
+        anchorOn(node.id)
         toggleSource(node.id)
     }
     else if (node.type === 'asset') {
@@ -577,6 +588,7 @@ function onDeleteSource(sourceId: string) {
     expandedSources.value = next
 }
 
+let fitted = false
 vueFlow.onNodesInitialized(() => {
     const heights = new Map(measuredHeights.value)
     let changed = false
@@ -593,8 +605,53 @@ vueFlow.onNodesInitialized(() => {
         measuredHeights.value = heights
     }
 
+    if (fitted) return
+    fitted = true
     vueFlow.fitView({ padding: 0.25 })
     if (!props.fitToContent) vueFlow.zoomTo(1)
+})
+
+// ── Viewport anchoring ──
+// The last toggled node holds its place on screen through every relayout: the
+// viewport moves by that node's own displacement, so the graph reflows around
+// the card the user clicked instead of jumping to a new fit.
+const anchor = ref<{ id: string; x: number; y: number } | null>(null)
+const anchoring = ref(false)
+let anchoringTimer: ReturnType<typeof setTimeout> | undefined
+
+function absolutePosition(id: string, byId: Map<string, Node>): { x: number; y: number } | null {
+    let node = byId.get(id)
+    if (!node) return null
+    let { x, y } = node.position
+    while (node?.parentNode) {
+        node = byId.get(node.parentNode)
+        if (!node) break
+        x += node.position.x
+        y += node.position.y
+    }
+    return { x, y }
+}
+
+function anchorOn(id: string) {
+    const position = absolutePosition(id, new Map(nodes.value.map(n => [n.id, n])))
+    anchor.value = position ? { id, ...position } : null
+}
+
+watch(nodes, (next) => {
+    const current = anchor.value
+    if (!current) return
+    const position = absolutePosition(current.id, new Map(next.map(n => [n.id, n])))
+    if (!position) return
+    const dx = position.x - current.x
+    const dy = position.y - current.y
+    current.x = position.x
+    current.y = position.y
+    if (!dx && !dy) return
+    const { x, y, zoom } = vueFlow.getViewport()
+    anchoring.value = true
+    clearTimeout(anchoringTimer)
+    anchoringTimer = setTimeout(() => { anchoring.value = false }, 150)
+    vueFlow.setViewport({ x: x - dx * zoom, y: y - dy * zoom, zoom })
 })
 
 // ── Connection plumbing provided to child node components ──
@@ -718,11 +775,11 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
         <VueFlow :id="flowId"
                  :nodes="nodes"
                  :edges="edges"
+                 :data-anchoring="anchoring || undefined"
                  fit-view
-                 class="!absolute inset-0"
+                 class="!absolute inset-0 bg-[var(--graph-canvas)]"
                  :max-zoom="1"
                  :min-zoom="0.6"
-                 snap-to-grid
                  :nodes-draggable="false"
                  :select-nodes-on-drag="false"
                  :elevate-nodes-on-select="false"
@@ -738,13 +795,15 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                      :source-defn="data.sourceDefn"
                                      :members="data.members"
                                      :open="data.open"
+                                     :layers="data.layers"
                                      :status="data.status" />
             </template>
             <template #node-source="{ data }">
                 <GraphSourceNode :source="data.source"
-                                 :source-defn="data.sourceDefn"
                                  :status="data.status"
                                  :open="data.open"
+                                 :nested="data.nested"
+                                 :layers="data.layers"
                                  :selected="false"
                                  @edit="emit('edit-source', $event)"
                                  @delete="onDeleteSource" />
@@ -760,13 +819,16 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                                 :asset="data.asset"
                                 :asset-defn="data.assetDefn"
                                 :status="data.status"
+                                :standalone="data.source === null"
                                 :selected="data.asset.id === selectedId"
                                 @view="emit('asset-click', data.asset, data.assetDefn, data.source)" />
             </template>
             <template #edge-upstream="edgeProps">
                 <GraphDependencyEdge v-bind="edgeProps" />
             </template>
-            <Background :size=".8" />
+            <Background :gap="23"
+                        :size="2"
+                        pattern-color="var(--graph-dot)" />
             <Controls position="bottom-left"
                       :show-interactive="false" />
 

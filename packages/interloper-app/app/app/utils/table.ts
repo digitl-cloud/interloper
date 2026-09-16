@@ -1,9 +1,11 @@
 import { h } from 'vue'
-import { UButton } from '#components'
+import { UBadge, UButton, UIcon } from '#components'
 import type { Column } from '@tanstack/vue-table'
 import type { TableColumn } from '@nuxt/ui'
 import { stateColumns, type ComponentDefinition } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
+import type { DriftBadge } from '~/composables/drift'
+import { componentIcon } from '~/utils/icons'
 import { formatDate } from '~/utils/time'
 
 /**
@@ -44,6 +46,52 @@ export function dateColumn<T>(key: keyof T & string, header: string): TableColum
         cell: ({ row }: { row: { getValue: <V>(key: string) => V } }) =>
             h('span', { class: 'text-muted' }, formatDate(row.getValue<string | null>(key)) || '—'),
     } as TableColumn<T>
+}
+
+/**
+ * The first column of a component table: the name, its discriminator beneath
+ * when the two differ, and an optional status badge. Search matches both.
+ */
+export function nameColumn(
+    header: string,
+    badge?: (row: ComponentRecord) => DriftBadge | null,
+): TableColumn<ComponentRecord> {
+    const nameOf = (row: ComponentRecord) => row.name ?? useCatalogStore().typeName(row.key)
+    return {
+        id: 'name',
+        header,
+        accessorFn: (row: ComponentRecord) => [nameOf(row), row.discriminator].filter(Boolean).join(' '),
+        cell: ({ row }: { row: { original: ComponentRecord } }) => {
+            const name = nameOf(row.original)
+            const meta = badge?.(row.original)
+            const title = meta
+                ? h('span', { class: 'flex items-center gap-2' }, [
+                        name,
+                        h(UBadge, { color: meta.color, size: 'sm', icon: meta.icon }, () => meta.label),
+                    ])
+                : name
+            const { discriminator } = row.original
+            if (!discriminator || discriminator === name) return title
+            return h('span', { class: 'flex flex-col items-start gap-1' }, [
+                title,
+                h(UBadge, { color: 'neutral', variant: 'soft', size: 'sm', class: 'font-mono' }, () => discriminator),
+            ])
+        },
+    } as TableColumn<ComponentRecord>
+}
+
+/** The `Type` column of a component table: the definition's icon and name. */
+export function typeColumn(icon: (key: string) => string = componentIcon): TableColumn<ComponentRecord> {
+    const typeName = (key: string) => useCatalogStore().typeName(key)
+    return {
+        id: 'type',
+        header: 'Type',
+        accessorFn: (row: ComponentRecord) => typeName(row.key),
+        cell: ({ row }: { row: { original: ComponentRecord } }) => h('span', { class: 'flex items-center gap-2 text-muted' }, [
+            h(UIcon, { name: icon(row.original.key), class: 'size-5 shrink-0' }),
+            typeName(row.original.key),
+        ]),
+    } as TableColumn<ComponentRecord>
 }
 
 /**

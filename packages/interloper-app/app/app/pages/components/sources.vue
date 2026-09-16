@@ -6,8 +6,6 @@ import { relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
-const UIcon = resolveComponent('UIcon')
-const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
@@ -15,10 +13,6 @@ const componentsStore = useComponentsStore()
 const { statusBadge, sourceDrift } = useDrift()
 
 const sources = computed(() => componentsStore.byKind('source'))
-
-function typeName(key: string): string {
-    return catalogStore.catalog[key]?.name ?? key
-}
 
 const stepperRef = ref<any>(null)
 const toast = useToast()
@@ -89,37 +83,8 @@ function destinationsOf(source: ComponentRecord): ComponentRecord[] {
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
-    {
-        accessorKey: 'name',
-        header: 'Source',
-        cell: ({ row }) => {
-            const children: any[] = [
-                h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
-                row.original.name,
-            ]
-            const badge = statusBadge(sourceDrift(row.original))
-            if (badge) {
-                children.push(h(UBadge, {
-                    color: badge.color,
-                    size: 'sm',
-                    class: 'ml-1',
-                }, () => h('span', { class: 'flex items-center gap-1' }, [
-                    h(UIcon, { name: badge.icon, class: 'size-3 shrink-0' }),
-                    badge.label,
-                ])))
-            }
-            return h('span', { class: 'flex items-center gap-2' }, children)
-        },
-    },
-    {
-        id: 'type',
-        header: 'Type',
-        accessorFn: (row: ComponentRecord) => typeName(row.key),
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
-            h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
-            typeName(row.original.key),
-        ]),
-    },
+    nameColumn('Source', row => statusBadge(sourceDrift(row))),
+    typeColumn(),
     {
         id: 'assets',
         header: 'Assets',

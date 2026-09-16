@@ -4,8 +4,8 @@ import { Handle, Position, useNodeConnections } from '@vue-flow/core'
 /**
  * Group node for sources sharing a catalog type. Collapsed it stands in for
  * all member sources (edges attach to its group-* handles); expanded it is a
- * dashed container whose members render as nested source nodes stacked
- * vertically. Not connectable and no CRUD — those stay per-source.
+ * card whose members render as nested source nodes stacked vertically. Not
+ * connectable and no CRUD — those stay per-source.
  */
 const props = withDefaults(defineProps<{
     /** Catalog key shared by the member sources. */
@@ -16,9 +16,12 @@ const props = withDefaults(defineProps<{
     open?: boolean
     /** Aggregated member status — reflected on the card border. */
     status?: NodeStatus
+    /** Folded cards drawn under the collapsed card. */
+    layers?: number
 }>(), {
     open: false,
     status: undefined,
+    layers: 1,
 })
 
 const sourceConnections = useNodeConnections({ handleType: 'source' })
@@ -35,12 +38,11 @@ const meta = computed(() =>
     + ` · ${assetCount.value} ${assetCount.value === 1 ? 'asset' : 'assets'}`,
 )
 
-const ringClass = computed(() => {
-    // Expanded, the dashed outline is the only frame — members carry their own status.
-    if (props.open) return ''
-    if (props.status) return statusRingClass(props.status.state)
-    return ''
-})
+const { getWarnings } = useAssetWarnings()
+/** Assets with configuration issues across the members; shown while the group hides them. */
+const issueCount = computed(() =>
+    props.members.reduce((n, m) => n + m.source.children.filter(a => getWarnings(a.id, a.key).length > 0).length, 0),
+)
 </script>
 
 <template>
@@ -52,30 +54,33 @@ const ringClass = computed(() => {
                 :connectable-end="false"
                 :class="!hasUpstream && 'opacity-0'" />
 
-        <!-- Collapsed: solid card standing in for the members.
-             Expanded: dashed outline over the canvas, members nest inside. -->
-        <div class="relative flex h-full w-full flex-col rounded-xl"
-             :class="[
-                 open
-                     ? 'border-2 border-dashed border-[var(--ui-text-dimmed)]/50 bg-transparent'
-                     : 'overflow-hidden border-[1.5px] border-[var(--ui-border-accented)] bg-default',
-                 ringClass,
-             ]">
-            <div class="flex h-[68px] shrink-0 items-center gap-3 px-4">
-                <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated">
-                    <UIcon :name="icon"
-                           class="size-5" />
-                </div>
-                <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
-                        <span class="truncate text-sm font-semibold text-highlighted">{{ label }}</span>
-                        <span class="size-2 shrink-0 rounded-full"
-                              :class="statusDotClass(status?.state ?? 'idle')" />
+        <GraphCornerBadge v-if="issueCount > 0 && !open"
+                          icon="i-lucide-triangle-alert"
+                          corner="top-right"
+                          tone="warning">
+            <div class="text-xs">{{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues</div>
+        </GraphCornerBadge>
+
+        <div class="relative isolate h-full w-full">
+            <GraphCardStack v-if="!open"
+                            :layers="layers" />
+            <div class="graph-card relative z-[1] flex h-full w-full flex-col rounded-2xl border border-[var(--graph-card-line)] bg-default">
+                <div class="flex h-[76px] shrink-0 items-center gap-3.5 px-5">
+                    <div class="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-elevated">
+                        <UIcon :name="icon"
+                               class="size-5" />
                     </div>
-                    <div class="truncate text-xs text-muted">{{ meta }}</div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-[7px]">
+                            <span class="truncate text-sm font-semibold tracking-tight text-highlighted">{{ label }}</span>
+                            <span class="size-[7px] shrink-0 rounded-full"
+                                  :class="statusDotClass(status?.state ?? 'idle')" />
+                        </div>
+                        <div class="mt-0.5 truncate text-[11.5px] text-dimmed">{{ meta }}</div>
+                    </div>
+                    <GraphCountBadge :count="assetCount"
+                                     emphasis />
                 </div>
-                <UIcon :name="open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-                       class="size-4 shrink-0 text-dimmed" />
             </div>
         </div>
 

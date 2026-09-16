@@ -246,6 +246,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
     const sourceInfoById = computed(() => {
         const map = new Map<string, {
             name: string
+            discriminator: string | null
             icon: string
             assetCount: number
             warnings: AssetWarning[]
@@ -265,6 +266,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
 
             map.set(source.id, {
                 name: source.name ?? sourceDefn?.name ?? source.key,
+                discriminator: source.discriminator !== source.name ? source.discriminator : null,
                 icon: componentIcon(source.key, 'i-lucide-database'),
                 assetCount: source.children.length,
                 warnings,

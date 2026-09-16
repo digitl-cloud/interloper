@@ -1,4 +1,6 @@
 import type { ComponentRecord } from '~/types/component'
+import type { Execution } from '~/types/execution'
+import { stateFromExecution } from '~/types/graph'
 import type { NodeStatus, GraphNodeState } from '~/types/graph'
 
 /** Tailwind class for a status indicator dot, keyed by node state. */
@@ -20,35 +22,67 @@ export function statusDotClass(state: GraphNodeState): string {
 }
 
 /**
- * Ring/border tint per node state. Healthy (idle) and the gray states keep
- * the default card look — their dot is enough; rings are reserved for states
+ * Border tint per node state. Healthy (idle) and the gray states keep the
+ * default card border — their dot is enough; tints are reserved for states
  * that demand attention or are live.
  */
-const STATUS_RING: Record<GraphNodeState, string> = {
+const STATUS_BORDER: Record<GraphNodeState, string> = {
     idle: '',
-    attention: 'ring-2 ring-[var(--ui-warning)]/70',
+    attention: 'border-warning/55',
     paused: '',
     queued: '',
     pending: '',
-    running: 'ring-2 ring-[var(--ui-info)]/70',
-    success: 'ring-2 ring-[var(--ui-success)]/60',
-    failed: 'ring-2 ring-[var(--ui-error)]/70',
+    running: 'border-info/55',
+    success: 'border-success/50',
+    failed: 'border-error/45',
     skipped: '',
     canceled: '',
 }
 
-export function statusRingClass(state: GraphNodeState): string {
-    return STATUS_RING[state]
+export function statusBorderClass(state: GraphNodeState): string {
+    return STATUS_BORDER[state]
+}
+
+/** Rollup precedence for a container's dot: the loudest child state wins. */
+const ROLLUP: GraphNodeState[] = ['failed', 'running', 'queued', 'canceled', 'success']
+
+/** The state a container shows for its children: the loudest one present, `pending` when none ran. */
+export function rollupState(states: Iterable<GraphNodeState>): GraphNodeState {
+    const present = new Set(states)
+    return ROLLUP.find(s => present.has(s)) ?? 'pending'
 }
 
 /**
- * Derives {@link NodeStatus} for collection graph nodes from data that
- * actually exists today: configuration warnings ({@link useAssetWarnings})
- * and job enablement ({@link useSchedule}).
- *
- * The collection page has no per-asset *run* status loaded, so live states
- * (running/success/failed) are intentionally absent here — those are
- * supplied by the run-page model from asset executions instead.
+ * Materialization status for the collection graph's dots, from each asset's
+ * latest execution ({@link useExecutionsStore}). An asset that never ran is
+ * `pending`; a source rolls its assets up, loudest state first.
+ */
+export function useMaterializationStatus() {
+    const executionsStore = useExecutionsStore()
+
+    function label(execution: Execution): string {
+        const at = execution.completed_at ?? execution.started_at ?? execution.created_at
+        const name = statusLabel(execution.status)
+        return at ? `${name} · ${timeSince(new Date(at))} ago` : name
+    }
+
+    function assetStatus(assetId: string): NodeStatus {
+        const execution = executionsStore.latestByAssetId.get(assetId)
+        if (!execution) return { state: 'pending' }
+        return { state: stateFromExecution(execution.status), label: label(execution) }
+    }
+
+    function sourceStatus(source: ComponentRecord): NodeStatus {
+        return { state: rollupState(source.children.map(a => assetStatus(a.id).state)) }
+    }
+
+    return { assetStatus, sourceStatus }
+}
+
+/**
+ * Derives the configuration-side {@link NodeStatus} of collection nodes from
+ * warnings ({@link useAssetWarnings}) and job enablement ({@link useSchedule}):
+ * what the toolbar's status filter counts and narrows by.
  */
 export function useNodeStatus() {
     const { getWarnings } = useAssetWarnings()

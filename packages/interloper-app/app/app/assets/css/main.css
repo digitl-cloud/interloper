@@ -96,7 +96,19 @@
     /* Nuxt UI default: 6px controls, 8px cards */
     --ui-radius: 0.25rem;
     /* graph canvas: dependency edges read darker than card borders */
-    --graph-edge: var(--color-gray-400);
+    --graph-canvas: var(--ui-bg-muted);
+    --graph-dot: #dcdce1;
+    --graph-edge: #8fbbf7;
+    --graph-edge-dim: color-mix(in srgb, #8fbbf7 30%, transparent);
+    --graph-card-line: var(--ui-border);
+    --graph-nested-bg: #f7f7f9;
+    --graph-nested-line: #e9e9ee;
+    --graph-head-line: #ebebef;
+    --graph-chip-text: #1b5fbf;
+    --graph-model: #6c5ce7;
+    --graph-card-shadow: 0 2px 8px rgb(11 42 66 / 0.07);
+    --graph-asset-shadow: 0 1px 4px rgb(11 42 66 / 0.06);
+    --graph-layer-shadow: 0 2px 6px rgb(11 42 66 / 0.06);
 }
 
 /* Design mono section label ("eyebrow"): pair with a text color utility. */
@@ -171,12 +183,59 @@
     --ui-border-accented: var(--color-gray-700);
     --ui-border-inverted: #ffffff;
     --ui-radius: 0.25rem;
-    --graph-edge: var(--color-gray-600);
+    --graph-canvas: var(--ui-bg);
+    --graph-dot: var(--color-gray-800);
+    --graph-edge: color-mix(in srgb, var(--ui-primary) 55%, var(--color-gray-950));
+    --graph-edge-dim: color-mix(in srgb, var(--ui-primary) 18%, var(--color-gray-950));
+    --graph-card-line: var(--color-gray-700);
+    --graph-nested-bg: var(--ui-bg-muted);
+    --graph-nested-line: var(--color-gray-700);
+    --graph-head-line: var(--color-gray-700);
+    --graph-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);
+    --graph-model: #9d8ff0;
+    --graph-card-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+    --graph-asset-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+    --graph-layer-shadow: 0 2px 6px rgb(0 0 0 / 0.4);
 
     --vf-node-bg: var(--ui-bg-elevated);
     --vf-node-text: var(--color-gray-400);
     --vf-connection-path: var(--color-gray-600);
     --vf-handle: var(--color-gray-600);
+}
+
+.graph-card,
+.graph-corner-badge {
+    box-shadow: var(--graph-card-shadow);
+}
+
+.graph-asset {
+    box-shadow: var(--graph-asset-shadow);
+}
+
+.graph-layer {
+    box-shadow: var(--graph-layer-shadow);
+}
+
+.graph-chip {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg));
+    color: var(--graph-chip-text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+/* Relayouts glide instead of cutting; the pane joins in only while the
+   viewport is being shifted to hold the toggled node in place. */
+.vue-flow__node,
+.vue-flow[data-anchoring] .vue-flow__transformationpane {
+    transition: transform 150ms ease;
+}
+
+.vue-flow__edge-path {
+    transition: d 150ms ease;
 }
 
 /* Vue Flow dark mode overrides */

@@ -30,10 +30,6 @@ const definitions = computed(() => catalogStore.definitionsForKind(kind.value))
 /** Resources filtered by current kind. */
 const resources = computed(() => componentsStore.byKind(kind.value))
 
-function typeName(key: string): string {
-    return catalogStore.catalog[key]?.name ?? key
-}
-
 const stepperRef = ref<any>(null)
 
 const {
@@ -115,31 +111,8 @@ const tableStateColumns = computed<TableColumn<ComponentRecord>[]>(() => {
 })
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    {
-        accessorKey: 'name',
-        header: 'Name',
-        cell: ({ row }) => {
-            const badge = statusBadge(row.original.status)
-            if (!badge) return row.original.name
-            return h('span', { class: 'flex items-center gap-2' }, [
-                row.original.name,
-                h(UBadge, { color: badge.color, size: 'sm' }, () =>
-                    h('span', { class: 'flex items-center gap-1' }, [
-                        h(UIcon, { name: badge.icon, class: 'size-3 shrink-0' }),
-                        badge.label,
-                    ])),
-            ])
-        },
-    },
-    {
-        id: 'type',
-        header: 'Type',
-        accessorFn: (row: ComponentRecord) => typeName(row.key),
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
-            h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
-            typeName(row.original.key),
-        ]),
-    },
+    nameColumn(kindLabel.value, row => statusBadge(row.status)),
+    typeColumn(),
     ...tableStateColumns.value,
     dateColumn<ComponentRecord>('created_at', 'Created'),
 ])
@@ -158,7 +131,7 @@ function rowActions(item: ComponentRecord): DropdownMenuItem[][] {
 async function renewNow(item: ComponentRecord) {
     try {
         await runsStore.createRun(item.id)
-        toast.add({ title: `Renewal queued for ${item.name ?? typeName(item.key)}`, color: 'success' })
+        toast.add({ title: `Renewal queued for ${item.name ?? catalogStore.typeName(item.key)}`, color: 'success' })
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to queue renewal'))

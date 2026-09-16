@@ -284,10 +284,10 @@ class Component(Serializable):
         id, a site URL, ...). Drives the derived :meth:`instance_name` and,
         for sources, the per-instance asset table names.
         """
-        marked = self._discriminator_fields()
-        if not marked:
+        field = self.discriminator_field()
+        if field is None:
             return None
-        value = getattr(self, marked[0])
+        value = getattr(self, field)
         return str(value) if value else None
 
     def instance_name(self) -> str:
@@ -682,6 +682,16 @@ class Component(Serializable):
             cls.relations[name] = stamped
             setattr(cls, name, stamped)
             annotations.pop(name, None)
+
+    @classmethod
+    def discriminator_field(cls) -> str | None:
+        """Name of the config field marked ``discriminator=True``, if any.
+
+        Returns:
+            The marked field name, or ``None`` when the class declares none.
+        """
+        marked = cls._discriminator_fields()
+        return marked[0] if marked else None
 
     @classmethod
     def _discriminator_fields(cls) -> list[str]:
