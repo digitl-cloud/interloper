@@ -18,15 +18,17 @@ from interloper_db.models import (
     UserOrganisation,
 )
 from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
-from interloper_db.store import Store
+from interloper_db.store import ComponentReading, DeleteImpact, Store
 from interloper_db.store.status import ComponentStatus
 
 __all__ = [
     "AuthSession",
     "Backfill",
     "Component",
+    "ComponentReading",
     "ComponentRelation",
     "ComponentStatus",
+    "DeleteImpact",
     "Event",
     "Execution",
     "Invitation",

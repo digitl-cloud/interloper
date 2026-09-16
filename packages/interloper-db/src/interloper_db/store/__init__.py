@@ -38,7 +38,7 @@ an existing member) says so in its own docstring.
 from interloper_db.session import commit, session_scope, transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.base import Store
-from interloper_db.store.components import ComponentStore
+from interloper_db.store.components import ComponentReading, ComponentStore, DeleteImpact
 from interloper_db.store.events import EventStore
 from interloper_db.store.organisations import OrganisationStore
 from interloper_db.store.quotas import QuotaStore
@@ -48,7 +48,9 @@ from interloper_db.store.tokens import TokenStore
 
 __all__ = [
     "AuthStore",
+    "ComponentReading",
     "ComponentStore",
+    "DeleteImpact",
     "EventStore",
     "OrganisationStore",
     "QuotaStore",

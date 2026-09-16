@@ -33,9 +33,10 @@ const props = defineProps<{
      * Impact preview for deleting the given ids (e.g.
      * `componentsStore.deleteImpact`). `blocking` referrers disable the
      * destructive button; `detaching` ones are listed as a heads-up — the
-     * backend guard stays the authority.
+     * backend guard stays the authority, so a failed preview degrades to a
+     * plain confirmation rather than blocking the dialog.
      */
-    deleteImpact?: (ids: string[]) => { blocking: UsedByRef[], detaching: UsedByRef[] }
+    deleteImpact?: (ids: string[]) => Promise<{ blocking: UsedByRef[], detaching: UsedByRef[] }>
     /**
      * A failed fetch of this list (e.g. a store's `error`). Shown as an alert
      * in place of the empty state, so a rejected request never reads as an
@@ -78,7 +79,7 @@ const NO_IMPACT = { blocking: [], detaching: [] }
 
 /** Confirm (via the shared modal) and, when accepted, emit the delete. */
 async function requestDelete(ids: string[], description: string) {
-    const { blocking, detaching } = props.deleteImpact?.(ids) ?? NO_IMPACT
+    const { blocking, detaching } = await (props.deleteImpact?.(ids).catch(() => NO_IMPACT) ?? NO_IMPACT)
     const confirmed = await confirm({ title: 'Confirm Deletion', description, blocking, detaching })
     if (confirmed) emit('delete', ids)
     return confirmed

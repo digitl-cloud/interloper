@@ -41,10 +41,7 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-// Everything once — the delete preview needs referrer records and relations
-// of every kind — then a per-kind refresh when switching resource kinds.
-componentsStore.fetchAll()
-componentsStore.fetchRelations()
+componentsStore.fetchAll([kind.value])
 watch(kind, () => componentsStore.fetchAll([kind.value]))
 
 /**
@@ -200,7 +197,7 @@ const typeKey = ref<string | null>(null)
                        :search-placeholder="`Search ${pageTitle.toLowerCase()}...`"
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.reload()">
+                       @retry="componentsStore.fetchAll([kind])">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="resources" />

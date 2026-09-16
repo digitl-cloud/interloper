@@ -1,4 +1,4 @@
-import type { ComponentRecord, ComponentInput, Relation, RelationInput } from '~/types/component'
+import type { ComponentRecord, ComponentInput, DeleteImpact, Relation, RelationInput } from '~/types/component'
 
 export const useComponentsStore = defineStore('components', () => {
     const { apiFetch } = useApi()
@@ -21,10 +21,13 @@ export const useComponentsStore = defineStore('components', () => {
     /**********************
      * Internals
      **********************/
+    /** Place a fetched record: inside its owner's children when it has one, among the roots otherwise. */
     function _upsert(component: ComponentRecord) {
-        const idx = components.value.findIndex(c => c.id === component.id)
-        if (idx >= 0) components.value[idx] = { ...components.value[idx], ...component }
-        else components.value.push(component)
+        const siblings = component.parent_id ? byId(component.parent_id)?.children : components.value
+        if (!siblings) return
+        const idx = siblings.findIndex(c => c.id === component.id)
+        if (idx >= 0) siblings[idx] = { ...siblings[idx], ...component }
+        else siblings.push(component)
     }
 
     /**
@@ -40,18 +43,23 @@ export const useComponentsStore = defineStore('components', () => {
         toast.add(errorToast(e, `Failed to load ${what}`))
     }
 
+    /** Drop a record wherever it sits: a root (its owned components with it) or one owner's child. */
     function _remove(id: string) {
-        // Deleting a source cascades its assets — drop children too.
-        components.value = components.value.filter(c => c.id !== id && c.parent_id !== id)
+        components.value = components.value.filter(c => c.id !== id)
+        for (const root of components.value) {
+            if (root.children?.some(c => c.id === id)) root.children = root.children.filter(c => c.id !== id)
+        }
     }
 
     /**********************
      * Actions
      **********************/
     /**
-     * Fetch components, optionally narrowed to `kinds`. An unfiltered fetch
-     * replaces the whole list; a filtered one replaces only entries of the
-     * fetched kinds so pages loading different kinds don't clobber each other.
+     * Fetch root components, optionally narrowed to `kinds`. An unfiltered
+     * fetch replaces the whole list; a filtered one replaces only entries of
+     * the fetched kinds so pages loading different kinds don't clobber each
+     * other. Owned components (a source's assets) arrive under their owner's
+     * `children`, never as entries of their own.
      */
     async function fetchAll(kinds?: string[]) {
         loading.value = true
@@ -59,7 +67,7 @@ export const useComponentsStore = defineStore('components', () => {
         try {
             const params = new URLSearchParams()
             for (const kind of kinds ?? []) params.append('kind', kind)
-            const fetched = await apiFetch<ComponentRecord[]>(`/components${kinds?.length ? `?${params}` : ''}`)
+            const fetched = await apiFetch<ComponentRecord[]>(`/components/${kinds?.length ? `?${params}` : ''}`)
             if (kinds?.length) {
                 const kindSet = new Set(kinds)
                 components.value = [...components.value.filter(c => !kindSet.has(c.kind)), ...fetched]
@@ -84,7 +92,7 @@ export const useComponentsStore = defineStore('components', () => {
     }
 
     async function create(input: ComponentInput): Promise<ComponentRecord> {
-        const component = await apiFetch<ComponentRecord>('/components', {
+        const component = await apiFetch<ComponentRecord>('/components/', {
             method: 'POST',
             body: input,
         })
@@ -174,67 +182,41 @@ export const useComponentsStore = defineStore('components', () => {
     /**********************
      * Lookups
      **********************/
+    /** Every component by id, owned ones included: the roots' trees flattened. */
+    const index = computed(() => {
+        const map = new Map<string, ComponentRecord>()
+        const visit = (record: ComponentRecord) => {
+            map.set(record.id, record)
+            for (const child of record.children ?? []) visit(child)
+        }
+        for (const root of components.value) visit(root)
+        return map
+    })
+
+    /** Every component, owned ones included: the flat view of the collection. */
+    const all = computed(() => [...index.value.values()])
+
     function byKind(kind: string): ComponentRecord[] {
-        return components.value.filter(c => c.kind === kind)
+        return all.value.filter(c => c.kind === kind)
     }
 
     function byId(id: string): ComponentRecord | undefined {
-        return components.value.find(c => c.id === id)
+        return index.value.get(id)
     }
 
     /**
-     * Whether a relation detaches (rather than blocks) when its destination
-     * is deleted, decided by the referrer's vocabulary and `on_delete`
-     * alone: `'detach'` drops the row, `'block'` refuses. `optional` only
-     * says the relation may be left empty or unbound, it has no say over
-     * deletion (an optional relation can still be `on_delete: 'block'`,
-     * e.g. `destinations`). Anything unresolvable blocks, matching the
-     * backend guard's fail-closed default.
-     */
-    function _relationDetaches(src: ComponentRecord | undefined, r: Relation): boolean {
-        if (!src) return false
-        const catalogStore = useCatalogStore()
-        let vocabulary = catalogStore.catalog[src.key]?.relations
-        if (src.kind === 'asset' && src.parent_id) {
-            const parent = byId(src.parent_id)
-            const assetDefn = parent && catalogStore.getSourceDefinition(parent.key)?.assets?.find(a => a.key === src.key)
-            if (assetDefn) vocabulary = assetDefn.relations
-        }
-        const defn = vocabulary?.[r.name]
-        if (!defn) return false
-        return defn.on_delete === 'detach'
-    }
-
-    /**
-     * What deleting `ids` does to the components bound to them — the
-     * client-side mirror of the API's delete guard, used to preview the
-     * impact before a delete is attempted. `blocking` referrers make the
+     * The server's delete preview for `ids`: the same rule its guard enforces,
+     * evaluated before anything is deleted. `blocking` referrers make the
      * backend refuse with 409; `detaching` ones just lose the relation.
-     * Referrers that are source-owned assets resolve to their parent source,
-     * the unit the user can act on; a referrer that blocks through any
-     * relation is only reported as blocking.
      */
-    function deleteImpact(ids: string | string[]): { blocking: ComponentRecord[], detaching: ComponentRecord[] } {
-        const subtree = new Set(Array.isArray(ids) ? ids : [ids])
-        for (const id of [...subtree]) {
-            for (const child of byId(id)?.children ?? []) subtree.add(child.id)
-        }
-        const blocking = new Map<string, ComponentRecord>()
-        const detaching = new Map<string, ComponentRecord>()
-        for (const r of relations.value) {
-            if (!subtree.has(r.dst_id) || subtree.has(r.src_id)) continue
-            let src = byId(r.src_id)
-            const detaches = _relationDetaches(src, r)
-            if (src?.parent_id && !subtree.has(src.parent_id)) src = byId(src.parent_id) ?? src
-            if (!src || subtree.has(src.id)) continue
-            ;(detaches ? detaching : blocking).set(src.id, src)
-        }
-        for (const id of blocking.keys()) detaching.delete(id)
-        return { blocking: [...blocking.values()], detaching: [...detaching.values()] }
+    async function deleteImpact(ids: string | string[]): Promise<DeleteImpact> {
+        const params = new URLSearchParams()
+        for (const id of Array.isArray(ids) ? ids : [ids]) params.append('id', id)
+        return apiFetch<DeleteImpact>(`/components/delete-impact?${params}`)
     }
 
     function search(query: string, kind?: string): ComponentRecord[] {
-        const base = kind ? byKind(kind) : components.value
+        const base = kind ? byKind(kind) : all.value
         if (!query) return base
         const q = query.toLowerCase()
         return base.filter(c =>
@@ -263,11 +245,11 @@ export const useComponentsStore = defineStore('components', () => {
     const orgStore = useOrganisationStore()
 
     // Component notifications are slim ({id, kind, parent_id}) — the payload
-    // channel never carries configs — so changes refetch through the API.
-    // A parent refetch keeps sources' embedded children fresh.
+    // channel never carries configs — so changes refetch through the API. The
+    // owner is the unit: an owned component's change refetches its owner,
+    // whose detail carries the children.
     function _refetchChanged(record: Record<string, any>) {
-        fetchOne(record.id).catch(() => {})
-        if (record.parent_id) fetchOne(record.parent_id).catch(() => {})
+        fetchOne(record.parent_id ?? record.id).catch(() => {})
     }
 
     useRealtimeSubscription({
@@ -278,7 +260,6 @@ export const useComponentsStore = defineStore('components', () => {
         onDelete: (record: Record<string, any>) => {
             _remove(record.id)
             relations.value = relations.value.filter(r => r.src_id !== record.id && r.dst_id !== record.id)
-            if (record.parent_id) fetchOne(record.parent_id).catch(() => {})
         },
     })
 
@@ -301,6 +282,7 @@ export const useComponentsStore = defineStore('components', () => {
 
     return {
         components,
+        all,
         relations,
         upstreams,
         loading,

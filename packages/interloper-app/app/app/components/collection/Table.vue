@@ -66,7 +66,7 @@ const emit = defineEmits<{
 
 async function deleteSource(sourceId: string) {
     const info = sourceInfoById.value.get(sourceId)
-    const { blocking, detaching } = componentsStore.deleteImpact(sourceId)
+    const { blocking, detaching } = await componentsStore.deleteImpact(sourceId).catch(() => ({ blocking: [], detaching: [] }))
     const confirmed = await confirm({
         title: 'Delete source?',
         description: 'This will permanently delete {subject} and all its assets.',
