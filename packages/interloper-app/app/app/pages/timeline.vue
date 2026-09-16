@@ -3,8 +3,8 @@ import type { TimelineBar } from '~/types/timeline'
 
 definePageMeta({ title: 'Timeline', fullBleed: true })
 
-/** Width of the row-label gutter, wide enough for a job name. */
-const LABEL_WIDTH = 220
+/** Width of the row-label gutter: a target's name, plus the badge for its kind. */
+const LABEL_WIDTH = 280
 
 /** How often the window re-anchors to now, so the view keeps up on its own. */
 const REFRESH_INTERVAL = 60_000
@@ -100,7 +100,7 @@ onUnmounted(() => {
                                         :range-end="rangeEnd"
                                         axis="clock"
                                         :label-width="LABEL_WIDTH"
-                                        label-title="Jobs"
+                                        label-title="Target"
                                         empty-message="No runs in this window"
                                         @bar-click="onBarClick" />
             </div>

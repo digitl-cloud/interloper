@@ -25,4 +25,6 @@ export interface TimelineRow {
     /** Rendered by the placeholder of a row with nothing to draw. */
     status?: ExecutionStatus
     bars: TimelineBar[]
+    /** Component kind of the row's entity (`job`, `connection`, …); absent when it no longer exists. */
+    kind?: string
 }

@@ -29,22 +29,6 @@ function sourceDriftBadge(sourceId: string) {
     return statusBadge(sourceInfoById.value.get(sourceId)?.drift ?? 'ok')
 }
 
-const statusColor: Record<string, 'error' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'neutral'> = {
-    success: 'success',
-    failed: 'error',
-    running: 'info',
-    pending: 'neutral',
-    canceled: 'warning',
-}
-
-const statusIcon: Record<string, string> = {
-    success: 'i-lucide-check',
-    failed: 'i-lucide-x',
-    running: 'i-lucide-loader-circle',
-    pending: 'i-lucide-clock',
-    canceled: 'i-lucide-ban',
-}
-
 const columns: TableColumn<CollectionRow>[] = [
     { id: 'title', header: 'Name' },
     { id: 'source_type', accessorKey: 'sourceKey' },
@@ -489,8 +473,8 @@ function onRowClick(row: any) {
                           class="text-dimmed">&mdash;</span>
                     <div v-else
                          class="flex items-center justify-center">
-                        <UBadge :color="statusColor[row.original.lastRunStatus] ?? 'neutral'"
-                                :icon="statusIcon[row.original.lastRunStatus] ?? 'i-lucide-circle'">
+                        <UBadge :color="statusColor(row.original.lastRunStatus)"
+                                :icon="statusIcon(row.original.lastRunStatus)">
                             {{ timeSince(new Date(row.original.lastRunAt)) }} ago
                         </UBadge>
                     </div>

@@ -7,6 +7,7 @@ import { jobCron, jobEnabled, jobTimezone, relationIds } from '~/types/component
 definePageMeta({ title: 'Components', fullBleed: true })
 
 const USwitch = resolveComponent('USwitch')
+const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
@@ -80,6 +81,22 @@ function targetsOf(job: ComponentRecord): ComponentRecord[] {
         .filter((t): t is ComponentRecord => !!t)
 }
 
+/** A job's last run reads as one badge — its age coloured by how the run ended. */
+function lastRunColumn(): TableColumn<ComponentRecord> {
+    return {
+        id: 'last_run_at',
+        header: 'Last run',
+        accessorFn: (row: ComponentRecord) => row.state?.last_run_at ?? '',
+        cell: ({ row }) => {
+            const state = row.original.state ?? {}
+            if (!state.last_run_at) return h('span', { class: 'text-dimmed' }, '—')
+            const status = state.last_run_status as string | undefined
+            return h(UBadge, { color: statusColor(status), icon: statusIcon(status) }, () =>
+                `${timeSince(new Date(state.last_run_at))} ago`)
+        },
+    }
+}
+
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     nameColumn('Job'),
     {
@@ -106,7 +123,8 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
             })
         },
     },
-    ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0]),
+    ...stateSchemaColumns(catalogStore.definitionsForKind('job')[0])
+        .map(column => (column.id === 'last_run_at' ? lastRunColumn() : column)),
     dateColumn<ComponentRecord>('created_at', 'Created'),
     {
         id: 'enabled',
