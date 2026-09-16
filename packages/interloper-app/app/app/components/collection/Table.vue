@@ -256,13 +256,10 @@ function onRowClick(row: any) {
                            class="size-5 shrink-0" />
                     <span class="flex flex-col items-start gap-1">
                         <span class="font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
-                        <UBadge v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
-                                color="neutral"
-                                variant="soft"
-                                size="sm"
-                                class="font-mono">
+                        <span v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
+                              class="id-chip max-w-full truncate">
                             {{ sourceInfoById.get(row.original.sourceId)!.discriminator }}
-                        </UBadge>
+                        </span>
                     </span>
                     <UBadge color="neutral"
                             variant="soft"
