@@ -386,6 +386,11 @@ function onBlankClick() {
     selectedId.value = null
 }
 
+/** Row name, then what kind of thing it is — the name alone truncates in the gutter. */
+function labelTooltip(row: TimelineRow): string {
+    return row.kind ? `${row.name} · ${row.kind}` : row.name
+}
+
 /** Row name, the execution's own context, then how long it took. */
 function barTooltip(row: TimelineRow, layout: LayoutBar): string {
     const parts = [row.name]
@@ -568,11 +573,17 @@ watch(axisMax, () => {
                          height: ROW_HEIGHT + 'px',
                          opacity: rowOpacity(row.id),
                      }"
-                     :title="row.name"
+                     :title="labelTooltip(row)"
                      @click.stop="selectedId = row.id">
                     <UIcon :name="row.icon"
                            class="size-4 shrink-0 text-muted" />
                     <span class="truncate text-sm font-medium">{{ row.name }}</span>
+                    <UBadge v-if="row.kind"
+                            color="neutral"
+                            variant="soft"
+                            class="ml-auto shrink-0 capitalize">
+                        {{ row.kind }}
+                    </UBadge>
                 </div>
             </div>
 

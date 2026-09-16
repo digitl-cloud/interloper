@@ -89,6 +89,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
         const barsByTarget = new Map<string, TimelineBar[]>()
         // Run-carried identity, for target kinds the components store doesn't hold.
         const targetNames = new Map<string, string>()
+        const targetKinds = new Map<string, string>()
         const orphaned: TimelineBar[] = []
 
         for (const run of toValue(runs)) {
@@ -106,6 +107,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
             }
             const name = run.component_name ?? run.component_key
             if (name && !targetNames.has(run.component_id)) targetNames.set(run.component_id, name)
+            if (run.component_kind) targetKinds.set(run.component_id, run.component_kind)
             const existing = barsByTarget.get(run.component_id)
             if (existing) existing.push(bar)
             else barsByTarget.set(run.component_id, [bar])
@@ -118,6 +120,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
                 name: job.name ?? job.key,
                 icon: JOB_ICON,
                 bars: barsByTarget.get(job.id) ?? [],
+                kind: job.kind,
             }))
             .sort(byName)
 
@@ -136,6 +139,7 @@ export function useRunTimelineRows(runs: MaybeRefOrGetter<Run[]>): ComputedRef<T
                         ? componentIcon(component.key)
                         : DEFAULT_ICON,
                 bars,
+                kind: component?.kind ?? targetKinds.get(id),
             })
         }
 

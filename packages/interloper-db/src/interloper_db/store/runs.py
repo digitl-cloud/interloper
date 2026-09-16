@@ -245,9 +245,10 @@ class RunStore:
     def complete(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
 
-        Also stamps ``last_run_at`` on the target component's machine-owned
-        state — this is the single terminal path every run takes (scheduled,
-        manual, retried), so the component's "last run" reflects all of them.
+        Also stamps ``last_run_at`` and ``last_run_status`` on the target
+        component's machine-owned state — this is the single terminal path
+        every run takes (scheduled, manual, retried), so the component's
+        "last run" reflects all of them.
 
         Args:
             run_id: The run UUID.
@@ -273,7 +274,7 @@ class RunStore:
             if db_run.component_id:
                 db_component = session.get(Component, db_run.component_id)
                 if db_component:
-                    db_component.stamp_state(last_run_at=db_run.completed_at)
+                    db_component.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
                     session.add(db_component)
 
             if db_run.backfill_id:

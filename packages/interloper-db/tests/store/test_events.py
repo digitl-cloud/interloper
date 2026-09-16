@@ -381,7 +381,7 @@ def run_store() -> Iterator[Store]:
         engine_module._engine = None
 
 
-def test_complete_run_stamps_the_jobs_last_run_at(run_store: Store) -> None:
+def test_complete_run_stamps_the_jobs_last_run_at_and_status(run_store: Store) -> None:
     from interloper_db.models import Component, Run
 
     org = uuid4()
@@ -404,6 +404,28 @@ def test_complete_run_stamps_the_jobs_last_run_at(run_store: Store) -> None:
         # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
         stamped_at = datetime.fromisoformat(stamped.state["last_run_at"])
         assert stamped_at == completed.completed_at.replace(tzinfo=timezone.utc)
+        assert stamped.state["last_run_status"] == "success"
+
+
+def test_complete_run_stamps_a_failed_status(run_store: Store) -> None:
+    from interloper_db.models import Component, Run
+
+    org = uuid4()
+    with Session(engine_module.get_engine()) as session:
+        job = Component(org_id=org, kind="job", key="cron_job", name="J")
+        session.add(job)
+        session.flush()
+        run = Run(id=uuid4(), org_id=org, component_id=job.id, status="running")
+        session.add(run)
+        session.commit()
+        component_id, run_id = job.id, run.id
+
+    run_store.runs.complete(run_id, success=False)
+
+    with Session(engine_module.get_engine()) as session:
+        stamped = session.get(Component, component_id)
+        assert stamped is not None and stamped.state is not None
+        assert stamped.state["last_run_status"] == "failed"
 
 
 def test_executions_read_model_maps_the_view(store: Store) -> None:

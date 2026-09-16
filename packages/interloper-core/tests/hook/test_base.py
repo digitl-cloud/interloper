@@ -71,7 +71,11 @@ class TestDefinition:
 
     def test_definition_describes_state(self):
         assert set(il.Hook.definition().state_schema["properties"]) == {"last_fired_at", "last_run_id"}
-        assert set(il.Job.definition().state_schema["properties"]) == {"next_run_at", "last_run_at"}
+        assert set(il.Job.definition().state_schema["properties"]) == {
+            "next_run_at",
+            "last_run_at",
+            "last_run_status",
+        }
         assert il.Source.definition().state_schema == {}
 
     def test_config_schema_hides_relation_fields(self):
