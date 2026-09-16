@@ -97,6 +97,9 @@ Assets in `interloper-assets` are named for **what the asset is**, decided by it
 - **Report** — metrics aggregated over a date/dimension grain. Name is **`<base>_stats`**, with any `_by_<dim>` breakdown *after* `stats`; `tags=["Report"]`, time-partitioned. Examples: `ads_stats`, `ads_stats_by_country`, `page_stats`, `performance_stats`.
 - **Event / fact** — one row per event/record (per-row identifiers like `order_id`/`event_date`, no aggregation). Name is a **bare plural noun**, `tags=["Report"]`, time-partitioned. Examples: `orders`, `transactions`, `conversions`, `clicks`, `actions`.
 
+How an asset is implemented — mirroring the vendor response, when a partition column may be
+stamped, how metrics are typed — is in [.claude/rules/assets.md](.claude/rules/assets.md).
+
 Schema classes follow the asset name: one class per file, the file named after the asset and the class its `PascalCase` (asset `ads_stats` → `class AdsStats` in `schemas/ads_stats.py`). The `demo` source is a test fixture and is exempt from these rules.
 
 ### Git flow
