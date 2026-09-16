@@ -81,11 +81,7 @@ function targetsOf(job: ComponentRecord): ComponentRecord[] {
 }
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    {
-        accessorKey: 'name',
-        header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name ?? ''),
-    },
+    nameColumn('Job'),
     {
         id: 'schedule',
         header: 'Schedule',

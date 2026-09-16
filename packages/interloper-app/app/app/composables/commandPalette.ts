@@ -152,7 +152,10 @@ export function useCommandPalette() {
                 label: 'Sources',
                 items: sources.map(source => ({
                     label: source.name ?? source.key,
-                    suffix: catalogStore.getSourceDefinition(source.key)?.name,
+                    suffix: [
+                        catalogStore.getSourceDefinition(source.key)?.name,
+                        source.discriminator !== source.name ? source.discriminator : null,
+                    ].filter(Boolean).join(' · ') || undefined,
                     icon: componentIcon(source.key),
                     to: kindPath('source'),
                     onSelect: close,

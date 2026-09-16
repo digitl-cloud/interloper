@@ -6,17 +6,22 @@ import type { ComponentRecord } from '~/types/component'
 
 const props = withDefaults(defineProps<{
     source: ComponentRecord
-    sourceDefn: SourceDefinition | undefined
     /** Source is expanded (its assets render as nested canvas nodes). */
     open?: boolean
     /** Derived node status — reflected on the card border. */
     status?: NodeStatus
     /** VueFlow selection state — drives the blue selection ring. */
     selected?: boolean
+    /** Rendered inside an expanded type group: an inset card rather than a top-level one. */
+    nested?: boolean
+    /** Folded cards drawn under the collapsed card. */
+    layers?: number
 }>(), {
     open: false,
     status: undefined,
     selected: false,
+    nested: false,
+    layers: 1,
 })
 
 const emit = defineEmits<{
@@ -79,16 +84,8 @@ const driftStatus = computed(() => sourceDrift(props.source))
 const driftBadge = computed(() => statusBadge(driftStatus.value))
 const isDrift = computed(() => driftStatus.value === 'missing' || driftStatus.value === 'partial')
 
-const sourceWarnings = computed(() => {
-    const all = props.source.children.flatMap(a => getWarnings(a.id, a.key))
-    const seen = new Set<string>()
-    return all.filter((w) => {
-        if (seen.has(w.message)) return false
-        seen.add(w.message)
-        return true
-    })
-})
-const hasWarning = computed(() => sourceWarnings.value.length > 0)
+/** Assets with configuration issues; the collapsed card only counts them, each asset lists its own. */
+const issueCount = computed(() => props.source.children.filter(a => getWarnings(a.id, a.key).length > 0).length)
 
 const contextMenuItems = computed<ContextMenuItem[][]>(() => [
     [
@@ -126,13 +123,11 @@ const isMaterializing = computed(() =>
     props.source.children?.some(a => materializingAssetIds?.value?.has(a.id)) ?? false,
 )
 
-const ringClass = computed(() => {
-    if (props.selected) return 'ring-2 ring-primary'
-    // Expanded, the card is just a frame — its assets carry their own status.
-    if (props.open) return ''
-    if (props.status) return statusRingClass(props.status.state)
-    return ''
-})
+const headHeight = computed(() => props.nested ? 64 : 84)
+const showChip = computed(() => !!props.source.discriminator && props.source.discriminator !== props.source.name)
+const frameClass = computed(() => props.nested
+    ? 'rounded-[14px] border border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]'
+    : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-default', props.selected && 'outline-2 outline-primary outline-offset-4'])
 </script>
 
 <template>
@@ -151,126 +146,74 @@ const ringClass = computed(() => {
                         isValidTarget && '!size-3 !bg-transparent !border-2 !border-warning animate-pulse-grow',
                     ]" />
 
-            <!-- Materializing spinner (collapsed only) -->
-            <div v-if="isMaterializing && collapsed"
-                 class="absolute -left-2.5 -top-2.5 z-10">
-                <UTooltip :delay-duration="0"
-                          :content="{ side: 'top', sideOffset: 6 }">
-                    <div class="flex size-7 items-center justify-center rounded-full border border-[var(--ui-border-accented)] bg-muted">
-                        <UIcon name="i-lucide-loader-2"
-                               class="size-4 shrink-0 animate-spin text-muted" />
-                    </div>
-                    <template #content>
-                        <div class="text-xs">Materializing</div>
-                    </template>
-                </UTooltip>
-            </div>
+            <GraphCornerBadge v-if="isMaterializing && collapsed"
+                              icon="i-lucide-loader-2"
+                              corner="top-left"
+                              spin>
+                <div class="text-xs">Materializing</div>
+            </GraphCornerBadge>
 
-            <!-- Drift badge (collapsed) — takes precedence over warnings: the source
-                 or one of its assets no longer resolves against the catalog. -->
-            <UTooltip v-if="isDrift && collapsed"
-                      :delay-duration="0"
-                      :content="{ side: 'top', sideOffset: 6 }"
-                      class="absolute -right-2.5 -top-2.5 z-10">
-                <div class="flex size-7 items-center justify-center rounded-full border"
-                     :class="driftStatus === 'missing'
-                         ? 'border-[color-mix(in_srgb,var(--ui-error)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-error)_25%,var(--ui-bg))]'
-                         : 'border-[color-mix(in_srgb,var(--ui-warning)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_25%,var(--ui-bg))]'">
-                    <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
-                           class="size-4 shrink-0"
-                           :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
-                </div>
-                <template #content>
-                    <div class="text-xs">{{ driftBadge?.label }}</div>
-                </template>
-            </UTooltip>
+            <!-- Drift outranks warnings: the source or one of its assets no longer resolves against the catalog. -->
+            <GraphCornerBadge v-if="isDrift && collapsed"
+                              :icon="driftBadge?.icon ?? 'i-lucide-unplug'"
+                              corner="top-right"
+                              :tone="driftStatus === 'missing' ? 'error' : 'warning'">
+                <div class="text-xs">{{ driftBadge?.label }}</div>
+            </GraphCornerBadge>
 
-            <!-- Warning badge (collapsed only) -->
-            <UTooltip v-if="hasWarning && !isDrift && collapsed"
-                      :delay-duration="0"
-                      :content="{ side: 'top', sideOffset: 6 }"
-                      :ui="{ content: 'bg-transparent ring-0 shadow-none p-0 rounded-none' }"
-                      class="absolute -right-2.5 -top-2.5 z-10">
-                <div class="flex size-7 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-warning)_40%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_25%,var(--ui-bg))]">
-                    <UIcon name="i-lucide-triangle-alert"
-                           class="size-4 shrink-0 text-warning" />
-                </div>
-                <template #content>
-                    <div class="rounded-lg border border-default bg-default shadow-lg overflow-hidden">
-                        <table class="text-xs w-full">
-                            <tbody>
-                                <tr v-for="(w, i) in sourceWarnings"
-                                    :key="i"
-                                    class="border-b border-default last:border-b-0">
-                                    <td class="px-3 py-2">
-                                        <div class="flex items-center gap-2">
-                                            <UIcon name="i-lucide-circle-alert"
-                                                   class="size-3.5 shrink-0 text-warning" />
-                                            <span>{{ w.message }}</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </template>
-            </UTooltip>
+            <GraphCornerBadge v-if="issueCount > 0 && !isDrift && collapsed"
+                              icon="i-lucide-triangle-alert"
+                              corner="top-right"
+                              tone="warning">
+                <div class="text-xs">{{ issueCount }} {{ issueCount === 1 ? 'asset' : 'assets' }} with configuration issues</div>
+            </GraphCornerBadge>
 
-            <!-- Destination badge (collapsed only) -->
-            <div v-if="destinationBadge && collapsed"
-                 class="absolute -bottom-3 -right-3 z-10">
-                <UTooltip :delay-duration="0"
-                          :content="{ side: 'bottom', sideOffset: 6 }">
-                    <div class="relative flex size-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--ui-primary)_80%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-primary)_20%,var(--ui-bg))]">
-                        <UIcon :name="destinationBadge.icon"
-                               class="size-4 shrink-0 text-primary" />
-                        <span v-if="destinationBadge.isMulti"
-                              class="absolute right-0.5 bottom-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full border border-primary/60 bg-default px-1 text-[9px] font-semibold leading-none text-primary">
-                            {{ destinationBadge.count }}
-                        </span>
-                    </div>
-                    <template #content>
-                        <div class="text-xs">
-                            {{ destinationBadge.label }}
+            <GraphCornerBadge v-if="destinationBadge && collapsed && !nested"
+                              :icon="destinationBadge.icon"
+                              corner="bottom-right"
+                              tone="primary"
+                              :count="destinationBadge.count">
+                <div class="text-xs">{{ destinationBadge.label }}</div>
+            </GraphCornerBadge>
+
+            <div class="relative isolate w-full"
+                 :style="{ height: collapsed ? `${headHeight}px` : '100%' }">
+                <GraphCardStack v-if="collapsed && layers > 0"
+                                :layers="layers"
+                                :nested="nested" />
+                <div class="relative z-[1] flex h-full w-full flex-col"
+                     :class="frameClass">
+                    <div class="flex shrink-0 items-center"
+                         :class="nested ? 'h-16 gap-2.5 px-5' : 'h-[84px] gap-3.5 px-5'">
+                        <div class="flex shrink-0 items-center justify-center"
+                             :class="nested ? 'size-7 rounded-lg bg-default' : 'size-9 rounded-[10px] bg-elevated'">
+                            <UIcon :name="icon"
+                                   :class="nested ? 'size-4' : 'size-5'" />
                         </div>
-                    </template>
-                </UTooltip>
-            </div>
-
-            <!-- Main card: one header row in both states; expanded grows downward
-                 (assets render as nested canvas nodes). -->
-            <div class="relative flex h-full w-full flex-col overflow-hidden rounded-xl border-2 border-[var(--ui-border-accented)]"
-                 :class="[container ? 'bg-muted' : 'bg-default', ringClass]">
-                <div class="flex h-[68px] shrink-0 items-center gap-3 px-4"
-                     :class="container && 'border-b border-default bg-default'">
-                    <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated">
-                        <UIcon :name="icon"
-                               class="size-5" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="truncate text-sm font-semibold text-highlighted">{{ source.name }}</span>
-                            <span class="size-2 shrink-0 rounded-full"
-                                  :class="statusDotClass(status?.state ?? 'idle')" />
+                        <div class="flex min-w-0 flex-1 flex-col items-start"
+                             :class="nested ? 'gap-[5px]' : 'gap-[7px]'">
+                            <div class="flex max-w-full items-center gap-[7px]">
+                                <span class="truncate font-semibold tracking-tight text-highlighted"
+                                      :class="nested ? 'text-[13px]' : 'text-sm'">{{ source.name }}</span>
+                                <span class="shrink-0 rounded-full"
+                                      :class="[nested ? 'size-1.5' : 'size-[7px]', statusDotClass(status?.state ?? 'idle')]" />
+                            </div>
+                            <span v-if="showChip"
+                                  class="graph-chip max-w-full truncate">{{ source.discriminator }}</span>
                         </div>
-                        <div v-if="sourceDefn"
-                             class="truncate text-xs text-muted">
-                            {{ sourceDefn.name }}
-                        </div>
+                        <UTooltip v-if="isDrift && !collapsed"
+                                  :delay-duration="0"
+                                  :content="{ side: 'top', sideOffset: 6 }">
+                            <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
+                                   class="size-4 shrink-0"
+                                   :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
+                            <template #content>
+                                <div class="text-xs">{{ driftBadge?.label }}</div>
+                            </template>
+                        </UTooltip>
+                        <GraphCountBadge :count="assetCount"
+                                         :emphasis="!nested" />
                     </div>
-                    <UTooltip v-if="isDrift && !collapsed"
-                              :delay-duration="0"
-                              :content="{ side: 'top', sideOffset: 6 }">
-                        <UIcon :name="driftBadge?.icon ?? 'i-lucide-unplug'"
-                               class="size-4 shrink-0"
-                               :class="driftStatus === 'missing' ? 'text-error' : 'text-warning'" />
-                        <template #content>
-                            <div class="text-xs">{{ driftBadge?.label }}</div>
-                        </template>
-                    </UTooltip>
-                    <span class="shrink-0 text-sm text-muted">{{ assetCount }}</span>
-                    <UIcon :name="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-                           class="size-4 shrink-0 text-dimmed" />
                 </div>
             </div>
 

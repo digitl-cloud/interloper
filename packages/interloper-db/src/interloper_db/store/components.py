@@ -686,6 +686,40 @@ class ComponentStore:
             raw = self._encrypt(raw)
         return raw, should_encrypt
 
+    def discriminator(self, db_component: Component) -> str | None:
+        """The value of the component's discriminator field, read off its stored config.
+
+        Args:
+            db_component: The row to read the payload from.
+
+        Returns:
+            The discriminator value as a string, or ``None`` when the class
+            declares none, the value is blank, or the key or payload can't be
+            read.
+        """
+        cls = self._resolve_class(db_component)
+        field = cls.discriminator_field() if cls else None
+        if field is None:
+            return None
+        value = (self._current_config(db_component) or {}).get(field)
+        return str(value) if value else None
+
+    def _resolve_class(self, db_component: Component) -> type[il.Component] | None:
+        """The component class a row's ``key`` and ``kind`` select in this catalog.
+
+        Args:
+            db_component: The row whose ``key`` and ``kind`` select the class.
+
+        Returns:
+            The class, or ``None`` when the key doesn't resolve or resolves to
+            a class of another kind (a stale row).
+        """
+        try:
+            cls = il.Component.resolve_key(db_component.key, self._catalog)
+        except (CatalogKeyError, ImportError, AttributeError, TypeError):
+            return None
+        return cls if cls.kind == db_component.kind else None
+
     def _derived_name(self, db_component: Component, config: dict[str, Any] | None) -> str | None:
         """The display name the component class derives from *config*.
 
@@ -698,11 +732,8 @@ class ComponentStore:
             ``None`` when the key doesn't resolve or the config can't construct
             the class.
         """
-        try:
-            cls = il.Component.resolve_key(db_component.key, self._catalog)
-        except (CatalogKeyError, ImportError, AttributeError, TypeError):
-            return None  # stale key: nothing to derive a name from
-        if cls.kind != db_component.kind:
+        cls = self._resolve_class(db_component)
+        if cls is None:
             return None
         try:
             instance = cls(**(config or {}))

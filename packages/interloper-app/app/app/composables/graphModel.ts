@@ -41,7 +41,8 @@ interface CollectionGraphOptions {
 export function useCollectionGraph(options: CollectionGraphOptions = {}) {
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
-    const { assetStatus, sourceStatus } = useNodeStatus()
+    const { assetStatus, sourceStatus } = useMaterializationStatus()
+    useExecutionsStore().fetchLatest()
 
     const sources = computed(() => {
         const ids = toValue(options.sourceIds)
@@ -64,7 +65,7 @@ export function useCollectionGraph(options: CollectionGraphOptions = {}) {
                     asset,
                     assetDefn: catalogStore.getAssetDefinition(qualifiedKey(source.key, asset.key)),
                     source,
-                    status: assetStatus(asset.id, asset.key),
+                    status: assetStatus(asset.id),
                 })
             }
         }
@@ -73,7 +74,7 @@ export function useCollectionGraph(options: CollectionGraphOptions = {}) {
                 asset,
                 assetDefn: catalogStore.getAssetDefinition(asset.key),
                 source: null,
-                status: assetStatus(asset.id, asset.key),
+                status: assetStatus(asset.id),
             })
         }
 
@@ -87,7 +88,7 @@ export function useCollectionGraph(options: CollectionGraphOptions = {}) {
 export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
-    const { assetStatus, sourceStatus } = useNodeStatus()
+    const { assetStatus, sourceStatus } = useMaterializationStatus()
 
     const model = computed<GraphModel>(() => {
         const job = componentsStore.byId(toValue(jobId))
@@ -111,7 +112,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
                     asset,
                     assetDefn: catalogStore.getAssetDefinition(qualifiedKey(source.key, asset.key)),
                     source,
-                    status: assetStatus(asset.id, asset.key),
+                    status: assetStatus(asset.id),
                 })
             }
         }
@@ -121,7 +122,7 @@ export function useJobGraph(jobId: MaybeRefOrGetter<string>) {
                 asset,
                 assetDefn: catalogStore.getAssetDefinition(asset.key),
                 source: null,
-                status: assetStatus(asset.id, asset.key),
+                status: assetStatus(asset.id),
             })
         }
 

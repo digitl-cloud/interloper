@@ -6,7 +6,6 @@ import { hookEnabled, hookEvents, relationIds } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
-const UIcon = resolveComponent('UIcon')
 const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
@@ -36,20 +35,8 @@ function watchedBy(hook: ComponentRecord): ComponentRecord[] {
 }
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    {
-        accessorKey: 'name',
-        header: 'Name',
-        cell: ({ row }) => h('span', { class: 'font-medium' }, row.original.name ?? ''),
-    },
-    {
-        id: 'type',
-        header: 'Type',
-        accessorFn: (row: ComponentRecord) => catalogStore.catalog[row.key]?.name ?? row.key,
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
-            h(UIcon, { name: componentIcon(row.original.key), class: 'size-4 shrink-0' }),
-            catalogStore.catalog[row.original.key]?.name ?? row.original.key,
-        ]),
-    },
+    nameColumn('Hook'),
+    typeColumn(),
     {
         id: 'events',
         header: 'Events',

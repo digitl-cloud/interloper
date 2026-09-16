@@ -41,6 +41,7 @@ const catalogStore = useCatalogStore()
 const { loading, upstreams: assetDependencies } = storeToRefs(componentsStore)
 
 const { model } = useCollectionGraph({ sourceIds: () => props.sourceIds })
+const { sourceStatus } = useNodeStatus()
 
 // ── Maps for connection validation/creation (collection editing only) ──
 const sources = computed(() => model.value.sources.map(e => e.source))
@@ -71,7 +72,7 @@ const displayModel = computed<GraphModel>(() => {
     const keep = new Set(
         m.sources
             .filter((s) => {
-                const state = s.status?.state ?? 'idle'
+                const state = sourceStatus(s.source).state
                 if (props.statusFilter === 'healthy') return state === 'idle'
                 if (props.statusFilter === 'attention') return state === 'attention'
                 if (props.statusFilter === 'paused') return state === 'paused'

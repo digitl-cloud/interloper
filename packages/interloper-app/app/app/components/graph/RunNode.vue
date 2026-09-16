@@ -26,7 +26,7 @@ const targetConnections = useNodeConnections({ handleType: 'target' })
 const hasUpstream = computed(() => targetConnections.value.length > 0)
 const hasDownstream = computed(() => sourceConnections.value.length > 0)
 
-const ringClass = computed(() => props.selected ? 'ring-2 ring-primary' : statusRingClass(state.value))
+const frameClass = computed(() => props.selected ? 'ring-2 ring-primary' : statusBorderClass(state.value) || 'border-[var(--ui-border-accented)]')
 </script>
 
 <template>
@@ -36,8 +36,8 @@ const ringClass = computed(() => props.selected ? 'ring-2 ring-primary' : status
                 :position="Position.Left"
                 :connectable="false" />
 
-        <div class="flex items-center gap-2 rounded-lg border border-[var(--ui-border-accented)] bg-muted px-3 py-2 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]"
-             :class="ringClass">
+        <div class="flex items-center gap-2 rounded-lg border bg-muted px-3 py-2 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.55)]"
+             :class="frameClass">
             <span class="size-2 shrink-0 rounded-full"
                   :class="statusDotClass(state)" />
             <UIcon :name="icon"

@@ -434,6 +434,36 @@ def test_executions_read_model_maps_the_view(store: Store) -> None:
     assert store.events.list_executions(uuid4()) == []
 
 
+def test_latest_executions_keeps_the_newest_per_asset(store: Store) -> None:
+    """One row per asset of the org: its most recent execution, older runs and other orgs dropped."""
+    engine = engine_module.get_engine()
+    Execution.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+    org, other_org = uuid4(), uuid4()
+    asset_a, asset_b, foreign = uuid4(), uuid4(), uuid4()
+    old_run, new_run = uuid4(), uuid4()
+    t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with Session(engine) as session:
+        rows = [
+            (old_run, asset_a, org, "a", "failed", t0),
+            (new_run, asset_a, org, "a", "success", t0 + timedelta(hours=1)),
+            (old_run, asset_b, org, "b", "running", t0),
+            (old_run, foreign, other_org, "x", "success", t0),
+        ]
+        session.add_all(
+            Execution(run_id=run, component_id=asset, org_id=owner, component_key=key, status=status, created_at=at)
+            for run, asset, owner, key, status, at in rows
+        )
+        session.commit()
+
+    rows = store.events.latest_executions(org)
+
+    assert {(row.component_id, row.run_id, row.status) for row in rows} == {
+        (asset_a, new_run, "success"),
+        (asset_b, old_run, "running"),
+    }
+    assert store.events.latest_executions(uuid4()) == []
+
+
 class TestEventValues:
     """The row values derived from a framework event."""
 

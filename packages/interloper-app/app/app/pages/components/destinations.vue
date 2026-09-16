@@ -6,7 +6,6 @@ import { resourceMap } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
-const UIcon = resolveComponent('UIcon')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
@@ -34,11 +33,6 @@ function typeIcon(key: string): string {
     return componentIcon(key, 'i-lucide-hard-drive')
 }
 
-function typeName(key: string): string {
-    const defn = catalogStore.catalog[key]
-    return defn?.name ?? key
-}
-
 /** The connection a destination is bound to, if any. */
 function connectionOf(destination: ComponentRecord): ComponentRecord | undefined {
     const id = resourceMap(destination).connection
@@ -46,27 +40,8 @@ function connectionOf(destination: ComponentRecord): ComponentRecord | undefined
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
-    {
-        id: 'destination',
-        header: 'Destination',
-        accessorFn: (row: ComponentRecord) => row.name ?? typeName(row.key),
-        cell: ({ row }) => {
-            const label = row.original.name ?? typeName(row.original.key)
-            return h('span', { class: 'flex items-center gap-2' }, [
-                h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
-                label,
-            ])
-        },
-    },
-    {
-        id: 'type',
-        header: 'Type',
-        accessorFn: (row: ComponentRecord) => typeName(row.key),
-        cell: ({ row }) => h('span', { class: 'flex items-center gap-1.5 text-muted' }, [
-            h(UIcon, { name: typeIcon(row.original.key), class: 'size-4 shrink-0' }),
-            typeName(row.original.key),
-        ]),
-    },
+    nameColumn('Destination'),
+    typeColumn(typeIcon),
     {
         id: 'connection',
         header: 'Connection',

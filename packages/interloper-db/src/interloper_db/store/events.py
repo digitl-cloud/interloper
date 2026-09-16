@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 import interloper as il
 from sqlalchemy import Engine
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import aliased
 from sqlmodel import col, func, select
 
 from interloper_db.models import Event, Execution
@@ -172,6 +173,27 @@ class EventStore:
         """
         with session_scope(self._engine) as session:
             statement = select(Execution).where(Execution.run_id == run_id)
+            return list(session.exec(statement).all())
+
+    def latest_executions(self, org_id: UUID) -> list[Execution]:
+        """The most recent execution of every asset in an organisation.
+
+        Args:
+            org_id: The organisation UUID.
+
+        Returns:
+            One row per asset that has ever executed, carrying its newest run's
+            status and timestamps.
+        """
+        rank = (
+            func.row_number()
+            .over(partition_by=col(Execution.component_id), order_by=col(Execution.created_at).desc())
+            .label("rank")
+        )
+        ranked = select(Execution, rank).where(Execution.org_id == org_id).subquery()
+        latest = aliased(Execution, ranked)
+        with session_scope(self._engine) as session:
+            statement = select(latest).where(ranked.c.rank == 1)
             return list(session.exec(statement).all())
 
     # -- Internals -------------------------------------------------------------

@@ -42,6 +42,11 @@ export const useCatalogStore = defineStore('catalog', () => {
         return byKind.value[kind] ?? []
     }
 
+    /** Display name of a definition by key, the key itself when it is not in the catalog. */
+    function typeName(key: string): string {
+        return catalog.value[key]?.name ?? key
+    }
+
     /** All source definitions from the catalog. */
     const sourceDefinitions = computed<SourceDefinition[]>(() =>
         definitionsForKind('source') as SourceDefinition[],
@@ -101,6 +106,7 @@ export const useCatalogStore = defineStore('catalog', () => {
         destinationDefinitions,
         fetchCatalog,
         definitionsForKind,
+        typeName,
         getSourceDefinition,
         getAssetDefinition,
         getDestinationDefinition,

@@ -11,6 +11,16 @@ export const useExecutionsStore = defineStore('executions', () => {
     const executions = ref<Execution[]>([])
     const loading = ref(false)
     const error = ref<Error | null>(null)
+    /** Latest execution per asset across the organisation, once `fetchLatest` has run. */
+    const latest = ref<Execution[]>([])
+    const latestLoaded = ref(false)
+    const latestByAssetId = computed(() => {
+        const map = new Map<string, Execution>()
+        for (const execution of latest.value) {
+            if (execution.component_id) map.set(execution.component_id, execution)
+        }
+        return map
+    })
 
     /**********************
      * Realtime
@@ -24,6 +34,17 @@ export const useExecutionsStore = defineStore('executions', () => {
         shouldHandle: (record: Record<string, any>) => record.run_id === runId.value,
         onInsert: () => {
             if (runId.value) _refetch(runId.value)
+        },
+    })
+
+    // A run streams many events; one refetch per burst is enough for the dots.
+    let latestTimer: ReturnType<typeof setTimeout> | undefined
+    useRealtimeSubscription({
+        table: 'events',
+        scope: () => latestLoaded.value ? orgStore.organisation?.id : null,
+        onInsert: () => {
+            clearTimeout(latestTimer)
+            latestTimer = setTimeout(() => { fetchLatest() }, 1000)
         },
     })
 
@@ -57,11 +78,23 @@ export const useExecutionsStore = defineStore('executions', () => {
         }
     }
 
+    async function fetchLatest() {
+        try {
+            latest.value = await apiFetch<Execution[]>('/runs/executions/latest')
+            latestLoaded.value = true
+        }
+        catch (e) {
+            error.value = e as Error
+        }
+    }
+
     function $reset() {
         runId.value = null
         executions.value = []
         loading.value = false
         error.value = null
+        latest.value = []
+        latestLoaded.value = false
     }
 
     return {
@@ -69,7 +102,10 @@ export const useExecutionsStore = defineStore('executions', () => {
         executions,
         loading,
         error,
+        latest,
+        latestByAssetId,
         fetchForRun,
+        fetchLatest,
         $reset,
     }
 })

@@ -162,9 +162,10 @@ const filteredData = computed(() => {
 
     const matchingAssetIds = new Set<string>()
     for (const d of data.value) {
-        const sourceName = sourceInfoById.value.get(d.sourceId)?.name ?? ''
+        const sourceInfo = sourceInfoById.value.get(d.sourceId)
         if (d.name.toLowerCase().includes(q)
-            || sourceName.toLowerCase().includes(q)
+            || (sourceInfo?.name.toLowerCase().includes(q) ?? false)
+            || (sourceInfo?.discriminator?.toLowerCase().includes(q) ?? false)
             || d.sourceKey.toLowerCase().includes(q)
             || d.tags.some(t => t.toLowerCase().includes(q))
             || (d.connectionName?.toLowerCase().includes(q) ?? false)
@@ -252,10 +253,12 @@ function onRowClick(row: any) {
                     <UIcon :name="typeInfoByKey.get(row.original.sourceKey)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
                     <span class="font-semibold">{{ typeInfoByKey.get(row.original.sourceKey)?.name ?? row.original.sourceKey }}</span>
-                    <span class="text-muted text-xs">
+                    <UBadge color="neutral"
+                            variant="soft"
+                            class="ml-2">
                         {{ typeInfoByKey.get(row.original.sourceKey)?.sourceCount ?? 0 }}
                         {{ (typeInfoByKey.get(row.original.sourceKey)?.sourceCount ?? 0) === 1 ? 'source' : 'sources' }}
-                    </span>
+                    </UBadge>
                 </div>
                 <!-- Source group header (depth 1) -->
                 <div v-else-if="row.getIsGrouped() && row.depth === 1"
@@ -267,11 +270,22 @@ function onRowClick(row: any) {
                              @click.stop="row.toggleExpanded()" />
                     <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
-                    <span class="font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
-                    <span class="text-muted text-xs">
+                    <span class="flex flex-col items-start gap-1">
+                        <span class="font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
+                        <UBadge v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
+                                color="neutral"
+                                variant="soft"
+                                size="sm"
+                                class="font-mono">
+                            {{ sourceInfoById.get(row.original.sourceId)!.discriminator }}
+                        </UBadge>
+                    </span>
+                    <UBadge color="neutral"
+                            variant="soft"
+                            class="ml-2">
                         {{ sourceInfoById.get(row.original.sourceId)?.assetCount ?? 0 }}
                         {{ (sourceInfoById.get(row.original.sourceId)?.assetCount ?? 0) === 1 ? 'asset' : 'assets' }}
-                    </span>
+                    </UBadge>
                     <UBadge v-if="sourceDriftBadge(row.original.sourceId)"
                             :color="sourceDriftBadge(row.original.sourceId)!.color"
                             :icon="sourceDriftBadge(row.original.sourceId)!.icon">
