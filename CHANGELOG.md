@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.82.0 (2026-09-16)
+
+### Features
+
+- Badge execution status on the jobs table and the timeline
+  ([`66ec8d6`](https://github.com/digitl-cloud/interloper/commit/66ec8d6aae06ef80a20f2c24e5c54319d6aabb8f))
+
+- **assets**: Partition the Amazon vendor forecast by generation date
+  ([`853e54a`](https://github.com/digitl-cloud/interloper/commit/853e54a5b8d4084e7202c8721e7169fdc440f82e))
+
+
 ## v0.81.1 (2026-09-16)
 
 
