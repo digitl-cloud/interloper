@@ -199,7 +199,7 @@ const frameClass = computed(() => props.nested
                                       :class="[nested ? 'size-1.5' : 'size-[7px]', statusDotClass(status?.state ?? 'idle')]" />
                             </div>
                             <span v-if="showChip"
-                                  class="graph-chip max-w-full truncate">{{ source.discriminator }}</span>
+                                  class="id-chip max-w-full truncate">{{ source.discriminator }}</span>
                         </div>
                         <UTooltip v-if="isDrift && !collapsed"
                                   :delay-duration="0"

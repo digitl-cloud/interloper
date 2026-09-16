@@ -74,7 +74,7 @@ export function nameColumn(
             if (!discriminator || discriminator === name) return title
             return h('span', { class: 'flex flex-col items-start gap-1' }, [
                 title,
-                h(UBadge, { color: 'neutral', variant: 'soft', size: 'sm', class: 'font-mono' }, () => discriminator),
+                h('span', { class: 'id-chip max-w-full truncate' }, discriminator),
             ])
         },
     } as TableColumn<ComponentRecord>

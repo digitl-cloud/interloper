@@ -104,7 +104,7 @@
     --graph-nested-bg: #f7f7f9;
     --graph-nested-line: #e9e9ee;
     --graph-head-line: #ebebef;
-    --graph-chip-text: #1b5fbf;
+    --id-chip-text: #1b5fbf;
     --graph-model: #6c5ce7;
     --graph-card-shadow: 0 2px 8px rgb(11 42 66 / 0.07);
     --graph-asset-shadow: 0 1px 4px rgb(11 42 66 / 0.06);
@@ -191,7 +191,7 @@
     --graph-nested-bg: var(--ui-bg-muted);
     --graph-nested-line: var(--color-gray-700);
     --graph-head-line: var(--color-gray-700);
-    --graph-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);
+    --id-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);
     --graph-model: #9d8ff0;
     --graph-card-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
     --graph-asset-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
@@ -216,11 +216,12 @@
     box-shadow: var(--graph-layer-shadow);
 }
 
-.graph-chip {
+/* Identifier chip: a discriminator or other machine id shown next to a name. */
+.id-chip {
     padding: 2px 8px;
     border-radius: 6px;
     background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-bg));
-    color: var(--graph-chip-text);
+    color: var(--id-chip-text);
     font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
