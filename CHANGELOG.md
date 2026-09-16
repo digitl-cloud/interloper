@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.81.0 (2026-09-16)
+
+### Features
+
+- Surface source identifiers and redesign the graph
+  ([`e3ed286`](https://github.com/digitl-cloud/Interloper/commit/e3ed286fd5b2f586753a8b1efcaa912bdaae91af))
+
+
 ## v0.80.0 (2026-09-16)
 
 ### Bug Fixes
