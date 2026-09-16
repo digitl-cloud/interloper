@@ -124,7 +124,7 @@ async def _request_report(
 
 
 def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]]:
-    """Stamp the partition date onto each stats row (the normalizer reshapes the rest)."""
+    """Stamp the partition date onto each entity row, which TikTok returns without a date."""
     return [{**row, "date": date} for row in rows]
 
 
@@ -149,7 +149,7 @@ class TiktokAds(il.Source):
 
     # --- Time-series reports (TiktokStatsNormalizer from the source) ---
 
-    @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=AdsStats, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad-level performance with basic metrics including spend, clicks, and conversions."""
         rows = await _request_report(
@@ -160,9 +160,9 @@ class TiktokAds(il.Source):
             dimensions=["ad_id", "stat_time_day"],
             metrics=constants.BASIC_METRICS,
         )
-        return _with_date(rows, context.partition_date)
+        return rows
 
-    @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=AdsStatsByCountry, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_country(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by country."""
         rows = await _request_report(
@@ -173,9 +173,9 @@ class TiktokAds(il.Source):
             dimensions=["ad_id", "country_code", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
         )
-        return _with_date(rows, context.partition_date)
+        return rows
 
-    @il.asset(schema=AdsStatsByAgeGender, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=AdsStatsByAgeGender, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_age_gender(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by age and gender demographics."""
         rows = await _request_report(
@@ -186,9 +186,9 @@ class TiktokAds(il.Source):
             dimensions=["ad_id", "age", "gender", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
         )
-        return _with_date(rows, context.partition_date)
+        return rows
 
-    @il.asset(schema=AdsStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(schema=AdsStatsByPlatform, partitioning=il.TimePartitionConfig(column="stat_time_day"), tags=["Report"])
     async def ads_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Ad performance segmented by platform."""
         rows = await _request_report(
@@ -199,9 +199,13 @@ class TiktokAds(il.Source):
             dimensions=["ad_id", "platform", "stat_time_day"],
             metrics=constants.AUDIENCE_METRICS,
         )
-        return _with_date(rows, context.partition_date)
+        return rows
 
-    @il.asset(schema=VideosStatsByPlatform, partitioning=il.TimePartitionConfig(column="date"), tags=["Report"])
+    @il.asset(
+        schema=VideosStatsByPlatform,
+        partitioning=il.TimePartitionConfig(column="stat_time_day"),
+        tags=["Report"],
+    )
     async def videos_stats_by_platform(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Video ad performance segmented by platform."""
         rows = await _request_report(
@@ -212,7 +216,7 @@ class TiktokAds(il.Source):
             dimensions=["ad_id", "platform", "stat_time_day"],
             metrics=constants.VIDEO_METRICS,
         )
-        return _with_date(rows, context.partition_date)
+        return rows
 
     # --- Entity assets (_ENTITY_NORMALIZER) ---
 

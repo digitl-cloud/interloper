@@ -45,4 +45,3 @@ class AdsStats(Schema):
     vta_complete_payment: int | None = Field(default=None, description="Total value of purchase events attributed to only 'viewing' the ad")
     vta_complete_payment_value: float | None = Field(default=None, description="Total value of purchase events attributed to someone only 'viewing' the ad")
     stat_time_day: dt.date | None = Field(default=None, description="Day of the ad")
-    date: dt.date | None = Field(default=None, description="Partition date")

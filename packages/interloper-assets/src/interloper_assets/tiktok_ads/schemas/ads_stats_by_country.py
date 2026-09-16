@@ -42,4 +42,3 @@ class AdsStatsByCountry(Schema):
     secondary_goal_result_rate: str | None = Field(default=None, description="Secondary goal result rate of the ad")
     spend: float | None = Field(default=None, description="Amount spent on the ad")
     stat_time_day: dt.date | None = Field(default=None, description="Day of the ad")
-    date: dt.date | None = Field(default=None, description="Partition date")
