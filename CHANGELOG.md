@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.80.0 (2026-09-16)
+
+### Bug Fixes
+
+- **assets**: Type Amazon Ads count metrics as integers
+  ([`f7a46ee`](https://github.com/digitl-cloud/Interloper/commit/f7a46ee0d74866d1d0811fe8e98ab6ffa7a35183))
+
+### Chores
+
+- **ci**: Drop the inline comment on keep_files
+  ([`e6a14c2`](https://github.com/digitl-cloud/Interloper/commit/e6a14c2d970191a9a75e0d4f3d0aa0fdf7ad2f6e))
+
+- **ci**: Prune stale files from the published docs site
+  ([`c4553fb`](https://github.com/digitl-cloud/Interloper/commit/c4553fbbfb500bc5c3daca2bd6feaca9b0fc9430))
+
+### Documentation
+
+- The Helm chart index is gone, stop describing it as live
+  ([`9d5a641`](https://github.com/digitl-cloud/Interloper/commit/9d5a641219969e9d9d026a22e6df824ca711c6ef))
+
+### Breaking Changes
+
+- **assets**: Existing BigQuery `amazon_ads` tables carry FLOAT64 columns for these metrics and
+  BigQuery cannot change a column type in place. Drop and recreate those tables (or migrate them)
+  before the first load with this version.
+
+
 ## v0.79.2 (2026-09-15)
 
 ### Chores
