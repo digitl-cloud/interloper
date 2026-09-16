@@ -157,6 +157,7 @@ class Runner(Serializable):
                 await asyncio.to_thread(EventBus.flush, 5.0)
                 EventBus.unsubscribe(handler)
 
+    # TODO: find a better name as the main method to abstract for a runner.
     @abstractmethod
     async def _run(
         self,
@@ -280,8 +281,7 @@ class Runner(Serializable):
             )
             if partitioned:
                 raise PartitionError(
-                    "This run requires a partition or partition window. "
-                    f"Partitioned operations: {partitioned}."
+                    f"This run requires a partition or partition window. Partitioned operations: {partitioned}."
                 )
             return
 
