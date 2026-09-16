@@ -101,6 +101,8 @@ const TOP_SOURCE_HEAD_H = 84
 const GRP_HEAD_H = 76
 /** Height each folded card adds under a collapsed nested source. */
 const LAYER_H = 6
+/** Folded cards a collapsed card peeks, so a stack reads as at most three deep. */
+const MAX_LAYERS = 2
 const SRC_W = ASSET_W + SRC_PAD_X * 2
 const GRP_W = SRC_W + GRP_PAD_X * 2
 
@@ -212,7 +214,7 @@ function getInnerLayout(sourceId: string) {
 
 /** Folded cards drawn under a collapsed nested source, hinting at its assets. */
 function sourceLayers(sourceId: string): number {
-    return Math.min(2, Math.max(0, childEntries(sourceId).length - 1))
+    return Math.min(MAX_LAYERS, Math.max(0, childEntries(sourceId).length - 1))
 }
 
 /** Whether a source is rendered as expanded child nodes on the canvas. */
@@ -499,7 +501,7 @@ const nodes = computed<Node[]>(() => {
                 sourceDefn: members[0]!.sourceDefn,
                 members,
                 open,
-                layers: Math.min(3, members.length),
+                layers: Math.min(MAX_LAYERS, members.length),
                 status: groupStatus(members),
             },
         })
