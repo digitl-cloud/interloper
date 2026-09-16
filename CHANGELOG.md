@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.82.1 (2026-09-16)
+
+### Bug Fixes
+
+- **app**: Cap the graph's card stacks at three
+  ([`31579d5`](https://github.com/digitl-cloud/interloper/commit/31579d5661f42c37277aa285582cd0ee892e87b8))
+
+### Code Style
+
+- **app**: One identifier chip for discriminators everywhere
+  ([`84e68e4`](https://github.com/digitl-cloud/interloper/commit/84e68e4892e42630a632d953a296910b00f4885e))
+
+- **app**: Tighter data table rows
+  ([`af51b63`](https://github.com/digitl-cloud/interloper/commit/af51b6393fe474c3533481ab409fde42ff43eec3))
+
+
 ## v0.82.0 (2026-09-16)
 
 ### Features
