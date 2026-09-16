@@ -397,20 +397,31 @@ class AmazonSellingPartner(il.Source):
         )
         return document.get("netPureProductMarginByAsin", []) if document else []
 
-    # TODO: disabled for now. Review whether this should be partitioned.
-    # @il.asset(
-    #     schema=schemas.VendorForecastingRetailStats,
-    #     tags=["Report"],
-    # )
-    # async def vendor_forecasting_retail_stats(self) -> list[_Record]:
-    #     """Latest forward-looking demand forecast per ASIN (retail, snapshot)."""
-    #     document = await _get_report(
-    #         self.connection,
-    #         report_type="GET_VENDOR_FORECASTING_REPORT",
-    #         marketplace=self.marketplace,
-    #         options={"sellingProgram": "RETAIL"},
-    #     )
-    #     return document.get("forecastByAsin", []) if document else []
+    @il.asset(
+        schema=schemas.VendorForecastingRetailStats,
+        partitioning=il.TimePartitionConfig(column="forecast_generation_date"),
+        tags=["Report"],
+    )
+    async def vendor_forecasting_retail_stats(self, context: il.ExecutionContext) -> list[_Record]:
+        """Forward-looking demand forecast per ASIN (retail), one partition per forecast generation.
+
+        Amazon regenerates the forecast weekly and the report only ever returns the
+        latest generation, so the rows are kept on the run whose partition is their
+        ``forecastGenerationDate`` and every other run writes nothing. Past
+        generations cannot be backfilled from the API.
+        """
+        document = await _get_report(
+            self.connection,
+            report_type="GET_VENDOR_FORECASTING_REPORT",
+            marketplace=self.marketplace,
+            options={"sellingProgram": "RETAIL"},
+        )
+        generated_on = context.partition_date.isoformat()
+        return [
+            record
+            for record in (document.get("forecastByAsin", []) if document else [])
+            if record.get("forecastGenerationDate") == generated_on
+        ]
 
     # --- Vendor Analytics: Data Kiosk (GraphQL) -------------------------------
 

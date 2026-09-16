@@ -96,3 +96,65 @@ class TestSpecRoundtrip:
         assert "aged_90_plus_days_sellable_inventory_cost_amount" in normalized.columns
 
         Representation.of(normalized).reconcile(schemas.VendorInventoryRetailManufacturingStats)  # must not raise
+
+
+class TestForecastingSnapshots:
+    """The forecast report is a weekly snapshot: one partition per generation, kept only on its own run."""
+
+    def test_asset_is_enabled_and_partitioned_on_the_generation_date(self):
+        asset = next(a for a in _source().assets if type(a).key == "vendor_forecasting_retail_stats")
+        assert asset.partitioning is not None and asset.partitioning.column == "forecast_generation_date"
+        assert asset.tags == ["Report"]
+
+    def test_run_keeps_only_the_partitions_generation(self, monkeypatch: Any):
+        import asyncio
+        import datetime as dt
+
+        import interloper as il
+        from interloper.asset.context import ExecutionContext
+
+        from interloper_assets.amazon_selling_partner import source as source_module
+
+        rows = [
+            {"asin": "A", "forecastGenerationDate": "2026-09-13", "startDate": "2026-09-13"},
+            {"asin": "A", "forecastGenerationDate": "2026-09-13", "startDate": "2026-09-20"},
+            {"asin": "B", "forecastGenerationDate": "2026-09-06", "startDate": "2026-09-06"},
+        ]
+
+        async def fake_report(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            return {"forecastByAsin": rows}
+
+        monkeypatch.setattr(source_module, "_get_report", fake_report)
+        asset = next(a for a in _source().assets if type(a).key == "vendor_forecasting_retail_stats")
+
+        def run(day: dt.date) -> list[dict[str, Any]]:
+            context = ExecutionContext(
+                asset_key=asset.key,
+                partitioning=asset.partitioning,
+                partition_or_window=il.TimePartition(value=day),
+            )
+            return asyncio.run(asset.data(context=context))
+
+        assert [r["startDate"] for r in run(dt.date(2026, 9, 13))] == ["2026-09-13", "2026-09-20"]
+        assert run(dt.date(2026, 9, 14)) == []  # a run between generations writes nothing
+
+    def test_forecast_row_conforms_with_date_typed_columns(self):
+        src = _source()
+        asset = next(a for a in src.assets if type(a).key == "vendor_forecasting_retail_stats")
+        rows = [
+            {
+                "asin": "B00TEST",
+                "startDate": "2026-09-13",
+                "endDate": "2026-09-19",
+                "forecastGenerationDate": "2026-09-13",
+                "meanForecastUnits": 12.5,
+                "p70ForecastUnits": 10.0,
+                "p80ForecastUnits": 9.0,
+                "p90ForecastUnits": 7.0,
+            }
+        ]
+        normalizer = asset.normalizer
+        assert normalizer is not None
+        out = Representation.of(normalizer.normalize(rows)).reconcile(schemas.VendorForecastingRetailStats)
+        assert str(out.loc[0, "forecast_generation_date"])[:10] == "2026-09-13"
+        assert set(out.columns) == set(schemas.VendorForecastingRetailStats.model_fields)
