@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { ComponentRecord } from '~/types/component'
-import { resourceMap } from '~/types/component'
+import type { ComponentRecord, RelationRef } from '~/types/component'
+import { relationRefs } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
@@ -25,18 +25,15 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-// Resource kinds too — the Connection column resolves resource names by id.
-componentsStore.fetchAll()
-componentsStore.fetchRelations()
+componentsStore.fetchAll(['destination'])
 
 function typeIcon(key: string): string {
     return componentIcon(key, 'i-lucide-hard-drive')
 }
 
-/** The connection a destination is bound to, if any. */
-function connectionOf(destination: ComponentRecord): ComponentRecord | undefined {
-    const id = resourceMap(destination).connection
-    return id ? componentsStore.byId(id) : undefined
+/** The connection a destination is bound to, if any, as its binding names it. */
+function connectionOf(destination: ComponentRecord): RelationRef | undefined {
+    return relationRefs(destination, 'connection')[0]
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
@@ -45,13 +42,13 @@ const columns: TableColumn<ComponentRecord>[] = [
     {
         id: 'connection',
         header: 'Connection',
-        accessorFn: (row: ComponentRecord) => connectionOf(row)?.name ?? connectionOf(row)?.key ?? '',
+        accessorFn: (row: ComponentRecord) => connectionOf(row)?.dst_name ?? connectionOf(row)?.dst_key ?? '',
         cell: ({ row }) => {
             const resource = connectionOf(row.original)
             if (!resource) return h('span', { class: 'text-muted' }, '—')
             return h(EntityBadge, {
-                icon: componentIcon(resource.key, 'i-lucide-key-round'),
-                label: resource.name ?? resource.key,
+                icon: componentIcon(resource.dst_key, 'i-lucide-key-round'),
+                label: resource.dst_name ?? resource.dst_key,
             })
         },
     },
@@ -93,7 +90,7 @@ const typeKey = ref<string | null>(null)
                        search-placeholder="Search destinations..."
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.reload()">
+                       @retry="componentsStore.fetchAll(['destination'])">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="destinations" />

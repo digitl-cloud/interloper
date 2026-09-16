@@ -1,5 +1,11 @@
 import type { ComponentRecord } from '~/types/component'
-import { relationIds } from '~/types/component'
+import { relationRefs } from '~/types/component'
+
+/** What the badge needs of a destination: its catalog key and display name. */
+export interface DestinationLike {
+    key: string
+    name: string | null
+}
 
 export interface DestinationBadge {
     icon: string
@@ -12,7 +18,7 @@ export function useDestinationBadge() {
     const componentsStore = useComponentsStore()
     const catalogStore = useCatalogStore()
 
-    function getBadgeForDestinations(destinations: ComponentRecord[]): DestinationBadge | null {
+    function getBadgeForDestinations(destinations: DestinationLike[]): DestinationBadge | null {
         if (destinations.length === 0) return null
 
         if (destinations.length > 1) {
@@ -36,10 +42,9 @@ export function useDestinationBadge() {
     }
 
     function getBadgeForSource(source: ComponentRecord): DestinationBadge | null {
-        const destinations = relationIds(source, 'destinations')
-            .map(id => componentsStore.byId(id))
-            .filter((d): d is ComponentRecord => !!d)
-        return getBadgeForDestinations(destinations)
+        return getBadgeForDestinations(
+            relationRefs(source, 'destinations').map(ref => ({ key: ref.dst_key, name: ref.dst_name })),
+        )
     }
 
     function getBadgeForAssetId(assetId: string): DestinationBadge | null {

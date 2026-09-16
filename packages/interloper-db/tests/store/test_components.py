@@ -143,6 +143,20 @@ class WireDownOptionalSource(il.Source):
             return []
 
 
+class WireDownMixedSource(il.Source):
+    """Downstream source that blocks through its connection and detaches through its asset's upstream."""
+
+    connection: WireConnection
+
+    class Reader(il.Asset):
+        """Asset with a detaching cross-source upstream."""
+
+        rows = il.Relation("asset", "wire_up_source.rows", optional=True, on_delete="detach")
+
+        def data(self, context: il.ExecutionContext) -> list[dict]:
+            return []
+
+
 class DiscriminatedSource(il.Source):
     """Source class whose instances are discriminated by ``account_id``."""
 
@@ -171,6 +185,7 @@ def store(component_db: Engine) -> Store:
             WireUpSource,
             WireDownSource,
             WireDownOptionalSource,
+            WireDownMixedSource,
             DiscriminatedSource,
         ]
     )
@@ -270,6 +285,34 @@ class TestCrud:
         assert store.components.get(dest.id, kind="destination").id == dest.id
         with pytest.raises(NotFoundError):
             store.components.get(dest.id, kind="asset")
+
+    def test_list_roots_nests_owned_components(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+        store.components.create(uuid4(), kind="connection", key="wire_connection", config={}, encrypted=False)
+
+        roots = store.components.list_roots(_ORG)
+
+        assert [row.id for row in roots] == [connection.id, source.id]
+        nested = next(row for row in roots if row.id == source.id)
+        assert {child.key for child in nested.children} == {"rows", "totals"}
+
+    def test_list_roots_filters_root_kinds(self, store: Store, connection: Component):
+        store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        assert [row.id for row in store.components.list_roots(_ORG, kinds=["connection"])] == [connection.id]
+        # Owned assets are not roots: a kind filter never surfaces them.
+        assert store.components.list_roots(_ORG, kinds=["asset"]) == []
+
+    def test_relations_carry_their_target(self, store: Store, connection: Component):
+        source = store.components.create(
+            _ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]}
+        )
+
+        row = store.components.get(source.id)
+
+        relation = next(r for r in row.out_relations if r.name == "connection")
+        assert relation.dst is not None
+        assert (relation.dst.id, relation.dst.key) == (connection.id, "wire_connection")
 
 
 class TestDeleteInUseGuard:
@@ -400,6 +443,61 @@ class TestUpstreamDeleteSemantics:
         with pytest.raises(InUseError) as excinfo:
             store.components.delete(upstream.id)
         assert [r["id"] for r in excinfo.value.referrers] == [str(referrer.id)]
+
+
+class TestDeleteImpact:
+    """The delete preview: who blocks, who detaches, before anything is deleted."""
+
+    def test_splits_blocking_from_detaching_referrers(self, store: Store):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
+        blocking = store.components.create(
+            _ORG, kind="asset", key="guard_required", name="Req", relations={"up": [upstream.id]}
+        )
+        detaching = store.components.create(
+            _ORG, kind="asset", key="guard_optional", name="Opt", relations={"up": [upstream.id]}
+        )
+
+        impact = store.components.delete_impact([upstream.id])
+
+        assert [r["id"] for r in impact.blocking] == [str(blocking.id)]
+        assert impact.detaching == [
+            {"id": str(detaching.id), "kind": "asset", "key": "guard_optional", "name": "Opt"}
+        ]
+        assert store.components.get(upstream.id).id == upstream.id  # a preview deletes nothing
+
+    def test_a_referrer_that_blocks_anywhere_is_only_blocking(self, store: Store, connection: Component):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        mixed = store.components.create(
+            _ORG, kind="source", key="wire_down_mixed_source", name="Mixed", relations={"connection": [connection.id]}
+        )
+        store.relations.add(_child(mixed, "reader").id, name="rows", dst_id=_child(up, "rows").id)
+
+        # One referrer, two outcomes: it blocks on its connection and detaches
+        # on its asset's upstream. Blocking is the only honest answer.
+        impact = store.components.delete_impact([connection.id, up.id])
+
+        assert [r["id"] for r in impact.blocking] == [str(mixed.id)]
+        assert impact.detaching == []
+
+    def test_a_referrer_through_an_owned_component_reports_its_owner(self, store: Store):
+        up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
+        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
+
+        impact = store.components.delete_impact([up.id])
+
+        assert [r["id"] for r in impact.blocking] == [str(down.id)]
+
+    def test_relations_inside_the_subtree_do_not_count(self, store: Store):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        impact = store.components.delete_impact([source.id])
+
+        assert (impact.blocking, impact.detaching) == ([], [])
+
+    def test_an_unknown_id_is_not_found(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.components.delete_impact([uuid4()])
 
 
 class TestIntraSourceWiring:
@@ -756,6 +854,87 @@ class TestStatus:
         row = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
         assert not row.encrypted
         assert demo_store.components.status(row) is ComponentStatus.OK
+
+    def test_a_standalone_asset_resolves_flat(self, store: Store):
+        row = Component(org_id=_ORG, kind="asset", key="guard_upstream")
+        assert store.components.status(row) is ComponentStatus.OK
+
+
+class TestReading:
+    """One decode per row: status, payload, public subset and discriminator together."""
+
+    @staticmethod
+    def _counting_store(catalog: il.Catalog) -> tuple[Store, list[bytes]]:
+        """A store whose cipher records every decrypt it is asked for.
+
+        Args:
+            catalog: Catalog the store resolves its keys against.
+
+        Returns:
+            The store and the list its decrypt calls are recorded in.
+        """
+        calls: list[bytes] = []
+
+        def _decrypt(data: bytes) -> bytes:
+            calls.append(data)
+            return data[::-1]
+
+        return Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_decrypt), calls
+
+    def test_reads_a_secret_row_with_one_decrypt(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        store, calls = self._counting_store(catalog)
+        row = store.components.create(
+            _ORG,
+            kind="connection",
+            key=PublicToggleConnection.key,
+            config={"api_key": "s3cret", "auto_renew": False},
+        )
+        calls.clear()
+
+        reading = store.components.read(row)
+
+        assert len(calls) == 1
+        assert reading.status is ComponentStatus.OK
+        assert reading.config == {"api_key": "s3cret", "auto_renew": False}
+        assert reading.public_config == {"auto_renew": False}
+        assert reading.discriminator is None
+
+    def test_an_unreadable_row_discloses_nothing(self, component_db: Engine):
+        catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
+        written, _ = self._counting_store(catalog)
+        row = written.components.create(
+            _ORG, kind="connection", key=PublicToggleConnection.key, config={"api_key": "s"}
+        )
+
+        def _wrong_key(_data: bytes) -> bytes:
+            raise InvalidToken
+
+        reading = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key).components.read(row)
+
+        assert reading.status is ComponentStatus.UNREADABLE
+        assert reading.config is None
+        assert reading.public_config == {}
+
+    def test_a_drifted_plain_row_keeps_its_config(self, store: Store):
+        row = Component(org_id=_ORG, kind="job", key="gone_job", config={"cron": "0 * * * *"})
+
+        reading = store.components.read(row)
+
+        assert reading.status is ComponentStatus.MISSING
+        assert reading.config == {"cron": "0 * * * *"}
+        assert reading.public_config == {}
+
+    def test_the_views_agree_with_the_reading(self, store: Store):
+        row = store.components.create(
+            _ORG, kind="source", key="discriminated_source", config={"account_id": "42"}
+        )
+
+        reading = store.components.read(row)
+
+        assert store.components.status(row) is reading.status
+        assert store.components.discriminator(row) == reading.discriminator == "42"
+        assert store.components.public_config(row) == reading.public_config
 
 
 # -- Resource encoding ---------------------------------------------------------

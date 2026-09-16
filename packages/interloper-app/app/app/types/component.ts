@@ -1,4 +1,5 @@
 import { RESOURCE_KINDS } from '~/types/catalog'
+import type { UsedByRef } from '~/utils/apiErrors'
 
 /**
  * Usability state of a persisted component in this deployment.
@@ -13,10 +14,23 @@ import { RESOURCE_KINDS } from '~/types/catalog'
  */
 export type ComponentStatus = 'ok' | 'disabled' | 'missing' | 'unreadable'
 
-/** A relation entry embedded on a component (`component.relations[name]`). */
+/**
+ * A relation entry embedded on a component (`component.relations[name]`).
+ *
+ * `dst_key` and `dst_name` ride along so a surface can label what a component
+ * is bound to without holding that component's own record.
+ */
 export interface RelationRef {
     dst_id: string
     dst_kind: string
+    dst_key: string
+    dst_name: string | null
+}
+
+/** `GET /components/delete-impact`: who refuses a deletion, who merely loses a binding. */
+export interface DeleteImpact {
+    blocking: UsedByRef[]
+    detaching: UsedByRef[]
 }
 
 /** A standalone relation row from `GET /components/relations`. */
@@ -51,7 +65,10 @@ export interface ComponentRecord {
     /** Owning source id for source-owned assets. */
     parent_id: string | null
     relations: Record<string, RelationRef[]>
-    /** Sources: their assets (one level deep). */
+    /**
+     * The components this one owns (a source's assets). The collection nests
+     * them here and never repeats them at top level.
+     */
     children: ComponentRecord[]
     created_at: string | null
     updated_at: string | null

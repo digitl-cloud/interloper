@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
-import type { ComponentRecord } from '~/types/component'
-import { jobCron, jobEnabled, jobTimezone, relationIds } from '~/types/component'
+import type { ComponentRecord, RelationRef } from '~/types/component'
+import { jobCron, jobEnabled, jobTimezone, relationRefs } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
@@ -27,8 +27,7 @@ const {
 const runModalOpen = ref(false)
 const runModalJob = ref<ComponentRecord | null>(null)
 
-componentsStore.fetchAll()
-componentsStore.fetchRelations()
+componentsStore.fetchAll(['job'])
 
 function openRun(job: ComponentRecord) {
     runModalJob.value = job
@@ -74,11 +73,9 @@ async function setEnabled(job: ComponentRecord, enabled: boolean) {
     }
 }
 
-/** The components a job targets, in relation order. */
-function targetsOf(job: ComponentRecord): ComponentRecord[] {
-    return relationIds(job, 'targets')
-        .map(id => componentsStore.byId(id))
-        .filter((t): t is ComponentRecord => !!t)
+/** The components a job targets, in relation order, as its bindings name them. */
+function targetsOf(job: ComponentRecord): RelationRef[] {
+    return relationRefs(job, 'targets')
 }
 
 /** A job's last run reads as one badge — its age coloured by how the run ended. */
@@ -111,14 +108,14 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         id: 'targets',
         header: 'Targets',
-        accessorFn: (row: ComponentRecord) => targetsOf(row).map(t => t.name ?? t.key).join(', '),
+        accessorFn: (row: ComponentRecord) => targetsOf(row).map(t => t.dst_name ?? t.dst_key).join(', '),
         cell: ({ row }) => {
             const targets = targetsOf(row.original)
             if (targets.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = targets[0]!
             return h(EntityBadge, {
-                icon: componentIcon(first.key),
-                label: first.name ?? first.key,
+                icon: componentIcon(first.dst_key),
+                label: first.dst_name ?? first.dst_key,
                 extra: targets.length - 1,
             })
         },
@@ -190,7 +187,7 @@ const enabled = ref<boolean | null>(null)
                        search-placeholder="Search jobs..."
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.reload()">
+                       @retry="componentsStore.fetchAll(['job'])">
                 <template #filters>
                     <EnabledFilter v-model="enabled" />
                 </template>

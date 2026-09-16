@@ -24,7 +24,7 @@ from interloper.errors import (
 from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.source import FacebookAds
-from interloper_db import Component, ComponentStatus, Store
+from interloper_db import Component, ComponentReading, ComponentStatus, DeleteImpact, Store
 
 from interloper_api import app as app_module
 from interloper_api.dependencies import (
@@ -249,10 +249,12 @@ class TestPublicConfigDisclosure:
     @staticmethod
     def _store(decoded: dict, public: dict) -> Store:
         components = SimpleNamespace(
-            status=lambda row, parent_key=None: "ok",
-            decode_config=lambda row: decoded,
-            public_config=lambda row: public,
-            discriminator=lambda row: None,
+            read=lambda row, parent_key=None: ComponentReading(
+                status=ComponentStatus.OK,
+                config=row.config if row.kind == "job" else decoded,
+                public_config=public,
+                discriminator=None,
+            ),
         )
         return cast(Store, SimpleNamespace(components=components))
 
@@ -283,10 +285,9 @@ class TestDiscriminatorDisclosure:
     def test_response_carries_the_discriminator(self):
         row = TestPublicConfigDisclosure._row("source", config={"account_id": "act_1"})
         components = SimpleNamespace(
-            status=lambda row, parent_key=None: "ok",
-            decode_config=lambda row: row.config,
-            public_config=lambda row: {},
-            discriminator=lambda row: "act_1",
+            read=lambda row, parent_key=None: ComponentReading(
+                status=ComponentStatus.OK, config=row.config, public_config={}, discriminator="act_1"
+            ),
         )
         store = cast(Store, SimpleNamespace(components=components))
         response = components_module.ComponentResponse.from_row(row, store, include_config=False)
@@ -316,20 +317,16 @@ class TestUnreadablePayload:
 
     @staticmethod
     def _store() -> Store:
-        """A store whose cipher rejects this row, the way `status` reports it.
+        """A store whose cipher rejects this row, the way a reading reports it.
 
         Returns:
-            The store stand-in: ``unreadable`` status, and both decode paths
-            raising the way the real ones do (nothing should call them).
+            The store stand-in: an ``unreadable`` reading disclosing no payload
+            at all, which is what a row whose cipher fails yields.
         """
-        def _raise(row: Component) -> dict:
-            raise HydrationError(f"Failed to decrypt component {row.id}: InvalidToken")
-
         components = SimpleNamespace(
-            status=lambda row, parent_key=None: ComponentStatus.UNREADABLE,
-            decode_config=_raise,
-            public_config=_raise,
-            discriminator=lambda row: None,
+            read=lambda row, parent_key=None: ComponentReading(
+                status=ComponentStatus.UNREADABLE, config=None, public_config={}, discriminator=None
+            ),
         )
         return cast(Store, SimpleNamespace(components=components))
 
@@ -399,6 +396,17 @@ def _row(
     )
 
 
+def _relation(
+    name: str, dst_id: UUID, dst_kind: str, *, dst_key: str = "k", dst_name: str | None = None
+) -> Any:
+    return SimpleNamespace(
+        name=name,
+        dst_id=dst_id,
+        dst_kind=dst_kind,
+        dst=SimpleNamespace(id=dst_id, key=dst_key, name=dst_name),
+    )
+
+
 class CrudStore:
     """Fake store covering the component and relation facets the CRUD routes use."""
 
@@ -418,19 +426,21 @@ class CrudStore:
         self.get_org_id = _ORG_ID
         self.loaded: Any = None
         self.load_error: Exception | None = None
+        self.impact_requested: list[list[UUID]] = []
+        self.impact = DeleteImpact(blocking=[], detaching=[])
 
         self.organisations = SimpleNamespace(member_role=lambda user_id, org_id: self.role)
         self.components = SimpleNamespace(
-            list_all=self._list_all,
+            list_roots=self._list_roots,
             create=self._create,
             get=self._get,
             update=self._update,
             delete=self._delete,
+            delete_impact=self._delete_impact,
             load=self._load,
-            status=lambda row, parent_key=None: ComponentStatus.OK,
-            decode_config=lambda row: row.config or {},
-            public_config=lambda row: {},
-            discriminator=lambda row: None,
+            read=lambda row, parent_key=None: ComponentReading(
+                status=ComponentStatus.OK, config=row.config or {}, public_config={}, discriminator=None
+            ),
         )
         self.relations = SimpleNamespace(
             list_all=self._list_relations,
@@ -438,9 +448,15 @@ class CrudStore:
             remove=self._remove_relation,
         )
 
-    def _list_all(self, org_id: UUID, kinds: list[str] | None = None) -> list[Any]:
+    def _list_roots(self, org_id: UUID, kinds: list[str] | None = None) -> list[Any]:
         self.listed.append({"org_id": org_id, "kinds": kinds})
         return self.rows
+
+    def _delete_impact(self, component_ids: list[UUID]) -> DeleteImpact:
+        if self.error:
+            raise self.error
+        self.impact_requested.append(component_ids)
+        return self.impact
 
     def _create(self, org_id: UUID, **kwargs: Any) -> Any:
         if self.error:
@@ -544,6 +560,39 @@ class TestListComponents:
     def test_no_components_is_an_empty_list(self, crud_client: TestClient) -> None:
         assert crud_client.get("/components/").json() == []
 
+    def test_owned_components_ride_under_their_owner(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        asset = _row(kind="asset", key="ads")
+        crud_store.rows = [_row(kind="source", key="fb", children=[asset])]
+
+        [source] = crud_client.get("/components/").json()
+
+        assert [child["key"] for child in source["children"]] == ["ads"]
+
+    def test_relation_refs_carry_their_target(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        connection_id = uuid4()
+        crud_store.rows = [
+            _row(
+                kind="source",
+                key="fb",
+                relations=[
+                    _relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB")
+                ],
+            )
+        ]
+
+        [row] = crud_client.get("/components/").json()
+
+        assert row["relations"] == {
+            "connection": [
+                {
+                    "dst_id": str(connection_id),
+                    "dst_kind": "connection",
+                    "dst_key": "facebook_ads",
+                    "dst_name": "FB",
+                }
+            ]
+        }
+
 
 class TestListRelations:
     """``GET /components/relations``, optionally narrowed by name and kinds."""
@@ -595,6 +644,33 @@ class TestListRelations:
         rows = response.json()
         assert all(r["dst_kind"] == "asset" for r in rows)
         assert [r["name"] for r in rows] == ["upstreams"]
+
+
+class TestDeleteImpact:
+    """``GET /components/delete-impact`` — the preview behind the delete confirmation."""
+
+    def test_returns_blocking_and_detaching_referrers(
+        self, crud_client: TestClient, crud_store: CrudStore
+    ) -> None:
+        first, second = uuid4(), uuid4()
+        referrer: dict[str, str | None] = {"id": str(uuid4()), "kind": "source", "key": "fb", "name": "FB"}
+        crud_store.impact = DeleteImpact(blocking=[referrer], detaching=[])
+
+        response = crud_client.get(f"/components/delete-impact?id={first}&id={second}")
+
+        assert response.status_code == 200
+        assert response.json() == {"blocking": [referrer], "detaching": []}
+        assert crud_store.impact_requested == [[first, second]]
+
+    def test_a_non_member_gets_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.role = None
+
+        assert crud_client.get(f"/components/delete-impact?id={uuid4()}").status_code == 404
+
+    def test_an_unknown_id_is_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.error = NotFoundError("gone")
+
+        assert crud_client.get(f"/components/delete-impact?id={uuid4()}").status_code == 404
 
 
 class TestCreateComponent:
@@ -961,9 +1037,9 @@ class TestRelationGrouping:
         first, second = uuid4(), uuid4()
         row = _row(
             relations=[
-                SimpleNamespace(name="connection", dst_id=first, dst_kind="connection"),
-                SimpleNamespace(name="connection", dst_id=second, dst_kind="connection"),
-                SimpleNamespace(name="destinations", dst_id=first, dst_kind="destination"),
+                _relation("connection", first, "connection"),
+                _relation("connection", second, "connection"),
+                _relation("destinations", first, "destination"),
             ]
         )
 
@@ -993,14 +1069,15 @@ class TestComponentResponseRelations:
         connection_id, destination_id = uuid4(), uuid4()
         row = _row(
             relations=[
-                SimpleNamespace(name="connection", dst_id=connection_id, dst_kind="connection"),
-                SimpleNamespace(name="destinations", dst_id=destination_id, dst_kind="destination"),
+                _relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB"),
+                _relation("destinations", destination_id, "destination"),
             ]
         )
         store = cast(Store, SimpleNamespace(
             components=SimpleNamespace(
-                status=lambda row, parent_key=None: ComponentStatus.OK,
-                discriminator=lambda row: None,
+                read=lambda row, parent_key=None: ComponentReading(
+                    status=ComponentStatus.OK, config=row.config, public_config={}, discriminator=None
+                ),
             )
         ))
 
@@ -1008,7 +1085,9 @@ class TestComponentResponseRelations:
 
         assert set(response.relations) == {"connection", "destinations"}
         assert response.relations["connection"] == [
-            components_module.RelationRef(dst_id=connection_id, dst_kind="connection")
+            components_module.RelationRef(
+                dst_id=connection_id, dst_kind="connection", dst_key="facebook_ads", dst_name="FB"
+            )
         ]
 
 

@@ -101,7 +101,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => [
             icon: 'i-lucide-trash',
             color: 'error' as const,
             onSelect: async () => {
-                const { blocking, detaching } = componentsStore.deleteImpact(props.source.id)
+                const { blocking, detaching } = await componentsStore.deleteImpact(props.source.id).catch(() => ({ blocking: [], detaching: [] }))
                 const confirmed = await confirm({
                     title: 'Delete source',
                     description: 'This will permanently delete {subject} and all its assets. This action cannot be undone.',

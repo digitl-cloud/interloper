@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import functools
 import json
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
@@ -43,6 +45,7 @@ from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
+from sqlmodel.sql.expression import SelectOfScalar
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
@@ -52,14 +55,46 @@ from interloper_db.store.relations import RelationStore
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
 # Eager-load set for rows returned to API consumers: the parent, the row's
-# own relations, and the children with theirs, so the whole unit reads off a
-# detached row.
+# own relations with the rows they point at, and the children with theirs, so
+# the whole unit reads off a detached row.
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
-    selectinload(Component.out_relations),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
-    .selectinload(Component.out_relations),  # ty: ignore[invalid-argument-type]
+    .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
+    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
 ]
+
+
+@dataclass(frozen=True)
+class ComponentReading:
+    """What one read of a component row yields for a response.
+
+    ``config`` is the decoded payload, ``None`` when the row cannot be read;
+    ``public_config`` is its schema-marked ``x-public`` subset; ``discriminator``
+    is the class's discriminator value read off it. The whole reading costs one
+    decode, so a response derives every field from it instead of decoding per
+    field.
+    """
+
+    status: ComponentStatus
+    config: dict[str, Any] | None
+    public_config: dict[str, Any]
+    discriminator: str | None
+
+
+@dataclass(frozen=True)
+class DeleteImpact:
+    """What deleting a set of components does to the components bound to them.
+
+    Each entry is a ``{id, kind, key, name}`` mapping, the shape
+    :class:`~interloper.errors.InUseError` reports. A referrer that blocks
+    through any relation is listed only as blocking.
+    """
+
+    blocking: list[dict[str, str | None]]
+    detaching: list[dict[str, str | None]]
 
 
 class ComponentStore:
@@ -160,7 +195,10 @@ class ComponentStore:
             return self._load_component(session, component_id, kind=kind)
 
     def list_all(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
-        """List an organisation's components, optionally filtered by kind.
+        """List an organisation's component rows, optionally filtered by kind.
+
+        Every row lists, owned ones included: this is the row-level view.
+        :meth:`list_roots` is the collection view.
 
         Args:
             org_id: Organisation UUID.
@@ -170,15 +208,46 @@ class ComponentStore:
             Eager-loaded component rows, oldest first.
         """
         with session_scope(self._engine) as session:
-            statement = (
-                select(Component)
-                .where(Component.org_id == org_id)
-                .options(*COMPONENT_LOAD_OPTIONS)
-                .order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
-            )
-            if kinds:
-                statement = statement.where(col(Component.kind).in_(kinds))
+            return list(session.exec(self._listing(org_id, kinds)).all())
+
+    def list_roots(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
+        """List an organisation's root components, owned ones nested under ``children``.
+
+        The collection's unit is the owner: an owned component (a source's
+        asset) never lists on its own but rides inside the root that owns it,
+        the way the catalog reaches an owned definition through its owner.
+
+        Args:
+            org_id: Organisation UUID.
+            kinds: Root kinds to include (``None`` = all).
+
+        Returns:
+            Eager-loaded root rows, oldest first, each carrying its children.
+        """
+        with session_scope(self._engine) as session:
+            statement = self._listing(org_id, kinds).where(col(Component.parent_id).is_(None))
             return list(session.exec(statement).all())
+
+    @staticmethod
+    def _listing(org_id: UUID, kinds: list[str] | None) -> SelectOfScalar[Component]:
+        """The eager-loaded, oldest-first selection of an organisation's components.
+
+        Args:
+            org_id: Organisation UUID.
+            kinds: Kinds to include (``None`` = all).
+
+        Returns:
+            The select statement, for the caller to narrow further.
+        """
+        statement = (
+            select(Component)
+            .where(Component.org_id == org_id)
+            .options(*COMPONENT_LOAD_OPTIONS)
+            .order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
+        )
+        if kinds:
+            statement = statement.where(col(Component.kind).in_(kinds))
+        return statement
 
     def update(
         self,
@@ -301,12 +370,41 @@ class ComponentStore:
         # invites the unit of work to manage them.
         child_ids = session.exec(select(Component.id).where(Component.parent_id == db_component.id)).all()
         subtree_ids = {db_component.id} | set(child_ids)
-        return self._blocking_referrers_into(session, subtree_ids, subtree_ids)
+        return self._referrers_into(session, subtree_ids, subtree_ids).blocking
 
-    def _blocking_referrers_into(
-        self, session: Session, target_ids: set[UUID], subtree_ids: set[UUID]
-    ) -> list[dict[str, str | None]]:
-        """Blocking referrers whose relations point into *target_ids* from outside *subtree_ids*.
+    def delete_impact(self, component_ids: list[UUID]) -> DeleteImpact:
+        """Preview what deleting *component_ids* does to the components bound to them.
+
+        The rule :meth:`delete` enforces, evaluated without deleting:
+        referrers outside the subtree (the ids plus the components they own)
+        whose relations into it block, and those whose relations detach.
+
+        Args:
+            component_ids: The components about to be deleted.
+
+        Returns:
+            The blocking and detaching referrers.
+
+        Raises:
+            NotFoundError: If any of the ids does not exist.
+        """
+        with session_scope(self._engine) as session:
+            for component_id in component_ids:
+                if session.get(Component, component_id) is None:
+                    raise NotFoundError(f"Component {component_id} not found")
+            child_ids = session.exec(
+                select(Component.id).where(col(Component.parent_id).in_(component_ids))
+            ).all()
+            subtree_ids = set(component_ids) | set(child_ids)
+            return self._referrers_into(session, subtree_ids, subtree_ids)
+
+    def _referrers_into(self, session: Session, target_ids: set[UUID], subtree_ids: set[UUID]) -> DeleteImpact:
+        """Referrers whose relations point into *target_ids* from outside *subtree_ids*, by outcome.
+
+        An edge whose name the referrer declares ``on_delete="detach"``
+        detaches; every other blocks. A referrer that is an owned component is
+        reported as its owner, the unit the user can act on, and one that
+        blocks through any edge is reported as blocking alone.
 
         Args:
             session: Open session to query in.
@@ -315,8 +413,7 @@ class ComponentStore:
                 originating there are ignored.
 
         Returns:
-            One ``{id, kind, key, name}`` dict per blocking referrer, sorted by
-            display name; empty when nothing blocks.
+            The blocking and detaching referrers, each sorted by display name.
         """
         rows = session.exec(
             select(ComponentRelation).where(
@@ -324,17 +421,36 @@ class ComponentStore:
                 col(ComponentRelation.src_id).not_in(subtree_ids),
             )
         ).all()
-        referrers: dict[UUID, Component] = {}
+        blocking: dict[UUID, Component] = {}
+        detaching: dict[UUID, Component] = {}
         for relation in rows:
             src = session.get(Component, relation.src_id)
-            if src is None or self._relations._relation_detaches(session, src, relation):
+            if src is None:
                 continue
+            detaches = self._relations._relation_detaches(session, src, relation)
             if src.parent_id is not None and src.parent_id not in subtree_ids:
                 src = session.get(Component, src.parent_id) or src
-            referrers[src.id] = src
+            (detaching if detaches else blocking)[src.id] = src
+        for component_id in blocking:
+            detaching.pop(component_id, None)
+        return DeleteImpact(
+            blocking=self._referrer_refs(blocking.values()),
+            detaching=self._referrer_refs(detaching.values()),
+        )
+
+    @staticmethod
+    def _referrer_refs(components: Iterable[Component]) -> list[dict[str, str | None]]:
+        """``{id, kind, key, name}`` mappings for *components*, sorted by display name.
+
+        Args:
+            components: The referrer rows.
+
+        Returns:
+            One mapping per component, in display order.
+        """
         return [
             {"id": str(c.id), "kind": c.kind, "key": c.key, "name": c.name}
-            for c in sorted(referrers.values(), key=lambda c: ((c.name or c.key).lower(), str(c.id)))
+            for c in sorted(components, key=lambda c: ((c.name or c.key).lower(), str(c.id)))
         ]
 
     # -- Hydration & status ----------------------------------------------------
@@ -514,43 +630,111 @@ class ComponentStore:
             f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
         )
 
+    def read(self, db_component: Component, *, parent_key: str | None = None) -> ComponentReading:
+        """Read a row once: its status and every view of its payload a response shows.
+
+        The catalog answers first: without a resolvable key there is no schema
+        to read the payload against, so drift outranks readability. The payload
+        is then decoded once; a payload that does not decode makes an otherwise
+        live row ``UNREADABLE``, while a drifted row keeps whatever config it
+        holds, so a surface can still show what the row carries.
+
+        An owned row resolves through its owner, whose key is read a row away
+        unless the caller supplies it. A caller walking many children of one
+        owner should pass *parent_key*: it already knows it, and the lookup is
+        then skipped per child.
+
+        Args:
+            db_component: The row to read.
+            parent_key: The owner's key when the caller already knows it.
+                Defaults to ``None``, which reads it from the database for an
+                owned row.
+
+        Returns:
+            The reading: status, decoded config, its public subset and the
+            discriminator value.
+        """
+        status = self._key_status(db_component, parent_key=parent_key)
+        config = self._current_config(db_component)
+        if config is None and status is ComponentStatus.OK:
+            status = ComponentStatus.UNREADABLE
+        return ComponentReading(
+            status=status,
+            config=config,
+            public_config=self._public_subset(db_component, config),
+            discriminator=self._discriminator_of(db_component, config),
+        )
+
     def status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
         """Usability status of a component row: catalog key, then payload.
 
-        A source-owned asset resolves through its parent, whose key is read a
-        row away unless the caller supplies it. A caller walking many children
-        of one source should pass *parent_key*: it already knows it, and the
-        lookup is then skipped per child.
-
-        The catalog answers first: without a resolvable key there is no schema
-        to read the payload against, so drift outranks readability. An
-        encrypted row then has to survive decryption, which costs one decrypt
-        per encrypted row (no query: the payload is already loaded).
-
         Args:
             db_component: The row to resolve.
-            parent_key: The owning source's key when the caller already knows
-                it. Defaults to ``None``, which reads it from the database.
+            parent_key: The owner's key when the caller already knows it.
+                Defaults to ``None``, which reads it from the database.
 
         Returns:
             ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key, or
             ``UNREADABLE`` when the key resolves but its payload does not
-            decrypt.
+            decode.
         """
-        if db_component.kind == "asset":
-            if parent_key is None and db_component.parent_id is not None:
+        return self.read(db_component, parent_key=parent_key).status
+
+    def _key_status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
+        """Catalog status of a row's key, an owned row resolving through its owner.
+
+        Args:
+            db_component: The row to resolve.
+            parent_key: The owner's key when the caller already knows it.
+                Defaults to ``None``, which reads it a row away.
+
+        Returns:
+            ``OK``, ``DISABLED`` or ``MISSING``.
+        """
+        if db_component.parent_id is not None:
+            if parent_key is None:
                 with session_scope(self._engine) as session:
                     parent_key = db_component.parent_key(session)
             return asset_status(self._catalog, db_component.key, source_key=parent_key)
+        if db_component.kind == "asset":
+            return asset_status(self._catalog, db_component.key)
+        return source_status(self._catalog, db_component.key)
 
-        catalog_status = source_status(self._catalog, db_component.key)
-        if catalog_status is not ComponentStatus.OK or not db_component.encrypted:
-            return catalog_status
-        try:
-            self.decode_config(db_component)
-        except HydrationError:
-            return ComponentStatus.UNREADABLE
-        return ComponentStatus.OK
+    def _public_subset(self, db_component: Component, config: dict[str, Any] | None) -> dict[str, Any]:
+        """The ``x-public`` fields of a decoded payload, per the row's config schema.
+
+        Args:
+            db_component: The row whose key selects the schema.
+            config: The decoded payload, or ``None`` when it could not be read.
+
+        Returns:
+            The disclosed fields; empty when the schema marks none public, the
+            key does not resolve, or there is no payload.
+        """
+        definition = self._catalog.get(db_component.key)
+        if definition is None or config is None:
+            return {}
+        properties = definition.config_schema.get("properties", {})
+        public_fields = {name for name, schema in properties.items() if schema.get("x-public")}
+        return {name: value for name, value in config.items() if name in public_fields}
+
+    def _discriminator_of(self, db_component: Component, config: dict[str, Any] | None) -> str | None:
+        """The discriminator value a decoded payload carries for the row's class.
+
+        Args:
+            db_component: The row whose key and kind select the class.
+            config: The decoded payload, or ``None`` when it could not be read.
+
+        Returns:
+            The value as a string, or ``None`` when the class declares no
+            discriminator, the value is blank, or there is no payload.
+        """
+        cls = self._resolve_class(db_component)
+        field = cls.discriminator_field() if cls else None
+        if field is None or config is None:
+            return None
+        value = config.get(field)
+        return str(value) if value else None
 
     def decode_config(self, db_component: Component) -> dict[str, Any]:
         """The component's config payload, decrypting secret kinds.
@@ -579,18 +763,11 @@ class ComponentStore:
             db_component: The row to read the payload from.
 
         Returns:
-            The disclosed fields — empty when the schema marks none public or
-            the row's key has drifted out of the catalog.
+            The disclosed fields — empty when the schema marks none public,
+            the row's key has drifted out of the catalog, or the payload
+            cannot be read.
         """
-        definition = self._catalog.get(db_component.key)
-        if definition is None:
-            return {}
-        properties = definition.config_schema.get("properties", {})
-        public_fields = {name for name, schema in properties.items() if schema.get("x-public")}
-        if not public_fields:
-            return {}
-        payload = self.decode_config(db_component)
-        return {name: value for name, value in payload.items() if name in public_fields}
+        return self.read(db_component).public_config
 
     def merge_config(self, component_id: UUID, fields: dict[str, Any]) -> Component:
         """Merge fields into a component's stored config payload.
@@ -697,12 +874,7 @@ class ComponentStore:
             declares none, the value is blank, or the key or payload can't be
             read.
         """
-        cls = self._resolve_class(db_component)
-        field = cls.discriminator_field() if cls else None
-        if field is None:
-            return None
-        value = (self._current_config(db_component) or {}).get(field)
-        return str(value) if value else None
+        return self.read(db_component).discriminator
 
     def _resolve_class(self, db_component: Component) -> type[il.Component] | None:
         """The component class a row's ``key`` and ``kind`` select in this catalog.
@@ -883,7 +1055,7 @@ class ComponentStore:
             # child set is exactly what this call is for.
             subtree_ids = {db_source.id} | {child.id for child in existing.values()}
             removed_ids = {existing[key].id for key in to_remove}
-            if referrers := self._blocking_referrers_into(session, removed_ids, subtree_ids):
+            if referrers := self._referrers_into(session, removed_ids, subtree_ids).blocking:
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
                     f"Cannot remove asset(s) {sorted(to_remove)} from source "

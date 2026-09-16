@@ -2,7 +2,7 @@
 import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
-import { relationIds } from '~/types/component'
+import { relationRefs } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
@@ -26,8 +26,7 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-componentsStore.fetchAll()
-componentsStore.fetchRelations()
+componentsStore.fetchAll(['source'])
 
 // Deep link (command palette): /sources?new=1 opens the create wizard.
 const route = useRoute()
@@ -75,11 +74,9 @@ function rowActions(source: ComponentRecord): DropdownMenuItem[][] {
     ]]
 }
 
-/** The destination components a source is bound to, in relation order. */
-function destinationsOf(source: ComponentRecord): ComponentRecord[] {
-    return relationIds(source, 'destinations')
-        .map(id => componentsStore.byId(id))
-        .filter((d): d is ComponentRecord => !!d)
+/** The destinations a source is bound to, in relation order, as its bindings name them. */
+function destinationsOf(source: ComponentRecord): DestinationLike[] {
+    return relationRefs(source, 'destinations').map(ref => ({ key: ref.dst_key, name: ref.dst_name }))
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
@@ -147,7 +144,7 @@ const typeKey = ref<string | null>(null)
                        search-placeholder="Search sources..."
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.reload()">
+                       @retry="componentsStore.fetchAll(['source'])">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="sources" />

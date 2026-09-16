@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { ComponentRecord } from '~/types/component'
-import { hookEnabled, hookEvents, relationIds } from '~/types/component'
+import type { ComponentRecord, RelationRef } from '~/types/component'
+import { hookEnabled, hookEvents, relationRefs } from '~/types/component'
 
 definePageMeta({ title: 'Components', fullBleed: true })
 
@@ -24,14 +24,11 @@ const {
     openEdit: handleEdit,
 } = useWizardDrawer<ComponentRecord>()
 
-componentsStore.fetchAll()
-componentsStore.fetchRelations()
+componentsStore.fetchAll(['hook'])
 
 /** The components a hook watches, in relation order. */
-function watchedBy(hook: ComponentRecord): ComponentRecord[] {
-    return relationIds(hook, 'watches')
-        .map(id => componentsStore.byId(id))
-        .filter((w): w is ComponentRecord => !!w)
+function watchedBy(hook: ComponentRecord): RelationRef[] {
+    return relationRefs(hook, 'watches')
 }
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
@@ -51,14 +48,14 @@ const columns = computed<TableColumn<ComponentRecord>[]>(() => [
     {
         id: 'watches',
         header: 'Watches',
-        accessorFn: (row: ComponentRecord) => watchedBy(row).map(w => w.name ?? w.key).join(', '),
+        accessorFn: (row: ComponentRecord) => watchedBy(row).map(w => w.dst_name ?? w.dst_key).join(', '),
         cell: ({ row }) => {
             const watched = watchedBy(row.original)
             if (watched.length === 0) return h('span', { class: 'text-muted' }, '—')
             const first = watched[0]!
             return h(EntityBadge, {
-                icon: componentIcon(first.key),
-                label: first.name ?? first.key,
+                icon: componentIcon(first.dst_key),
+                label: first.dst_name ?? first.dst_key,
                 extra: watched.length - 1,
             })
         },
@@ -116,7 +113,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                        search-placeholder="Search hooks..."
                        @delete="handleDelete"
                        @edit="handleEdit"
-                       @retry="componentsStore.reload()">
+                       @retry="componentsStore.fetchAll(['hook'])">
                 <template #filters>
                     <TypeFilter v-model="typeKey"
                                 :components="hooks" />

@@ -7,8 +7,10 @@ checking a connection (``/check``).
 
 The response shape is kind-agnostic — identity, drift ``status``, ``config``
 (decoded for secret kinds on detail responses; the schema's ``x-public``
-subset elsewhere), machine-owned ``state``, typed ``relations``, and one
-level of ``children`` (a source's assets).
+subset elsewhere), machine-owned ``state``, typed ``relations``, and the
+components a row owns under ``children`` (a source's assets). The owner is
+the unit: an owned component rides inside its owner and never lists on its
+own, the way the catalog reaches an owned definition through its owner.
 What a kind's config looks like and which relation types it may declare
 come from the catalog (``/catalog``), not from this router.
 """
@@ -36,7 +38,7 @@ from interloper.errors import (
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
-from interloper_db import Component, ComponentStatus, Store
+from interloper_db import Component, ComponentStatus, DeleteImpact, Store
 from pydantic import BaseModel, Field, ValidationError
 
 from interloper_api.dependencies import (
@@ -70,10 +72,16 @@ class RelationCreateRequest(RelationEntry):
 
 
 class RelationRef(BaseModel):
-    """One relation binding in a component response."""
+    """One relation binding in a component response, with enough of its target to name it.
+
+    ``dst_key`` and ``dst_name`` ride along so a surface can label what a
+    component is bound to without holding that component's own row.
+    """
 
     dst_id: UUID
     dst_kind: str
+    dst_key: str
+    dst_name: str | None = None
 
 
 class RelationResponse(BaseModel):
@@ -88,6 +96,37 @@ class RelationResponse(BaseModel):
     dst_id: UUID
     src_kind: str
     dst_kind: str
+
+
+class UsedByRef(BaseModel):
+    """A component bound to something about to be deleted, as the 409 ``used_by`` payload names it."""
+
+    id: str
+    kind: str
+    key: str
+    name: str | None = None
+
+
+class DeleteImpactResponse(BaseModel):
+    """The preview behind a delete confirmation: who blocks it, who merely detaches."""
+
+    blocking: list[UsedByRef]
+    detaching: list[UsedByRef]
+
+    @classmethod
+    def from_impact(cls, impact: DeleteImpact) -> DeleteImpactResponse:
+        """Convert the store's preview to its response model.
+
+        Args:
+            impact: The store's blocking and detaching referrers.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            blocking=[UsedByRef.model_validate(ref) for ref in impact.blocking],
+            detaching=[UsedByRef.model_validate(ref) for ref in impact.detaching],
+        )
 
 
 class ComponentCreateRequest(BaseModel):
@@ -154,37 +193,34 @@ class ComponentResponse(BaseModel):
     ) -> ComponentResponse:
         """Convert a component row to its response model.
 
-        ``status`` is the usability state hydration gates on: catalog resolution
-        (drift detection) plus, for an encrypted row, whether its payload
-        decrypts. Secret kinds expose their decoded payload as ``config`` only
-        when *include_config* is set (detail responses); otherwise ``config``
-        carries just the schema's ``x-public`` subset (operational fields such
-        as a connection's ``auto_renew``). An ``unreadable`` row carries no
-        ``config`` either way: the reason rides its ``status``, so the
-        collection still lists and the UI can say what is wrong instead of the
-        request failing over one row.
+        The row is read once: ``status`` is the usability state hydration gates
+        on (catalog resolution, then whether the payload decodes) and every
+        view of the payload comes off that same reading. Secret kinds expose
+        their decoded payload as ``config`` only when *include_config* is set
+        (detail responses); otherwise ``config`` carries just the schema's
+        ``x-public`` subset (operational fields such as a connection's
+        ``auto_renew``). An ``unreadable`` row carries no ``config`` either
+        way: the reason rides its ``status``, so the collection still lists and
+        the UI can say what is wrong instead of the request failing over one
+        row.
 
         Args:
             row: The component row to convert.
             store: The Store instance.
             include_config: Whether a secret kind's decoded config is exposed.
-            parent_key: The parent source's key when the caller already knows it,
-                sparing a lazy load of ``row.parent`` for asset rows.
-            with_children: Whether the row's children are nested in the response.
+            parent_key: The owner's key when the caller already knows it,
+                sparing a lookup for an owned row.
+            with_children: Whether the components the row owns are nested in
+                the response.
 
         Returns:
             The response model.
         """
-        status = store.components.status(row, parent_key=parent_key)
+        reading = store.components.read(row, parent_key=parent_key)
 
-        config: dict[str, Any] | None = row.config
-        if KINDS[row.kind].sensitive:
-            if status is ComponentStatus.UNREADABLE:
-                config = None
-            elif include_config:
-                config = store.components.decode_config(row)
-            else:
-                config = store.components.public_config(row)
+        config = reading.config
+        if KINDS[row.kind].sensitive and not include_config:
+            config = None if reading.status is ComponentStatus.UNREADABLE else reading.public_config
 
         return cls(
             id=row.id,
@@ -192,8 +228,8 @@ class ComponentResponse(BaseModel):
             kind=row.kind,
             key=row.key,
             name=row.name,
-            discriminator=store.components.discriminator(row),
-            status=status,
+            discriminator=reading.discriminator,
+            status=reading.status,
             config=config,
             state=row.state,
             encrypted=row.encrypted,
@@ -242,7 +278,12 @@ def _relations_of(row: Component) -> dict[str, list[RelationRef]]:
     grouped: dict[str, list[RelationRef]] = {}
     for relation in row.out_relations:
         grouped.setdefault(relation.name, []).append(
-            RelationRef(dst_id=relation.dst_id, dst_kind=relation.dst_kind)
+            RelationRef(
+                dst_id=relation.dst_id,
+                dst_kind=relation.dst_kind,
+                dst_key=relation.dst.key if relation.dst else "",
+                dst_name=relation.dst.name if relation.dst else None,
+            )
         )
     return grouped
 
@@ -272,18 +313,22 @@ def list_components(
     store: StoreDep,
     kind: Annotated[list[str] | None, Query()] = None,
 ) -> list[ComponentResponse]:
-    """List the organisation's components, optionally filtered by kind(s).
+    """List the organisation's root components, optionally filtered by kind(s).
+
+    An owned component (a source's asset) rides under its owner's
+    ``children`` rather than listing on its own, so ``kind=asset`` yields the
+    standalone assets alone.
 
     Args:
-        kind: The component kinds to keep; None lists every kind.
+        kind: The root kinds to keep; None lists every kind.
         user: The authenticated user.
         org_id: The active organisation UUID.
         store: The Store instance.
 
     Returns:
-        The organisation's components, secret configs withheld.
+        The organisation's root components, secret configs withheld.
     """
-    rows = store.components.list_all(org_id, kinds=kind)
+    rows = store.components.list_roots(org_id, kinds=kind)
     return [ComponentResponse.from_row(row, store, include_config=False) for row in rows]
 
 
@@ -319,6 +364,38 @@ def list_relations(
         )
         for relation in store.relations.list_all(org_id, name=name, src_kind=src_kind, dst_kind=dst_kind)
     ]
+
+
+@router.get("/delete-impact")
+def get_delete_impact(
+    user: CurrentUserDep,
+    store: StoreDep,
+    component_id: Annotated[list[UUID], Query(alias="id")],
+) -> DeleteImpactResponse:
+    """Preview what deleting the given components does to the components bound to them.
+
+    The rule the delete guard enforces, evaluated without deleting, so a
+    confirmation can say up front what refuses the deletion and what merely
+    loses a binding.
+
+    Args:
+        user: The authenticated user.
+        store: The Store instance.
+        component_id: The components about to be deleted, repeated per id.
+
+    Returns:
+        The blocking and detaching referrers.
+
+    Raises:
+        HTTPException: 404 when any of the ids is unknown.
+    """
+    for one in component_id:
+        load_authorized(store.components.get, one, user, store, label="Component")
+    try:
+        impact = store.components.delete_impact(component_id)
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return DeleteImpactResponse.from_impact(impact)
 
 
 @router.post("/", status_code=201)

@@ -133,7 +133,9 @@ class ComponentRelation(SQLModel, table=True):
     ``name`` is the relation name as declared on the owning class: the field
     a ``Relation`` is bound to. Whether a given name is single-valued or
     many-valued is a class rule the store enforces, not a schema constraint,
-    so no uniqueness is declared here.
+    so no uniqueness is declared here. ``dst`` reads the target row the edge
+    points at, so a consumer can name what a component is bound to without a
+    second lookup.
     """
 
     __tablename__: ClassVar[str] = "component_relations"
@@ -160,3 +162,10 @@ class ComponentRelation(SQLModel, table=True):
     org_id: UUID
     src_kind: str
     dst_kind: str
+
+    dst: Optional["Component"] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "foreign(ComponentRelation.dst_id) == Component.id",
+            "viewonly": True,
+        },
+    )

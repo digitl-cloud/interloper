@@ -45,12 +45,12 @@ function clearFilters() {
 /** Type choices follow the kind in view, so the two filters never contradict. */
 const typeChoices = computed(() => filters.value.kind
     ? componentsStore.byKind(filters.value.kind)
-    : componentsStore.components)
+    : componentsStore.all)
 
 onMounted(async () => {
     // Target icons and type names read the catalog; the filter choices read the collection.
     if (!catalogStore.loaded) catalogStore.fetchCatalog()
-    if (componentsStore.components.length === 0) componentsStore.fetchAll()
+    if (componentsStore.all.length === 0) componentsStore.fetchAll()
     const { q, kind, type } = route.query
     await runsStore.setFilters({
         q: typeof q === 'string' ? q : '',
@@ -123,7 +123,7 @@ function onPageChange(page: number) {
                     class="max-w-sm" />
             <div class="ml-auto flex items-center gap-2">
                 <KindFilter v-model="kind"
-                            :components="componentsStore.components" />
+                            :components="componentsStore.all" />
                 <TypeFilter v-model="type"
                             :components="typeChoices" />
             </div>
