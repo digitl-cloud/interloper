@@ -42,4 +42,3 @@ class VideosStatsByPlatform(Schema):
     video_views_p75: int | None = Field(default=None, description="Number of times the video was watched to 75% of its length.")
     video_watched_2s: int | None = Field(default=None, description="Number of times the video was watched for at least 2 seconds.")
     video_watched_6s: int | None = Field(default=None, description="Number of times the video was watched for at least 6 seconds.")
-    date: dt.date | None = Field(default=None, description="Partition date")

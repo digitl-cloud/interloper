@@ -99,13 +99,15 @@ class TestSpecRoundtripAndReconcile:
             {
                 "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
                 "metrics": {"spend": "12.50", "clicks": "3", "cpc": "4.16"},
-                "date": "2026-06-14",
             }
         ]
         normalized = child.normalizer.normalize(rows)
         reconciled = Representation.of(normalized).reconcile(schemas.AdsStats)
         assert float(reconciled.loc[0, "spend"]) == 12.5
         assert int(reconciled.loc[0, "clicks"]) == 3
+        # the report's own day is the partition column; nothing is stamped on top
+        assert str(reconciled.loc[0, "stat_time_day"])[:10] == "2026-06-14"
+        assert "date" not in reconciled.columns
 
     def test_entity_row_reconciles_against_ads_schema(self):
         child = self._child("ads")
@@ -116,3 +118,39 @@ class TestSpecRoundtripAndReconcile:
         reconciled = Representation.of(normalized).reconcile(schemas.Ads)
         assert reconciled.loc[0, "ad_texts"] == '["hello"]'
         assert reconciled.loc[0, "image_ids"] == '["img1"]'
+
+
+REPORT_ASSETS = (
+    "ads_stats",
+    "ads_stats_by_country",
+    "ads_stats_by_age_gender",
+    "ads_stats_by_platform",
+    "videos_stats_by_platform",
+)
+ENTITY_ASSETS = ("ads", "campaigns", "advertisers")
+
+
+class TestPartitionColumns:
+    """Reports partition on TikTok's own ``stat_time_day``; only the entities get a stamped date."""
+
+    def _asset(self, key: str) -> Any:
+        return next(a for a in _source().assets if type(a).key == key)
+
+    def test_reports_partition_on_the_payload_day(self):
+        for key in REPORT_ASSETS:
+            asset = self._asset(key)
+            assert asset.partitioning is not None and asset.partitioning.column == "stat_time_day", key
+
+    def test_reports_do_not_declare_a_stamped_date(self):
+        for key in REPORT_ASSETS:
+            asset = self._asset(key)
+            assert asset.schema is not None
+            assert "stat_time_day" in asset.schema.model_fields, key
+            assert "date" not in asset.schema.model_fields, key  # TikTok sends the day; do not add one
+
+    def test_entities_still_stamp_a_date(self):
+        """TikTok returns entities without a day, so their snapshot date has to be stamped."""
+        for key in ENTITY_ASSETS:
+            asset = self._asset(key)
+            assert asset.partitioning is not None and asset.partitioning.column == "date", key
+            assert asset.schema is not None and "date" in asset.schema.model_fields, key
