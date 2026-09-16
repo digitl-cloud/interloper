@@ -221,7 +221,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                 sticky
                 :ui="{
                     tr: noRowClick ? '' : 'cursor-pointer',
-                    ...(bordered && { thead: '[&>tr]:bg-muted', th: 'first:pl-4', td: 'first:pl-4' }),
+                    td: bordered ? 'py-2.5 first:pl-4' : 'py-2.5',
+                    ...(bordered && { thead: '[&>tr]:bg-muted', th: 'first:pl-4' }),
                 }"
                 :class="bordered ? 'rounded-lg border border-default' : 'flex-1 min-h-0'"
                 @select="(_e: Event, row: any) => emit('edit', row.original)"
