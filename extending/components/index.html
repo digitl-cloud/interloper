@@ -2259,7 +2259,8 @@ whatever the owner cascades into its children is cascaded again.</p>
 <code>many</code>, <code>optional</code>, <code>on_delete</code>.</p>
 <h3 id="discriminator">Discriminator<a class="headerlink" href="#discriminator" title="Permanent link">&para;</a></h3>
 <p>One configuration field may carry <code>discriminator=True</code>. <code>discriminator</code> and <code>instance_name()</code>
-expose it; sources use it for per-instance table names. Two marked fields raise <code>TypeError</code>.</p>
+expose its value, <code>discriminator_field()</code> its name for callers holding a config without an
+instance; sources use it for per-instance table names. Two marked fields raise <code>TypeError</code>.</p>
 <h2 id="writing-a-kind">Writing a kind<a class="headerlink" href="#writing-a-kind" title="Permanent link">&para;</a></h2>
 <p>A kind is an anchor class plus one entry-point line. Everything above applies to it; this is the
 order in which it comes up.</p>

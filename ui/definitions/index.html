@@ -2260,6 +2260,10 @@ the browser.</p>
 <p>The field marked <code>discriminator=True</code> (<code>x-discriminator</code>) names the instance: the wizard proposes
 the selected option's label (an ad account name rather than its id) as the component name, and
 the platform derives the per-instance table names from the same value.</p>
+<p>The value itself stays visible: every component response carries it as <code>discriminator</code>, the
+sources table shows it under the name and matches it in the search box, the command palette
+lists it next to the type, and a fetched option shows its id under its label in the picker. A
+user holding an account id from the warehouse or the vendor finds the source by it.</p>
 <h2 id="state-columns">State columns<a class="headerlink" href="#state-columns" title="Permanent link">&para;</a></h2>
 <p>A kind with a <code>state_model</code> publishes <code>state_schema</code>. List pages add one column per property:
 jobs show <code>next_run_at</code> and <code>last_run_at</code>, connections show <code>next_renewal_at</code>, <code>last_renewed_at</code>
