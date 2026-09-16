@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v0.83.0 (2026-09-16)
+
+### Bug Fixes
+
+- **assets**: Partition the TikTok reports on TikTok's own stat_time_day
+  ([`b9fb088`](https://github.com/digitl-cloud/interloper/commit/b9fb08825b2fccd272cd17255b790fe3189b57b1))
+
+### Chores
+
+- **core**: Todo comment
+  ([`65888b8`](https://github.com/digitl-cloud/interloper/commit/65888b8283ca2f12ed1b0eafa4f76304b27a5dc0))
+
+### Documentation
+
+- **assets**: Write down how an asset mirrors its vendor response
+  ([`714e53a`](https://github.com/digitl-cloud/interloper/commit/714e53ab1a16417233e85085bbec7ebbd9e191fe))
+
+### Features
+
+- List the components collection by owner
+  ([`e63cff8`](https://github.com/digitl-cloud/interloper/commit/e63cff80e1ef75b3c8cc7193416dabaa63d9e76b))
+
+### Breaking Changes
+
+- `GET /components` lists root components only. Owned assets arrive under their owner's `children`
+  instead of also appearing as top-level rows, and `?kind=asset` returns standalone assets alone.
+  The embedded `relations` entries gain `dst_key` and `dst_name`.
+
+- **assets**: The report tables' partition column changes from date to stat_time_day and the date
+  column is gone. BigQuery cannot repartition a table in place: drop and recreate the tiktok_ads
+  report tables (or migrate them) before the first load with this version.
+
+
 ## v0.82.1 (2026-09-16)
 
 ### Bug Fixes
