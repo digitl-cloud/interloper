@@ -24,6 +24,7 @@ from interloper.asset import Asset
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.representation import Representation
+from interloper.schema import Schema
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_ads import constants, schemas
@@ -90,3 +91,69 @@ class TestSpecRoundtrip:
         assert normalizer is not None
         normalized = normalizer.normalize(df)
         Representation.of(normalized).reconcile(schemas.ProductsCampaignsStats)  # must not raise
+
+
+# Count metrics: whole numbers only across the 20 M legacy rows of the Swarovski warehouse (checked
+# 2026-09-16), so the schemas type them as ``int``. Rates and amounts keep ``float``.
+COUNT_FIELDS = frozenset({
+    "impressions", "clicks", "purchases", "purchases_clicks", "units_sold", "units_sold_clicks",
+    "purchases_1d", "purchases_7d", "purchases_14d", "purchases_30d",
+    "units_sold_clicks_1d", "units_sold_clicks_7d", "units_sold_clicks_14d", "units_sold_clicks_30d",
+    "units_sold_same_sku_1d", "units_sold_same_sku_7d", "units_sold_same_sku_14d", "units_sold_same_sku_30d",
+    "purchases_same_sku_1d", "purchases_same_sku_7d", "purchases_same_sku_14d", "purchases_same_sku_30d",
+    "new_to_brand_purchases", "new_to_brand_units_sold", "detail_page_views", "add_to_cart", "branded_searches",
+    "viewable_impressions", "video_complete_views", "video_unmutes", "cumulative_reach",
+    "gross_impressions", "invalid_impressions", "gross_click_throughs", "invalid_click_throughs",
+})
+FLOAT_SUFFIXES = (
+    "_rate", "_percentage", "cost", "sales", "spend", "bid", "amount", "roas_clicks_7d", "roas_clicks_14d",
+)
+
+
+def _stats_schemas() -> list[type[Schema]]:
+    import inspect
+
+    return [
+        cls
+        for name, cls in inspect.getmembers(schemas, inspect.isclass)
+        if issubclass(cls, Schema) and cls is not Schema and name.endswith("Stats")
+    ]
+
+
+class TestCountMetricTypes:
+    """Count metrics are integers; rates and amounts stay floats."""
+
+    def test_count_metrics_are_int_everywhere(self):
+        wrong = [
+            f"{cls.__name__}.{name}"
+            for cls in _stats_schemas()
+            for name, info in cls.model_fields.items()
+            if name in COUNT_FIELDS and info.annotation != (int | None)
+        ]
+        assert not wrong, wrong
+
+    def test_rates_and_amounts_stay_float(self):
+        wrong = [
+            f"{cls.__name__}.{name}"
+            for cls in _stats_schemas()
+            for name, info in cls.model_fields.items()
+            if name.endswith(FLOAT_SUFFIXES) and info.annotation == (int | None)
+        ]
+        assert not wrong, wrong
+
+    def test_budget_rule_name_is_a_string(self):
+        field = schemas.ProductsCampaignsStats.model_fields["campaign_applicable_budget_rule_name"]
+        assert field.annotation == (str | None)
+
+    def test_float_valued_counts_reconcile_to_int(self):
+        """Amazon may serialise a count as ``3.0``; conform must land it as an integer column."""
+        src = _source()
+        asset = next(a for a in src.assets if type(a).key == "products_campaigns_stats")
+        row: dict[str, object] = dict.fromkeys(constants.PRODUCTS_CAMPAIGN_METRICS)
+        row.update({"date": "2026-06-10", "impressions": 3.0, "clicks": 2, "cost": 1.5})
+        normalizer = asset.normalizer
+        assert normalizer is not None
+        normalized = normalizer.normalize(pd.DataFrame([row]))
+        out = Representation.of(normalized).reconcile(schemas.ProductsCampaignsStats)
+        assert pd.api.types.is_integer_dtype(out["impressions"]) and int(out.loc[0, "impressions"]) == 3
+        assert pd.api.types.is_float_dtype(out["cost"])

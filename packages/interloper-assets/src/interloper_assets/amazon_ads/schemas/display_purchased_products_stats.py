@@ -13,8 +13,8 @@ class DisplayPurchasedProductsStats(Schema):
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
     campaign_id: int | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
-    conversions_brand_halo: float | None = Field(..., description="The number of conversions with brand halo")
-    conversions_brand_halo_clicks: float | None = Field(
+    conversions_brand_halo: int | None = Field(..., description="The number of conversions with brand halo")
+    conversions_brand_halo_clicks: int | None = Field(
         ..., description="The number of conversions with brand halo clicks"
     )
     date: datetime.date | None = Field(..., description="The date of the record")
@@ -22,7 +22,7 @@ class DisplayPurchasedProductsStats(Schema):
     promoted_sku: str | None = Field(..., description="The SKU of the promoted product")
     sales_brand_halo: float | None = Field(..., description="The sales with brand halo")
     sales_brand_halo_clicks: float | None = Field(..., description="The sales with brand halo clicks")
-    units_sold_brand_halo: float | None = Field(..., description="The number of units sold with brand halo")
-    units_sold_brand_halo_clicks: float | None = Field(
+    units_sold_brand_halo: int | None = Field(..., description="The number of units sold with brand halo")
+    units_sold_brand_halo_clicks: int | None = Field(
         ..., description="The number of units sold with brand halo clicks"
     )
