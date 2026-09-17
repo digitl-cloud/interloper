@@ -118,6 +118,50 @@ Before anything executes, the runner validates the scope against every enabled
 operation: partitioned operations without a scope, windows against operations that forbid them,
 and time-partition mismatches fail the whole run up front.
 
+## Retrying
+
+An operation that fails is attempted again when it carries a `RetryPolicy`, without the run seeing
+the intermediate failure. Nothing retries by default: a policy is in force only where a component
+declares one.
+
+```py
+@il.asset(retry=il.RetryPolicy(max_attempts=3, delay=5))
+def orders(**kwargs): ...
+```
+
+The policy is declared on the component whose unit it governs, so one budget never means several
+things:
+
+| declared on | governs |
+|---|---|
+| an asset, or any operation | that operation's execution |
+| a source | the default its assets inherit |
+| a job | that job's runs |
+
+`max_attempts` counts the first attempt, and the wait before each further one grows geometrically
+from `delay` by `backoff`, capped at `max_delay` and spread by `jitter` so operations failing
+together do not retry in lockstep. Whether a given error is worth another attempt is behaviour
+rather than configuration: override `retryable()` to recognise one that never will be.
+
+```py
+class Orders(il.Asset):
+    retry = il.RetryPolicy(max_attempts=3)
+
+    def retryable(self, error: Exception) -> bool:
+        return not isinstance(error, PermissionError)
+```
+
+A retried attempt is not a verdict. The node keeps its status, nothing downstream is canceled, and
+`fail_fast` is not tripped; only an exhausted or declined failure marks the node failed. Each
+attempt is recorded as an `operation_retried` event, and `operation_failed` means the budget ran
+out.
+
+A job's policy works one level up: when a run fails, the platform queues the next attempt after the
+backoff. Those attempts form a **stack**, and the rest of the system reads the stack rather than any
+one attempt. An automatic retry always re-runs only what failed, carrying forward every operation
+that already succeeded anywhere in the stack; the manual retry endpoint additionally offers re-running
+everything, for when the earlier success is the thing you distrust.
+
 ## Running single assets
 
 `asset.run()` and `asset.materialize()` bypass the runner. Pass the DAG when the asset has

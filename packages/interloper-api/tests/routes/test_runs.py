@@ -35,8 +35,10 @@ def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
         partition_key=None,
         status="failed",
         retry_of=None,
+        root_run_id=run_id,
         attempt=1,
         retry_scope=None,
+        scheduled_for=None,
         started_at=None,
         completed_at=None,
         created_at=None,
@@ -250,6 +252,49 @@ def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
     )
     assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == window
     assert (store.count_calls[0]["after"], store.count_calls[0]["before"]) == window
+
+
+def _viewer_client(store: FakeStore) -> TestClient:
+    """A client authenticated as a viewer of the fixture organisation.
+
+    Args:
+        store: The fake store the routes resolve against.
+
+    Returns:
+        The client.
+    """
+    app = _app(store)
+    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+    return TestClient(app)
+
+
+def test_list_runs_forwards_the_stack_filter(store: FakeStore) -> None:
+    """Asking for one stack narrows both the listing and its count."""
+    root = uuid4()
+    resp = _viewer_client(store).get("/runs/", params={"root_run_id": str(root)})
+
+    assert resp.status_code == 200
+    assert store.list_calls[0]["root_run_id"] == root
+    assert store.count_calls[0]["root_run_id"] == root
+
+
+def test_list_runs_defaults_to_one_row_per_stack(store: FakeStore) -> None:
+    """Without the filter the store is asked for stacks, not attempts."""
+    resp = _viewer_client(store).get("/runs/")
+
+    assert resp.status_code == 200
+    assert store.list_calls[0]["root_run_id"] is None
+
+
+def test_a_run_response_carries_its_stack(store: FakeStore) -> None:
+    resp = _client(store).get(f"/runs/{_RUN_ID}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["root_run_id"] == str(_RUN_ID)
+    assert body["attempt"] == 1
+    assert body["scheduled_for"] is None
 
 
 def test_list_runs_forwards_the_target_filters(store: FakeStore) -> None:

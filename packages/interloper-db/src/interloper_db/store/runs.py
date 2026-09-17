@@ -149,10 +149,17 @@ class RunStore:
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
+        root_run_id: UUID | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Run]:
-        """List runs with optional filters.
+        """List one row per stack, or one stack's attempts.
+
+        A stack is one piece of work, so a listing shows its **latest
+        attempt** and every filter reads that attempt: a stack whose first
+        attempt failed and whose second succeeded is a success, which is what
+        a reader means by "failed runs". Passing *root_run_id* asks for one
+        stack instead, and returns its attempts newest first.
 
         Args:
             org_id: Organisation UUID.
@@ -164,6 +171,7 @@ class RunStore:
             q: Keep runs whose target's name or key contains this, case-insensitively.
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
+            root_run_id: List this stack's attempts rather than one row per stack.
             limit: Max results (default 50).
             offset: Pagination offset.
 
@@ -171,22 +179,25 @@ class RunStore:
             List of Run rows.
         """
         with session_scope(self._engine) as session:
+            filters = self._run_filters(
+                org_id,
+                component_id,
+                backfill_id,
+                status,
+                after,
+                before,
+                q=q,
+                component_kind=component_kind,
+                component_key=component_key,
+                root_run_id=root_run_id,
+            )
+            if root_run_id is None:
+                filters.append(self._latest_attempt_only(org_id))
+            order = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
             statement = (
                 select(Run)
-                .where(
-                    *self._run_filters(
-                        org_id,
-                        component_id,
-                        backfill_id,
-                        status,
-                        after,
-                        before,
-                        q=q,
-                        component_kind=component_kind,
-                        component_key=component_key,
-                    )
-                )
-                .order_by(col(Run.created_at).desc())
+                .where(*filters)
+                .order_by(order)
                 .offset(offset)
                 .limit(limit)
                 .options(*RUN_LOAD_OPTIONS)
@@ -205,6 +216,7 @@ class RunStore:
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
+        root_run_id: UUID | None = None,
     ) -> int:
         """Count runs matching the same filters as :meth:`list_all`.
 
@@ -218,29 +230,27 @@ class RunStore:
             q: Keep runs whose target's name or key contains this, case-insensitively.
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
+            root_run_id: Count this stack's attempts rather than one per stack.
 
         Returns:
             Total number of matching runs (ignoring limit/offset).
         """
         with session_scope(self._engine) as session:
-            statement = (
-                select(func.count())
-                .select_from(Run)
-                .where(
-                    *self._run_filters(
-                        org_id,
-                        component_id,
-                        backfill_id,
-                        status,
-                        after,
-                        before,
-                        q=q,
-                        component_kind=component_kind,
-                        component_key=component_key,
-                    )
-                )
+            filters = self._run_filters(
+                org_id,
+                component_id,
+                backfill_id,
+                status,
+                after,
+                before,
+                q=q,
+                component_kind=component_kind,
+                component_key=component_key,
+                root_run_id=root_run_id,
             )
-            return session.exec(statement).one()
+            if root_run_id is None:
+                filters.append(self._latest_attempt_only(org_id))
+            return session.exec(select(func.count()).select_from(Run).where(*filters)).one()
 
     def complete(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
@@ -586,6 +596,38 @@ class RunStore:
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
+    def _latest_attempt_only(org_id: UUID) -> Any:
+        """Keep only each stack's latest attempt.
+
+        Scoped to the organisation alone on purpose: every attempt of a stack
+        shares its target, its backfill and its org, so no other filter can
+        change which attempt is the latest. Narrowing by the caller's filters
+        instead would answer a different question, such as "the latest *failed*
+        attempt" rather than "the stacks whose latest attempt failed".
+
+        Expressed as a grouped join rather than ``DISTINCT ON`` so it runs on
+        SQLite as well as Postgres.
+
+        Args:
+            org_id: Organisation whose stacks are reduced.
+
+        Returns:
+            A filter expression selecting the latest attempt of each stack.
+        """
+        latest = (
+            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
+            .where(Run.org_id == org_id)
+            .group_by(col(Run.root_run_id))
+            .subquery()
+        )
+        return col(Run.id).in_(
+            select(col(Run.id)).join(
+                latest,
+                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
+            )
+        )
+
+    @staticmethod
     def _run_filters(
         org_id: UUID,
         component_id: UUID | None,
@@ -597,6 +639,7 @@ class RunStore:
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
+        root_run_id: UUID | None = None,
     ) -> list[Any]:
         """The shared where-clauses of :meth:`RunStore.list_all` / :meth:`RunStore.count`.
 
@@ -625,6 +668,8 @@ class RunStore:
                 applies no kind filter.
             component_key: Keep runs whose target is of this type (catalog
                 key); ``None`` applies no type filter.
+            root_run_id: Keep the attempts of this stack; ``None`` applies no
+                stack filter.
 
         Returns:
             Filter expressions for the given criteria.
@@ -646,6 +691,8 @@ class RunStore:
             filters.append(Run.component_id == component_id)
         if backfill_id:
             filters.append(Run.backfill_id == backfill_id)
+        if root_run_id:
+            filters.append(Run.root_run_id == root_run_id)
         if status:
             filters.append(Run.status == status)
         if after is not None:
