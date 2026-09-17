@@ -2218,7 +2218,7 @@ instances are supplied at construction.</p>
 <td>With several destinations, the one downstream readers load from.</td>
 </tr>
 <tr>
-<td><code>materializable</code></td>
+<td><code>enabled</code></td>
 <td><code>False</code> turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable.</td>
 </tr>
 <tr>
@@ -2241,7 +2241,7 @@ afterwards. See <a href="../dependencies/#how-wiring-works">Dependencies</a>.</p
 <p>Set them at construction, or derive a reconfigured copy by calling an existing instance:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">asset</span> <span class="o">=</span> <span class="n">users</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./data"</span><span class="p">),</span> <span class="n">dataset</span><span class="o">=</span><span class="s2">"shop"</span><span class="p">)</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">materializable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">strict</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">STRICT</span><span class="p">)</span>
 </span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">bare</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">normalizer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>           <span class="c1"># None explicitly clears the normalizer</span>
 </span></code></pre></div>
@@ -2265,7 +2265,7 @@ one at all changes it, since <code>None</code> there clears the binding.</p>
 </tr>
 <tr>
 <td><code>asset.materialize(partition, dag, metadata)</code></td>
-<td>Everything <code>run</code> does, then write to every destination. Returns the data, or <code>None</code> when the asset is not materializable.</td>
+<td>Everything <code>run</code> does, then write to every destination. Returns the data, or <code>None</code> when the asset is disabled.</td>
 </tr>
 <tr>
 <td><code>await asset.run_async(...)</code>, <code>await asset.materialize_async(...)</code></td>

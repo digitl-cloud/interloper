@@ -1,0 +1,2651 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/plans/2026-09-17-retry-phase-2-platform/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Retry Phase 2: Platform Implementation Plan - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#retry-phase-2-platform-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Retry Phase 2: Platform Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="retry-phase-2-platform-implementation-plan">Retry Phase 2: Platform Implementation Plan<a class="headerlink" href="#retry-phase-2-platform-implementation-plan" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> A failed run queues its own next attempt, backfills and hooks report the stack's verdict rather than any one attempt's.</p>
+<p><strong>Architecture:</strong> There is no instance-wide default in this phase, so a run retries only when its
+target job declares a policy; phases 1 and 2 therefore change no behaviour until something declares
+one. A run attempt is a <code>Run</code> row; a stack is the attempts of one unit of work, keyed by
+a new <code>root_run_id</code>. <code>RunStore.complete()</code> is the single terminal path every failure takes, so it is
+where the successor is created, in the same transaction that marks the run failed. That makes "has a
+successor" true the instant the run fails, which is what lets the hook evaluator gate on it without
+knowing anything about budgets. A <code>scheduled_for</code> column holds the backoff, honoured by the queue's
+claim. Backfill accounting and the <code>executions</code> view both move from counting attempts to reading the
+latest one.</p>
+<p><strong>Tech Stack:</strong> Python 3.10+, SQLModel, SQLAlchemy, Alembic, PostgreSQL, pytest, ruff, ty.</p>
+<p>Spec: <code>docs/superpowers/specs/2026-09-17-retry-design.md</code>, sections 5 to 8 and 10.
+Prerequisite: <code>docs/superpowers/plans/2026-09-17-retry-phase-1-core.md</code> must be complete.
+<code>RetryPolicy</code> and <code>Job.retry</code> exist.</p>
+<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Line length 120, ruff-formatted. Type-checked with <code>ty</code>.</li>
+<li>Google-style docstrings on every module, class, function and method, with every applicable section.
+  An Alembic revision's <code>upgrade</code>/<code>downgrade</code> pair is exempt; the module docstring carries the intent.</li>
+<li>Tests mirror the package layout one to one.</li>
+<li>The migration chain was folded to <code>001</code>-<code>003</code>, so this is revision <code>004</code> with <code>down_revision = "003"</code>.</li>
+<li><code>env.py</code> uses <code>transaction_per_migration</code> and commits after <code>SET lock_timeout</code>; do not add a
+  <code>CREATE INDEX CONCURRENTLY</code> without checking that file first.</li>
+<li>Run checks from the repo root: <code>uv run ruff check</code>, <code>uv run ty check</code>, <code>uv run pytest</code>.</li>
+<li><strong>Do not commit without Guillaume asking.</strong> The commit step records the intended message.</li>
+</ul>
+<hr />
+<h3 id="task-1-stack-and-schedule-columns">Task 1: Stack and schedule columns<a class="headerlink" href="#task-1-stack-and-schedule-columns" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-db/src/interloper_db/models/runs.py:52-96</code>
+- Create: <code>packages/interloper-db/src/interloper_db/migrations/versions/004_run_attempts.py</code>
+- Modify: <code>packages/interloper-db/src/interloper_db/store/runs.py</code> (<code>create</code> at :51, <code>create_backfill</code> at :335, <code>retry</code> at :286)
+- Modify: <code>packages/interloper-scheduler/src/interloper_scheduler/cron.py:155-175</code>
+- Test: <code>packages/interloper-db/tests/store/test_runs.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: nothing from phase 1.
+- Produces: <code>Run.root_run_id: UUID</code> (not null, its own id for a first attempt) and
+  <code>Run.scheduled_for: datetime | None</code>. Every run-creating call site assigns <code>id=uuid4()</code> explicitly
+  so the root can be set in the same statement. Tasks 2 to 5 read both columns.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-db/tests/store/test_runs.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_new_run_is_its_own_stack_root</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="k">assert</span> <span class="n">run</span><span class="o">.</span><span class="n">root_run_id</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="k">assert</span> <span class="n">run</span><span class="o">.</span><span class="n">scheduled_for</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_backfill_runs_are_each_their_own_root</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">):</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">backfill</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create_backfill</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">start_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="s2">"2026-01-03"</span><span class="p">)</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">runs</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">assert</span> <span class="p">{</span><span class="n">run</span><span class="o">.</span><span class="n">root_run_id</span> <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="n">runs</span><span class="p">}</span> <span class="o">==</span> <span class="p">{</span><span class="n">run</span><span class="o">.</span><span class="n">id</span> <span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="n">runs</span><span class="p">}</span>
+</span></code></pre></div>
+<p>Use the fixtures the surrounding tests in that module already use for <code>store</code> and <code>org</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the test to verify it fails</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v -k "stack_root or own_root"</code>
+Expected: FAIL with <code>AttributeError: 'Run' object has no attribute 'root_run_id'</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Add the columns to the model</strong></li>
+</ul>
+<p>In <code>packages/interloper-db/src/interloper_db/models/runs.py</code>, add to <code>Run</code>, after <code>retry_scope</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>    <span class="n">root_run_id</span><span class="p">:</span> <span class="n">UUID</span> <span class="o">=</span> <span class="n">SQLField</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>        <span class="n">sa_column</span><span class="o">=</span><span class="n">Column</span><span class="p">(</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s2">"runs.id"</span><span class="p">,</span> <span class="n">ondelete</span><span class="o">=</span><span class="s2">"SET NULL"</span><span class="p">),</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">scheduled_for</span><span class="p">:</span> <span class="n">datetime</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">SQLField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sa_column</span><span class="o">=</span><span class="n">Column</span><span class="p">(</span><span class="n">TZDateTime</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Extend the class docstring with one paragraph: a run is one attempt, <code>root_run_id</code> groups the
+attempts of one unit of work into a stack and is the run's own id for a first attempt, and
+<code>scheduled_for</code> is the earliest instant the queue may claim it.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Assign ids and roots at every creation site</strong></li>
+</ul>
+<p><code>root_run_id</code> cannot default to the row's own server-generated id, so the id is assigned in Python.
+In <code>packages/interloper-db/src/interloper_db/store/runs.py</code>, in <code>create</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>            <span class="n">run_id</span> <span class="o">=</span> <span class="n">uuid4</span><span class="p">()</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>            <span class="n">db_run</span> <span class="o">=</span> <span class="n">Run</span><span class="p">(</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>                <span class="nb">id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>                <span class="n">root_run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>                <span class="n">org_id</span><span class="o">=</span><span class="n">org_id</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>                <span class="n">component_id</span><span class="o">=</span><span class="n">component_id</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>                <span class="n">partition_key</span><span class="o">=</span><span class="n">partition_key</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>                <span class="n">status</span><span class="o">=</span><span class="s2">"queued"</span><span class="p">,</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>                <span class="n">billable</span><span class="o">=</span><span class="n">billable</span><span class="p">,</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>            <span class="p">)</span>
+</span></code></pre></div>
+<p>In <code>create_backfill</code>, inside the per-partition loop:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>                <span class="n">run_id</span> <span class="o">=</span> <span class="n">uuid4</span><span class="p">()</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>                <span class="n">db_run</span> <span class="o">=</span> <span class="n">Run</span><span class="p">(</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>                    <span class="nb">id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>                    <span class="n">root_run_id</span><span class="o">=</span><span class="n">run_id</span><span class="p">,</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>                    <span class="n">org_id</span><span class="o">=</span><span class="n">org_id</span><span class="p">,</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>                    <span class="n">component_id</span><span class="o">=</span><span class="n">component_id</span><span class="p">,</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>                    <span class="n">backfill_id</span><span class="o">=</span><span class="n">db_backfill</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>                    <span class="n">partition_key</span><span class="o">=</span><span class="n">window</span><span class="o">.</span><span class="n">granularity</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">value</span><span class="p">),</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>                    <span class="n">status</span><span class="o">=</span><span class="s2">"queued"</span> <span class="k">if</span> <span class="n">index</span> <span class="o">&gt;=</span> <span class="n">first_queued</span> <span class="k">else</span> <span class="s2">"pending"</span><span class="p">,</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>                <span class="p">)</span>
+</span></code></pre></div>
+<p>In <code>retry</code>, the successor joins its predecessor's stack:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>            <span class="n">db_run</span> <span class="o">=</span> <span class="n">Run</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>                <span class="nb">id</span><span class="o">=</span><span class="n">uuid4</span><span class="p">(),</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>                <span class="n">root_run_id</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>                <span class="n">org_id</span><span class="o">=</span><span class="n">src</span><span class="o">.</span><span class="n">org_id</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>                <span class="o">...</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>            <span class="p">)</span>
+</span></code></pre></div>
+<p>In <code>packages/interloper-scheduler/src/interloper_scheduler/cron.py</code>, both <code>Run(...)</code> constructions
+(the per-partition one and the unpartitioned one) get the same <code>run_id = uuid4()</code> treatment.</p>
+<p>Add <code>from uuid import uuid4</code> where it is missing.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Write the migration</strong></li>
+</ul>
+<p>Create <code>packages/interloper-db/src/interloper_db/migrations/versions/004_run_attempts.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="sd">"""Add the run stack and its schedule.</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="sd">A run is one attempt. ``root_run_id`` groups the attempts of one unit of work</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="sd">so a stack is a single indexed predicate rather than a recursive walk, and is</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="sd">the run's own id for a first attempt. ``scheduled_for`` holds a retry's</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="sd">backoff: the queue claims a run only once it has passed.</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="sd">Existing rows are folded into stacks by walking the ``retry_of`` chains that</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="sd">manual retries already created. A run whose predecessor was deleted becomes</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="sd">its own root, which is correct: its lineage is gone.</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="sd">"""</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="kn">from</span><span class="w"> </span><span class="nn">alembic</span><span class="w"> </span><span class="kn">import</span> <span class="n">op</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="n">revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"004"</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="n">down_revision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="s2">"003"</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="n">branch_labels</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="n">depends_on</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="k">def</span><span class="w"> </span><span class="nf">upgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"ALTER TABLE runs ADD COLUMN root_run_id uuid REFERENCES runs(id) ON DELETE SET NULL"</span><span class="p">)</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"ALTER TABLE runs ADD COLUMN scheduled_for timestamptz"</span><span class="p">)</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">        </span><span class="sd">"""</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="sd">        WITH RECURSIVE chain AS (</span>
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="sd">            SELECT id, id AS root FROM runs WHERE retry_of IS NULL</span>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="sd">            UNION ALL</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a><span class="sd">            SELECT r.id, c.root FROM runs r JOIN chain c ON r.retry_of = c.id</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="sd">        )</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="sd">        UPDATE runs SET root_run_id = chain.root FROM chain WHERE runs.id = chain.id</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="sd">        """</span>
+</span><span id="__span-5-33"><a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>    <span class="p">)</span>
+</span><span id="__span-5-34"><a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"UPDATE runs SET root_run_id = id WHERE root_run_id IS NULL"</span><span class="p">)</span>
+</span><span id="__span-5-35"><a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"ALTER TABLE runs ALTER COLUMN root_run_id SET NOT NULL"</span><span class="p">)</span>
+</span><span id="__span-5-36"><a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"CREATE INDEX ix_runs_root_run_id ON runs (root_run_id)"</span><span class="p">)</span>
+</span><span id="__span-5-37"><a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"CREATE INDEX ix_runs_claim ON runs (status, scheduled_for, created_at)"</span><span class="p">)</span>
+</span><span id="__span-5-38"><a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>
+</span><span id="__span-5-39"><a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>
+</span><span id="__span-5-40"><a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a><span class="k">def</span><span class="w"> </span><span class="nf">downgrade</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-41"><a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"DROP INDEX IF EXISTS ix_runs_claim"</span><span class="p">)</span>
+</span><span id="__span-5-42"><a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"DROP INDEX IF EXISTS ix_runs_root_run_id"</span><span class="p">)</span>
+</span><span id="__span-5-43"><a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"ALTER TABLE runs DROP COLUMN scheduled_for"</span><span class="p">)</span>
+</span><span id="__span-5-44"><a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a>    <span class="n">op</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"ALTER TABLE runs DROP COLUMN root_run_id"</span><span class="p">)</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 7: Verify the migration applies to an empty and a populated database</strong></li>
+</ul>
+<p>Run: <code>make dev-reset</code>
+Expected: the chain migrates to <code>004</code> and the seed succeeds.</p>
+<p>Then apply it to a database that already holds runs, which is what exercises the recursive backfill.
+Do not run this against the shared dev database if another session may be using it; use a throwaway.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 8: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db<span class="w"> </span>packages/interloper-scheduler/src/interloper_scheduler/cron.py
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(db): give every run a stack root and a schedule</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-2-a-failed-run-queues-its-next-attempt">Task 2: A failed run queues its next attempt<a class="headerlink" href="#task-2-a-failed-run-queues-its-next-attempt" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-db/src/interloper_db/store/runs.py:245-284</code> (<code>complete</code>) and a new <code>_plan_retry</code>
+- Test: <code>packages/interloper-db/tests/store/test_runs.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>Run.root_run_id</code>/<code>Run.scheduled_for</code> (Task 1) and <code>Job.retry</code> (phase 1).
+- Produces: <code>RunStore._plan_retry(session, db_run) -&gt; Run | None</code>, called from <code>complete</code> on failure
+  before <code>_advance_backfill</code>. Tasks 4 and 6 rely on the successor existing by the time the
+  transaction commits.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-db/tests/store/test_runs.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_failed_run_queues_its_next_attempt</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"delay"</span><span class="p">:</span> <span class="mi">60</span><span class="p">}})</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">successor</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">retry_of</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">root_run_id</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">root_run_id</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">attempt</span> <span class="o">==</span> <span class="mi">2</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">retry_scope</span> <span class="o">==</span> <span class="s2">"failed"</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"queued"</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">scheduled_for</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_an_exhausted_budget_queues_nothing</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>
+</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>
+</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>
+</span><span id="__span-7-25"><a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>
+</span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_successful_run_queues_nothing</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-7-27"><a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">3</span><span class="p">}})</span>
+</span><span id="__span-7-28"><a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-7-29"><a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a>
+</span><span id="__span-7-30"><a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-7-31"><a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a>
+</span><span id="__span-7-32"><a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-7-33"><a id="__codelineno-7-33" name="__codelineno-7-33" href="#__codelineno-7-33"></a>
+</span><span id="__span-7-34"><a id="__codelineno-7-34" name="__codelineno-7-34" href="#__codelineno-7-34"></a>
+</span><span id="__span-7-35"><a id="__codelineno-7-35" name="__codelineno-7-35" href="#__codelineno-7-35"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_run_whose_target_is_gone_queues_nothing</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">):</span>
+</span><span id="__span-7-36"><a id="__codelineno-7-36" name="__codelineno-7-36" href="#__codelineno-7-36"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-7-37"><a id="__codelineno-7-37" name="__codelineno-7-37" href="#__codelineno-7-37"></a>
+</span><span id="__span-7-38"><a id="__codelineno-7-38" name="__codelineno-7-38" href="#__codelineno-7-38"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-39"><a id="__codelineno-7-39" name="__codelineno-7-39" href="#__codelineno-7-39"></a>
+</span><span id="__span-7-40"><a id="__codelineno-7-40" name="__codelineno-7-40" href="#__codelineno-7-40"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-7-41"><a id="__codelineno-7-41" name="__codelineno-7-41" href="#__codelineno-7-41"></a>
+</span><span id="__span-7-42"><a id="__codelineno-7-42" name="__codelineno-7-42" href="#__codelineno-7-42"></a>
+</span><span id="__span-7-43"><a id="__codelineno-7-43" name="__codelineno-7-43" href="#__codelineno-7-43"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_backfill_run_keeps_its_backfill_when_it_retries</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-7-44"><a id="__codelineno-7-44" name="__codelineno-7-44" href="#__codelineno-7-44"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}})</span>
+</span><span id="__span-7-45"><a id="__codelineno-7-45" name="__codelineno-7-45" href="#__codelineno-7-45"></a>    <span class="n">backfill</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create_backfill</span><span class="p">(</span>
+</span><span id="__span-7-46"><a id="__codelineno-7-46" name="__codelineno-7-46" href="#__codelineno-7-46"></a>        <span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">start_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span>
+</span><span id="__span-7-47"><a id="__codelineno-7-47" name="__codelineno-7-47" href="#__codelineno-7-47"></a>    <span class="p">)</span>
+</span><span id="__span-7-48"><a id="__codelineno-7-48" name="__codelineno-7-48" href="#__codelineno-7-48"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-7-49"><a id="__codelineno-7-49" name="__codelineno-7-49" href="#__codelineno-7-49"></a>
+</span><span id="__span-7-50"><a id="__codelineno-7-50" name="__codelineno-7-50" href="#__codelineno-7-50"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-7-51"><a id="__codelineno-7-51" name="__codelineno-7-51" href="#__codelineno-7-51"></a>
+</span><span id="__span-7-52"><a id="__codelineno-7-52" name="__codelineno-7-52" href="#__codelineno-7-52"></a>    <span class="n">successor</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-7-53"><a id="__codelineno-7-53" name="__codelineno-7-53" href="#__codelineno-7-53"></a>    <span class="k">assert</span> <span class="n">successor</span><span class="o">.</span><span class="n">backfill_id</span> <span class="o">==</span> <span class="n">backfill</span><span class="o">.</span><span class="n">id</span>
+</span></code></pre></div>
+<p>Add a <code>job_component</code> fixture to that module if one does not exist, creating a <code>job</code>-kind component
+row for the org through the same path the surrounding tests use.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v -k "next_attempt or exhausted or queues_nothing or keeps_its_backfill"</code>
+Expected: FAIL. Nothing creates a successor.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Write the retry planner</strong></li>
+</ul>
+<p>In <code>packages/interloper-db/src/interloper_db/store/runs.py</code>, add to <code>RunStore</code>, in the internals
+section:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>    <span class="nd">@staticmethod</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_retry_policy</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span> <span class="n">db_run</span><span class="p">:</span> <span class="n">Run</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">il</span><span class="o">.</span><span class="n">RetryPolicy</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">        </span><span class="sd">"""The run-level policy in force for a run.</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="sd">        A job's declared policy governs its runs, and nothing else does: a</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="sd">        source's or an asset's own ``retry`` is an operation policy, and</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="sd">        reading it here would apply an operation's budget to whole runs. There</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="sd">        is no instance-wide fallback, so a run whose target declares nothing is</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="sd">        attempted once. The config column is plain JSON, so this is one row</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="sd">        read and no hydration.</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="sd">        Args:</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="sd">            session: Open session the target row is read through.</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="sd">            db_run: The run whose policy is resolved.</span>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="sd">        Returns:</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a><span class="sd">            The policy, or ``None`` when the target declares none.</span>
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="sd">        """</span>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>        <span class="k">if</span> <span class="n">db_run</span><span class="o">.</span><span class="n">component_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-20"><a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-8-21"><a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a>        <span class="n">db_component</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">db_run</span><span class="o">.</span><span class="n">component_id</span><span class="p">)</span>
+</span><span id="__span-8-22"><a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>        <span class="k">if</span> <span class="n">db_component</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">db_component</span><span class="o">.</span><span class="n">kind</span> <span class="o">!=</span> <span class="s2">"job"</span><span class="p">:</span>
+</span><span id="__span-8-23"><a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-8-24"><a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a>        <span class="n">declared</span> <span class="o">=</span> <span class="p">(</span><span class="n">db_component</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"retry"</span><span class="p">)</span>
+</span><span id="__span-8-25"><a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a>        <span class="k">return</span> <span class="n">il</span><span class="o">.</span><span class="n">RetryPolicy</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">declared</span><span class="p">)</span> <span class="k">if</span> <span class="n">declared</span> <span class="k">else</span> <span class="kc">None</span>
+</span><span id="__span-8-26"><a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a>
+</span><span id="__span-8-27"><a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_plan_retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span> <span class="n">db_run</span><span class="p">:</span> <span class="n">Run</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Run</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-28"><a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a><span class="w">        </span><span class="sd">"""Queue the next attempt of a failed run, when its budget allows one.</span>
+</span><span id="__span-8-29"><a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a>
+</span><span id="__span-8-30"><a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a><span class="sd">        Called from the single terminal path, in the transaction that marks the</span>
+</span><span id="__span-8-31"><a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a><span class="sd">        run failed, so that a doomed attempt never looks final to anything</span>
+</span><span id="__span-8-32"><a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a><span class="sd">        reading the table. The successor stays in its predecessor's backfill and</span>
+</span><span id="__span-8-33"><a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a><span class="sd">        stack, and re-runs only what failed. The quota is deliberately not</span>
+</span><span id="__span-8-34"><a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a><span class="sd">        checked here: dispatch is the authoritative gate and cancels an</span>
+</span><span id="__span-8-35"><a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a><span class="sd">        over-quota run at claim time, like any other run.</span>
+</span><span id="__span-8-36"><a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a>
+</span><span id="__span-8-37"><a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a><span class="sd">        Args:</span>
+</span><span id="__span-8-38"><a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a><span class="sd">            session: Open session the successor is written through.</span>
+</span><span id="__span-8-39"><a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a><span class="sd">            db_run: The run that just failed.</span>
+</span><span id="__span-8-40"><a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>
+</span><span id="__span-8-41"><a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a><span class="sd">        Returns:</span>
+</span><span id="__span-8-42"><a id="__codelineno-8-42" name="__codelineno-8-42" href="#__codelineno-8-42"></a><span class="sd">            The queued successor, or ``None`` when nothing is retried.</span>
+</span><span id="__span-8-43"><a id="__codelineno-8-43" name="__codelineno-8-43" href="#__codelineno-8-43"></a><span class="sd">        """</span>
+</span><span id="__span-8-44"><a id="__codelineno-8-44" name="__codelineno-8-44" href="#__codelineno-8-44"></a>        <span class="k">if</span> <span class="n">db_run</span><span class="o">.</span><span class="n">component_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-8-45"><a id="__codelineno-8-45" name="__codelineno-8-45" href="#__codelineno-8-45"></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-8-46"><a id="__codelineno-8-46" name="__codelineno-8-46" href="#__codelineno-8-46"></a>        <span class="n">policy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_retry_policy</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_run</span><span class="p">)</span>
+</span><span id="__span-8-47"><a id="__codelineno-8-47" name="__codelineno-8-47" href="#__codelineno-8-47"></a>        <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">policy</span><span class="o">.</span><span class="n">allows</span><span class="p">(</span><span class="n">db_run</span><span class="o">.</span><span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+</span><span id="__span-8-48"><a id="__codelineno-8-48" name="__codelineno-8-48" href="#__codelineno-8-48"></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-8-49"><a id="__codelineno-8-49" name="__codelineno-8-49" href="#__codelineno-8-49"></a>
+</span><span id="__span-8-50"><a id="__codelineno-8-50" name="__codelineno-8-50" href="#__codelineno-8-50"></a>        <span class="n">successor</span> <span class="o">=</span> <span class="n">Run</span><span class="p">(</span>
+</span><span id="__span-8-51"><a id="__codelineno-8-51" name="__codelineno-8-51" href="#__codelineno-8-51"></a>            <span class="nb">id</span><span class="o">=</span><span class="n">uuid4</span><span class="p">(),</span>
+</span><span id="__span-8-52"><a id="__codelineno-8-52" name="__codelineno-8-52" href="#__codelineno-8-52"></a>            <span class="n">org_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">org_id</span><span class="p">,</span>
+</span><span id="__span-8-53"><a id="__codelineno-8-53" name="__codelineno-8-53" href="#__codelineno-8-53"></a>            <span class="n">component_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">component_id</span><span class="p">,</span>
+</span><span id="__span-8-54"><a id="__codelineno-8-54" name="__codelineno-8-54" href="#__codelineno-8-54"></a>            <span class="n">backfill_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">,</span>
+</span><span id="__span-8-55"><a id="__codelineno-8-55" name="__codelineno-8-55" href="#__codelineno-8-55"></a>            <span class="n">partition_key</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">partition_key</span><span class="p">,</span>
+</span><span id="__span-8-56"><a id="__codelineno-8-56" name="__codelineno-8-56" href="#__codelineno-8-56"></a>            <span class="n">status</span><span class="o">=</span><span class="s2">"queued"</span><span class="p">,</span>
+</span><span id="__span-8-57"><a id="__codelineno-8-57" name="__codelineno-8-57" href="#__codelineno-8-57"></a>            <span class="n">scheduled_for</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+</span><span id="__span-8-58"><a id="__codelineno-8-58" name="__codelineno-8-58" href="#__codelineno-8-58"></a>            <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="n">policy</span><span class="o">.</span><span class="n">delay_before</span><span class="p">(</span><span class="n">db_run</span><span class="o">.</span><span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)),</span>
+</span><span id="__span-8-59"><a id="__codelineno-8-59" name="__codelineno-8-59" href="#__codelineno-8-59"></a>            <span class="n">retry_of</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+</span><span id="__span-8-60"><a id="__codelineno-8-60" name="__codelineno-8-60" href="#__codelineno-8-60"></a>            <span class="n">root_run_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">,</span>
+</span><span id="__span-8-61"><a id="__codelineno-8-61" name="__codelineno-8-61" href="#__codelineno-8-61"></a>            <span class="n">attempt</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-8-62"><a id="__codelineno-8-62" name="__codelineno-8-62" href="#__codelineno-8-62"></a>            <span class="n">retry_scope</span><span class="o">=</span><span class="s2">"failed"</span><span class="p">,</span>
+</span><span id="__span-8-63"><a id="__codelineno-8-63" name="__codelineno-8-63" href="#__codelineno-8-63"></a>            <span class="n">billable</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">billable</span><span class="p">,</span>
+</span><span id="__span-8-64"><a id="__codelineno-8-64" name="__codelineno-8-64" href="#__codelineno-8-64"></a>        <span class="p">)</span>
+</span><span id="__span-8-65"><a id="__codelineno-8-65" name="__codelineno-8-65" href="#__codelineno-8-65"></a>        <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">successor</span><span class="p">)</span>
+</span><span id="__span-8-66"><a id="__codelineno-8-66" name="__codelineno-8-66" href="#__codelineno-8-66"></a>        <span class="n">session</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+</span><span id="__span-8-67"><a id="__codelineno-8-67" name="__codelineno-8-67" href="#__codelineno-8-67"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"Queued attempt </span><span class="si">%d</span><span class="s2"> of run stack </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">successor</span><span class="o">.</span><span class="n">attempt</span><span class="p">,</span> <span class="n">successor</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">)</span>
+</span><span id="__span-8-68"><a id="__codelineno-8-68" name="__codelineno-8-68" href="#__codelineno-8-68"></a>        <span class="k">return</span> <span class="n">successor</span>
+</span></code></pre></div>
+<p>Add the imports it needs: <code>timedelta</code> and <code>uuid4</code>. <code>interloper as il</code> is already imported, which is
+what <code>il.RetryPolicy</code> resolves through.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Call it from the terminal path</strong></li>
+</ul>
+<p>In <code>complete</code>, between the component stamp and the backfill advance:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span><span class="p">:</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>                <span class="bp">self</span><span class="o">.</span><span class="n">_plan_retry</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_run</span><span class="p">)</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>            <span class="k">if</span> <span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">:</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>                <span class="bp">self</span><span class="o">.</span><span class="n">_advance_backfill</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">,</span> <span class="n">failed</span><span class="o">=</span><span class="ow">not</span> <span class="n">success</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Extend <code>complete</code>'s docstring: on failure it also queues the next attempt when the target's policy
+allows one, and it does so before advancing the backfill so that the batch's in-flight count sees the
+successor and does not finalize early.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(db): queue the next attempt when a run fails</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-3-the-queue-honours-the-schedule">Task 3: The queue honours the schedule<a class="headerlink" href="#task-3-the-queue-honours-the-schedule" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-scheduler/src/interloper_scheduler/queue.py:79-116</code>
+- Test: <code>packages/interloper-scheduler/tests/test_queue.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>Run.scheduled_for</code> (Task 1).
+- Produces: a claim that skips a run whose <code>scheduled_for</code> is still in the future. No new API.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-scheduler/tests/test_queue.py</code>, following the module's existing way of
+building a controller with a fake launcher:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_scheduled_run_is_not_claimed_before_its_time</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">):</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="k">with</span> <span class="n">Session</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">engine</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>        <span class="n">db_run</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Run</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">db_run</span><span class="o">.</span><span class="n">scheduled_for</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span> <span class="o">+</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">hours</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">db_run</span><span class="p">)</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="k">assert</span> <span class="n">controller</span><span class="o">.</span><span class="n">_claim_next</span><span class="p">()</span> <span class="ow">is</span> <span class="kc">None</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_run_whose_schedule_has_passed_is_claimed</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">):</span>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>    <span class="k">with</span> <span class="n">Session</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">engine</span><span class="p">)</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>        <span class="n">db_run</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">Run</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>        <span class="n">db_run</span><span class="o">.</span><span class="n">scheduled_for</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span> <span class="o">-</span> <span class="n">timedelta</span><span class="p">(</span><span class="n">seconds</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>        <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">db_run</span><span class="p">)</span>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a>        <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a>    <span class="k">assert</span> <span class="n">controller</span><span class="o">.</span><span class="n">_claim_next</span><span class="p">()</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-scheduler/tests/test_queue.py -v -k scheduled</code>
+Expected: FAIL. The first test claims the run anyway.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<p>In <code>packages/interloper-scheduler/src/interloper_scheduler/queue.py</code>, add the predicate to the claim
+statement in <code>_claim_next</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>                <span class="n">statement</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>                    <span class="n">select</span><span class="p">(</span><span class="n">Run</span><span class="p">)</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>                    <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"queued"</span><span class="p">)</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>                    <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">scheduled_for</span><span class="p">)</span><span class="o">.</span><span class="n">is_</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">scheduled_for</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">()))</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>                    <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">created_at</span><span class="p">)</span><span class="o">.</span><span class="n">asc</span><span class="p">())</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>                    <span class="o">.</span><span class="n">limit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>                    <span class="o">.</span><span class="n">with_for_update</span><span class="p">(</span><span class="n">skip_locked</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>                <span class="p">)</span>
+</span></code></pre></div>
+<p>Import <code>func</code> from sqlalchemy. Extend the method's docstring: a run carrying a schedule is not
+claimable until it has passed, which is how a retry's backoff is served without a second status.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-scheduler/tests/test_queue.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-scheduler
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(scheduler): claim a run only once its schedule has passed</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-4-backfills-finalize-on-stacks">Task 4: Backfills finalize on stacks<a class="headerlink" href="#task-4-backfills-finalize-on-stacks" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-db/src/interloper_db/store/runs.py:584-643</code> (<code>_advance_backfill</code>)
+- Test: <code>packages/interloper-db/tests/store/test_runs.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>Run.root_run_id</code> (Task 1), <code>_plan_retry</code> (Task 2).
+- Produces: a backfill whose terminal status reads the latest attempt of each stack. No new API.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-db/tests/store/test_runs.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_backfill_healed_by_a_retry_succeeds</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"delay"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}})</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">backfill</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create_backfill</span><span class="p">(</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>        <span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">start_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="p">)</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>    <span class="n">first</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="n">successor</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">successor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="k">assert</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">get_backfill</span><span class="p">(</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"success"</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_backfill_whose_stack_exhausts_its_budget_fails</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"delay"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}})</span>
+</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a>    <span class="n">backfill</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create_backfill</span><span class="p">(</span>
+</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a>        <span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">start_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span><span class="p">,</span> <span class="n">end_key</span><span class="o">=</span><span class="s2">"2026-01-01"</span>
+</span><span id="__span-14-19"><a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a>    <span class="p">)</span>
+</span><span id="__span-14-20"><a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a>    <span class="n">first</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-14-21"><a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a>
+</span><span id="__span-14-22"><a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-14-23"><a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a>    <span class="n">successor</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">backfill_id</span><span class="o">=</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-14-24"><a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">successor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-14-25"><a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a>
+</span><span id="__span-14-26"><a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a>    <span class="k">assert</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">get_backfill</span><span class="p">(</span><span class="n">backfill</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"failed"</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v -k backfill_healed</code>
+Expected: FAIL. The healed backfill is marked <code>failed</code>, because the first attempt's row still counts.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Write the implementation</strong></li>
+</ul>
+<p>In <code>_advance_backfill</code>, replace the <code>any_failed</code> lookup in the finalize branch:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>        <span class="k">if</span> <span class="n">in_flight_count</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">pending_runs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>            <span class="n">latest</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>                <span class="n">select</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">,</span> <span class="n">func</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">attempt</span><span class="p">))</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="s2">"attempt"</span><span class="p">))</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>                <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">backfill_id</span> <span class="o">==</span> <span class="n">backfill_id</span><span class="p">)</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>                <span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">))</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>                <span class="o">.</span><span class="n">subquery</span><span class="p">()</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>            <span class="p">)</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>            <span class="n">any_failed</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>                <span class="n">select</span><span class="p">(</span><span class="n">Run</span><span class="p">)</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>                <span class="o">.</span><span class="n">join</span><span class="p">(</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>                    <span class="n">latest</span><span class="p">,</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>                    <span class="n">onclause</span><span class="o">=</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">)</span> <span class="o">==</span> <span class="n">latest</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">)</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>                    <span class="o">&amp;</span> <span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">attempt</span><span class="p">)</span> <span class="o">==</span> <span class="n">latest</span><span class="o">.</span><span class="n">c</span><span class="o">.</span><span class="n">attempt</span><span class="p">),</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>                <span class="p">)</span>
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>                <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">backfill_id</span> <span class="o">==</span> <span class="n">backfill_id</span><span class="p">,</span> <span class="n">Run</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"failed"</span><span class="p">)</span>
+</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>            <span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
+</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>            <span class="n">db_backfill</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="s2">"failed"</span> <span class="k">if</span> <span class="n">any_failed</span> <span class="k">else</span> <span class="s2">"success"</span>
+</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>            <span class="n">db_backfill</span><span class="o">.</span><span class="n">completed_at</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
+</span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a>            <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">db_backfill</span><span class="p">)</span>
+</span><span id="__span-15-20"><a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a>            <span class="k">return</span>
+</span></code></pre></div>
+<p>Extend the method's docstring to say the verdict reads each stack's latest attempt, so an attempt
+that a later one healed no longer condemns the batch.</p>
+<p>Leave the in-flight count and the fail-fast branch alone: a queued successor already counts as
+in-flight, which is exactly what keeps the batch open while a retry is pending.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_runs.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"fix(db): finalize a backfill on its stacks, not its attempts</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-5-the-executions-view-reads-the-latest-attempt">Task 5: The executions view reads the latest attempt<a class="headerlink" href="#task-5-the-executions-view-reads-the-latest-attempt" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-db/src/interloper_db/migrations/versions/004_run_attempts.py</code>
+- Modify: <code>packages/interloper-db/src/interloper_db/models/runs.py:166-186</code> (<code>Execution</code>)
+- Test: <code>packages/interloper-db/tests/store/test_events.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>EventType.OPERATION_RETRIED</code> and the <code>attempt</code> key in operation event data (phase 1).
+- Produces: an <code>executions</code> view still keyed by <code>(run_id, component_id)</code>, whose <code>status</code> is the
+  latest attempt's and which gains <code>attempts: int</code>. <code>Execution</code> gains the matching field. Phase 3
+  renders it.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing test</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-db/tests/store/test_events.py</code>, following the module's existing way of
+saving events and reading executions back:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_an_operation_that_healed_reads_as_a_success</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">component</span><span class="p">):</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>    <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">_operation_event</span><span class="p">(</span><span class="n">EventType</span><span class="o">.</span><span class="n">OPERATION_FAILED</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">org_id</span><span class="o">=</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>    <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">_operation_event</span><span class="p">(</span><span class="n">EventType</span><span class="o">.</span><span class="n">OPERATION_RETRIED</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">org_id</span><span class="o">=</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>    <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">save</span><span class="p">(</span>
+</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>        <span class="n">_operation_event</span><span class="p">(</span><span class="n">EventType</span><span class="o">.</span><span class="n">OPERATION_COMPLETED</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">org_id</span><span class="o">=</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span>
+</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>    <span class="p">)</span>
+</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
+</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>    <span class="n">executions</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">list_executions</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">executions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>    <span class="k">assert</span> <span class="n">executions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"success"</span>
+</span><span id="__span-17-11"><a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>    <span class="k">assert</span> <span class="n">executions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">attempts</span> <span class="o">==</span> <span class="mi">2</span>
+</span><span id="__span-17-12"><a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>
+</span><span id="__span-17-13"><a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a>
+</span><span id="__span-17-14"><a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_an_operation_that_exhausted_its_budget_reads_as_a_failure</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">run</span><span class="p">,</span> <span class="n">component</span><span class="p">):</span>
+</span><span id="__span-17-15"><a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>    <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">_operation_event</span><span class="p">(</span><span class="n">EventType</span><span class="o">.</span><span class="n">OPERATION_RETRIED</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">org_id</span><span class="o">=</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-16"><a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a>    <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">_operation_event</span><span class="p">(</span><span class="n">EventType</span><span class="o">.</span><span class="n">OPERATION_FAILED</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">attempt</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span> <span class="n">org_id</span><span class="o">=</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">run_id</span><span class="o">=</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-17"><a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a>
+</span><span id="__span-17-18"><a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a>    <span class="n">executions</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">list_executions</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-17-19"><a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a>    <span class="k">assert</span> <span class="n">executions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"failed"</span>
+</span><span id="__span-17-20"><a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a>    <span class="k">assert</span> <span class="n">executions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">attempts</span> <span class="o">==</span> <span class="mi">2</span>
+</span></code></pre></div>
+<p>Write the <code>_operation_event</code> helper in the test module: it builds an <code>il.Event</code> of the given type
+whose metadata carries <code>component_id</code>, <code>component_kind</code>, <code>component_key</code> and <code>attempt</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-db/tests/store/test_events.py -v -k "healed or exhausted"</code>
+Expected: FAIL. The healed operation reads <code>failed</code>, because the view ranks <code>operation_failed</code> above
+<code>operation_completed</code> regardless of recency, and <code>attempts</code> does not exist.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Replace the view in migration 004</strong></li>
+</ul>
+<p>Add to the <code>upgrade()</code> of <code>004_run_attempts.py</code>, after the index creation, a
+<code>CREATE OR REPLACE VIEW executions AS ...</code> that is the migration 002 definition with three changes:</p>
+<ol>
+<li><code>operation_retried</code> joins the <code>event_type</code> filter in the <code>WHERE</code> clause of the <code>ranked</code> CTE.</li>
+<li>The window's <code>ORDER BY</code> puts the attempt first, so the latest attempt decides the verdict and the
+   severity ranking only breaks ties within it:</li>
+</ol>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="w">        </span><span class="n">row_number</span><span class="p">()</span><span class="w"> </span><span class="n">OVER</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">            </span><span class="n">PARTITION</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">run_id</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">component_id</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">            </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">                </span><span class="k">COALESCE</span><span class="p">((</span><span class="n">e</span><span class="p">.</span><span class="k">data</span><span class="o">-&gt;&gt;</span><span class="s1">'attempt'</span><span class="p">)::</span><span class="nb">int</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">DESC</span><span class="p">,</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">                </span><span class="k">CASE</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">event_type</span>
+</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_failed'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">1</span>
+</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_canceled'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">2</span>
+</span><span id="__span-18-8"><a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_completed'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">3</span>
+</span><span id="__span-18-9"><a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_started'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">4</span>
+</span><span id="__span-18-10"><a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_skipped'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">5</span>
+</span><span id="__span-18-11"><a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_retried'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">6</span>
+</span><span id="__span-18-12"><a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="w">                    </span><span class="k">WHEN</span><span class="w"> </span><span class="s1">'operation_queued'</span><span class="w"> </span><span class="k">THEN</span><span class="w"> </span><span class="mi">7</span>
+</span><span id="__span-18-13"><a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="w">                </span><span class="k">END</span><span class="p">,</span>
+</span><span id="__span-18-14"><a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a><span class="w">                </span><span class="n">e</span><span class="p">.</span><span class="k">timestamp</span><span class="w"> </span><span class="k">DESC</span>
+</span><span id="__span-18-15"><a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a><span class="w">        </span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">rn</span><span class="p">,</span>
+</span></code></pre></div>
+<ol>
+<li>A new window carries the attempt count into the outer select:</li>
+</ol>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="w">        </span><span class="k">max</span><span class="p">(</span><span class="k">COALESCE</span><span class="p">((</span><span class="n">e</span><span class="p">.</span><span class="k">data</span><span class="o">-&gt;&gt;</span><span class="s1">'attempt'</span><span class="p">)::</span><span class="nb">int</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="n">OVER</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">            </span><span class="n">PARTITION</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">run_id</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">component_id</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">        </span><span class="p">)</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">attempts</span><span class="p">,</span>
+</span></code></pre></div>
+<p>selected as <code>r.attempts</code>. <code>operation_retried</code> must never win the verdict, which is why it sits below
+every terminal type in the severity ranking; it is in the view only so it counts toward <code>attempts</code>.</p>
+<p>Add the matching <code>DROP</code> and re-create of the 002 definition to <code>downgrade()</code>.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Add the column to the read model</strong></li>
+</ul>
+<p>In <code>packages/interloper-db/src/interloper_db/models/runs.py</code>, add to <code>Execution</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>    <span class="n">attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+</span></code></pre></div>
+<p>Extend the class docstring: the status is the latest attempt's, and <code>attempts</code> is how many that
+operation took.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>make dev-reset &amp;&amp; uv run pytest packages/interloper-db/tests/store/test_events.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Verify the failed-scope retry still reads correctly</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-scheduler/tests/test_executor.py -v</code>
+Expected: PASS. <code>RunExecutor._prior_successes</code> reads <code>list_executions</code> and keys by component id; the
+view still returns one row per operation, so it is unaffected. If this fails, the view is returning
+more than one row per <code>(run, operation)</code> and step 3 is wrong.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 7: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-db
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(db): read an execution's verdict from its latest attempt</span>
+</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>
+</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-6-hooks-observe-verdicts">Task 6: Hooks observe verdicts<a class="headerlink" href="#task-6-hooks-observe-verdicts" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Modify: <code>packages/interloper-scheduler/src/interloper_scheduler/hooks.py:87-105</code> (<code>_tick</code>) and <code>:138-170</code> (<code>_event_metadata</code>)
+- Test: <code>packages/interloper-scheduler/tests/test_hooks.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>Run.retry_of</code>/<code>Run.root_run_id</code> (Task 1), <code>_plan_retry</code> (Task 2).
+- Produces: a sweep that skips a failed run with a successor, and <code>HookContext.metadata</code> carrying
+  <code>attempt</code> and <code>attempts</code>. No new hook event types.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Write the failing tests</strong></li>
+</ul>
+<p>Add to <code>packages/interloper-scheduler/tests/test_hooks.py</code>, following the module's existing way of
+building a hook component and a terminal run:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_failed_run_that_will_be_retried_does_not_fire</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}})</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-22-5"><a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a>
+</span><span id="__span-22-6"><a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a>    <span class="n">controller</span><span class="o">.</span><span class="n">_tick</span><span class="p">()</span>
+</span><span id="__span-22-7"><a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a>
+</span><span id="__span-22-8"><a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a>    <span class="k">assert</span> <span class="ow">not</span> <span class="n">fired_events</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-9"><a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a>
+</span><span id="__span-22-10"><a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a>
+</span><span id="__span-22-11"><a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_an_exhausted_stack_fires_once</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-22-12"><a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
+</span><span id="__span-22-13"><a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-14"><a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-22-15"><a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a>
+</span><span id="__span-22-16"><a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a>    <span class="n">controller</span><span class="o">.</span><span class="n">_tick</span><span class="p">()</span>
+</span><span id="__span-22-17"><a id="__codelineno-22-17" name="__codelineno-22-17" href="#__codelineno-22-17"></a>
+</span><span id="__span-22-18"><a id="__codelineno-22-18" name="__codelineno-22-18" href="#__codelineno-22-18"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">fired_events</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-22-19"><a id="__codelineno-22-19" name="__codelineno-22-19" href="#__codelineno-22-19"></a>
+</span><span id="__span-22-20"><a id="__codelineno-22-20" name="__codelineno-22-20" href="#__codelineno-22-20"></a>
+</span><span id="__span-22-21"><a id="__codelineno-22-21" name="__codelineno-22-21" href="#__codelineno-22-21"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_a_healed_stack_fires_completed_on_the_successful_attempt</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-22-22"><a id="__codelineno-22-22" name="__codelineno-22-22" href="#__codelineno-22-22"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"delay"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}})</span>
+</span><span id="__span-22-23"><a id="__codelineno-22-23" name="__codelineno-22-23" href="#__codelineno-22-23"></a>    <span class="n">first</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-24"><a id="__codelineno-22-24" name="__codelineno-22-24" href="#__codelineno-22-24"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-22-25"><a id="__codelineno-22-25" name="__codelineno-22-25" href="#__codelineno-22-25"></a>    <span class="n">successor</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">list_all</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">id</span> <span class="o">!=</span> <span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-22-26"><a id="__codelineno-22-26" name="__codelineno-22-26" href="#__codelineno-22-26"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">successor</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-22-27"><a id="__codelineno-22-27" name="__codelineno-22-27" href="#__codelineno-22-27"></a>
+</span><span id="__span-22-28"><a id="__codelineno-22-28" name="__codelineno-22-28" href="#__codelineno-22-28"></a>    <span class="n">controller</span><span class="o">.</span><span class="n">_tick</span><span class="p">()</span>
+</span><span id="__span-22-29"><a id="__codelineno-22-29" name="__codelineno-22-29" href="#__codelineno-22-29"></a>
+</span><span id="__span-22-30"><a id="__codelineno-22-30" name="__codelineno-22-30" href="#__codelineno-22-30"></a>    <span class="k">assert</span> <span class="ow">not</span> <span class="n">fired_events</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">first</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-31"><a id="__codelineno-22-31" name="__codelineno-22-31" href="#__codelineno-22-31"></a>    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">fired_events</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">successor</span><span class="o">.</span><span class="n">id</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-22-32"><a id="__codelineno-22-32" name="__codelineno-22-32" href="#__codelineno-22-32"></a>
+</span><span id="__span-22-33"><a id="__codelineno-22-33" name="__codelineno-22-33" href="#__codelineno-22-33"></a>
+</span><span id="__span-22-34"><a id="__codelineno-22-34" name="__codelineno-22-34" href="#__codelineno-22-34"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_the_context_carries_the_stack_position</span><span class="p">(</span><span class="n">controller</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">org</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="n">job_component</span><span class="p">):</span>
+</span><span id="__span-22-35"><a id="__codelineno-22-35" name="__codelineno-22-35" href="#__codelineno-22-35"></a>    <span class="n">store</span><span class="o">.</span><span class="n">components</span><span class="o">.</span><span class="n">merge_config</span><span class="p">(</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="p">{</span><span class="s2">"retry"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"max_attempts"</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
+</span><span id="__span-22-36"><a id="__codelineno-22-36" name="__codelineno-22-36" href="#__codelineno-22-36"></a>    <span class="n">run</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">org</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">component_id</span><span class="o">=</span><span class="n">job_component</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-22-37"><a id="__codelineno-22-37" name="__codelineno-22-37" href="#__codelineno-22-37"></a>    <span class="n">store</span><span class="o">.</span><span class="n">runs</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-22-38"><a id="__codelineno-22-38" name="__codelineno-22-38" href="#__codelineno-22-38"></a>
+</span><span id="__span-22-39"><a id="__codelineno-22-39" name="__codelineno-22-39" href="#__codelineno-22-39"></a>    <span class="n">controller</span><span class="o">.</span><span class="n">_tick</span><span class="p">()</span>
+</span><span id="__span-22-40"><a id="__codelineno-22-40" name="__codelineno-22-40" href="#__codelineno-22-40"></a>
+</span><span id="__span-22-41"><a id="__codelineno-22-41" name="__codelineno-22-41" href="#__codelineno-22-41"></a>    <span class="k">assert</span> <span class="n">hook</span><span class="o">.</span><span class="n">seen_context</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"attempt"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+</span><span id="__span-22-42"><a id="__codelineno-22-42" name="__codelineno-22-42" href="#__codelineno-22-42"></a>    <span class="k">assert</span> <span class="n">hook</span><span class="o">.</span><span class="n">seen_context</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"attempts"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+</span></code></pre></div>
+<p>Write <code>fired_events(store, run_id)</code> in the test module: the <code>hook_fired</code> events attached to that run.
+The <code>hook</code> fixture is a hook component whose <code>fire</code> records the context it was handed; a hook
+subscribing to <code>run_completed</code> as well as <code>run_failed</code> is what makes the third test meaningful.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-scheduler/tests/test_hooks.py -v -k "retried or exhausted or healed or stack_position"</code>
+Expected: FAIL. The first test fires a notification for an attempt that will be retried.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Gate the sweep</strong></li>
+</ul>
+<p>In <code>packages/interloper-scheduler/src/interloper_scheduler/hooks.py</code>, add the predicate to <code>_tick</code>'s
+statement:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>            <span class="n">successor</span> <span class="o">=</span> <span class="n">aliased</span><span class="p">(</span><span class="n">Run</span><span class="p">)</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>            <span class="n">has_successor</span> <span class="o">=</span> <span class="n">select</span><span class="p">(</span><span class="n">successor</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">successor</span><span class="o">.</span><span class="n">retry_of</span><span class="p">)</span> <span class="o">==</span> <span class="n">Run</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>            <span class="n">runs</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span>
+</span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a>                <span class="n">select</span><span class="p">(</span><span class="n">Run</span><span class="p">)</span>
+</span><span id="__span-23-5"><a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a>                <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">status</span><span class="p">)</span><span class="o">.</span><span class="n">in_</span><span class="p">(</span><span class="n">_TERMINAL_STATUSES</span><span class="p">))</span>
+</span><span id="__span-23-6"><a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a>                <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">completed_at</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">since</span><span class="p">)</span>
+</span><span id="__span-23-7"><a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>                <span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="o">~</span><span class="p">((</span><span class="n">Run</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"failed"</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">has_successor</span><span class="p">))</span>
+</span><span id="__span-23-8"><a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a>                <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">col</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">completed_at</span><span class="p">))</span>
+</span><span id="__span-23-9"><a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a>            <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Import <code>aliased</code> from <code>sqlalchemy.orm</code>. Extend the module docstring with the rule this implements: a
+hook observes a verdict, never an attempt, so a failed run whose next attempt is already queued is
+not an outcome and does not fire. Because the successor is created in the same transaction that marks
+the run failed, there is no window in which a doomed attempt looks final.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Carry the stack position into the context</strong></li>
+</ul>
+<p>In <code>_event_metadata</code>, add the stack's position to the dict it builds:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>        <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>            <span class="s2">"status"</span><span class="p">:</span> <span class="n">run</span><span class="o">.</span><span class="n">status</span><span class="p">,</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>            <span class="s2">"component_name"</span><span class="p">:</span> <span class="n">target</span><span class="o">.</span><span class="n">name</span> <span class="ow">or</span> <span class="n">target</span><span class="o">.</span><span class="n">key</span><span class="p">,</span>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a>            <span class="s2">"component_key"</span><span class="p">:</span> <span class="n">target</span><span class="o">.</span><span class="n">key</span><span class="p">,</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>            <span class="s2">"attempt"</span><span class="p">:</span> <span class="n">run</span><span class="o">.</span><span class="n">attempt</span><span class="p">,</span>
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>            <span class="s2">"attempts"</span><span class="p">:</span> <span class="n">session</span><span class="o">.</span><span class="n">exec</span><span class="p">(</span>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a>                <span class="n">select</span><span class="p">(</span><span class="n">func</span><span class="o">.</span><span class="n">count</span><span class="p">())</span><span class="o">.</span><span class="n">select_from</span><span class="p">(</span><span class="n">Run</span><span class="p">)</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">Run</span><span class="o">.</span><span class="n">root_run_id</span> <span class="o">==</span> <span class="n">run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">)</span>
+</span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>            <span class="p">)</span><span class="o">.</span><span class="n">one</span><span class="p">(),</span>
+</span><span id="__span-24-9"><a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a>        <span class="p">}</span>
+</span></code></pre></div>
+<p>Import <code>func</code> from sqlalchemy. Extend the method's docstring: a message addressing humans renders the
+stack's position, so it can say the work succeeded on the second attempt or failed after three.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Run the tests to verify they pass</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-scheduler/tests/test_hooks.py -v</code>
+Expected: PASS.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Run the full checks</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check &amp;&amp; uv run ty check &amp;&amp; uv run pytest</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 7: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-scheduler
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(scheduler): fire hooks on a stack's verdict, not on each attempt</span>
+</span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>
+</span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="s2">By Digitl"</span>
+</span></code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>

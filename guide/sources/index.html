@@ -2196,9 +2196,9 @@ targets, <code>None</code> binds nothing. Attribute access reads what is bound (
 <h3 id="reconfiguring">Reconfiguring<a class="headerlink" href="#reconfiguring" title="Permanent link">&para;</a></h3>
 <p>Calling an instance returns a deep copy with overrides applied; the original is untouched:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./staging"</span><span class="p">))</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">materializable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Accepted keywords: <code>dataset</code>, <code>default_destination_key</code>, <code>materializable</code> (applied to every
+<p>Accepted keywords: <code>dataset</code>, <code>default_destination_key</code>, <code>enabled</code> (applied to every
 asset), <code>normalizer</code>, <code>materialization_strategy</code>, and any relation name. A fixed keyword left
 out means "unchanged"; a relation name passed at all changes it, since <code>None</code> there clears the
 binding. Rebinding a relation also repoints the assets that had received it by trickle, leaving

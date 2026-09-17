@@ -2057,7 +2057,7 @@ public <code>run()</code>:</p>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">state</span><span class="o">.</span><span class="n">mark_canceled</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Completing an operation promotes its dependents to ready; failing one cancels everything
-downstream. Non-materializable operations start as <code>SKIPPED</code> and count as satisfied
+downstream. Non-enabled operations start as <code>SKIPPED</code> and count as satisfied
 predecessors. Each transition emits the matching <code>OPERATION_*</code> event with a deterministic id
 (<code>emit=False</code> skips the emission for runners whose child process emits it itself). All
 mutations happen on the event loop thread, so no locking is needed.</p>

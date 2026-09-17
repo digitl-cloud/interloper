@@ -1,0 +1,2369 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-17-retry-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Retry: attempts and verdicts across the execution hierarchy - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#retry-attempts-and-verdicts-across-the-execution-hierarchy" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Retry: attempts and verdicts across the execution hierarchy
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI flags
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Event types
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Spans & metrics
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="retry-attempts-and-verdicts-across-the-execution-hierarchy">Retry: attempts and verdicts across the execution hierarchy<a class="headerlink" href="#retry-attempts-and-verdicts-across-the-execution-hierarchy" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-17. Status: approved design, implementation not started.</p>
+<p>Scope: how work that failed is tried again, at every level of the framework that has a unit of work,
+and how the outcome of that work is reported once rather than per attempt. This is the first of three
+specs derived from one diagnosis (below). It depends on <code>2026-09-17-operation-is-a-component-design.md</code>,
+which lands first and is what lets a policy be declared once on <code>Operation</code>. It covers the policy
+primitive, operation-level retry in
+the runner, run-level retry in the platform, stacks, verdict-based hooks, and the surfaces that
+render them. Capacity (<code>Limit</code>/<code>Limiter</code>) is a separate spec and is not designed here.</p>
+<hr />
+<h2 id="1-diagnosis">1. Diagnosis<a class="headerlink" href="#1-diagnosis" title="Permanent link">&para;</a></h2>
+<p>The framework has an execution hierarchy, batch to run to operation to request. Each level is a unit
+of work that can fail, contend for a shared resource, and report an outcome. The levels are equipped
+inconsistently:</p>
+<table>
+<thead>
+<tr>
+<th>level</th>
+<th>verdict</th>
+<th>attempt</th>
+<th>capacity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>batch (<code>Backfill</code>)</td>
+<td>derived, but counts runs</td>
+<td>none</td>
+<td><code>concurrency</code>, inert for cron backfills</td>
+</tr>
+<tr>
+<td>run (<code>Run</code>)</td>
+<td><code>status</code></td>
+<td>manual only, <code>POST /runs/{id}/retry</code></td>
+<td>none, the queue drains unbounded</td>
+</tr>
+<tr>
+<td>operation (<code>Operation</code>)</td>
+<td>events, via the <code>executions</code> view</td>
+<td>none</td>
+<td><code>max_workers</code>, local and anonymous</td>
+</tr>
+<tr>
+<td>request</td>
+<td>a raised exception</td>
+<td>none</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<p>That single inconsistency produces the symptoms: retry exists at one level and by hand, contention is
+bounded by an anonymous per-process number that cannot name the resource it protects, and hooks
+observe attempts rather than verdicts, so they narrate work in progress instead of reporting
+outcomes.</p>
+<p>The plan is to make the hierarchy uniform: every unit of work has a verdict, an attempt budget, and a
+capacity, expressed by the same types at every level. Three specs:</p>
+<ol>
+<li><strong>Attempts and verdicts</strong> (this document).</li>
+<li><strong>Capacity</strong>: <code>Limit</code> declared on the component that is the contended resource, <code>Limiter</code> with an
+   in-process and a store-backed implementation selected by deployment as <code>Launcher</code> already is,
+   absorbing <code>max_workers</code> and <code>Backfill.concurrency</code>.</li>
+<li><strong>Request-level retry</strong> in <code>RESTClient</code>, which is a small application of this document's policy
+   type and a source author's opt-in.</li>
+</ol>
+<hr />
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primitive</td>
+<td>One flat <code>RetryPolicy</code>: numbers only, no per-level nesting, no scope.</td>
+</tr>
+<tr>
+<td>Level binding</td>
+<td>The component a policy is declared on fixes the level, because a component's unit is its level. <code>Operation.retry</code> governs that operation's execution, <code>Source.retry</code> its assets' operations, <code>Job.retry</code> that job's runs, <code>RESTClient(retry=...)</code> that client's requests.</td>
+</tr>
+<tr>
+<td>Contract</td>
+<td><code>retry</code> is a field on <code>Operation</code>, so the runner reads <code>operation.retry</code> on any node without narrowing to <code>Asset</code>. <code>Workload</code> does not declare it: nothing ever reads a run policy off an instance, and <code>Operation</code> extends <code>Workload</code>, so one name on both contracts would have to mean two levels at once.</td>
+</tr>
+<tr>
+<td>Multiplication</td>
+<td>Nothing multiplies unless two components deliberately declare at two levels. There is no single number reused across levels.</td>
+</tr>
+<tr>
+<td>Inheritance</td>
+<td>An asset inherits its source's policy through <code>Source._resolve()</code>, alongside <code>dataset</code>, <code>normalizer</code> and <code>materialization_strategy</code>. No new cascade mechanism.</td>
+</tr>
+<tr>
+<td>Run-level reach</td>
+<td>A run targeting a source or an asset takes the platform default. Run-level retry is a property of the job; a source's <code>retry</code> is an operation policy and is never read at run level.</td>
+</tr>
+<tr>
+<td>Classification</td>
+<td>Behaviour, not config: <code>Operation.retryable(error)</code>, next to <code>Operation.failure()</code>. Exception types never enter serialized config.</td>
+</tr>
+<tr>
+<td>Automatic scope</td>
+<td>An automatic retry is always failed-scope. <code>scope</code> stays an argument of the manual retry endpoint.</td>
+</tr>
+<tr>
+<td>Attempt identity</td>
+<td>A run attempt is a <code>Run</code> row. A stack is the attempts of one unit of work, keyed by <code>root_run_id</code> (its own id for a first attempt). No new table.</td>
+</tr>
+<tr>
+<td>Successor creation</td>
+<td>In <code>RunStore.complete()</code>, in the transaction that marks the run failed, before <code>_advance_backfill</code>.</td>
+</tr>
+<tr>
+<td>Dispatch delay</td>
+<td><code>Run.scheduled_for</code>, honoured by the queue claim. Status stays <code>queued</code>.</td>
+</tr>
+<tr>
+<td>Backfills</td>
+<td>Successors keep their <code>backfill_id</code>. <code>_advance_backfill</code> finalizes on stacks, not runs.</td>
+</tr>
+<tr>
+<td>Verdict rule</td>
+<td>A hook observes verdicts, never attempts. A failed run that has a successor does not fire.</td>
+</tr>
+<tr>
+<td>Intermediate failures</td>
+<td><code>OPERATION_RETRIED</code> marks an attempt that will be retried. <code>OPERATION_FAILED</code> means exhausted.</td>
+</tr>
+<tr>
+<td>Executions view</td>
+<td>Still one row per <code>(run, operation)</code>, the verdict. Ranked by attempt first, severity within the latest attempt, plus an <code>attempts</code> column.</td>
+</tr>
+<tr>
+<td>Defaults</td>
+<td>None. A policy applies only where a component declares one; there is no instance-wide fallback. Recorded as a follow-up.</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>None required. All consumers ship together.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-the-policy">3. The policy<a class="headerlink" href="#3-the-policy" title="Permanent link">&para;</a></h2>
+<p><code>interloper/retry/base.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">RetryPolicy</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""An attempt budget for one unit of work."""</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">max_attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span>       <span class="c1"># total, including the first</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">delay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span>          <span class="c1"># seconds before the second attempt</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">backoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>        <span class="c1"># multiplier per subsequent attempt</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">max_delay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3600.0</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">jitter</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span>         <span class="c1"># fraction of the computed delay, applied symmetrically</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">allows</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attempt</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">delay_before</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attempt</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p><code>delay_before(attempt)</code> is <code>min(delay * backoff ** (attempt - 2), max_delay)</code>, jittered; attempt 2 is
+the first retry. <code>allows(attempt)</code> is <code>attempt &lt;= max_attempts</code>.</p>
+<p>Numbers only. The type is serializable, so it renders in <code>SchemaForm</code> without bespoke UI and survives
+into a spec unchanged.</p>
+<h3 id="declaration">Declaration<a class="headerlink" href="#declaration" title="Permanent link">&para;</a></h3>
+<p>Declared once on the unit it governs, which the prerequisite spec makes a real component:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Operation</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">Workload</span><span class="p">):</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n">RetryPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># this operation's execution</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Source</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">Workload</span><span class="p">):</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n">RetryPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># default for its assets' operations</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">Job</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">Workload</span><span class="p">):</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n">RetryPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>     <span class="c1"># this job's runs</span>
+</span></code></pre></div>
+<p><code>Asset</code> inherits the field from <code>Operation</code> and declares nothing. So does <code>Connection</code>, where it
+governs the renewal operation, which is correct and comes for free.</p>
+<p><code>@il.asset(retry=...)</code> and <code>@il.source(retry=...)</code> gain the parameter alongside <code>partitioning=</code> and
+<code>normalizer=</code>.</p>
+<p><code>Source._resolve()</code> gains one line, in the block that already applies source-level defaults to assets
+that do not define their own:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">if</span> <span class="n">asset</span><span class="o">.</span><span class="n">retry</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">asset</span><span class="o">.</span><span class="n">retry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">retry</span>
+</span></code></pre></div>
+<h3 id="resolution">Resolution<a class="headerlink" href="#resolution" title="Permanent link">&para;</a></h3>
+<p>One step plus the platform default, per level. There is no walk.</p>
+<table>
+<thead>
+<tr>
+<th>failing unit</th>
+<th>policy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>request</td>
+<td>the policy given to the client at construction; nothing else</td>
+</tr>
+<tr>
+<td>operation</td>
+<td><code>operation.retry</code>, already carrying its source's default for an asset. Nothing else: an operation that declares no policy is attempted once.</td>
+</tr>
+<tr>
+<td>run</td>
+<td>the target's <code>config.retry</code> when the target is a job. Nothing else: a run whose target is not a job carrying a policy is attempted once.</td>
+</tr>
+</tbody>
+</table>
+<p>The run-level policy is read live at completion time, so editing a job's policy takes effect on the
+next failure rather than on the next run.</p>
+<h3 id="classification">Classification<a class="headerlink" href="#classification" title="Permanent link">&para;</a></h3>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Operation</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">retryable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">        </span><span class="sd">"""Whether another attempt at this operation is worth making."""</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>        <span class="k">return</span> <span class="kc">True</span>
+</span></code></pre></div>
+<p>Sits next to <code>failure()</code>, and is overridden by an operation that can recognise a permanent error. The
+default is permissive: the budget, not the classifier, is what bounds waste.</p>
+<hr />
+<h2 id="4-operation-level">4. Operation level<a class="headerlink" href="#4-operation-level" title="Permanent link">&para;</a></h2>
+<p>The attempt loop is implemented once on <code>Runner</code> and called by both execution paths,
+<code>AsyncRunner._execute_operation</code> and the multi-process worker function, so the policy is applied
+identically everywhere. The multi-process runner calls it inside its worker: <code>retry</code> is a field on
+the operation itself, so it is already serialized with it and needs no separate channel.</p>
+<p>The loop wraps the existing try/except in <code>AsyncRunner._execute_operation</code>:</p>
+<ul>
+<li><code>execute</code> raises</li>
+<li>the policy is <code>operation.retry</code>, so the loop never narrows to <code>Asset</code></li>
+<li>if <code>operation.retryable(error)</code> and the policy allows the next attempt: emit <code>OPERATION_RETRIED</code>
+  carrying the attempt number and the error, sleep <code>delay_before(next)</code>, execute again</li>
+<li>otherwise: <code>state.mark_failed(...)</code> exactly as today</li>
+</ul>
+<p>A retrying node holds its concurrency slot for the duration. The DAG walk, the semaphore and
+<code>fail_fast</code> are untouched: a node that is still retrying has not failed, so nothing downstream is
+cancelled and no fail-fast break is triggered until its budget is exhausted.</p>
+<p>Every operation lifecycle event gains <code>attempt</code> in its <code>data</code>, defaulting to 1 when absent, so
+historical rows read correctly.</p>
+<h3 id="event-vocabulary">Event vocabulary<a class="headerlink" href="#event-vocabulary" title="Permanent link">&para;</a></h3>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">OPERATION_RETRIED</span> <span class="o">=</span> <span class="s2">"operation_retried"</span>
+</span></code></pre></div>
+<p><code>OPERATION_FAILED</code> keeps its meaning and is emitted only on exhaustion. This is the verdict rule one
+level down: an intermediate attempt is recorded, and is not the outcome.</p>
+<hr />
+<h2 id="5-run-level">5. Run level<a class="headerlink" href="#5-run-level" title="Permanent link">&para;</a></h2>
+<h3 id="columns">Columns<a class="headerlink" href="#columns" title="Permanent link">&para;</a></h3>
+<p><code>Run</code> gains:</p>
+<ul>
+<li><code>root_run_id: UUID</code>, not null, its own id for a first attempt. Stack membership is one indexed
+  predicate with no <code>COALESCE</code>.</li>
+<li><code>scheduled_for: datetime | None</code>, the earliest instant the run may be claimed.</li>
+</ul>
+<p><code>retry_of</code>, <code>attempt</code> and <code>retry_scope</code> already exist and keep their meaning. Run ids are assigned in
+Python (<code>uuid4()</code>) at every creation site so <code>root_run_id</code> can always be set; the server default
+stays as a safety net.</p>
+<h3 id="the-terminal-path">The terminal path<a class="headerlink" href="#the-terminal-path" title="Permanent link">&para;</a></h3>
+<p><code>RunStore.complete()</code> is the single terminal path every failure takes: the executor's verdict, the
+executor's exception handler, the queue's launch failure, and the reaper's timeout. Planning the
+successor there, rather than in a sweeping controller, is what makes the hook rule race-free: "has a
+successor" becomes true in the same transaction that makes the run failed, so there is no window in
+which a doomed attempt looks final.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">complete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">run_id</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">success</span><span class="p">):</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="o">...</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">db_run</span><span class="o">.</span><span class="n">status</span> <span class="o">=</span> <span class="s2">"success"</span> <span class="k">if</span> <span class="n">success</span> <span class="k">else</span> <span class="s2">"failed"</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">db_run</span><span class="o">.</span><span class="n">completed_at</span> <span class="o">=</span> <span class="n">now</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">UsageLedger</span><span class="p">(</span><span class="n">session</span><span class="p">)</span><span class="o">.</span><span class="n">settle_run</span><span class="p">(</span><span class="n">db_run</span><span class="p">,</span> <span class="n">success</span><span class="o">=</span><span class="n">success</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="o">...</span> <span class="n">stamp</span> <span class="n">component</span> <span class="n">state</span> <span class="o">...</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">success</span><span class="p">:</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_plan_retry</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_run</span><span class="p">)</span>      <span class="c1"># flushes, so the successor is visible below</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="k">if</span> <span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">:</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_advance_backfill</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">,</span> <span class="n">failed</span><span class="o">=</span><span class="ow">not</span> <span class="n">success</span><span class="p">)</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">commit</span><span class="p">(</span><span class="n">session</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>_plan_retry</code> reads the target component row (<code>config</code> is plain JSON, so this is one row read and no
+hydration), resolves the policy, and inserts the successor when the policy allows the next attempt
+and the target still exists:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">Run</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="nb">id</span><span class="o">=</span><span class="n">uuid4</span><span class="p">(),</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">org_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">org_id</span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">component_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">component_id</span><span class="p">,</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">backfill_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">backfill_id</span><span class="p">,</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">partition_key</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">partition_key</span><span class="p">,</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">status</span><span class="o">=</span><span class="s2">"queued"</span><span class="p">,</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">scheduled_for</span><span class="o">=</span><span class="n">now</span> <span class="o">+</span> <span class="n">policy</span><span class="o">.</span><span class="n">delay_before</span><span class="p">(</span><span class="n">db_run</span><span class="o">.</span><span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">retry_of</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">root_run_id</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">root_run_id</span><span class="p">,</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">attempt</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">retry_scope</span><span class="o">=</span><span class="s2">"failed"</span><span class="p">,</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">billable</span><span class="o">=</span><span class="n">db_run</span><span class="o">.</span><span class="n">billable</span><span class="p">,</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Ordering matters: the successor must exist before <code>_advance_backfill</code> runs, so the in-flight count
+sees it and the backfill is not finalized prematurely.</p>
+<p>A run whose component was deleted (<code>component_id</code> is null) is not retried. A canceled run is not
+retried: cancellation does not go through this path. The quota is not checked at creation; dispatch
+is the authoritative gate and cancels an over-quota run at claim time, as it does for any run.</p>
+<h3 id="dispatch">Dispatch<a class="headerlink" href="#dispatch" title="Permanent link">&para;</a></h3>
+<p><code>QueueController._claim_next</code> gains one predicate:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'queued'</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="n">scheduled_for</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">OR</span><span class="w"> </span><span class="n">scheduled_for</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="n">now</span><span class="p">())</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">created_at</span><span class="w"> </span><span class="k">ASC</span>
+</span></code></pre></div>
+<p>Status stays <code>queued</code>, so nothing else in the pipeline changes, and a delayed run is simply not yet
+claimable.</p>
+<h3 id="failed-scope">Failed scope<a class="headerlink" href="#failed-scope" title="Permanent link">&para;</a></h3>
+<p><code>RunExecutor._prior_successes</code> already walks the <code>retry_of</code> chain and marks previously successful
+operations non-materializable, keyed by component row id. It is unchanged: the executions view keeps
+one row per <code>(run, operation)</code> carrying the latest attempt's verdict, which is exactly what the walk
+reads.</p>
+<hr />
+<h2 id="6-backfills">6. Backfills<a class="headerlink" href="#6-backfills" title="Permanent link">&para;</a></h2>
+<p>A cron <code>lookback</code> window is a backfill, so retries have to live inside backfill accounting. This is
+the part the earlier manual-retry work deliberately punted, and it cannot be punted.</p>
+<ul>
+<li>The successor keeps its <code>backfill_id</code>. A retry belongs to the batch that produced it.</li>
+<li><code>_advance_backfill</code> finalizes on stacks: the batch is complete when no stack has an attempt in
+  flight or pending, and it failed only if some stack's latest attempt failed. Attempt 1 dying no
+  longer condemns a backfill that attempt 2 healed.</li>
+<li><code>Backfill.partitions</code> is unchanged: it counts partitions, and there is still exactly one stack per
+  partition.</li>
+</ul>
+<p>Progress counts stacks, so a backfill of 7 partitions reports out of 7 however many attempts it took.</p>
+<hr />
+<h2 id="7-verdicts">7. Verdicts<a class="headerlink" href="#7-verdicts" title="Permanent link">&para;</a></h2>
+<h3 id="the-executions-view">The executions view<a class="headerlink" href="#the-executions-view" title="Permanent link">&para;</a></h3>
+<p>Today the view ranks <code>operation_failed</code> above <code>operation_completed</code> regardless of recency, so an
+operation that failed and then healed would read as failed. It keeps one row per <code>(run, operation)</code>,
+the verdict, and changes its ordering:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">row_number</span><span class="p">()</span><span class="w"> </span><span class="n">OVER</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="n">PARTITION</span><span class="w"> </span><span class="k">BY</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">run_id</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">component_id</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">ORDER</span><span class="w"> </span><span class="k">BY</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">        </span><span class="k">COALESCE</span><span class="p">((</span><span class="n">e</span><span class="p">.</span><span class="k">data</span><span class="o">-&gt;&gt;</span><span class="s1">'attempt'</span><span class="p">)::</span><span class="nb">int</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">DESC</span><span class="p">,</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">        </span><span class="k">CASE</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">event_type</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="k">END</span><span class="p">,</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="n">e</span><span class="p">.</span><span class="k">timestamp</span><span class="w"> </span><span class="k">DESC</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>plus an <code>attempts</code> column, <code>max(attempt)</code> over the same partition. <code>operation_retried</code> is added to
+the view's event filter so it counts toward <code>attempts</code> without ever winning the verdict.</p>
+<p>Every consumer keeps working unchanged, <code>_prior_successes</code> included. Per-attempt detail stays in
+<code>events</code>, which is where detail belongs.</p>
+<h3 id="hooks">Hooks<a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h3>
+<p><code>HookController</code> gains one predicate in its sweep, so a failed run with a successor is never
+evaluated:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">AND</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="p">(</span><span class="n">runs</span><span class="p">.</span><span class="n">status</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'failed'</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">runs</span><span class="w"> </span><span class="n">successor</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">successor</span><span class="p">.</span><span class="n">retry_of</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">runs</span><span class="p">.</span><span class="n">id</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="p">))</span>
+</span></code></pre></div>
+<p>No knowledge of budgets, backoff or policy, and no new hook event types: <code>run_completed</code> and
+<code>run_failed</code> keep their names and now mean the stack's verdict. A stack that succeeds on attempt 3
+fires <code>run_completed</code> once, on that attempt. A stack that exhausts its budget fires <code>run_failed</code>
+once, on the last attempt.</p>
+<p><code>HookContext.metadata</code> gains <code>attempt</code> and <code>attempts</code> (the stack's total), so a message can say
+"succeeded on attempt 2" or "failed after 3 attempts". The firing claim stays <code>uuid5(hook, run)</code>:
+attempts that do not fire never claim, so no double firing is possible.</p>
+<hr />
+<h2 id="8-persistence-and-migration">8. Persistence and migration<a class="headerlink" href="#8-persistence-and-migration" title="Permanent link">&para;</a></h2>
+<p>Migration 004 (the chain was folded to 001-003):</p>
+<ol>
+<li><code>ALTER TABLE runs ADD COLUMN root_run_id uuid, ADD COLUMN scheduled_for timestamptz</code></li>
+<li>backfill existing rows:</li>
+</ol>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">WITH</span><span class="w"> </span><span class="k">RECURSIVE</span><span class="w"> </span><span class="k">chain</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="n">id</span><span class="w"> </span><span class="k">AS</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">runs</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">retry_of</span><span class="w"> </span><span class="k">IS</span><span class="w"> </span><span class="k">NULL</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="k">UNION</span><span class="w"> </span><span class="k">ALL</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="k">SELECT</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">root</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">runs</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="k">chain</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">retry_of</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">id</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">UPDATE</span><span class="w"> </span><span class="n">runs</span><span class="w"> </span><span class="k">SET</span><span class="w"> </span><span class="n">root_run_id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">chain</span><span class="p">.</span><span class="n">root</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="k">chain</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">runs</span><span class="p">.</span><span class="n">id</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">chain</span><span class="p">.</span><span class="n">id</span><span class="p">;</span>
+</span></code></pre></div>
+<ol>
+<li><code>ALTER TABLE runs ALTER COLUMN root_run_id SET NOT NULL</code></li>
+<li><code>CREATE INDEX ix_runs_root_run_id ON runs (root_run_id)</code></li>
+<li>an index supporting the claim predicate: <code>(status, scheduled_for, created_at)</code></li>
+<li><code>CREATE OR REPLACE VIEW executions</code> with the attempt-aware ranking</li>
+</ol>
+<p>Any run row whose <code>retry_of</code> points at a deleted run (the FK is <code>ON DELETE SET NULL</code>) becomes its own
+root, which is correct: its lineage is gone.</p>
+<hr />
+<h2 id="9-surfaces">9. Surfaces<a class="headerlink" href="#9-surfaces" title="Permanent link">&para;</a></h2>
+<h3 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>RunResponse</code> gains <code>root_run_id</code>, <code>scheduled_for</code>, and <code>attempts</code> (the stack's total).</li>
+<li><code>GET /runs</code> becomes stack-native: one row per stack, the latest attempt, selected with
+  <code>DISTINCT ON (root_run_id) ... ORDER BY root_run_id, attempt DESC</code> and re-ordered by <code>created_at
+  DESC</code> in an outer query so the listing order is unchanged. Filters and counts apply to the stack's
+  verdict, which is what a reader means by "show me failed runs".</li>
+<li><code>GET /runs?root_run_id=...</code> lists the attempts of one stack.</li>
+<li><code>POST /runs/{id}/retry</code> is unchanged and keeps its explicit <code>scope</code>.</li>
+</ul>
+<h3 id="app">App<a class="headerlink" href="#app" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Runs table: one row per stack, the latest attempt's status, an <code>n/N</code> chip when <code>attempts &gt; 1</code>,
+  expandable to the attempts. Watch the known <code>UTable</code> traps: an inline <code>:grouping</code> literal with
+  <code>v-model:expanded</code> auto-resets, and <code>resolveComponent</code> returns a bare string inside header and cell
+  render functions.</li>
+<li>Run detail: attempt navigation across the stack, and the failed-scope attempts showing which
+  operations were carried forward as already successful.</li>
+<li>Timeline: an operation with <code>attempts &gt; 1</code> reads as its verdict, with its retried attempts visible
+  from the events it emitted.</li>
+<li>Retry policy needs no bespoke UI: it is a config field on a component, so <code>SchemaForm</code> renders it.</li>
+</ul>
+<hr />
+<h2 id="10-no-instance-wide-default">10. No instance-wide default<a class="headerlink" href="#10-no-instance-wide-default" title="Permanent link">&para;</a></h2>
+<p>Deliberately none. A policy is in force only where a component declares one, so retry is visible at
+the thing it retries and nothing acquires attempts by deployment. A deployment-wide default is a real
+want, and it is recorded as a follow-up rather than guessed at now: it needs its own answer to how an
+instance default interacts with a declared one, and to whether operation and run defaults belong in
+one block or with the runner that owns execution.</p>
+<p>The consequence to keep in mind while the two land: nothing retries until a job or an asset says so,
+so phases 1 and 2 change no behaviour on their own.</p>
+<hr />
+<h2 id="11-request-level">11. Request level<a class="headerlink" href="#11-request-level" title="Permanent link">&para;</a></h2>
+<p>Out of scope here beyond the type it shares. The third spec gives <code>RESTClient</code> a <code>retry:
+RetryPolicy | None</code> constructor argument, honoured around the transport call together with
+<code>Retry-After</code> when the response carries one. A source author opts in where the client is built,
+typically the source's <code>client</code> cached property, and is free to ignore it and handle vendor
+semantics directly. Nothing resolves a request policy from a component.</p>
+<hr />
+<h2 id="12-testing">12. Testing<a class="headerlink" href="#12-testing" title="Permanent link">&para;</a></h2>
+<p>Tests mirror the package layout one to one; no standalone feature files.</p>
+<ul>
+<li><code>interloper-core</code>: <code>tests/retry/test_base.py</code> for the budget and backoff maths, including jitter
+  bounds and <code>max_delay</code> capping. <code>tests/runner/test_async_runner.py</code> for the attempt loop: a node
+  that heals on attempt 2 reports success and emits <code>OPERATION_RETRIED</code> then <code>OPERATION_COMPLETED</code>; a
+  node that exhausts its budget emits <code>OPERATION_FAILED</code> once; a node whose <code>retryable()</code> declines is
+  not retried; a retrying node does not trigger a fail-fast break. <code>tests/source/test_base.py</code> for
+  the <code>_resolve</code> inheritance.</li>
+<li><code>interloper-db</code>: <code>tests/store/test_runs.py</code> for successor creation, exhaustion, a deleted target,
+  the <code>scheduled_for</code> stamp, and the claim predicate; stack-based backfill finalization, in
+  particular a backfill whose attempt 1 failed and attempt 2 succeeded reporting success.</li>
+<li><code>interloper-scheduler</code>: <code>tests/test_hooks.py</code> for the gate: a failed run with a successor does not
+  fire, an exhausted one fires <code>run_failed</code> once, a healed stack fires <code>run_completed</code> once on the
+  successful attempt.</li>
+</ul>
+<hr />
+<h2 id="13-phasing">13. Phasing<a class="headerlink" href="#13-phasing" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Core</strong>: <code>RetryPolicy</code>, <code>Operation.retryable</code>, the fields on <code>Operation</code>/<code>Source</code>/<code>Job</code>, the
+   <code>_resolve</code> inheritance, the decorator parameters, <code>OPERATION_RETRIED</code>, the runner attempt loop.</li>
+<li><strong>Platform</strong>: the two columns, migration 004, the executions view, <code>_plan_retry</code> in <code>complete()</code>,
+   the claim predicate, stack-based backfill accounting, the hook gate.</li>
+<li><strong>Surfaces</strong>: API fields and the stack-native runs listing, then the app.</li>
+</ol>
+<p>Each phase is independently shippable: after phase 1 operations retry in place with nothing else
+changed, after phase 2 runs retry and hooks report verdicts, after phase 3 the stack is legible.</p>
+<hr />
+<h2 id="14-follow-ups-recorded">14. Follow-ups, recorded<a class="headerlink" href="#14-follow-ups-recorded" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>An instance-wide default.</strong> Dropped from this design on purpose. Whoever picks it up owns two
+  questions: whether an instance default is a floor, a ceiling or a plain fallback under a declared
+  policy, and whether the operation-level default belongs in a settings block next to the run one or
+  on the runner that executes operations, where <code>max_workers</code> and <code>fail_fast</code> already live.</li>
+<li><strong>Capacity spec</strong>: <code>Limit</code> and <code>Limiter</code>, absorbing <code>max_workers</code> and <code>Backfill.concurrency</code>, with
+  a store-backed implementation so a limit can be shared across pods. This is the tuning surface for
+  vendor quotas, and the reason retry is not being asked to solve contention.</li>
+<li><strong>Cron backfill concurrency</strong>: cron builds its backfill inline and queues every partition at once,
+  so <code>Backfill.concurrency</code> is recorded but inert for exactly the backfills that dominate production.
+  Folded into the capacity spec rather than fixed on its own.</li>
+<li><strong>Backfill-level hook events</strong>: stack gating stops a healing attempt from notifying, but a
+  genuinely broken source still notifies once per partition. <code>backfill_completed</code> / <code>backfill_failed</code>
+  would collapse a cron firing into one message. Deliberately deferred until the noise left after
+  stack gating is known.</li>
+<li><strong>Run-level classification</strong>: the run level has no exception object, so it retries everything
+  within its budget. If a class of run failure proves never worth retrying, it needs a verdict
+  richer than a boolean, which is a change to the terminal path's signature.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>

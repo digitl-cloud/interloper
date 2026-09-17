@@ -2082,9 +2082,9 @@ nothing else to ask. In the platform, the store resolves it. A reference nobody 
 <h2 id="sources-and-their-assets">Sources and their assets<a class="headerlink" href="#sources-and-their-assets" title="Permanent link">&para;</a></h2>
 <p>A source is the unit of reconstruction. Its spec carries the assets as an <strong>override map</strong> keyed
 by asset key rather than as individual specs, which keeps the document compact and lets
-per-asset state (its own destinations, <code>materializable</code>, its bound upstreams) survive:</p>
+per-asset state (its own destinations, <code>enabled</code>, its bound upstreams) survive:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">Shop</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_1"</span><span class="p">)</span><span class="o">.</span><span class="n">to_spec</span><span class="p">()</span><span class="o">.</span><span class="n">init</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True}, ...}}</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># {"account_id": "act_1", "assets": {"orders": {"id": "...", "enabled": True}, ...}}</span>
 </span></code></pre></div>
 <p>Reconstruction builds each asset class with its overrides. The map is also the list of assets the
 source ends up with: an asset absent from a non-empty map does not exist after reconstruction.
@@ -2118,7 +2118,7 @@ need to live in the file. A manifest is one component, nested, and is exactly <c
 </span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
 </span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">          </span><span class="nt">campaigns</span><span class="p">:</span>
 </span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">            </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fb-campaigns</span>
-</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">            </span><span class="nt">materializable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a><span class="w">            </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">campaign_matcher</span>
 </span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">      </span><span class="nt">init</span><span class="p">:</span>
 </span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span>
@@ -2149,7 +2149,7 @@ YAML it is one document per root, separated by <code>---</code>:</p>
 </span></code></pre></div>
 <p>It is what <code>MultiProcessRunner</code> ships to its workers and what <code>interloper run --format inline</code>
 accepts. The override map is built from the DAG's <strong>actual</strong> asset instances, so a parent the run
-only reads travels as its own document carrying that one asset with <code>materializable: false</code>,
+only reads travels as its own document carrying that one asset with <code>enabled: false</code>,
 and stays read-only after the round-trip.</p>
 <h2 id="what-makes-something-serializable">What makes something serializable<a class="headerlink" href="#what-makes-something-serializable" title="Permanent link">&para;</a></h2>
 <p><code>Serializable</code> is a pydantic model with a few additions:</p>

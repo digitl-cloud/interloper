@@ -2202,7 +2202,7 @@ calendar, while hour windows are always UTC because hour ids are UTC labels.</p>
 <p>Passing a window to a run is then a single execution covering the whole range. A single
 partition still works and is presented to the asset as a one-partition window. Destinations
 split window writes per partition, so storage looks identical either way.</p>
-<p>A run given a window fails as a whole when any materializable partitioned asset in the DAG does
+<p>A run given a window fails as a whole when any enabled partitioned asset in the DAG does
 not allow windows.</p>
 <h2 id="what-the-context-exposes">What the context exposes<a class="headerlink" href="#what-the-context-exposes" title="Permanent link">&para;</a></h2>
 <table>

@@ -2209,10 +2209,10 @@ below <code>1.0</code> also merges names that merely resemble each other.</p>
 <p>A matcher built against upstreams already materialized elsewhere reads them read-only instead of
 running them, the same explicit-bind pattern as any other relation:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">matcher</span><span class="o">.</span><span class="n">campaign_matches</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">fb</span><span class="o">.</span><span class="n">campaigns</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">matcher</span><span class="p">)</span>   <span class="c1"># fb.campaigns joins the DAG as materializable=False</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">matcher</span><span class="p">)</span>   <span class="c1"># fb.campaigns joins the DAG as enabled=False</span>
 </span></code></pre></div>
 <p><code>examples/campaign_matcher.yaml</code> is the same wiring written as a manifest: two connectors each
-override their <code>campaigns</code> asset to <code>materializable: false</code>, and <code>campaign_matches</code> names both by
+override their <code>campaigns</code> asset to <code>enabled: false</code>, and <code>campaign_matches</code> names both by
 <code>{ref: ...}</code> since an asset always travels under its own source. See <a href="../specs/">Specs</a> for the
 manifest format.</p>
 <h2 id="how-wiring-works">How wiring works<a class="headerlink" href="#how-wiring-works" title="Permanent link">&para;</a></h2>
@@ -2335,11 +2335,11 @@ read one partition at a time, which an unpartitioned downstream cannot express. 
 partition scope, so both ends of an edge must agree on granularity, read-only upstreams
 included.</p>
 <h2 id="running-one-asset-with-its-parents">Running one asset with its parents<a class="headerlink" href="#running-one-asset-with-its-parents" title="Permanent link">&para;</a></h2>
-<p>A bound upstream the run does not materialize joins the DAG anyway, as a non-materializable copy
+<p>A bound upstream the run does not materialize joins the DAG anyway, as a disabled copy
 under the same id: it is a live instance with its own destinations, so it can be read without
 being run. That is the whole mechanism behind running one asset with its parents:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">mini</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">mini_dag</span><span class="p">(</span><span class="n">fin</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">materializable</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">[(</span><span class="n">op</span><span class="o">.</span><span class="n">qualified_key</span><span class="p">,</span> <span class="n">op</span><span class="o">.</span><span class="n">enabled</span><span class="p">)</span> <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">mini</span><span class="o">.</span><span class="n">operations</span><span class="p">]</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># [("finance.revenue", True), ("shop.orders", False)]</span>
 </span></code></pre></div>
 <p>Only the target executes; the parents are read, not rewritten. Partition checks still apply
