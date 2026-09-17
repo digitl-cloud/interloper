@@ -332,6 +332,30 @@ class TestResultInterpretation:
         return runner, operation
 
     @pytest.mark.parametrize("handler", ["_handle_completed", "_handle_flushed"])
+    def test_the_attempts_the_worker_retried_are_replayed(
+        self, handler: str, prepared: tuple[MultiProcessRunner, Any]
+    ) -> None:
+        # The child owns the loop but emits nothing; both paths back into the
+        # parent have to replay what it retried, including the flush path a
+        # fail-fast break or a natural end drains through.
+        runner, operation = prepared
+        future: Future[Any] = Future()
+        future.set_result((operation.id, True, None, None, {"config": {}, "state": {}}, ["boom", "boom again"]))
+        events: list[Event] = []
+        il.EventBus.subscribe(events.append)
+        try:
+            getattr(runner, handler)(future, operation)
+            il.EventBus.flush(timeout=5.0)
+        finally:
+            il.EventBus.unsubscribe(events.append)
+
+        assert runner.state.attempts[operation.id] == 3
+        retried = [event for event in events if event.type is il.EventType.OPERATION_RETRIED]
+        assert [event.metadata["error"] for event in retried] == ["boom", "boom again"]
+        assert [event.metadata["attempt"] for event in retried] == [1, 2]
+        assert runner.state.executions[operation.id].status is ExecutionStatus.COMPLETED
+
+    @pytest.mark.parametrize("handler", ["_handle_completed", "_handle_flushed"])
     def test_a_success_tuple_records_the_effects(
         self, handler: str, prepared: tuple[MultiProcessRunner, Any]
     ) -> None:
