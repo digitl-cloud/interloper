@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.84.1 (2026-09-17)
+
+### Code Style
+
+- **app**: Name and discriminator share a line in component tables
+  ([`ee953d3`](https://github.com/digitl-cloud/interloper/commit/ee953d3845808e49381c3afcd02f47ba7bf098bb))
+
+
 ## v0.84.0 (2026-09-17)
 
 ### Bug Fixes
