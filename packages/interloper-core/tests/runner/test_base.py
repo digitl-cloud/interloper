@@ -241,15 +241,15 @@ class TestPreflightValidation:
 
         assert result.status is ExecutionStatus.COMPLETED
 
-    def test_non_materializable_partitioned_assets_are_exempt(self):
-        # Upstream dependencies are hydrated read-only (materializable=False);
+    def test_non_enabled_partitioned_assets_are_exempt(self):
+        # Upstream dependencies are hydrated read-only (enabled=False);
         # they must not force a partition onto an otherwise unpartitioned run.
         @il.asset(partitioning=TimePartitionConfig(column="date"))
         def upstream() -> list[dict[str, Any]]:
             return [{"date": "2026-01-01"}]
 
         asset = upstream(id="upstream", destinations=[il.MemoryDestination()])
-        asset.materializable = False
+        asset.enabled = False
 
         AsyncRunner()._preflight_validation(il.DAG(asset), None)
 

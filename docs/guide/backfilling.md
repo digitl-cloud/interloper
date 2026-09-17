@@ -23,7 +23,7 @@ data in place rather than the ancient tail.
 
 ## One run for the whole window
 
-When every materializable partitioned asset in the DAG declares `allow_window=True`, pass the
+When every enabled partitioned asset in the DAG declares `allow_window=True`, pass the
 window itself. Each asset receives the range through `context.window` and fetches it in one
 call; destinations split the write per partition:
 

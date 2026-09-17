@@ -103,6 +103,12 @@ class Operation(Component, Workload):
     ``Component.__init_subclass__`` deriving one. Each implementor declares
     its own.
 
+    ``enabled`` is the same word ``Job`` and ``Hook`` already use for "this
+    will run": a disabled operation stays in the graph, ordering whatever
+    depends on it, and does not execute. ``Asset`` adds the half only an
+    asset has, which is that a disabled one is read-only and its downstreams
+    resolve its data from its destination instead of recomputing it.
+
     ``capture_traceback`` controls whether a failed execution's traceback
     is attached to its failure event; off for operations whose raw errors
     embed secrets (credential exchanges carry them in URLs).
@@ -112,7 +118,7 @@ class Operation(Component, Workload):
     capture_traceback: ClassVar[bool] = True
     partitioning: ClassVar[PartitionConfig | None] = None
 
-    materializable: bool = Field(default=True, json_schema_extra={"x-hidden": True})
+    enabled: bool = Field(default=True, description="Operation will execute")
 
     def operations(self) -> list[Operation]:
         """An operation is trivially its own workload.

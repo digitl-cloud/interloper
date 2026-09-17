@@ -108,10 +108,10 @@ Calling an instance returns a deep copy with overrides applied; the original is 
 
 ```py
 staging = source(destinations=il.CSVDestination(base_path="./staging"))
-read_only = source(materializable=False)
+read_only = source(enabled=False)
 ```
 
-Accepted keywords: `dataset`, `default_destination_key`, `materializable` (applied to every
+Accepted keywords: `dataset`, `default_destination_key`, `enabled` (applied to every
 asset), `normalizer`, `materialization_strategy`, and any relation name. A fixed keyword left
 out means "unchanged"; a relation name passed at all changes it, since `None` there clears the
 binding. Rebinding a relation also repoints the assets that had received it by trickle, leaving

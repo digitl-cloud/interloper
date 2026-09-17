@@ -22,7 +22,7 @@ and type. Common metadata: `component_id`, `component_kind`, `component_key`, `s
 
 | Type | When |
 |------|------|
-| `operation_queued` | At run start, for every materializable operation. |
+| `operation_queued` | At run start, for every enabled operation. |
 | `operation_started` | The operation was submitted. |
 | `operation_completed` | `execute()` returned. |
 | `operation_failed` | `execute()` raised. Adds `error` and, when the operation captures tracebacks, `traceback`. |

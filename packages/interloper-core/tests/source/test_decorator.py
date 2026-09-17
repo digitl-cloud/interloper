@@ -89,12 +89,12 @@ class TestRelations:
 
 
 class TestMaterializable:
-    """``materializable`` is an asset-level runtime flag, not a source declaration."""
+    """``enabled`` is an asset-level runtime flag, not a source declaration."""
 
     def test_not_accepted_by_the_decorator(self):
-        with pytest.raises(TypeError, match=r"Source does not accept 'materializable'"):
+        with pytest.raises(TypeError, match=r"Source does not accept 'enabled'"):
 
-            @il.source(materializable=False)
+            @il.source(enabled=False)
             def probe():
                 return []
 
@@ -107,7 +107,7 @@ class TestMaterializable:
         def probe_source():
             return [probe_asset]
 
-        assert all(not a.materializable for a in probe_source()(materializable=False).assets)
+        assert all(not a.enabled for a in probe_source()(enabled=False).assets)
 
 
 class TestFunctionForm:

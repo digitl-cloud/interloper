@@ -137,7 +137,7 @@ An instance carries the runtime state a definition does not know about:
 | `destinations` | Destination instances to write to. A single destination is accepted and wrapped in a list. |
 | `dataset` | Namespace (schema, folder) the asset materializes into. Defaults to the source's. |
 | `default_destination_key` | With several destinations, the one downstream readers load from. |
-| `materializable` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
+| `enabled` | `False` turns the asset into a read-only dependency: it is skipped by runners but its stored output is still readable. |
 | `materialization_strategy` | How strictly the data is checked against the schema. |
 | `normalizer` | The normalizer applied before conform. |
 | `id` | Instance identity, a UUID by default. |
@@ -151,7 +151,7 @@ Set them at construction, or derive a reconfigured copy by calling an existing i
 ```py
 asset = users(destinations=il.CSVDestination(base_path="./data"), dataset="shop")
 
-read_only = asset(materializable=False)
+read_only = asset(enabled=False)
 strict = asset(materialization_strategy=il.MaterializationStrategy.STRICT)
 bare = asset(normalizer=None)           # None explicitly clears the normalizer
 ```
@@ -170,7 +170,7 @@ Unknown keyword arguments raise `TypeError` rather than being silently dropped.
 | Call | Effect |
 |------|--------|
 | `asset.run(partition, dag, metadata)` | Execute, normalize, conform. Return the data. Write nothing. |
-| `asset.materialize(partition, dag, metadata)` | Everything `run` does, then write to every destination. Returns the data, or `None` when the asset is not materializable. |
+| `asset.materialize(partition, dag, metadata)` | Everything `run` does, then write to every destination. Returns the data, or `None` when the asset is disabled. |
 | `await asset.run_async(...)`, `await asset.materialize_async(...)` | The same, for async callers. |
 
 `partition` is required for partitioned assets and ignored (with a warning) for unpartitioned

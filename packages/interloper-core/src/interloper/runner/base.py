@@ -277,7 +277,7 @@ class Runner(Serializable):
             partitioned = sorted(
                 operation.key
                 for operation in dag.operations
-                if operation.materializable and operation.partitioning is not None
+                if operation.enabled and operation.partitioning is not None
             )
             if partitioned:
                 raise PartitionError(
@@ -289,7 +289,7 @@ class Runner(Serializable):
             unsupported = [
                 operation.key
                 for operation in dag.operations
-                if operation.materializable
+                if operation.enabled
                 and operation.partitioning is not None
                 and not operation.partitioning.allow_window
             ]
@@ -300,5 +300,5 @@ class Runner(Serializable):
                 )
 
         for operation in dag.operations:
-            if operation.materializable and isinstance(operation.partitioning, TimePartitionConfig):
+            if operation.enabled and isinstance(operation.partitioning, TimePartitionConfig):
                 operation._validate_time_partitioning(operation.partitioning, partition_or_window)

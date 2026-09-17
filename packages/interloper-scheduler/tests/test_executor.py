@@ -450,7 +450,7 @@ class TestUpstreamJoinsReadOnly:
     ``_run_dag`` to inspect what it built.
     """
 
-    def test_a_bound_upstream_is_joined_and_made_non_materializable(
+    def test_a_bound_upstream_is_joined_and_made_non_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         il.MemoryDestination.clear()
@@ -477,14 +477,14 @@ class TestUpstreamJoinsReadOnly:
         assert executor.execute(run.id) is True
 
         (dag,) = built
-        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.operation_map[upstream.id].enabled is False
         assert dag.predecessors[target.id] == [upstream.id]
 
 
 class TestRetrySkipsPriorSuccesses:
     """A failed-only retry reads earlier successes instead of recomputing them."""
 
-    def test_a_previously_successful_node_is_made_non_materializable(
+    def test_a_previously_successful_node_is_made_non_enabled(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         il.MemoryDestination.clear()
@@ -510,7 +510,7 @@ class TestRetrySkipsPriorSuccesses:
         monkeypatch.setattr(executor, "_prior_successes", lambda _retry_of: {component_id})
 
         assert executor.execute(run.id) is True
-        assert target.materializable is False
+        assert target.enabled is False
 
     def test_a_whole_run_retry_recomputes_everything(self, monkeypatch: pytest.MonkeyPatch) -> None:
         il.MemoryDestination.clear()
@@ -536,4 +536,4 @@ class TestRetrySkipsPriorSuccesses:
         )
 
         assert executor.execute(run.id) is True
-        assert target.materializable is True
+        assert target.enabled is True

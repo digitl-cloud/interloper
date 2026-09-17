@@ -113,7 +113,7 @@ Passing a window to a run is then a single execution covering the whole range. A
 partition still works and is presented to the asset as a one-partition window. Destinations
 split window writes per partition, so storage looks identical either way.
 
-A run given a window fails as a whole when any materializable partitioned asset in the DAG does
+A run given a window fails as a whole when any enabled partitioned asset in the DAG does
 not allow windows.
 
 ## What the context exposes

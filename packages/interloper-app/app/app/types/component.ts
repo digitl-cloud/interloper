@@ -93,9 +93,9 @@ export interface ComponentInput {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/** Whether an asset materializes (clients own `config.materializable`). */
-export function materializable(c: ComponentRecord): boolean {
-    return c.config?.materializable ?? true
+/** Whether an operation executes (clients own `config.enabled`). */
+export function enabled(c: ComponentRecord): boolean {
+    return c.config?.enabled ?? true
 }
 
 /** Relation refs under a given name, e.g. `relationRefs(c, 'destinations')`. */

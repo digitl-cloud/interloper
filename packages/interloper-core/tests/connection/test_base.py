@@ -18,7 +18,7 @@ from interloper.utils.concurrency import invoke
 class TestConnection:
     def test_kind_survives_operation_becoming_a_component(self):
         assert Connection.kind == "connection"
-        assert Connection.model_fields["materializable"].json_schema_extra == {"x-hidden": True}
+        assert Connection.model_fields["enabled"].default is True
 
     def test_definition_without_oauth(self):
         class Plain(Connection):

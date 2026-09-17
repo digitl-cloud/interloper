@@ -122,7 +122,7 @@ class RunExecutor:
                     successes = self._prior_successes(retry_of)
                     for operation in operations:
                         if UUID(operation.id) in successes:
-                            operation.materializable = False
+                            operation.enabled = False
 
                 dag = il.DAG(*operations)
                 partition = il.TimePartition.from_key(partition_key) if partition_key else None

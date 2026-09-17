@@ -57,7 +57,7 @@ https://docs.interloper.dev/guide/jobs/
    ```
 
    Read the dry-run plan: each numbered line is one generation, parallel operations share a
-   line. A downstream asset on the same line as its upstream, or a `materializable / total`
+   line. A downstream asset on the same line as its upstream, or a `enabled / total`
    count that does not add up, means the edge is not wired. A failed run still leaves the
    completed upstream files under `./data`.
 
@@ -67,9 +67,9 @@ https://docs.interloper.dev/guide/jobs/
 ## Rules that are not obvious
 
 - **`assets:` is a whitelist.** Reconstruction builds only the assets listed in the map; an
-  asset left out does not exist in the run, so `assets: {order_stats: {materializable: false}}`
+  asset left out does not exist in the run, so `assets: {order_stats: {enabled: false}}`
   removes `orders`, not `order_stats`. Use `select:` to restrict what runs. Use `assets:` only
-  for per-asset overrides (`id`, `materializable`, `destinations`, a bound upstream) and list
+  for per-asset overrides (`id`, `enabled`, `destinations`, a bound upstream) and list
   every asset the run needs.
 - **One reference rule, no flags.** A component that has a parent (an asset, always under its
   source) is `{ref: id}` wherever a relation points at it. A component without one (a
@@ -115,7 +115,7 @@ https://docs.interloper.dev/guide/jobs/
 
 ## Common mistakes
 
-- `materializable: false` to drop an asset: the map is a whitelist and the other assets vanish.
+- `enabled: false` to drop an asset: the map is a whitelist and the other assets vanish.
 - `destinations: [{ref: out}]` on every target: the job's destinations already cascade; write
   a target's own only to override them.
 - Reading `ConfigError: ... is unbound and non-optional` as a bug: it means the job lacks the

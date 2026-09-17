@@ -93,7 +93,7 @@ class TestRunSpecFileMode:
 
         out = capsys.readouterr().out
         assert "2026-06-01" in out
-        assert "1 materializable / 1 total" in out
+        assert "1 enabled / 1 total" in out
         assert "1. fake_run_source.one" in out
 
     def test_source_spec_is_runnable_directly(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -202,7 +202,7 @@ class TestRunJobSpecMode:
         _cmd_run(_args(file=str(spec_file), dry_run=True))
 
         out = capsys.readouterr().out
-        assert "1 materializable / 1 total" in out
+        assert "1 enabled / 1 total" in out
         assert "1. fake_run_source.one" in out
 
     def test_job_spec_run_materializes(self, tmp_path: Path) -> None:

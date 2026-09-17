@@ -59,8 +59,6 @@ _VARIADIC_KINDS = (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITION
 
 
 warnings.filterwarnings("ignore", message='Field name "schema" in "AssetDefinition"')
-# Deliberate: Asset refines the Operation node protocol's plain defaults into real fields.
-warnings.filterwarnings("ignore", message='Field name "materializable" in "Asset"')
 
 
 class AssetDefinition(ComponentDefinition):
@@ -313,7 +311,7 @@ class Asset(Operation):
         self,
         *,
         id: str | None = None,
-        materializable: bool | None = None,
+        enabled: bool | None = None,
         dataset: str | None = None,
         default_destination_key: str | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
@@ -330,12 +328,12 @@ class Asset(Operation):
         with a ``ConfigError``, since it cannot be left empty.
 
         The copy carries this asset's own bindings and parent, so a copy made
-        to flip one field (the non-materializable parents of a mini-DAG, say)
+        to flip one field (the disabled parents of a mini-DAG, say)
         still reads from the same destinations and upstreams.
 
         Args:
             id: New component id for the copy.
-            materializable: Whether the copy writes to destinations at all.
+            enabled: Whether the copy executes; a disabled copy is read-only.
             dataset: Dataset (schema/namespace) the asset materializes into.
             default_destination_key: When the asset has several destinations,
                 the one downstream assets read it from.
@@ -358,8 +356,8 @@ class Asset(Operation):
         overrides: dict[str, Any] = {}
         if id is not None:
             overrides["id"] = id
-        if materializable is not None:
-            overrides["materializable"] = materializable
+        if enabled is not None:
+            overrides["enabled"] = enabled
         if dataset is not None:
             overrides["dataset"] = dataset
         if default_destination_key is not None:
@@ -510,7 +508,7 @@ class Asset(Operation):
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
-            The execution result, or ``None`` if the asset is not materializable.
+            The execution result, or ``None`` if the asset is disabled.
         """
         return concurrency.run(self.materialize_async(partition_or_window, dag, metadata))
 
@@ -528,9 +526,9 @@ class Asset(Operation):
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
-            The execution result, or ``None`` if the asset is not materializable.
+            The execution result, or ``None`` if the asset is disabled.
         """
-        if not self.materializable:
+        if not self.enabled:
             return None
 
         metadata = metadata or {}

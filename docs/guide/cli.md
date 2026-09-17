@@ -59,7 +59,7 @@ Run and operation events flow through the logging stack, sharing one format and 
 ordinary log lines on stderr:
 
 ```
-19:39:52.368 INFO    Running DAG with 3 materializable operation(s) (3 total) using AsyncRunner
+19:39:52.368 INFO    Running DAG with 3 enabled operation(s) (3 total) using AsyncRunner
 19:39:52.370 INFO    RUN_STARTED      -  Run started (3 operations)
 19:39:52.370 INFO    OPERATION_STARTED users  Operation 'users' started
 19:39:52.371 INFO    OPERATION_STARTED orders  Operation 'orders' started

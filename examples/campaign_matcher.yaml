@@ -31,11 +31,11 @@ init:
             access_token: ${FACEBOOK_ADS_ACCESS_TOKEN}
             app_id: ${FACEBOOK_ADS_APP_ID}
             app_secret: ${FACEBOOK_ADS_APP_SECRET}
-        # materializable: false keeps this asset read-only in this job: it is
+        # enabled: false keeps this asset read-only in this job: it is
         # never run here, only read back so campaign_matches below can fan it
         # in alongside the other connector's campaigns.
         assets:
-          campaigns: {id: fb-campaigns, materializable: false}
+          campaigns: {id: fb-campaigns, enabled: false}
 
     - key: tiktok_ads
       init:
@@ -45,7 +45,7 @@ init:
           init:
             access_token: ${TIKTOK_ADS_ACCESS_TOKEN}
         assets:
-          campaigns: {id: tt-campaigns, materializable: false}
+          campaigns: {id: tt-campaigns, enabled: false}
 
     - key: campaign_matcher
       init:
