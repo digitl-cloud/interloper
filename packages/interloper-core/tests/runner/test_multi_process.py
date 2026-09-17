@@ -240,6 +240,11 @@ class TestRun:
 
     def test_a_child_retry_reaches_the_parent_as_events(self, importable_in_children: None) -> None:
         il.MemoryDestination.clear()
+        # A pool that forks (Linux) hands the child this module's state as the
+        # parent left it, so an earlier test's attempts would make the asset
+        # succeed first try here. A pool that spawns (macOS) re-imports and
+        # would not. Clearing makes the test read the same under both.
+        _FLAKY_ATTEMPTS.clear()
         runner = MultiProcessRunner(max_workers=1)
         events: list[Event] = []
 
