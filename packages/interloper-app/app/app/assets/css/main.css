@@ -107,8 +107,11 @@
     --id-chip-text: #1b5fbf;
     --graph-model: #6c5ce7;
     --graph-card-shadow: 0 2px 8px rgb(11 42 66 / 0.07);
+    --graph-card-shadow-raised: 0 6px 16px rgb(11 42 66 / 0.11);
     --graph-asset-shadow: 0 1px 4px rgb(11 42 66 / 0.06);
+    --graph-asset-shadow-raised: 0 4px 12px rgb(11 42 66 / 0.1);
     --graph-layer-shadow: 0 2px 6px rgb(11 42 66 / 0.06);
+    --graph-layer-shadow-raised: 0 4px 10px rgb(11 42 66 / 0.09);
 }
 
 /* Design mono section label ("eyebrow"): pair with a text color utility. */
@@ -194,8 +197,11 @@
     --id-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);
     --graph-model: #9d8ff0;
     --graph-card-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+    --graph-card-shadow-raised: 0 6px 16px rgb(0 0 0 / 0.55);
     --graph-asset-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+    --graph-asset-shadow-raised: 0 4px 12px rgb(0 0 0 / 0.5);
     --graph-layer-shadow: 0 2px 6px rgb(0 0 0 / 0.4);
+    --graph-layer-shadow-raised: 0 4px 10px rgb(0 0 0 / 0.5);
 
     --vf-node-bg: var(--ui-bg-elevated);
     --vf-node-text: var(--color-gray-400);
@@ -214,6 +220,42 @@
 
 .graph-layer {
     box-shadow: var(--graph-layer-shadow);
+}
+
+/* Hovering anywhere on a node lifts it: the top card and the folded layers under
+   it travel together, as one stack. Driven from the node root so the corner
+   badges, which sit over the card but outside it, don't break the hover. Worn by
+   collapsed cards only: an expanded container's members are separate canvas
+   nodes that wouldn't travel with it. */
+.graph-raise,
+.graph-stack-layer {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.graph-node:hover .graph-raise,
+.graph-node:hover .graph-stack-layer {
+    transform: translateY(-2px);
+}
+
+/* Only the floor of the stack deepens its shadow — the one card actually casting
+   onto the canvas. The shadows between the folded layers stay put. */
+.graph-node:hover .graph-layer.graph-stack-floor {
+    box-shadow: var(--graph-layer-shadow-raised);
+}
+
+.graph-node:hover .graph-card.graph-stack-floor {
+    box-shadow: var(--graph-card-shadow-raised);
+}
+
+.graph-node:hover .graph-asset.graph-stack-floor {
+    box-shadow: var(--graph-asset-shadow-raised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .graph-node:hover .graph-raise,
+    .graph-node:hover .graph-stack-layer {
+        transform: none;
+    }
 }
 
 /* Identifier chip: a discriminator or other machine id shown next to a name. */

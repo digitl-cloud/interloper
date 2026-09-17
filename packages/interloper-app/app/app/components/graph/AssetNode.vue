@@ -151,7 +151,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="relative w-[256px] transition-opacity duration-200"
+        <div class="graph-node relative w-[256px] transition-opacity duration-200"
              :class="shouldFade && 'opacity-25'">
             <Handle v-if="showTargetHandle"
                     type="target"
@@ -212,7 +212,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 <div class="text-xs">{{ destinationBadge.label }}</div>
             </GraphCornerBadge>
 
-            <div class="graph-asset overflow-hidden rounded-xl border bg-default"
+            <div class="graph-asset graph-raise graph-stack-floor overflow-hidden rounded-xl border bg-default"
                  :class="frameClass">
                 <div class="flex h-10 items-center gap-[9px] border-b border-[var(--graph-head-line)] bg-elevated px-3.5">
                     <span v-if="standalone"

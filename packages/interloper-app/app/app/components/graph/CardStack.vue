@@ -16,7 +16,10 @@ withDefaults(defineProps<{
     <span v-for="i in layers"
           :key="i"
           aria-hidden="true"
-          class="pointer-events-none absolute rounded-xl border"
-          :class="nested ? 'h-5 border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]' : ['graph-layer h-6 bg-default', borderClass]"
+          class="graph-stack-layer pointer-events-none absolute rounded-xl border"
+          :class="[
+              i === layers && 'graph-stack-floor',
+              nested ? 'h-5 border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]' : ['graph-layer h-6 bg-default', borderClass],
+          ]"
           :style="{ left: `${8 * i}px`, right: `${8 * i}px`, bottom: `${-6 * i}px`, zIndex: -i }" />
 </template>
