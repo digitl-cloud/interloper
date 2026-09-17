@@ -100,6 +100,25 @@ async function onRetry(scope: 'all' | 'failed') {
 
 const fetchError = ref<unknown>(null)
 
+/**
+ * The attempts of this run's stack, newest first, fetched only when there is
+ * more than one. A listing carries a stack's latest attempt, so reaching the
+ * others is what this page adds.
+ */
+const stack = ref<Run[]>([])
+
+async function loadStack(fetched: Run) {
+    const root = fetched.root_run_id
+    if (!root || (fetched.attempt === 1 && root === fetched.id)) return
+    try {
+        stack.value = await runsStore.fetchStack(root)
+    }
+    catch {
+        // The page stands on its own without the stack; losing it is not an error worth showing.
+        stack.value = []
+    }
+}
+
 onMounted(async () => {
     try {
         const [fetchedRun] = await Promise.all([
@@ -118,6 +137,7 @@ onMounted(async () => {
         initialRun.value = fetchedRun
         // Seed the store so realtime updates can find and update it.
         runsStore._upsert(fetchedRun)
+        await loadStack(fetchedRun)
     }
     catch (e) {
         fetchError.value = e
@@ -143,6 +163,17 @@ onUnmounted(() => {
             <StatusPill v-if="run"
                         :label="statusLabel(run.status)"
                         :color="statusPillColor(run.status)" />
+            <div v-if="stack.length > 1"
+                 class="flex items-center gap-1">
+                <span class="text-[13px] text-dimmed">Attempts</span>
+                <ULink v-for="attempt in stack"
+                       :key="attempt.id"
+                       :to="`/executions/runs/${attempt.id}`"
+                       class="rounded px-1.5 py-0.5 text-[13px] tabular-nums"
+                       :class="attempt.id === runId
+                           ? 'bg-elevated font-semibold text-highlighted'
+                           : 'text-muted hover:text-highlighted'">{{ attempt.attempt }}</ULink>
+            </div>
         </NavTitle>
         <NavActions v-if="run?.status === 'failed'">
             <UButton label="Retry failed"

@@ -84,8 +84,19 @@ const columns: TableColumn<Run>[] = [
         accessorKey: 'status',
         header: 'Status',
         cell: ({ row }) => {
+            const run = row.original as Run
             const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
+            const badge = h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
+            // A row is a stack at its latest attempt, so `attempt` is how many
+            // it took: worth showing only when it took more than one.
+            if (run.attempt <= 1) return badge
+            return h('div', { class: 'flex items-center gap-1.5' }, [
+                badge,
+                h('span', {
+                    class: 'text-xs text-muted tabular-nums',
+                    title: `This work took ${run.attempt} attempts`,
+                }, `${run.attempt} attempts`),
+            ])
         },
     },
     {

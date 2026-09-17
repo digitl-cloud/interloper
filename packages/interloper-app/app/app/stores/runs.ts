@@ -36,13 +36,26 @@ export const useRunsStore = defineStore('runs', () => {
     /**********************
      * Internals
      **********************/
+    /**
+     * A listing holds one row per stack, its latest attempt. So a run arriving
+     * over realtime either updates its own row, supersedes the earlier attempt
+     * of the stack it belongs to, or is new work.
+     */
     function _upsert(run: Run) {
         const idx = runs.value.findIndex(r => r.id === run.id)
-        if (idx >= 0) runs.value[idx] = { ...runs.value[idx], ...run }
-        else {
-            runs.value.unshift(run)
-            total.value++
+        if (idx >= 0) {
+            runs.value[idx] = { ...runs.value[idx], ...run }
+            return
         }
+        const predecessor = run.root_run_id
+            ? runs.value.findIndex(r => (r.root_run_id ?? r.id) === run.root_run_id)
+            : -1
+        if (predecessor >= 0) {
+            runs.value[predecessor] = run
+            return
+        }
+        runs.value.unshift(run)
+        total.value++
     }
 
     function _remove(id: string) {
@@ -105,6 +118,12 @@ export const useRunsStore = defineStore('runs', () => {
 
     async function fetchOne(id: string): Promise<Run> {
         return apiFetch<Run>(`/runs/${id}`)
+    }
+
+    /** Every attempt of one stack, newest first. A listing only ever carries the latest. */
+    async function fetchStack(rootRunId: string): Promise<Run[]> {
+        const params = new URLSearchParams({ root_run_id: rootRunId })
+        return apiFetch<Run[]>(`/runs?${params}`)
     }
 
     /** Queue a manual run for a runnable component (job, source, or asset). Returns the created run's id. */
@@ -176,6 +195,7 @@ export const useRunsStore = defineStore('runs', () => {
         fetch,
         fetchOne,
         createRun,
+        fetchStack,
         retryRun,
         goToPage,
         setFilters,
