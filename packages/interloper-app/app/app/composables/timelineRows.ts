@@ -14,17 +14,6 @@ const JOB_ICON = 'i-lucide-calendar-clock'
 const DELETED_ICON = 'i-lucide-circle-slash'
 const DELETED_LABEL = 'Deleted target'
 
-/** Sort weight: assets that ran sort first, non-started assets sink to the bottom. */
-const STATUS_WEIGHT: Record<string, number> = {
-    success: 0,
-    running: 1,
-    failed: 2,
-    canceled: 3,
-    skipped: 4,
-    queued: 5,
-    pending: 5,
-}
-
 /** Statuses that will never advance — the bar they carry is closed. */
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'skipped'])
 
@@ -45,7 +34,7 @@ function bounds(
     return { start, end: completed ?? (TERMINAL_STATUSES.has(status) ? start : null) }
 }
 
-/** One row per asset execution of a single run, ordered as its timeline reads best. */
+/** One row per asset execution of a single run, ordered by start time, never-started assets last. */
 export function useExecutionRows(
     executions: MaybeRefOrGetter<Execution[]>,
 ): ComputedRef<TimelineRow[]> {
@@ -67,10 +56,10 @@ export function useExecutionRows(
             }
         })
         .sort((a, b) => {
-            const wa = STATUS_WEIGHT[a.status] ?? 9
-            const wb = STATUS_WEIGHT[b.status] ?? 9
-            if (wa !== wb) return wa - wb
-            return (a.bars[0]?.start ?? Infinity) - (b.bars[0]?.start ?? Infinity)
+            const sa = a.bars[0]?.start ?? Infinity
+            const sb = b.bars[0]?.start ?? Infinity
+            if (sa !== sb) return sa - sb
+            return byName(a, b)
         }))
 }
 
