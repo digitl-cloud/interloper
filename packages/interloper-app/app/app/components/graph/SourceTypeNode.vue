@@ -46,7 +46,7 @@ const issueCount = computed(() =>
 </script>
 
 <template>
-    <div class="relative h-full w-full">
+    <div class="graph-node relative h-full w-full">
         <Handle id="group-target"
                 type="target"
                 :position="Position.Left"
@@ -64,7 +64,8 @@ const issueCount = computed(() =>
         <div class="relative isolate h-full w-full">
             <GraphCardStack v-if="!open"
                             :layers="layers" />
-            <div class="graph-card relative z-[1] flex h-full w-full flex-col rounded-2xl border border-[var(--graph-card-line)] bg-default">
+            <div class="graph-card relative z-[1] flex h-full w-full flex-col rounded-2xl border border-[var(--graph-card-line)] bg-default"
+                 :class="[!open && 'graph-raise', !open && layers === 0 && 'graph-stack-floor']">
                 <div class="flex h-[76px] shrink-0 items-center gap-3.5 px-5">
                     <div class="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-elevated">
                         <UIcon :name="icon"

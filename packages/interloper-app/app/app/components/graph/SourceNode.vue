@@ -125,14 +125,19 @@ const isMaterializing = computed(() =>
 
 const headHeight = computed(() => props.nested ? 64 : 84)
 const showChip = computed(() => !!props.source.discriminator && props.source.discriminator !== props.source.name)
-const frameClass = computed(() => props.nested
-    ? 'rounded-[14px] border border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]'
-    : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-default', props.selected && 'outline-2 outline-primary outline-offset-4'])
+const frameClass = computed(() => [
+    collapsed.value && 'graph-raise',
+    // With layers folded under it the card is no longer what the stack casts from.
+    collapsed.value && props.layers === 0 && 'graph-stack-floor',
+    props.nested
+        ? 'rounded-[14px] border border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]'
+        : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-default', props.selected && 'outline-2 outline-primary outline-offset-4'],
+])
 </script>
 
 <template>
     <UContextMenu :items="graphReadonly ? [] : contextMenuItems">
-        <div class="relative h-full w-full transition-opacity duration-200"
+        <div class="graph-node relative h-full w-full transition-opacity duration-200"
              :class="shouldFade && 'opacity-25'">
             <Handle id="source-target"
                     type="target"
