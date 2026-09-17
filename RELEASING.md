@@ -97,24 +97,30 @@ All workspace packages are published:
 
 ## Docker images (GitHub Container Registry)
 
-The `docker` job builds one image per role and pushes it to GHCR. Flavored
-variants (extra-bearing builds) ride the **tag** as a `-<flavor>` suffix on the
-same image rather than a separate image name. The matrix mirrors the image
-catalog in the [`Makefile`](Makefile) (`ROLES` + `FLAVORS_*`) — keep the two in
-sync if a role or flavor is added or removed.
+The `docker` job builds one image per role and pushes it to GHCR. Each role
+ships two variants: the **loaded** image on the bare tag, carrying the role's
+packages plus every component class a catalog can name (the vendor SDKs only
+on the roles that execute assets), and the extras-free **slim** one on a
+`-slim` tag. The matrix
+mirrors the image catalog in the [`Makefile`](Makefile) (`ROLES` +
+`SLIM_ROLES`), keep the two in sync if a role or variant is added or removed.
+No build args are passed: the dockerfile's `ARG` defaults define what loaded
+means, and the slim stages declare no extras `ARG` at all.
 
-| Image:tag | Dockerfile target | Build arg |
+| Image:tag | Dockerfile target | Carries |
 | --- | --- | --- |
-| `ghcr.io/<owner>/interloper-api:<version>` | `api` | — |
-| `ghcr.io/<owner>/interloper-api:<version>-agent` | `api` | `API_EXTRAS=agent` |
+| `ghcr.io/<owner>/interloper-api:<version>` | `api` | assets, destinations, Slack, agent, otel |
+| `ghcr.io/<owner>/interloper-api:<version>-slim` | `api-slim` | core + db + api |
 | `ghcr.io/<owner>/interloper-frontend:<version>` | `frontend` | nginx serving the built SPA |
-| `ghcr.io/<owner>/interloper-worker:<version>` | `worker` | — |
-| `ghcr.io/<owner>/interloper-scheduler:<version>` | `scheduler` | no launcher extras |
-| `ghcr.io/<owner>/interloper-scheduler:<version>-k8s` | `scheduler` | `SCHEDULER_EXTRAS=k8s` |
-| `ghcr.io/<owner>/interloper-scheduler:<version>-docker` | `scheduler` | `SCHEDULER_EXTRAS=docker` |
+| `ghcr.io/<owner>/interloper-core:<version>` | `core` | assets + vendor SDKs, destinations, otel |
+| `ghcr.io/<owner>/interloper-core:<version>-slim` | `core-slim` | the framework alone |
+| `ghcr.io/<owner>/interloper-scheduler:<version>` | `scheduler` | assets + vendor SDKs, destinations, both launchers, otel |
+| `ghcr.io/<owner>/interloper-scheduler:<version>-slim` | `scheduler-slim` | core + db + scheduler |
+| `ghcr.io/<owner>/interloper-mcp:<version>` | `mcp` | assets, destinations, otel |
+| `ghcr.io/<owner>/interloper-mcp:<version>-slim` | `mcp-slim` | core + db + toolkit + mcp |
 
-Each image is tagged with the released version (and `-<flavor>` variants). On
-**stable** releases the `latest` / `latest-<flavor>` tags are also moved;
+Each image is tagged with the released version (plus the `-slim` variant). On
+**stable** releases the `latest` / `latest-slim` tags are also moved;
 release candidates push the version tags only.
 
 One-time setup: the first push creates each package as **private** and not yet

@@ -30,7 +30,7 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.api.terminationGracePeriodSeconds }}
       containers:
         - name: api
-          image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image "flavor" (include "interloper.apiFlavor" .)) }}
+          image: {{ include "interloper.image" (dict "root" . "component" "api" "image" .Values.api.image) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["interloper"]
           args:

@@ -45,70 +45,59 @@ build-app:
 
 REGISTRY      := europe-docker.pkg.dev/dc-int-connectors-prd/docker
 VERSION       := $(shell python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-CORE_EXTRAS   ?= google-cloud
-ASSETS_EXTRAS ?= bing,facebook,google
-COMMON_EXTRAS ?= otel
+# Extras are build args of the dockerfile, which is the single source of truth
+# for what a loaded image carries. Set one here to override it for a local
+# build (e.g. `make docker-build-api CORE_EXTRAS=google-cloud`); left unset,
+# the dockerfile default is what ships.
+CORE_EXTRAS      ?=
+ASSETS_EXTRAS    ?=
+SCHEDULER_EXTRAS ?=
+API_EXTRAS       ?=
+COMMON_EXTRAS    ?=
 
-# Image catalog. Each role is its own repository "interloper-<role>"; flavors
-# (extra-bearing variants) ride the TAG, not the image name:
-#   interloper-<role>:<version>            base image (no flavor extras)
-#   interloper-<role>:<version>-<flavor>   flavored variant
-# plus the matching "latest" / "latest-<flavor>" tags on stable releases.
+# Only what is explicitly set above reaches docker: the slim stages declare no
+# extras ARG at all, so passing one there would only warn about an unconsumed
+# build arg.
+EXTRAS_ARGS := $(foreach e,CORE_EXTRAS ASSETS_EXTRAS SCHEDULER_EXTRAS API_EXTRAS COMMON_EXTRAS,\
+                 $(if $($(e)),--build-arg $(e)=$($(e))))
+
+# Image catalog. Each role is its own repository "interloper-<role>", and each
+# Python role ships two variants: the loaded image on the bare tag, and the
+# extras-free one on a "-slim" tag.
+#   interloper-<role>:<version>        loaded (every extra the role can use)
+#   interloper-<role>:<version>-slim   slim (core + the role's own packages)
+# plus the matching "latest" / "latest-slim" tags on stable releases.
+# Each stem here is also the dockerfile target that builds it.
 # NOTE: the `docker` job matrix in .github/workflows/publish.yaml mirrors this
-# catalog — update both together when adding or removing a role or flavor.
-ROLES := api frontend worker scheduler mcp
+# catalog; update both together when adding or removing a role or variant.
+ROLES := api frontend core scheduler mcp
 
-# Flavors per role, and the build-arg that carries a flavor's extra. A role
-# with no FLAVORS_<role> builds only its base image.
-FLAVORS_api          := agent
-FLAVORS_scheduler    := k8s docker
-EXTRAS_ARG_api       := API_EXTRAS
-EXTRAS_ARG_scheduler := SCHEDULER_EXTRAS
+# The frontend is nginx serving static files: nothing optional to strip, so it
+# ships as a single image.
+SLIM_ROLES := api core scheduler mcp
 
-# All flavor tokens, used to split a "<role>-<flavor>" stem back apart.
-ALL_FLAVORS := $(sort $(foreach r,$(ROLES),$(FLAVORS_$(r))))
+TARGETS := $(ROLES) $(addsuffix -slim,$(SLIM_ROLES))
 
-# Concrete target stems built by `docker-build`: every role plus each
-# "<role>-<flavor>" pair → api api-agent frontend worker scheduler mcp
-# scheduler-k8s scheduler-docker.
-TARGETS := $(ROLES) \
-           $(foreach r,$(ROLES),$(foreach f,$(FLAVORS_$(r)),$(r)-$(f)))
-
-# Parse a stem (e.g. "scheduler-k8s") into flavor + role. Flavor is empty for
-# base stems ("scheduler", "api", …).
-flavor_of = $(lastword $(filter $(ALL_FLAVORS),$(subst -, ,$(1))))
-role_of   = $(if $(call flavor_of,$(1)),$(patsubst %-$(call flavor_of,$(1)),%,$(1)),$(1))
-
-# One image name per role; the flavor (when any) rides the tag.
+# Split a stem ("scheduler-slim") back into its role and variant.
+is_slim   = $(filter %-slim,$(1))
+role_of   = $(patsubst %-slim,%,$(1))
 image_of  = interloper-$(call role_of,$(1))
-tag_of    = $(VERSION)$(if $(call flavor_of,$(1)),-$(call flavor_of,$(1)))
-latest_of = latest$(if $(call flavor_of,$(1)),-$(call flavor_of,$(1)))
-
-# Build-arg injecting the flavor's extra, scoped to the role that defines it
-# (e.g. "--build-arg API_EXTRAS=agent"). Roles with an extras arg always get
-# it set — empty for the base stem — so the dockerfile default can't leak in
-# (SCHEDULER_EXTRAS defaults to "docker" there).
-extras_arg = $(if $(EXTRAS_ARG_$(call role_of,$(1))),--build-arg $(EXTRAS_ARG_$(call role_of,$(1)))=$(call flavor_of,$(1)))
+tag_of    = $(VERSION)$(if $(call is_slim,$(1)),-slim)
+latest_of = latest$(if $(call is_slim,$(1)),-slim)
 
 # Pattern rules. Order matters on macOS' GNU make 3.81 (no shortest-stem):
 # the more specific docker-build-linux-% must come first.
 docker-build-linux-%:
-	docker build --target $(call role_of,$*) -f dockerfile --platform linux/amd64 \
-		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
-		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
-		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
-		$(call extras_arg,$*) \
+	docker build --target $* -f dockerfile --platform linux/amd64 \
+		$(EXTRAS_ARGS) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \
 		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \
 		-t $(REGISTRY)/$(call image_of,$*):$(call latest_of,$*) .
 
 docker-build-%:
-	docker build --target $(call role_of,$*) -f dockerfile \
-		--build-arg CORE_EXTRAS=$(CORE_EXTRAS) \
-		--build-arg ASSETS_EXTRAS=$(ASSETS_EXTRAS) \
-		--build-arg COMMON_EXTRAS=$(COMMON_EXTRAS) \
-		$(call extras_arg,$*) \
+	docker build --target $* -f dockerfile \
+		$(EXTRAS_ARGS) \
 		-t $(call image_of,$*):$(call tag_of,$*) \
 		-t $(call image_of,$*):$(call latest_of,$*) \
 		-t $(REGISTRY)/$(call image_of,$*):$(call tag_of,$*) \

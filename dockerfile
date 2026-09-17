@@ -4,47 +4,72 @@
 #
 # Targets (build with: docker build --target <target> .):
 #
-#   core       interloper-core only (lightest)
-#   scheduler  core + db + scheduler + assets (cron + worker + reaper)
-#   worker     core + assets only (per-asset Job target for runner.type=kubernetes)
-#   api        core + db + api (assets installed; SDK extras skipped)
-#   mcp        core + db + toolkit + mcp (read-only MCP server, PAT auth)
-#   frontend   pre-built Nuxt SPA served by nginx
+# Every runtime role ships in two variants:
+#
+#   <role>          loaded: the role's packages, plus every component class a
+#                   catalog can name, plus what the role runs on
+#   <role>-slim     pure: core plus the role's own packages, nothing optional
+#
+#   core            the framework + assets (per-asset Job target for runner.type=kubernetes)
+#   core-slim       the framework and nothing else
+#   scheduler       core + db + scheduler + assets (cron + queue worker + reaper)
+#   scheduler-slim  core + db + scheduler (in-process launcher only)
+#   api             core + db + api + agent (assets installed; SDK extras skipped)
+#   api-slim        core + db + api
+#   mcp             core + db + toolkit + mcp (read-only MCP server, PAT auth)
+#   mcp-slim        core + db + toolkit + mcp, no assets
+#   frontend        pre-built Nuxt SPA served by nginx (single variant)
+#
+# Two rules decide what a loaded image carries. Any role that builds a catalog
+# must be able to import every class a catalog can name, which is why the api
+# and mcp ship sources, destinations and hooks they never execute: they
+# describe them, and a class that fails to import is skipped with a warning
+# rather than an error. The vendor SDKs are the exception, since their imports
+# are guarded: only the roles that actually execute assets (scheduler, core)
+# carry them, which is what keeps the api and mcp images a fraction of the size.
+#
+# The slim variants are a base to extend, not a smaller deployment: no vendor
+# SDKs, no destinations, no launcher beyond in-process, no telemetry SDK, and
+# no ready-made sources. A deployment layers exactly the packages it needs on
+# top of one. See "Extending an image" in the docs.
 #
 # The static documentation site has its own standalone build: docs.dockerfile.
 #
-# Tagging convention: one image per role, flavors ride the tag.
-#   docker build --target scheduler -t interloper-scheduler:0.2.0 .        # base
-#   docker build --target scheduler --build-arg SCHEDULER_EXTRAS=k8s \
-#       -t interloper-scheduler:0.2.0-k8s .                                # flavored
-#   docker build --target api --build-arg API_EXTRAS=agent \
-#       -t interloper-api:0.2.0-agent .
+# Tagging convention: one image per role, the slim variant rides the tag.
+#   docker build --target scheduler      -t interloper-scheduler:0.2.0 .
+#   docker build --target scheduler-slim -t interloper-scheduler:0.2.0-slim .
 #
-# Build args:
-#   CORE_EXTRAS       comma-separated interloper-core extras (default: google-cloud)
-#                     Each extra maps to --package interloper-{name}.
+# Build args carry what "loaded" means and are the single source of truth for
+# it: the Makefile and the publish workflow pass none, so these defaults are
+# what ships. The slim stages declare no extras ARG at all, so none of this
+# can reach them (an ARG is only in scope where it is redeclared).
+#
+#   CORE_EXTRAS       comma-separated interloper-core extras
+#                     (default: google-cloud,slack). Each extra maps to
+#                     --package interloper-{name}.
 #   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
 #                     Each extra maps to --extra {name} on interloper-assets.
 #                     Pass "" to disable.
-#   SCHEDULER_EXTRAS  comma-separated interloper-scheduler extras (default: docker)
-#                     Supported: docker, k8s.  Each extra pulls in the
-#                     corresponding launcher/runner package. Pass "" for the
-#                     base scheduler (in-process launcher, no extras).
-#   API_EXTRAS        comma-separated interloper-api extras (default: none).
-#                     Supported: agent (bundles interloper-agent so the
-#                     /agent routes mount). Each maps to --extra {name}.
+#   SCHEDULER_EXTRAS  comma-separated interloper-scheduler extras (default: docker,k8s).
+#                     Each extra pulls in the corresponding launcher/runner
+#                     package; the loaded image carries both, and
+#                     launcher.type picks between them at runtime.
+#   API_EXTRAS        comma-separated interloper-api extras (default: agent).
+#                     agent bundles interloper-agent so the /agent routes
+#                     mount; agent.enabled still gates them at runtime.
 #   COMMON_EXTRAS     comma-separated extras defined by several workspace
 #                     packages (default: otel). Each maps to --extra {name},
-#                     applied to whichever selected packages carry it —
+#                     applied to whichever selected packages carry it:
 #                     otel lands the SDK/exporters via core plus the
 #                     FastAPI/SQLAlchemy instrumentors via api/db where
 #                     those packages are in the image. Pass "" to disable.
 #
 # ================================================================
 
-ARG CORE_EXTRAS=google-cloud
+ARG CORE_EXTRAS=google-cloud,slack
 ARG ASSETS_EXTRAS=bing,facebook,google
-ARG SCHEDULER_EXTRAS=docker
+ARG SCHEDULER_EXTRAS=docker,k8s
+ARG API_EXTRAS=agent
 ARG COMMON_EXTRAS=otel
 
 
@@ -70,6 +95,7 @@ COPY packages/interloper-agent/pyproject.toml       packages/interloper-agent/py
 COPY packages/interloper-pandas/pyproject.toml      packages/interloper-pandas/pyproject.toml
 COPY packages/interloper-mcp/pyproject.toml         packages/interloper-mcp/pyproject.toml
 COPY packages/interloper-toolkit/pyproject.toml     packages/interloper-toolkit/pyproject.toml
+COPY packages/interloper-slack/pyproject.toml       packages/interloper-slack/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────
@@ -83,20 +109,9 @@ ENV PATH="/interloper/.venv/bin:$PATH"
 # BUILD STAGES
 # ================================================================
 
-# ── core ──────────────────────────────────────────────────────
-FROM base AS build-core
-ARG COMMON_EXTRAS
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh --frozen interloper-core
-COPY . .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    docker/uv-sync.sh interloper-core
-
-
 # ── scheduler ─────────────────────────────────────────────────
-# One image runs cron + queue worker + reaper in the same process.
-# Launcher extras (docker | k8s | none) are picked at build time.
+# One image runs cron + queue worker + reaper in the same process. It carries
+# both launchers; launcher.type picks between them at runtime.
 FROM base AS build-scheduler
 ARG CORE_EXTRAS
 ARG ASSETS_EXTRAS
@@ -110,11 +125,23 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-scheduler
 
 
-# ── worker (leaf per-asset Job target) ────────────────────────
+# ── scheduler-slim ────────────────────────────────────────────
+# No extras ARG is declared here, so none is in scope and the venv gets the
+# named packages alone: the in-process launcher, and no sources to run.
+FROM base AS build-scheduler-slim
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core interloper-db interloper-scheduler
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core interloper-db interloper-scheduler
+
+
+# ── core (the framework itself; leaf per-asset Job target) ────
 # Used as runner.config.image when runner.type=kubernetes. Executes a single
 # mini-DAG via `interloper run --format inline`. No DB, no scheduler,
-# no launcher — just core + assets + destinations + pandas.
-FROM base AS build-worker
+# no launcher: core + assets + destinations + pandas.
+FROM base AS build-core
 ARG CORE_EXTRAS
 ARG ASSETS_EXTRAS
 ARG COMMON_EXTRAS
@@ -124,6 +151,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets
+
+
+# ── core-slim ─────────────────────────────────────────────────
+# The framework alone, the base every other slim image builds on.
+FROM base AS build-core-slim
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core
 
 
 # ── api ───────────────────────────────────────────────────────
@@ -145,6 +183,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-api
 
 
+# ── api-slim ──────────────────────────────────────────────────
+FROM base AS build-api-slim
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core interloper-db interloper-api
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core interloper-db interloper-api
+
+
 # ── mcp ───────────────────────────────────────────────────────
 # Like the api, the MCP server only reads catalog metadata — assets stay
 # importable but the heavy SDK extras are skipped. google-adk is never
@@ -159,6 +207,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     docker/uv-sync.sh interloper-core interloper-assets interloper-db interloper-toolkit interloper-mcp
+
+
+# ── mcp-slim ──────────────────────────────────────────────────
+FROM base AS build-mcp-slim
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh --frozen interloper-core interloper-db interloper-toolkit interloper-mcp
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    docker/uv-sync.sh interloper-core interloper-db interloper-toolkit interloper-mcp
 
 
 # ── frontend (Nuxt SPA, built static) ────────────────────────
@@ -185,21 +243,25 @@ RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 # RUNTIME STAGES
 # ================================================================
 
-# ── core ──────────────────────────────────────────────────────
-FROM runtime AS core
-COPY --from=build-core --chown=app:app /interloper/.venv /interloper/.venv
-USER app
-CMD ["interloper"]
-
 # ── scheduler (cron + worker + reaper; singleton) ─────────────
 FROM runtime AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
-# ── worker (per-asset Job target; runner.type=kubernetes only) ───────
-FROM runtime AS worker
-COPY --from=build-worker --chown=app:app /interloper/.venv /interloper/.venv
+FROM runtime AS scheduler-slim
+COPY --from=build-scheduler-slim --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
+
+# ── core (the framework; also the per-asset Job target) ───────
+FROM runtime AS core
+COPY --from=build-core --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+CMD ["interloper"]
+
+FROM runtime AS core-slim
+COPY --from=build-core-slim --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper"]
 
@@ -210,9 +272,21 @@ USER app
 EXPOSE 3000
 CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
 
+FROM runtime AS api-slim
+COPY --from=build-api-slim --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+EXPOSE 3000
+CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
+
 # ── mcp (streamable-HTTP MCP server; horizontally scalable) ───
 FROM runtime AS mcp
 COPY --from=build-mcp --chown=app:app /interloper/.venv /interloper/.venv
+USER app
+EXPOSE 3001
+CMD ["interloper-mcp"]
+
+FROM runtime AS mcp-slim
+COPY --from=build-mcp-slim --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 EXPOSE 3001
 CMD ["interloper-mcp"]

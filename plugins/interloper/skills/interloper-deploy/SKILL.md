@@ -93,8 +93,8 @@ and https://docs.interloper.dev/ui/running/
 
 | Need | Use |
 |------|-----|
-| Containers | `ghcr.io/digitl-cloud/interloper-<role>:<version>` for `api` (`-agent` flavour), `frontend`, `worker`, `scheduler` (`-k8s`, `-docker` flavours), `mcp` |
-| Kubernetes | `helm repo add interloper https://docs.interloper.dev` then `helm install interloper interloper/interloper`; `launcher.type` selects the scheduler flavour |
+| Containers | `ghcr.io/digitl-cloud/interloper-<role>:<version>` (loaded) or `:<version>-slim` (core + the role's own packages), for `api`, `frontend`, `core`, `scheduler`, `mcp` |
+| Kubernetes | `helm repo add interloper https://docs.interloper.dev` then `helm install interloper interloper/interloper`; the loaded scheduler carries every launcher, so `launcher.type` is a runtime setting |
 | Runner for in-process runs | `runner: {type: async, config: {max_workers: 8}}`; types `async`, `serial`, `multi_process`, plus registered keys such as `k8s` |
 | Who can sign up | `auth.allowed_domains`; first login of a listed `super_admin_emails` address is promoted |
 | Local http | `INTERLOPER_AUTH_COOKIE_SECURE=false` |
