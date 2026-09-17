@@ -641,7 +641,7 @@ class TestReadOnlyUpstreams:
         node = dag.operation_map[fb.campaigns.id]
         assert node.materializable is False
         assert node is not fb.campaigns
-        assert node.source is fb
+        assert node.parent is fb
         assert dag.get_predecessors(matcher.campaign_matches.id) == [fb.campaigns.id]
 
     def test_unbound_wildcard_binds_every_candidate_in_dag(self):

@@ -61,8 +61,6 @@ class Operation(Component, Workload):
 
     materializable: bool = Field(default=True, json_schema_extra={"x-hidden": True})
 
-    @property
-    def source(self) -> Any: ...             # None; Asset narrows it to its parent
     def operations(self) -> list[Operation]: ...
     def effective_partition(self, partition_or_window): ...
     def upstream_relations(self) -> dict[str, Relation]: ...
@@ -113,12 +111,20 @@ its form. `materializable` therefore carries `x-hidden`, and every later field o
 make the same decision deliberately. This is the real cost of the change and the reason to keep
 `Operation`'s field surface minimal.
 
-**`source` versus `parent`.** The DAG and the run state both read `operation.source` on any node,
-including a `Connection` no source owns, so the default stays. It becomes a property returning
-`None` rather than a class attribute: pydantic rejects a bare un-annotated attribute, and a
-`ClassVar` that `Asset` overrides with a property is an invalid override under `ty`. `Component.parent`
-now covers the same ground, and collapsing the two is a follow-up rather than something smuggled in
-here.
+**`source` collapses into `parent`.** `Asset.source` is literally `cast("Source | None",
+self.parent)`, so a `source` on `Operation` is a second name for `Component.parent` living on a
+contract where it is false for every implementor but one, with a `None` that is a null object rather
+than an answer. The same shape as `qualified_key`, and it goes the same way.
+
+Both generic readers want ownership, not source-ness. `DAG.to_spec` reads it to decide what to
+serialize (no owner means the node's own spec, an owner means the owner's spec once, deduped), which
+is the ownership rule `Component` already defines. `RunState._operation_event_metadata` stamps the
+owner's id. Both now read `operation.parent`.
+
+`Asset.source` stays: a typed accessor narrowing `parent` to `Source` on the one class where that
+holds, and part of the authoring surface, since `@il.asset` injects `self.source` into `data()`. A
+domain alias on the class where it is true is not the smell; hoisting it onto a contract where it is
+not is.
 
 ---
 
@@ -137,8 +143,11 @@ here.
 
 ## 6. Follow-ups, recorded
 
-- **`Operation.source` collapses into `Component.parent`**, once it is confirmed that every read of
-  `operation.source` means "the source that owns this node".
+- **The `source_id` event key.** `RunState` stamps the owner's id under `source_id`, and telemetry
+  reads it as `interloper.source.id`. That is correct while assets are the only owned operations, but
+  the key is named for a guarantee the model does not make. Renaming it to `parent_id` is right and
+  touches the event stream that telemetry and downstream consumers read, so it wants its own change.
+- **`DAG.to_spec` duplicates the owner rule** that `Component` serialization already implements.
 - **Explicit kinds everywhere.** With `Asset` and `Connection` declaring theirs, the auto-derivation
   in `__init_subclass__` serves only `Source`, `Job`, `Hook`, `Destination` and `Config`. Dropping it
   entirely in favour of an explicit declaration per anchor would remove a piece of magic, and is a

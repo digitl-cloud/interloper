@@ -461,14 +461,14 @@ class DAG:
         """
         context = SerializationContext(cast("list[Component]", self.operations))
         items: list[Spec] = []
-        written_sources: set[str] = set()
+        written_owners: set[str] = set()
         for operation in self.operations:
-            source = operation.source
-            if source is None:
+            owner = operation.parent
+            if owner is None:
                 items.append(operation.to_spec(context=context))
-            elif source.id not in written_sources:
-                written_sources.add(source.id)
-                items.append(source.to_spec(context=context))
+            elif owner.id not in written_owners:
+                written_owners.add(owner.id)
+                items.append(owner.to_spec(context=context))
         return DAGSpec(items=items)
 
     @classmethod
