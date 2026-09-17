@@ -1331,6 +1331,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#images" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Images
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-an-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Extending an image
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#one-process" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2026,30 +2048,87 @@ platform needs the core.</p>
 </tr>
 </tbody>
 </table>
-<p>Container images for each role and a Helm chart are published with every release; see the
-repository README.</p>
+<h2 id="images">Images<a class="headerlink" href="#images" title="Permanent link">&para;</a></h2>
+<p>Every release publishes one image per role to <code>ghcr.io/digitl-cloud</code>, plus a Helm chart that
+deploys them. Each image comes in two variants:</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Carries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interloper-&lt;role&gt;:&lt;version&gt;</code></td>
+<td><strong>Loaded</strong>: the role's own packages, every component class a catalog can name (ready-made sources, BigQuery and GCS destinations, the Slack hook) and what the role runs on (both launchers on the scheduler, the agent on the api, telemetry).</td>
+</tr>
+<tr>
+<td><code>interloper-&lt;role&gt;:&lt;version&gt;-slim</code></td>
+<td><strong>Slim</strong>: <code>interloper-core</code> plus the role's own packages, nothing optional. No sources, no destinations, no launcher beyond in-process, no telemetry SDK.</td>
+</tr>
+</tbody>
+</table>
+<p>The roles are <code>api</code>, <code>scheduler</code>, <code>core</code>, <code>mcp</code> and <code>frontend</code> (nginx, single variant). The
+loaded images are what the Helm chart deploys and what a deployment configured from the
+catalog wants: <code>launcher.type</code> and <code>agent.enabled</code> select between things already in the image,
+so switching one is a restart and never a rebuild.</p>
+<p><code>core</code> is the framework itself, with no platform around it: the Kubernetes runner uses it as
+the per-asset Job target, and <code>interloper-core:&lt;version&gt;-slim</code> is <code>interloper-core</code> and nothing
+else, which makes it the base to build on when you ship your own components.</p>
+<p>Two rules decide what a loaded image carries. Any role that builds a catalog must be able to
+import every class the catalog can name, which is why the api and mcp ship sources,
+destinations and hooks they never execute: they <em>describe</em> them, and a class that fails to
+import is skipped with a warning rather than an error, so the answer would quietly be wrong.
+The vendor SDKs (<code>bingads</code>, <code>facebook-business</code>, <code>google-ads</code>) are the exception, because the
+asset modules guard those imports: only the roles that actually execute assets, <code>scheduler</code> and
+<code>core</code>, carry them. That single distinction is why the api and mcp images are a fraction of the
+size of the two that run assets.</p>
+<h2 id="extending-an-image">Extending an image<a class="headerlink" href="#extending-an-image" title="Permanent link">&para;</a></h2>
+<p>The slim images exist to be built on. Every package is on PyPI, so adding what a deployment
+needs is an install in a child image:</p>
+<div class="language-dockerfile highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">FROM</span><span class="w"> </span><span class="s">ghcr.io/digitl-cloud/interloper-scheduler:&lt;version&gt;-slim</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">USER</span><span class="w"> </span><span class="s">root</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">RUN</span><span class="w"> </span>pip<span class="w"> </span>--python<span class="w"> </span>/interloper/.venv/bin/python<span class="w"> </span>install<span class="w"> </span>--no-cache-dir<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">      </span><span class="s2">"interloper-assets[google]"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span>interloper-google-cloud<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span>my-own-connectors
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">USER</span><span class="w"> </span><span class="s">app</span>
+</span></code></pre></div>
+<p>The <code>--python</code> flag matters, and it goes before the subcommand. The application lives in the
+virtualenv at <code>/interloper/.venv</code>, which was built by uv and therefore has no <code>pip</code> of its own;
+a bare <code>pip install</code> would resolve to the base image's interpreter instead and land the package
+somewhere the app never looks, with no error to show for it.</p>
+<p>Anything installed this way registers itself: a package declaring components under the
+<code>interloper.components</code> entry point joins the catalog on the next start, with no change to the
+image's command. List what you want enabled under <code>catalog</code> and the deployment sees exactly
+that, as described in <a href="../../guide/catalog/">Catalog</a> and
+<a href="../../extending/entry-points/">Entry points &amp; registries</a>.</p>
+<p>The same recipe works on a loaded image when you want everything it ships plus your own
+components.</p>
 <h2 id="one-process">One process<a class="headerlink" href="#one-process" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>interloper<span class="w"> </span>app<span class="w"> </span>--api<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>app<span class="w"> </span>--api<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper
 </span></code></pre></div>
 <p>runs every service in one process against the configured Postgres, serving the UI on port 3000.
 Each service can be toggled off, so the API and worker scale out while cron and reaper stay
 singletons. <code>--dev</code> runs the Nuxt dev server with hot reload instead of the built assets.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p><code>interloper.yaml</code> in the working directory, or <code>INTERLOPER_*</code> variables:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">postgres</span><span class="p">:</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">database</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper</span><span class="w">          </span><span class="c1"># password: INTERLOPER_POSTGRES_PASSWORD</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">auth</span><span class="p">:</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">google_client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span><span class="nt">google_client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span><span class="nt">google_redirect_uri</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://app.example.com/api/auth/google/callback</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">allowed_domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">example.com</span><span class="p p-Indicator">]</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nt">catalog</span><span class="p">:</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.source.FacebookAds</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">postgres</span><span class="p">:</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">host</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">localhost</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">database</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper</span><span class="w">          </span><span class="c1"># password: INTERLOPER_POSTGRES_PASSWORD</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">auth</span><span class="p">:</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">google_client_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">google_client_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span><span class="nt">google_redirect_uri</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://app.example.com/api/auth/google/callback</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span><span class="nt">allowed_domains</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">example.com</span><span class="p p-Indicator">]</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">catalog</span><span class="p">:</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_package.sources.Shop</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">interloper_assets.facebook_ads.source.FacebookAds</span>
 </span></code></pre></div>
 <p>The file is not interpolated: a field left out of a block is read from its <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are
@@ -2059,8 +2138,8 @@ bootstraps platform administrators. In-house OAuth app credentials for connector
 has no sign-in tab, only manual credential entry. The full settings list is in
 <a href="../../reference/settings/">Settings</a>.</p>
 <h2 id="database">Database<a class="headerlink" href="#database" title="Permanent link">&para;</a></h2>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>interloper<span class="w"> </span>db<span class="w"> </span>init<span class="w">          </span><span class="c1"># create the database, tables and run migrations; idempotent</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w">       </span><span class="c1"># migrate an existing database to head</span>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>interloper<span class="w"> </span>db<span class="w"> </span>init<span class="w">          </span><span class="c1"># create the database, tables and run migrations; idempotent</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w">       </span><span class="c1"># migrate an existing database to head</span>
 </span></code></pre></div>
 <p><code>interloper app</code> also creates missing tables on startup unless <code>--no-create-tables</code> is passed.</p>
 <h2 id="local-development">Local development<a class="headerlink" href="#local-development" title="Permanent link">&para;</a></h2>
