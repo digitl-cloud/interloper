@@ -114,19 +114,6 @@ class Operation(Component, Workload):
 
     materializable: bool = Field(default=True, json_schema_extra={"x-hidden": True})
 
-    @property
-    def source(self) -> Any:
-        """The source that owns this node, or ``None`` when nothing does.
-
-        Read by the graph and by the event metadata on any node, including
-        the operations no source owns, which is why it is answered here
-        rather than only on ``Asset``.
-
-        Returns:
-            The owning source, or ``None``.
-        """
-        return None
-
     def operations(self) -> list[Operation]:
         """An operation is trivially its own workload.
 

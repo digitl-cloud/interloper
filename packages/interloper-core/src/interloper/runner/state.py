@@ -365,8 +365,10 @@ class RunState:
             "component_key": operation.key,
             "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
         }
-        if operation.source is not None:
-            meta["source_id"] = operation.source.id
+        # Only assets are owned today, and their owner is their source, so the
+        # key stays `source_id`; a parent of another kind would need a rename.
+        if operation.parent is not None:
+            meta["source_id"] = operation.parent.id
         return meta
 
     @staticmethod
