@@ -23,6 +23,7 @@ EVENT_LOGGER_NAME = "interloper.run"
 _EVENT_LEVELS: dict[EventType, int] = {
     EventType.RUN_FAILED: logging.ERROR,
     EventType.OPERATION_FAILED: logging.ERROR,
+    EventType.OPERATION_RETRIED: logging.WARNING,
     EventType.BACKFILL_FAILED: logging.ERROR,
     EventType.OPERATION_CANCELED: logging.WARNING,
     EventType.OPERATION_QUEUED: logging.DEBUG,

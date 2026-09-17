@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import traceback
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import Any
@@ -20,7 +21,7 @@ def _worker(
     dag_spec: dict[str, Any],
     partition_or_window: Partition | PartitionWindow | None,
     metadata: dict[str, Any],
-) -> tuple[str, bool, str | None, str | None, dict[str, Any]]:
+) -> tuple[str, bool, str | None, str | None, dict[str, Any], list[str]]:
     """Execute a single operation in a worker process.
 
     Reconstructs the DAG from its serialized spec, looks up the target
@@ -34,8 +35,14 @@ def _worker(
             to the node's own effective partition.
         metadata: Run metadata, also carrying the parent span context.
 
+    The worker owns the attempt loop because only it sees the failures, and
+    none of the reporting: the parent holds the ``RunState`` and emits every
+    event, so the errors of the attempts that were retried travel back with
+    the outcome for it to replay.
+
     Returns:
-        Tuple of ``(id, success, error_message, formatted_traceback, effects)``.
+        Tuple of ``(id, success, error_message, formatted_traceback, effects,
+        retried_errors)``.
     """
     from opentelemetry import context as otel_context
 
@@ -50,31 +57,40 @@ def _worker(
     token = otel_context.attach(context) if context is not None else None
 
     operation: Operation | None = None
+    retried: list[str] = []
     try:
         dag = DAGSpec(**dag_spec).reconstruct()
         operation = dag.operation_map[operation_id]
-        result = asyncio.run(
-            operation.execute(
-                OperationContext(
-                    partition_or_window=operation.effective_partition(partition_or_window),
-                    dag=dag,
-                    metadata=metadata,
-                )
-            )
+        context = OperationContext(
+            partition_or_window=operation.effective_partition(partition_or_window),
+            dag=dag,
+            metadata=metadata,
         )
+        policy = operation.retry
+        attempt = 1
+        while True:
+            try:
+                result = asyncio.run(operation.execute(context))
+                break
+            except Exception as e:
+                if policy is None or not policy.allows(attempt + 1) or not operation.retryable(e):
+                    raise
+                retried.append(format_exception(e))
+                time.sleep(policy.delay_before(attempt + 1))
+                attempt += 1
     except Exception as e:  # noqa: BLE001
         if operation is None:
-            return (operation_id, False, format_exception(e), traceback.format_exc(), {})
+            return (operation_id, False, format_exception(e), traceback.format_exc(), {}, retried)
         failed = operation.failure(e)
         tb = traceback.format_exc() if type(operation).capture_traceback else None
         effects = {"config": failed.config, "state": failed.state}
-        return (operation_id, False, failed.error or format_exception(e), tb, effects)
+        return (operation_id, False, failed.error or format_exception(e), tb, effects, retried)
     finally:
         if token is not None:
             otel_context.detach(token)
         # Pool workers are reused; exit hooks may never run.
         force_flush()
-    return (operation_id, True, None, None, {"config": result.config, "state": result.state})
+    return (operation_id, True, None, None, {"config": result.config, "state": result.state}, retried)
 
 
 class MultiProcessRunner(SyncRunner):
@@ -158,8 +174,9 @@ class MultiProcessRunner(SyncRunner):
         """Process a completed future from a worker process.
 
         Unlike the base ``_handle_completed``, this interprets the
-        ``(id, success, error_msg, tb, effects)`` tuple returned by
-        ``_worker``.
+        ``(id, success, error_msg, tb, effects, retried_errors)`` tuple
+        returned by ``_worker``, replaying the attempts the worker retried so
+        the run's events and attempt counters match what actually happened.
 
         Args:
             future: The finished future returned by ``_submit_operation``.
@@ -168,10 +185,13 @@ class MultiProcessRunner(SyncRunner):
         self._futures.pop(future, None)
 
         try:
-            _key, success, error_message, tb, effects = future.result()
+            _key, success, error_message, tb, effects, retried = future.result()
         except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
             self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc(), exception=e)
             return
+
+        for error in retried:
+            self.state.mark_retried(operation, error)
 
         if success:
             self.state.mark_completed(operation, effects=OperationResult(**effects))
@@ -184,17 +204,20 @@ class MultiProcessRunner(SyncRunner):
             )
 
     def _handle_flushed(self, future: Future[Any], operation: Operation) -> None:
-        """Interpret the worker ``(id, success, error_message, tb, effects)`` tuple during flush.
+        """Interpret the worker ``(id, success, error_message, tb, effects, retried_errors)`` tuple during flush.
 
         Args:
             future: The finished future to interpret.
             operation: The operation the future was submitted for.
         """
         try:
-            _key, success, error_message, tb, effects = future.result()
+            _key, success, error_message, tb, effects, retried = future.result()
         except Exception as e:  # noqa: BLE001
             self.state.mark_failed(operation, format_exception(e), tb=traceback.format_exc())
             return
+
+        for error in retried:
+            self.state.mark_retried(operation, error)
 
         if success:
             self.state.mark_completed(operation, effects=OperationResult(**effects))

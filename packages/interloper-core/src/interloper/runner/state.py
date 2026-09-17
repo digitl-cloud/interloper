@@ -53,6 +53,7 @@ class RunState:
             self.metadata["run_id"] = str(uuid.uuid4())
 
         self.executions: dict[str, ExecutionInfo] = {}
+        self.attempts: dict[str, int] = {operation.id: 1 for operation in dag.operations}
         self.partition_or_window: Partition | PartitionWindow | None = None
         self.start_time: dt.datetime | None = None
         self.end_time: dt.datetime | None = None
@@ -317,6 +318,32 @@ class RunState:
                     },
                 )
 
+    def mark_retried(self, operation: Operation, error: str, *, emit: bool = True) -> None:
+        """Record a failed attempt that will be retried, and open the next one.
+
+        A retried attempt is not a verdict: the execution keeps its current
+        status, nothing downstream is canceled, and ``OPERATION_FAILED`` stays
+        reserved for an exhausted budget. Advancing the counter is what makes
+        the next attempt's events distinct from this one's.
+
+        Args:
+            operation: The operation whose attempt failed.
+            error: Error message describing the failed attempt.
+            emit: Emit ``OPERATION_RETRIED`` on the EventBus.  Set to ``False``
+                for cross-process runners where the child emits its own events.
+        """
+        attempt = self.attempts[operation.id]
+        if emit:
+            self._emit_operation_event(
+                EventType.OPERATION_RETRIED,
+                {
+                    **self._operation_event_metadata(operation),
+                    "error": error,
+                    "message": f"Operation '{operation.key}' failed on attempt {attempt}, retrying: {error}",
+                },
+            )
+        self.attempts[operation.id] = attempt + 1
+
     # -- Internals -------------------------------------------------------------
 
     def _initialize_operations(self) -> None:
@@ -364,13 +391,14 @@ class RunState:
             "component_kind": operation.kind,
             "component_key": operation.key,
             "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
+            "attempt": self.attempts[operation.id],
         }
         if operation.parent is not None:
             meta["parent_id"] = operation.parent.id
         return meta
 
     @staticmethod
-    def _operation_event_id(run_id: str, component_id: str, event_type: EventType) -> str:
+    def _operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:
         """Derive a deterministic event id from a run/component/type triple.
 
         Both the host and the in-container child run this same code with the
@@ -382,29 +410,42 @@ class RunState:
             run_id: Id of the run the event belongs to.
             component_id: Id of the operation the event is about.
             event_type: The operation-lifecycle event type.
+            attempt: The attempt the event belongs to, so a retried node's
+                events are their own rows rather than a dedup of the first
+                attempt's. Left out of the key when it is 1, which keeps every
+                id written before retries existed unchanged.
 
         Returns:
             A stable UUID5 string for the event.
         """
-        return str(uuid.uuid5(RunState._OPERATION_EVENT_NS, f"{run_id}:{component_id}:{event_type.value}"))
+        key = f"{run_id}:{component_id}:{event_type.value}"
+        if attempt > 1:
+            key = f"{key}:{attempt}"
+        return str(uuid.uuid5(RunState._OPERATION_EVENT_NS, key))
 
     def _emit_operation_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
         """Emit an operation-lifecycle event with a deterministic id.
 
-        The id is derived from ``(run_id, component_id, event_type)`` so the
-        same logical event dedups across producers (host fallback vs child, or
-        the duplicate ``operation_queued``).  ``metadata`` must carry
-        ``component_id``.
+        The id is derived from ``(run_id, component_id, event_type, attempt)``
+        so the same logical event dedups across producers (host fallback vs
+        child, or the duplicate ``operation_queued``) while a retried node's
+        attempts stay distinct.  ``metadata`` must carry ``component_id``.
 
         Args:
             event_type: The operation-lifecycle event type to emit.
             metadata: Event metadata, as built by ``_operation_event_metadata``;
-                must carry a ``component_id`` key.
+                must carry a ``component_id`` key, and an ``attempt`` for any
+                node past its first.
         """
         event = Event(
             type=event_type,
             metadata=metadata,
-            id=self._operation_event_id(self.run_id, str(metadata["component_id"]), event_type),
+            id=self._operation_event_id(
+                self.run_id,
+                str(metadata["component_id"]),
+                event_type,
+                attempt=int(metadata.get("attempt", 1)),
+            ),
         )
         EventBus.emit_event(event)
 

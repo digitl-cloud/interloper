@@ -14,6 +14,7 @@ from interloper.component import Component, ComponentDefinition, ComponentIdenti
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
+from interloper.retry import RetryPolicy
 from interloper.serializable import IgnoredDescriptor
 from interloper.utils.text import validate_key
 
@@ -114,6 +115,8 @@ class Source(Component, Workload):
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
     internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "select"})
+
+    retry: RetryPolicy | None = Field(default=None, description="Default attempt budget for this source's assets")
 
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
@@ -559,6 +562,8 @@ class Source(Component, Workload):
                 asset.default_destination_key = self.default_destination_key
             if asset.normalizer is None and self.normalizer is not None:
                 asset.normalizer = self.normalizer
+            if asset.retry is None and self.retry is not None:
+                asset.retry = self.retry
             if (
                 self.materialization_strategy is not None
                 and asset.materialization_strategy is MaterializationStrategy.RECONCILE

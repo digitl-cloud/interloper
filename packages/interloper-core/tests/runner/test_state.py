@@ -140,6 +140,54 @@ class TestInitialisation:
         assert state.executions[middle.id].status is ExecutionStatus.READY
 
 
+class TestRetriedAttempts:
+    """A retried attempt is recorded without becoming the node's verdict."""
+
+    def test_mark_retried_emits_and_advances_the_attempt(self, chain: tuple[RunState, dict[str, Any]]) -> None:
+        state, operations = chain
+        root = operations["root"]
+        events: list[il.Event] = []
+        il.EventBus.subscribe(events.append)
+        try:
+            state.mark_retried(root, "boom")
+            il.EventBus.flush(timeout=5.0)
+        finally:
+            il.EventBus.unsubscribe(events.append)
+
+        assert state.attempts[root.id] == 2
+        retried = [event for event in events if event.type is il.EventType.OPERATION_RETRIED]
+        assert len(retried) == 1
+        assert retried[0].metadata["attempt"] == 1
+        assert retried[0].metadata["error"] == "boom"
+
+    def test_a_retried_attempt_is_not_a_verdict(self, chain: tuple[RunState, dict[str, Any]]) -> None:
+        state, operations = chain
+        root, middle = operations["root"], operations["middle"]
+        before = (state.executions[root.id].status, state.executions[middle.id].status)
+
+        state.mark_retried(root, "boom")
+
+        # Neither a terminal status for the node nor a cancellation downstream:
+        # only an exhausted budget is a failure, and mark_failed is what says so.
+        assert (state.executions[root.id].status, state.executions[middle.id].status) == before
+        assert state.executions[middle.id].status is not ExecutionStatus.CANCELED
+
+    def test_events_after_a_retry_carry_the_new_attempt(self, chain: tuple[RunState, dict[str, Any]]) -> None:
+        state, operations = chain
+        root = operations["root"]
+        events: list[il.Event] = []
+        il.EventBus.subscribe(events.append)
+        try:
+            state.mark_retried(root, "boom")
+            state.mark_failed(root, "boom again")
+            il.EventBus.flush(timeout=5.0)
+        finally:
+            il.EventBus.unsubscribe(events.append)
+
+        failed = [event for event in events if event.type is il.EventType.OPERATION_FAILED]
+        assert failed[0].metadata["attempt"] == 2
+
+
 class TestStatusBuckets:
     """The per-status operation views the runners schedule from."""
 

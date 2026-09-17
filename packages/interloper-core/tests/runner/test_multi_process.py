@@ -12,6 +12,7 @@ import pytest
 
 import interloper as il
 from interloper.errors import RunnerError
+from interloper.events import Event
 from interloper.runner.multi_process import MultiProcessRunner, _worker
 from interloper.runner.results import ExecutionStatus
 from interloper.settings import RunnerSettings
@@ -54,6 +55,36 @@ class PickledSource(il.Source):
 
         def data(self) -> Any:
             return [{"x": 2}]
+
+
+_FLAKY_ATTEMPTS: list[int] = []
+
+
+class RetrySource(il.Source):
+    """Assets exercising the worker's own attempt loop."""
+
+    class Flaky(il.Asset):
+        """Fails its first attempt, then succeeds."""
+
+        retry: il.RetryPolicy | None = il.RetryPolicy(max_attempts=3, delay=0.0, jitter=0.0)
+
+        def data(self) -> Any:
+            _FLAKY_ATTEMPTS.append(1)
+            if len(_FLAKY_ATTEMPTS) == 1:
+                raise ValueError("transient")
+            return [{"x": 1}]
+
+    class AlwaysBroken(il.Asset):
+        """Fails every attempt.
+
+        Raises:
+            ValueError: Always.
+        """
+
+        retry: il.RetryPolicy | None = il.RetryPolicy(max_attempts=2, delay=0.0, jitter=0.0)
+
+        def data(self) -> Any:
+            raise ValueError("permanent")
 
 
 class ChainSource(il.Source):
@@ -131,7 +162,7 @@ class TestWorker:
         spec, dag = _spec(WorkerSource(destinations=[il.MemoryDestination()]))
         operation = next(o for o in dag.operations if o.key == "ok")
 
-        operation_id, success, error, tb, effects = _worker(operation.id, spec, None, {})
+        operation_id, success, error, tb, effects, _retries = _worker(operation.id, spec, None, {})
 
         assert operation_id == operation.id
         assert success is True
@@ -143,7 +174,7 @@ class TestWorker:
         spec, dag = _spec(WorkerSource(destinations=[il.MemoryDestination()]))
         operation = next(o for o in dag.operations if o.key == "boom")
 
-        operation_id, success, error, tb, effects = _worker(operation.id, spec, None, {})
+        operation_id, success, error, tb, effects, _retries = _worker(operation.id, spec, None, {})
 
         assert operation_id == operation.id
         assert success is False
@@ -151,12 +182,37 @@ class TestWorker:
         assert tb is not None and "ValueError" in tb
         assert set(effects) == {"config", "state"}
 
+    def test_a_flaky_operation_is_retried_inside_the_worker(self) -> None:
+        il.MemoryDestination.clear()
+        _FLAKY_ATTEMPTS.clear()
+        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], select=["flaky"]))
+        operation = next(o for o in dag.operations if o.key == "flaky")
+
+        _id, success, error, tb, _effects, retries = _worker(operation.id, spec, None, {})
+
+        assert success is True
+        assert (error, tb) == (None, None)
+        assert len(_FLAKY_ATTEMPTS) == 2
+        assert len(retries) == 1
+        assert "transient" in retries[0]
+
+    def test_an_exhausted_budget_reports_its_retried_attempts(self) -> None:
+        il.MemoryDestination.clear()
+        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], select=["always_broken"]))
+        operation = next(o for o in dag.operations if o.key == "always_broken")
+
+        _id, success, error, _tb, _effects, retries = _worker(operation.id, spec, None, {})
+
+        assert success is False
+        assert "permanent" in (error or "")
+        assert len(retries) == 1
+
     def test_an_unresolvable_operation_id_still_reports_cleanly(self) -> None:
         # The node is looked up before any operation exists, so the worker has
         # nothing to build a failure result from.
         spec, _dag = _spec(WorkerSource(destinations=[il.MemoryDestination()]))
 
-        operation_id, success, error, tb, effects = _worker("not-in-this-dag", spec, None, {})
+        operation_id, success, error, tb, effects, _retries = _worker("not-in-this-dag", spec, None, {})
 
         assert (operation_id, success) == ("not-in-this-dag", False)
         assert error is not None
@@ -164,7 +220,7 @@ class TestWorker:
         assert effects == {}
 
     def test_a_malformed_spec_is_reported_not_raised(self) -> None:
-        operation_id, success, error, tb, effects = _worker("anything", {"nodes": "nonsense"}, None, {})
+        operation_id, success, error, tb, effects, _retries = _worker("anything", {"nodes": "nonsense"}, None, {})
 
         assert (operation_id, success, effects) == ("anything", False, {})
         assert error is not None
@@ -181,6 +237,23 @@ class TestRun:
 
         assert result.status is ExecutionStatus.COMPLETED
         assert len(result.completed_ids) == 2
+
+    def test_a_child_retry_reaches_the_parent_as_events(self, importable_in_children: None) -> None:
+        il.MemoryDestination.clear()
+        runner = MultiProcessRunner(max_workers=1)
+        events: list[Event] = []
+
+        result = il.run(
+            runner.model_copy(update={"on_event": events.append}).run(
+                il.DAG(RetrySource(destinations=[il.MemoryDestination()], select=["flaky"]))
+            )
+        )
+
+        # The worker owns the loop; the parent replays what it retried, so the
+        # attempt is visible here even though it happened in another process.
+        assert result.status is ExecutionStatus.COMPLETED
+        assert len([e for e in events if e.type is il.EventType.OPERATION_RETRIED]) == 1
+        assert not [e for e in events if e.type is il.EventType.OPERATION_FAILED]
 
     def test_a_child_failure_lands_on_the_node(self, importable_in_children: None) -> None:
         runner = MultiProcessRunner(max_workers=2, fail_fast=False)
@@ -259,7 +332,7 @@ class TestResultInterpretation:
     ) -> None:
         runner, operation = prepared
         future: Future[Any] = Future()
-        future.set_result((operation.id, True, None, None, {"config": {"cursor": "z"}, "state": {}}))
+        future.set_result((operation.id, True, None, None, {"config": {"cursor": "z"}, "state": {}}, []))
 
         getattr(runner, handler)(future, operation)
 
@@ -274,7 +347,7 @@ class TestResultInterpretation:
     ) -> None:
         runner, operation = prepared
         future: Future[Any] = Future()
-        future.set_result((operation.id, False, "child exploded", "Traceback...", {"config": {}, "state": {}}))
+        future.set_result((operation.id, False, "child exploded", "Traceback...", {"config": {}, "state": {}}, []))
 
         getattr(runner, handler)(future, operation)
 
@@ -291,7 +364,7 @@ class TestResultInterpretation:
     ) -> None:
         runner, operation = prepared
         future: Future[Any] = Future()
-        future.set_result((operation.id, False, None, None, {"config": {}, "state": {}}))
+        future.set_result((operation.id, False, None, None, {"config": {}, "state": {}}, []))
 
         getattr(runner, handler)(future, operation)
 
@@ -339,6 +412,6 @@ def test_worker_adopts_and_releases_the_parent_span_context() -> None:
         inject_metadata(metadata)
     assert "traceparent" in metadata
 
-    _operation_id, success, _error, _tb, _effects = _worker(operation.id, spec, None, metadata)
+    _operation_id, success, _error, _tb, _effects, _retries = _worker(operation.id, spec, None, metadata)
 
     assert success is True

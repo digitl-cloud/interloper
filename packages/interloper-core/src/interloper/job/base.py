@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from interloper.component import Component, Relation
 from interloper.operation import Operation, Workload
+from interloper.retry import RetryPolicy
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
@@ -52,6 +53,7 @@ class Job(Component, Workload):
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
     enabled: bool = Field(default=True, description="Job will run on the configured schedule")
+    retry: RetryPolicy | None = Field(default=None, description="Attempt budget for this job's runs")
     tags: list[str] = Field(default_factory=list)
 
     def operations(self) -> list[Operation]:

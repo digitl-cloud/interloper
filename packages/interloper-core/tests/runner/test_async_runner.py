@@ -80,6 +80,116 @@ class TestFailFast:
         assert result.executions["fine-2"].status is ExecutionStatus.COMPLETED
 
 
+class TestRetry:
+    """An operation retries in place, within its declared budget."""
+
+    async def test_an_operation_that_heals_on_the_second_attempt_succeeds(self):
+        il.MemoryDestination.clear()
+        calls: list[int] = []
+
+        @il.asset(retry=il.RetryPolicy(max_attempts=3, delay=0.0, jitter=0.0))
+        def flaky() -> list[dict[str, Any]]:
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("transient")
+            return [{"x": 1}]
+
+        dag = il.DAG(flaky(id="flaky", destinations=[il.MemoryDestination()]))
+        events: list[Event] = []
+
+        result = await AsyncRunner(on_event=events.append).run(dag)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert result.executions["flaky"].status is ExecutionStatus.COMPLETED
+        assert len(calls) == 2
+        assert [e.type for e in events if e.type is il.EventType.OPERATION_RETRIED]
+        assert not [e.type for e in events if e.type is il.EventType.OPERATION_FAILED]
+
+    async def test_an_exhausted_budget_fails_once(self):
+        il.MemoryDestination.clear()
+        calls: list[int] = []
+
+        @il.asset(retry=il.RetryPolicy(max_attempts=2, delay=0.0, jitter=0.0))
+        def broken() -> list[dict[str, Any]]:
+            calls.append(1)
+            raise ValueError("permanent")
+
+        dag = il.DAG(broken(id="broken", destinations=[il.MemoryDestination()]))
+        events: list[Event] = []
+
+        result = await AsyncRunner(on_event=events.append).run(dag)
+
+        assert result.status is ExecutionStatus.FAILED
+        assert len(calls) == 2
+        assert len([e for e in events if e.type is il.EventType.OPERATION_RETRIED]) == 1
+        assert len([e for e in events if e.type is il.EventType.OPERATION_FAILED]) == 1
+
+    async def test_an_operation_without_a_budget_is_attempted_once(self):
+        il.MemoryDestination.clear()
+        calls: list[int] = []
+
+        @il.asset()
+        def broken() -> list[dict[str, Any]]:
+            calls.append(1)
+            raise ValueError("permanent")
+
+        dag = il.DAG(broken(id="broken", destinations=[il.MemoryDestination()]))
+
+        result = await AsyncRunner().run(dag)
+
+        assert result.status is ExecutionStatus.FAILED
+        assert len(calls) == 1
+
+    async def test_an_error_the_operation_declines_is_not_retried(self):
+        il.MemoryDestination.clear()
+        calls: list[int] = []
+
+        class Picky(il.Asset):
+            """Asset that knows a ValueError will never heal."""
+
+            retry: il.RetryPolicy | None = il.RetryPolicy(max_attempts=3, delay=0.0, jitter=0.0)
+
+            def data(self) -> list[dict[str, Any]]:
+                calls.append(1)
+                raise ValueError("permanent")
+
+            def retryable(self, error: Exception) -> bool:
+                return not isinstance(error, ValueError)
+
+        dag = il.DAG(Picky(id="picky", destinations=[il.MemoryDestination()]))
+
+        result = await AsyncRunner().run(dag)
+
+        assert result.status is ExecutionStatus.FAILED
+        assert len(calls) == 1
+
+    async def test_a_retrying_node_does_not_trip_fail_fast(self):
+        il.MemoryDestination.clear()
+        calls: list[int] = []
+
+        @il.asset(retry=il.RetryPolicy(max_attempts=2, delay=0.0, jitter=0.0))
+        def flaky() -> list[dict[str, Any]]:
+            calls.append(1)
+            if len(calls) == 1:
+                raise ValueError("transient")
+            return [{"x": 1}]
+
+        @il.asset()
+        def independent() -> list[dict[str, Any]]:
+            return [{"x": 2}]
+
+        dag = il.DAG(
+            flaky(id="flaky", destinations=[il.MemoryDestination()]),
+            independent(id="independent", destinations=[il.MemoryDestination()]),
+        )
+
+        result = await AsyncRunner(max_workers=1, fail_fast=True).run(dag)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert result.executions["flaky"].status is ExecutionStatus.COMPLETED
+        assert result.executions["independent"].status is ExecutionStatus.COMPLETED
+
+
 class TestMachineryErrors:
     """Failures of the walk itself, as opposed to an operation's."""
 

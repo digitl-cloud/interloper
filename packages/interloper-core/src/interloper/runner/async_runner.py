@@ -168,7 +168,18 @@ class AsyncRunner(Runner):
         operation: Operation,
         partition_or_window: Partition | PartitionWindow | None = None,
     ) -> Any:
-        """Execute a single operation with state tracking.
+        """Execute a single operation with state tracking, retrying in place.
+
+        An operation carrying a :class:`~interloper.retry.base.RetryPolicy`
+        gets another attempt whenever it raises an error it calls retryable
+        and its budget allows one: the failure is recorded as retried, the
+        backoff is slept, and the same node executes again. An operation
+        carrying no policy is attempted once.
+
+        Only an exhausted or declined failure marks the node failed, which is
+        what cancels its dependents and, under ``fail_fast``, stops the walk.
+        A node still working through its attempts has not failed, so nothing
+        downstream reacts to it.
 
         On failure the operation's own :meth:`~Operation.failure` hook
         curates the recorded message and effects, and the traceback is
@@ -183,8 +194,6 @@ class AsyncRunner(Runner):
         Returns:
             The execution's effects, or ``None`` if the operation failed.
         """
-        self.state.mark_running(operation)
-
         effective_partition = operation.effective_partition(partition_or_window)
         span_attrs = attributes.from_metadata(
             operation._event_metadata(self.state.metadata, effective_partition)
@@ -194,16 +203,27 @@ class AsyncRunner(Runner):
             dag=self.state.dag,
             metadata=self.state.metadata,
         )
-        try:
-            with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attrs):
-                result = await operation.execute(context)
+        policy = operation.retry
+
+        while True:
+            self.state.mark_running(operation)
+            try:
+                with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attrs):
+                    result = await operation.execute(context)
+            except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
+                attempt = self.state.attempts[operation.id]
+                if policy is not None and policy.allows(attempt + 1) and operation.retryable(e):
+                    self.state.mark_retried(operation, format_exception(e))
+                    await asyncio.sleep(policy.delay_before(attempt + 1))
+                    continue
+                failed = operation.failure(e)
+                tb = traceback.format_exc() if type(operation).capture_traceback else None
+                self.state.mark_failed(
+                    operation, failed.error or format_exception(e), tb=tb, effects=failed, exception=e
+                )
+                return None
             self.state.mark_completed(operation, effects=result)
-        except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
-            failed = operation.failure(e)
-            tb = traceback.format_exc() if type(operation).capture_traceback else None
-            self.state.mark_failed(operation, failed.error or format_exception(e), tb=tb, effects=failed, exception=e)
-            return None
-        return result
+            return result
 
     async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
         """Let the in-flight tasks finish when the walk ends.
