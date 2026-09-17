@@ -15,7 +15,7 @@ class TestFromMetadata:
                 "component_key": "orders",
                 "qualified_key": "shop.orders",
                 "partition_or_window": "2026-07-01",
-                "source_id": "s1",
+                "parent_id": "s1",
             }
         )
         assert attrs == {
@@ -25,7 +25,7 @@ class TestFromMetadata:
             attributes.COMPONENT_KEY: "orders",
             attributes.COMPONENT_QUALIFIED_KEY: "shop.orders",
             attributes.PARTITION: "2026-07-01",
-            attributes.SOURCE_ID: "s1",
+            attributes.PARENT_ID: "s1",
         }
 
     def test_drops_none_and_unknown_keys(self):

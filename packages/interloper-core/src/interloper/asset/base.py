@@ -1129,5 +1129,5 @@ class Asset(Operation):
         }
         source = self.source
         if source is not None:
-            base["source_id"] = source.id
+            base["parent_id"] = source.id
         return base

@@ -124,14 +124,14 @@ def test_event_values_spills_unpromoted_metadata_into_data() -> None:
                 "component_id": str(uuid4()),
                 "component_key": "ads",
                 "asset_qualified_key": "facebook.ads",
-                "source_id": "src-1",
+                "parent_id": "src-1",
                 "error": "boom",
             }
         ),
         org_id=uuid4(),
         run_id=None,
     )
-    assert values["data"] == {"asset_qualified_key": "facebook.ads", "source_id": "src-1"}
+    assert values["data"] == {"asset_qualified_key": "facebook.ads", "parent_id": "src-1"}
     assert values["error"] == "boom"
 
 

@@ -27,7 +27,7 @@ def test_log_event_carries_component_and_source_id() -> None:
         "demo.a",
         {"run_id": "run-1"},
         component_id="asset-1",
-        source_id="source-1",
+        parent_id="source-1",
     )
 
     events = _capture(lambda: logger.info("hello"))
@@ -35,7 +35,7 @@ def test_log_event_carries_component_and_source_id() -> None:
     assert len(events) == 1
     meta = events[0].metadata
     assert meta["component_id"] == "asset-1"
-    assert meta["source_id"] == "source-1"
+    assert meta["parent_id"] == "source-1"
     assert meta["component_key"] == "demo.a"
     assert meta["message"] == "hello"
     assert meta["run_id"] == "run-1"
@@ -50,4 +50,4 @@ def test_log_event_omits_ids_when_unset() -> None:
     assert len(events) == 1
     meta = events[0].metadata
     assert "component_id" not in meta
-    assert "source_id" not in meta
+    assert "parent_id" not in meta

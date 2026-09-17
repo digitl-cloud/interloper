@@ -62,7 +62,7 @@ class ExecutionContext:
                 self._asset_key,
                 self._metadata,
                 component_id=self._asset_id,
-                source_id=self._source_id,
+                parent_id=self._source_id,
             )
         return self._logger
 
