@@ -210,3 +210,33 @@ def test_exchange_relays_a_transport_failure_as_a_500(monkeypatch: pytest.Monkey
     assert resp.status_code == 500
     assert "no route to host" in resp.json()["detail"]
     assert "the-code" not in resp.json()["detail"]
+
+
+def test_exchange_relays_the_providers_parsed_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The route hands the body to the provider's parser: TikTok's envelope is unwrapped."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": 0, "message": "OK", "data": {"access_token": "at"}})
+
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "tiktok", client_id="cid", client_secret="cs", redirect_uri="https://r")
+
+    resp = _client().post("/oauth/tiktok", json={"code": "the-code"})
+
+    assert resp.status_code == 200
+    assert resp.json() == {"access_token": "at"}
+
+
+def test_exchange_relays_an_in_band_provider_rejection_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A rejection TikTok reports inside a 200 body is a failure, not a token-less success."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": 40002, "message": "auth_code invalid", "request_id": "req"})
+
+    _mock_async_client(monkeypatch, handler)
+    _configure(monkeypatch, "tiktok", client_id="cid", client_secret="cs", redirect_uri="https://r")
+
+    resp = _client().post("/oauth/tiktok", json={"code": "stale"})
+
+    assert resp.status_code == 500
+    assert "auth_code invalid" in resp.json()["detail"]
