@@ -49,8 +49,10 @@ export function dateColumn<T>(key: keyof T & string, header: string): TableColum
 }
 
 /**
- * The first column of a component table: the name, its discriminator beneath
- * when the two differ, and an optional status badge. Search matches both.
+ * The first column of a component table: the name, its discriminator when the
+ * two differ, and an optional status badge — on one line, stacking under the
+ * name once the viewport is too narrow for it. Search matches the name and
+ * the discriminator alike.
  */
 export function nameColumn(
     header: string,
@@ -63,19 +65,16 @@ export function nameColumn(
         accessorFn: (row: ComponentRecord) => [nameOf(row), row.discriminator].filter(Boolean).join(' '),
         cell: ({ row }: { row: { original: ComponentRecord } }) => {
             const name = nameOf(row.original)
-            const meta = badge?.(row.original)
-            const title = meta
-                ? h('span', { class: 'flex items-center gap-2' }, [
-                        name,
-                        h(UBadge, { color: meta.color, size: 'sm', icon: meta.icon }, () => meta.label),
-                    ])
-                : name
             const { discriminator } = row.original
-            if (!discriminator || discriminator === name) return title
-            return h('span', { class: 'flex flex-col items-start gap-1' }, [
-                title,
-                h('span', { class: 'id-chip max-w-full truncate' }, discriminator),
-            ])
+            const meta = badge?.(row.original)
+            const children = [h('span', { class: 'truncate' }, name)]
+            if (discriminator && discriminator !== name) {
+                children.push(h('span', { class: 'id-chip max-w-full truncate sm:shrink-0' }, discriminator))
+            }
+            if (meta) {
+                children.push(h(UBadge, { color: meta.color, size: 'sm', icon: meta.icon }, () => meta.label))
+            }
+            return h('span', { class: 'flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2' }, children)
         },
     } as TableColumn<ComponentRecord>
 }
