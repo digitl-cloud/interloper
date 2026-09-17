@@ -117,6 +117,27 @@ def _component(store: Store, kind: str, key: str | None = None, name: str | None
         return row.id
 
 
+def _job_with_retry(store: Store, **policy: Any) -> UUID:
+    """A job component whose config declares a retry policy.
+
+    Returns:
+        The component id.
+    """
+    with Session(store.engine) as session:
+        row = Component(
+            id=uuid4(),
+            org_id=_ORG_ID,
+            kind="job",
+            key="job",
+            name="job",
+            config={"retry": policy} if policy else {},
+        )
+        session.add(row)
+        session.commit()
+        assert row.id is not None
+        return row.id
+
+
 class TestRunTargetOperations:
     """Run creation validates the target's operation and records billability."""
 
@@ -198,6 +219,168 @@ class TestTargetResolution:
         target = _component(store, kind="destination")
         with pytest.raises(ValueError, match="cannot be run"):
             store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
+
+
+class TestStackIdentity:
+    """Every run belongs to a stack; a first attempt is its own root."""
+
+    def test_a_new_run_is_its_own_stack_root(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        assert run.root_run_id == run.id
+        assert run.scheduled_for is None
+        assert run.attempt == 1
+
+    def test_backfill_runs_are_each_their_own_root(self, store: Store) -> None:
+        backfill = _backfill(store)
+
+        with Session(store.engine) as session:
+            runs = session.exec(select(Run).where(Run.backfill_id == backfill.id)).all()
+        assert {run.root_run_id for run in runs} == {run.id for run in runs}
+
+    def test_a_manual_retry_joins_its_predecessors_stack(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
+
+        retry = store.runs.retry(run.id)
+
+        assert retry.root_run_id == run.root_run_id
+        assert retry.id != run.id
+        assert retry.attempt == 2
+
+
+class TestAutomaticRetry:
+    """A failed run queues its own next attempt when its target allows one."""
+
+    def test_a_failed_run_queues_its_next_attempt(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=2, delay=60)
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            successor = session.exec(select(Run).where(Run.retry_of == run.id)).one()
+        assert successor.root_run_id == run.root_run_id
+        assert successor.attempt == 2
+        assert successor.retry_scope == "failed"
+        assert successor.status == "queued"
+        assert successor.scheduled_for is not None
+        assert successor.billable == run.billable
+
+    def test_an_exhausted_budget_queues_nothing(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=1)
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+
+    def test_a_successful_run_queues_nothing(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=3)
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        store.runs.complete(run.id, success=True)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+
+    def test_a_target_declaring_no_policy_queues_nothing(self, store: Store) -> None:
+        target = _component(store, kind="job")
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+
+    def test_a_source_policy_is_not_read_at_the_run_level(self, store: Store) -> None:
+        # A source's `retry` is an operation budget; reading it here would
+        # apply an operation's attempts to whole runs.
+        with Session(store.engine) as session:
+            row = Component(
+                id=uuid4(),
+                org_id=_ORG_ID,
+                kind="source",
+                key="shop",
+                name="shop",
+                config={"retry": {"max_attempts": 5}},
+            )
+            session.add(row)
+            session.commit()
+            target = row.id
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+
+    def test_a_run_whose_target_is_gone_queues_nothing(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
+
+    def test_the_successor_stays_in_its_backfill(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=2, delay=0)
+        backfill = store.runs.create_backfill(
+            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-01"
+        )
+        with Session(store.engine) as session:
+            run = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
+
+        store.runs.complete(run.id, success=False)
+
+        with Session(store.engine) as session:
+            successor = session.exec(select(Run).where(Run.retry_of == run.id)).one()
+        assert successor.backfill_id == backfill.id
+
+
+class TestBackfillStacks:
+    """A batch's verdict reads each stack's latest attempt, not every attempt."""
+
+    def _single_partition_backfill(self, store: Store, target: UUID) -> tuple[UUID, Run]:
+        backfill = store.runs.create_backfill(
+            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-01"
+        )
+        with Session(store.engine) as session:
+            run = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
+        assert backfill.id is not None
+        return backfill.id, run
+
+    def _successor(self, store: Store, run_id: UUID) -> Run:
+        with Session(store.engine) as session:
+            return session.exec(select(Run).where(Run.retry_of == run_id)).one()
+
+    def test_a_backfill_healed_by_a_retry_succeeds(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=2, delay=0)
+        backfill_id, first = self._single_partition_backfill(store, target)
+
+        store.runs.complete(first.id, success=False)
+        store.runs.complete(self._successor(store, first.id).id, success=True)
+
+        assert store.runs.get_backfill(backfill_id).status == "success"
+
+    def test_a_backfill_whose_stack_exhausts_its_budget_fails(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=2, delay=0)
+        backfill_id, first = self._single_partition_backfill(store, target)
+
+        store.runs.complete(first.id, success=False)
+        store.runs.complete(self._successor(store, first.id).id, success=False)
+
+        assert store.runs.get_backfill(backfill_id).status == "failed"
+
+    def test_a_pending_retry_keeps_the_backfill_open(self, store: Store) -> None:
+        target = _job_with_retry(store, max_attempts=2, delay=0)
+        backfill_id, first = self._single_partition_backfill(store, target)
+
+        store.runs.complete(first.id, success=False)
+
+        # The successor is queued, so the batch still has work in flight.
+        assert store.runs.get_backfill(backfill_id).status == "running"
 
 
 class TestCreateBackfill:

@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from typing import Any, ClassVar, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import ForeignKey, Index, event
 from sqlmodel import Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
@@ -52,6 +52,12 @@ class Backfill(SQLModel, table=True):
 class Run(SQLModel, table=True):
     """A single execution of a component's operation.
 
+    A run is one *attempt*. ``root_run_id`` groups the attempts of one unit of
+    work into a stack and is the run's own id for a first attempt, so stack
+    membership is one indexed predicate rather than a recursive walk.
+    ``scheduled_for`` is the earliest instant the queue may claim the run,
+    which is how a retry's backoff is served without a second status.
+
     ``quota_reserved_at`` is set when a dispatch-time quota reservation was
     taken; its month tells settlement which usage period to release.
     ``billable`` records the operation's declaration at creation time, so
@@ -86,6 +92,11 @@ class Run(SQLModel, table=True):
     )
     attempt: int = 1
     retry_scope: str | None = None
+    root_run_id: UUID = SQLField(
+        default=None,
+        sa_column=Column(ForeignKey("runs.id", ondelete="SET NULL"), index=True, nullable=False),
+    )
+    scheduled_for: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     billable: bool = True
     quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
@@ -124,6 +135,29 @@ class Run(SQLModel, table=True):
                 "target_name": target.name,
             }
         return metadata
+
+
+@event.listens_for(Run, "before_insert")
+def _stamp_stack_root(_mapper: Any, _connection: Any, target: Run) -> None:
+    """Default a run's stack root to itself, and its id to a fresh one.
+
+    A first attempt roots its own stack, which cannot be expressed as a column
+    default because it references the row's own id. Doing it here rather than
+    at each creation site keeps the invariant in one place: a ``table=True``
+    model skips pydantic validation, so a validator would never fire, and
+    every caller remembering would be a trap for the next one. The id is
+    generated too, because the root cannot be set before it exists; the
+    column's server default stays for rows inserted outside the ORM.
+
+    Args:
+        _mapper: The mapper being flushed, unused.
+        _connection: The connection the flush runs on, unused.
+        target: The run row about to be inserted, stamped in place.
+    """
+    if target.id is None:
+        target.id = uuid4()
+    if target.root_run_id is None:
+        target.root_run_id = target.id
 
 
 class Event(SQLModel, table=True):
@@ -166,9 +200,11 @@ class Event(SQLModel, table=True):
 class Execution(SQLModel, table=True):
     """Read model over the ``executions`` view — never written.
 
-    One row per ``(run, operation)``: the current status derived from
-    lifecycle events (severity then recency) plus the queued/started/completed
-    timestamps. The view itself is created by migration 002; ``create_all``
+    One row per ``(run, operation)``: the operation's verdict, derived from
+    its lifecycle events (latest attempt first, then severity, then recency)
+    plus the queued/started/completed timestamps and how many attempts it
+    took. The timestamps span every attempt, so a retried operation reads as
+    one execution from its first start to its final outcome. The view itself is created by migration 002; ``create_all``
     skips view-backed models (see the ``is_view`` marker).
     """
 
@@ -180,6 +216,7 @@ class Execution(SQLModel, table=True):
     org_id: UUID
     component_key: str | None = None
     status: str
+    attempts: int = 1
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))

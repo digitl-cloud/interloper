@@ -269,6 +269,8 @@ class TestHookEvaluation:
             "status": "success",
             "component_name": "Demo",
             "component_key": "demo_source",
+            "attempt": 1,
+            "attempts": 1,
         }
 
     def test_metadata_falls_back_to_key_when_unnamed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
@@ -345,6 +347,105 @@ class TestHookEvaluation:
         with Session(engine_module.get_engine()) as session:
             queued = session.exec(select(Run).where(Run.status == "queued")).all()
             assert [q.component_id for q in queued] == [root.id]
+
+
+class TestVerdictGating:
+    """A hook observes a stack's verdict, never one of its attempts."""
+
+    def _job(self, **retry: Any) -> UUID:
+        """A job row declaring a retry policy, inserted directly.
+
+        ``store.components.create`` would build the component; this only needs
+        the row, which is all the run level and the hook sweep read.
+
+        Returns:
+            The component id.
+        """
+        with Session(engine_module.get_engine()) as session:
+            row = Component(
+                id=uuid4(),
+                org_id=_ORG,
+                kind="job",
+                key="cron_job",
+                name="Nightly",
+                config={"cron": "0 6 * * *", **({"retry": retry} if retry else {})},
+            )
+            session.add(row)
+            session.commit()
+            assert row.id is not None
+            return row.id
+
+    def _watching_hook(self, store: Store, component_id: UUID) -> UUID:
+        hook = store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed", "run_failed"], "url": "https://example.invalid/hook"},
+            relations={"watches": [component_id]},
+        )
+        return hook.id
+
+    def _fired(self, run_id: UUID) -> list[EventRow]:
+        with Session(engine_module.get_engine()) as session:
+            return list(
+                session.exec(select(EventRow).where(EventRow.run_id == run_id, EventRow.event_type == "hook_fired"))
+            )
+
+    def _successor(self, run_id: UUID) -> Run:
+        with Session(engine_module.get_engine()) as session:
+            return session.exec(select(Run).where(Run.retry_of == run_id)).one()
+
+    def test_a_failed_run_that_will_be_retried_does_not_fire(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _capture_posts(monkeypatch)
+        job = self._job(max_attempts=2, delay=0)
+        self._watching_hook(store, job)
+        run = store.runs.create(_ORG, component_id=job)
+        store.runs.complete(run.id, success=False)
+
+        _sweep(store)
+
+        assert self._fired(run.id) == []
+
+    def test_an_exhausted_stack_fires_once(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        _capture_posts(monkeypatch)
+        job = self._job(max_attempts=1)
+        self._watching_hook(store, job)
+        run = store.runs.create(_ORG, component_id=job)
+        store.runs.complete(run.id, success=False)
+
+        _sweep(store)
+
+        assert len(self._fired(run.id)) == 1
+
+    def test_a_healed_stack_fires_completed_on_the_successful_attempt(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _capture_posts(monkeypatch)
+        job = self._job(max_attempts=2, delay=0)
+        self._watching_hook(store, job)
+        first = store.runs.create(_ORG, component_id=job)
+        store.runs.complete(first.id, success=False)
+        successor = self._successor(first.id)
+        store.runs.complete(successor.id, success=True)
+
+        _sweep(store)
+
+        assert self._fired(first.id) == []
+        assert len(self._fired(successor.id)) == 1
+
+    def test_the_context_carries_the_stacks_position(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payloads = _capture_posts(monkeypatch)
+        job = self._job(max_attempts=1)
+        self._watching_hook(store, job)
+        run = store.runs.create(_ORG, component_id=job)
+        store.runs.complete(run.id, success=False)
+
+        _sweep(store)
+
+        assert payloads[0]["metadata"]["attempt"] == 1
+        assert payloads[0]["metadata"]["attempts"] == 1
 
 
 class TestFirstTickWatermark:

@@ -11,6 +11,7 @@ from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
 from interloper_db.models import Backfill, Event, Run
 from interloper_db.store.runs import cancel_backfill_runs
+from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from interloper_scheduler.controller import Controller
@@ -77,7 +78,12 @@ class QueueController(Controller):
                 self._store.runs.complete(run_id, success=False)
 
     def _claim_next(self) -> UUID | None:
-        """Claim the oldest queued run, reserve its quota slot, and mark it dispatched.
+        """Claim the oldest claimable queued run, reserve its quota, and dispatch it.
+
+        A run carrying a schedule is not claimable until it has passed, which
+        is how a retry serves its backoff without needing a status of its own.
+        It is skipped rather than waited on, so a run backing off never holds
+        the head of the queue.
 
         This is the authoritative run-quota gate: dispatch requires an atomic
         reservation, so an exhausted organisation can never execute past its
@@ -93,6 +99,7 @@ class QueueController(Controller):
                 statement = (
                     select(Run)
                     .where(Run.status == "queued")
+                    .where(col(Run.scheduled_for).is_(None) | (col(Run.scheduled_for) <= func.now()))
                     .order_by(col(Run.created_at).asc())
                     .limit(1)
                     .with_for_update(skip_locked=True)

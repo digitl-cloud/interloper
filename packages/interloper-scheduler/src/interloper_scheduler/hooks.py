@@ -5,6 +5,12 @@ controller) sweeps recently-terminal runs with a watermark and an overlap
 window, matches them against hooks watching the run's target component (or
 its parent source), and calls each matching hook's ``fire()``.
 
+A hook observes a **verdict**, never an attempt: a failed run whose next
+attempt is already queued is not an outcome, so the sweep skips it. Because
+the successor is created in the same transaction that marks the run failed,
+there is no window in which a doomed attempt looks final, and the rule needs
+no knowledge of budgets or backoff.
+
 Delivery is **at-least-evaluated, at-most-fired-once**: every firing is
 claimed by an ``events`` row whose id is deterministic (uuid5 of hook + run),
 so the overlap window and restarts re-evaluate runs without re-firing hooks.
@@ -25,6 +31,8 @@ import interloper as il
 from interloper_db import Store
 from interloper_db.models import Component, ComponentRelation, Run
 from interloper_db.models import Event as EventRow
+from sqlalchemy import func
+from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
 from interloper_scheduler.controller import Controller
@@ -92,10 +100,13 @@ class HookController(Controller):
         since = self._watermark - _OVERLAP
 
         with Session(self._store.engine) as session:
+            successor = aliased(Run)
+            has_successor = select(successor.id).where(col(successor.retry_of) == Run.id).exists()
             runs = session.exec(
                 select(Run)
                 .where(col(Run.status).in_(_TERMINAL_STATUSES))
                 .where(col(Run.completed_at) > since)
+                .where(~((col(Run.status) == "failed") & has_successor))
                 .order_by(col(Run.completed_at))
             ).all()
 
@@ -146,7 +157,9 @@ class HookController(Controller):
 
         The ids in the context are the machine-readable half; this is the half
         a hook addressing humans (a Slack message) renders, so it carries the
-        component's display name and — for a failure — the error the run
+        component's display name, the stack's position (this attempt's number
+        and how many the stack holds, so a message can say it succeeded on the
+        second or failed after three) and — for a failure — the error the run
         recorded, which lives on the run's event rows rather than the run.
 
         Returns:
@@ -156,6 +169,10 @@ class HookController(Controller):
             "status": run.status,
             "component_name": target.name or target.key,
             "component_key": target.key,
+            "attempt": run.attempt,
+            "attempts": session.exec(
+                select(func.count()).select_from(Run).where(Run.root_run_id == run.root_run_id)
+            ).one(),
         }
         if event_type == "run_failed":
             error = session.exec(

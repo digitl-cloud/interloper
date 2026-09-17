@@ -350,6 +350,20 @@ UPDATE runs SET root_run_id = chain.root FROM chain WHERE runs.id = chain.id;
 Any run row whose `retry_of` points at a deleted run (the FK is `ON DELETE SET NULL`) becomes its own
 root, which is correct: its lineage is gone.
 
+Three constraints the implementation found, all load-bearing:
+
+- **The DDL must be idempotent.** `create_all` creates tables from the models and *then* runs the
+  chain, so on a fresh database the columns already exist by the time 004 runs. Without
+  `IF NOT EXISTS`, the migration fails on every fresh database, which includes `make dev-reset` and
+  any new deployment.
+- **`attempts` is appended as the view's last column.** `CREATE OR REPLACE VIEW` may only add
+  columns at the end; inserting one mid-list reads to Postgres as renaming the column that was
+  there, and it refuses.
+- **`root_run_id` cannot be a column default**, because it references the row's own id, and a
+  `table=True` model skips pydantic validation so a validator never fires. A `before_insert`
+  listener on `Run` owns the invariant instead, which keeps every creation site, and every future
+  one, free of it.
+
 ---
 
 ## 9. Surfaces
@@ -434,6 +448,13 @@ changed, after phase 2 runs retry and hooks report verdicts, after phase 3 the s
 ---
 
 ## 14. Follow-ups, recorded
+
+- **Retried attempts are indistinguishable in a trace.** Each attempt opens its own
+  `interloper.operation.execute` span, which is the conventional shape, but the attributes are built
+  once from the operation's own metadata and carry no attempt number, so N attempts produce N
+  identically named, identically attributed sibling spans. Adding `interloper.attempt` is small.
+  Giving the node a parent span with the attempts as children is the fuller fix: it matches what the
+  UI timeline shows, and it changes the span tree existing dashboards read.
 
 - **An instance-wide default.** Dropped from this design on purpose. Whoever picks it up owns two
   questions: whether an instance default is a floor, a ceiling or a plain fallback under a declared
