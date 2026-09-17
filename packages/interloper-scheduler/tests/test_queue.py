@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
@@ -72,6 +73,50 @@ def test_tick_drains_the_queue(store: Store) -> None:
 
     assert set(launcher.launched) == {first.id, second.id}
     assert set(_statuses(store).values()) == {"dispatched"}
+
+
+def _schedule(store: Store, run_id: UUID, *, seconds: float) -> None:
+    """Move a queued run's earliest claim time by *seconds* from now."""
+    with Session(store.engine) as session:
+        db_run = session.get(Run, run_id)
+        assert db_run is not None
+        db_run.scheduled_for = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=seconds)
+        session.add(db_run)
+        session.commit()
+
+
+def test_a_scheduled_run_is_not_claimed_before_its_time(store: Store) -> None:
+    run = store.runs.create(_ORG)
+    _schedule(store, run.id, seconds=3600)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    assert _statuses(store)[run.id] == "queued"
+
+
+def test_a_run_whose_schedule_has_passed_is_claimed(store: Store) -> None:
+    run = store.runs.create(_ORG)
+    _schedule(store, run.id, seconds=-1)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == [run.id]
+
+
+def test_a_scheduled_run_does_not_block_the_queue_behind_it(store: Store) -> None:
+    # The claim orders by creation, so a run waiting out its backoff must be
+    # skipped rather than held at the head of the line.
+    waiting = store.runs.create(_ORG)
+    _schedule(store, waiting.id, seconds=3600)
+    ready = store.runs.create(_ORG)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == [ready.id]
 
 
 def test_empty_queue_is_a_noop(store: Store) -> None:

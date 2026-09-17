@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -250,6 +250,10 @@ class RunStore:
         every run takes (scheduled, manual, retried), so the component's
         "last run" reflects all of them.
 
+        A failure also queues its own next attempt when the target's policy
+        allows one, before the backfill advances so the batch's in-flight
+        count sees the successor and does not finalize early.
+
         Args:
             run_id: The run UUID.
             success: Whether the run succeeded.
@@ -276,6 +280,9 @@ class RunStore:
                 if db_component:
                     db_component.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
                     session.add(db_component)
+
+            if not success:
+                self._plan_retry(session, db_run)
 
             if db_run.backfill_id:
                 self._advance_backfill(session, db_run.backfill_id, failed=not success)
@@ -315,6 +322,7 @@ class RunStore:
             if src.billable:
                 self._quotas.check(src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
             db_run = Run(
+                root_run_id=src.root_run_id,
                 org_id=src.org_id,
                 component_id=src.component_id,
                 partition_key=src.partition_key,
@@ -329,6 +337,75 @@ class RunStore:
             session.refresh(db_run)
             _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
+
+    @staticmethod
+    def _retry_policy(session: Session, db_run: Run) -> il.RetryPolicy | None:
+        """The run-level policy in force for a run.
+
+        A job's declared policy governs its runs, and nothing else does: a
+        source's or an asset's own ``retry`` is an operation budget, and
+        reading it here would spend an operation's attempts on whole runs.
+        There is no instance-wide default either, so a run whose target
+        declares nothing is attempted once. ``config`` is a plain JSON
+        column, so this is one row read and no hydration.
+
+        Args:
+            session: Open session the target row is read through.
+            db_run: The run whose policy is resolved.
+
+        Returns:
+            The policy, or ``None`` when the target declares none.
+        """
+        if db_run.component_id is None:
+            return None
+        db_component = session.get(Component, db_run.component_id)
+        if db_component is None or db_component.kind != "job":
+            return None
+        declared = (db_component.config or {}).get("retry")
+        return il.RetryPolicy.model_validate(declared) if declared else None
+
+    def _plan_retry(self, session: Session, db_run: Run) -> Run | None:
+        """Queue the next attempt of a failed run, when its budget allows one.
+
+        Called from the single terminal path, in the transaction that marks
+        the run failed, so a doomed attempt never looks final to anything
+        reading the table — which is what lets the hook evaluator gate on the
+        successor's existence without knowing anything about budgets. The
+        successor stays in its predecessor's backfill and stack, and re-runs
+        only what failed.
+
+        The quota is deliberately not checked here: dispatch is the
+        authoritative gate and cancels an over-quota run at claim time, like
+        any other run.
+
+        Args:
+            session: Open session the successor is written through.
+            db_run: The run that just failed.
+
+        Returns:
+            The queued successor, or ``None`` when nothing is retried.
+        """
+        policy = self._retry_policy(session, db_run)
+        if policy is None or not policy.allows(db_run.attempt + 1):
+            return None
+
+        successor = Run(
+            org_id=db_run.org_id,
+            component_id=db_run.component_id,
+            backfill_id=db_run.backfill_id,
+            partition_key=db_run.partition_key,
+            status="queued",
+            scheduled_for=datetime.now(timezone.utc) + timedelta(seconds=policy.delay_before(db_run.attempt + 1)),
+            retry_of=db_run.id,
+            root_run_id=db_run.root_run_id,
+            attempt=db_run.attempt + 1,
+            retry_scope="failed",
+            billable=db_run.billable,
+        )
+        session.add(successor)
+        session.flush()
+        logger.info("Queued attempt %d of run stack %s", successor.attempt, successor.root_run_id)
+        return successor
 
     # -- Backfills -------------------------------------------------------------
 
@@ -586,7 +663,11 @@ class RunStore:
         """Advance a backfill after a run completes.
 
         1. **Fail-fast**: if enabled and the run failed, cancel pending runs.
-        2. **Finalize**: if nothing in-flight or pending, mark complete.
+        2. **Finalize**: if nothing in-flight or pending, mark complete. The
+           verdict reads each stack's latest attempt, so an attempt a later one
+           healed no longer condemns the batch. A queued successor still counts
+           as in flight, which is what keeps the batch open while a retry waits
+           out its backoff.
         3. **Advance**: promote next pending runs up to concurrency limit.
 
         Args:
@@ -628,8 +709,20 @@ class RunStore:
         ).all()
 
         if in_flight_count == 0 and len(pending_runs) == 0:
+            latest = (
+                select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
+                .where(Run.backfill_id == backfill_id)
+                .group_by(col(Run.root_run_id))
+                .subquery()
+            )
             any_failed = session.exec(
-                select(Run).where(Run.backfill_id == backfill_id, Run.status == "failed")
+                select(Run)
+                .join(
+                    latest,
+                    onclause=(col(Run.root_run_id) == latest.c.root_run_id)
+                    & (col(Run.attempt) == latest.c.attempt),
+                )
+                .where(Run.backfill_id == backfill_id, Run.status == "failed")
             ).first()
             db_backfill.status = "failed" if any_failed else "success"
             db_backfill.completed_at = datetime.now(timezone.utc)
