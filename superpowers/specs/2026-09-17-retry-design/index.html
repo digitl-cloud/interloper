@@ -2200,6 +2200,20 @@ attempts that do not fire never claim, so no double firing is possible.</p>
 </ol>
 <p>Any run row whose <code>retry_of</code> points at a deleted run (the FK is <code>ON DELETE SET NULL</code>) becomes its own
 root, which is correct: its lineage is gone.</p>
+<p>Three constraints the implementation found, all load-bearing:</p>
+<ul>
+<li><strong>The DDL must be idempotent.</strong> <code>create_all</code> creates tables from the models and <em>then</em> runs the
+  chain, so on a fresh database the columns already exist by the time 004 runs. Without
+  <code>IF NOT EXISTS</code>, the migration fails on every fresh database, which includes <code>make dev-reset</code> and
+  any new deployment.</li>
+<li><strong><code>attempts</code> is appended as the view's last column.</strong> <code>CREATE OR REPLACE VIEW</code> may only add
+  columns at the end; inserting one mid-list reads to Postgres as renaming the column that was
+  there, and it refuses.</li>
+<li><strong><code>root_run_id</code> cannot be a column default</strong>, because it references the row's own id, and a
+  <code>table=True</code> model skips pydantic validation so a validator never fires. A <code>before_insert</code>
+  listener on <code>Run</code> owns the invariant instead, which keeps every creation site, and every future
+  one, free of it.</li>
+</ul>
 <hr />
 <h2 id="9-surfaces">9. Surfaces<a class="headerlink" href="#9-surfaces" title="Permanent link">&para;</a></h2>
 <h3 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h3>
@@ -2271,10 +2285,20 @@ changed, after phase 2 runs retry and hooks report verdicts, after phase 3 the s
 <hr />
 <h2 id="14-follow-ups-recorded">14. Follow-ups, recorded<a class="headerlink" href="#14-follow-ups-recorded" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>An instance-wide default.</strong> Dropped from this design on purpose. Whoever picks it up owns two
+<li>
+<p><strong>Retried attempts are indistinguishable in a trace.</strong> Each attempt opens its own
+  <code>interloper.operation.execute</code> span, which is the conventional shape, but the attributes are built
+  once from the operation's own metadata and carry no attempt number, so N attempts produce N
+  identically named, identically attributed sibling spans. Adding <code>interloper.attempt</code> is small.
+  Giving the node a parent span with the attempts as children is the fuller fix: it matches what the
+  UI timeline shows, and it changes the span tree existing dashboards read.</p>
+</li>
+<li>
+<p><strong>An instance-wide default.</strong> Dropped from this design on purpose. Whoever picks it up owns two
   questions: whether an instance default is a floor, a ceiling or a plain fallback under a declared
   policy, and whether the operation-level default belongs in a settings block next to the run one or
-  on the runner that executes operations, where <code>max_workers</code> and <code>fail_fast</code> already live.</li>
+  on the runner that executes operations, where <code>max_workers</code> and <code>fail_fast</code> already live.</p>
+</li>
 <li><strong>Capacity spec</strong>: <code>Limit</code> and <code>Limiter</code>, absorbing <code>max_workers</code> and <code>Backfill.concurrency</code>, with
   a store-backed implementation so a limit can be shared across pods. This is the tuning surface for
   vendor quotas, and the reason retry is not being asked to solve contention.</li>
