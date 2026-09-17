@@ -40,6 +40,11 @@ class RunResponse(BaseModel):
     target kinds they do not know about. All three ``component_*`` identity
     fields are ``None`` exactly when the target was deleted
     (``component_id`` nulls on deletion).
+
+    A response is one attempt. In a stack-native listing it is the stack's
+    latest, so ``attempt`` is also how many attempts the stack took; fetching
+    an older attempt by id gives that attempt's own number. ``root_run_id``
+    is what groups them, and lists them through ``?root_run_id=``.
     """
 
     id: UUID
@@ -52,8 +57,10 @@ class RunResponse(BaseModel):
     partition_key: str | None
     status: str
     retry_of: UUID | None = None
+    root_run_id: UUID | None = None
     attempt: int = 1
     retry_scope: str | None = None
+    scheduled_for: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
@@ -79,8 +86,10 @@ class RunResponse(BaseModel):
             partition_key=run.partition_key,
             status=run.status,
             retry_of=run.retry_of,
+            root_run_id=run.root_run_id,
             attempt=run.attempt,
             retry_scope=run.retry_scope,
+            scheduled_for=str(run.scheduled_for) if run.scheduled_for else None,
             started_at=str(run.started_at) if run.started_at else None,
             completed_at=str(run.completed_at) if run.completed_at else None,
             created_at=str(run.created_at) if run.created_at else None,
@@ -222,10 +231,16 @@ def list_runs(
     q: str | None = None,
     component_kind: str | None = None,
     component_key: str | None = None,
+    root_run_id: UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[RunResponse]:
-    """List runs with optional filters.
+    """List one row per run stack, or one stack's attempts.
+
+    A stack is one piece of work, so a listing carries its latest attempt and
+    every filter reads that attempt: a stack whose first attempt failed and
+    whose second succeeded is a success. Passing ``root_run_id`` asks for one
+    stack's attempts instead, newest first.
 
     ``after``/``before`` bound the runs to those whose execution overlaps that
     window — a run occupies ``started_at`` → ``completed_at`` (open-ended while
@@ -247,6 +262,7 @@ def list_runs(
         component_kind: Keep only runs targeting a component of this kind; None applies no filter.
         component_key: Keep only runs targeting a component of this type (catalog key); None
             applies no filter.
+        root_run_id: List this stack's attempts rather than one row per stack.
         limit: Maximum number of runs on the page.
         offset: Number of matching runs to skip before the page starts.
         user: The authenticated user, required to hold at least the ``viewer`` role.
@@ -266,6 +282,7 @@ def list_runs(
         q=q,
         component_kind=component_kind,
         component_key=component_key,
+        root_run_id=root_run_id,
     )
     response.headers["X-Total-Count"] = str(total)
     runs = store.runs.list_all(
@@ -278,6 +295,7 @@ def list_runs(
         q=q,
         component_kind=component_kind,
         component_key=component_key,
+        root_run_id=root_run_id,
         limit=limit,
         offset=offset,
     )

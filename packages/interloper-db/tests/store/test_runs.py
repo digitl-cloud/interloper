@@ -383,6 +383,67 @@ class TestBackfillStacks:
         assert store.runs.get_backfill(backfill_id).status == "running"
 
 
+class TestStackNativeListing:
+    """A listing shows one row per stack: its latest attempt."""
+
+    def _failed_then(self, store: Store, *, success: bool) -> tuple[Run, Run]:
+        """A two-attempt stack whose second attempt ends as asked.
+
+        Returns:
+            The first attempt and its successor.
+        """
+        target = _job_with_retry(store, max_attempts=2, delay=0)
+        first = store.runs.create(_ORG_ID, component_id=target)
+        store.runs.complete(first.id, success=False)
+        with Session(store.engine) as session:
+            successor = session.exec(select(Run).where(Run.retry_of == first.id)).one()
+        store.runs.complete(successor.id, success=success)
+        return first, successor
+
+    def test_a_stack_is_one_row_at_its_latest_attempt(self, store: Store) -> None:
+        first, successor = self._failed_then(store, success=True)
+
+        runs = store.runs.list_all(_ORG_ID)
+
+        assert [run.id for run in runs] == [successor.id]
+        assert runs[0].attempt == 2
+        assert first.id not in {run.id for run in runs}
+
+    def test_count_matches_the_listing(self, store: Store) -> None:
+        self._failed_then(store, success=True)
+
+        assert store.runs.count(_ORG_ID) == 1
+
+    def test_a_status_filter_reads_the_stacks_verdict(self, store: Store) -> None:
+        # The first attempt failed, so a run-level filter would surface it; the
+        # stack succeeded, and that is what a reader means by "failed runs".
+        self._failed_then(store, success=True)
+
+        assert store.runs.list_all(_ORG_ID, status="failed") == []
+        assert len(store.runs.list_all(_ORG_ID, status="success")) == 1
+
+    def test_an_exhausted_stack_still_reads_as_failed(self, store: Store) -> None:
+        self._failed_then(store, success=False)
+
+        assert len(store.runs.list_all(_ORG_ID, status="failed")) == 1
+
+    def test_a_stack_lists_its_attempts_newest_first(self, store: Store) -> None:
+        first, successor = self._failed_then(store, success=True)
+
+        attempts = store.runs.list_all(_ORG_ID, root_run_id=first.root_run_id)
+
+        assert [run.id for run in attempts] == [successor.id, first.id]
+        assert store.runs.count(_ORG_ID, root_run_id=first.root_run_id) == 2
+
+    def test_unretried_runs_are_unaffected(self, store: Store) -> None:
+        first = store.runs.create(_ORG_ID)
+        second = store.runs.create(_ORG_ID)
+
+        runs = store.runs.list_all(_ORG_ID)
+
+        assert {run.id for run in runs} == {first.id, second.id}
+
+
 class TestCreateBackfill:
     """Dispatch order: newest partition first (ITLPR-120)."""
 

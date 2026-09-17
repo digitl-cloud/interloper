@@ -83,6 +83,22 @@ any component.
 `HookState` (`last_fired_at`, `last_run_id`) is the hook's machine-owned state, stamped by the
 operator on every firing.
 
+## Retries
+
+A hook observes a **verdict**, never an attempt. When a run fails and its job's retry policy allows
+another attempt, the failure is not an outcome and no hook fires. Only the attempt that ends the
+stack does: as `run_completed` if a retry healed the work, or as `run_failed` once the budget is
+exhausted.
+
+The context carries the stack's position, so a message can say which attempt it is reporting:
+
+```py
+def fire(self, context: il.HookContext) -> None:
+    attempt = context.metadata["attempt"]
+    attempts = context.metadata["attempts"]
+    post(f"{context.metadata['component_name']}: {context.metadata['status']} on attempt {attempt}/{attempts}")
+```
+
 ## Scope
 
 Hooks fire on **persisted, terminal runs** evaluated by a scheduler. For observing execution
