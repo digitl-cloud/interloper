@@ -153,11 +153,11 @@ running them, the same explicit-bind pattern as any other relation:
 
 ```py
 matcher.campaign_matches.bind("campaigns", fb.campaigns)
-dag = il.DAG(matcher)   # fb.campaigns joins the DAG as materializable=False
+dag = il.DAG(matcher)   # fb.campaigns joins the DAG as enabled=False
 ```
 
 `examples/campaign_matcher.yaml` is the same wiring written as a manifest: two connectors each
-override their `campaigns` asset to `materializable: false`, and `campaign_matches` names both by
+override their `campaigns` asset to `enabled: false`, and `campaign_matches` names both by
 `{ref: ...}` since an asset always travels under its own source. See [Specs](specs.md) for the
 manifest format.
 
@@ -245,13 +245,13 @@ included.
 
 ## Running one asset with its parents
 
-A bound upstream the run does not materialize joins the DAG anyway, as a non-materializable copy
+A bound upstream the run does not materialize joins the DAG anyway, as a disabled copy
 under the same id: it is a live instance with its own destinations, so it can be read without
 being run. That is the whole mechanism behind running one asset with its parents:
 
 ```py
 mini = dag.mini_dag(fin.revenue.id)
-[(op.qualified_key, op.materializable) for op in mini.operations]
+[(op.qualified_key, op.enabled) for op in mini.operations]
 # [("finance.revenue", True), ("shop.orders", False)]
 ```
 

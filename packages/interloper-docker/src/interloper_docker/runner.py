@@ -8,7 +8,7 @@ without recomputing them.
 **Real-time events** are streamed via **stderr** using the ``@EVENT:``
 prefix (see :class:`~interloper.events.StderrEventHandler`).  Events for
 the target asset are forwarded to the host EventBus; events for
-non-materializable parent assets and container-internal ``RUN_*`` events
+disabled parent assets and container-internal ``RUN_*`` events
 are dropped.  The host updates internal state with ``emit=False`` to
 avoid duplicate events.
 """
@@ -52,7 +52,7 @@ class DockerRunner(SyncRunner):
     For each asset, constructs a mini-DAG comprising the asset and all its
     upstream ancestors. The mini-DAG is sent to the container via inline JSON.
     Inside the container, all non-target assets are marked as
-    ``materializable=False`` to avoid recomputation while still enabling
+    ``enabled=False`` to avoid recomputation while still enabling
     IO-based dependency resolution.
 
     Events are emitted by the container process and streamed to the host
@@ -349,7 +349,7 @@ class DockerRunner(SyncRunner):
         """Stream events from the container's stderr to the host EventBus.
 
         Only events belonging to the **target asset** are forwarded.
-        Events for non-materializable parent assets in the mini-DAG and
+        Events for disabled parent assets in the mini-DAG and
         container-internal ``RUN_*`` events are dropped.
 
         Args:

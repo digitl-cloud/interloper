@@ -150,21 +150,21 @@ def trigger_backfill(
 
 def toggle_asset(
     asset_id: str,
-    materializable: bool,
+    enabled: bool,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
     """Enable or disable materialization for an asset.
 
     Args:
         asset_id: UUID of the asset.
-        materializable: True to enable materialization, false to disable.
+        enabled: True to enable materialization, false to disable.
     """
     try:
         store = get_store()
         aid = UUID(asset_id)
         asset = store.components.get(aid, kind="asset")
-        updated = store.components.update(aid, config={**(asset.config or {}), "materializable": materializable})
-        action = "enabled" if materializable else "disabled"
+        updated = store.components.update(aid, config={**(asset.config or {}), "enabled": enabled})
+        action = "enabled" if enabled else "disabled"
         return {
             "status": "success",
             "message": f"Asset '{updated.key}' materialization {action}",

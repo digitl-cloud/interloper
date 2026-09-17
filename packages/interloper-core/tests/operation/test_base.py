@@ -53,13 +53,13 @@ class TestContract:
         assert Operation.kind == ""
         assert "destination" in il.KINDS
 
-    def test_materializable_is_a_field(self):
-        assert _NoopOperation().materializable is True
-        assert _NoopOperation(materializable=False).materializable is False
+    def test_enabled_is_a_field(self):
+        assert _NoopOperation().enabled is True
+        assert _NoopOperation(enabled=False).enabled is False
 
     def test_node_protocol_defaults(self):
         operation = _NoopOperation()
-        assert operation.materializable is True
+        assert operation.enabled is True
         assert operation.partitioning is None
         assert operation.effective_partition(None) is None
         assert type(operation).capture_traceback is True

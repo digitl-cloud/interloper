@@ -41,7 +41,7 @@ class KubernetesRunner(SyncRunner):
     For each asset, constructs a mini-DAG comprising the asset and all its
     upstream ancestors. The mini-DAG is sent to the container via inline JSON.
     Inside the container, all non-target assets are marked as
-    ``materializable=False`` to avoid recomputation while still enabling
+    ``enabled=False`` to avoid recomputation while still enabling
     IO-based dependency resolution.
 
     The blocking Job-polling walk is offloaded to a thread, so the runner
@@ -426,7 +426,7 @@ class KubernetesRunner(SyncRunner):
 
         Only events for the **target asset** are forwarded.
         Container-internal ``RUN_*`` events and events for
-        non-materializable parent assets are dropped.
+        disabled parent assets are dropped.
 
         Args:
             job_name: The K8s Job name to stream logs from.

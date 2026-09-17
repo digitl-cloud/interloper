@@ -556,10 +556,10 @@ class TestReconfiguration:
         with pytest.raises(TypeError, match="declares no relation"):
             FakeSourceWithAssets()(watches=[FakeDestination()])
 
-    def test_materializable_override_propagates_to_assets(self):
+    def test_enabled_override_propagates_to_assets(self):
         source = FakeSourceWithAssets()
-        reconfigured = source(materializable=False)
-        assert all(a.materializable is False for a in reconfigured.assets)
+        reconfigured = source(enabled=False)
+        assert all(a.enabled is False for a in reconfigured.assets)
 
     def test_copied_assets_have_source_backref_on_copy(self):
         source = FakeSourceWithAssets()
@@ -633,14 +633,14 @@ class TestSerialization:
 
     def test_source_roundtrip_preserves_per_asset_mutation(self):
         source = FakeSourceWithAssets()
-        source.assets[0].materializable = False
+        source.assets[0].enabled = False
         source.assets[0].dataset = "custom"
 
         restored = FakeSourceWithAssets.from_spec(source.to_spec())
-        assert restored.assets[0].materializable is False
+        assert restored.assets[0].enabled is False
         assert restored.assets[0].dataset == "custom"
         # Other asset unchanged
-        assert restored.assets[1].materializable is True
+        assert restored.assets[1].enabled is True
 
     def test_source_with_destination_roundtrip(self):
         source = FakeSource(destinations=[FakeDestination()])
@@ -660,14 +660,14 @@ class TestSerialization:
 
     def test_roundtrip_via_json_string(self):
         source = FakeSourceWithAssets(dataset="ds")
-        source.assets[0].materializable = False
+        source.assets[0].enabled = False
 
         spec_json = source.to_spec().model_dump_json()
         restored = Spec.model_validate_json(spec_json).reconstruct()
 
         assert isinstance(restored, FakeSourceWithAssets)
         assert restored.dataset == "ds"
-        assert restored.assets[0].materializable is False
+        assert restored.assets[0].enabled is False
 
 
 class TestSpecRule:
@@ -733,12 +733,12 @@ class TestSpecRule:
 class TestSelect:
     """Init-time asset selection via the ``select`` field."""
 
-    def test_unselected_assets_stay_as_non_materializable_deps(self):
+    def test_unselected_assets_stay_as_non_enabled_deps(self):
         source = FakeSourceWithAssets(select=["fake_second"])
         by_key = {type(a).key: a for a in source.assets}
-        assert by_key["fake_second"].materializable
-        assert not by_key["fake_first"].materializable
-        # The non-materializable sibling stays wired as an upstream.
+        assert by_key["fake_second"].enabled
+        assert not by_key["fake_first"].enabled
+        # The disabled sibling stays wired as an upstream.
         assert by_key["fake_second"].bound("fake_first") is by_key["fake_first"]
 
     def test_selected_assets_keep_their_source(self):

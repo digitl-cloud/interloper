@@ -172,7 +172,7 @@ def test_leg_without_data_is_skipped_not_fatal() -> None:
     fb = _connector("fb_like", ["x"])(destinations=[memory])
     tt = _connector("tt_like", ["y"])(destinations=[memory])
     matcher = CampaignMatcher(destinations=[memory])
-    tt.campaigns.materializable = False  # nothing written for tt: its leg reads as None
+    tt.campaigns.enabled = False  # nothing written for tt: its leg reads as None
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, tt, matcher).materialize(partition)
     rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
@@ -187,7 +187,7 @@ def test_matcher_alone_reads_bound_upstreams_read_only() -> None:
     matcher = CampaignMatcher(destinations=[memory])
     matcher.campaign_matches.bind("campaigns", fb.campaigns)
     dag = il.DAG(matcher)
-    assert dag.operation_map[fb.campaigns.id].materializable is False
+    assert dag.operation_map[fb.campaigns.id].enabled is False
     dag.materialize(partition)
     assert len(memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))) == 1
 

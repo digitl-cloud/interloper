@@ -548,7 +548,7 @@ class TestInjection:
 
         EventBus.subscribe(handler)
         try:
-            result = DAG(fb(materializable=False), asset).materialize(TimePartition(dt.date(2026, 9, 1)))
+            result = DAG(fb(enabled=False), asset).materialize(TimePartition(dt.date(2026, 9, 1)))
             EventBus.flush(timeout=5.0)
         finally:
             EventBus.unsubscribe(handler)
@@ -556,7 +556,7 @@ class TestInjection:
         assert result.status is ExecutionStatus.COMPLETED
         # The leg carries the DAG's own node, the read-only copy of the binding.
         assert seen["leg"].asset.id == fb.campaigns.id
-        assert seen["leg"].asset.materializable is False
+        assert seen["leg"].asset.enabled is False
         assert seen["leg"].data is None
         assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
 
@@ -834,8 +834,8 @@ class TestReconfiguration:
     def test_override_dataset(self):
         assert FakeAsset()(dataset="my_ds").dataset == "my_ds"
 
-    def test_override_materializable(self):
-        assert FakeAsset(materializable=True)(materializable=False).materializable is False
+    def test_override_enabled(self):
+        assert FakeAsset(enabled=True)(enabled=False).enabled is False
 
     def test_dataset_and_strategy_are_overridable(self):
         from interloper.normalizer import MaterializationStrategy
@@ -857,9 +857,9 @@ class TestReconfiguration:
         assert reconfigured.normalizer is None
 
     def test_omitted_fields_preserved(self):
-        asset = FakeAsset(dataset="original", materializable=False)
+        asset = FakeAsset(dataset="original", enabled=False)
         reconfigured = asset(dataset="updated")
-        assert reconfigured.materializable is False
+        assert reconfigured.enabled is False
 
     def test_the_copy_keeps_the_originals_bindings(self):
         destination = FakeDestination()
@@ -867,7 +867,7 @@ class TestReconfiguration:
         asset = FakeSourceOwnedAsset(destinations=[destination])
         asset.parent = source
 
-        reconfigured = asset(materializable=False)
+        reconfigured = asset(enabled=False)
 
         assert reconfigured.destinations == [destination]
         assert reconfigured.parent is source
@@ -895,11 +895,11 @@ class TestReconfiguration:
 
 class TestSerialization:
     def test_standalone_asset_roundtrip(self):
-        asset = FakeAsset(dataset="ds", materializable=False)
+        asset = FakeAsset(dataset="ds", enabled=False)
         restored = Component.from_spec(asset.to_spec())
         assert isinstance(restored, FakeAsset)
         assert restored.dataset == "ds"
-        assert restored.materializable is False
+        assert restored.enabled is False
 
     def test_asset_with_destination_roundtrip(self):
         asset = FakeAsset(destinations=[FakeDestination()])
@@ -914,13 +914,13 @@ class TestSerialization:
 
     def test_source_owned_asset_roundtrip_preserves_subclass(self):
         source = FakeParentSource()
-        asset = FakeSourceOwnedAsset(dataset="override", materializable=False)
+        asset = FakeSourceOwnedAsset(dataset="override", enabled=False)
         asset.parent = source
 
         restored = FakeSourceOwnedAsset.from_spec(asset.to_spec())
         assert isinstance(restored, FakeSourceOwnedAsset)
         assert restored.dataset == "override"
-        assert restored.materializable is False
+        assert restored.enabled is False
 
     def test_roundtrip_via_json_string(self):
         asset = FakeAsset(dataset="ds", default_destination_key="memory")
@@ -1357,7 +1357,7 @@ class TestUpstreamReads:
 
         EventBus.subscribe(handler)
         try:
-            result = DAG(one(materializable=False), two(materializable=False), matcher).materialize(partition)
+            result = DAG(one(enabled=False), two(enabled=False), matcher).materialize(partition)
             EventBus.flush(timeout=5.0)
         finally:
             EventBus.unsubscribe(handler)
@@ -1380,7 +1380,7 @@ class TestUpstreamReads:
         matcher = self._matcher()(destinations=[mem], campaigns=[one.campaigns])
         partition = TimePartition(dt.date(2026, 1, 1))
 
-        result = DAG(one(materializable=False), matcher).materialize(partition)
+        result = DAG(one(enabled=False), matcher).materialize(partition)
 
         assert result.status is ExecutionStatus.FAILED
 
@@ -1403,7 +1403,7 @@ class TestUpstreamReads:
             return [{"date": context.partition_date, "ids": [row["id"] for row in c.data]}]
 
         asset = single(destinations=[mem], c=one.campaigns)
-        DAG(one(materializable=False), asset).materialize(partition)
+        DAG(one(enabled=False), asset).materialize(partition)
 
         assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
             {"date": dt.date(2026, 1, 1), "ids": ["fb"]}
@@ -1423,7 +1423,7 @@ class TestUpstreamReads:
         asset = lenient(destinations=[mem], c=one.campaigns)
         partition = TimePartition(dt.date(2030, 5, 5))  # provider never ran for this day
 
-        result = DAG(one(materializable=False), asset).materialize(partition)
+        result = DAG(one(enabled=False), asset).materialize(partition)
 
         assert result.status is ExecutionStatus.COMPLETED
         assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
@@ -1438,7 +1438,7 @@ class TestUpstreamReads:
 
         broken = FbLike(destinations=[Broken()])
         asset = lenient(destinations=[mem], c=broken.campaigns)
-        assert DAG(broken(materializable=False), asset).materialize(partition).status is ExecutionStatus.FAILED
+        assert DAG(broken(enabled=False), asset).materialize(partition).status is ExecutionStatus.FAILED
 
     def test_an_upstream_absent_from_the_dag_is_skipped_with_a_warning(self):
         mem = il.MemoryDestination()
@@ -1480,7 +1480,7 @@ class TestUpstreamReadFailures:
             return []
 
         asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
-        dag = DAG(one(materializable=False), asset)
+        dag = DAG(one(enabled=False), asset)
 
         with pytest.raises(AssetError, match="No destination found for upstream asset 'campaigns'"):
             await asset.run_async(TimePartition(dt.date(2026, 1, 1)), dag=dag)
@@ -1507,7 +1507,7 @@ class TestUpstreamReadFailures:
             return []
 
         asset = consumer(destinations=[il.MemoryDestination()], c=one.campaigns)
-        dag = DAG(one(materializable=False), asset)
+        dag = DAG(one(enabled=False), asset)
         captured: list[Event] = []
         EventBus.subscribe(captured.append)
         try:
@@ -1565,7 +1565,7 @@ class TestNonMaterializableAssets:
     """Read-only hydration of an upstream dependency."""
 
     async def test_materialize_returns_nothing(self):
-        asset = FakeAsset(destinations=[il.MemoryDestination()], materializable=False)
+        asset = FakeAsset(destinations=[il.MemoryDestination()], enabled=False)
 
         assert await asset.materialize_async() is None
 

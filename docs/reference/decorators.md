@@ -126,7 +126,7 @@ Calling an instance returns a copy; omitted keywords mean "unchanged".
 | `id` | |
 | `dataset` | `dataset` (re-points assets that inherited the old value) |
 | `default_destination_key` | `default_destination_key` |
-| `materializable` | `materializable` (applied to every asset) |
+| `enabled` | `enabled` (applied to every asset) |
 | `materialization_strategy` | `materialization_strategy` |
 | `normalizer` (`None` clears) | `normalizer` |
 | any relation name (replaced; `None` clears) | any relation name (replaced; `None` clears, and repoints what was trickled) |

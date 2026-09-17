@@ -222,10 +222,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if args.run_id:
             metadata["run_id"] = args.run_id
 
-        materializable = [operation for operation in dag.operations if operation.materializable]
+        enabled = [operation for operation in dag.operations if operation.enabled]
         logger.info(
-            "Running DAG with %d materializable operation(s) (%d total) using %s",
-            len(materializable),
+            "Running DAG with %d enabled operation(s) (%d total) using %s",
+            len(enabled),
             len(dag.operations),
             type(runner).__name__,
         )
@@ -307,7 +307,7 @@ def _print_plan(
         runner_name: Class name of the configured runner.
         name: Run name; omitted from the output when empty.
     """
-    materializable = [operation for operation in dag.operations if operation.materializable]
+    enabled = [operation for operation in dag.operations if operation.enabled]
     lines: list[str] = []
     if name:
         lines.append(f"Run:       {name}")
@@ -315,7 +315,7 @@ def _print_plan(
         [
             f"Runner:    {runner_name}",
             f"Partition: {partition if partition is not None else '(none)'}",
-            f"Operations: {len(materializable)} materializable / {len(dag.operations)} total",
+            f"Operations: {len(enabled)} enabled / {len(dag.operations)} total",
             "",
         ]
     )

@@ -322,7 +322,7 @@ class RunState:
     def _initialize_operations(self) -> None:
         """Initialize all operations as QUEUED, then promote root operations to READY."""
         for operation in self.dag.operations:
-            status = ExecutionStatus.SKIPPED if not operation.materializable else ExecutionStatus.QUEUED
+            status = ExecutionStatus.SKIPPED if not operation.enabled else ExecutionStatus.QUEUED
             self.executions[operation.id] = ExecutionInfo(
                 component_id=operation.id,
                 component_key=operation.key,

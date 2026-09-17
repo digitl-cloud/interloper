@@ -44,7 +44,7 @@ state.mark_canceled(operation)
 ```
 
 Completing an operation promotes its dependents to ready; failing one cancels everything
-downstream. Non-materializable operations start as `SKIPPED` and count as satisfied
+downstream. Non-enabled operations start as `SKIPPED` and count as satisfied
 predecessors. Each transition emits the matching `OPERATION_*` event with a deterministic id
 (`emit=False` skips the emission for runners whose child process emits it itself). All
 mutations happen on the event loop thread, so no locking is needed.

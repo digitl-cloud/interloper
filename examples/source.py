@@ -62,10 +62,10 @@ if __name__ == "__main__":
         print(f"{a.key}: {a.run()}")
 
     print("\n=== Reconfigure ===")
-    disabled = s(materializable=False)
+    disabled = s(enabled=False)
     for a in disabled.assets:
-        print(f"{a.key}: materializable={a.materializable}")
+        print(f"{a.key}: enabled={a.enabled}")
 
     print("\n=== Original unchanged ===")
     for a in s.assets:
-        print(f"{a.key}: materializable={a.materializable}")
+        print(f"{a.key}: enabled={a.enabled}")

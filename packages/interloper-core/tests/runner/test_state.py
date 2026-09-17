@@ -111,7 +111,7 @@ class TestInitialisation:
         assert state.executions[operations["middle"].id].status is ExecutionStatus.QUEUED
         assert state.executions[operations["leaf"].id].status is ExecutionStatus.QUEUED
 
-    def test_non_materializable_operations_are_skipped_from_the_start(self) -> None:
+    def test_non_enabled_operations_are_skipped_from_the_start(self) -> None:
         dag = il.DAG(ChainSource(destinations=[il.MemoryDestination()]))
         state = RunState(dag)
         skipped = [
@@ -120,17 +120,17 @@ class TestInitialisation:
             if state.executions[operation.id].status is ExecutionStatus.SKIPPED
         ]
 
-        assert all(not operation.materializable for operation in skipped)
+        assert all(not operation.enabled for operation in skipped)
 
     def test_a_dependent_of_only_skipped_operations_is_promoted(self, monkeypatch: Any) -> None:
-        # A DAG whose upstream is not materializable (e.g. a destination-only
+        # A DAG whose upstream is disabled (e.g. a destination-only
         # node) must not leave its dependent queued forever.
         dag = il.DAG(ChainSource(destinations=[il.MemoryDestination()]))
         root = next(operation for operation in dag.operations if operation.key == "root")
-        # `materializable` is a field on `Operation`, so there is no class attribute to replace:
+        # `enabled` is a field on `Operation`, so there is no class attribute to replace:
         # the property is installed, not overridden.
         monkeypatch.setattr(
-            type(root), "materializable", property(lambda self: self.key != "root"), raising=False
+            type(root), "enabled", property(lambda self: self.key != "root"), raising=False
         )
 
         state = RunState(dag)

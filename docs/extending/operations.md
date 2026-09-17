@@ -37,7 +37,7 @@ plain defaults that make any subclass a valid node; `Asset` overrides them with 
 | Member | Default | Asset |
 |--------|---------|-------|
 | `id`, `kind`, `key`, `qualified_key` | from `Component` | qualified with the source key |
-| `materializable` | `True` | field |
+| `enabled` | `True` | field |
 | `relations` | `{}` | every relation the class declares, by name |
 | `upstream_relations()` | `{}` | the relations whose kind is `asset`: the graph's edges |
 | `bound(name)` | from `Component` | what is bound to one relation |

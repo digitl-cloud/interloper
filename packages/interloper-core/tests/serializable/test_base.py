@@ -250,7 +250,7 @@ class TestSerializationContext:
 
     def test_a_closed_context_writes_its_own_copies_of_the_owned_components(self):
         original = OwningSource().assets[0]
-        copy = original(materializable=False)
+        copy = original(enabled=False)
 
         assert SerializationContext().carried([original]) == [original]
         assert SerializationContext([copy]).carried([original]) == [copy]

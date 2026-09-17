@@ -242,7 +242,7 @@ class Source(Component, Workload):
         """
         super().validate_relations(nodes)
         for asset in self.assets:
-            if asset.materializable:
+            if asset.enabled:
                 asset.validate_relations(nodes)
 
     def on_rebind(self, name: str) -> None:
@@ -262,7 +262,7 @@ class Source(Component, Workload):
             self.trickle(destination)
 
     def _apply_select(self) -> None:
-        """Mark assets outside ``select`` as non-materializable.
+        """Mark assets outside ``select`` as disabled.
 
         Unselected assets stay in the list so intra-source dependency wiring
         can still resolve them by key and their outputs stay readable, but
@@ -280,7 +280,7 @@ class Source(Component, Workload):
         if unknown:
             raise SourceError(f"Source '{self.key}' has no asset(s) {unknown}; available: {sorted(known)}")
         selected = set(self.select or [])
-        self.assets = [a if a.key in selected else a(materializable=False) for a in self.assets]
+        self.assets = [a if a.key in selected else a(enabled=False) for a in self.assets]
         for asset in self.assets:
             asset.parent = self
 
@@ -371,7 +371,7 @@ class Source(Component, Workload):
         *,
         dataset: str | None = None,
         default_destination_key: str | None = None,
-        materializable: bool | None = None,
+        enabled: bool | None = None,
         normalizer: Normalizer | None = None,
         materialization_strategy: MaterializationStrategy | None = None,
         **relations: Any,
@@ -390,7 +390,7 @@ class Source(Component, Workload):
                 dataset are re-pointed; per-asset overrides are preserved.
             default_destination_key: Replacement key of the destination
                 downstream assets read from.
-            materializable: Applied to every asset of the copy.
+            enabled: Applied to every asset of the copy.
             normalizer: Replacement normalizer for the source.
             materialization_strategy: Replacement default strategy for the
                 source.
@@ -428,8 +428,8 @@ class Source(Component, Workload):
             copy.dataset = dataset
         if default_destination_key is not None:
             copy.default_destination_key = default_destination_key
-        if materializable is not None:
-            copy.assets = [asset(materializable=materializable) for asset in copy.assets]
+        if enabled is not None:
+            copy.assets = [asset(enabled=enabled) for asset in copy.assets]
         if normalizer is not None:
             copy.normalizer = normalizer
         if materialization_strategy is not None:

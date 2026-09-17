@@ -517,10 +517,10 @@ class TestGraph:
         assert dag.successors[by_key["f"].id] == [by_key["g"].id]
         assert dag.successors[by_key["g"].id] == []
 
-    def test_non_materializable_asset_skipped_from_predecessors(self):
-        # Non-materializable assets are parents, not roots, so their predecessors
+    def test_non_enabled_asset_skipped_from_predecessors(self):
+        # Non-enabled assets are parents, not roots, so their predecessors
         # are not computed (they don't need to execute).
-        upstream = FakeAsset(materializable=False)
+        upstream = FakeAsset(enabled=False)
         downstream = FakeOtherAsset(upstream=upstream)
         dag = DAG(upstream, downstream)
         assert upstream.id not in dag.predecessors
@@ -530,14 +530,14 @@ class TestGraph:
         upstream = FakeAsset()
         downstream = FakeAssetRequiringFake(upstream=upstream)
         dag = DAG(downstream)
-        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.operation_map[upstream.id].enabled is False
         assert dag.predecessors[downstream.id] == [upstream.id]
 
     def test_an_optional_bound_upstream_outside_the_dag_joins_read_only_too(self):
         upstream = FakeAsset()
         asset = FakeAssetOptionallyRequiringFake(upstream=upstream)
         dag = DAG(asset)
-        assert dag.operation_map[upstream.id].materializable is False
+        assert dag.operation_map[upstream.id].enabled is False
         assert dag.predecessors[asset.id] == [upstream.id]
 
 
@@ -572,7 +572,7 @@ class TestValidation:
 
 class TestGranularityAcrossEdges:
     def test_mixed_granularity_raises_even_for_read_only_upstreams(self):
-        daily = FakeDaily(materializable=False)
+        daily = FakeDaily(enabled=False)
         monthly = FakeMonthly(daily=daily)
         with pytest.raises(DAGError, match="partitioned by day"):
             DAG(daily, monthly)
@@ -601,7 +601,7 @@ class TestDeclaredResolution:
             DAG(finance)
 
     def test_unbound_slot_is_ignored_on_read_only_nodes(self):
-        finance = FakeFinance()(materializable=False)
+        finance = FakeFinance()(enabled=False)
         DAG(finance)  # no raise
 
     def test_many_slot_binds_every_match(self):
@@ -639,7 +639,7 @@ class TestReadOnlyUpstreams:
         dag = DAG(matcher)
 
         node = dag.operation_map[fb.campaigns.id]
-        assert node.materializable is False
+        assert node.enabled is False
         assert node is not fb.campaigns
         assert node.parent is fb
         assert dag.get_predecessors(matcher.campaign_matches.id) == [fb.campaigns.id]
@@ -720,12 +720,12 @@ class TestTraversal:
         assert len(levels) == 1
         assert len(levels[0]) == 4
 
-    def test_topological_generations_skips_non_materializable_parent(self):
+    def test_topological_generations_skips_non_enabled_parent(self):
         # Mini-DAG shape: a skipped parent upstream of a live target. The
         # parent's edge counts as satisfied, and only the target appears.
         a = FakeAsset()
         b = FakeOtherAsset(upstream=a)
-        dag = DAG(a(materializable=False), b)
+        dag = DAG(a(enabled=False), b)
         levels = dag.topological_generations()
         assert [[asset.id for asset in level] for level in levels] == [[b.id]]
 
@@ -773,7 +773,7 @@ class TestMiniDag:
         keys = {type(asset).key for asset in mini.operations}
         assert keys == {"fake_asset", "fake_other_asset"}
 
-    def test_mini_dag_marks_parents_non_materializable(self):
+    def test_mini_dag_marks_parents_non_enabled(self):
         a = FakeAsset()
         b = FakeOtherAsset(upstream=a)
         dag = DAG(a, b)
@@ -781,15 +781,15 @@ class TestMiniDag:
 
         target = next(asset for asset in mini.operations if type(asset).key == "fake_other_asset")
         parent = next(asset for asset in mini.operations if type(asset).key == "fake_asset")
-        assert target.materializable is True
-        assert parent.materializable is False
+        assert target.enabled is True
+        assert parent.enabled is False
 
     def test_mini_dag_for_root_asset_has_no_parents(self):
         a = FakeAsset()
         dag = DAG(a)
         mini = dag.mini_dag(a.id)
         assert len(mini.operations) == 1
-        assert mini.operations[0].materializable is True
+        assert mini.operations[0].enabled is True
 
     def test_mini_dag_raises_for_unknown_id(self):
         dag = DAG(FakeAsset())
@@ -804,10 +804,10 @@ class TestMiniDag:
         assert {type(asset).key for asset in mini.operations} == {"b", "c", "e"}
 
         target = next(asset for asset in mini.operations if type(asset).key == "e")
-        assert target.materializable is True
+        assert target.enabled is True
         for asset in mini.operations:
             if type(asset).key != "e":
-                assert asset.materializable is False
+                assert asset.enabled is False
 
 
 # -- Serialization round-trip --------------------------------------------------
@@ -891,24 +891,24 @@ class TestSerialization:
 
         restored = DAG.from_spec(mini.to_spec())
         assert len(restored.operations) == 2
-        restored_flags = [asset.materializable for asset in restored.operations]
-        assert restored_flags == [asset.materializable for asset in mini.operations]
+        restored_flags = [asset.enabled for asset in restored.operations]
+        assert restored_flags == [asset.enabled for asset in mini.operations]
 
-    def test_roundtrip_source_mini_dag_preserves_materializable(self):
-        """Mini-DAG from a source: only the target asset is materializable."""
+    def test_roundtrip_source_mini_dag_preserves_enabled(self):
+        """Mini-DAG from a source: only the target asset is enabled."""
         source = FakeSource()
         dag = DAG(source)
         by_key = {type(a).key: a for a in dag.operations}
         # fake_second depends on fake_first; mini_dag for fake_second
-        # should mark fake_first as non-materializable.
+        # should mark fake_first as disabled.
         mini = dag.mini_dag(by_key["fake_second"].id)
 
         restored = DAG.from_spec(mini.to_spec())
         restored_by_key = {type(a).key: a for a in restored.operations}
 
         assert len(restored.operations) == 2
-        assert restored_by_key["fake_second"].materializable is True
-        assert restored_by_key["fake_first"].materializable is False
+        assert restored_by_key["fake_second"].enabled is True
+        assert restored_by_key["fake_first"].enabled is False
 
     def test_roundtrip_source_mini_dag_excludes_unrelated_assets(self):
         """Mini-DAG from a source should not include assets that aren't in the subgraph."""
@@ -924,21 +924,21 @@ class TestSerialization:
         assert restored_keys == {"a", "c"}
         for asset in restored.operations:
             if type(asset).key == "c":
-                assert asset.materializable is True
+                assert asset.enabled is True
             else:
-                assert asset.materializable is False
+                assert asset.enabled is False
 
-    def test_roundtrip_source_mini_dag_only_one_materializable(self, dag: il.DAG):
-        """Every mini-DAG round-trip should have exactly one materializable asset."""
+    def test_roundtrip_source_mini_dag_only_one_enabled(self, dag: il.DAG):
+        """Every mini-DAG round-trip should have exactly one enabled asset."""
         for asset in dag.operations:
             mini = dag.mini_dag(asset.id)
             restored = DAG.from_spec(mini.to_spec())
-            materializable = [a for a in restored.operations if a.materializable]
-            assert len(materializable) == 1, (
-                f"mini_dag for '{type(asset).key}' has {len(materializable)} "
-                f"materializable assets after round-trip, expected 1"
+            enabled = [a for a in restored.operations if a.enabled]
+            assert len(enabled) == 1, (
+                f"mini_dag for '{type(asset).key}' has {len(enabled)} "
+                f"enabled assets after round-trip, expected 1"
             )
-            assert type(materializable[0]).key == type(asset).key
+            assert type(enabled[0]).key == type(asset).key
 
 
 class TestDAGSpec:
@@ -954,9 +954,9 @@ class TestDAGSpec:
         fb_item = next(item for item in spec.items if item.id == fb.id)
         assert fb_item.init is not None
         assert set(fb_item.init["assets"]) == {"campaigns"}
-        assert fb_item.init["assets"]["campaigns"]["materializable"] is False
+        assert fb_item.init["assets"]["campaigns"]["enabled"] is False
 
-    def test_round_trip_preserves_operation_map_and_materializable_flags(self):
+    def test_round_trip_preserves_operation_map_and_enabled_flags(self):
         fb = FbLike()
         matcher = Matcher()
         matcher.campaign_matches.bind("campaigns", fb.campaigns)
@@ -966,9 +966,9 @@ class TestDAGSpec:
 
         assert set(rebuilt.operation_map) == set(dag.operation_map)
         for operation_id, operation in dag.operation_map.items():
-            assert rebuilt.operation_map[operation_id].materializable == operation.materializable
-        assert rebuilt.operation_map[matcher.campaign_matches.id].materializable is True
-        assert rebuilt.operation_map[fb.campaigns.id].materializable is False
+            assert rebuilt.operation_map[operation_id].enabled == operation.enabled
+        assert rebuilt.operation_map[matcher.campaign_matches.id].enabled is True
+        assert rebuilt.operation_map[fb.campaigns.id].enabled is False
         # FbLike's own other assets, if it had any, would come along under the
         # same read-only source item; the map staying the same size rules that out.
         other_fb_assets = {asset.id for asset in fb.assets if asset.id != fb.campaigns.id}

@@ -58,11 +58,11 @@ nothing else to ask. In the platform, the store resolves it. A reference nobody 
 
 A source is the unit of reconstruction. Its spec carries the assets as an **override map** keyed
 by asset key rather than as individual specs, which keeps the document compact and lets
-per-asset state (its own destinations, `materializable`, its bound upstreams) survive:
+per-asset state (its own destinations, `enabled`, its bound upstreams) survive:
 
 ```py
 Shop(account_id="act_1").to_spec().init
-# {"account_id": "act_1", "assets": {"orders": {"id": "...", "materializable": True}, ...}}
+# {"account_id": "act_1", "assets": {"orders": {"id": "...", "enabled": True}, ...}}
 ```
 
 Reconstruction builds each asset class with its overrides. The map is also the list of assets the
@@ -101,7 +101,7 @@ init:
         assets:
           campaigns:
             id: fb-campaigns
-            materializable: false
+            enabled: false
     - key: campaign_matcher
       init:
         assets:
@@ -141,7 +141,7 @@ dag = il.DAG.from_spec(DAGSpec(**payload))
 
 It is what `MultiProcessRunner` ships to its workers and what `interloper run --format inline`
 accepts. The override map is built from the DAG's **actual** asset instances, so a parent the run
-only reads travels as its own document carrying that one asset with `materializable: false`,
+only reads travels as its own document carrying that one asset with `enabled: false`,
 and stays read-only after the round-trip.
 
 ## What makes something serializable

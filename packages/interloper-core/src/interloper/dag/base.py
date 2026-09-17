@@ -142,7 +142,7 @@ class DAG:
             self.successors[operation.id] = []
 
         for operation in self.operations:
-            if not operation.materializable:
+            if not operation.enabled:
                 continue
 
             self.predecessors[operation.id] = []
@@ -189,7 +189,7 @@ class DAG:
         """
         assets = [operation for operation in self.operations if isinstance(operation, Asset)]
         for asset in assets:
-            if not asset.materializable:
+            if not asset.enabled:
                 continue
             for name, relation in asset.upstream_relations().items():
                 if asset.bound(name) or not relation.keys:
@@ -218,17 +218,17 @@ class DAG:
         A materializing node reads its upstreams through the DAG's own node
         (see :meth:`~interloper.asset.base.Asset._read_upstreams`), so an
         upstream nobody in the run materializes still has to be one: it joins
-        as a non-materializable copy, same id, same bindings, same parent,
+        as a disabled copy, same id, same bindings, same parent,
         which the runners skip and the dependent reads. Those copies never
         execute, so their own upstreams are not pulled in with them.
         """
         for operation in list(self.operations):
-            if not operation.materializable:
+            if not operation.enabled:
                 continue
             for upstream in self._upstream_targets(operation):
                 if upstream.id in self.operation_map:
                     continue
-                read_only = upstream(materializable=False)
+                read_only = upstream(enabled=False)
                 self.operations.append(read_only)
                 self.operation_map[read_only.id] = read_only
 
@@ -249,7 +249,7 @@ class DAG:
         """
         nodes = {id: node for id, node in self.operation_map.items() if isinstance(node, Component)}
         for operation in self.operations:
-            if operation.materializable and isinstance(operation, Component):
+            if operation.enabled and isinstance(operation, Component):
                 operation.validate_relations(nodes)
 
     def _check_circular_dependencies(self) -> None:
@@ -321,8 +321,8 @@ class DAG:
         Lists are ordered so that all dependencies of a level appear in
         previous levels (Kahn's algorithm).
 
-        Only materializable operations appear in the generations.  Edges from
-        non-materializable operations count as already satisfied, mirroring
+        Only enabled operations appear in the generations.  Edges from
+        disabled operations count as already satisfied, mirroring
         the runners, which mark those nodes as skipped (e.g. the parents
         in a :meth:`mini_dag`).
 
@@ -540,7 +540,7 @@ class DAG:
         """Create a mini-DAG with the target operation and its immediate parents.
 
         A DAG over the target alone: its bound upstreams join as
-        non-materializable copies through the very mechanism any run uses for
+        disabled copies through the very mechanism any run uses for
         an upstream it does not materialize
         (:meth:`_include_read_only_upstreams`), so the parents are there,
         under their own ids, read instead of executed.
@@ -559,4 +559,4 @@ class DAG:
 
         target = self.operation_map[operation_id]
         # Only an asset has upstreams to pull in, and only an asset can be re-flagged.
-        return DAG(target(materializable=True) if isinstance(target, Asset) else target)
+        return DAG(target(enabled=True) if isinstance(target, Asset) else target)

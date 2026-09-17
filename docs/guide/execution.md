@@ -26,7 +26,7 @@ dag.get_successors(asset.id)      # downstream ids
 dag.mini_dag(asset.id)            # one node plus read-only parents
 ```
 
-Non-materializable nodes stay in the graph as dependencies but never execute and never appear
+Non-enabled nodes stay in the graph as dependencies but never execute and never appear
 in the generations.
 
 ## Materializing
@@ -104,7 +104,7 @@ print(result)
 `ExecutionInfo` carries `component_id`, `component_key`, `status`, `start_time`, `end_time`,
 `execution_time`, `error`, `traceback`, and `effects` (what the operation asked the platform to
 persist). `ExecutionStatus` is `QUEUED`, `READY`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED`
-(non-materializable), `CANCELED` (downstream of a failure).
+(disabled), `CANCELED` (downstream of a failure).
 
 ## Failure handling
 
@@ -114,7 +114,7 @@ traceback, its dependents are canceled, and the run continues or stops depending
 so events and results are complete before it surfaces. A failure of the walk machinery itself
 (a deadlock, an invalid graph) raises `RunnerError`.
 
-Before anything executes, the runner validates the scope against every materializable
+Before anything executes, the runner validates the scope against every enabled
 operation: partitioned operations without a scope, windows against operations that forbid them,
 and time-partition mismatches fail the whole run up front.
 

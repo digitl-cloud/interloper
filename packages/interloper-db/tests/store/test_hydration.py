@@ -299,12 +299,12 @@ class TestSourceRoundTrip:
     def test_source_owned_asset_loads_through_its_parent(self, store: Store):
         db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         child = _child(db_source, "a")
-        store.components.update(child.id, config={"materializable": False})
+        store.components.update(child.id, config={"enabled": False})
 
         asset = store.components.load(child.id)
         assert isinstance(asset, il.Asset)
         assert asset.key == "a"
-        assert asset.materializable is False
+        assert asset.enabled is False
 
     def test_children_selection_drops_rows_and_relations(self, store: Store):
         db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
@@ -399,12 +399,12 @@ class TestStandaloneAsset:
     """Standalone assets hydrate directly through the generic builder."""
 
     def test_create_and_load(self, store: Store):
-        db_asset = store.components.create(_ORG, kind="asset", key="demo_asset", config={"materializable": False})
+        db_asset = store.components.create(_ORG, kind="asset", key="demo_asset", config={"enabled": False})
         asset = store.components.load(db_asset.id)
         assert isinstance(asset, il.Asset)
         assert asset.key == "demo_asset"
         assert asset.id == str(db_asset.id)
-        assert asset.materializable is False
+        assert asset.enabled is False
 
 
 class TestJobRoundTrip:
