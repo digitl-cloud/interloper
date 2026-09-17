@@ -68,15 +68,15 @@ Both run against [dev/interloper.yaml](dev/interloper.yaml), which carries **onl
 
 ## Docker images
 
-Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile): one image per role (`interloper-<role>`), with **flavors** (extra-bearing variants) riding the **tag** as a `-<flavor>` suffix — not a separate image name.
+Built from a single multi-target [dockerfile](dockerfile). The image catalog is defined in the [Makefile](Makefile): one image per role (`interloper-<role>`), each shipping two **variants**.
 
-- `ROLES` (`api`, `frontend`, `worker`, `scheduler`) → image `interloper-<role>:<version>` (base, no flavor extras).
-- `FLAVORS_<role>` defines the per-role flavors and `EXTRAS_ARG_<role>` the build arg that carries them: `scheduler` → `k8s`, `docker` (via `SCHEDULER_EXTRAS`); `api` → `agent` (via `API_EXTRAS`). These build `interloper-scheduler:<version>-k8s`, `interloper-api:<version>-agent`, etc. (plus matching `latest-<flavor>` tags). The Helm chart picks the scheduler tag suffix from `launcher.type` and the api `-agent` tag from `agent.enabled`.
-- Build one target: `make docker-build-<role>` (base) or `make docker-build-<role>-<flavor>` (e.g. `docker-build-scheduler-k8s`, `docker-build-api-agent`).
+- `ROLES` (`api`, `frontend`, `core`, `scheduler`, `mcp`) → image `interloper-<role>:<version>`, the **loaded** variant: the role's packages, every component class a catalog can name (sources, destinations, the Slack hook) and what the role runs on (both launchers on the scheduler, the agent on the api, otel). The vendor SDKs go only to the roles that execute assets (`scheduler`, `core`), since the asset modules guard those imports.
+- `SLIM_ROLES` (everything but `frontend`) also builds `interloper-<role>:<version>-slim`, the **slim** variant: `interloper-core` plus the role's own packages and no extras at all. It is a base to extend, not a smaller deployment. The recipe is in [docs/ui/running.md](docs/ui/running.md).
+- Each target stem is also the dockerfile target: `make docker-build-<role>` or `make docker-build-<role>-slim`. A slim stage declares no extras `ARG`, which is what keeps the extras out of it.
 - Build everything: `make docker-build` (host arch) or `make docker-build-linux` (linux/amd64 for the registry).
 - Push: `make docker-push`, or `make docker-build-push` to build linux + push in one step.
 
-Override extras at `make` time: `CORE_EXTRAS`, `ASSETS_EXTRAS` (flavor extras come from the target stem, not these).
+The dockerfile's `ARG` defaults are the single source of truth for what "loaded" means: neither the Makefile nor [publish.yaml](.github/workflows/publish.yaml) passes a build arg. Set `CORE_EXTRAS`, `ASSETS_EXTRAS`, `SCHEDULER_EXTRAS`, `API_EXTRAS` or `COMMON_EXTRAS` at `make` time to override one locally.
 
 ## Conventions
 

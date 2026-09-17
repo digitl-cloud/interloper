@@ -227,9 +227,12 @@ One version for all packages, released together to PyPI.
 `interloper app` runs the API, cron controller, queue worker and reaper against Postgres,
 configured by `interloper.yaml` and `INTERLOPER_*` variables. Images are on
 [GHCR](https://github.com/orgs/digitl-cloud/packages?repo_name=interloper) as
-`interloper-<role>:<version>` for `api` (`-agent` flavour), `frontend`, `worker`, `scheduler`
-(`-k8s`, `-docker` flavours) and `mcp`; the Helm chart alongside them as an OCI
-artifact. See [RELEASING.md](RELEASING.md).
+`interloper-<role>:<version>` for `api`, `scheduler`, `core`, `mcp` and `frontend`, each
+(bar the frontend) in two variants: the bare tag is **loaded**, carrying the role's packages
+plus every component class a catalog can name, and `-slim` is **pure**, core plus the role's
+own packages, meant to be extended. The
+Helm chart sits alongside them as an OCI artifact. See [RELEASING.md](RELEASING.md) and
+[Running the app](https://docs.interloper.dev/ui/running/).
 
 ```bash
 helm install interloper oci://ghcr.io/digitl-cloud/charts/interloper --version <version>

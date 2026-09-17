@@ -58,46 +58,21 @@ Secret name — either user-provided existingSecret or chart-generated.
 {{- end -}}
 
 {{/*
-Flavor token for the scheduler image, derived from the runtime launcher
-choice (launcher.type). Flavors are tag suffixes on the single
-interloper-scheduler image, matching the build-time SCHEDULER_EXTRAS that
-produced each variant.
-
-  in_process → ""        (base image, no launcher extras)
-  kubernetes → "k8s"
-  docker     → "docker"
-*/}}
-{{- define "interloper.schedulerFlavor" -}}
-{{- $type := .Values.launcher.type | default "in_process" -}}
-{{- if eq $type "kubernetes" -}}k8s
-{{- else if eq $type "docker" -}}docker
-{{- end -}}
-{{- end -}}
-
-{{/*
-Flavor token for the api image. The "agent" flavor
-(interloper-api:<tag>-agent) bundles interloper-agent so the /agent routes
-mount; the base image omits it (those routes 404).
-*/}}
-{{- define "interloper.apiFlavor" -}}
-{{- if .Values.agent.enabled -}}agent{{- end -}}
-{{- end -}}
-
-{{/*
 Image reference for a component. Falls back to
-"<registry>/interloper-<component>:<tag>[-<flavor>]" if repository is not set.
-The optional "flavor" rides the tag (e.g. scheduler "-k8s", api "-agent").
-Usage: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image "flavor" (include "interloper.schedulerFlavor" .)) }}
+"<registry>/interloper-<component>:<tag>" if repository is not set.
+
+The chart deploys the loaded images, which carry every component class a
+catalog can name plus both launchers (launcher.type picks one at runtime) and
+the agent (agent.enabled gates its routes). To run a slim image instead, or one built
+on top of it, set the tag or repository per component.
+Usage: {{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image) }}
 */}}
 {{- define "interloper.image" -}}
 {{- $tag := default .root.Values.image.tag .image.tag | default .root.Chart.AppVersion -}}
-{{- $flavor := .flavor | default "" -}}
-{{- $suffix := "" -}}
-{{- if $flavor -}}{{- $suffix = printf "-%s" $flavor -}}{{- end -}}
 {{- if .image.repository -}}
-{{ .image.repository }}:{{ $tag }}{{ $suffix }}
+{{ .image.repository }}:{{ $tag }}
 {{- else -}}
-{{ .root.Values.image.registry }}/interloper-{{ .component }}:{{ $tag }}{{ $suffix }}
+{{ .root.Values.image.registry }}/interloper-{{ .component }}:{{ $tag }}
 {{- end -}}
 {{- end -}}
 
@@ -105,19 +80,19 @@ Usage: {{ include "interloper.image" (dict "root" . "component" "scheduler" "ima
 Scheduler image reference (used as default for the K8s launcher).
 */}}
 {{- define "interloper.schedulerImage" -}}
-{{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image "flavor" (include "interloper.schedulerFlavor" .)) }}
+{{ include "interloper.image" (dict "root" . "component" "scheduler" "image" .Values.scheduler.image) }}
 {{- end -}}
 
 {{/*
-Worker image reference (used as default for the K8s runner — leaf
-per-asset Jobs). No launcher suffix: the worker doesn't spawn sub-Jobs.
+Core image reference (used as default for the K8s runner, the leaf
+per-asset Jobs).
 */}}
-{{- define "interloper.workerImage" -}}
-{{- $tag := default .Values.image.tag .Values.worker.image.tag | default .Chart.AppVersion -}}
-{{- if .Values.worker.image.repository -}}
-{{ .Values.worker.image.repository }}:{{ $tag }}
+{{- define "interloper.coreImage" -}}
+{{- $tag := default .Values.image.tag .Values.core.image.tag | default .Chart.AppVersion -}}
+{{- if .Values.core.image.repository -}}
+{{ .Values.core.image.repository }}:{{ $tag }}
 {{- else -}}
-{{ .Values.image.registry }}/interloper-worker:{{ $tag }}
+{{ .Values.image.registry }}/interloper-core:{{ $tag }}
 {{- end -}}
 {{- end -}}
 

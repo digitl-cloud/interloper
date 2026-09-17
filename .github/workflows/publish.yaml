@@ -60,12 +60,13 @@ jobs:
   # Docker images → GitHub Container Registry (ghcr.io)
   #
   # One image per role, tagged with the released version (plus `latest` on
-  # stable releases only). Flavors (extra-bearing variants) ride the tag as a
-  # "-<flavor>" suffix rather than a separate image. The matrix mirrors the
-  # image catalog in the Makefile (ROLES + FLAVORS_*) — keep the two in sync.
+  # stable releases only). Each Python role ships two variants: the loaded
+  # image on the bare tag, and the extras-free one on a "-slim" tag. The
+  # matrix mirrors the image catalog in the Makefile (ROLES + SLIM_ROLES),
+  # keep the two in sync.
   # ────────────────────────────────────────────────────────────────────
   docker:
-    name: Docker (${{ matrix.role }}${{ matrix.flavor && format('-{0}', matrix.flavor) || '' }})
+    name: Docker (${{ matrix.target }})
     needs: resolve
     runs-on: ubuntu-latest
 
@@ -76,17 +77,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # role  → dockerfile target + image name (interloper-<role>)
-        # flavor → tag suffix; api_extras/scheduler_extras feed the build args
+        # target → dockerfile target (also the Makefile stem)
+        # role   → image name (interloper-<role>); suffix → tag suffix
         include:
-          - { role: api,       flavor: "",       api_extras: "",      scheduler_extras: "" }
-          - { role: api,       flavor: agent,    api_extras: "agent", scheduler_extras: "" }
-          - { role: frontend,  flavor: "",       api_extras: "",      scheduler_extras: "" }
-          - { role: worker,    flavor: "",       api_extras: "",      scheduler_extras: "" }
-          - { role: mcp,       flavor: "",       api_extras: "",      scheduler_extras: "" }
-          - { role: scheduler, flavor: "",       api_extras: "",      scheduler_extras: "" }
-          - { role: scheduler, flavor: k8s,      api_extras: "",      scheduler_extras: "k8s" }
-          - { role: scheduler, flavor: docker,   api_extras: "",      scheduler_extras: "docker" }
+          - { target: api,            role: api,       suffix: "" }
+          - { target: api-slim,       role: api,       suffix: "-slim" }
+          - { target: frontend,       role: frontend,  suffix: "" }
+          - { target: core,           role: core,      suffix: "" }
+          - { target: core-slim,      role: core,      suffix: "-slim" }
+          - { target: mcp,            role: mcp,       suffix: "" }
+          - { target: mcp-slim,       role: mcp,       suffix: "-slim" }
+          - { target: scheduler,      role: scheduler, suffix: "" }
+          - { target: scheduler-slim, role: scheduler, suffix: "-slim" }
 
     steps:
       - name: Checkout (released tag)
@@ -114,31 +116,26 @@ jobs:
         run: |
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           repo="ghcr.io/${owner}/interloper-${{ matrix.role }}"
-          suffix=""
-          [ -n "${{ matrix.flavor }}" ] && suffix="-${{ matrix.flavor }}"
+          suffix="${{ matrix.suffix }}"
           tags="${repo}:${{ needs.resolve.outputs.version }}${suffix}"
           if [ "${{ needs.resolve.outputs.stable }}" = "true" ]; then
             tags="${tags},${repo}:latest${suffix}"
           fi
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & Push (${{ matrix.role }}${{ matrix.flavor && format('-{0}', matrix.flavor) || '' }})
+      # No build args: the dockerfile's own defaults define what a loaded
+      # image carries, and the slim targets take no extras at all.
+      - name: Build & Push (${{ matrix.target }})
         uses: docker/build-push-action@v6
         with:
           context: .
           file: dockerfile
-          target: ${{ matrix.role }}
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: |
-            CORE_EXTRAS=google-cloud
-            ASSETS_EXTRAS=bing,facebook,google
-            COMMON_EXTRAS=otel
-            API_EXTRAS=${{ matrix.api_extras }}
-            SCHEDULER_EXTRAS=${{ matrix.scheduler_extras }}
-          cache-from: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }}
-          cache-to: type=gha,scope=docker-${{ matrix.role }}-${{ matrix.flavor }},mode=max
+          cache-from: type=gha,scope=docker-${{ matrix.target }}
+          cache-to: type=gha,scope=docker-${{ matrix.target }},mode=max
 
   # ────────────────────────────────────────────────────────────────────
   # Helm chart → GitHub Container Registry (ghcr.io)

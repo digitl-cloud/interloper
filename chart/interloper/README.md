@@ -16,25 +16,26 @@ disabled via `<component>.enabled: false`.
 
 ## Images
 
-Each component is its own image, named `interloper-<component>`. Flavored
-variants ride the **tag** as a `-<flavor>` suffix on the same image (not a
-separate image name). Images are published to GitHub Container Registry, which
-is the chart's default `image.registry` (`ghcr.io/digitl-cloud`):
+Each component is its own image, named `interloper-<component>`, published to
+GitHub Container Registry, which is the chart's default `image.registry`
+(`ghcr.io/digitl-cloud`). Every image comes in two variants: the **loaded**
+one on the bare tag, and the extras-free **slim** one on `-slim`.
 
 ```
-ghcr.io/digitl-cloud/interloper-scheduler:<version>          # in-process launcher
-ghcr.io/digitl-cloud/interloper-scheduler:<version>-k8s      # kubernetes launcher
-ghcr.io/digitl-cloud/interloper-scheduler:<version>-docker   # docker launcher
-ghcr.io/digitl-cloud/interloper-api:<version>                # base (no /agent routes)
-ghcr.io/digitl-cloud/interloper-api:<version>-agent          # bundles the ADK agent
+ghcr.io/digitl-cloud/interloper-scheduler:<version>   # every launcher + sources + destinations
+ghcr.io/digitl-cloud/interloper-api:<version>         # + the ADK agent
 ghcr.io/digitl-cloud/interloper-frontend:<version>
-ghcr.io/digitl-cloud/interloper-worker:<version>             # kubernetes runner per-asset Job target
-ghcr.io/digitl-cloud/interloper-mcp:<version>                # read-only MCP server
+ghcr.io/digitl-cloud/interloper-core:<version>        # the framework; kubernetes runner per-asset Job target
+ghcr.io/digitl-cloud/interloper-mcp:<version>         # read-only MCP server
 ```
 
-The chart picks the scheduler tag suffix from `launcher.type`
-automatically, and the api `-agent` tag when `agent.enabled=true` — no
-manual mapping. Override `image.registry` (and `image.pullSecrets` for a
+The chart deploys the loaded images, so `launcher.type` and `agent.enabled`
+are pure runtime settings: no tag mapping, nothing to rebuild when they
+change. The `-slim` images carry core plus the component's own packages and
+nothing optional; they are a base to build on rather than a smaller
+deployment, so a chart pointed at one needs its own image adding back
+whatever the catalog names. Set `<component>.image.repository` (or `.tag`) to
+use one, and override `image.registry` (plus `image.pullSecrets` for a
 private registry) to pull from elsewhere.
 
 ## Quick start (dev)

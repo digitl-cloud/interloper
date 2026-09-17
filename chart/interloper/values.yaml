@@ -5,10 +5,12 @@
 # Global image defaults (overridable per-component below).
 #
 # Images are published to GitHub Container Registry and follow the
-# convention "<registry>/interloper-<component>:<tag>" — e.g.
-# ghcr.io/digitl-cloud/interloper-api:0.3.1. Flavored variants ride the TAG as
-# a "-<flavor>" suffix on the same image: the scheduler gets "-k8s"/"-docker"
-# from config.launcher.type, and the api gets "-agent" when agent.enabled.
+# convention "<registry>/interloper-<component>:<tag>", e.g.
+# ghcr.io/digitl-cloud/interloper-api:0.3.1. That bare tag is the loaded
+# image, carrying the role's packages plus every component class a catalog can
+# name, which is what this chart deploys. The "-slim" tag of the same image is the extras-free base meant to
+# be extended; to run one, point a component's image.tag or image.repository
+# at it.
 image:
   registry: ghcr.io/digitl-cloud
   tag: ""  # defaults to Chart.appVersion
@@ -45,13 +47,14 @@ scheduler:
   # names (e.g. connector OAuth provider creds) instead of one entry per key.
   extraEnvFrom: []
 
-# ── Worker (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
-# Not deployed as a workload — this image is referenced by the Kubernetes
-# runner as the per-asset Job target. Slimmer than scheduler: no DB, no
-# scheduler/launcher packages, just core + assets + destinations + pandas.
-worker:
+# ── Core (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
+# Not deployed as a workload: this image is the framework itself, referenced
+# by the Kubernetes runner as the per-asset Job target. Slimmer than the
+# scheduler, with no DB and no scheduler/launcher packages, just core +
+# assets + destinations + pandas.
+core:
   image:
-    repository: ""  # defaults to {image.registry}/interloper-worker
+    repository: ""  # defaults to {image.registry}/interloper-core
     tag: ""
 
 # ── API (REST + websocket backend) ─────────────────────────────────────────
@@ -197,13 +200,13 @@ dbInit:
 # App runtime settings live at the root, one block per feature. The chart
 # renders them into the generated interloper.yaml (and pairs secret-bearing
 # fields with env vars from `secrets`); blocks the chart must act on itself
-# (agent, launcher) also drive image selection. `extraConfig` passes any
+# (agent, launcher) are read at runtime from it. `extraConfig` passes any
 # remaining interloper.yaml sections through verbatim.
 
-# Agent (ADK chat) support. When enabled, the chart deploys the
-# `interloper-api:<tag>-agent` image, which bundles interloper-agent, and
-# enables the /agent routes via the generated interloper.yaml (the API
-# reports availability to the app, which shows/hides the Agent UI).
+# Agent (ADK chat) support. The loaded api image always bundles
+# interloper-agent; this enables the /agent routes via the generated
+# interloper.yaml (the API reports availability to the app, which shows or
+# hides the Agent UI).
 #
 # `model` takes a bare name for native Gemini models (default
 # "gemini-2.5-flash") or a LiteLLM `provider/model` reference such as
@@ -217,8 +220,8 @@ agent:
   enabled: false
   model: ""  # defaults to gemini-2.5-flash
 
-# How runs are launched (where they execute). The launcher type also selects
-# the scheduler image flavor (kubernetes → "-k8s", docker → "-docker").
+# How runs are launched (where they execute). The loaded scheduler image
+# carries every launcher, so this is a pure runtime choice.
 launcher:
   type: kubernetes
   config:
