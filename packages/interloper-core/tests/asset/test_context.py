@@ -159,7 +159,7 @@ class TestLogger:
         assert len(logs) == 1
         assert logs[0].metadata["message"] == "fetching page 1"
         assert logs[0].metadata["component_id"] == "a1"
-        assert logs[0].metadata["source_id"] == "s1"
+        assert logs[0].metadata["parent_id"] == "s1"
         assert logs[0].metadata["run_id"] == "r1"
 
 

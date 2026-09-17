@@ -28,7 +28,7 @@ class EventLogger:
         metadata: dict[str, Any],
         component_id: str | None = None,
         component_kind: str = "asset",
-        source_id: str | None = None,
+        parent_id: str | None = None,
     ) -> None:
         """Initialize the logger.
 
@@ -39,13 +39,13 @@ class EventLogger:
                 every emitted ``LOG`` event so it can be attributed to the
                 component (e.g. filtered alongside its lifecycle events).
             component_kind: Kind of the owning component.
-            source_id: Id of the source the component belongs to, if any.
+            parent_id: Id of the component that owns this one, if any.
         """
         self._component_key = component_key
         self._metadata = metadata
         self._component_id = component_id
         self._component_kind = component_kind
-        self._source_id = source_id
+        self._parent_id = parent_id
 
     def _emit(self, level: int, message: str) -> None:
         """Emit a ``LOG`` event with the given level and message.
@@ -64,8 +64,8 @@ class EventLogger:
         if self._component_id is not None:
             metadata["component_id"] = self._component_id
             metadata["component_kind"] = self._component_kind
-        if self._source_id is not None:
-            metadata["source_id"] = self._source_id
+        if self._parent_id is not None:
+            metadata["parent_id"] = self._parent_id
         EventBus.emit(EventType.LOG, metadata=metadata)
 
     def debug(self, message: str) -> None:

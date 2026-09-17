@@ -10,7 +10,7 @@ COMPONENT_ID = "interloper.component.id"
 COMPONENT_KIND = "interloper.component.kind"
 COMPONENT_KEY = "interloper.component.key"
 COMPONENT_QUALIFIED_KEY = "interloper.component.qualified_key"
-SOURCE_ID = "interloper.source.id"
+PARENT_ID = "interloper.parent.id"
 PARTITION = "interloper.partition"
 DESTINATION_KEY = "interloper.destination.key"
 UPSTREAM_KEY = "interloper.upstream.key"
@@ -34,7 +34,7 @@ _METADATA_KEYS = {
     "component_key": COMPONENT_KEY,
     "qualified_key": COMPONENT_QUALIFIED_KEY,
     "partition_or_window": PARTITION,
-    "source_id": SOURCE_ID,
+    "parent_id": PARENT_ID,
     "destination_key": DESTINATION_KEY,
     "org_id": ORG_ID,
     "target_id": TARGET_ID,

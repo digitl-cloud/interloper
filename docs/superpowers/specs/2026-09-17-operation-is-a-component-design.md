@@ -126,6 +126,17 @@ holds, and part of the authoring surface, since `@il.asset` injects `self.source
 domain alias on the class where it is true is not the smell; hoisting it onto a contract where it is
 not is.
 
+**The event key follows.** All three producers of the owner's id (the node lifecycle metadata, the
+asset-level metadata and the component log emitter) wrote `source_id`, and the telemetry attribute
+was `interloper.source.id`. That named a guarantee the model does not make, so the key is `parent_id`
+and the attribute `interloper.parent.id`. Renaming only the generic producer would have left two keys
+for one value, which is worse than the name being loose.
+
+The same line divides the plumbing: `EventLogger`, which is component-generic, takes `parent_id`,
+while `ExecutionContext`, which is asset-specific, keeps `source_id` and fills it. Events written
+before this carry the old key; they are history and are not rewritten, so anything reading the event
+stream over a period spanning it has to accept both.
+
 ---
 
 ## 5. Testing
@@ -143,10 +154,6 @@ not is.
 
 ## 6. Follow-ups, recorded
 
-- **The `source_id` event key.** `RunState` stamps the owner's id under `source_id`, and telemetry
-  reads it as `interloper.source.id`. That is correct while assets are the only owned operations, but
-  the key is named for a guarantee the model does not make. Renaming it to `parent_id` is right and
-  touches the event stream that telemetry and downstream consumers read, so it wants its own change.
 - **`DAG.to_spec` duplicates the owner rule** that `Component` serialization already implements.
 - **Explicit kinds everywhere.** With `Asset` and `Connection` declaring theirs, the auto-derivation
   in `__init_subclass__` serves only `Source`, `Job`, `Hook`, `Destination` and `Config`. Dropping it
