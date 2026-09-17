@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v0.84.0 (2026-09-17)
+
+### Bug Fixes
+
+- **app**: Sort run timeline assets by start time
+  ([`9462ec3`](https://github.com/digitl-cloud/interloper/commit/9462ec30c1e549b978f2f09996ef646d76d885a9))
+
+### Features
+
+- Ship every image in a loaded and a slim variant
+  ([`2264b7c`](https://github.com/digitl-cloud/interloper/commit/2264b7c75a843f92ee326ecc762ece10010b4aab))
+
+### Breaking Changes
+
+- The interloper-worker image is now interloper-core, and the
+
+
 ## v0.83.0 (2026-09-16)
 
 ### Bug Fixes
