@@ -26,6 +26,7 @@ class EventType(Enum):
     OPERATION_STARTED = "operation_started"
     OPERATION_COMPLETED = "operation_completed"
     OPERATION_FAILED = "operation_failed"
+    OPERATION_RETRIED = "operation_retried"
     OPERATION_CANCELED = "operation_canceled"
 
     # Asset data (the data() call)

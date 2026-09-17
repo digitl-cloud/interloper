@@ -133,6 +133,39 @@ class FakeUnfillableSource(il.Source):
 # -- Identity and class metadata -----------------------------------------------
 
 
+class TestRetryInheritance:
+    def test_a_source_policy_fills_its_assets(self):
+        policy = il.RetryPolicy(max_attempts=5)
+
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop(retry=policy).assets[0].retry == policy
+
+    def test_an_assets_own_policy_wins(self):
+        source_policy = il.RetryPolicy(max_attempts=5)
+        asset_policy = il.RetryPolicy(max_attempts=2)
+
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                retry: il.RetryPolicy | None = asset_policy
+
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop(retry=source_policy).assets[0].retry == asset_policy
+
+    def test_no_policy_anywhere_leaves_assets_unset(self):
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop().assets[0].retry is None
+
+
 class TestIdentity:
     def test_key_auto_derived_from_class_name(self):
         assert FakeSource.key == "fake_source"

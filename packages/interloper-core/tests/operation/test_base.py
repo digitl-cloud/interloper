@@ -57,6 +57,23 @@ class TestContract:
         assert _NoopOperation().enabled is True
         assert _NoopOperation(enabled=False).enabled is False
 
+    def test_no_retry_policy_by_default(self):
+        assert _NoopOperation().retry is None
+
+    def test_every_error_is_retryable_by_default(self):
+        assert _NoopOperation().retryable(ValueError("boom")) is True
+
+    def test_retryable_can_be_narrowed(self):
+        class Picky(Operation):
+            async def execute(self, context: OperationContext) -> OperationResult:
+                return OperationResult()
+
+            def retryable(self, error: Exception) -> bool:
+                return not isinstance(error, ValueError)
+
+        assert Picky().retryable(TypeError()) is True
+        assert Picky().retryable(ValueError()) is False
+
     def test_node_protocol_defaults(self):
         operation = _NoopOperation()
         assert operation.enabled is True

@@ -29,6 +29,7 @@ from pydantic import Field
 from interloper.component.base import Component
 from interloper.errors import format_exception
 from interloper.partitioning.base import PartitionConfig
+from interloper.retry import RetryPolicy
 
 if TYPE_CHECKING:
     from interloper.component.relation import Relation
@@ -119,6 +120,7 @@ class Operation(Component, Workload):
     partitioning: ClassVar[PartitionConfig | None] = None
 
     enabled: bool = Field(default=True, description="Operation will execute")
+    retry: RetryPolicy | None = Field(default=None, description="Attempt budget for this operation's execution")
 
     def operations(self) -> list[Operation]:
         """An operation is trivially its own workload.
@@ -201,6 +203,23 @@ class Operation(Component, Workload):
         Returns:
             The effects to persist (often none).
         """
+
+    def retryable(self, error: Exception) -> bool:
+        """Whether another attempt at this operation is worth making.
+
+        Consulted by the runner before it spends an attempt from
+        :attr:`retry`. Override to recognise a permanent error, such as a
+        vendor rejecting a request it will reject identically every time. The
+        default is permissive: the budget, not the classifier, is what bounds
+        waste.
+
+        Args:
+            error: The exception :meth:`execute` raised.
+
+        Returns:
+            ``True`` when the failure may be transient.
+        """
+        return True
 
     def failure(self, error: Exception) -> OperationResult:
         """Describe a failed execution in terms the platform can persist.

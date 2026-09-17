@@ -36,6 +36,15 @@ class FakeOtherJobDestination(FakeJobDestination):
     """Second destination class, to tell a cascaded binding from an own one."""
 
 
+class TestRetry:
+    def test_a_job_carries_a_retry_policy(self):
+        policy = il.RetryPolicy(max_attempts=2)
+        assert il.Job(retry=policy).retry == policy
+
+    def test_a_job_declares_no_policy_by_default(self):
+        assert il.Job().retry is None
+
+
 class TestDefinition:
     """Class-level identity and defaults."""
 
@@ -45,14 +54,22 @@ class TestDefinition:
 
     def test_definition_self_describes(self):
         defn = il.CronJob.definition()
-        assert set(defn.config_schema["properties"]) == {"cron", "timezone", "enabled", "tags", "lookback", "offset"}
+        assert set(defn.config_schema["properties"]) == {
+            "cron",
+            "timezone",
+            "enabled",
+            "retry",
+            "tags",
+            "lookback",
+            "offset",
+        }
         assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["targets"].kinds == ["source", "asset"]
         assert defn.relations["targets"].many is True
 
     def test_anchor_carries_the_workload_only(self):
         defn = il.Job.definition()
-        assert set(defn.config_schema["properties"]) == {"enabled", "tags"}
+        assert set(defn.config_schema["properties"]) == {"enabled", "retry", "tags"}
         assert il.CronJob.kind == "job"
 
     def test_defaults(self):

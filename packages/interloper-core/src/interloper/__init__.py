@@ -72,6 +72,7 @@ from interloper.rest import (
     RESTClient,
     SinglePagePaginator,
 )
+from interloper.retry import RetryPolicy
 from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
 from interloper.serializable import Serializable, Spec
@@ -143,6 +144,7 @@ __all__ = [
     "Renewal",
     "Resource",
     "ResourceDefinition",
+    "RetryPolicy",
     "RunResult",
     "Runner",
     "Schema",

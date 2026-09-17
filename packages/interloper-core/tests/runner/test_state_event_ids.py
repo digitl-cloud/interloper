@@ -55,6 +55,22 @@ def test_asset_event_id_is_deterministic() -> None:
     assert base != RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_COMPLETED)
 
 
+def test_asset_event_id_is_unchanged_for_a_first_attempt() -> None:
+    """Ids written before retries existed keep their value."""
+    implicit = RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
+    explicit = RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED, attempt=1)
+
+    assert implicit == explicit
+
+
+def test_asset_event_id_differs_per_attempt() -> None:
+    """Each attempt's events are their own rows, not a dedup of the first's."""
+    first = RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_STARTED, attempt=1)
+    second = RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_STARTED, attempt=2)
+
+    assert first != second
+
+
 # -- RunState stamps the deterministic id on what it emits ---------------------
 
 
