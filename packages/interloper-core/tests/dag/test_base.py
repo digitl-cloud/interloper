@@ -4,7 +4,7 @@
 # ``data()`` methods whose parameter annotations must be real classes (not lazy
 # strings) for ``Asset._collect`` to infer their relations.
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -999,7 +999,7 @@ class TestDAGSpec:
         rebuilt = DAG.from_spec_file(file)
         assert set(rebuilt.operation_map) == set(original.operation_map)
         revenue = rebuilt.operation_map[finance.revenue.id]
-        assert revenue.bound("orders").id == shop.orders.id
+        assert cast("il.Component", revenue.bound("orders")).id == shop.orders.id
         assert revenue.bound("orders") is rebuilt.operation_map[shop.orders.id]
 
 

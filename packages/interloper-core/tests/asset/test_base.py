@@ -160,6 +160,11 @@ async def _capture_log_events(coro: Any) -> list[Event]:
 # -- Identity and class metadata -----------------------------------------------
 
 
+class TestKind:
+    def test_asset_declares_its_kind_explicitly(self):
+        assert il.Asset.__dict__["kind"] == "asset"
+
+
 class TestIdentity:
     def test_key_auto_derived_from_class_name(self):
         assert FakeAsset.key == "fake_asset"

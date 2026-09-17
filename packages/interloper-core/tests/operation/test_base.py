@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Any, ClassVar
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 import interloper as il
+from interloper.component import Component
 from interloper.errors import DAGError
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.runner.results import ExecutionStatus
@@ -39,6 +40,22 @@ class TestContract:
         failed = _NoopOperation().failure(ValueError("boom"))
         assert failed.error == "ValueError: boom"
         assert failed.state == {}
+
+    def test_an_operation_is_a_component_with_real_identity(self):
+        operation = _NoopOperation()
+        assert isinstance(operation, Component)
+        assert operation.key == "noop_operation"
+        assert operation.relations == {}
+        assert str(UUID(operation.id)) == operation.id
+        assert operation.to_spec() is not None
+
+    def test_operation_declares_no_kind_of_its_own(self):
+        assert Operation.kind == ""
+        assert "destination" in il.KINDS
+
+    def test_materializable_is_a_field(self):
+        assert _NoopOperation().materializable is True
+        assert _NoopOperation(materializable=False).materializable is False
 
     def test_node_protocol_defaults(self):
         operation = _NoopOperation()
@@ -90,7 +107,7 @@ class TestKindWiring:
             assert not issubclass(il.KINDS[kind], il.Workload)
 
 
-class _EffectfulOperation(il.Component, il.Operation):
+class _EffectfulOperation(il.Operation):
     """Test-only operation kind carrying effects and a curated failure."""
 
     capture_traceback: ClassVar[bool] = False

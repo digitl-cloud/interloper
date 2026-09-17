@@ -127,7 +127,11 @@ class TestInitialisation:
         # node) must not leave its dependent queued forever.
         dag = il.DAG(ChainSource(destinations=[il.MemoryDestination()]))
         root = next(operation for operation in dag.operations if operation.key == "root")
-        monkeypatch.setattr(type(root), "materializable", property(lambda self: self.key != "root"))
+        # `materializable` is a field on `Operation`, so there is no class attribute to replace:
+        # the property is installed, not overridden.
+        monkeypatch.setattr(
+            type(root), "materializable", property(lambda self: self.key != "root"), raising=False
+        )
 
         state = RunState(dag)
 

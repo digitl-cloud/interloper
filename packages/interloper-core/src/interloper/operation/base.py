@@ -24,13 +24,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from pydantic import Field
+
+from interloper.component.base import Component
 from interloper.errors import format_exception
+from interloper.partitioning.base import PartitionConfig
 
 if TYPE_CHECKING:
-    from interloper.component.base import Relation
+    from interloper.component.relation import Relation
     from interloper.dag.base import DAG
-    from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-    from interloper.serializable import SerializationContext, Spec
+    from interloper.partitioning.base import Partition, PartitionWindow
 
 
 @dataclass
@@ -85,67 +88,44 @@ class Workload(ABC):
         """
 
 
-class Operation(Workload):
+class Operation(Component, Workload):
     """A unit of work: the node a DAG orders and a runner drives.
 
-    Beyond :meth:`execute` and :meth:`failure`, this class carries the node
-    protocol the graph machinery reads: defaults that make any operation a
-    valid DAG node, which ``Asset`` (the graph-structured, partitioned
-    operation) overrides with its real fields and properties. They are
-    deliberately plain class attributes, not pydantic fields: an operation
-    class is usually also a pydantic component, and a field here would leak
-    into every subclass's config schema.
+    An operation is a component: the DAG, the runner and the platform all
+    address it by its component identity, and its events and executions are
+    keyed by its row id. What it adds to a component is the execution
+    contract (:meth:`execute`, :meth:`failure`) and the node attributes the
+    graph machinery reads, which ``Asset`` (the graph-structured, partitioned
+    operation) narrows with its own fields and properties.
+
+    ``kind`` is deliberately empty: an operation is a contract several kinds
+    satisfy, not a kind of its own, and declaring it here is what stops
+    ``Component.__init_subclass__`` deriving one. Each implementor declares
+    its own.
 
     ``capture_traceback`` controls whether a failed execution's traceback
     is attached to its failure event; off for operations whose raw errors
     embed secrets (credential exchanges carry them in URLs).
     """
 
+    kind: ClassVar[str] = ""
     capture_traceback: ClassVar[bool] = True
+    partitioning: ClassVar[PartitionConfig | None] = None
 
-    # -- Node protocol -----------------------------------------------------
-
-    if TYPE_CHECKING:
-        id: str
-        kind: ClassVar[str]
-        key: ClassVar[str]
-        relations: ClassVar[dict[str, Relation]]
-        materializable: bool
-        source: Any | None
-        partitioning: ClassVar[PartitionConfig | None]
-
-        def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
-            """Serialize this node (see ``Component.to_spec``).
-
-            Args:
-                context: The state shared with the other roots of one document.
-
-            Returns:
-                The node's spec.
-            """
-            ...
-
-        def bound(self, name: str) -> Any:
-            """What is bound to one of this node's relations (see ``Component.bound``).
-
-            Args:
-                name: The relation name as declared on the class.
-
-            Returns:
-                The bound node(s): a list for a many-valued relation, the
-                single node or ``None`` otherwise.
-            """
-            ...
-
-    materializable = True
-    relations = {}  # noqa: RUF012
-    source = None
-    partitioning = None
+    materializable: bool = Field(default=True, json_schema_extra={"x-hidden": True})
 
     @property
-    def qualified_key(self) -> str:
-        """The node's display key; subclasses qualify it (``source.asset``)."""
-        return self.key
+    def source(self) -> Any:
+        """The source that owns this node, or ``None`` when nothing does.
+
+        Read by the graph and by the event metadata on any node, including
+        the operations no source owns, which is why it is answered here
+        rather than only on ``Asset``.
+
+        Returns:
+            The owning source, or ``None``.
+        """
+        return None
 
     def operations(self) -> list[Operation]:
         """An operation is trivially its own workload.

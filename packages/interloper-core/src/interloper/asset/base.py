@@ -30,7 +30,6 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.partitioning import (
     Partition,
-    PartitionConfig,
     PartitionWindow,
     TimePartition,
     TimePartitionConfig,
@@ -99,7 +98,7 @@ class AssetDefinition(ComponentDefinition):
         return str(ComponentIdentity(self.source_key or None, self.key))
 
 
-class Asset(Component, Operation):
+class Asset(Operation):
     """A data-producing component.
 
     Subclass and implement ``data()`` to define an asset. Every parameter of
@@ -121,9 +120,9 @@ class Asset(Component, Operation):
     """
 
     # Definition
+    kind: ClassVar[str] = "asset"
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
     schema: ClassVar[type[Schema] | None] = None
-    partitioning: ClassVar[PartitionConfig | None] = None
     internal_fields: ClassVar[frozenset[str]] = frozenset({"normalizer"})
     tags: ClassVar[list[str]] = []
 
@@ -132,7 +131,6 @@ class Asset(Component, Operation):
     # State
     dataset: str = Field(default="")
     default_destination_key: str = Field(default="")
-    materializable: bool = Field(default=True)
     materialization_strategy: MaterializationStrategy = SelectField(
         default=MaterializationStrategy.RECONCILE,
         label="Materialization Strategy",

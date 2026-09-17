@@ -25,9 +25,10 @@ from interloper_db.store import Store
 _ORG_ID = uuid4()
 
 
-class FakePlumbing(il.Component, il.Operation):
+class FakePlumbing(il.Operation):
     """Test-only kind whose operation is platform plumbing (non-billable)."""
 
+    kind: ClassVar[str] = "fake_plumbing"
     billable: ClassVar[bool] = False
 
     async def execute(self, context: il.OperationContext) -> il.OperationResult:
