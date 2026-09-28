@@ -175,6 +175,29 @@ class EventStore:
             statement = select(Execution).where(Execution.run_id == run_id)
             return list(session.exec(statement).all())
 
+    def count_executions(self, run_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
+        """Count each run's operation executions by status, in one query.
+
+        Args:
+            run_ids: The runs to count, typically one listing page.
+
+        Returns:
+            Per run, its execution count per status; a run with no executions
+            yet is absent.
+        """
+        if not run_ids:
+            return {}
+        statement = (
+            select(Execution.run_id, Execution.status, func.count())
+            .where(col(Execution.run_id).in_(run_ids))
+            .group_by(col(Execution.run_id), col(Execution.status))
+        )
+        counts: dict[UUID, dict[str, int]] = {}
+        with session_scope(self._engine) as session:
+            for run_id, status, count in session.exec(statement).all():
+                counts.setdefault(run_id, {})[status] = count
+        return counts
+
     def latest_executions(self, org_id: UUID) -> list[Execution]:
         """The most recent execution of every asset in an organisation.
 
