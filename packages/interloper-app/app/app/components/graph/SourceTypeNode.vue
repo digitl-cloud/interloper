@@ -34,7 +34,7 @@ const label = computed(() => props.sourceDefn?.name ?? props.groupKey)
 const sourceCount = computed(() => props.members.length)
 const assetCount = computed(() => props.members.reduce((sum, m) => sum + (m.source.children?.length ?? 0), 0))
 const meta = computed(() =>
-    `${sourceCount.value} ${sourceCount.value === 1 ? 'account' : 'accounts'}`
+    `${sourceCount.value} ${sourceCount.value === 1 ? 'source' : 'sources'}`
     + ` · ${assetCount.value} ${assetCount.value === 1 ? 'asset' : 'assets'}`,
 )
 
