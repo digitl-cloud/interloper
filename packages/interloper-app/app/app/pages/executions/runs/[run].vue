@@ -100,11 +100,6 @@ async function onRetry(scope: 'all' | 'failed') {
 
 const fetchError = ref<unknown>(null)
 
-/**
- * The attempts of this run's stack, newest first, fetched only when there is
- * more than one. A listing carries a stack's latest attempt, so reaching the
- * others is what this page adds.
- */
 const stack = ref<Run[]>([])
 
 async function loadStack(fetched: Run) {
