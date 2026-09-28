@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.errors import NotFoundError
 from interloper_db import Profile, Store
 from interloper_db.models import Event, Execution, Run
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
     CurrentUserDep,
@@ -45,6 +45,10 @@ class RunResponse(BaseModel):
     latest, so ``attempt`` is also how many attempts the stack took; fetching
     an older attempt by id gives that attempt's own number. ``root_run_id``
     is what groups them, and lists them through ``?root_run_id=``.
+
+    ``execution_counts`` is the attempt's own operation executions per status
+    (a failed-scope retry only re-executes what had not succeeded), so a
+    listing can draw each attempt's progress without fetching its executions.
     """
 
     id: UUID
@@ -64,13 +68,16 @@ class RunResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
+    execution_counts: dict[str, int] = Field(default_factory=dict)
 
     @classmethod
-    def from_run(cls, run: Run) -> RunResponse:
+    def from_run(cls, run: Run, execution_counts: dict[str, int] | None = None) -> RunResponse:
         """Convert a DB Run to a RunResponse.
 
         Args:
             run: The DB Run row, with its ``target`` relationship loaded.
+            execution_counts: The run's execution count per status; None (a
+                run just queued) reads as no executions yet.
 
         Returns:
             The response model.
@@ -93,6 +100,7 @@ class RunResponse(BaseModel):
             started_at=str(run.started_at) if run.started_at else None,
             completed_at=str(run.completed_at) if run.completed_at else None,
             created_at=str(run.created_at) if run.created_at else None,
+            execution_counts=execution_counts or {},
         )
 
 
@@ -299,7 +307,8 @@ def list_runs(
         limit=limit,
         offset=offset,
     )
-    return [RunResponse.from_run(r) for r in runs]
+    counts = store.events.count_executions([run.id for run in runs])
+    return [RunResponse.from_run(run, counts.get(run.id)) for run in runs]
 
 
 @router.post("/", status_code=201)
@@ -366,7 +375,7 @@ def get_run(
         The run, as a response model.
     """
     run = _load_authorized_run(run_id, user, store)
-    return RunResponse.from_run(run)
+    return RunResponse.from_run(run, store.events.count_executions([run_id]).get(run_id))
 
 
 @router.get("/{run_id}/executions")

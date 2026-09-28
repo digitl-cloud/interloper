@@ -456,6 +456,32 @@ def test_executions_read_model_maps_the_view(store: Store) -> None:
     assert store.events.list_executions(uuid4()) == []
 
 
+def test_count_executions_groups_each_run_by_status(store: Store) -> None:
+    """One count per run and status, for the requested runs only; a run with nothing yet is absent."""
+    engine = engine_module.get_engine()
+    Execution.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+    org = uuid4()
+    first, second, unrequested, idle = uuid4(), uuid4(), uuid4(), uuid4()
+    with Session(engine) as session:
+        rows = [
+            (first, "a", "success"),
+            (first, "b", "success"),
+            (first, "c", "failed"),
+            (second, "a", "running"),
+            (unrequested, "a", "success"),
+        ]
+        session.add_all(
+            Execution(run_id=run, component_id=uuid4(), org_id=org, component_key=key, status=status)
+            for run, key, status in rows
+        )
+        session.commit()
+
+    counts = store.events.count_executions([first, second, idle])
+
+    assert counts == {first: {"success": 2, "failed": 1}, second: {"running": 1}}
+    assert store.events.count_executions([]) == {}
+
+
 def test_latest_executions_keeps_the_newest_per_asset(store: Store) -> None:
     """One row per asset of the org: its most recent execution, older runs and other orgs dropped."""
     engine = engine_module.get_engine()

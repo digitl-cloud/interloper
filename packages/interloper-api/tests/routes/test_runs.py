@@ -66,7 +66,7 @@ class FakeStore:
             retry=self._retry_run,
         )
         self.components = SimpleNamespace()
-        self.events = SimpleNamespace()
+        self.events = SimpleNamespace(count_executions=lambda run_ids: {})
 
     def _get_run(self, run_id: UUID):
         if self.raise_not_found:
@@ -295,6 +295,33 @@ def test_a_run_response_carries_its_stack(store: FakeStore) -> None:
     assert body["root_run_id"] == str(_RUN_ID)
     assert body["attempt"] == 1
     assert body["scheduled_for"] is None
+
+
+def test_list_runs_carries_each_attempts_execution_counts(store: FakeStore) -> None:
+    """Every listed run reports its own executions per status, counted for the whole page at once."""
+    counted, pending = uuid4(), uuid4()
+    asked: list[list[UUID]] = []
+
+    def count_executions(run_ids: list[UUID]) -> dict[UUID, dict[str, int]]:
+        asked.append(list(run_ids))
+        return {counted: {"success": 2, "failed": 1}}
+
+    store.runs.list_all = lambda org_id, **kwargs: [_fake_run(counted), _fake_run(pending)]
+    store.events = SimpleNamespace(count_executions=count_executions)
+
+    resp = _viewer_client(store).get("/runs/")
+
+    assert resp.status_code == 200
+    assert [row["execution_counts"] for row in resp.json()] == [{"success": 2, "failed": 1}, {}]
+    assert asked == [[counted, pending]]
+
+
+def test_get_run_carries_its_execution_counts(store: FakeStore) -> None:
+    store.events = SimpleNamespace(count_executions=lambda run_ids: {run_ids[0]: {"running": 3}})
+
+    resp = _client(store).get(f"/runs/{_RUN_ID}")
+
+    assert resp.json()["execution_counts"] == {"running": 3}
 
 
 def test_list_runs_forwards_the_target_filters(store: FakeStore) -> None:
