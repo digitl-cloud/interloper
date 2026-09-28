@@ -4,58 +4,25 @@
         <loc>https://docs.interloper.dev/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/tutorial/</loc>
+        <loc>https://docs.interloper.dev/extending/components/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/entry-points/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/operations/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/representations/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/extending/runners/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/guide/assets/</loc>
       </url>
       <url>
-        <loc>https://docs.interloper.dev/guide/sources/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/dependencies/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/resources/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/connections/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/oauth/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/fields/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/destinations/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/schema/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/normalization/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/partitioning/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/execution/</loc>
-      </url>
-      <url>
         <loc>https://docs.interloper.dev/guide/backfilling/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/events/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/jobs/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/hooks/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/guide/specs/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/guide/catalog/</loc>
@@ -64,7 +31,136 @@
         <loc>https://docs.interloper.dev/guide/cli/</loc>
       </url>
       <url>
+        <loc>https://docs.interloper.dev/guide/connections/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/dependencies/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/destinations/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/events/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/execution/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/fields/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/hooks/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/jobs/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/normalization/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/oauth/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/partitioning/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/resources/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/schema/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/sources/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/guide/specs/</loc>
+      </url>
+      <url>
         <loc>https://docs.interloper.dev/guide/telemetry/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/claude-code/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/cli/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/decorators/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/ecosystem/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/errors/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/events/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/settings/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/telemetry/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/reference/utils/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-04-downstream-assets-phase-1-core/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-04-downstream-assets-phase-2-platform/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-04-downstream-assets-phase-3-matcher/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-04-downstream-assets-phase-4-app/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-1-core/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-2-platform/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-3-matcher/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-4-app/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-16-components-list-performance/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-17-operation-is-a-component/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-17-retry-phase-1-core/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-17-retry-phase-2-platform/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-17-retry-phase-3-surfaces/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-04-downstream-assets-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-07-relation-model-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-16-components-list-performance-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-17-operation-is-a-component-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-17-retry-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/tutorial/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/ui/</loc>
@@ -74,47 +170,5 @@
       </url>
       <url>
         <loc>https://docs.interloper.dev/ui/running/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/extending/components/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/extending/representations/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/extending/runners/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/extending/operations/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/extending/entry-points/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/decorators/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/settings/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/cli/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/events/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/telemetry/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/errors/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/utils/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/ecosystem/</loc>
-      </url>
-      <url>
-        <loc>https://docs.interloper.dev/reference/claude-code/</loc>
       </url>
 </urlset>
