@@ -8,6 +8,7 @@ const iconMap: Record<EventType, string> = {
     operation_started: 'i-lucide-play-circle',
     operation_completed: 'i-lucide-check-circle',
     operation_failed: 'i-lucide-alert-circle',
+    operation_retried: 'i-lucide-rotate-ccw',
     operation_canceled: 'i-lucide-x-circle',
     asset_data_started: 'i-lucide-play-circle',
     asset_data_completed: 'i-lucide-check-circle',
@@ -36,6 +37,7 @@ const labelMap: Record<EventType, string> = {
     operation_started: 'Operation Started',
     operation_completed: 'Operation Completed',
     operation_failed: 'Operation Failed',
+    operation_retried: 'Operation Retried',
     operation_canceled: 'Operation Canceled',
     asset_data_started: 'Asset Data Started',
     asset_data_completed: 'Asset Data Completed',
@@ -77,6 +79,7 @@ const LIFECYCLE_TYPES: EventType[] = [
     'operation_started',
     'operation_completed',
     'operation_failed',
+    'operation_retried',
     'operation_canceled',
     'backfill_started',
     'backfill_completed',
@@ -123,6 +126,7 @@ export function eventTypeColor(eventType: EventType): BadgeColor {
     if (eventType.includes('completed')) return 'success'
     if (eventType.includes('started')) return 'info'
     if (eventType.includes('dispatched')) return 'info'
+    if (eventType.includes('retried')) return 'warning'
     if (eventType.includes('skipped')) return 'warning'
     if (eventType.includes('canceled')) return 'warning'
     if (eventType.includes('queued')) return 'neutral'

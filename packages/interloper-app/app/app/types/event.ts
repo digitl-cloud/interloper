@@ -4,6 +4,7 @@ export type EventType =
     | 'operation_started'
     | 'operation_completed'
     | 'operation_failed'
+    | 'operation_retried'
     | 'operation_canceled'
     | 'asset_data_started'
     | 'asset_data_completed'

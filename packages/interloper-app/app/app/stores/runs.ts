@@ -26,6 +26,7 @@ export const useRunsStore = defineStore('runs', () => {
     const filters = ref<RunFilters>({ ...NO_FILTERS })
     const loading = ref(false)
     const error = ref<Error | null>(null)
+    const stacks = ref<Record<string, Run[]>>({})
 
     /**********************
      * Getters
@@ -41,7 +42,17 @@ export const useRunsStore = defineStore('runs', () => {
      * over realtime either updates its own row, supersedes the earlier attempt
      * of the stack it belongs to, or is new work.
      */
+    function _cacheAttempt(run: Run) {
+        const root = run.root_run_id
+        const cached = root ? stacks.value[root] : undefined
+        if (!root || !cached) return
+        const merged = { ...cached.find(r => r.id === run.id), ...run }
+        const attempts = [merged, ...cached.filter(r => r.id !== run.id)].sort((a, b) => b.attempt - a.attempt)
+        stacks.value = { ...stacks.value, [root]: attempts }
+    }
+
     function _upsert(run: Run) {
+        _cacheAttempt(run)
         const idx = runs.value.findIndex(r => r.id === run.id)
         if (idx >= 0) {
             runs.value[idx] = { ...runs.value[idx], ...run }
@@ -74,6 +85,30 @@ export const useRunsStore = defineStore('runs', () => {
         return [run.component_name, run.component_key].some(text => text?.toLowerCase().includes(needle))
     }
 
+    function _isShown(id: string): boolean {
+        return !!findById(id) || Object.values(stacks.value).some(attempts => attempts.some(r => r.id === id))
+    }
+
+    /** Swap in a refetched run's fields wherever it is shown, without the list semantics of `_upsert`. */
+    function _refresh(run: Run) {
+        const idx = runs.value.findIndex(r => r.id === run.id)
+        if (idx >= 0) runs.value[idx] = { ...runs.value[idx], ...run }
+        _cacheAttempt(run)
+    }
+
+    // Execution counts move with events, which never touch the runs table: the
+    // runs a burst of events concerns are refetched together, at most once a second.
+    const staleCounts = new Set<string>()
+    let countsTimer: ReturnType<typeof setTimeout> | undefined
+
+    async function _refreshCounts() {
+        countsTimer = undefined
+        const ids = [...staleCounts]
+        staleCounts.clear()
+        const fresh = await Promise.all(ids.map(id => fetchOne(id).catch(() => null)))
+        for (const run of fresh) if (run) _refresh(run)
+    }
+
     /** A realtime record enters the list only if it matches the filters; one already listed is always refreshed. */
     function _onRealtime(record: Run) {
         if (findById(record.id) || _matches(record)) _upsert(record)
@@ -88,6 +123,16 @@ export const useRunsStore = defineStore('runs', () => {
         onInsert: (record: Record<string, any>) => _onRealtime(record as Run),
         onUpdate: (record: Record<string, any>) => _onRealtime(record as Run),
         onDelete: (record: Record<string, any>) => _remove(record.id),
+    })
+
+    useRealtimeSubscription({
+        table: 'events',
+        scope: () => runs.value.length ? orgStore.organisation?.id : null,
+        shouldHandle: (record: Record<string, any>) => !!record.run_id && _isShown(record.run_id),
+        onInsert: (record: Record<string, any>) => {
+            staleCounts.add(record.run_id)
+            countsTimer ??= setTimeout(_refreshCounts, 1000)
+        },
     })
 
     /**********************
@@ -124,6 +169,12 @@ export const useRunsStore = defineStore('runs', () => {
     async function fetchStack(rootRunId: string): Promise<Run[]> {
         const params = new URLSearchParams({ root_run_id: rootRunId })
         return apiFetch<Run[]>(`/runs?${params}`)
+    }
+
+    /** Load a stack's attempts into `stacks` unless they are already there. */
+    async function loadStack(rootRunId: string) {
+        if (stacks.value[rootRunId]) return
+        stacks.value = { ...stacks.value, [rootRunId]: await fetchStack(rootRunId) }
     }
 
     /** Queue a manual run for a runnable component (job, source, or asset). Returns the created run's id. */
@@ -173,6 +224,7 @@ export const useRunsStore = defineStore('runs', () => {
 
     function $reset() {
         runs.value = []
+        stacks.value = {}
         total.value = 0
         pageIndex.value = 0
         clearFilters()
@@ -196,6 +248,8 @@ export const useRunsStore = defineStore('runs', () => {
         fetchOne,
         createRun,
         fetchStack,
+        stacks,
+        loadStack,
         retryRun,
         goToPage,
         setFilters,
