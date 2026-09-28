@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
+import type { SplitterItem } from '@nuxt/ui'
 import type { EventCategory } from '~/utils/events'
-import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
@@ -17,6 +17,7 @@ const executionsStore = useExecutionsStore()
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+const appConfig = useAppConfig()
 
 const initialRun = ref<Run | null>(null)
 const executions = computed(() => executionsStore.executions)
@@ -27,6 +28,13 @@ const run = computed(() => runsStore.findById(runId) ?? initialRun.value)
 const selectedAsset = ref<string | null>(null)
 const statusFilter = ref<string | null>(null)
 const eventInFocus = ref<RunEvent | null>(null)
+/** Asset under the pointer in the rail, mirrored in the timeline and the graph. */
+const hoveredAsset = ref<string | null>(null)
+
+const stats = useRunStats(run, executions)
+const attempts = useRunAttempts(run, executions)
+/** Every asset of this attempt: the rail lists them all, whichever filter is active. */
+const assetRows = useExecutionRows(executions)
 
 /** Execution statuses behind the active status pill (e.g. pending → pending+queued). */
 const filterStatuses = computed(() => statusFilter.value ? statusesForKey(statusFilter.value) : null)
@@ -78,8 +86,35 @@ const eventCaption = computed(() => {
     return `${loaded} event${loaded === 1 ? '' : 's'}`
 })
 
-const markerTime = computed(() => eventInFocus.value?.timestamp ? new Date(eventInFocus.value.timestamp) : null)
-const highlightedAsset = computed(() => eventInFocus.value?.component_id ?? null)
+/** A hovered event marks its own instant; a hovered rail asset marks when it started. */
+const markerTime = computed(() => {
+    if (eventInFocus.value?.timestamp) return new Date(eventInFocus.value.timestamp)
+    const start = assetRows.value.find(row => row.id === hoveredAsset.value)?.bars[0]?.start
+    return start ? new Date(start) : null
+})
+const highlightedAsset = computed(() => hoveredAsset.value ?? eventInFocus.value?.component_id ?? null)
+
+const railItems: SplitterItem[] = [
+    { slot: 'rail', sizeUnit: 'px', defaultSize: 268, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden' },
+    { slot: 'main', class: 'min-w-0' },
+]
+const panelItems: SplitterItem[] = [
+    { slot: 'timeline', defaultSize: 40, minSize: 15, class: 'flex-col overflow-hidden' },
+    { slot: 'events', defaultSize: 60, minSize: 20, class: 'flex-col overflow-hidden' },
+]
+/** The handles are the panels' dividing borders, lit while hovered or dragged. */
+const handleClass = 'bg-(--ui-border) transition-colors data-[state=hover]:bg-primary data-[state=drag]:bg-primary'
+
+type SplitterPanelHandle = { collapse: () => void, expand: () => void, isCollapsed: boolean }
+const railSplitter = useTemplateRef<{ panelsRef: SplitterPanelHandle[] }>('railSplitter')
+const railPanel = computed(() => railSplitter.value?.panelsRef[0])
+/** Read off the panel: a collapse restored from the saved layout emits no event. */
+const railCollapsed = computed(() => railPanel.value?.isCollapsed ?? false)
+
+function toggleRail() {
+    if (railCollapsed.value) railPanel.value?.expand()
+    else railPanel.value?.collapse()
+}
 
 const retrying = ref(false)
 
@@ -100,20 +135,6 @@ async function onRetry(scope: 'all' | 'failed') {
 
 const fetchError = ref<unknown>(null)
 
-const stack = ref<Run[]>([])
-
-async function loadStack(fetched: Run) {
-    const root = fetched.root_run_id
-    if (!root || (fetched.attempt === 1 && root === fetched.id)) return
-    try {
-        stack.value = await runsStore.fetchStack(root)
-    }
-    catch {
-        // The page stands on its own without the stack; losing it is not an error worth showing.
-        stack.value = []
-    }
-}
-
 onMounted(async () => {
     try {
         const [fetchedRun] = await Promise.all([
@@ -132,16 +153,17 @@ onMounted(async () => {
         initialRun.value = fetchedRun
         // Seed the store so realtime updates can find and update it.
         runsStore._upsert(fetchedRun)
-        await loadStack(fetchedRun)
     }
     catch (e) {
         fetchError.value = e
     }
 })
 
+// Navigating between attempts mounts the next run's page before this one
+// unmounts, so only clear stores that still hold this run.
 onUnmounted(() => {
-    eventsStore.$reset()
-    executionsStore.$reset()
+    if (eventsStore.runId === runId) eventsStore.$reset()
+    if (executionsStore.runId === runId) executionsStore.$reset()
 })
 </script>
 
@@ -158,103 +180,109 @@ onUnmounted(() => {
             <StatusPill v-if="run"
                         :label="statusLabel(run.status)"
                         :color="statusPillColor(run.status)" />
-            <div v-if="stack.length > 1"
-                 class="flex items-center gap-1">
-                <span class="text-[13px] text-dimmed">Attempts</span>
-                <ULink v-for="attempt in stack"
-                       :key="attempt.id"
-                       :to="`/executions/runs/${attempt.id}`"
-                       class="rounded px-1.5 py-0.5 text-[13px] tabular-nums"
-                       :class="attempt.id === runId
-                           ? 'bg-elevated font-semibold text-highlighted'
-                           : 'text-muted hover:text-highlighted'">{{ attempt.attempt }}</ULink>
-            </div>
         </NavTitle>
         <NavActions v-if="run?.status === 'failed'">
             <UButton label="Retry failed"
-                     icon="i-lucide-list-restart"
+                     icon="i-lucide-rotate-ccw"
                      color="neutral"
-                     variant="outline"
+                     variant="ghost"
                      size="sm"
                      :loading="retrying"
                      @click="onRetry('failed')" />
             <UButton label="Retry all"
-                     icon="i-lucide-rotate-ccw"
+                     icon="i-lucide-refresh-cw"
                      color="neutral"
-                     variant="outline"
+                     variant="ghost"
                      size="sm"
                      :loading="retrying"
                      @click="onRetry('all')" />
         </NavActions>
-        <div class="flex flex-col h-full min-h-0">
-            <div class="flex flex-col mb-4 shrink-0 px-4 pt-4">
-                <ExecutionsRunSummary v-if="run"
-                                      v-model:status-filter="statusFilter"
-                                      :run="run"
-                                      :executions="executions" />
-            </div>
+        <div class="flex h-full min-h-0 flex-col">
+            <template v-if="run">
+                <ExecutionsRunMetaStrip :run="run"
+                                        :duration="stats.duration" />
+                <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
+                                        :stats="stats" />
+            </template>
 
-        <SplitterGroup direction="vertical"
-                       auto-save-id="run-panels"
-                       class="flex-1 min-h-0">
-            <SplitterPanel :default-size="40"
-                           :min-size="15"
-                           class="flex flex-col overflow-hidden">
-                <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                    <div class="flex items-center px-4 pt-4 pb-3 shrink-0">
-                        <UTabs v-model="view"
-                               :items="viewTabs"
-                               variant="pill"
-                               size="xs"
-                               :content="false" />
-                    </div>
+            <USplitter id="run-rail"
+                       ref="railSplitter"
+                       auto-save-id="run-rail"
+                       :items="railItems"
+                       :ui="{ root: 'min-h-0 flex-1', handle: `w-px ${handleClass}` }">
+                <template #rail="{ collapsed }">
+                    <ExecutionsRunRail v-if="!collapsed"
+                                       v-model:status-filter="statusFilter"
+                                       v-model:selected="selectedAsset"
+                                       v-model:hovered="hoveredAsset"
+                                       :rows="assetRows"
+                                       :buckets="stats.buckets"
+                                       :attempts="attempts"
+                                       :current-run-id="runId" />
+                </template>
 
-                    <div class="flex min-h-0 flex-1 flex-col">
-                    <div v-if="run?.status === 'queued'"
-                         class="flex h-full items-center justify-center text-muted">
-                        <span class="text-sm">Run is currently queued...</span>
-                    </div>
-                    <ChartExecutionTimeline v-else-if="view === 'timeline'"
-                                            v-model:selected-id="selectedAsset"
-                                            :rows="timelineRows"
-                                            :min-bar-ratio="0.05"
-                                            :marker-time="markerTime"
-                                            :highlighted-id="highlightedAsset"
-                                            empty-message="No asset executions yet" />
-                    <ExecutionsRunGraph v-else
-                                        v-model:selected-asset="selectedAsset"
-                                        :run-id="runId" />
-                    </div>
-                </div>
-            </SplitterPanel>
+                <template #main>
+                    <USplitter id="run-panels"
+                               orientation="vertical"
+                               auto-save-id="run-panels"
+                               :items="panelItems"
+                               :ui="{ root: 'min-h-0 min-w-0 flex-1', handle: `h-px ${handleClass}` }">
+                        <template #timeline>
+                            <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+                                <UButton :icon="railCollapsed ? appConfig.ui.icons.panelOpen : appConfig.ui.icons.panelClose"
+                                         :aria-label="railCollapsed ? 'Show panel' : 'Hide panel'"
+                                         color="neutral"
+                                         variant="ghost"
+                                         size="sm"
+                                         class="-ml-1.5"
+                                         @click="toggleRail" />
+                                <UTabs v-model="view"
+                                       :items="viewTabs"
+                                       variant="pill"
+                                       size="xs"
+                                       :content="false" />
+                            </div>
 
-            <SplitterResizeHandle
-                class="relative h-px shrink-0 cursor-ns-resize bg-(--ui-border) transition-colors data-[state=hover]:bg-primary/30 data-[state=drag]:bg-primary/30 before:absolute before:inset-x-0 before:-top-1.5 before:-bottom-1.5 before:z-1" />
+                            <div class="flex min-h-0 flex-1 flex-col">
+                                <div v-if="run?.status === 'queued'"
+                                     class="flex h-full items-center justify-center text-muted">
+                                    <span class="text-sm">Run is currently queued...</span>
+                                </div>
+                                <ChartExecutionTimeline v-else-if="view === 'timeline'"
+                                                        v-model:selected-id="selectedAsset"
+                                                        :rows="timelineRows"
+                                                        :min-bar-ratio="0.05"
+                                                        :marker-time="markerTime"
+                                                        :highlighted-id="highlightedAsset"
+                                                        empty-message="No asset executions yet" />
+                                <ExecutionsRunGraph v-else
+                                                    v-model:selected-asset="selectedAsset"
+                                                    :run-id="runId" />
+                            </div>
+                        </template>
 
-            <SplitterPanel :default-size="60"
-                           :min-size="20"
-                           class="flex flex-col min-h-0">
-                <div class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
-                        <UTabs v-model="eventCategory"
-                               :items="eventTabs"
-                               variant="pill"
-                               size="xs"
-                               :content="false" />
-                        <span v-if="!eventsStore.loading"
-                              class="ml-auto text-[13.5px] text-muted">{{ eventCaption }}</span>
-                    </div>
-                    <div class="flex-1 min-h-0 px-4">
-                        <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
-                                               :events="eventsStore.events"
-                                               :loading="eventsStore.loading"
-                                               :loading-more="eventsStore.loadingMore"
-                                               :has-more="eventsStore.hasMore"
-                                               :load-more="eventsStore.loadMore" />
-                    </div>
-                </div>
-            </SplitterPanel>
-        </SplitterGroup>
+                        <template #events>
+                            <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+                                <UTabs v-model="eventCategory"
+                                       :items="eventTabs"
+                                       variant="pill"
+                                       size="xs"
+                                       :content="false" />
+                                <span v-if="!eventsStore.loading"
+                                      class="ml-auto text-[13.5px] text-muted">{{ eventCaption }}</span>
+                            </div>
+                            <div class="flex-1 min-h-0 px-4">
+                                <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
+                                                       :events="eventsStore.events"
+                                                       :loading="eventsStore.loading"
+                                                       :loading-more="eventsStore.loadingMore"
+                                                       :has-more="eventsStore.hasMore"
+                                                       :load-more="eventsStore.loadMore" />
+                            </div>
+                        </template>
+                    </USplitter>
+                </template>
+            </USplitter>
         </div>
     </OrganizationGate>
 </template>

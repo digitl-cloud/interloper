@@ -377,8 +377,13 @@ function rowOpacity(id: string | null): number {
     return id === focusedId.value ? 1 : 0.25
 }
 
+/** Clicking the selected row again clears the selection. */
+function toggleSelected(id: string | null) {
+    selectedId.value = selectedId.value === id ? null : id
+}
+
 function onBarClick(layout: LayoutBar, row: TimelineRow) {
-    selectedId.value = row.id
+    toggleSelected(row.id)
     emit('barClick', layout.bar, row)
 }
 
@@ -574,7 +579,7 @@ watch(axisMax, () => {
                          opacity: rowOpacity(row.id),
                      }"
                      :title="labelTooltip(row)"
-                     @click.stop="selectedId = row.id">
+                     @click.stop="toggleSelected(row.id)">
                     <UIcon :name="row.icon"
                            class="size-4 shrink-0 text-muted" />
                     <span class="truncate text-sm font-medium">{{ row.name }}</span>
@@ -610,7 +615,7 @@ watch(axisMax, () => {
                              opacity: rowOpacity(row.id),
                          }"
                          :title="`${row.name} — ${statusLabel(row.status)}`"
-                         @click.stop="selectedId = row.id">
+                         @click.stop="toggleSelected(row.id)">
                         <UIcon :name="row.icon"
                                class="size-3.5 shrink-0" />
                         <span class="truncate text-xs font-medium">{{ row.name }}</span>

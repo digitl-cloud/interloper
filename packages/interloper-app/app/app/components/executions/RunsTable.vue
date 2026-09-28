@@ -4,14 +4,42 @@ import type { TableColumn } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 
 const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
 const EntityBadge = resolveComponent('EntityBadge')
+const UProgressGroup = resolveComponent('UProgressGroup')
+
+type RunRow = Run & { children?: Run[] }
 
 const route = useRoute()
 const router = useRouter()
 const runsStore = useRunsStore()
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const { runs, loading, total, pageIndex, pageSize, filters, filtered } = storeToRefs(runsStore)
+const { runs, stacks, loading, total, pageIndex, pageSize, filters, filtered } = storeToRefs(runsStore)
+
+/**
+ * A row is a stack at its latest attempt; expanding it lists the attempts
+ * before, which load on first expand. The latest is left out of its own
+ * children so no attempt appears twice, which also keeps row ids unique.
+ */
+const rows = computed<RunRow[]>(() => runs.value.map((run) => {
+    const attempts = stacks.value[run.root_run_id ?? run.id]
+    return attempts ? { ...run, children: attempts.filter(attempt => attempt.id !== run.id) } : run
+}))
+
+const expanded = ref<Record<string, boolean>>({})
+// Stable references: fresh ones on every render make TanStack rebuild the row
+// model, and the default auto-reset would collapse a stack the moment its
+// attempts finish loading.
+const getRowId = (run: RunRow) => run.id
+const getSubRows = (run: RunRow) => run.children
+const expandedOptions = {
+    autoResetExpanded: false,
+    getRowCanExpand: (row: { depth: number, original: RunRow }) => row.depth === 0 && row.original.attempt > 1,
+}
+// UTable renders a detail row under every expanded row for its `#expanded`
+// slot, even with sub-rows; with no slot its single spanning cell is empty.
+const tableUi = { tr: 'cursor-pointer [&:has(>td[colspan]:empty)]:hidden' }
 
 /**
  * Filters live in the store (the fetch, the pagination and the realtime gate
@@ -61,11 +89,45 @@ onMounted(async () => {
 
 onUnmounted(runsStore.clearFilters)
 
-const columns: TableColumn<Run>[] = [
+/** A stack's attempt count on its own row, an earlier attempt's ordinal on its; none for a single attempt. */
+function attemptBadge(run: Run, depth: number) {
+    if (depth > 0) {
+        return h(UBadge, { color: 'neutral', variant: 'outline', size: 'sm', title: `Attempt ${run.attempt}` }, () => `#${run.attempt}`)
+    }
+    if (run.attempt <= 1) return null
+    return h(UBadge, {
+        color: 'neutral',
+        size: 'sm',
+        icon: 'i-lucide-rotate-ccw',
+        title: `${run.attempt} attempts`,
+    }, () => String(run.attempt))
+}
+
+const columns: TableColumn<RunRow>[] = [
     {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ row }) => h('span', { class: 'font-mono text-xs' }, row.getValue<string>('id').substring(0, 8)),
+        cell: ({ row }) => {
+            const run = row.original
+            const open = row.getIsExpanded()
+            return h('div', { class: 'flex items-center gap-1.5', style: { paddingInlineStart: `${row.depth * 1.5}rem` } }, [
+                h(UButton, {
+                    'color': 'neutral',
+                    'variant': 'ghost',
+                    'size': 'xs',
+                    'icon': open ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right',
+                    'class': row.getCanExpand() ? undefined : 'invisible',
+                    'aria-label': open ? 'Hide earlier attempts' : 'Show earlier attempts',
+                    'onClick': (event: Event) => {
+                        event.stopPropagation()
+                        if (!open) runsStore.loadStack(run.root_run_id ?? run.id)
+                        row.toggleExpanded()
+                    },
+                }),
+                h('span', { class: 'font-mono text-xs' }, run.id.substring(0, 8)),
+                attemptBadge(run, row.depth),
+            ])
+        },
     },
     {
         id: 'target',
@@ -84,18 +146,19 @@ const columns: TableColumn<Run>[] = [
         accessorKey: 'status',
         header: 'Status',
         cell: ({ row }) => {
-            const run = row.original as Run
             const status = row.getValue<string>('status')
-            const badge = h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
-            // A row is a stack at its latest attempt, so `attempt` is how many
-            // it took: worth showing only when it took more than one.
-            if (run.attempt <= 1) return badge
-            return h('div', { class: 'flex items-center gap-1.5' }, [
-                badge,
-                h('span', {
-                    class: 'text-xs text-muted tabular-nums',
-                    title: `This work took ${run.attempt} attempts`,
-                }, `${run.attempt} attempts`),
+            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
+        },
+    },
+    {
+        id: 'assets',
+        header: 'Assets',
+        cell: ({ row }) => {
+            const stats = runStats(row.original, row.original.execution_counts ?? {})
+            if (!stats.total) return h('span', { class: 'text-muted' }, '—')
+            return h('div', { class: 'flex w-40 items-center gap-2', title: outcomeSummary(stats).join(' · ') }, [
+                h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
+                h('span', { class: 'text-xs text-muted tabular-nums' }, `${stats.succeeded}/${stats.total}`),
             ])
         },
     },
@@ -162,13 +225,17 @@ function onPageChange(page: number) {
         </div>
 
         <template v-else>
-            <UTable :data="runs"
+            <UTable v-model:expanded="expanded"
+                    :data="rows"
                     :columns="columns"
+                    :get-row-id="getRowId"
+                    :get-sub-rows="getSubRows"
+                    :expanded-options="expandedOptions"
                     :loading="loading"
                     :sorting="[{ id: 'created_at', desc: true }]"
                     sticky
                     class="flex-1 min-h-0"
-                    :ui="{ tr: 'cursor-pointer' }"
+                    :ui="tableUi"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
 
             <TableFooter class="shrink-0"
