@@ -2,6 +2,61 @@
 
 <!-- version list -->
 
+## v0.85.0 (2026-09-28)
+
+### Code Style
+
+- **app**: Drop attribute-level comments from the run type
+  ([`e8dde36`](https://github.com/digitl-cloud/interloper/commit/e8dde3632ce3e66b6f503ff3cce2bd9d0a44a8a8))
+
+### Documentation
+
+- Spec the retry system and its prerequisite
+  ([`15ceb2c`](https://github.com/digitl-cloud/interloper/commit/15ceb2c27f9f1267e69f1beda11393a73a3a6075))
+
+### Features
+
+- **api**: List runs by stack
+  ([`4e95e46`](https://github.com/digitl-cloud/interloper/commit/4e95e46a8bed0d15ec84348aed567255504edb10))
+
+- **api**: Report each run's execution counts by status
+  ([`559b1c1`](https://github.com/digitl-cloud/interloper/commit/559b1c146938ccf9549f2002e7a7ad2edde534a2))
+
+- **app**: Lift a graph node on hover
+  ([`a07ed96`](https://github.com/digitl-cloud/interloper/commit/a07ed96a5efb009783af2ec73cb0e5748270af12))
+
+- **app**: Show run attempts as stacks and redesign the run page
+  ([`c6b1bd9`](https://github.com/digitl-cloud/interloper/commit/c6b1bd96e0a50a5d5e7988d4b85fb4b0084d7e2d))
+
+- **core**: Retry a failed operation in place
+  ([`0df4cb9`](https://github.com/digitl-cloud/interloper/commit/0df4cb97c503e2c3f127e2dfbe2fec0beb0e6c30))
+
+- **db**: Retry a failed run, and report the stack's verdict
+  ([`a9d4061`](https://github.com/digitl-cloud/interloper/commit/a9d406182f019bab8f1d95ad97b22b675931b24d))
+
+### Refactoring
+
+- An operation is enabled, not materializable
+  ([`2bf1c64`](https://github.com/digitl-cloud/interloper/commit/2bf1c6462ea023fa01e798d75ef2da28c2b45454))
+
+- **core**: Make an operation a component
+  ([`bee28c8`](https://github.com/digitl-cloud/interloper/commit/bee28c8969814c8bfea95d61766ef6f0116d4426))
+
+- **core**: Name the owner's id parent_id in the event stream
+  ([`f15fe03`](https://github.com/digitl-cloud/interloper/commit/f15fe0355540d182a0ddae367628f8fc8f1abcbf))
+
+- **core**: Read a node's owner as its parent, not its source
+  ([`5470695`](https://github.com/digitl-cloud/interloper/commit/547069537293855a9abf7fa13c7a6f53a348c64b))
+
+### Testing
+
+- **core**: Cover replaying retried attempts on the flush path
+  ([`44ba034`](https://github.com/digitl-cloud/interloper/commit/44ba034aa8d42e02f115ff30e1d41439fa381330))
+
+- **core**: Make the cross-process retry test start-method agnostic
+  ([`5b2ffc5`](https://github.com/digitl-cloud/interloper/commit/5b2ffc5d06892ab536b80255b2a5fbc13bbec0b3))
+
+
 ## v0.84.1 (2026-09-17)
 
 ### Code Style
