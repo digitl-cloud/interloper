@@ -40,8 +40,8 @@ def register_tools(mcp: FastMCP) -> None:
         return catalog.get_asset_schema(get_ctx(), source_key, asset_key)
 
     @mcp.tool(description=catalog.search_fields.__doc__)
-    def search_fields(query: str) -> m.FieldSearchResult | m.ToolError:
-        return catalog.search_fields(get_ctx(), query)
+    def search_fields(query: str, limit: int = 50, offset: int = 0) -> m.FieldSearchResult | m.ToolError:
+        return catalog.search_fields(get_ctx(), query, limit, offset)
 
     @mcp.tool(description=catalog.compare_schemas.__doc__)
     def compare_schemas(
@@ -55,8 +55,10 @@ def register_tools(mcp: FastMCP) -> None:
     # -- Collection -------------------------------------------------------
 
     @mcp.tool(description=collection.list_components.__doc__)
-    def list_components(kind: str | None = None) -> m.ComponentCounts | m.ComponentList | m.ToolError:
-        return collection.list_components(get_ctx(), kind)
+    def list_components(
+        kind: str | None = None, q: str | None = None, limit: int = 50, offset: int = 0
+    ) -> m.ComponentCounts | m.ComponentList | m.ToolError:
+        return collection.list_components(get_ctx(), kind, q, limit, offset)
 
     # -- Lineage ----------------------------------------------------------
 
@@ -83,8 +85,8 @@ def register_tools(mcp: FastMCP) -> None:
     # -- Scheduling (read-only) --------------------------------------------
 
     @mcp.tool(description=scheduling.list_jobs.__doc__)
-    def list_jobs() -> m.JobList | m.ToolError:
-        return scheduling.list_jobs(get_ctx())
+    def list_jobs(limit: int = 50, offset: int = 0) -> m.JobList | m.ToolError:
+        return scheduling.list_jobs(get_ctx(), limit, offset)
 
     @mcp.tool(description=scheduling.get_job_health.__doc__)
     def get_job_health(component_id: str) -> m.JobHealth | m.ToolError:
@@ -95,20 +97,36 @@ def register_tools(mcp: FastMCP) -> None:
         component_id: str | None = None,
         status: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> m.RunList | m.ToolError:
-        return scheduling.list_recent_runs(get_ctx(), component_id, status, limit)
+        return scheduling.list_recent_runs(get_ctx(), component_id, status, limit, offset)
 
     @mcp.tool(description=scheduling.get_run_detail.__doc__)
     def get_run_detail(run_id: str) -> m.RunDetail | m.ToolError:
         return scheduling.get_run_detail(get_ctx(), run_id)
 
+    @mcp.tool(description=scheduling.list_run_events.__doc__)
+    def list_run_events(
+        run_id: str,
+        component_id: str | None = None,
+        event_types: list[str] | None = None,
+        errors_only: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> m.EventList | m.ToolError:
+        return scheduling.list_run_events(get_ctx(), run_id, component_id, event_types, errors_only, limit, offset)
+
+    @mcp.tool(description=scheduling.get_event.__doc__)
+    def get_event(event_id: str) -> m.EventDetail | m.ToolError:
+        return scheduling.get_event(get_ctx(), event_id)
+
     @mcp.tool(description=scheduling.list_failures.__doc__)
-    def list_failures(limit: int = 20) -> m.FailureList | m.ToolError:
-        return scheduling.list_failures(get_ctx(), limit)
+    def list_failures(limit: int = 20, offset: int = 0) -> m.FailureList | m.ToolError:
+        return scheduling.list_failures(get_ctx(), limit, offset)
 
     @mcp.tool(description=scheduling.list_backfills.__doc__)
-    def list_backfills(active_only: bool = True) -> m.BackfillList | m.ToolError:
-        return scheduling.list_backfills(get_ctx(), active_only)
+    def list_backfills(active_only: bool = True, limit: int = 20, offset: int = 0) -> m.BackfillList | m.ToolError:
+        return scheduling.list_backfills(get_ctx(), active_only, limit, offset)
 
     # -- Analytics ---------------------------------------------------------
 

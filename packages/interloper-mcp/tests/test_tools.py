@@ -39,7 +39,7 @@ async def test_only_read_only_tools_are_exposed(store: Store, catalog: il.Catalo
         tools = (await client.list_tools()).tools
 
     names = {t.name for t in tools}
-    assert len(names) == 20
+    assert len(names) == 22
     forbidden = {n for n in names if n.startswith(("trigger_", "toggle_", "create_", "request_", "bind_", "unbind_"))}
     assert forbidden == set()
     assert {"list_jobs", "list_definitions", "get_full_lineage", "freshness_check"} <= names

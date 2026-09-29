@@ -7,6 +7,7 @@ from uuid import uuid4
 from interloper_db.store import Store
 
 from interloper_toolkit import ToolkitContext, collection
+from interloper_toolkit.models import ComponentCounts, ComponentList
 
 
 class TestBindRelation:
@@ -63,3 +64,19 @@ class TestBindRelation:
 
         assert result.status == "error"
         assert len(store.relations.list_all(other_org, name="destinations")) == 1
+
+
+class TestListComponents:
+    def test_searches_and_pages_with_a_total(self, ctx: ToolkitContext, store: Store):
+        store.components.create(ctx.org_id, kind="destination", key="bq", name="Raw warehouse")
+        store.components.create(ctx.org_id, kind="destination", key="bq", name="Clean warehouse")
+        store.components.create(ctx.org_id, kind="destination", key="bq", name="Lake")
+
+        page = collection.list_components(ctx, kind="destination", q="warehouse", limit=1, offset=1)
+        counts = collection.list_components(ctx, q="lake")
+
+        assert isinstance(page, ComponentList)
+        assert (page.count, page.total) == (1, 2)
+        assert page.components[0].name == "Clean warehouse"
+        assert isinstance(counts, ComponentCounts)
+        assert counts.component_counts == {"destination": 1}

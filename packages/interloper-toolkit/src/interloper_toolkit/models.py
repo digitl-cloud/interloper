@@ -10,10 +10,12 @@ allowlist of what leaves the platform.
 Row-shaped payloads deliberately embed the interloper-db models (``Run``,
 ``Backfill``, ``Event``, ``Component`` — already pydantic via SQLModel)
 rather than duplicating their shape: the full-row contract predates this
-module, and embedding makes the coupling visible in the signature. The one
-exception is :class:`ComponentSummary`, where projecting is the point —
-sensitive kinds must never expose config or credential material, so the
-model's fields fail closed instead of relying on conditional key insertion.
+module, and embedding makes the coupling visible in the signature. The exceptions
+project on purpose: :class:`ComponentSummary`, because sensitive kinds must
+never expose config or credential material, so the model's fields fail
+closed instead of relying on conditional key insertion; and
+:class:`EventRecord`, because a page of tracebacks would not fit a tool
+response.
 
 Catalog definition payloads stay ``dict[str, Any]``: their content is
 definition-specific JSON schema material with no fixed shape to type.
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from interloper_db.models import Backfill, Component, Event, Execution, Run
 from pydantic import BaseModel
@@ -112,11 +115,12 @@ class FieldMatch(BaseModel):
 
 
 class FieldSearchResult(BaseModel):
-    """Fields across all asset schemas matching a query."""
+    """One page of the fields across all asset schemas matching a query."""
 
     status: Literal["success"] = "success"
     query: str
     match_count: int
+    total: int
     matches: list[FieldMatch]
 
 
@@ -172,11 +176,12 @@ class ComponentSummary(BaseModel):
 
 
 class ComponentList(BaseModel):
-    """The org's component instances of one kind."""
+    """One page of the org's component instances of one kind."""
 
     status: Literal["success"] = "success"
     kind: str
     count: int
+    total: int
     components: list[ComponentSummary]
 
 
@@ -285,10 +290,11 @@ class CrossSourceDependencies(BaseModel):
 
 
 class JobList(BaseModel):
-    """The org's scheduled jobs (full component rows)."""
+    """One page of the org's scheduled jobs (full component rows)."""
 
     status: Literal["success"] = "success"
     count: int
+    total: int
     jobs: list[Component]
 
 
@@ -311,50 +317,95 @@ class JobHealth(BaseModel):
 
 
 class RunList(BaseModel):
-    """Recent runs matching the filters."""
+    """One page of the runs matching the filters."""
 
     status: Literal["success"] = "success"
     count: int
+    total: int
     runs: list[Run]
 
 
 class RunDetail(BaseModel):
-    """One run with its event timeline and per-operation execution summary."""
+    """One run with its per-operation execution summary."""
 
     status: Literal["success"] = "success"
     run: Run
-    events: list[Event]
     executions: list[Execution]
 
 
-class RunErrorEvent(BaseModel):
-    """One error event of a failed run."""
+class EventRecord(BaseModel):
+    """An event row without its traceback, which only ``get_event`` carries.
 
+    A traceback runs to tens of kilobytes, so a page of them would not fit a
+    tool response; every other column is the row's.
+    """
+
+    id: UUID
+    run_id: UUID | None = None
+    event_type: str
+    timestamp: datetime
+    component_id: UUID | None = None
+    component_kind: str | None = None
+    component_key: str | None = None
+    level: str | None = None
+    message: str | None = None
+    error: str | None = None
+    data: dict[str, Any] | None = None
+
+
+class EventList(BaseModel):
+    """One page of a run's events, oldest first."""
+
+    status: Literal["success"] = "success"
+    run_id: str
+    count: int
+    total: int
+    events: list[EventRecord]
+
+
+class EventDetail(BaseModel):
+    """One event in full, its error and traceback clipped to a readable size."""
+
+    status: Literal["success"] = "success"
+    event: Event
+
+
+class RunErrorEvent(BaseModel):
+    """One error event of a failed run, its text clipped; ``get_event`` has it whole."""
+
+    event_id: UUID
     component_key: str | None = None
     error: str
     timestamp: datetime
 
 
 class RunFailure(BaseModel):
-    """A failed run with its error events."""
+    """A failed run with its error events.
+
+    ``error_count`` is the run's whole tally; ``errors`` holds the first
+    page of them.
+    """
 
     run: Run
+    error_count: int
     errors: list[RunErrorEvent]
 
 
 class FailureList(BaseModel):
-    """Recent failed runs with their errors."""
+    """One page of the failed runs, newest first, with their errors."""
 
     status: Literal["success"] = "success"
     count: int
+    total: int
     failures: list[RunFailure]
 
 
 class BackfillList(BaseModel):
-    """Backfills, optionally only the active ones."""
+    """One page of the backfills, newest first, optionally only the active ones."""
 
     status: Literal["success"] = "success"
     count: int
+    total: int
     backfills: list[Backfill]
 
 
