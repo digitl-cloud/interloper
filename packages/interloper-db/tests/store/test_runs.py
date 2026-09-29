@@ -21,7 +21,7 @@ from sqlmodel import Session, col, select
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store import Store
-from interloper_db.store.runs import create_backfill_runs
+from interloper_db.store.runs import create_backfill_runs, partition_key_range
 
 _ORG_ID = uuid4()
 
@@ -820,6 +820,79 @@ class TestListActiveBackfills:
         _backfill(store)
 
         assert store.runs.list_backfills(uuid4(), active_only=True) == []
+
+
+class TestListBackfills:
+    """The listing pages newest first and counts what it filters."""
+
+    def test_pages_newest_first_and_counts_the_whole_listing(self, store: Store):
+        created = [_backfill(store, days=2).id for _ in range(3)]
+
+        page = store.runs.list_backfills(_ORG_ID, limit=2, offset=1)
+
+        assert len(page) == 2
+        assert {row.id for row in page} <= set(created)
+        assert store.runs.count_backfills(_ORG_ID) == 3
+        assert store.runs.count_backfills(uuid4()) == 0
+
+
+class TestIntervals:
+    """Every attempt as a narrow row, filtered like the statistics need."""
+
+    def _add(self, store: Store, **fields: Any) -> UUID:
+        run = Run(org_id=_ORG_ID, **{"status": "success", **fields})
+        with Session(store.engine) as session:
+            session.add(run)
+            session.commit()
+            assert run.id is not None
+            return run.id
+
+    def test_every_attempt_of_a_stack_is_kept(self, store: Store):
+        stamp = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
+        first = self._add(store, status="failed", partition_key="2026-07-01", created_at=stamp)
+        second = self._add(
+            store,
+            retry_of=first,
+            root_run_id=first,
+            attempt=2,
+            partition_key="2026-07-01",
+            created_at=stamp + dt.timedelta(minutes=1),
+        )
+
+        rows, truncated = store.runs.intervals(_ORG_ID)
+
+        assert not truncated
+        assert [(row.id, row.attempt, row.root_run_id) for row in rows] == [(first, 1, first), (second, 2, first)]
+
+    def test_filters_narrow_by_window_target_backfill_and_partition(self, store: Store):
+        job_id = uuid4()
+        backfill = _backfill(store, days=2)
+        stamp = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
+        old = self._add(store, created_at=stamp - dt.timedelta(days=30))
+        targeted = self._add(store, component_id=job_id, created_at=stamp, partition_key="2026-07-02")
+        hourly = self._add(store, created_at=stamp, partition_key="2026-07-02T13")
+
+        def ids(**filters: Any) -> set[UUID]:
+            return {row.id for row in store.runs.intervals(_ORG_ID, **filters)[0]}
+
+        assert old not in ids(since=stamp - dt.timedelta(days=1))
+        assert ids(until=stamp - dt.timedelta(days=1)) == {old}
+        assert ids(component_id=job_id) == {targeted}
+        assert len(ids(backfill_id=backfill.id)) == 2
+        assert targeted in ids(partition_from="2026-07-01", partition_to="2026-07-03")
+        assert hourly not in ids(partition_from="2026-07-01", partition_to="2026-07-03")
+
+    def test_the_cap_reports_that_it_cut_rows_off(self, store: Store):
+        for _ in range(3):
+            self._add(store)
+
+        rows, truncated = store.runs.intervals(_ORG_ID, max_rows=2)
+
+        assert len(rows) == 2
+        assert truncated
+
+    def test_partition_key_range_bounds_by_value_and_granularity(self):
+        assert len(partition_key_range("2026-07-01", "2026-07-31")) == 3
 
 
 class TestBackfillProgression:
