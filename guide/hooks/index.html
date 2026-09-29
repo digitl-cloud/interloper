@@ -1116,6 +1116,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#backfills" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Backfills
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#retries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2066,7 +2077,7 @@ contract.</p>
 <tr>
 <td><code>events</code></td>
 <td><code>["run_failed"]</code></td>
-<td>Run outcomes that fire the hook: <code>run_completed</code>, <code>run_failed</code>. At least one.</td>
+<td>Outcomes that fire the hook: <code>run_completed</code>, <code>run_failed</code>, <code>backfill_completed</code>, <code>backfill_failed</code>. At least one.</td>
 </tr>
 <tr>
 <td><code>enabled</code></td>
@@ -2145,11 +2156,22 @@ hook classes join the <a href="../catalog/">catalog</a> through the <code>interl
 any component.</p>
 <p><code>HookState</code> (<code>last_fired_at</code>, <code>last_run_id</code>) is the hook's machine-owned state, stamped by the
 operator on every firing.</p>
+<h2 id="backfills">Backfills<a class="headerlink" href="#backfills" title="Permanent link">&para;</a></h2>
+<p>A backfill has a verdict of its own: <code>backfill_completed</code> once every partition's latest attempt
+succeeded, <code>backfill_failed</code> once the batch closed with a failed partition left. Every firing of a
+partitioned cron job is a backfill, so a hook subscribed to <code>backfill_failed</code> gets one message per
+bad morning rather than one per partition; subscribe to both levels to get both. A canceled
+backfill is not an outcome of the work and fires nothing.</p>
+<p>The context names the backfill (<code>backfill_id</code>, <code>start_key</code>, <code>end_key</code>) and its metadata carries
+<code>partitions</code>, <code>counts</code> (partitions per status, each read as its latest attempt) and, for a failure,
+<code>failed_partitions</code>: <code>[partition_key, error]</code> pairs, newest first. A <code>TriggerHook</code> fired by a
+backfill event backfills each target over the same range, gated by the target job's <code>concurrency</code>.</p>
 <h2 id="retries">Retries<a class="headerlink" href="#retries" title="Permanent link">&para;</a></h2>
 <p>A hook observes a <strong>verdict</strong>, never an attempt. When a run fails and its job's retry policy allows
 another attempt, the failure is not an outcome and no hook fires. Only the attempt that ends the
 stack does: as <code>run_completed</code> if a retry healed the work, or as <code>run_failed</code> once the budget is
-exhausted.</p>
+exhausted. A backfill stays open while a retry waits out its backoff, so its event, too, reports
+the healed or exhausted stack.</p>
 <p>The context carries the stack's position, so a message can say which attempt it is reporting:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">fire</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">HookContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">attempt</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"attempt"</span><span class="p">]</span>

@@ -12,36 +12,32 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/ui/">
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-29-backfill-hook-events-design/">
       
       
-        <link rel="prev" href="../guide/telemetry/">
-      
-      
-        <link rel="next" href="./definitions/">
       
       
         
       
       
-      <link rel="icon" href="../assets/favicon.png">
+      <link rel="icon" href="../../../assets/favicon.png">
       <meta name="generator" content="zensical-0.0.66">
     
     
       
-        <title>Tour - Interloper</title>
+        <title>Backfill hook events - Interloper</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../assets/stylesheets/modern/main.1502b751.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.1502b751.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.812a03bb.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -60,9 +56,9 @@
       
     
     
-      <link rel="stylesheet" href="../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -87,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#web-ui" class="md-skip">
+        <a href="#backfill-hook-events" class="md-skip">
           Skip to content
         </a>
       
@@ -103,9 +99,9 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="./.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
@@ -122,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Tour
+              Backfill hook events
             
           </span>
         </div>
@@ -210,7 +206,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="./.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   Getting started
@@ -226,7 +222,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../tutorial/" class="md-tabs__link">
+      <a href="../../../tutorial/" class="md-tabs__link">
         
   
   Tutorial
@@ -289,7 +285,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../guide/assets/" class="md-tabs__link">
+        <a href="../../../guide/assets/" class="md-tabs__link">
           
   
   Guide
@@ -304,8 +300,6 @@
   
   
   
-    
-  
   
     
       
@@ -322,8 +316,8 @@
     
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="././" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
           
   
   Web UI
@@ -357,7 +351,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../extending/components/" class="md-tabs__link">
+        <a href="../../../extending/components/" class="md-tabs__link">
           
   
   Extending
@@ -399,7 +393,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../reference/decorators/" class="md-tabs__link">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
           
   
   Reference
@@ -440,9 +434,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="./.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     Interloper
@@ -469,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="./.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -495,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorial/" class="md-nav__link">
+      <a href="../../../tutorial/" class="md-nav__link">
         
   
   
@@ -614,7 +608,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/assets/" class="md-nav__link">
+      <a href="../../../guide/assets/" class="md-nav__link">
         
   
   
@@ -641,7 +635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/sources/" class="md-nav__link">
+      <a href="../../../guide/sources/" class="md-nav__link">
         
   
   
@@ -668,7 +662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/dependencies/" class="md-nav__link">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
         
   
   
@@ -695,7 +689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/resources/" class="md-nav__link">
+      <a href="../../../guide/resources/" class="md-nav__link">
         
   
   
@@ -722,7 +716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/connections/" class="md-nav__link">
+      <a href="../../../guide/connections/" class="md-nav__link">
         
   
   
@@ -749,7 +743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/oauth/" class="md-nav__link">
+      <a href="../../../guide/oauth/" class="md-nav__link">
         
   
   
@@ -776,7 +770,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/fields/" class="md-nav__link">
+      <a href="../../../guide/fields/" class="md-nav__link">
         
   
   
@@ -803,7 +797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/destinations/" class="md-nav__link">
+      <a href="../../../guide/destinations/" class="md-nav__link">
         
   
   
@@ -830,7 +824,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/schema/" class="md-nav__link">
+      <a href="../../../guide/schema/" class="md-nav__link">
         
   
   
@@ -857,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/normalization/" class="md-nav__link">
+      <a href="../../../guide/normalization/" class="md-nav__link">
         
   
   
@@ -884,7 +878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/partitioning/" class="md-nav__link">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
         
   
   
@@ -911,7 +905,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/execution/" class="md-nav__link">
+      <a href="../../../guide/execution/" class="md-nav__link">
         
   
   
@@ -938,7 +932,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/backfilling/" class="md-nav__link">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
         
   
   
@@ -965,7 +959,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/events/" class="md-nav__link">
+      <a href="../../../guide/events/" class="md-nav__link">
         
   
   
@@ -992,7 +986,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/jobs/" class="md-nav__link">
+      <a href="../../../guide/jobs/" class="md-nav__link">
         
   
   
@@ -1019,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/hooks/" class="md-nav__link">
+      <a href="../../../guide/hooks/" class="md-nav__link">
         
   
   
@@ -1046,7 +1040,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/specs/" class="md-nav__link">
+      <a href="../../../guide/specs/" class="md-nav__link">
         
   
   
@@ -1073,7 +1067,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/catalog/" class="md-nav__link">
+      <a href="../../../guide/catalog/" class="md-nav__link">
         
   
   
@@ -1100,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/cli/" class="md-nav__link">
+      <a href="../../../guide/cli/" class="md-nav__link">
         
   
   
@@ -1127,7 +1121,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../guide/telemetry/" class="md-nav__link">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
         
   
   
@@ -1159,8 +1153,6 @@
       
   
   
-    
-  
   
   
     
@@ -1178,23 +1170,20 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="././" class="md-nav__link md-nav__link--active">
+            <a href="../../../ui/" class="md-nav__link ">
               
   
   
@@ -1211,14 +1200,14 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_4" id="__nav_4_label" tabindex="">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
         
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
             <label class="md-nav__title" for="__nav_4">
               <span class="md-nav__icon md-icon"></span>
               
@@ -1237,7 +1226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="./definitions/" class="md-nav__link">
+      <a href="../../../ui/definitions/" class="md-nav__link">
         
   
   
@@ -1264,7 +1253,7 @@
   
   
     <li class="md-nav__item">
-      <a href="./running/" class="md-nav__link">
+      <a href="../../../ui/running/" class="md-nav__link">
         
   
   
@@ -1362,7 +1351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../extending/components/" class="md-nav__link">
+      <a href="../../../extending/components/" class="md-nav__link">
         
   
   
@@ -1389,7 +1378,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../extending/representations/" class="md-nav__link">
+      <a href="../../../extending/representations/" class="md-nav__link">
         
   
   
@@ -1416,7 +1405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../extending/runners/" class="md-nav__link">
+      <a href="../../../extending/runners/" class="md-nav__link">
         
   
   
@@ -1443,7 +1432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../extending/operations/" class="md-nav__link">
+      <a href="../../../extending/operations/" class="md-nav__link">
         
   
   
@@ -1470,7 +1459,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../extending/entry-points/" class="md-nav__link">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
         
   
   
@@ -1576,7 +1565,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/decorators/" class="md-nav__link">
+      <a href="../../../reference/decorators/" class="md-nav__link">
         
   
   
@@ -1603,7 +1592,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/settings/" class="md-nav__link">
+      <a href="../../../reference/settings/" class="md-nav__link">
         
   
   
@@ -1630,7 +1619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/cli/" class="md-nav__link">
+      <a href="../../../reference/cli/" class="md-nav__link">
         
   
   
@@ -1657,7 +1646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/events/" class="md-nav__link">
+      <a href="../../../reference/events/" class="md-nav__link">
         
   
   
@@ -1684,7 +1673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/telemetry/" class="md-nav__link">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
         
   
   
@@ -1711,7 +1700,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/errors/" class="md-nav__link">
+      <a href="../../../reference/errors/" class="md-nav__link">
         
   
   
@@ -1738,7 +1727,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/utils/" class="md-nav__link">
+      <a href="../../../reference/utils/" class="md-nav__link">
         
   
   
@@ -1765,7 +1754,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/ecosystem/" class="md-nav__link">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
         
   
   
@@ -1792,7 +1781,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reference/claude-code/" class="md-nav__link">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
         
   
   
@@ -1838,61 +1827,6 @@
   
 
 
-  <nav class="md-path" aria-label="Navigation" >
-    <ol class="md-path__list">
-      
-        
-  
-  
-    <li class="md-path__item">
-      <a href="./.." class="md-path__link">
-        
-  
-  <span class="md-ellipsis">
-    Getting started
-  </span>
-
-      </a>
-    </li>
-  
-
-      
-      
-        
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-      <li class="md-path__item">
-        <a href="././" class="md-path__link">
-          
-  
-  <span class="md-ellipsis">
-    Web UI
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-    </ol>
-  </nav>
-
               
               <article class="md-content__inner md-typeset">
                 
@@ -1901,109 +1835,192 @@
   
 
 
-<h1 id="web-ui">Web UI<a class="headerlink" href="#web-ui" title="Permanent link">&para;</a></h1>
-<p>The platform ships a web application over the components the framework defines: browse what is
-installed, configure sources and their credentials, attach destinations, schedule jobs, react to
-outcomes with hooks, and follow every run down to its events. Nothing on these screens is written
-per connector; each page is rendered from component definitions, as
-<a href="definitions/">Generated from definitions</a> explains. This page walks through the app with the
-demo sources that ship with the framework.</p>
-<h2 id="timeline">Timeline<a class="headerlink" href="#timeline" title="Permanent link">&para;</a></h2>
-<p><img alt="Timeline" src="../assets/ui/timeline-light.png#only-light" />
-<img alt="Timeline" src="../assets/ui/timeline-dark.png#only-dark" /></p>
-<p>The landing page: one row per job and per source, one bar per run over a selectable window, green
-for success and red for failure. Hovering a bar shows the run; clicking opens it.</p>
-<h2 id="graph">Graph<a class="headerlink" href="#graph" title="Permanent link">&para;</a></h2>
-<p><img alt="Graph" src="../assets/ui/graph-light.png#only-light" />
-<img alt="Graph" src="../assets/ui/graph-dark.png#only-dark" /></p>
-<p>The lineage of every asset in the organisation, built from the dependency relations the
-framework infers (<code>a</code> feeds <code>b</code>, <code>c</code>, <code>d</code>, which feed <code>e</code>). Nodes carry the asset's tags and its
-health; the toolbar groups by asset, by source instance or by source type, and filters by status.
-Selecting a node opens a panel with the asset's schema, partitioning, destinations and last runs.</p>
-<h2 id="collection">Collection<a class="headerlink" href="#collection" title="Permanent link">&para;</a></h2>
-<p><img alt="Collection" src="../assets/ui/collection-light.png#only-light" />
-<img alt="Collection" src="../assets/ui/collection-dark.png#only-dark" /></p>
-<p>Every source instance and its assets, grouped by source type. Columns show the last run, the
-connection, the number of upstream dependencies, the destinations and the jobs that target each
-asset. The catalog of installed but not yet configured types is reachable from the "New source"
-button.</p>
-<h2 id="sources">Sources<a class="headerlink" href="#sources" title="Permanent link">&para;</a></h2>
-<p><img alt="Sources" src="../assets/ui/sources-light.png#only-light" />
-<img alt="Sources" src="../assets/ui/sources-dark.png#only-dark" /></p>
-<p>The configured source instances. Two instances of the same type ("Demo Data" and "Demo Flaky")
-coexist because each has its own dataset; with a discriminator field they would also have
-distinct table names.</p>
-<h3 id="creating-a-source">Creating a source<a class="headerlink" href="#creating-a-source" title="Permanent link">&para;</a></h3>
-<p><img alt="Source wizard, type step" src="../assets/ui/source-wizard-types-light.png#only-light" />
-<img alt="Source wizard, type step" src="../assets/ui/source-wizard-types-dark.png#only-dark" /></p>
-<p>The wizard opens on the type step: one tile per source definition in the catalog, grouped by tag,
-with the icon and name the class declares. Selecting a tile advances.</p>
-<p><img alt="Source wizard, assets step" src="../assets/ui/source-wizard-assets-light.png#only-light" />
-<img alt="Source wizard, assets step" src="../assets/ui/source-wizard-assets-dark.png#only-dark" /></p>
-<p>The assets step lists the definition's assets with their docstrings and tags, filterable by tag.
-The selection becomes the source's children; assets left out stay available as dependencies.</p>
-<p><img alt="Source wizard, connection step" src="../assets/ui/source-wizard-connection-light.png#only-light" />
-<img alt="Source wizard, connection step" src="../assets/ui/source-wizard-connection-dark.png#only-dark" /></p>
-<p>One step per resource relation the source declares. It lists the existing connections of the
-required key or creates one inline; the connection form is the same as on the Connections page.</p>
-<p><img alt="Source wizard, details step" src="../assets/ui/source-wizard-details-light.png#only-light" />
-<img alt="Source wizard, details step" src="../assets/ui/source-wizard-details-dark.png#only-dark" /></p>
-<p>The details step recaps the earlier choices and renders the form generated from the source's
-configuration fields: the framework's own (<code>materialization_strategy</code>, <code>dataset</code>) and the
-class's (<code>hello</code>, <code>random_failure_probability</code> on the demo source), with the labels,
-descriptions and tooltips their field helpers declare.</p>
-<h2 id="connections">Connections<a class="headerlink" href="#connections" title="Permanent link">&para;</a></h2>
-<p><img alt="Connections" src="../assets/ui/connections-light.png#only-light" />
-<img alt="Connections" src="../assets/ui/connections-dark.png#only-dark" /></p>
-<p>Credentials, stored encrypted and shared by every source that needs them. The page lists the
-configured connections and, below, the catalog of connection types installed. The sidebar entry
-exists because the catalog contains the <code>connection</code> resource kind; a package defining another
-kind gets its own entry.</p>
-<p><img alt="Connection form" src="../assets/ui/connection-form-light.png#only-light" />
-<img alt="Connection form" src="../assets/ui/connection-form-dark.png#only-dark" /></p>
-<p>A connection declaring <code>OAuthConfig</code> gets a sign-in tab when the provider's app credentials are
-configured on the server, and a manual tab showing every field. The <code>auto_renew</code> toggle appears
-because the class is renewable; a "Test connection" action appears when it implements <code>check()</code>.</p>
-<h2 id="destinations">Destinations<a class="headerlink" href="#destinations" title="Permanent link">&para;</a></h2>
-<p><img alt="Destinations" src="../assets/ui/destinations-light.png#only-light" />
-<img alt="Destinations" src="../assets/ui/destinations-dark.png#only-dark" /></p>
-<p>Where data lands. A destination's form comes from its configuration fields, and its connection
-relation, when it declares one, is a picker over the matching connections.</p>
-<h2 id="jobs">Jobs<a class="headerlink" href="#jobs" title="Permanent link">&para;</a></h2>
-<p><img alt="Jobs" src="../assets/ui/jobs-light.png#only-light" />
-<img alt="Jobs" src="../assets/ui/jobs-dark.png#only-dark" /></p>
-<p>Cron jobs over sources or assets. The schedule column renders the cron expression and its
-timezone; "Next run at" and "Last run at" are the job's state model, shown as columns because
-the definition publishes a <code>state_schema</code>. The job form uses the cron and timezone widgets and
-the partition-window fields (<code>lookback</code>, <code>offset</code>); its Operation section carries <code>concurrency</code>,
-how many of a firing's partitions run at once.</p>
-<h2 id="hooks">Hooks<a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h2>
-<p><img alt="Hooks" src="../assets/ui/hooks-light.png#only-light" />
-<img alt="Hooks" src="../assets/ui/hooks-dark.png#only-dark" /></p>
-<p>Reactions to run and backfill outcomes: a webhook posting failures to an operations endpoint, and a trigger
-hook starting the monthly rollup when the daily job completes. The watched components and, for
-trigger hooks, the targets are relation pickers derived from the hook class's vocabulary.</p>
-<h2 id="executions">Executions<a class="headerlink" href="#executions" title="Permanent link">&para;</a></h2>
-<p><img alt="Executions" src="../assets/ui/executions-light.png#only-light" />
-<img alt="Executions" src="../assets/ui/executions-dark.png#only-dark" /></p>
-<p>Every run with its target, partition key, status and timings. Runs come from schedules, manual
-triggers, hooks and backfills.</p>
-<p><img alt="Backfills" src="../assets/ui/backfills-light.png#only-light" />
-<img alt="Backfills" src="../assets/ui/backfills-dark.png#only-dark" /></p>
-<p>A backfill is one run per partition over a range, dispatched newest first with a concurrency
-cap; the range is shown in the target's partition-key shape, and the Partitions column draws
-each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
-Both tables filter by status, and a status still executing spins.</p>
-<h3 id="run-detail">Run detail<a class="headerlink" href="#run-detail" title="Permanent link">&para;</a></h3>
-<p><img alt="Run detail" src="../assets/ui/run-light.png#only-light" />
-<img alt="Run detail" src="../assets/ui/run-dark.png#only-dark" /></p>
-<p>One run: the per-asset execution timeline (or the run's graph), and the full event stream the
-framework emitted, filterable to lifecycle events, errors or the log lines assets wrote through
-<code>context.logger</code>. Failed runs offer "Retry failed" and "Retry all".</p>
-<h2 id="search-and-switching">Search and switching<a class="headerlink" href="#search-and-switching" title="Permanent link">&para;</a></h2>
-<p>The search box (<code>⌘K</code>) opens a command palette over every page, source, job and hook, with
-aliases (typing "DAG" finds the graph). The footer switches the organisation and the user, and
-toggles light and dark mode.</p>
+<h1 id="backfill-hook-events">Backfill hook events<a class="headerlink" href="#backfill-hook-events" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-29. Status: approved design, implementation not started.</p>
+<p>Scope: hooks can observe a backfill's verdict, not only a run's, and the evaluator delivers every
+verdict it is owed. This closes the last item of the retry design's original ask (one
+notification per outcome, not per attempt) now that every firing of a partitioned cron job is a
+backfill (<code>2026-09-29-backfill-concurrency-design.md</code>).</p>
+<hr />
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">&para;</a></h2>
+<p>A hook reacts to <code>run_completed</code> and <code>run_failed</code>. Since a cron job's firing became a backfill
+gated by <code>concurrency</code>, a broken vendor makes a job with <code>lookback: 7</code> produce seven failed runs,
+each a verdict of its own (stack gating only holds back attempts), so a hook watching the job
+posts seven messages for one bad morning and nothing that says the firing as a whole failed.</p>
+<p>The batch already has a verdict: <code>_advance_backfill</code> finalises a backfill as <code>success</code> or <code>failed</code>
+from each partition's latest attempt, and keeps it open while a retry waits out its backoff. No
+hook can subscribe to it, and no event announces it: <code>EventType.BACKFILL_COMPLETED</code> and
+<code>BACKFILL_FAILED</code> exist and are emitted nowhere.</p>
+<p>Two delivery gaps sit beside this, in the sweep the batch events would inherit:</p>
+<ul>
+<li>The evaluator sweeps by a wall-clock watermark from the scheduler's clock against a
+  <code>completed_at</code> stamped by the completing process, with a fixed 30 s overlap. A pod whose clock
+  trails the scheduler's by more than that, or a <code>complete()</code> transaction that takes longer than
+  that to commit, produces a verdict the sweep never sees.</li>
+<li>The watermark starts at boot, so a verdict reached while the scheduler was restarting (every
+  rollout) is never delivered.</li>
+</ul>
+<p>And one race unrelated to retries: <code>RunStore.complete()</code> does not check that the run is still
+non-terminal, so the reaper failing a run whose pod started at the 600 s mark can overwrite the
+executor's success, and now also queue a retry of a run that succeeded.</p>
+<hr />
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vocabulary</td>
+<td><code>HookEvent</code> gains <code>backfill_completed</code> and <code>backfill_failed</code>. A hook picks the levels it wants; the default stays <code>["run_failed"]</code>. A hook subscribed to both levels gets a message per partition and one for the batch, which is what it asked for.</td>
+</tr>
+<tr>
+<td>What a backfill event is</td>
+<td>The backfill reaching <code>success</code> or <code>failed</code>. A canceled backfill (a user's cancel, or the quota) is not an outcome of the work and fires nothing. A single-partition backfill (a manual partition run) is a backfill like any other.</td>
+</tr>
+<tr>
+<td>Sweep</td>
+<td>The evaluator sweeps backfills beside runs, same tick, same matching, same claim mechanism. Run events are unchanged: a run inside a backfill still fires run events. A failed run whose successor is queued is not a verdict: it is stamped as evaluated without firing, so it leaves the unevaluated set like any other row.</td>
+</tr>
+<tr>
+<td>Matching</td>
+<td>Hooks watching the backfill's target, or the target's parent, as for runs.</td>
+</tr>
+<tr>
+<td>Claim</td>
+<td><code>uuid5(hook, backfill_id)</code>, an <code>events</code> row with no <code>run_id</code>; <code>data</code> carries <code>backfill_id</code>.</td>
+</tr>
+<tr>
+<td>Context</td>
+<td><code>HookContext</code> gains <code>backfill_id</code>, <code>start_key</code> and <code>end_key</code>; <code>run_id</code> and <code>partition_key</code> stay for run events and are <code>None</code> for backfill events.</td>
+</tr>
+<tr>
+<td>Metadata</td>
+<td><code>status</code>, <code>component_name</code>, <code>component_key</code>, <code>partitions</code>, <code>counts</code> (per status, each partition read as its latest attempt, from <code>RunStore.count_backfill_runs</code>), and for a failure <code>failed_partitions</code>: the failed partitions' keys with each one's recorded error, newest partition first.</td>
+</tr>
+<tr>
+<td>Slack</td>
+<td>A headline per outcome (<code>backfill completed</code> / <code>backfill failed</code>), a details line with the range and the counts, then the failed partitions with their errors, at most ten, then "and N more".</td>
+</tr>
+<tr>
+<td>Webhook</td>
+<td>The payload gains <code>backfill_id</code>, <code>start_key</code> and <code>end_key</code>; <code>metadata</code> carries the rest.</td>
+</tr>
+<tr>
+<td>Trigger hooks</td>
+<td>On a backfill event the trigger creates a backfill over the same range on each target, so a cascade stays aligned with what fired it. Its concurrency is the target job's <code>concurrency</code> when the target is a job, else 1. The re-entry guard is unchanged.</td>
+</tr>
+<tr>
+<td>Delivery cursor</td>
+<td>The watermark and its overlap go. Runs and backfills gain <code>hooks_evaluated_at</code>; the sweep takes terminal rows where it is null, ordered by <code>completed_at</code>, and stamps it once every matching hook has been evaluated. No clock is compared with another, and a verdict reached during a restart is delivered after it. The idempotent claim stays as the guard against a stamp lost to a crash mid-tick.</td>
+</tr>
+<tr>
+<td>First deploy</td>
+<td>The migration stamps every existing terminal run and backfill, so history is not replayed.</td>
+</tr>
+<tr>
+<td>Terminal guard</td>
+<td><code>complete()</code> raises <code>ValueError</code> when the run is already terminal. The reaper already logs and moves on; the executor logs it too, since a run the reaper failed first is not its to finish.</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>Additive for hooks: stored <code>events</code> values keep their meaning. One migration (006): two nullable columns with partial indexes on the unevaluated rows, plus the stamp.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-what-changes">3. What changes<a class="headerlink" href="#3-what-changes" title="Permanent link">&para;</a></h2>
+<h3 id="core">Core<a class="headerlink" href="#core" title="Permanent link">&para;</a></h3>
+<p><code>interloper/hook/base.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">HookEvent</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"run_completed"</span><span class="p">,</span> <span class="s2">"run_failed"</span><span class="p">,</span> <span class="s2">"backfill_completed"</span><span class="p">,</span> <span class="s2">"backfill_failed"</span><span class="p">]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">HookContext</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">event_type</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">component_id</span><span class="p">:</span> <span class="nb">str</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">run_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">partition_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">backfill_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">start_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">end_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">trigger</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">str</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exclude</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span></code></pre></div>
+<p>The <code>events</code> field description becomes "Outcomes this hook reacts to". The form's multi-select
+picks the new values up from the schema.</p>
+<p><code>interloper/hook/webhook.py</code>: <code>_payload</code> adds <code>backfill_id</code>, <code>start_key</code>, <code>end_key</code>.</p>
+<p><code>interloper_slack/hook.py</code>: <code>_OUTCOMES</code> gains the two backfill entries; <code>_details</code> renders the range
+and the counts for a backfill; a failure appends the failed partitions.</p>
+<h3 id="store">Store<a class="headerlink" href="#store" title="Permanent link">&para;</a></h3>
+<p><code>interloper_db/models/runs.py</code>: <code>hooks_evaluated_at: datetime | None</code> on <code>Run</code> and <code>Backfill</code>, with
+a partial index each on <code>(completed_at) WHERE hooks_evaluated_at IS NULL</code>.</p>
+<p><code>interloper_db/migrations/versions/006_hook_cursors.py</code>: the columns, the indexes (<code>CONCURRENTLY</code>,
+<code>IF NOT EXISTS</code>, as 005), and <code>UPDATE ... SET hooks_evaluated_at = completed_at WHERE status IN
+('success', 'failed', 'canceled') AND hooks_evaluated_at IS NULL</code> on both tables.</p>
+<p><code>interloper_db/store/runs.py</code></p>
+<ul>
+<li><code>complete()</code> raises <code>ValueError(f"Run {run_id} is already {status}")</code> when the row's status is
+  <code>success</code>, <code>failed</code> or <code>canceled</code>.</li>
+<li><code>RunStore.failed_partitions(backfill_id) -&gt; list[tuple[str, str | None]]</code>: the partitions whose
+  latest attempt failed, newest first, each with the error of that attempt's <code>run_failed</code> event.</li>
+<li><code>RunStore.create_backfill</code> is unchanged; the trigger calls it.</li>
+</ul>
+<h3 id="scheduler">Scheduler<a class="headerlink" href="#scheduler" title="Permanent link">&para;</a></h3>
+<p><code>interloper_scheduler/hooks.py</code></p>
+<ul>
+<li><code>_tick</code> selects runs and backfills with a terminal status and <code>hooks_evaluated_at IS NULL</code>,
+  ordered by <code>completed_at</code>. A failed run with a successor is stamped and skipped; every other row
+  is stamped once its hooks have been evaluated. The claims themselves are written as today, one
+  <code>events</code> row each, so a crash between a claim and its stamp re-evaluates the row and finds the
+  claim.</li>
+<li><code>_evaluate</code> is split by subject: the run path is today's; the backfill path reads the target,
+  matches the same hooks, builds the backfill metadata, and fires with a backfill context.</li>
+<li><code>_trigger</code> takes the context's shape into account: a run event creates a run on the target with
+  the partition propagated (today), a backfill event creates a backfill over <code>start_key</code> to
+  <code>end_key</code>.</li>
+<li><code>_OVERLAP</code>, <code>_watermark</code> and the first-tick logic go, with <code>TestFirstTickWatermark</code>.</li>
+</ul>
+<p><code>interloper_scheduler/executor.py</code>: the terminal <code>complete()</code> calls catch <code>ValueError</code>, log it at
+warning level with the run id, and return <code>False</code>.</p>
+<h3 id="docs">Docs<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>docs/guide/hooks.md</code>: the two new events, what a backfill verdict is, the trigger's backfill
+  cascade, and that a canceled backfill fires nothing.</li>
+<li><code>docs/ui/index.md</code>: the hook form's events.</li>
+</ul>
+<hr />
+<h2 id="4-tests">4. Tests<a class="headerlink" href="#4-tests" title="Permanent link">&para;</a></h2>
+<p>Test files mirror the modules they cover.</p>
+<ul>
+<li><code>interloper-core/tests/hook/test_base.py</code>: the vocabulary lists four events; the context's
+  backfill fields default to <code>None</code>.</li>
+<li><code>interloper-core/tests/hook/test_webhook.py</code>: the payload carries the backfill fields.</li>
+<li><code>interloper-slack/tests/test_hook.py</code>: a backfill failure renders the range, the counts and the
+  failed partitions, capped at ten; a completion renders no error block.</li>
+<li><code>interloper-db/tests/store/test_runs.py</code>: <code>complete()</code> refuses a terminal run; <code>failed_partitions</code>
+  reads each stack's latest attempt and its error, newest first.</li>
+<li><code>interloper-db/tests/migrations/</code>: 006 stamps existing terminal rows and leaves open ones unstamped.</li>
+<li><code>interloper-scheduler/tests/test_hooks.py</code>: a finished backfill fires a hook subscribed to
+  <code>backfill_failed</code> once, with the counts and failed partitions in its metadata; its runs still fire
+  run events for a hook subscribed to those; a backfill kept open by a waiting retry fires nothing
+  until it closes; a canceled backfill fires nothing; a terminal row is stamped after evaluation and
+  not selected again; a failed run with a queued successor is stamped without firing; a row completed before the controller started is still evaluated; a trigger
+  hook on a backfill event creates a backfill over the same range with the target job's
+  concurrency.</li>
+<li><code>interloper-scheduler/tests/test_executor.py</code>: a run the reaper already failed is logged, not
+  re-completed.</li>
+</ul>
+<hr />
+<h2 id="5-rollout">5. Rollout<a class="headerlink" href="#5-rollout" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Ships as a <code>feat</code> with migration 006. The migration's stamp keeps the first sweep from replaying
+  history; after that, restarts deliver late rather than never.</li>
+<li>The Swarovski Slack hooks should subscribe to <code>backfill_failed</code> and drop <code>run_failed</code>, so a bad
+  morning is one message naming the failed partitions. Set the same way their jobs' <code>retry</code> and
+  <code>concurrency</code> were.</li>
+</ul>
 
 
 
@@ -2038,44 +2055,6 @@ toggles light and dark mode.</p>
       
         <footer class="md-footer">
   
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href="../guide/telemetry/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Telemetry">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Telemetry
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="./definitions/" class="md-footer__link md-footer__link--next" aria-label="Next: Generated from definitions">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Generated from definitions
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </a>
-        
-      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -2112,10 +2091,10 @@ toggles light and dark mode.</p>
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../assets/javascripts/bundle.b7d3f789.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.b7d3f789.min.js"></script>
       
     
   </body>
