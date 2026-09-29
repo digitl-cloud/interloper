@@ -105,7 +105,8 @@ relation, when it declares one, is a picker over the matching connections.
 Cron jobs over sources or assets. The schedule column renders the cron expression and its
 timezone; "Next run at" and "Last run at" are the job's state model, shown as columns because
 the definition publishes a `state_schema`. The job form uses the cron and timezone widgets and
-the partition-window fields (`lookback`, `offset`).
+the partition-window fields (`lookback`, `offset`); its Operation section carries `concurrency`,
+how many of a firing's partitions run at once.
 
 ## Hooks
 

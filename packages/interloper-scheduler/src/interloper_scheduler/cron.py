@@ -25,6 +25,7 @@ from interloper.errors import ConfigError
 from interloper.partitioning.time import TimePartitionWindow
 from interloper_db import Store
 from interloper_db.models import Backfill, Component, Run
+from interloper_db.store.runs import create_backfill_runs
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
@@ -137,13 +138,12 @@ class CronController(Controller):
                     )
                     continue
 
-                # Create runs. The backfill is built inline rather than via
-                # Store.runs.create_backfill: it must commit atomically with the
-                # job's state advance (else a crash between the two would
-                # re-create it next tick), and cron top-ups queue every
-                # partition immediately instead of concurrency-gating. Because
-                # every run is queued at once, the queue worker's FIFO claim
-                # order (runs.created_at) decides execution order here.
+                # The backfill row is built inline rather than through
+                # Store.runs.create_backfill: it must commit atomically with
+                # the job's state advance (a crash between the two would
+                # re-create it next tick), and a top-up skips the quota
+                # checks a user-created backfill pays. The fan-out itself is
+                # the shared one, gated by the job's concurrency.
                 try:
                     window = self._backfill_window(session, job, config, now.astimezone(zone))
                 except ValueError as exc:
@@ -157,23 +157,13 @@ class CronController(Controller):
                         component_id=job.id,
                         start_key=window.granularity.format(window.start),
                         end_key=window.granularity.format(window.end),
+                        concurrency=config.get("concurrency", 1),
                         status="running",
                         started_at=now,
                     )
                     session.add(backfill)
                     session.flush()
-
-                    for value in window.granularity.period_range(window.start, window.end):
-                        run = Run(
-                            component_id=job.id,
-                            org_id=job.org_id,
-                            backfill_id=backfill.id,
-                            status="queued",
-                            partition_key=window.granularity.format(value),
-                        )
-                        session.add(run)
-                    backfill.partitions = window.partition_count()
-                    session.add(backfill)
+                    create_backfill_runs(session, backfill, window)
                 else:
                     run = Run(
                         component_id=job.id,
