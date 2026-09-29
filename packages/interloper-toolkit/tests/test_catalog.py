@@ -16,6 +16,13 @@ class TestCatalog:
         assert result.match_count == 2
         assert {m.qualified_key for m in result.matches} == {"facebook_ads.ads", "google_ads.campaigns"}
 
+    def test_search_fields_pages_with_a_total(self, ctx: ToolkitContext):
+        result = catalog_tools.search_fields(ctx, "campaign", limit=1, offset=1)
+
+        assert result.status == "success"
+        assert (result.match_count, result.total) == (1, 2)
+        assert result.matches[0].qualified_key == "google_ads.campaigns"
+
     def test_compare_schemas_reports_shared_and_unique(self, ctx: ToolkitContext):
         result = catalog_tools.compare_schemas(ctx, "facebook_ads", "ads", "google_ads", "campaigns")
 

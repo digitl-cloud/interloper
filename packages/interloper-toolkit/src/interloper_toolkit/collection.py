@@ -28,9 +28,9 @@ from interloper_toolkit.models import (
 
 
 def list_components(
-    ctx: ToolkitContext, kind: str | None = None
+    ctx: ToolkitContext, kind: str | None = None, q: str | None = None, limit: int = 50, offset: int = 0
 ) -> ComponentCounts | ComponentList | ToolError:
-    """List the components in the organisation's collection.
+    """List the components in the organisation's collection, oldest first.
 
     This answers "what do we have?" — what *could* be added (the catalog of
     definitions) is the Catalog specialist's domain. Sensitive kinds
@@ -39,13 +39,19 @@ def list_components(
 
     Args:
         kind: Component kind to list — e.g. 'source', 'connection',
-            'destination'. Omit for per-kind counts only; call again with a
-            kind for the entries.
+            'destination', 'asset'. Omit for per-kind counts only; call again
+            with a kind for the entries.
+        q: Keep only components whose name or key contains this text,
+            case-insensitively.
+        limit: Maximum number of components to return (default 50).
+        offset: Number of components to skip, for paging past the first page.
+
+    Returns the page of components and the total number matching the filters.
     """
     try:
         if kind is None:
             counts: dict[str, int] = {}
-            for c in ctx.store.components.list_all(ctx.org_id):
+            for c in ctx.store.components.list_all(ctx.org_id, q=q):
                 counts[c.kind] = counts.get(c.kind, 0) + 1
             return ComponentCounts(
                 component_counts=counts,
@@ -55,7 +61,8 @@ def list_components(
             return ToolError(error=f"Unknown kind '{kind}'", valid_kinds=sorted(KINDS.keys()))
 
         results = []
-        for c in ctx.store.components.list_all(ctx.org_id, kinds=[kind]):
+        total = ctx.store.components.count(ctx.org_id, kinds=[kind], q=q)
+        for c in ctx.store.components.list_all(ctx.org_id, kinds=[kind], q=q, limit=limit, offset=offset):
             entry = ComponentSummary(
                 id=str(c.id),
                 key=c.key,
@@ -70,7 +77,7 @@ def list_components(
                 entry.asset_count = len(c.children)
             results.append(entry)
 
-        return ComponentList(kind=kind, count=len(results), components=results)
+        return ComponentList(kind=kind, count=len(results), total=total, components=results)
     except Exception as e:
         return ToolError(error=str(e))
 

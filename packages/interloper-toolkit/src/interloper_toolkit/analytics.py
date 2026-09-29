@@ -28,23 +28,19 @@ def run_history_summary(
         component_id: Filter to a specific job UUID (optional, all jobs if omitted).
         days: Number of days to look back (default 7).
 
-    Returns aggregate counts (total, success, failed, canceled),
-    success rate, and average duration.
+    Returns aggregate counts (total, success, failed, canceled), success
+    rate, and average duration over the runs that executed within the
+    period, each run stack counted by its latest attempt.
     """
     try:
-        runs = ctx.store.runs.list_all(
-            ctx.org_id,
-            component_id=UUID(component_id) if component_id else None,
-            limit=500,
-        )
-
+        jid = UUID(component_id) if component_id else None
         cutoff = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=days)
-        recent = [r for r in runs if r.created_at and r.created_at >= cutoff]
+        total = ctx.store.runs.count(ctx.org_id, component_id=jid, after=cutoff)
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, after=cutoff, limit=total)
 
-        total = len(recent)
         by_status: dict[str, int] = {}
         durations: list[float] = []
-        for r in recent:
+        for r in runs:
             by_status[r.status] = by_status.get(r.status, 0) + 1
             if r.started_at and r.completed_at:
                 durations.append((r.completed_at - r.started_at).total_seconds())
@@ -79,7 +75,8 @@ def partition_coverage(
     """
     try:
         job = ctx.store.components.get(UUID(component_id), kind="job", org_id=ctx.org_id)
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=job.id, limit=1000)
+        total = ctx.store.runs.count(ctx.org_id, component_id=job.id, status="success")
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=job.id, status="success", limit=total)
 
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
@@ -87,7 +84,7 @@ def partition_coverage(
         # Coverage is a daily question, so a run covers every day inside its partition.
         covered: set[datetime.date] = set()
         for r in runs:
-            if r.status != "success" or not r.partition_key:
+            if not r.partition_key:
                 continue
             p_start, p_end = TimePartition.from_key(r.partition_key).bounds
             if isinstance(p_start, datetime.datetime):

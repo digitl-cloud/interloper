@@ -198,6 +198,8 @@ scheduling_agent = Agent(
         scheduling.toggle_job,
         scheduling.list_recent_runs,
         scheduling.get_run_detail,
+        scheduling.list_run_events,
+        scheduling.get_event,
         scheduling.list_failures,
         scheduling.trigger_run,
         scheduling.list_backfills,

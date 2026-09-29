@@ -179,7 +179,7 @@ def get_asset_schema(ctx: ToolkitContext, source_key: str, asset_key: str) -> As
         return ToolError(error=str(e))
 
 
-def search_fields(ctx: ToolkitContext, query: str) -> FieldSearchResult | ToolError:
+def search_fields(ctx: ToolkitContext, query: str, limit: int = 50, offset: int = 0) -> FieldSearchResult | ToolError:
     """Search for fields across all asset schemas in the catalog matching a query string.
 
     Searches every source definition's schemas, whether or not the source is
@@ -187,8 +187,11 @@ def search_fields(ctx: ToolkitContext, query: str) -> FieldSearchResult | ToolEr
 
     Args:
         query: Substring to search for in field names and descriptions (case-insensitive).
+        limit: Maximum number of matches to return (default 50).
+        offset: Number of matches to skip, for paging past the first page.
 
-    Returns matching fields grouped by source and asset, with field type and description.
+    Returns the page of matching fields grouped by source and asset, with
+    field type and description, plus the total number of matches.
     """
     try:
         query_lower = query.lower()
@@ -215,7 +218,8 @@ def search_fields(ctx: ToolkitContext, query: str) -> FieldSearchResult | ToolEr
                             description=field_desc,
                         ))
 
-        return FieldSearchResult(query=query, match_count=len(matches), matches=matches)
+        page = matches[offset : offset + limit]
+        return FieldSearchResult(query=query, match_count=len(page), total=len(matches), matches=page)
     except Exception as e:
         return ToolError(error=str(e))
 

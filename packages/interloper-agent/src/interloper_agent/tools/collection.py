@@ -40,11 +40,18 @@ _RESOLVE_TIMEOUT = 30.0
 _MAX_OPTIONS = 100
 
 
-def list_components(kind: str | None = None, tool_context: ToolContext | None = None) -> dict[str, Any]:
+def list_components(
+    kind: str | None = None,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
     # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
     # below) lives in the shared read-only toolkit so the MCP server exposes
     # the same logic.
-    return toolkit_collection.list_components(toolkit_ctx(tool_context), kind).model_dump(mode="json")
+    result = toolkit_collection.list_components(toolkit_ctx(tool_context), kind, q, limit, offset)
+    return result.model_dump(mode="json")
 
 
 list_components.__doc__ = toolkit_collection.list_components.__doc__

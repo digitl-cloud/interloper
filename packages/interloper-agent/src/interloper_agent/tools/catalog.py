@@ -26,8 +26,10 @@ def get_asset_schema(source_key: str, asset_key: str, tool_context: ToolContext)
     return toolkit_catalog.get_asset_schema(toolkit_ctx(tool_context), source_key, asset_key).model_dump(mode="json")
 
 
-def search_fields(query: str, tool_context: ToolContext) -> dict[str, Any]:
-    return toolkit_catalog.search_fields(toolkit_ctx(tool_context), query).model_dump(mode="json")
+def search_fields(
+    query: str, limit: int = 50, offset: int = 0, tool_context: ToolContext | None = None
+) -> dict[str, Any]:
+    return toolkit_catalog.search_fields(toolkit_ctx(tool_context), query, limit, offset).model_dump(mode="json")
 
 
 def compare_schemas(
