@@ -102,13 +102,20 @@ class SecretsSettings(BaseSettings):
 
 
 class ServerSettings(BaseSettings):
-    """HTTP server settings (API + frontend)."""
+    """HTTP server settings (API + frontend).
+
+    ``external_url`` is the public base URL of the app (e.g.
+    ``https://app.interloper.dev``), for links built outside a browser
+    request, such as the setup hand-off an MCP tool returns. Empty means
+    the deployment has none.
+    """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}SERVER_")
 
     enabled: bool = True
     host: str = "0.0.0.0"
     port: int = 3000
+    external_url: str = ""
 
 
 class CronSettings(BaseSettings):

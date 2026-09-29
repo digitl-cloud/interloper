@@ -203,6 +203,13 @@ dbInit:
 # (agent, launcher) are read at runtime from it. `extraConfig` passes any
 # remaining interloper.yaml sections through verbatim.
 
+# Public base URL of the app (e.g. https://app.example.com), for links built
+# outside a browser request: the connection setup hand-off an MCP tool
+# returns. Injected as INTERLOPER_SERVER_EXTERNAL_URL into every pod; ignored
+# when extraConfig carries a `server` section (the YAML block then owns the
+# whole submodel).
+externalUrl: ""
+
 # Agent (ADK chat) support. The loaded api image always bundles
 # interloper-agent; this enables the /agent routes via the generated
 # interloper.yaml (the API reports availability to the app, which shows or

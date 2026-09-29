@@ -136,6 +136,10 @@ Environment variables shared by all interloper pods (scheduler, api, frontend).
 Contains Postgres connection info + the encryption key secret.
 */}}
 {{- define "interloper.commonEnv" -}}
+{{- with .Values.externalUrl }}
+- name: INTERLOPER_SERVER_EXTERNAL_URL
+  value: {{ . | quote }}
+{{- end }}
 - name: INTERLOPER_POSTGRES_HOST
   value: {{ include "interloper.postgresHost" . | quote }}
 - name: INTERLOPER_POSTGRES_PORT
