@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any, NamedTuple
+from typing import Any
 from uuid import UUID
 
 import interloper as il
 from interloper.errors import NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine, func
-from sqlalchemy import select as sa_select
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, col, select
 
@@ -35,34 +34,6 @@ RUN_LOAD_OPTIONS = (joinedload(Run.target),)  # ty: ignore[invalid-argument-type
 BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
 
 _ACTIVE_BACKFILL_STATUSES = ("running", "queued")
-
-
-class RunInterval(NamedTuple):
-    """One run attempt reduced to what timing and verdict statistics read.
-
-    Attributes:
-        id: The run.
-        root_run_id: The stack the attempt belongs to.
-        component_id: The run's target.
-        backfill_id: The backfill the run belongs to, if any.
-        partition_key: The partition the run covers, if any.
-        status: The attempt's status.
-        attempt: The attempt's number within its stack.
-        created_at: When the attempt was created.
-        started_at: When it started, if it did.
-        completed_at: When it completed, if it did.
-    """
-
-    id: UUID
-    root_run_id: UUID
-    component_id: UUID | None
-    backfill_id: UUID | None
-    partition_key: str | None
-    status: str
-    attempt: int
-    created_at: datetime | None
-    started_at: datetime | None
-    completed_at: datetime | None
 
 
 def partition_key_range(start_key: str, end_key: str) -> list[Any]:
@@ -205,16 +176,21 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
+        partition_from: str | None = None,
+        partition_to: str | None = None,
+        all_attempts: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Run]:
-        """List one row per stack, or one stack's attempts.
+        """List one row per stack, one stack's attempts, or every attempt.
 
         A stack is one piece of work, so a listing shows its **latest
         attempt** and every filter reads that attempt: a stack whose first
         attempt failed and whose second succeeded is a success, which is what
         a reader means by "failed runs". Passing *root_run_id* asks for one
-        stack instead, and returns its attempts newest first.
+        stack instead, and returns its attempts newest first; *all_attempts*
+        keeps every attempt of every stack, which is what statistics over
+        durations and retries read.
 
         Args:
             org_id: Organisation UUID.
@@ -227,6 +203,10 @@ class RunStore:
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
             root_run_id: List this stack's attempts rather than one row per stack.
+            partition_from: With *partition_to*, keep runs whose partition key
+                lies in that inclusive range (see :func:`partition_key_range`).
+            partition_to: Last partition key of that range.
+            all_attempts: Keep every attempt rather than each stack's latest.
             limit: Max results (default 50).
             offset: Pagination offset.
 
@@ -245,8 +225,10 @@ class RunStore:
                 component_kind=component_kind,
                 component_key=component_key,
                 root_run_id=root_run_id,
+                partition_from=partition_from,
+                partition_to=partition_to,
             )
-            if root_run_id is None:
+            if root_run_id is None and not all_attempts:
                 filters.append(self._latest_attempt_only(org_id))
             order = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
             statement = (
@@ -272,6 +254,9 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
+        partition_from: str | None = None,
+        partition_to: str | None = None,
+        all_attempts: bool = False,
     ) -> int:
         """Count runs matching the same filters as :meth:`list_all`.
 
@@ -286,6 +271,10 @@ class RunStore:
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
             root_run_id: Count this stack's attempts rather than one per stack.
+            partition_from: With *partition_to*, count runs whose partition key
+                lies in that inclusive range.
+            partition_to: Last partition key of that range.
+            all_attempts: Count every attempt rather than each stack's latest.
 
         Returns:
             Total number of matching runs (ignoring limit/offset).
@@ -302,8 +291,10 @@ class RunStore:
                 component_kind=component_kind,
                 component_key=component_key,
                 root_run_id=root_run_id,
+                partition_from=partition_from,
+                partition_to=partition_to,
             )
-            if root_run_id is None:
+            if root_run_id is None and not all_attempts:
                 filters.append(self._latest_attempt_only(org_id))
             return session.exec(select(func.count()).select_from(Run).where(*filters)).one()
 
@@ -611,7 +602,7 @@ class RunStore:
             statement = (
                 select(Backfill)
                 .where(*self._backfill_filters(org_id, active_only))
-                .order_by(col(Backfill.created_at).desc(), col(Backfill.id).desc())
+                .order_by(col(Backfill.created_at).desc())
                 .offset(offset)
                 .limit(limit)
                 .options(*BACKFILL_LOAD_OPTIONS)
@@ -631,70 +622,6 @@ class RunStore:
         with session_scope(self._engine) as session:
             statement = select(func.count()).select_from(Backfill).where(*self._backfill_filters(org_id, active_only))
             return session.exec(statement).one()
-
-    def intervals(
-        self,
-        org_id: UUID,
-        *,
-        since: datetime | None = None,
-        until: datetime | None = None,
-        component_id: UUID | None = None,
-        backfill_id: UUID | None = None,
-        partition_from: str | None = None,
-        partition_to: str | None = None,
-        max_rows: int = 100_000,
-    ) -> tuple[list[RunInterval], bool]:
-        """Every attempt matching the filters, as narrow rows, oldest first.
-
-        Unlike :meth:`list_all`, every attempt of a stack is kept: statistics
-        over durations, retries and concurrency need each attempt, and the
-        caller folds stacks to their latest attempt where it wants verdicts.
-
-        Args:
-            org_id: Organisation UUID.
-            since: Keep attempts created at or after this instant.
-            until: Keep attempts created before this instant.
-            component_id: Keep attempts targeting this component.
-            backfill_id: Keep attempts of this backfill.
-            partition_from: With *partition_to*, keep attempts whose partition
-                key lies in that inclusive range (see :func:`partition_key_range`).
-            partition_to: Last partition key of that range.
-            max_rows: Cap on the rows returned.
-
-        Returns:
-            The attempts, and whether the cap cut any off.
-        """
-        filters: list[Any] = [Run.org_id == org_id]
-        if since is not None:
-            filters.append(col(Run.created_at) >= since)
-        if until is not None:
-            filters.append(col(Run.created_at) < until)
-        if component_id is not None:
-            filters.append(Run.component_id == component_id)
-        if backfill_id is not None:
-            filters.append(Run.backfill_id == backfill_id)
-        if partition_from is not None and partition_to is not None:
-            filters.extend(partition_key_range(partition_from, partition_to))
-        statement = (
-            sa_select(
-                col(Run.id),
-                col(Run.root_run_id),
-                col(Run.component_id),
-                col(Run.backfill_id),
-                col(Run.partition_key),
-                col(Run.status),
-                col(Run.attempt),
-                col(Run.created_at),
-                col(Run.started_at),
-                col(Run.completed_at),
-            )
-            .where(*filters)
-            .order_by(col(Run.created_at).asc(), col(Run.id).asc())
-            .limit(max_rows + 1)
-        )
-        with session_scope(self._engine) as session:
-            rows = [RunInterval(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
-        return rows[:max_rows], len(rows) > max_rows
 
     def count_backfill_runs(self, backfill_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each backfill's partitions by their latest attempt's status, in one query.
@@ -796,6 +723,8 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
+        partition_from: str | None = None,
+        partition_to: str | None = None,
     ) -> list[Any]:
         """The shared where-clauses of :meth:`RunStore.list_all` / :meth:`RunStore.count`.
 
@@ -826,6 +755,9 @@ class RunStore:
                 key); ``None`` applies no type filter.
             root_run_id: Keep the attempts of this stack; ``None`` applies no
                 stack filter.
+            partition_from: With *partition_to*, keep runs whose partition key
+                lies in that inclusive range; either alone applies no filter.
+            partition_to: Last partition key of that range.
 
         Returns:
             Filter expressions for the given criteria.
@@ -849,6 +781,8 @@ class RunStore:
             filters.append(Run.backfill_id == backfill_id)
         if root_run_id:
             filters.append(Run.root_run_id == root_run_id)
+        if partition_from is not None and partition_to is not None:
+            filters.extend(partition_key_range(partition_from, partition_to))
         if status:
             filters.append(Run.status == status)
         if after is not None:

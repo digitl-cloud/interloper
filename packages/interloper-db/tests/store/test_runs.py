@@ -848,8 +848,8 @@ class TestListBackfills:
         assert store.runs.count_backfills(uuid4()) == 0
 
 
-class TestIntervals:
-    """Every attempt as a narrow row, filtered like the statistics need."""
+class TestAllAttemptsAndPartitionRange:
+    """``all_attempts`` keeps every attempt; a partition range bounds by key and granularity."""
 
     def _add(self, store: Store, **fields: Any) -> UUID:
         run = Run(org_id=_ORG_ID, **{"status": "success", **fields})
@@ -859,49 +859,24 @@ class TestIntervals:
             assert run.id is not None
             return run.id
 
-    def test_every_attempt_of_a_stack_is_kept(self, store: Store):
-        stamp = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
-        first = self._add(store, status="failed", partition_key="2026-07-01", created_at=stamp)
-        second = self._add(
-            store,
-            retry_of=first,
-            root_run_id=first,
-            attempt=2,
-            partition_key="2026-07-01",
-            created_at=stamp + dt.timedelta(minutes=1),
-        )
+    def test_all_attempts_lists_and_counts_every_attempt(self, store: Store):
+        first = self._add(store, status="failed")
+        second = self._add(store, retry_of=first, root_run_id=first, attempt=2)
 
-        rows, truncated = store.runs.intervals(_ORG_ID)
+        assert [run.id for run in store.runs.list_all(_ORG_ID)] == [second]
+        assert {run.id for run in store.runs.list_all(_ORG_ID, all_attempts=True)} == {first, second}
+        assert store.runs.count(_ORG_ID) == 1
+        assert store.runs.count(_ORG_ID, all_attempts=True) == 2
 
-        assert not truncated
-        assert [(row.id, row.attempt, row.root_run_id) for row in rows] == [(first, 1, first), (second, 2, first)]
+    def test_partition_range_excludes_other_granularities(self, store: Store):
+        inside = self._add(store, partition_key="2026-07-02")
+        self._add(store, partition_key="2026-07-02T13")
+        self._add(store, partition_key="2026-08-01")
 
-    def test_filters_narrow_by_window_target_backfill_and_partition(self, store: Store):
-        job_id = uuid4()
-        backfill = _backfill(store, days=2)
-        stamp = dt.datetime(2026, 7, 1, tzinfo=dt.timezone.utc)
-        old = self._add(store, created_at=stamp - dt.timedelta(days=30))
-        targeted = self._add(store, component_id=job_id, created_at=stamp, partition_key="2026-07-02")
-        hourly = self._add(store, created_at=stamp, partition_key="2026-07-02T13")
+        runs = store.runs.list_all(_ORG_ID, partition_from="2026-07-01", partition_to="2026-07-31")
 
-        def ids(**filters: Any) -> set[UUID]:
-            return {row.id for row in store.runs.intervals(_ORG_ID, **filters)[0]}
-
-        assert old not in ids(since=stamp - dt.timedelta(days=1))
-        assert ids(until=stamp - dt.timedelta(days=1)) == {old}
-        assert ids(component_id=job_id) == {targeted}
-        assert len(ids(backfill_id=backfill.id)) == 2
-        assert targeted in ids(partition_from="2026-07-01", partition_to="2026-07-03")
-        assert hourly not in ids(partition_from="2026-07-01", partition_to="2026-07-03")
-
-    def test_the_cap_reports_that_it_cut_rows_off(self, store: Store):
-        for _ in range(3):
-            self._add(store)
-
-        rows, truncated = store.runs.intervals(_ORG_ID, max_rows=2)
-
-        assert len(rows) == 2
-        assert truncated
+        assert [run.id for run in runs] == [inside]
+        assert store.runs.count(_ORG_ID, partition_from="2026-07-01", partition_to="2026-07-31") == 1
 
     def test_partition_key_range_bounds_by_value_and_granularity(self):
         assert len(partition_key_range("2026-07-01", "2026-07-31")) == 3
