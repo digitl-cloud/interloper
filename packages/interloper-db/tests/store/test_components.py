@@ -297,6 +297,17 @@ class TestCrud:
         with pytest.raises(NotFoundError):
             store.components.get(dest.id, kind="asset")
 
+    def test_get_component_checks_org_like_a_missing_row(self, store: Store):
+        dest = store.components.create(_ORG, kind="destination", key="dest")
+        missing = uuid4()
+
+        assert store.components.get(dest.id, org_id=_ORG).id == dest.id
+        with pytest.raises(NotFoundError) as foreign:
+            store.components.get(dest.id, org_id=uuid4())
+        with pytest.raises(NotFoundError) as absent:
+            store.components.get(missing, org_id=_ORG)
+        assert str(foreign.value).replace(str(dest.id), "<id>") == str(absent.value).replace(str(missing), "<id>")
+
     def test_list_roots_nests_owned_components(self, store: Store, connection: Component):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
         store.components.create(uuid4(), kind="connection", key="wire_connection", config={}, encrypted=False)

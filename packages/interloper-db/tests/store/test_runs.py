@@ -661,6 +661,18 @@ class TestGetAndComplete:
         with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
             store.runs.get(missing)
 
+    def test_another_orgs_run_and_backfill_read_as_missing(self, store: Store):
+        run = store.runs.create(_ORG_ID)
+        backfill = _backfill(store, days=1)
+        other = uuid4()
+
+        assert store.runs.get(run.id, org_id=_ORG_ID).id == run.id
+        assert store.runs.get_backfill(backfill.id, org_id=_ORG_ID).id == backfill.id
+        with pytest.raises(NotFoundError, match=f"Run {run.id} not found"):
+            store.runs.get(run.id, org_id=other)
+        with pytest.raises(NotFoundError, match=f"Backfill {backfill.id} not found"):
+            store.runs.get_backfill(backfill.id, org_id=other)
+
     def test_complete_records_success(self, store: Store):
         run = store.runs.create(_ORG_ID)
 

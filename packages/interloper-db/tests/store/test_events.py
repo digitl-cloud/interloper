@@ -620,6 +620,15 @@ class TestGet:
         with pytest.raises(NotFoundError):
             store.events.get(uuid4())
 
+    def test_another_orgs_event_reads_as_missing(self, store: Store) -> None:
+        event = _make_events(1)[0]
+        event_id = event.id
+        _seed([event])
+
+        assert store.events.get(event_id, org_id=_ORG_ID).id == event_id
+        with pytest.raises(NotFoundError):
+            store.events.get(event_id, org_id=uuid4())
+
 
 class TestHasError:
     def test_only_events_carrying_an_error_list_and_count(self, store: Store) -> None:

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from google.adk.tools.tool_context import ToolContext
+from interloper.errors import NotFoundError
 
 from interloper_agent import context
 from interloper_agent.tools import scheduling
@@ -23,7 +24,9 @@ class FakeStore:
         self.components = SimpleNamespace(get=self._get, update=self._record("update"))
         self.runs = SimpleNamespace(create=self._record("create"), create_backfill=self._record("create_backfill"))
 
-    def _get(self, component_id: Any, *, kind: str | None = None) -> Any:
+    def _get(self, component_id: Any, *, kind: str | None = None, org_id: Any = None) -> Any:
+        if org_id != self.component.org_id:
+            raise NotFoundError(f"Component {component_id} not found")
         return self.component
 
     def _record(self, name: str) -> Any:

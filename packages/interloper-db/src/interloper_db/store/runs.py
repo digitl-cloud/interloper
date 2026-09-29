@@ -170,21 +170,25 @@ class RunStore:
             raise ValueError(f"Components of kind '{db_component.kind}' cannot be run")  # noqa: TRY004
         return db_component.kind, anchor
 
-    def get(self, run_id: UUID) -> Run:
+    def get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
         """Load a run by ID.
 
         Args:
             run_id: The run UUID.
+            org_id: Organisation the run must belong to (``None`` accepts
+                any); a mismatch raises ``NotFoundError`` like an absent row,
+                so a caller cannot learn that an id exists in another tenant.
 
         Returns:
             The Run row.
 
         Raises:
-            NotFoundError: If the run is not found.
+            NotFoundError: If the run is not found, or belongs to another
+                organisation.
         """
         with session_scope(self._engine) as session:
             db_run = session.get(Run, run_id, options=RUN_LOAD_OPTIONS)
-            if not db_run:
+            if not db_run or (org_id is not None and db_run.org_id != org_id):
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
@@ -568,21 +572,24 @@ class RunStore:
             _ = db_backfill.target  # load before the session closes; readers reach it detached
             return db_backfill
 
-    def get_backfill(self, backfill_id: UUID) -> Backfill:
+    def get_backfill(self, backfill_id: UUID, *, org_id: UUID | None = None) -> Backfill:
         """Load a backfill by ID.
 
         Args:
             backfill_id: The backfill UUID.
+            org_id: Organisation the backfill must belong to (``None`` accepts
+                any); a mismatch raises ``NotFoundError`` like an absent row.
 
         Returns:
             The Backfill row.
 
         Raises:
-            NotFoundError: If the backfill is not found.
+            NotFoundError: If the backfill is not found, or belongs to another
+                organisation.
         """
         with session_scope(self._engine) as session:
             db_backfill = session.get(Backfill, backfill_id, options=BACKFILL_LOAD_OPTIONS)
-            if not db_backfill:
+            if not db_backfill or (org_id is not None and db_backfill.org_id != org_id):
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             return db_backfill
 

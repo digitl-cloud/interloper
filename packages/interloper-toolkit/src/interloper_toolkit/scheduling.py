@@ -47,8 +47,9 @@ def get_job_health(ctx: ToolkitContext, component_id: str) -> JobHealth | ToolEr
     Returns job metadata plus success rate computed from the last 20 runs.
     """
     try:
-        job = ctx.component(component_id, kind="job")
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=job.id, limit=20)
+        jid = UUID(component_id)
+        job = ctx.store.components.get(jid, kind="job", org_id=ctx.org_id)
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, limit=20)
 
         total = len(runs)
         success = sum(1 for r in runs if r.status == "success")
@@ -113,9 +114,10 @@ def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
     Returns the run metadata, event timeline, and per-operation execution summary.
     """
     try:
-        run = ctx.run(run_id)
-        events = ctx.store.events.list_all(run_id=run.id)
-        executions = ctx.store.events.list_executions(run.id)
+        rid = UUID(run_id)
+        run = ctx.store.runs.get(rid, org_id=ctx.org_id)
+        events = ctx.store.events.list_all(run_id=rid)
+        executions = ctx.store.events.list_executions(rid)
 
         return RunDetail(run=run, events=events, executions=executions)
     except Exception as e:
