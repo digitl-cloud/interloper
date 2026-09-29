@@ -25,6 +25,8 @@ class CronJob(Job):
     "yesterday only" — the job timezone's yesterday. Hourly windows are always
     UTC-derived regardless of ``timezone`` (hour partition ids are UTC labels,
     see :class:`~interloper.partitioning.time.TimePartitionWindow.lookback`).
+    Each firing is a backfill over that window, and ``concurrency`` is how many
+    of its partitions are in flight at once, newest first.
     """
 
     cron: str = CronField(
@@ -49,6 +51,13 @@ class CronJob(Job):
         ge=0,
         description="How many partitions back from the current one the window ends",
         json_schema_extra={"x-section": "Partitioning"},
+    )
+    concurrency: int = Field(
+        default=1,
+        ge=1,
+        title="Concurrency",
+        description="How many partitions of one firing run at once",
+        json_schema_extra={"x-section": "Operation"},
     )
 
     @field_validator("timezone")
