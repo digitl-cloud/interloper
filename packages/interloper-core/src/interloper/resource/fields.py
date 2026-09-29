@@ -175,6 +175,8 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
       field whose value distinguishes instances of a component, driving the
       derived display name (:meth:`Component.instance_name`) and, for
       sources, the per-instance asset table names (:meth:`Source.asset_table`).
+    - ``section`` becomes ``x-section``: the labelled group of the form the
+      field renders under; fields without one lead the form.
 
     Args:
         kwargs: The field factory's keyword arguments, mutated in place: the
@@ -182,8 +184,8 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
         widget: The ``x-widget`` hint naming the UI control to render.
 
     Returns:
-        The extra dict with ``x-widget`` (and possibly ``x-info`` /
-        ``x-discriminator``) set.
+        The extra dict with ``x-widget`` (and possibly ``x-info``,
+        ``x-discriminator`` / ``x-section``) set.
     """
     extra = kwargs.pop("json_schema_extra", {})
     extra["x-widget"] = widget
@@ -195,6 +197,9 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
         extra["x-info"] = info
     if kwargs.pop("discriminator", False):
         extra["x-discriminator"] = True
+    section = kwargs.pop("section", None)
+    if section is not None:
+        extra["x-section"] = section
     return extra
 
 

@@ -46,6 +46,9 @@ Every helper also accepts:
 | `label=` | The form label (sets the JSON Schema `title`). |
 | `info=` | Longer help text shown in a tooltip, keeping `description` short. |
 | `discriminator=True` | Marks the field whose value distinguishes instances of the component. See [Sources](sources.md#the-discriminator). |
+| `section=` | The labelled group of the form the field renders under (sets `x-section`). Fields without one lead the form. |
+
+A plain `Field` declares a section through `json_schema_extra={"x-section": "Operation"}`.
 
 ## Fetched options
 
@@ -79,5 +82,9 @@ silently in a form. `il.is_fetch_field_provider(obj)` tests whether a callable i
 framework strips `id`, plus anything the class lists in `internal_fields` (sources hide `assets`,
 `normalizer`, `select`; assets hide `normalizer`). Relations (`destinations`, `connection`, and
 so on) are not fields at all and never appear in the schema. Field helpers add `x-widget`,
-`x-info`, `x-options`, `x-options-from`, `x-fetch` and `x-discriminator` extensions that forms
-read. The schema is part of every [component definition](catalog.md#definitions).
+`x-info`, `x-options`, `x-options-from`, `x-fetch`, `x-discriminator` and `x-section` extensions
+that forms read. The schema is part of every [component definition](catalog.md#definitions).
+
+Properties are listed most specific first: the class's own fields, then each ancestor's, closest
+first, each in declaration order. A source's form therefore opens with its own account field
+rather than with the settings every source shares, and forms render in this order.

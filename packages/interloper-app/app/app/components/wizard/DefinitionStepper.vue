@@ -9,11 +9,11 @@
  *   3. One picker step per `relationSteps` entry the selected class declares.
  *   4. One step per declared resource relation (when `resourceRelationSteps`).
  *   5. Extra steps with `placement: 'end'` (e.g. source destinations).
- *   6. Details: name, a SchemaForm generated from `config_schema`, the
- *      kind's own action (a connection's check), then a second SchemaForm
- *      for the schema's public fields, plus the `#details` extension slot
- *      whose `extra.config`/`extra.input` merge into the payload and whose
- *      `extra.valid` gates submit.
+ *   6. Details: name and a SchemaForm generated from `config_schema` (grouped
+ *      by the fields' `x-section`), with the kind's own action (a connection's
+ *      check) following its credential fields. A page's `#section-<name>` slot replaces that section of the
+ *      form; its `extra.config` merges into the payload and its `extra.valid`
+ *      gates submit.
  *
  * Extra steps render through `#step-<name>` slots; their gating and recap
  * live in the entry's `canProceed`/`recap` callbacks so the page owns the
@@ -68,12 +68,10 @@ const props = withDefaults(defineProps<{
     /** Render one picker step per declared resource relation. */
     resourceRelationSteps?: boolean
     extraSteps?: ExtraStep[]
-    /** Config fields kept out of the generated form (owned by the `#details` slot). */
+    /** Config fields kept out of the generated form. */
     exclude?: string[]
     /** Allow an empty name (falls back to the type's display name). */
     nameOptional?: boolean
-    /** Separator label above the name, and above the form when it isn't split. */
-    configLabel?: string
     /**
      * Separator label splitting the generated form off under its own heading
      * (e.g. 'Credentials'). Omit for kinds that hold no credentials.
@@ -94,7 +92,6 @@ const props = withDefaults(defineProps<{
     extraSteps: () => [],
     exclude: () => [],
     nameOptional: false,
-    configLabel: 'Configuration',
     credentialsLabel: undefined,
     optionsContext: undefined,
     extraInput: undefined,
@@ -130,17 +127,10 @@ const hasConfigFields = computed(() => {
     return Object.keys(properties).some(key => key !== 'id')
 })
 
-/**
- * Fields the schema marks public (a connection's `auto_renew`): settings
- * rather than credentials, so they render in their own trailing section
- * below the generated form and whatever action follows it.
- */
-const publicFieldKeys = computed(() => {
-    const properties = (schema.value?.properties ?? {}) as Record<string, { 'x-public'?: boolean }>
-    return Object.entries(properties)
-        .filter(([key, prop]) => prop['x-public'] === true && !props.exclude.includes(key))
-        .map(([key]) => key)
-})
+const slots = useSlots()
+
+/** The page's `#section-<name>` slots, forwarded to the generated form. */
+const sectionSlots = computed(() => Object.keys(slots).filter(slotName => slotName.startsWith('section-')))
 
 /** Selected-type summary card shown on every post-type step. */
 const summaryCard = computed(() => hasTypeStep.value || isEditing.value
@@ -156,13 +146,11 @@ const summaryCard = computed(() => hasTypeStep.value || isEditing.value
 const name = ref('')
 const configData = ref<Record<string, unknown>>({})
 const configValid = ref(true)
-/** Validity of the trailing public-field section, which is its own form. */
-const publicValid = ref(true)
 const relationSelections = ref<Record<string, string[]>>(
     Object.fromEntries(props.relationSteps.map(step => [step.name, []])),
 )
 const resourceSelections = ref<Record<string, string>>({})
-/** The `#details` slot's contribution: merged into the config, gating submit. */
+/** The `#section-*` slots' contribution: merged into the config, gating submit. */
 const extra = reactive<{ config: Record<string, unknown>, valid: boolean }>({ config: {}, valid: true })
 const submitting = ref(false)
 const loadingEdit = ref(false)
@@ -171,9 +159,6 @@ const loadError = ref<Error | null>(null)
 
 /** Editing a component whose stored config the server could not decrypt. */
 const unreadableConfig = computed(() => props.component?.status === 'unreadable' && hasConfigFields.value)
-
-/** Whether the schema form is in manual credential entry (vs OAuth sign-in). */
-const manualCreds = ref(true)
 
 const schemaForm = useTemplateRef('schemaForm')
 
@@ -371,7 +356,7 @@ const recapRows = computed(() => {
 // ── Validation ──────────────────────────────────────────────────
 const detailsValid = computed(() =>
     (props.nameOptional || !!name.value.trim())
-    && (!hasConfigFields.value || (configValid.value && publicValid.value))
+    && (!hasConfigFields.value || configValid.value)
     && extra.valid,
 )
 
@@ -544,7 +529,7 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                 <WizardRecap v-if="recapRows.length"
                              :rows="recapRows" />
 
-                <USeparator :label="configLabel" />
+                <USeparator label="Configuration" />
 
                 <UFormField :label="`${noun} name`"
                             :required="!nameOptional">
@@ -557,38 +542,35 @@ defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, 
                             ref="schemaForm"
                             v-model:data="configData"
                             v-model:is-valid="configValid"
-                            v-model:manual-mode="manualCreds"
                             v-model:discriminator-label="discriminatorLabel"
                             :schema="schema"
                             :component-key="selectedKey"
-                            :exclude="[...exclude, ...publicFieldKeys]"
+                            :exclude="exclude"
                             :resource-context="resourceContext"
                             :options-context="optionsContext"
-                            :credentials-label="credentialsLabel" />
+                            :credentials-label="credentialsLabel">
+                    <template v-for="slotName in sectionSlots"
+                              :key="slotName"
+                              #[slotName]="section">
+                        <slot :name="slotName"
+                              v-bind="section"
+                              :config-data="configData"
+                              :relations="relationSelections"
+                              :extra="extra" />
+                    </template>
+                    <template v-if="definition?.checkable"
+                              #credentials-actions>
+                        <ResourcesConnectionCheck :component-key="selectedKey"
+                                                  :config="configData"
+                                                  manual
+                                                  @field-errors="applyCheckErrors" />
+                    </template>
+                </SchemaForm>
                 <div v-else
                      class="text-sm text-muted italic">
                     No configuration required for this type.
                 </div>
 
-                <ResourcesConnectionCheck v-if="definition?.checkable && manualCreds"
-                                          :component-key="selectedKey"
-                                          :config="configData"
-                                          manual
-                                          @field-errors="applyCheckErrors" />
-
-                <SchemaForm v-if="schema && publicFieldKeys.length"
-                            v-model:data="configData"
-                            v-model:is-valid="publicValid"
-                            :schema="schema"
-                            :component-key="selectedKey"
-                            :include="publicFieldKeys" />
-
-                <!-- Extension point: derived display and hand-built sections a
-                     kind keeps outside the generated form. -->
-                <slot name="details"
-                      :config-data="configData"
-                      :relations="relationSelections"
-                      :extra="extra" />
             </div>
         </template>
     </UStepper>

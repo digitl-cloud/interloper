@@ -116,12 +116,28 @@ class Source(Component, Workload):
     tags: ClassVar[list[str]] = []
     internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "select"})
 
-    retry: RetryPolicy | None = Field(default=None, description="Default attempt budget for this source's assets")
-
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
     # State
     normalizer: Normalizer | None = Field(default=None)
+    assets: list[Asset] = Field(default_factory=list)
+    select: list[str] | None = Field(
+        default=None, description="Asset keys to materialize; others stay as read-only dependencies"
+    )
+
+    # Exposed fields
+    dataset: str = InputField(
+        default="",
+        description="Defaults to the source key when left empty",
+        section="Destination",
+    )
+    default_destination_key: str = SelectField(
+        label="Default Destination",
+        default="",
+        options_from="destinations",
+        description="When an asset has multiple destinations, downstream assets use this to know where to read from",
+        section="Destination",
+    )
     materialization_strategy: MaterializationStrategy | None = SelectField(
         default=MaterializationStrategy.RECONCILE,
         label="Materialization Strategy",
@@ -131,19 +147,13 @@ class Source(Component, Workload):
             "none is declared); 'Strict' requires a schema and fails on any "
             "mismatch. Assets declaring their own strategy keep it."
         ),
+        section="Materialization",
     )
-    assets: list[Asset] = Field(default_factory=list)
-    select: list[str] | None = Field(
-        default=None, description="Asset keys to materialize; others stay as read-only dependencies"
-    )
-
-    # Exposed fields
-    dataset: str = InputField(default="", description="Defaults to the source key when left empty")
-    default_destination_key: str = SelectField(
-        label="Default Destination",
-        default="",
-        options_from="destinations",
-        description="When an asset has multiple destinations, downstream assets use this to know where to read from",
+    retry: RetryPolicy | None = Field(
+        default=None,
+        title="Retry",
+        description="Default attempt budget for this source's assets",
+        json_schema_extra={"x-section": "Operation"},
     )
 
     # -- Construction & resolution ---------------------------------------------

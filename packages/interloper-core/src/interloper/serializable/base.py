@@ -901,6 +901,12 @@ class Serializable(BaseModel):
     def config_schema(cls) -> dict[str, Any]:
         """JSON Schema of the class's user-configurable fields.
 
+        Properties are listed most specific first: the class's own fields, then
+        each ancestor's, closest first, each in declaration order. Pydantic
+        lists inherited fields first, which would open every form with what a
+        whole kind shares (a source's dataset, a job's retry) rather than with
+        what defines the component; forms render in property order.
+
         Returns:
             The stripped schema, or ``{}`` when no configurable field remains.
         """
@@ -908,6 +914,12 @@ class Serializable(BaseModel):
 
         raw = cls.model_json_schema() if hasattr(cls, "model_json_schema") else {}
         schema = strip_internal_fields(raw, extra=cls.internal_fields)
-        return schema if schema.get("properties") else {}
+        properties = schema.get("properties")
+        if not properties:
+            return {}
+        declared = [name for klass in cls.__mro__ for name in inspect.get_annotations(klass) if name in properties]
+        order = list(dict.fromkeys([*(name for name in properties if name not in declared), *declared]))
+        schema["properties"] = {name: properties[name] for name in order}
+        return schema
 
 

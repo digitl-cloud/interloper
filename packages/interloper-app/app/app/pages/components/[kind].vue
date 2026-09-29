@@ -256,7 +256,6 @@ const typeKey = ref<string | null>(null)
                                      :component="editingResource"
                                      :initial-type-key="presetTypeKey"
                                      :definitions="definitions"
-                                     :config-label="kind === 'connection' ? 'Config' : 'Configuration'"
                                      :credentials-label="kind === 'connection' ? 'Credentials' : undefined"
                                      @created="handleSaved"
                                      @updated="handleSaved" />

@@ -78,10 +78,30 @@ from the JSON Schema type otherwise:
 | plain `int` or `float` field | | Number input honouring `ge` and `le`. |
 | plain `list[str]` field | | Tag input, or multi-select when items are an enum. |
 | `Enum`-typed field | | Dropdown of the enum values. |
+| nested model field (e.g. `retry: RetryPolicy \| None`) | | The model's own fields in a bordered group; an optional model sits behind a switch (off saves `null`, on starts from the model's defaults). |
 
 Presentation keywords carry over: `label` is the form label, `description` the help line under
 it, `info` a tooltip next to the label. `required` follows the pydantic definition, and the form
 is only submittable when every required field has a value.
+
+### Order and sections
+
+Fields render in the schema's property order, which lists a component's own fields before those
+it inherits (see [Fields](../guide/fields.md#what-ends-up-in-the-config-schema)). Fields carrying
+`x-section` render under that section's separator, after the fields without one; sections appear
+in the order their first field does. Sources group `dataset` and the default destination under
+"Destination", and their materialization strategy under "Materialization"; a cron job's window fields sit
+under "Partitioning"; `enabled` and `retry`, which the operation, job and source bases declare, sit
+under "Operation", joined there by a job's cron expression and timezone. A connection's only
+operation is its renewal, so it hides `enabled` (Automatic renewal is the switch) and keeps `retry`
+beside Automatic renewal among its credentials; a connection with nothing to renew shows neither. A connection's sign-in tabs, the OAuth sign-in and the credential fields they
+govern render together in one bordered group.
+
+A page can replace a section's generated fields through the wizard's `#section-<name>` slot (the
+section name lowercased, e.g. `#section-partitioning`). The slot receives the section's field
+`keys` and the schema, plus the wizard's `extra` contract: `extra.config` merges into the saved
+config and `extra.valid` gates submit. The job wizard uses it to show the partition window only
+when the selected targets are partitioned, with a preview of what a run covers.
 
 ### Fetched options
 

@@ -52,9 +52,18 @@ class Job(Component, Workload):
     targets: list[Source | Asset] = Relation(["source", "asset"], many=True, optional=True, on_delete="detach")
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
-    enabled: bool = Field(default=True, description="Job will run on the configured schedule")
-    retry: RetryPolicy | None = Field(default=None, description="Attempt budget for this job's runs")
     tags: list[str] = Field(default_factory=list)
+    enabled: bool = Field(
+        default=True,
+        description="Job will run on the configured schedule",
+        json_schema_extra={"x-section": "Operation"},
+    )
+    retry: RetryPolicy | None = Field(
+        default=None,
+        title="Retry",
+        description="Attempt budget for this job's runs",
+        json_schema_extra={"x-section": "Operation"},
+    )
 
     def operations(self) -> list[Operation]:
         """The targets' operations, flattened.
