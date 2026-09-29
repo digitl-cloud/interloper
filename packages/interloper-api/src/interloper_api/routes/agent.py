@@ -140,8 +140,8 @@ async def create_session(
 ) -> SessionResponse:
     """Create a new agent chat session.
 
-    The authenticated user's ``org_id`` is injected into the ADK session
-    state so agent tools are scoped to the correct organisation.
+    The active ``org_id`` and the user's role in it are stamped into the ADK
+    session state: the org scopes every tool, the role gates the writes.
 
     Args:
         user: The authenticated user, required to hold at least the ``editor`` role.
@@ -157,7 +157,7 @@ async def create_session(
     session = await session_service.create_session(
         app_name=APP_NAME,
         user_id=str(user.id),
-        state={"org_id": str(org_id)},
+        state={"org_id": str(org_id), "role": store.organisations.member_role(user.id, org_id)},
     )
     return SessionResponse.from_session(session)
 

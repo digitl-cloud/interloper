@@ -59,7 +59,9 @@ def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setattr(agent_module, "_get_runner", lambda store, catalog: SimpleNamespace())
     app = FastAPI()
     app.include_router(agent_module.router)
-    app.dependency_overrides[get_store] = lambda: SimpleNamespace()
+    app.dependency_overrides[get_store] = lambda: SimpleNamespace(
+        organisations=SimpleNamespace(member_role=lambda user_id, org_id: "editor")
+    )
     app.dependency_overrides[get_catalog] = lambda: SimpleNamespace()
     app.dependency_overrides[get_org_id] = lambda: _ORG_ID
     app.dependency_overrides[require_viewer] = _profile
@@ -149,15 +151,15 @@ class TestGetRunner:
 
 
 class TestCreateSession:
-    """``POST /agent/sessions`` — the org is stamped into the session state."""
+    """``POST /agent/sessions`` — the org and the user's role are stamped into the session state."""
 
-    def test_the_active_org_is_stamped_into_the_state(self, client: TestClient) -> None:
-        # Agent tools read org_id off the session state to scope themselves.
+    def test_the_active_org_and_role_are_stamped_into_the_state(self, client: TestClient) -> None:
+        # Agent tools read org_id off the session state to scope themselves, and role to gate writes.
         response = client.post("/agent/sessions")
 
         assert response.status_code == 200
         payload = response.json()
-        assert payload["state"] == {"org_id": str(_ORG_ID)}
+        assert payload["state"] == {"org_id": str(_ORG_ID), "role": "editor"}
         assert payload["user_id"] == str(_USER_ID)
         assert payload["app_name"] == agent_module.APP_NAME
         assert payload["event_count"] == 0

@@ -107,10 +107,18 @@ def toolkit_ctx(tool_context: ToolContext | None) -> ToolkitContext:
     """Build the shared-toolkit context from the agent's globals and ADK state.
 
     Args:
-        tool_context: Injected by ADK; carries the session's ``org_id``.
+        tool_context: Injected by ADK; carries the session's ``org_id`` and
+            the user's ``role`` in it (absent, the context fails closed).
 
     Returns:
         The context the toolkit functions read.
 
     """
-    return ToolkitContext(store=get_store(), catalog=get_catalog(), org_id=get_org_id(tool_context))
+    assert tool_context is not None  # get_org_id already refused None
+    role = tool_context.state.get("role")
+    return ToolkitContext(
+        store=get_store(),
+        catalog=get_catalog(),
+        org_id=get_org_id(tool_context),
+        role=str(role) if role else "viewer",
+    )

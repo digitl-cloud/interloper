@@ -20,11 +20,15 @@ class ToolkitContext:
         catalog: The *dumped* catalog (``Catalog.dump()``) — a plain dict of
             component definitions keyed by catalog key.
         org_id: The organisation every query is scoped to.
+        role: The caller's role in that organisation (``viewer``, ``editor``
+            or ``admin``); writes refuse below the role they declare. Defaults
+            to the weakest role, so a context built without one fails closed.
     """
 
     store: Store
     catalog: dict[str, Any]
     org_id: UUID
+    role: str = "viewer"
 
 
 def serialize(obj: Any) -> Any:

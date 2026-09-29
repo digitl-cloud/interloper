@@ -43,7 +43,8 @@ def main() -> None:
     init_context(store, catalog)
 
     if args.transport == "stdio":
-        set_static_ctx(_resolve_stdio_org(store, settings.token, settings.org_id))
+        org_id, role = _resolve_stdio_scope(store, settings.token, settings.org_id)
+        set_static_ctx(org_id, role=role)
         mcp = create_mcp_server(settings, store=None)
         mcp.run(transport="stdio")
     else:
@@ -52,12 +53,13 @@ def main() -> None:
         mcp.run(transport="streamable-http")
 
 
-def _resolve_stdio_org(store: Store, token: str, org_id: str) -> UUID:
-    """Resolve the organisation scope for the stdio transport.
+def _resolve_stdio_scope(store: Store, token: str, org_id: str) -> tuple[UUID, str]:
+    """Resolve the organisation scope and role for the stdio transport.
 
     A PAT (``INTERLOPER_MCP_TOKEN``) is the normal path; a bare
     ``INTERLOPER_MCP_ORG_ID`` is a local-development fallback that skips
-    authentication entirely.
+    authentication entirely and, being a developer's own instance, runs as
+    an editor.
 
     Args:
         store: The Store to resolve the token against.
@@ -65,7 +67,8 @@ def _resolve_stdio_org(store: Store, token: str, org_id: str) -> UUID:
         org_id: Organisation UUID string, or empty.
 
     Returns:
-        The organisation UUID to scope all tool calls to.
+        The organisation UUID to scope all tool calls to, and the role the
+        write tools are gated on.
 
     Raises:
         SystemExit: If the token is invalid, expired or revoked, or if
@@ -77,10 +80,10 @@ def _resolve_stdio_org(store: Store, token: str, org_id: str) -> UUID:
             raise SystemExit("INTERLOPER_MCP_TOKEN is invalid, expired, or revoked")
         profile, pat, role = resolved
         logger.info("Authenticated as %s (role %s)", profile.email, role)
-        return pat.organisation_id
+        return pat.organisation_id, role
     if org_id:
-        logger.warning("Running without authentication, scoped to org %s (INTERLOPER_MCP_ORG_ID)", org_id)
-        return UUID(org_id)
+        logger.warning("Running without authentication as editor, scoped to org %s (INTERLOPER_MCP_ORG_ID)", org_id)
+        return UUID(org_id), "editor"
     raise SystemExit("stdio transport needs INTERLOPER_MCP_TOKEN (or INTERLOPER_MCP_ORG_ID for local development)")
 
 
