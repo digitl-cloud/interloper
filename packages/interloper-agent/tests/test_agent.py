@@ -49,7 +49,6 @@ def test_all_agents_carry_the_current_time():
         assert "Current date and time:" in text
 
 
-def test_the_collection_agent_registers_the_relation_write_tools():
-    # The toolkit's only write functions: exposed here, never on the
-    # deliberately read-only MCP server.
-    assert {"bind_relation", "unbind_relation"} <= _tool_names(agent_module.collection_agent)
+def test_the_collection_agent_registers_the_write_tools():
+    names = _tool_names(agent_module.collection_agent)
+    assert {"bind_relation", "unbind_relation", "create_source", "create_job", "create_connections"} <= names

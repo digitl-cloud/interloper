@@ -39,11 +39,14 @@ class TestRequiresRole:
         assert result.error == "Requires editor role or higher"
 
     def test_the_default_context_role_fails_closed(self, ctx: ToolkitContext):
-        assert isinstance(write(ctx, 1), ToolError)
+        bare = ToolkitContext(store=ctx.store, catalog=ctx.catalog, org_id=ctx.org_id)
+
+        assert bare.role == "viewer"
+        assert isinstance(write(bare, 1), ToolError)
 
     async def test_async_tools_are_gated_the_same_way(self, ctx: ToolkitContext):
-        assert isinstance(await write_async(ctx, 1), ToolError)
-        assert await write_async(dataclasses.replace(ctx, role="editor"), 1) == {"value": 1}
+        assert isinstance(await write_async(dataclasses.replace(ctx, role="viewer"), 1), ToolError)
+        assert await write_async(ctx, 1) == {"value": 1}
 
     def test_the_wrapper_keeps_the_docstring_the_surfaces_adopt(self):
         assert write.__name__ == "write"

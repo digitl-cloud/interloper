@@ -1,8 +1,4 @@
-"""Scheduling tools — jobs, runs, and backfills: read-only monitoring.
-
-Mutating operations (toggling jobs, triggering runs and backfills) live with
-the agent — this module is shared with surfaces that must stay read-only.
-"""
+"""Scheduling tools — jobs, runs, and backfills: monitoring and control."""
 
 from __future__ import annotations
 
@@ -11,12 +7,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from interloper_toolkit.authz import requires_role
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.errors import classify
 from interloper_toolkit.models import (
     AttemptTiming,
     BackfillList,
+    BackfillQueued,
     BackfillTimeline,
+    ComponentRef,
+    ComponentToggled,
     ErrorBreakdown,
     ErrorCause,
     ErrorGroupRow,
@@ -31,6 +31,7 @@ from interloper_toolkit.models import (
     RunErrorEvent,
     RunFailure,
     RunList,
+    RunQueued,
     Scan,
     ToolError,
 )
@@ -129,6 +130,46 @@ def get_job_health(ctx: ToolkitContext, component_id: str) -> JobHealth | ToolEr
         return ToolError(error=str(e))
 
 
+@requires_role("editor")
+def toggle_job(ctx: ToolkitContext, component_id: str, enabled: bool) -> ComponentToggled | ToolError:
+    """Enable or disable a scheduled job.
+
+    Args:
+        component_id: UUID of the job.
+        enabled: True to enable, false to disable.
+    """
+    try:
+        job = ctx.store.components.get(UUID(component_id), kind="job", org_id=ctx.org_id)
+        updated = ctx.store.components.update(job.id, config={**(job.config or {}), "enabled": enabled})
+        return ComponentToggled(
+            message=f"Job '{job.name}' {'enabled' if enabled else 'disabled'}",
+            component=ComponentRef(id=updated.id, kind=updated.kind, key=updated.key, name=updated.name),
+            enabled=enabled,
+        )
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def toggle_asset(ctx: ToolkitContext, asset_id: str, enabled: bool) -> ComponentToggled | ToolError:
+    """Enable or disable materialization for an asset.
+
+    Args:
+        asset_id: UUID of the asset.
+        enabled: True to enable materialization, false to disable.
+    """
+    try:
+        asset = ctx.store.components.get(UUID(asset_id), kind="asset", org_id=ctx.org_id)
+        updated = ctx.store.components.update(asset.id, config={**(asset.config or {}), "enabled": enabled})
+        return ComponentToggled(
+            message=f"Asset '{updated.key}' materialization {'enabled' if enabled else 'disabled'}",
+            component=ComponentRef(id=updated.id, kind=updated.kind, key=updated.key, name=updated.name),
+            enabled=enabled,
+        )
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
 # --- Runs ---
 
 
@@ -154,6 +195,24 @@ def list_recent_runs(
         runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, status=status, limit=limit, offset=offset)
         total = ctx.store.runs.count(ctx.org_id, component_id=jid, status=status)
         return RunList(count=len(runs), total=total, runs=runs)
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def trigger_run(ctx: ToolkitContext, component_id: str, partition_key: str | None = None) -> RunQueued | ToolError:
+    """Queue a single run for a job.
+
+    Args:
+        component_id: UUID of the job to run.
+        partition_key: Optional partition key. The shape carries the
+            granularity: 2026-04-09 (day), 2026-04 (month), 2026 (year),
+            2026-04-09T13 (hour).
+    """
+    try:
+        target = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
+        run = ctx.store.runs.create(ctx.org_id, component_id=target.id, partition_key=partition_key)
+        return RunQueued(message="Run queued successfully", run=run)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -407,6 +466,41 @@ def list_backfills(
         backfills = ctx.store.runs.list_backfills(ctx.org_id, active_only=active_only, limit=limit, offset=offset)
         total = ctx.store.runs.count_backfills(ctx.org_id, active_only=active_only)
         return BackfillList(count=len(backfills), total=total, backfills=backfills)
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def trigger_backfill(
+    ctx: ToolkitContext,
+    component_id: str,
+    start_key: str,
+    end_key: str,
+    concurrency: int = 1,
+    fail_fast: bool = False,
+) -> BackfillQueued | ToolError:
+    """Start a backfill for a job over a partition range.
+
+    Args:
+        component_id: UUID of the job.
+        start_key: First partition's key (e.g. 2026-04-09, or 2026-04 for a
+            monthly job).
+        end_key: Last partition's key, inclusive. Must share the start key's
+            granularity.
+        concurrency: Max number of runs in-flight at once (default 1).
+        fail_fast: If true, cancel remaining runs on first failure (default false).
+    """
+    try:
+        target = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
+        backfill = ctx.store.runs.create_backfill(
+            ctx.org_id,
+            component_id=target.id,
+            start_key=start_key,
+            end_key=end_key,
+            concurrency=concurrency,
+            fail_fast=fail_fast,
+        )
+        return BackfillQueued(message="Backfill created successfully", backfill=backfill)
     except Exception as e:
         return ToolError(error=str(e))
 

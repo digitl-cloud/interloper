@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Run
 from interloper_db.store import Store
 from sqlmodel import Session, select
 
 from interloper_toolkit import ToolkitContext, scheduling
+from interloper_toolkit.models import ToolError
 
 
 class TestScheduling:
@@ -310,3 +313,62 @@ class TestBackfillTimeline:
         backfill = store.runs.create_backfill(uuid4(), start_key="2026-07-01", end_key="2026-07-01")
 
         assert scheduling.backfill_timeline(ctx, str(backfill.id)).status == "error"
+
+
+class TestWrites:
+    def _job(self, ctx: ToolkitContext, store: Store) -> Any:
+        connection = store.components.create(
+            ctx.org_id, kind="connection", key="demo_connection", config={}, encrypted=False
+        )
+        source = store.components.create(
+            ctx.org_id, kind="source", key="shop_source", relations={"connection": [connection.id], "destinations": []}
+        )
+        return store.components.create(
+            ctx.org_id,
+            kind="job",
+            key="cron_job",
+            name="Daily",
+            config={"cron": "0 6 * * *"},
+            relations={"targets": [source.id]},
+        )
+
+    def test_toggles_a_job_and_an_asset(self, ctx: ToolkitContext, store: Store):
+        job = self._job(ctx, store)
+        asset = next(c for c in store.components.list_all(ctx.org_id, kinds=["asset"]))
+
+        off = scheduling.toggle_job(ctx, str(job.id), False)
+        asset_off = scheduling.toggle_asset(ctx, str(asset.id), False)
+
+        assert off.status == "success"
+        assert asset_off.status == "success"
+        assert (off.enabled, off.component.name) == (False, "Daily")
+        assert (store.components.get(job.id).config or {})["enabled"] is False
+        assert (store.components.get(asset.id).config or {})["enabled"] is False
+
+    def test_queues_a_run_and_a_backfill(self, ctx: ToolkitContext, store: Store):
+        job = self._job(ctx, store)
+
+        run = scheduling.trigger_run(ctx, str(job.id), partition_key="2026-07-01")
+        backfill = scheduling.trigger_backfill(ctx, str(job.id), "2026-07-01", "2026-07-03", concurrency=2)
+
+        assert run.status == "success"
+        assert backfill.status == "success"
+        assert run.run.partition_key == "2026-07-01"
+        assert (backfill.backfill.partitions, backfill.backfill.concurrency) == (3, 2)
+        assert store.runs.count(ctx.org_id, component_id=job.id) == 4
+
+    @pytest.mark.parametrize(
+        "write",
+        [
+            lambda ctx, job_id: scheduling.toggle_job(ctx, job_id, False),
+            lambda ctx, job_id: scheduling.trigger_run(ctx, job_id),
+            lambda ctx, job_id: scheduling.trigger_backfill(ctx, job_id, "2026-07-01", "2026-07-01"),
+        ],
+    )
+    def test_writes_refuse_a_viewer_and_another_orgs_job(self, ctx: ToolkitContext, store: Store, write: Any):
+        job = self._job(ctx, store)
+        theirs = self._job(dataclasses.replace(ctx, org_id=uuid4()), store)
+
+        assert isinstance(write(dataclasses.replace(ctx, role="viewer"), str(job.id)), ToolError)
+        assert write(ctx, str(theirs.id)).status == "error"
+        assert store.runs.count(ctx.org_id) == 0

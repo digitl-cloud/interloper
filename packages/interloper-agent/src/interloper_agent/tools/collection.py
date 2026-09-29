@@ -1,43 +1,20 @@
-"""Collection tools — the component instances persisted for the organisation.
+"""Collection tools — thin ADK wrappers over the shared toolkit.
 
-Generic over component kinds, mirroring the framework's component
-architecture: one lister and one editor for any kind (sensitive kinds
-project identity-only and refuse config edits, driven by ``KINDS``), plus
-the connection and source operations that are irreducibly kind-specific. Credentials never transit
-the model: ``request_connection_setup`` only signals the app to present a
-secure setup form, and the browser submits credentials to the API
-directly; source setup is conversational because its inputs (accounts,
-datasets, asset selections) are not secrets.
+The implementations (and the LLM-facing docstrings, adopted below) live in
+``interloper_toolkit.collection`` and ``interloper_toolkit.sources``, so the
+MCP server exposes the same logic. ``create_connections`` is the one write
+the agent alone registers: its arguments carry credentials.
 """
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from typing import Any
-from uuid import UUID
 
-import httpx
 from google.adk.tools.tool_context import ToolContext
-from interloper import KINDS
-from interloper.connection.base import Connection
-from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, ConnectionCheckError, HydrationError
-from interloper.oauth import OAuthAppCredentials
-from interloper.resource.fields import is_fetch_field_provider
-from interloper.utils.concurrency import invoke
 from interloper_toolkit import collection as toolkit_collection
-from pydantic import ValidationError
+from interloper_toolkit import sources as toolkit_sources
 
-from interloper_agent.context import get_catalog, get_org_id, get_store, serialize, toolkit_ctx
-
-logger = logging.getLogger(__name__)
-
-#: Upper bound on a live connection check — the agent must never hang on a dead host.
-_CHECK_TIMEOUT = 15.0
-
-#: Upper bound on a provider options fetch, and the most options one response carries.
-_RESOLVE_TIMEOUT = 30.0
-_MAX_OPTIONS = 100
+from interloper_agent.context import toolkit_ctx
 
 
 def list_components(
@@ -47,14 +24,8 @@ def list_components(
     offset: int = 0,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
-    # below) lives in the shared read-only toolkit so the MCP server exposes
-    # the same logic.
     result = toolkit_collection.list_components(toolkit_ctx(tool_context), kind, q, limit, offset)
     return result.model_dump(mode="json")
-
-
-list_components.__doc__ = toolkit_collection.list_components.__doc__
 
 
 def update_component(
@@ -64,197 +35,23 @@ def update_component(
     asset_keys: list[str] | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Edit an existing component in the organisation's collection.
-
-    Works on any kind: rename it, change config values, or change which of a
-    source's assets are enabled. Recap exactly what changes (old → new) and
-    get the user's explicit confirmation BEFORE calling this.
-
-    Config updates are partial — only the fields passed change, the rest of
-    the stored config is kept; pass null to reset a field to its default.
-    Connection configs hold credentials and are never edited here: the user
-    changes those in the app (renaming a connection is fine). Rebinding
-    relations (a source's connection, a job's targets) is not config either:
-    use bind_relation and unbind_relation.
-
-    Args:
-        component_id: UUID of the component, from list_components.
-        name: New display name; omit to keep the current one.
-        config_updates: Config fields to change, merged over the stored
-            config — e.g. ``{"cron": "0 7 * * *"}`` on a job, or
-            ``{"account_id": ...}`` on a source.
-        asset_keys: Sources only — the child asset keys to enable, replacing
-            the current selection exactly. Omit to leave it unchanged.
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-
-        component = store.components.get(UUID(component_id))
-        if component.org_id != org_id:
-            return {"status": "error", "error": f"Component '{component_id}' not found"}
-        if name is None and config_updates is None and not asset_keys:
-            return {"status": "error", "error": "Nothing to update — pass name, config_updates, or asset_keys"}
-        if config_updates and KINDS[component.kind].sensitive:
-            return {
-                "status": "error",
-                "error": (
-                    f"The config of a {component.kind} holds credentials and cannot be edited in chat — "
-                    "the user changes it in the app, or sets up a new one via the secure form. "
-                    "Renaming is allowed."
-                ),
-            }
-
-        config = None
-        if config_updates:
-            # Sensitive kinds were refused above, so the plain config column
-            # is the full stored payload.
-            config = dict(component.config or {})
-            for field, value in config_updates.items():
-                if value is None:
-                    config.pop(field, None)
-                else:
-                    config[field] = value
-
-        children = None
-        defn = get_catalog().get(component.key)
-        if asset_keys:
-            if component.kind != "source":
-                return {"status": "error", "error": f"Components of kind '{component.kind}' have no assets"}
-            if defn is None:
-                return {
-                    "status": "error",
-                    "error": f"'{component.key}' is no longer in the catalog — its asset selection cannot change",
-                }
-            children, error = _normalized_asset_keys(defn, component.key, asset_keys)
-            if error:
-                return error
-
-        try:
-            row = store.components.update(component.id, name=name, config=config, children=children)
-        except (ConfigError, CatalogKeyError) as e:
-            return {"status": "error", "error": str(e)}
-
-        result: dict[str, Any] = {
-            "status": "success",
-            "message": f"{component.kind.capitalize()} '{row.name or row.key}' updated",
-            "component": {"id": serialize(row.id), "kind": row.kind, "key": row.key, "name": row.name},
-        }
-        if config_updates:
-            result["changed_fields"] = sorted(config_updates)
-        if children is not None:
-            result["component"]["asset_count"] = len(row.children)
-            if defn is not None:
-                result["unresolved_requirements"] = _unresolved_requirements(defn, row)
-        return result
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    result = toolkit_collection.update_component(
+        toolkit_ctx(tool_context), component_id, name, config_updates, asset_keys
+    )
+    return result.model_dump(mode="json")
 
 
-# -- Relations (generic over kinds) -----------------------------------------------
-
-
-def bind_relation(
-    component_id: str,
-    name: str,
-    dst_id: str,
-    tool_context: ToolContext | None = None,
-) -> dict[str, Any]:
-    # Thin ADK wrapper: the implementation (and LLM-facing docstring, adopted
-    # below) lives in the shared toolkit, which the MCP server deliberately
-    # does not register, since it writes.
+def bind_relation(component_id: str, name: str, dst_id: str, tool_context: ToolContext | None = None) -> dict[str, Any]:
     return toolkit_collection.bind_relation(toolkit_ctx(tool_context), component_id, name, dst_id).model_dump(
         mode="json"
     )
 
 
-bind_relation.__doc__ = toolkit_collection.bind_relation.__doc__
-
-
 def unbind_relation(
-    component_id: str,
-    name: str,
-    dst_id: str,
-    tool_context: ToolContext | None = None,
+    component_id: str, name: str, dst_id: str, tool_context: ToolContext | None = None
 ) -> dict[str, Any]:
-    # Thin ADK wrapper: see bind_relation above.
-    return toolkit_collection.unbind_relation(toolkit_ctx(tool_context), component_id, name, dst_id).model_dump(
-        mode="json"
-    )
-
-
-unbind_relation.__doc__ = toolkit_collection.unbind_relation.__doc__
-
-
-# -- Connection operations (kind-specific by nature) ------------------------------
-
-
-def create_connections(
-    connection_key: str,
-    instances: list[dict[str, Any]],
-    tool_context: ToolContext | None = None,
-) -> dict[str, Any]:
-    """Create connections directly from credential values the user already gave.
-
-    REACT-ONLY. The secure form (request_connection_setup) is the only path
-    you ever propose or ask for — never invite the user to paste credentials.
-    Use this solely when the user has *already* put the credential values in
-    the conversation unprompted: they are in context regardless, so create
-    what they asked for instead of dead-ending on a form. Recap and get
-    explicit confirmation first, and never repeat a credential value back —
-    not in the recap, not in your reply (identity and location only).
-
-    Each config is validated against the connection definition and stored
-    encrypted. Instances that fail are reported individually; the rest are
-    created. Verify the results with check_connection afterwards.
-
-    Args:
-        connection_key: Catalog key of the connection definition
-            (e.g. 'amazon_selling_partner_connection').
-        instances: One entry per connection, each ``{"name": ...,
-            "config": {<field>: <value>, ...}}`` — config carries the
-            definition's fields (shared ones like client_id/client_secret
-            repeated per instance, plus the per-instance secret).
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-        catalog = get_catalog()
-
-        defn = catalog.get(connection_key)
-        if defn is None or defn.get("kind") != "connection":
-            valid = sorted(k for k, d in catalog.items() if d.get("kind") == "connection")
-            return {
-                "status": "error",
-                "error": f"Connection definition '{connection_key}' not found in catalog",
-                "valid_keys": valid,
-            }
-        cleaned: list[tuple[str, dict[str, Any]]] = [
-            (str(i["name"]), i["config"])
-            for i in instances
-            if isinstance(i, dict) and i.get("name") and isinstance(i.get("config"), dict)
-        ]
-        if not cleaned:
-            return {"status": "error", "error": "instances must carry at least one {name, config} entry"}
-
-        created, failed = [], []
-        for name, config in cleaned:
-            try:
-                row = store.components.create(org_id, kind="connection", key=connection_key, name=name, config=config)
-            except (ConfigError, CatalogKeyError) as e:
-                # str(e) may name required fields but never echoes values.
-                failed.append({"name": name, "error": str(e)})
-                continue
-            created.append({"id": serialize(row.id), "name": row.name})
-
-        return {
-            "status": "success" if created else "error",
-            "message": f"{len(created)} connection(s) created" + (f", {len(failed)} failed" if failed else ""),
-            "created": created,
-            "failed": failed,
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    result = toolkit_collection.unbind_relation(toolkit_ctx(tool_context), component_id, name, dst_id)
+    return result.model_dump(mode="json")
 
 
 def request_connection_setup(
@@ -263,161 +60,22 @@ def request_connection_setup(
     force_new: bool = False,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Present a secure connection setup form to the user in the app.
-
-    Call this to let the user create a connection: the app renders the form
-    for the given definition (OAuth sign-in when available, manual
-    credential entry otherwise) and the credentials go directly to the API.
-    Never ask the user to share credentials in the chat instead.
-
-    When the collection already holds connections of this definition, the
-    form is NOT presented: the response lists them so you can ask the user
-    whether to reuse one — call again with ``force_new`` only when they
-    want another account connected.
-
-    The response notes whether the user can sign in with the provider
-    (``oauth_available``) or must enter credentials manually; an unknown key
-    fails with the list of valid connection keys.
-
-    Args:
-        connection_key: Catalog key of the connection definition — usually
-            ``<source_key>_connection`` (e.g. 'facebook_ads_connection').
-        name: Optional display name to prefill in the form.
-        force_new: Present the form even though fitting connections exist.
-    """
-    try:
-        catalog = get_catalog()
-        defn = catalog.get(connection_key)
-        if defn is None or defn.get("kind") != "connection":
-            valid = sorted(k for k, d in catalog.items() if d.get("kind") == "connection")
-            return {
-                "status": "error",
-                "error": f"Connection definition '{connection_key}' not found in catalog",
-                "valid_keys": valid,
-            }
-
-        if not force_new:
-            org_id = get_org_id(tool_context)
-            existing = [
-                {"id": serialize(c.id), "name": c.name}
-                for c in get_store().components.list_all(org_id, kinds=["connection"])
-                if c.key == connection_key
-            ]
-            if existing:
-                return {
-                    "status": "exists",
-                    "message": (
-                        "The collection already holds connections of this definition — no form was "
-                        "presented. Ask the user whether to reuse one; call again with force_new "
-                        "only if they want another account connected."
-                    ),
-                    "existing": existing,
-                }
-
-        oauth = (defn.get("config_schema") or {}).get("x-oauth")
-        return {
-            "status": "success",
-            "message": (
-                "Setup form presented to the user. Ask them to complete it "
-                "(and to say so when done), then verify with list_components."
-            ),
-            "connection_key": connection_key,
-            "name": name,
-            "oauth": oauth is not None,
-            "oauth_available": OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False,
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    result = toolkit_collection.request_connection_setup(toolkit_ctx(tool_context), connection_key, name, force_new)
+    return result.model_dump(mode="json")
 
 
-def _categorise(exc: Exception) -> tuple[str, str]:
-    """Map a ``check()`` failure to an LLM-safe ``(category, message)`` pair.
-
-    Written against the categorisation contract documented on
-    ``Connection.check()``. Raw provider errors may carry URLs with tokens,
-    and this tool's output enters the model context — only curated messages
-    leave here; details are logged server-side.
-
-    Returns:
-        The ``(category, message)`` pair.
-    """
-    if isinstance(exc, ConnectionCheckError):
-        return "error", str(exc)
-    if isinstance(exc, httpx.HTTPStatusError):
-        if exc.response.status_code in (401, 403):
-            return "auth", "The provider rejected the credentials."
-        return "error", f"The provider responded with HTTP {exc.response.status_code}."
-    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
-        return "network", "The provider did not respond in time."
-    if isinstance(exc, httpx.TransportError):
-        return "network", "The provider could not be reached."
-    return "error", "The connection check failed unexpectedly."
+def create_connections(
+    connection_key: str,
+    instances: list[dict[str, Any]],
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    result = toolkit_collection.create_connections(toolkit_ctx(tool_context), connection_key, instances)
+    return result.model_dump(mode="json")
 
 
 async def check_connection(connection_id: str, tool_context: ToolContext) -> dict[str, Any]:
-    """Run a health check on an existing connection.
-
-    Hydrates the stored connection (which validates its config against the
-    current catalog and environment) and, when the type supports it, makes a
-    lightweight authenticated call to the provider to prove the credentials
-    work. Use this to verify a connection after the user sets it up, or when
-    data collection fails with authentication-looking errors.
-
-    Args:
-        connection_id: UUID of the connection, from list_components.
-
-    Returns ``ok`` plus, on failure, a ``category`` ('config', 'auth',
-    'network', 'error') and message. ``live`` is false when the type
-    implements no check and only hydration was verified.
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-
-        component = store.components.get(UUID(connection_id), kind="connection")
-        if component.org_id != org_id:
-            return {"status": "error", "error": f"Connection '{connection_id}' not found"}
-        info = {"id": connection_id, "name": component.name, "key": component.key}
-
-        try:
-            conn = store.components.load(component.id)
-        except ComponentDriftError as e:
-            return {"status": "success", "connection": info, "ok": False, "live": False,
-                    "category": "config", "message": str(e)}
-        except HydrationError as e:
-            logger.error("Connection '%s' (%s) failed to hydrate: %s", component.name, component.key, e)
-            # Never forward the wrapped message: pydantic errors embed input
-            # values, which for connections may be secrets — name fields only.
-            if isinstance(e.__cause__, ValidationError):
-                fields = ", ".join(
-                    ".".join(str(loc) for loc in err["loc"]) or "(root)" for err in e.__cause__.errors()
-                )
-                message = f"The stored config is no longer valid for this connection type (invalid fields: {fields})."
-            else:
-                message = "The stored connection could not be reconstructed."
-            return {"status": "success", "connection": info, "ok": False, "live": False,
-                    "category": "config", "message": message}
-
-        if not isinstance(conn, Connection) or not conn.checkable():
-            return {"status": "success", "connection": info, "ok": True, "live": False,
-                    "message": "This connection type implements no live check; the stored config hydrates."}
-
-        try:
-            ok = bool(await asyncio.wait_for(invoke(conn.check), timeout=_CHECK_TIMEOUT))
-        except Exception as e:
-            logger.error("Connection check failed for '%s' (%s): %s", component.name, component.key, e)
-            category, message = _categorise(e)
-            return {"status": "success", "connection": info, "ok": False, "live": True,
-                    "category": category, "message": message}
-        if not ok:
-            return {"status": "success", "connection": info, "ok": False, "live": True,
-                    "category": "error", "message": "The connection check failed."}
-        return {"status": "success", "connection": info, "ok": True, "live": True}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
-# -- Source operations (kind-specific by nature) ----------------------------------
+    result = await toolkit_collection.check_connection(toolkit_ctx(tool_context), connection_id)
+    return result.model_dump(mode="json")
 
 
 async def resolve_source_field_options(
@@ -426,218 +84,10 @@ async def resolve_source_field_options(
     field: str | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """List the live options for a source's provider-backed config field.
-
-    Fields marked fetchable in the source definition get their options from
-    the provider through a connection in the org's collection — e.g. the ad
-    accounts the connection can access. Options are not secret: present them
-    for the user to choose from; the chosen option's label makes a good
-    default source name.
-
-    Args:
-        source_key: The source definition's catalog key (e.g. 'facebook_ads').
-        connection_id: UUID of a connection from the org's collection.
-        field: The config field to resolve. Omit it — never guess field
-            names: most definitions have exactly one fetchable field and it
-            is picked automatically (the response names it).
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-        catalog = get_catalog()
-
-        defn = catalog.get(source_key)
-        if defn is None or defn.get("kind") != "source":
-            return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
-        properties = (defn.get("config_schema") or {}).get("properties", {})
-        fetchable = sorted(k for k, p in properties.items() if p.get("x-fetch"))
-        if field is None:
-            if len(fetchable) != 1:
-                return {
-                    "status": "error",
-                    "error": f"'{source_key}' has {len(fetchable)} fetchable fields — pass one explicitly",
-                    "fetchable_fields": fetchable,
-                }
-            field = fetchable[0]
-        fetch = (properties.get(field) or {}).get("x-fetch")
-        if not fetch:
-            return {
-                "status": "error",
-                "error": f"Field '{field}' on '{source_key}' is not provider-backed",
-                "fetchable_fields": fetchable,
-            }
-        _, _, method_name = str(fetch.get("provider", "")).partition(".")
-
-        component = store.components.get(UUID(connection_id), kind="connection")
-        if component.org_id != org_id:
-            return {"status": "error", "error": f"Connection '{connection_id}' not found"}
-        try:
-            conn = store.components.load(component.id)
-        except (ComponentDriftError, HydrationError) as e:
-            logger.error("Connection '%s' (%s) failed to load for resolve: %s", component.name, component.key, e)
-            return {"status": "error", "error": "The connection could not be loaded — check it with check_connection."}
-
-        # The @fetch_field_provider marker is the allowlist (same contract as
-        # the API's /components/resolve): only opted-in methods are callable.
-        fn = getattr(conn, method_name, None)
-        if not is_fetch_field_provider(fn):
-            return {
-                "status": "error",
-                "error": f"Connection '{component.key}' does not provide options for {source_key}.{field}",
-            }
-        assert fn is not None  # narrowed by the guard above
-
-        try:
-            items = list(await asyncio.wait_for(invoke(fn), timeout=_RESOLVE_TIMEOUT) or [])
-        except Exception as e:
-            logger.error("Resolving %s.%s via '%s' failed: %s", source_key, field, component.name, e)
-            category, message = _categorise(e)
-            return {"status": "error", "category": category, "error": message}
-
-        label_key, value_key = fetch.get("label_key"), fetch.get("value_key")
-        options = [
-            {"label": item.get(label_key), "value": item.get(value_key)}
-            if isinstance(item, dict)
-            else {"label": str(item), "value": item}
-            for item in items[:_MAX_OPTIONS]
-        ]
-        return {
-            "status": "success",
-            "source_key": source_key,
-            "field": field,
-            "total": len(items),
-            "returned": len(options),
-            "options": options,
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
-def _normalized_asset_keys(
-    defn: dict[str, Any], source_key: str, asset_keys: list[str] | None
-) -> tuple[list[str] | None, dict[str, Any] | None]:
-    """Normalize an asset selection: empty means default-all, unknown keys error.
-
-    Models pass ``[]`` meaning "default" — and a zero-asset source is useless.
-
-    Returns:
-        ``(asset_keys, None)`` or ``(None, error_response)``.
-    """
-    if not asset_keys:
-        return None, None
-    valid = {a.get("key") for a in defn.get("assets", [])}
-    unknown = sorted(set(asset_keys) - valid)
-    if unknown:
-        return None, {
-            "status": "error",
-            "error": f"Unknown asset keys for '{source_key}': {', '.join(unknown)}",
-            "valid_asset_keys": sorted(valid),
-        }
-    return asset_keys, None
-
-
-def _source_relations(
-    store: Any,
-    org_id: UUID,
-    defn: dict[str, Any],
-    source_key: str,
-    connection_id: str | None,
-    destination_ids: list[str] | None,
-) -> tuple[dict[str, list[UUID]] | None, dict[str, Any] | None]:
-    """Bind the connection into the definition's named relation, plus destinations.
-
-    Finds the relations the definition declares whose ``kind`` includes
-    ``"connection"``. A given connection binds under whichever one it fits
-    (an empty ``key`` accepts any connection, otherwise the connection's key
-    must appear in the relation's key list); every non-optional connection
-    relation left unbound afterwards is an error naming the relation and the
-    key it expects. Destinations bind under the fixed ``"destinations"`` name
-    once each one is confirmed to belong to the organisation.
-
-    Args:
-        store: The database store, for looking up the connection and
-            destination rows.
-        org_id: Organisation UUID the connection and every destination must
-            belong to.
-        defn: The source's catalog definition, carrying its declared
-            ``relations`` (name to relation dict: ``kind``, ``key``, ``many``,
-            ``optional``, ``on_delete``, ``name``).
-        source_key: The source definition's catalog key, named in error
-            messages.
-        connection_id: UUID of the connection to bind, or ``None`` to leave
-            every connection relation unbound.
-        destination_ids: UUIDs of the destinations to attach, or ``None``.
-
-    Returns:
-        ``(relations, None)``, ``relations`` mapping relation name to the
-        UUIDs bound under it (ready for ``ComponentStore.create``'s
-        ``relations`` argument), or ``(None, error_response)``.
-    """
-    relations_defn = defn.get("relations") or {}
-    connection_relations = {
-        name: relation
-        for name, relation in relations_defn.items()
-        if "connection" in (relation["kind"] if isinstance(relation["kind"], list) else [relation["kind"]])
-    }
-
-    connection = None
-    if connection_id is not None:
-        connection = store.components.get(UUID(connection_id), kind="connection")
-        if connection.org_id != org_id:
-            return None, {"status": "error", "error": f"Connection '{connection_id}' not found"}
-
-    bindings: dict[str, list[UUID]] = {}
-    if connection is not None:
-        name = next(
-            (
-                relation_name
-                for relation_name, relation in connection_relations.items()
-                if not relation.get("key")
-                or connection.key in ([relation["key"]] if isinstance(relation["key"], str) else relation["key"])
-            ),
-            None,
-        )
-        if name is None:
-            return None, {
-                "status": "error",
-                "error": f"Connection '{connection.key}' does not fit any relation of '{source_key}'",
-            }
-        bindings[name] = [connection.id]
-
-    for name, relation in connection_relations.items():
-        if not relation.get("optional") and name not in bindings:
-            expected = relation.get("key") or "connection"
-            return None, {
-                "status": "error",
-                "error": (
-                    f"'{source_key}' requires a '{expected}' as '{name}'; "
-                    "pick one from the collection or set one up first"
-                ),
-            }
-
-    destination_bindings: list[UUID] = []
-    for dest_id in destination_ids or []:
-        dest = store.components.get(UUID(dest_id), kind="destination")
-        if dest.org_id != org_id:
-            return None, {"status": "error", "error": f"Destination '{dest_id}' not found"}
-        destination_bindings.append(dest.id)
-    bindings["destinations"] = destination_bindings
-
-    return bindings, None
-
-
-def _unresolved_requirements(defn: dict[str, Any], row: Any) -> list[str]:
-    """Cross-source requirements of the enabled assets — reported, not auto-wired.
-
-    Returns:
-        One ``"asset: params"`` line per affected asset.
-    """
-    enabled = {a.key for a in row.children}
-    return sorted(
-        f"{a['key']}: {', '.join(sorted({**a.get('requires', {}), **a.get('optional_requires', {})}))}"
-        for a in defn.get("assets", [])
-        if a.get("key") in enabled and (a.get("requires") or a.get("optional_requires"))
+    result = await toolkit_sources.resolve_source_field_options(
+        toolkit_ctx(tool_context), source_key, connection_id, field
     )
+    return result.model_dump(mode="json")
 
 
 def create_source(
@@ -649,66 +99,10 @@ def create_source(
     destination_ids: list[str] | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Create a source in the organisation's collection.
-
-    Recap the choices — type, name, config, assets, connection, destinations
-    — and get the user's explicit confirmation BEFORE calling this.
-
-    Args:
-        source_key: The source definition's catalog key (e.g. 'facebook_ads').
-        name: Display name — default to the label of the chosen account /
-            discriminator option.
-        config: Values for the definition's config schema (e.g. account_id).
-        connection_id: UUID of the connection to bind; required when the
-            definition declares a required connection relation.
-        asset_keys: Child asset keys to enable; omit to enable all.
-        destination_ids: Destination UUIDs to attach (optional).
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-        catalog = get_catalog()
-
-        defn = catalog.get(source_key)
-        if defn is None or defn.get("kind") != "source":
-            return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
-
-        asset_keys, error = _normalized_asset_keys(defn, source_key, asset_keys)
-        if error:
-            return error
-        relations, error = _source_relations(store, org_id, defn, source_key, connection_id, destination_ids)
-        if error:
-            return error
-        assert relations is not None
-
-        try:
-            row = store.components.create(
-                org_id,
-                kind="source",
-                key=source_key,
-                name=name,
-                config=config,
-                children=asset_keys,
-                relations=relations,
-            )
-        except (ConfigError, CatalogKeyError) as e:
-            return {"status": "error", "error": str(e)}
-
-        return {
-            "status": "success",
-            "message": f"Source '{name}' created",
-            "source": {
-                "id": serialize(row.id),
-                "key": row.key,
-                "name": row.name,
-                "asset_count": len(row.children),
-                "connection_bound": connection_id is not None,
-                "destination_count": len(relations["destinations"]),
-            },
-            "unresolved_requirements": _unresolved_requirements(defn, row),
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    result = toolkit_sources.create_source(
+        toolkit_ctx(tool_context), source_key, name, config, connection_id, asset_keys, destination_ids
+    )
+    return result.model_dump(mode="json")
 
 
 def create_sources(
@@ -721,100 +115,17 @@ def create_sources(
     destination_ids: list[str] | None = None,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Create several sources of one definition — one per account/profile value.
-
-    Use this when the user sets up multiple accounts of the same source type
-    at once: every instance shares the connection, asset selection, and any
-    shared config; its ``value`` fills the definition's account field and its
-    ``name`` becomes the source's display name (use the option labels from
-    the account selection).
-
-    Recap the choices and get the user's explicit confirmation BEFORE calling
-    this. Instances that fail (e.g. an account that already has a source)
-    are reported individually; the others are still created.
-
-    Args:
-        source_key: The source definition's catalog key (e.g. 'facebook_ads').
-        instances: One entry per source, each ``{"name": ..., "value": ...}``.
-        connection_id: UUID of the connection every source binds.
-        asset_keys: Child asset keys to enable on every source; omit for all.
-        shared_config: Config values common to all instances (e.g. dataset).
-        field: The config field receiving each value. Omit it — never guess
-            field names: the definition's fetchable field is picked
-            automatically.
-        destination_ids: Destination UUIDs to attach to every source.
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-        catalog = get_catalog()
-
-        defn = catalog.get(source_key)
-        if defn is None or defn.get("kind") != "source":
-            return {"status": "error", "error": f"Source '{source_key}' not found in catalog"}
-        cleaned = [
-            {"name": str(i.get("name") or i.get("value")), "value": str(i.get("value"))}
-            for i in instances
-            if isinstance(i, dict) and i.get("value") is not None
-        ]
-        if not cleaned:
-            return {"status": "error", "error": "instances must carry at least one {name, value} entry"}
-
-        properties = (defn.get("config_schema") or {}).get("properties", {})
-        if field is None:
-            fetchable = sorted(k for k, p in properties.items() if p.get("x-fetch"))
-            discriminators = sorted(k for k, p in properties.items() if p.get("x-discriminator"))
-            candidates = fetchable or discriminators
-            if len(candidates) != 1:
-                return {
-                    "status": "error",
-                    "error": f"'{source_key}' has no single account field — pass one explicitly",
-                    "candidate_fields": candidates,
-                }
-            field = candidates[0]
-        elif field not in properties:
-            return {"status": "error", "error": f"Unknown config field '{field}' for '{source_key}'"}
-
-        asset_keys, error = _normalized_asset_keys(defn, source_key, asset_keys)
-        if error:
-            return error
-        relations, error = _source_relations(store, org_id, defn, source_key, connection_id, destination_ids)
-        if error:
-            return error
-        assert relations is not None
-
-        created, failed = [], []
-        unresolved: list[str] = []
-        for instance in cleaned:
-            try:
-                row = store.components.create(
-                    org_id,
-                    kind="source",
-                    key=source_key,
-                    name=instance["name"],
-                    config={**(shared_config or {}), field: instance["value"]},
-                    children=asset_keys,
-                    relations=relations,
-                )
-            except (ConfigError, CatalogKeyError) as e:
-                failed.append({"name": instance["name"], "value": instance["value"], "error": str(e)})
-                continue
-            created.append({"id": serialize(row.id), "name": row.name, "value": instance["value"]})
-            unresolved = _unresolved_requirements(defn, row)
-
-        return {
-            "status": "success" if created else "error",
-            "message": f"{len(created)} source(s) created" + (f", {len(failed)} failed" if failed else ""),
-            "field": field,
-            "created": created,
-            "failed": failed,
-            "unresolved_requirements": unresolved,
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
-
-
-# -- Job operations (kind-specific by nature) --------------------------------------
+    result = toolkit_sources.create_sources(
+        toolkit_ctx(tool_context),
+        source_key,
+        instances,
+        connection_id,
+        asset_keys,
+        shared_config,
+        field,
+        destination_ids,
+    )
+    return result.model_dump(mode="json")
 
 
 def create_job(
@@ -825,66 +136,19 @@ def create_job(
     offset: int = 1,
     tool_context: ToolContext | None = None,
 ) -> dict[str, Any]:
-    """Create a cron job that runs the given sources on a schedule.
+    from interloper_toolkit import jobs as toolkit_jobs
 
-    Use this after creating sources to put them on a cadence — one job can
-    target several sources (e.g. every account of a source type). Recap the
-    name, the schedule in words, and the targets, and get the user's
-    explicit confirmation BEFORE calling this.
+    result = toolkit_jobs.create_job(toolkit_ctx(tool_context), name, cron, target_source_ids, lookback, offset)
+    return result.model_dump(mode="json")
 
-    Whether runs are partitioned is derived from the targets: a job over
-    time-partitioned assets covers a trailing window of partitions each tick.
 
-    Args:
-        name: Display name for the job (e.g. 'Facebook Ads daily').
-        cron: Standard cron expression (e.g. '0 6 * * *' for daily at 06:00 UTC).
-        target_source_ids: UUIDs of the sources the job materializes.
-        lookback: For partitioned targets, how many partitions each run covers.
-        offset: For partitioned targets, how many partitions back from the
-            current one the window ends. 1 (the default) means it ends on the
-            last complete partition, i.e. yesterday for daily targets.
-    """
-    try:
-        org_id = get_org_id(tool_context)
-        store = get_store()
-
-        targets: list[UUID] = []
-        for source_id in target_source_ids:
-            source = store.components.get(UUID(source_id), kind="source")
-            if source.org_id != org_id:
-                return {"status": "error", "error": f"Source '{source_id}' not found"}
-            targets.append(source.id)
-        if not targets:
-            return {"status": "error", "error": "target_source_ids must name at least one source"}
-
-        try:
-            row = store.components.create(
-                org_id,
-                kind="job",
-                key="cron_job",
-                name=name,
-                config={
-                    "cron": cron,
-                    "enabled": True,
-                    "tags": [],
-                    "lookback": lookback,
-                    "offset": offset,
-                },
-                relations={"targets": targets},
-            )
-        except (ConfigError, CatalogKeyError) as e:
-            return {"status": "error", "error": str(e)}
-
-        return {
-            "status": "success",
-            "message": f"Job '{name}' created",
-            "job": {
-                "id": serialize(row.id),
-                "name": row.name,
-                "cron": cron,
-                "enabled": True,
-                "target_count": len(targets),
-            },
-        }
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+list_components.__doc__ = toolkit_collection.list_components.__doc__
+update_component.__doc__ = toolkit_collection.update_component.__doc__
+bind_relation.__doc__ = toolkit_collection.bind_relation.__doc__
+unbind_relation.__doc__ = toolkit_collection.unbind_relation.__doc__
+request_connection_setup.__doc__ = toolkit_collection.request_connection_setup.__doc__
+create_connections.__doc__ = toolkit_collection.create_connections.__doc__
+check_connection.__doc__ = toolkit_collection.check_connection.__doc__
+resolve_source_field_options.__doc__ = toolkit_sources.resolve_source_field_options.__doc__
+create_source.__doc__ = toolkit_sources.create_source.__doc__
+create_sources.__doc__ = toolkit_sources.create_sources.__doc__

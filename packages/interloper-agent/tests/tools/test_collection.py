@@ -1,4 +1,6 @@
-"""Tests for interloper_agent.tools.collection."""
+"""Tests for interloper_agent.tools.collection: the wrappers pass through to the toolkit."""
+
+from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
@@ -6,241 +8,49 @@ from uuid import uuid4
 
 import pytest
 from google.adk.tools.tool_context import ToolContext
+from interloper_toolkit import collection as toolkit_collection
+from interloper_toolkit import sources as toolkit_sources
+from interloper_toolkit.models import ToolError
 
 from interloper_agent import context
 from interloper_agent.tools import collection
 
 ORG_ID = uuid4()
 
-CATALOG = {
-    "facebook_ads": {
-        "kind": "source",
-        "assets": [
-            {"key": "ads"},
-            {"key": "ads_stats", "requires": {"campaigns": "facebook_ads.campaigns"}},
-        ],
-    },
-    "facebook_ads_connection": {"kind": "connection"},
-}
-
-
-class FakeComponentStore:
-    """Captures update calls; get returns the store's one row."""
-
-    def __init__(self, store: "FakeStore"):
-        """Bind the fake facet to the store holding the row."""
-        self._store = store
-
-    def get(self, component_id: Any, *, kind: str | None = None) -> Any:
-        return self._store.component
-
-    def update(self, component_id: Any, **kwargs: Any) -> Any:
-        self._store.update_kwargs = kwargs
-        component = self._store.component
-        if kwargs.get("name") is not None:
-            component.name = kwargs["name"]
-        if kwargs.get("config") is not None:
-            component.config = kwargs["config"]
-        if kwargs.get("children") is not None:
-            component.children = [SimpleNamespace(key=k) for k in kwargs["children"]]
-        return component
-
-
-class FakeStore:
-    """Presents the ``components`` facet the collection tools reach for."""
-
-    def __init__(self, component: Any):
-        """Bind the fake store to the one component row it serves."""
-        self.component = component
-        self.update_kwargs: dict[str, Any] | None = None
-        self.components = FakeComponentStore(self)
-
-
-def _component(**overrides: Any) -> Any:
-    defaults: dict[str, Any] = {
-        "id": uuid4(),
-        "org_id": ORG_ID,
-        "kind": "source",
-        "key": "facebook_ads",
-        "name": "FB",
-        "config": {"account_id": "1", "dataset": "raw"},
-        "children": [SimpleNamespace(key="ads"), SimpleNamespace(key="ads_stats")],
-    }
-    return SimpleNamespace(**{**defaults, **overrides})
-
 
 @pytest.fixture
-def ctx() -> ToolContext:
-    return cast(ToolContext, SimpleNamespace(state={"org_id": str(ORG_ID)}))
+def ctx(monkeypatch: pytest.MonkeyPatch) -> ToolContext:
+    monkeypatch.setattr(context, "_store", SimpleNamespace())
+    monkeypatch.setattr(context, "_catalog", SimpleNamespace(dump=dict))
+    return cast(ToolContext, SimpleNamespace(state={"org_id": str(ORG_ID), "role": "editor"}))
 
 
-@pytest.fixture
-def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
-    fake = FakeStore(_component())
-    monkeypatch.setattr(context, "_store", fake)
-    monkeypatch.setattr(context, "_catalog", SimpleNamespace(dump=lambda: CATALOG))
-    return fake
+def test_the_wrappers_pass_the_context_and_arguments_through(monkeypatch: pytest.MonkeyPatch, ctx: ToolContext):
+    seen: dict[str, Any] = {}
+
+    def fake(tk_ctx: Any, *args: Any, **kwargs: Any) -> ToolError:
+        seen.update(org_id=tk_ctx.org_id, role=tk_ctx.role, args=args)
+        return ToolError(error="seen")
+
+    monkeypatch.setattr(toolkit_collection, "update_component", fake)
+
+    result = collection.update_component("cid", name="New", tool_context=ctx)
+
+    assert result == {"status": "error", "error": "seen", "valid_values": None, "category": None}
+    assert seen == {"org_id": ORG_ID, "role": "editor", "args": ("cid", "New", None, None)}
 
 
-def test_update_component_merges_partial_config(store: FakeStore, ctx: ToolContext):
-    result = collection.update_component(
-        str(store.component.id), config_updates={"dataset": "clean", "account_id": None}, tool_context=ctx
-    )
-    assert result["status"] == "success"
-    assert result["changed_fields"] == ["account_id", "dataset"]
-    assert store.update_kwargs is not None
-    assert store.update_kwargs["config"] == {"dataset": "clean"}
+async def test_async_wrappers_await_the_toolkit(monkeypatch: pytest.MonkeyPatch, ctx: ToolContext):
+    async def fake(tk_ctx: Any, *args: Any) -> ToolError:
+        return ToolError(error=f"resolved {args}")
+
+    monkeypatch.setattr(toolkit_sources, "resolve_source_field_options", fake)
+
+    result = await collection.resolve_source_field_options("shop_source", "cid", tool_context=ctx)
+
+    assert result["error"] == "resolved ('shop_source', 'cid', None)"
 
 
-def test_update_component_renames_without_touching_config(store: FakeStore, ctx: ToolContext):
-    result = collection.update_component(str(store.component.id), name="Meta Ads", tool_context=ctx)
-    assert result["status"] == "success"
-    assert result["component"]["name"] == "Meta Ads"
-    assert store.update_kwargs is not None
-    assert store.update_kwargs["config"] is None
-
-
-def test_update_component_replaces_asset_selection(store: FakeStore, ctx: ToolContext):
-    result = collection.update_component(str(store.component.id), asset_keys=["ads_stats"], tool_context=ctx)
-    assert result["status"] == "success"
-    assert store.update_kwargs is not None
-    assert store.update_kwargs["children"] == ["ads_stats"]
-    assert result["component"]["asset_count"] == 1
-    assert result["unresolved_requirements"] == ["ads_stats: campaigns"]
-
-
-def test_update_component_rejects_unknown_asset_keys(store: FakeStore, ctx: ToolContext):
-    result = collection.update_component(str(store.component.id), asset_keys=["nope"], tool_context=ctx)
-    assert result["status"] == "error"
-    assert result["valid_asset_keys"] == ["ads", "ads_stats"]
-    assert store.update_kwargs is None
-
-
-def test_update_component_rejects_assets_on_non_source(store: FakeStore, ctx: ToolContext):
-    store.component = _component(kind="job", key="cron_job", config={"cron": "0 6 * * *"})
-    result = collection.update_component(str(store.component.id), asset_keys=["ads"], tool_context=ctx)
-    assert result["status"] == "error"
-    assert "have no assets" in result["error"]
-
-
-def test_update_component_refuses_connection_config(store: FakeStore, ctx: ToolContext):
-    store.component = _component(kind="connection", key="facebook_ads_connection", config=None)
-    result = collection.update_component(
-        str(store.component.id), config_updates={"access_token": "x"}, tool_context=ctx
-    )
-    assert result["status"] == "error"
-    assert "credentials" in result["error"]
-    assert store.update_kwargs is None
-
-
-def test_update_component_allows_connection_rename(store: FakeStore, ctx: ToolContext):
-    store.component = _component(kind="connection", key="facebook_ads_connection", config=None)
-    result = collection.update_component(str(store.component.id), name="Meta main", tool_context=ctx)
-    assert result["status"] == "success"
-    assert store.update_kwargs is not None
-    assert store.update_kwargs["config"] is None
-
-
-def test_update_component_hides_other_orgs_components(store: FakeStore, ctx: ToolContext):
-    store.component = _component(org_id=uuid4())
-    result = collection.update_component(str(store.component.id), name="Hijack", tool_context=ctx)
-    assert result["status"] == "error"
-    assert "not found" in result["error"]
-    assert store.update_kwargs is None
-
-
-def test_update_component_requires_a_change(store: FakeStore, ctx: ToolContext):
-    result = collection.update_component(str(store.component.id), tool_context=ctx)
-    assert result["status"] == "error"
-    assert store.update_kwargs is None
-
-
-# -- _source_relations --------------------------------------------------------
-
-
-class _RelationsComponentStore:
-    """Serves fixed connection/destination rows by id for _source_relations tests."""
-
-    def __init__(self, rows: dict[Any, Any]):
-        """Bind the fake facet to the rows it serves.
-
-        Args:
-            rows: Maps component UUID to the row ``get`` returns for it.
-        """
-        self._rows = rows
-
-    def get(self, component_id: Any, *, kind: str | None = None) -> Any:
-        return self._rows[component_id]
-
-
-class _RelationsStore:
-    """Presents the ``components`` facet ``_source_relations`` reaches for."""
-
-    def __init__(self, rows: dict[Any, Any]):
-        """Bind the fake store to the rows its components facet serves.
-
-        Args:
-            rows: Maps component UUID to the row ``components.get`` returns.
-        """
-        self.components = _RelationsComponentStore(rows)
-
-
-def _relation_row(**overrides: Any) -> Any:
-    defaults: dict[str, Any] = {"id": uuid4(), "org_id": ORG_ID, "key": "facebook_ads_connection"}
-    return SimpleNamespace(**{**defaults, **overrides})
-
-
-def test_source_relations_binds_connection_by_name():
-    connection = _relation_row(key="facebook_ads_connection")
-    destination = _relation_row(key="bigquery")
-    store = _RelationsStore({connection.id: connection, destination.id: destination})
-    defn = {
-        "relations": {
-            "connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False},
-            "destinations": {"kind": "destination", "many": True, "optional": True},
-        }
-    }
-    relations, error = collection._source_relations(
-        store, ORG_ID, defn, "facebook_ads", str(connection.id), [str(destination.id)]
-    )
-    assert error is None
-    assert relations == {"connection": [connection.id], "destinations": [destination.id]}
-
-
-def test_source_relations_rejects_connection_with_mismatched_key():
-    connection = _relation_row(key="bing_ads_connection")
-    store = _RelationsStore({connection.id: connection})
-    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False}}}
-    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", str(connection.id), None)
-    assert relations is None
-    assert error is not None
-    assert "does not fit any relation of 'facebook_ads'" in error["error"]
-
-
-def test_source_relations_requires_missing_connection():
-    store = _RelationsStore({})
-    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": False}}}
-    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", None, None)
-    assert relations is None
-    assert error is not None
-    assert "requires a 'facebook_ads_connection' as 'connection'" in error["error"]
-
-
-def test_source_relations_rejects_a_connection_a_source_cannot_hold():
-    connection = _relation_row()
-    store = _RelationsStore({connection.id: connection})
-    defn = {"relations": {"destinations": {"kind": "destination", "many": True, "optional": True}}}
-    relations, error = collection._source_relations(
-        store, ORG_ID, defn, "static_source", str(connection.id), None
-    )
-    assert relations is None
-    assert error is not None
-    assert "does not fit any relation of 'static_source'" in error["error"]
-
-
-def test_source_relations_allows_optional_connection_unbound():
-    store = _RelationsStore({})
-    defn = {"relations": {"connection": {"kind": "connection", "key": "facebook_ads_connection", "optional": True}}}
-    relations, error = collection._source_relations(store, ORG_ID, defn, "facebook_ads", None, None)
-    assert error is None
-    assert relations == {"destinations": []}
+def test_the_wrappers_adopt_the_toolkit_docstrings():
+    assert collection.create_source.__doc__ == toolkit_sources.create_source.__doc__
+    assert collection.check_connection.__doc__ == toolkit_collection.check_connection.__doc__

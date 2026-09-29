@@ -132,9 +132,17 @@ def store(toolkit_db: Engine) -> Store:
         A store reading and writing the fixture database.
 
     """
-    return Store(catalog=il.Catalog.from_assets([ShopSource, FinanceSource]))
+    # An identity cipher: connections are encrypted by default, and the
+    # write tools create them the way production does.
+    return Store(catalog=il.Catalog.from_assets([ShopSource, FinanceSource]), encrypt=lambda b: b, decrypt=lambda b: b)
 
 
 @pytest.fixture
 def ctx(store: Store) -> ToolkitContext:
-    return ToolkitContext(store=store, catalog=CATALOG_DUMP, org_id=uuid4())
+    """An editor's context over the hand-built dump plus the store's own definitions.
+
+    Returns:
+        The context; ``dataclasses.replace(ctx, role=...)`` narrows the role.
+    """
+    catalog = {**CATALOG_DUMP, **il.Catalog.from_assets([ShopSource, FinanceSource]).dump()}
+    return ToolkitContext(store=store, catalog=catalog, org_id=uuid4(), role="editor")
