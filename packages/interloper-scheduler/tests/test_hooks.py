@@ -16,7 +16,7 @@ import pytest
 from interloper_assets.demo.source import DemoSource, demo_asset
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, ComponentRelation, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
 from interloper_db.store.events import EventStore
 from sqlalchemy import event
@@ -46,7 +46,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, EventRow, Quota, Usage):
+    for model in (Component, ComponentRelation, Backfill, Run, EventRow, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
 
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
@@ -116,9 +116,15 @@ def _record_run_failure(run_id: UUID, error: str) -> None:
 
 def _sweep(store: Store) -> HookController:
     controller = HookController(store=store, poll_interval=999)
-    controller._watermark = _PAST
     controller._tick()
     return controller
+
+
+def _evaluated_at(run_id: UUID) -> dt.datetime | None:
+    with Session(engine_module.get_engine()) as session:
+        db_run = session.get(Run, run_id)
+        assert db_run is not None
+        return db_run.hooks_evaluated_at
 
 
 class TestHookEvaluation:
@@ -160,7 +166,6 @@ class TestHookEvaluation:
         _terminal_run(store, leaf.id)
 
         controller = _sweep(store)
-        controller._watermark = _PAST
         controller._tick()  # second sweep over the same window
 
         with Session(engine_module.get_engine()) as session:
@@ -406,6 +411,20 @@ class TestVerdictGating:
 
         assert self._fired(run.id) == []
 
+    def test_a_retried_run_is_stamped_without_firing(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Not a verdict, so nothing fires; stamped anyway, so it leaves the
+        # unevaluated set instead of being re-read every tick.
+        _capture_posts(monkeypatch)
+        job = self._job(max_attempts=2, delay=0)
+        self._watching_hook(store, job)
+        run = store.runs.create(_ORG, component_id=job)
+        store.runs.complete(run.id, success=False)
+
+        _sweep(store)
+
+        assert self._fired(run.id) == []
+        assert _evaluated_at(run.id) is not None
+
     def test_an_exhausted_stack_fires_once(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         _capture_posts(monkeypatch)
         job = self._job(max_attempts=1)
@@ -448,16 +467,203 @@ class TestVerdictGating:
         assert payloads[0]["metadata"]["attempts"] == 1
 
 
-class TestFirstTickWatermark:
-    """The first sweep sets its own watermark rather than replaying history."""
+class TestDeliveryCursor:
+    """A terminal row is swept until it is stamped, whatever the clocks say."""
 
-    def test_a_fresh_controller_starts_from_now(self, store: Store):
-        controller = HookController(store=store, poll_interval=999)
-        assert controller._watermark is None
+    def _watched_source(self, store: Store) -> UUID:
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed", "run_failed"], "url": "https://example.invalid/hook"},
+            relations={"watches": [source.id]},
+        )
+        return source.id
 
-        controller._tick()
+    def test_an_evaluated_run_is_stamped(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        _capture_posts(monkeypatch)
+        run = _terminal_run(store, self._watched_source(store))
 
-        assert controller._watermark is not None
+        _sweep(store)
+
+        assert _evaluated_at(run.id) is not None
+
+    def test_a_run_that_finished_long_before_the_controller_started_is_evaluated(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ):
+        # No watermark: a verdict reached during a restart, or stamped by a
+        # trailing clock, is delivered late rather than never.
+        payloads = _capture_posts(monkeypatch)
+        run = _terminal_run(store, self._watched_source(store))
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            db_run.completed_at = _PAST
+            session.add(db_run)
+            session.commit()
+
+        _sweep(store)
+
+        assert [payload["run_id"] for payload in payloads] == [str(run.id)]
+
+    def test_a_stamped_run_is_not_evaluated_again(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        run = _terminal_run(store, self._watched_source(store))
+        _sweep(store)
+        stamped = _evaluated_at(run.id)
+
+        _sweep(store)
+
+        assert len(payloads) == 1
+        assert _evaluated_at(run.id) == stamped
+
+
+class TestBackfillEvents:
+    """A backfill's verdict is a subject of its own, beside its runs'."""
+
+    def _job(self, **retry: Any) -> UUID:
+        with Session(engine_module.get_engine()) as session:
+            row = Component(
+                id=uuid4(),
+                org_id=_ORG,
+                kind="job",
+                key="cron_job",
+                name="Nightly",
+                config={"cron": "0 6 * * *", **({"retry": retry} if retry else {})},
+            )
+            session.add(row)
+            session.commit()
+            assert row.id is not None
+            return row.id
+
+    def _hook(self, store: Store, component_id: UUID, *events: str) -> UUID:
+        return store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": list(events), "url": "https://example.invalid/hook"},
+            relations={"watches": [component_id]},
+        ).id
+
+    def _backfill(self, store: Store, job: UUID, days: int = 3) -> Backfill:
+        return store.runs.create_backfill(
+            _ORG, component_id=job, start_key="2026-09-01", end_key=f"2026-09-{days:02d}", concurrency=days
+        )
+
+    def _runs(self, backfill_id: UUID) -> dict[str, Run]:
+        with Session(engine_module.get_engine()) as session:
+            runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
+            return {run.partition_key or "": run for run in runs}
+
+    def _backfill_evaluated_at(self, backfill_id: UUID) -> dt.datetime | None:
+        with Session(engine_module.get_engine()) as session:
+            db_backfill = session.get(Backfill, backfill_id)
+            assert db_backfill is not None
+            return db_backfill.hooks_evaluated_at
+
+    def test_a_failed_backfill_fires_once_with_its_partitions(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job()
+        self._hook(store, job, "backfill_failed")
+        backfill = self._backfill(store, job)
+        runs = self._runs(backfill.id)
+        store.runs.complete(runs["2026-09-01"].id, success=True)
+        store.runs.complete(runs["2026-09-02"].id, success=False)
+        _record_run_failure(runs["2026-09-02"].id, "rate limited")
+        store.runs.complete(runs["2026-09-03"].id, success=False)
+
+        _sweep(store)
+        _sweep(store)
+
+        assert [payload["event_type"] for payload in payloads] == ["backfill_failed"]
+        payload = payloads[0]
+        assert payload["backfill_id"] == str(backfill.id)
+        assert payload["run_id"] is None
+        assert (payload["start_key"], payload["end_key"]) == ("2026-09-01", "2026-09-03")
+        assert payload["metadata"]["component_name"] == "Nightly"
+        assert payload["metadata"]["partitions"] == 3
+        assert payload["metadata"]["counts"] == {"success": 1, "failed": 2}
+        assert payload["metadata"]["failed_partitions"] == [["2026-09-03", None], ["2026-09-02", "rate limited"]]
+        assert self._backfill_evaluated_at(backfill.id) is not None
+
+    def test_a_completed_backfill_fires_completed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job()
+        self._hook(store, job, "backfill_completed")
+        backfill = self._backfill(store, job, days=2)
+        for run in self._runs(backfill.id).values():
+            store.runs.complete(run.id, success=True)
+
+        _sweep(store)
+
+        assert [payload["event_type"] for payload in payloads] == ["backfill_completed"]
+        assert payloads[0]["metadata"]["counts"] == {"success": 2}
+        assert "failed_partitions" not in payloads[0]["metadata"]
+
+    def test_the_runs_of_a_backfill_still_fire_run_events(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job()
+        self._hook(store, job, "run_failed")
+        backfill = self._backfill(store, job, days=2)
+        for run in self._runs(backfill.id).values():
+            store.runs.complete(run.id, success=False)
+
+        _sweep(store)
+
+        assert sorted(payload["event_type"] for payload in payloads) == ["run_failed", "run_failed"]
+
+    def test_a_backfill_waiting_on_a_retry_fires_only_once_it_closes(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job(max_attempts=2, delay=0)
+        self._hook(store, job, "backfill_completed", "backfill_failed")
+        backfill = self._backfill(store, job, days=1)
+        first = self._runs(backfill.id)["2026-09-01"]
+        store.runs.complete(first.id, success=False)
+
+        _sweep(store)
+        assert payloads == []
+
+        with Session(engine_module.get_engine()) as session:
+            successor = session.exec(select(Run).where(Run.retry_of == first.id)).one()
+        store.runs.complete(successor.id, success=True)
+        _sweep(store)
+
+        assert [payload["event_type"] for payload in payloads] == ["backfill_completed"]
+        assert payloads[0]["metadata"]["counts"] == {"success": 1}
+
+    def test_a_trigger_cascades_the_range_with_the_targets_concurrency(self, store: Store):
+        job = self._job()
+        downstream = store.components.create(
+            _ORG, kind="job", key="cron_job", name="Downstream", config={"cron": "0 7 * * *", "concurrency": 2}
+        )
+        store.components.create(
+            _ORG, kind="hook", key="trigger_hook", name="Cascade",
+            config={"events": ["backfill_completed"]},
+            relations={"watches": [job], "targets": [downstream.id]},
+        )
+        backfill = self._backfill(store, job, days=3)
+        for run in self._runs(backfill.id).values():
+            store.runs.complete(run.id, success=True)
+
+        _sweep(store)
+
+        with Session(engine_module.get_engine()) as session:
+            cascaded = session.exec(select(Backfill).where(Backfill.component_id == downstream.id)).one()
+        assert (cascaded.start_key, cascaded.end_key, cascaded.concurrency) == ("2026-09-01", "2026-09-03", 2)
+        statuses = sorted(run.status for run in self._runs(cascaded.id).values())
+        assert statuses == ["pending", "queued", "queued"]
+
+    def test_a_canceled_backfill_is_stamped_without_firing(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job()
+        self._hook(store, job, "backfill_completed", "backfill_failed")
+        backfill = self._backfill(store, job, days=2)
+        store.runs.cancel_backfill(backfill.id)
+
+        _sweep(store)
+
+        assert payloads == []
+        assert self._backfill_evaluated_at(backfill.id) is not None
+        assert all(_evaluated_at(run.id) is not None for run in self._runs(backfill.id).values())
 
 
 class TestEvaluateGuards:

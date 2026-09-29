@@ -115,8 +115,7 @@ class RunExecutor:
                 operations = target.operations()
                 if not operations:
                     logger.info("No operations for run %s, marking success", run_id)
-                    self._store.runs.complete(run_id, success=True)
-                    return True
+                    return self._complete(run_id, success=True)
 
                 if retry_of:
                     successes = self._prior_successes(retry_of)
@@ -131,8 +130,7 @@ class RunExecutor:
             self._apply_effects(result)
             success = result.status == ExecutionStatus.COMPLETED
             logger.info("Run %s completed: %s", run_id, result.status.name)
-            self._store.runs.complete(run_id, success=success)
-            return success
+            return self._complete(run_id, success=success)
 
         except Exception as e:
             logger.exception("Run %s failed", run_id)
@@ -141,10 +139,31 @@ class RunExecutor:
                     metadata = {**run_metadata, "error": format_exception(e)}
                     event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
                     self._store.events.save(event, org_id=org_id, run_id=run_id)
-                self._store.runs.complete(run_id, success=False)
+                self._complete(run_id, success=False)
             except Exception:
                 logger.exception("Failed to mark run %s as failed", run_id)
             return False
+
+    def _complete(self, run_id: UUID, *, success: bool) -> bool:
+        """Record the run's verdict, unless another writer recorded one first.
+
+        The reaper fails a run whose pod has not reported within its timeout;
+        when that pod then finishes, its verdict is not this executor's to
+        write, so the store's refusal is logged and read as a failure.
+
+        Args:
+            run_id: The run to complete.
+            success: The verdict this execution reached.
+
+        Returns:
+            ``success`` once recorded, ``False`` when the run was already terminal.
+        """
+        try:
+            self._store.runs.complete(run_id, success=success)
+        except ValueError as e:
+            logger.warning("Run %s was completed by another writer first: %s", run_id, e)
+            return False
+        return success
 
     # -- Internals -------------------------------------------------------------
 

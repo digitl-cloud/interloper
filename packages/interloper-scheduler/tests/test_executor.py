@@ -246,19 +246,22 @@ class _RecordingStore:
 
     engine = None  # the fake Session ignores it
 
-    def __init__(self, target: Any, *, complete_raises: bool = False) -> None:
+    def __init__(self, target: Any, *, complete_raises: bool = False, already_terminal: bool = False) -> None:
         """Set up the fake.
 
         Args:
             target: What ``components.load`` hands back.
             complete_raises: Whether ``runs.complete`` raises, standing in for
                 a store that is unreachable while reporting a failure.
+            already_terminal: Whether ``runs.complete`` refuses the run as
+                already terminal, standing in for a verdict the reaper wrote first.
         """
         self.completed: list[tuple[UUID, bool]] = []
         self.saved_events: list[il.Event] = []
         self.merged: list[tuple[UUID, dict[str, Any]]] = []
         self.stamped: list[tuple[UUID, dict[str, Any]]] = []
         self._complete_raises = complete_raises
+        self._already_terminal = already_terminal
         self.components = SimpleNamespace(
             load=lambda _component_id: target,
             merge_config=lambda component_id, config: self.merged.append((component_id, config)),
@@ -273,6 +276,8 @@ class _RecordingStore:
     def _complete(self, run_id: UUID, success: bool) -> None:
         if self._complete_raises:
             raise RuntimeError("store unreachable")
+        if self._already_terminal:
+            raise ValueError(f"Run {run_id} is already failed")
         self.completed.append((run_id, success))
 
 
@@ -345,6 +350,28 @@ class TestWorkloadValidation:
         store = _RecordingStore(_NotAWorkload(), complete_raises=True)
 
         assert _executor(store).execute(run.id) is False
+
+
+class TestAlreadyTerminal:
+    """A run another writer finished first is not this executor's to finish."""
+
+    def test_it_logs_and_reports_failure_without_retrying_the_completion(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
+        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
+
+        class EmptyWorkload(il.Source):
+            """Source that selects none of its assets."""
+
+        store = _RecordingStore(EmptyWorkload(select=[]), already_terminal=True)
+
+        with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
+            assert _executor(store).execute(run.id) is False
+
+        assert store.completed == []
+        assert [record.levelname for record in caplog.records] == ["WARNING"]
+        assert str(run.id) in caplog.records[0].getMessage()
 
 
 class TestEmptyWorkload:

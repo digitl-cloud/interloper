@@ -20,7 +20,7 @@ alert = il.WebhookHook(
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `watches` | `[]` | Sources, assets or jobs to observe. |
-| `events` | `["run_failed"]` | Run outcomes that fire the hook: `run_completed`, `run_failed`. At least one. |
+| `events` | `["run_failed"]` | Outcomes that fire the hook: `run_completed`, `run_failed`, `backfill_completed`, `backfill_failed`. At least one. |
 | `enabled` | `True` | A disabled hook is kept but never fires. |
 
 ## Built-in hooks
@@ -83,12 +83,26 @@ any component.
 `HookState` (`last_fired_at`, `last_run_id`) is the hook's machine-owned state, stamped by the
 operator on every firing.
 
+## Backfills
+
+A backfill has a verdict of its own: `backfill_completed` once every partition's latest attempt
+succeeded, `backfill_failed` once the batch closed with a failed partition left. Every firing of a
+partitioned cron job is a backfill, so a hook subscribed to `backfill_failed` gets one message per
+bad morning rather than one per partition; subscribe to both levels to get both. A canceled
+backfill is not an outcome of the work and fires nothing.
+
+The context names the backfill (`backfill_id`, `start_key`, `end_key`) and its metadata carries
+`partitions`, `counts` (partitions per status, each read as its latest attempt) and, for a failure,
+`failed_partitions`: `[partition_key, error]` pairs, newest first. A `TriggerHook` fired by a
+backfill event backfills each target over the same range, gated by the target job's `concurrency`.
+
 ## Retries
 
 A hook observes a **verdict**, never an attempt. When a run fails and its job's retry policy allows
 another attempt, the failure is not an outcome and no hook fires. Only the attempt that ends the
 stack does: as `run_completed` if a retry healed the work, or as `run_failed` once the budget is
-exhausted.
+exhausted. A backfill stays open while a retry waits out its backoff, so its event, too, reports
+the healed or exhausted stack.
 
 The context carries the stack's position, so a message can say which attempt it is reporting:
 
