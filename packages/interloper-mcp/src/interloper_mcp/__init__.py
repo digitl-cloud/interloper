@@ -1,1 +1,1 @@
-"""Interloper MCP server — read-only platform access for AI agents."""
+"""Interloper MCP server — platform access for AI agents."""

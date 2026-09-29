@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     """Run the MCP server on the selected transport."""
-    parser = argparse.ArgumentParser(prog="interloper-mcp", description="Interloper MCP server (read-only)")
+    parser = argparse.ArgumentParser(prog="interloper-mcp", description="Interloper MCP server")
     parser.add_argument(
         "--transport",
         choices=["streamable-http", "stdio"],

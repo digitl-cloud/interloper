@@ -1,4 +1,4 @@
-"""MCP server factory: FastMCP wired with PAT auth and the read-only tools."""
+"""MCP server factory: FastMCP wired with PAT auth and the toolkit's tools."""
 
 from __future__ import annotations
 
@@ -14,11 +14,16 @@ from interloper_mcp.tools import register_tools
 SERVER_NAME = "interloper"
 
 INSTRUCTIONS = (
-    "Read-only access to an interloper deployment: the catalog of available "
-    "component definitions, the organisation's collection (sources, "
-    "connections, destinations, jobs), asset lineage, run and backfill "
-    "monitoring, and analytics (freshness, coverage, history). All results "
-    "are scoped to the organisation of the authenticated token."
+    "Access to an interloper deployment: the catalog of available component "
+    "definitions, the organisation's collection (sources, connections, "
+    "destinations, jobs), asset lineage, run and backfill monitoring, "
+    "analytics (freshness, coverage, history, error breakdowns), and, for "
+    "tokens holding the editor role, the writes: editing components, creating "
+    "sources and jobs, toggling, triggering, retrying and canceling runs and "
+    "backfills. Connections are set up in the app; request_connection_setup "
+    "hands the user the link. Recap a write and get the user's explicit "
+    "confirmation before calling it. All results are scoped to the "
+    "organisation of the authenticated token."
 )
 
 
@@ -33,7 +38,7 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> Fast
             seeded once at startup instead.
 
     Returns:
-        The configured server with all read-only tools registered.
+        The configured server with the tools registered.
     """
     auth_kwargs: dict = {}
     if store is not None:
