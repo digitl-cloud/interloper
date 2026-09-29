@@ -372,3 +372,43 @@ class TestWrites:
         assert isinstance(write(dataclasses.replace(ctx, role="viewer"), str(job.id)), ToolError)
         assert write(ctx, str(theirs.id)).status == "error"
         assert store.runs.count(ctx.org_id) == 0
+
+    def test_retries_a_failed_run_as_the_next_attempt(self, ctx: ToolkitContext, store: Store):
+        job = self._job(ctx, store)
+        failed = store.runs.create(ctx.org_id, component_id=job.id)
+        store.runs.complete(failed.id, success=False)
+        fine = store.runs.create(ctx.org_id, component_id=job.id)
+        store.runs.complete(fine.id, success=True)
+
+        result = scheduling.retry_run(ctx, str(failed.id), scope="failed")
+        not_failed = scheduling.retry_run(ctx, str(fine.id))
+
+        assert result.status == "success"
+        assert (result.run.attempt, result.run.root_run_id, result.run.status) == (2, failed.id, "queued")
+        assert not_failed.status == "error"
+        assert scheduling.retry_run(ctx, str(failed.id), scope="sometimes").status == "error"
+
+    def test_cancels_a_backfills_undispatched_runs(self, ctx: ToolkitContext, store: Store):
+        backfill = store.runs.create_backfill(ctx.org_id, start_key="2026-07-01", end_key="2026-07-03", concurrency=1)
+
+        result = scheduling.cancel_backfill(ctx, str(backfill.id))
+        again = scheduling.cancel_backfill(ctx, str(backfill.id))
+
+        assert result.status == "success"
+        assert result.runs_canceled == 3
+        assert result.backfill.status == "canceled"
+        assert again.status == "error"
+
+    def test_retry_and_cancel_refuse_a_viewer_and_another_org(self, ctx: ToolkitContext, store: Store):
+        viewer = dataclasses.replace(ctx, role="viewer")
+        theirs = uuid4()
+        run = store.runs.create(theirs)
+        store.runs.complete(run.id, success=False)
+        backfill = store.runs.create_backfill(theirs, start_key="2026-07-01", end_key="2026-07-01")
+
+        assert isinstance(scheduling.retry_run(viewer, str(run.id)), ToolError)
+        assert isinstance(scheduling.cancel_backfill(viewer, str(backfill.id)), ToolError)
+        assert scheduling.retry_run(ctx, str(run.id)).status == "error"
+        assert scheduling.cancel_backfill(ctx, str(backfill.id)).status == "error"
+        assert store.runs.count(theirs, all_attempts=True) == 2
+        assert store.runs.get_backfill(backfill.id).status == "running"

@@ -12,6 +12,7 @@ from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.errors import classify
 from interloper_toolkit.models import (
     AttemptTiming,
+    BackfillCanceled,
     BackfillList,
     BackfillQueued,
     BackfillTimeline,
@@ -32,6 +33,7 @@ from interloper_toolkit.models import (
     RunFailure,
     RunList,
     RunQueued,
+    RunRetried,
     Scan,
     ToolError,
 )
@@ -213,6 +215,26 @@ def trigger_run(ctx: ToolkitContext, component_id: str, partition_key: str | Non
         target = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
         run = ctx.store.runs.create(ctx.org_id, component_id=target.id, partition_key=partition_key)
         return RunQueued(message="Run queued successfully", run=run)
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def retry_run(ctx: ToolkitContext, run_id: str, scope: str = "all") -> RunRetried | ToolError:
+    """Queue a retry of a failed run as a new attempt of the same stack.
+
+    Args:
+        run_id: UUID of the failed run.
+        scope: 'all' re-runs the whole DAG (default); 'failed' re-runs only
+            the operations that failed or were canceled.
+
+    Returns the queued attempt; its ``attempt`` number and ``root_run_id``
+    tie it to the run it retries. A run that is not failed cannot be retried.
+    """
+    try:
+        ctx.store.runs.get(UUID(run_id), org_id=ctx.org_id)
+        run = ctx.store.runs.retry(UUID(run_id), scope=scope)
+        return RunRetried(message=f"Retry queued as attempt {run.attempt}", run=run)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -501,6 +523,29 @@ def trigger_backfill(
             fail_fast=fail_fast,
         )
         return BackfillQueued(message="Backfill created successfully", backfill=backfill)
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled | ToolError:
+    """Cancel a backfill: its runs not yet dispatched will never execute.
+
+    Args:
+        backfill_id: UUID of the backfill, from list_backfills.
+
+    Returns the backfill in its terminal state and how many runs were
+    canceled. Runs already dispatched or running drain to their own verdict.
+    A backfill that already finished cannot be canceled.
+    """
+    try:
+        bid = UUID(backfill_id)
+        ctx.store.runs.get_backfill(bid, org_id=ctx.org_id)
+        backfill = ctx.store.runs.cancel_backfill(bid)
+        canceled = ctx.store.runs.count(ctx.org_id, backfill_id=bid, status="canceled", all_attempts=True)
+        return BackfillCanceled(
+            message=f"Backfill canceled, {canceled} run(s) will not execute", backfill=backfill, runs_canceled=canceled
+        )
     except Exception as e:
         return ToolError(error=str(e))
 
