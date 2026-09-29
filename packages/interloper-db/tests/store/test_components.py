@@ -280,6 +280,17 @@ class TestCrud:
         assert [row.key for row in rows] == ["mine"]
         assert {row.key for row in store.components.list_all(_ORG)} == {"mine", "other_kind"}
 
+    def test_list_searches_name_and_key_and_pages(self, store: Store):
+        store.components.create(_ORG, kind="destination", key="bq_raw", name="Raw warehouse")
+        store.components.create(_ORG, kind="destination", key="bq_clean", name="Clean")
+        store.components.create(_ORG, kind="destination", key="gcs", name="Lake")
+
+        assert {row.key for row in store.components.list_all(_ORG, q="BQ")} == {"bq_raw", "bq_clean"}
+        assert [row.key for row in store.components.list_all(_ORG, q="warehouse")] == ["bq_raw"]
+        assert len(store.components.list_all(_ORG, limit=2, offset=1)) == 2
+        assert store.components.count(_ORG, kinds=["destination"], q="bq") == 2
+        assert store.components.count(uuid4()) == 0
+
     def test_get_component_checks_kind(self, store: Store):
         dest = store.components.create(_ORG, kind="destination", key="dest")
         assert store.components.get(dest.id, kind="destination").id == dest.id
