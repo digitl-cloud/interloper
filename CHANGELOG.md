@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.86.0 (2026-09-29)
+
+### Bug Fixes
+
+- **app**: Label source type group members as sources, not accounts
+  ([`98c0b11`](https://github.com/digitl-cloud/interloper/commit/98c0b11f540b0b066b2a3861108e29228739c93b))
+
+### Features
+
+- Order component forms, group them into sections, and edit retry policies
+  ([`3541135`](https://github.com/digitl-cloud/interloper/commit/35411351d665ce935093430f03d35aef9e711cb5))
+
+
 ## v0.85.0 (2026-09-28)
 
 ### Code Style
