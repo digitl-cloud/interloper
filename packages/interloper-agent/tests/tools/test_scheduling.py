@@ -1,4 +1,6 @@
-"""Tests for interloper_agent.tools.scheduling."""
+"""Tests for interloper_agent.tools.scheduling: the wrappers pass through to the toolkit."""
+
+from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
@@ -6,7 +8,8 @@ from uuid import uuid4
 
 import pytest
 from google.adk.tools.tool_context import ToolContext
-from interloper.errors import NotFoundError
+from interloper_toolkit import scheduling as toolkit_scheduling
+from interloper_toolkit.models import ToolError
 
 from interloper_agent import context
 from interloper_agent.tools import scheduling
@@ -14,68 +17,53 @@ from interloper_agent.tools import scheduling
 ORG_ID = uuid4()
 
 
-class FakeStore:
-    """Serves one component row and records every write the tools attempt."""
-
-    def __init__(self, component: Any):
-        """Bind the fake store to the one component row it serves."""
-        self.component = component
-        self.writes: list[str] = []
-        self.components = SimpleNamespace(get=self._get, update=self._record("update"))
-        self.runs = SimpleNamespace(create=self._record("create"), create_backfill=self._record("create_backfill"))
-
-    def _get(self, component_id: Any, *, kind: str | None = None, org_id: Any = None) -> Any:
-        if org_id != self.component.org_id:
-            raise NotFoundError(f"Component {component_id} not found")
-        return self.component
-
-    def _record(self, name: str) -> Any:
-        def write(*args: Any, **kwargs: Any) -> Any:
-            self.writes.append(name)
-            return self.component
-
-        return write
-
-
-def _component(org_id: Any) -> Any:
-    return SimpleNamespace(id=uuid4(), org_id=org_id, kind="job", key="daily", name="Daily", config={})
-
-
 @pytest.fixture
-def ctx() -> ToolContext:
-    return cast(ToolContext, SimpleNamespace(state={"org_id": str(ORG_ID)}))
-
-
-@pytest.fixture
-def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
-    fake = FakeStore(_component(ORG_ID))
-    monkeypatch.setattr(context, "_store", fake)
+def ctx(monkeypatch: pytest.MonkeyPatch) -> ToolContext:
+    monkeypatch.setattr(context, "_store", SimpleNamespace())
     monkeypatch.setattr(context, "_catalog", SimpleNamespace(dump=dict))
-    return fake
+    return cast(ToolContext, SimpleNamespace(state={"org_id": str(ORG_ID), "role": "editor"}))
 
 
-WRITES = [
-    lambda cid, ctx: scheduling.toggle_job(cid, False, tool_context=ctx),
-    lambda cid, ctx: scheduling.toggle_asset(cid, False, tool_context=ctx),
-    lambda cid, ctx: scheduling.trigger_run(cid, tool_context=ctx),
-    lambda cid, ctx: scheduling.trigger_backfill(cid, "2026-07-01", "2026-07-02", tool_context=ctx),
-]
+@pytest.mark.parametrize(
+    ("name", "call", "expected_args"),
+    [
+        ("toggle_job", lambda ctx: scheduling.toggle_job("jid", False, tool_context=ctx), ("jid", False)),
+        ("toggle_asset", lambda ctx: scheduling.toggle_asset("aid", True, tool_context=ctx), ("aid", True)),
+        (
+            "trigger_run",
+            lambda ctx: scheduling.trigger_run("jid", "2026-07-01", tool_context=ctx),
+            ("jid", "2026-07-01"),
+        ),
+        (
+            "trigger_backfill",
+            lambda ctx: scheduling.trigger_backfill("jid", "2026-07-01", "2026-07-02", tool_context=ctx),
+            ("jid", "2026-07-01", "2026-07-02", 1, False),
+        ),
+    ],
+)
+def test_the_write_wrappers_pass_the_context_and_arguments_through(
+    monkeypatch: pytest.MonkeyPatch, ctx: ToolContext, name: str, call: Any, expected_args: tuple[Any, ...]
+):
+    seen: dict[str, Any] = {}
+
+    def fake(tk_ctx: Any, *args: Any) -> ToolError:
+        seen.update(org_id=tk_ctx.org_id, role=tk_ctx.role, args=args)
+        return ToolError(error="seen")
+
+    monkeypatch.setattr(toolkit_scheduling, name, fake)
+
+    result = call(ctx)
+
+    assert result["error"] == "seen"
+    assert seen == {"org_id": ORG_ID, "role": "editor", "args": expected_args}
 
 
-@pytest.mark.parametrize("write", WRITES)
-def test_writes_to_own_components_go_through(store: FakeStore, ctx: ToolContext, write: Any):
-    result = write(str(store.component.id), ctx)
+def test_a_session_without_a_role_fails_closed(monkeypatch: pytest.MonkeyPatch, ctx: ToolContext):
+    roles: list[str] = []
+    monkeypatch.setattr(
+        toolkit_scheduling, "toggle_job", lambda tk_ctx, *a: roles.append(tk_ctx.role) or ToolError(error="x")
+    )
 
-    assert result["status"] == "success"
-    assert len(store.writes) == 1
+    scheduling.toggle_job("jid", False, tool_context=cast(ToolContext, SimpleNamespace(state={"org_id": str(ORG_ID)})))
 
-
-@pytest.mark.parametrize("write", WRITES)
-def test_writes_to_another_orgs_component_are_refused(store: FakeStore, ctx: ToolContext, write: Any):
-    store.component = _component(uuid4())
-
-    result = write(str(store.component.id), ctx)
-
-    assert result["status"] == "error"
-    assert "not found" in result["error"]
-    assert store.writes == []
+    assert roles == ["viewer"]

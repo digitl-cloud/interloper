@@ -81,7 +81,7 @@ def list_definitions(
         if kind not in counts:
             return ToolError(
                 error=f"No '{kind}' definitions in the catalog",
-                valid_kinds=sorted(counts),
+                valid_values=sorted(counts),
             )
 
         collection_counts: dict[str, int] = {}

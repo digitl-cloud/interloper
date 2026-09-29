@@ -32,11 +32,17 @@ from pydantic import BaseModel
 
 
 class ToolError(BaseModel):
-    """A failed tool call, as a structured result rather than an exception."""
+    """A failed tool call, as a structured result rather than an exception.
+
+    ``valid_values`` lists the accepted values when an argument named an
+    unknown one; ``category`` classes a provider failure (``config``,
+    ``auth``, ``network``, ``error``).
+    """
 
     status: Literal["error"] = "error"
     error: str
-    valid_kinds: list[str] | None = None
+    valid_values: list[str] | None = None
+    category: str | None = None
 
 
 # -- Catalog --------------------------------------------------------------------
@@ -185,6 +191,75 @@ class ComponentList(BaseModel):
     components: list[ComponentSummary]
 
 
+class ComponentRef(BaseModel):
+    """A component's identity, as a write reports what it touched."""
+
+    id: UUID
+    kind: str | None = None
+    key: str | None = None
+    name: str | None = None
+
+
+class ComponentUpdated(BaseModel):
+    """One component edited by ``update_component``."""
+
+    status: Literal["success"] = "success"
+    message: str
+    component: ComponentRef
+    asset_count: int | None = None
+    changed_fields: list[str] | None = None
+    unresolved_requirements: list[str] | None = None
+
+
+class FailedInstance(BaseModel):
+    """One instance a batch creation refused, and why."""
+
+    name: str
+    value: str | None = None
+    error: str
+
+
+class ConnectionsCreated(BaseModel):
+    """The outcome of ``create_connections``, instance by instance."""
+
+    status: Literal["success"] = "success"
+    message: str
+    created: list[ComponentRef]
+    failed: list[FailedInstance]
+
+
+class ConnectionSetup(BaseModel):
+    """The hand-off ``request_connection_setup`` makes.
+
+    A non-empty ``existing`` means no form was presented: the collection
+    already holds connections of this definition to reuse.
+    """
+
+    status: Literal["success"] = "success"
+    message: str
+    connection_key: str
+    name: str | None = None
+    oauth: bool
+    oauth_available: bool
+    existing: list[ComponentRef] = []
+
+
+class ConnectionCheck(BaseModel):
+    """The outcome of a connection's health check.
+
+    ``live`` is false when the type implements no check and only hydration
+    was verified; ``category`` classes a failure (``config``, ``auth``,
+    ``network``, ``error``).
+    """
+
+    status: Literal["success"] = "success"
+    connection: ComponentRef
+    ok: bool
+    live: bool
+    category: str | None = None
+    message: str | None = None
+
+
 class BindResult(BaseModel):
     """One relation edge created or repointed by ``bind_relation``."""
 
@@ -202,6 +277,69 @@ class UnbindResult(BaseModel):
     src_id: str
     name: str
     dst_id: str
+
+
+# -- Sources and jobs -----------------------------------------------------------
+
+
+class FieldOption(BaseModel):
+    """One live option of a provider-backed config field."""
+
+    label: str | None = None
+    value: Any = None
+
+
+class FieldOptions(BaseModel):
+    """The live options of a source's provider-backed config field."""
+
+    status: Literal["success"] = "success"
+    source_key: str
+    field: str
+    total: int
+    returned: int
+    options: list[FieldOption]
+
+
+class SourceCreated(BaseModel):
+    """One source created by ``create_source``."""
+
+    status: Literal["success"] = "success"
+    message: str
+    source: ComponentRef
+    asset_count: int
+    connection_bound: bool
+    destination_count: int
+    unresolved_requirements: list[str]
+
+
+class CreatedInstance(BaseModel):
+    """One source a batch creation made, and the account value it got."""
+
+    id: UUID
+    name: str | None = None
+    value: str
+
+
+class SourcesCreated(BaseModel):
+    """The outcome of ``create_sources``, instance by instance."""
+
+    status: Literal["success"] = "success"
+    message: str
+    field: str
+    created: list[CreatedInstance]
+    failed: list[FailedInstance]
+    unresolved_requirements: list[str]
+
+
+class JobCreated(BaseModel):
+    """One cron job created by ``create_job``."""
+
+    status: Literal["success"] = "success"
+    message: str
+    job: ComponentRef
+    cron: str
+    enabled: bool
+    target_count: int
 
 
 # -- Lineage --------------------------------------------------------------------
@@ -287,6 +425,31 @@ class CrossSourceDependencies(BaseModel):
 
 
 # -- Scheduling -----------------------------------------------------------------
+
+
+class ComponentToggled(BaseModel):
+    """A job or asset switched on or off."""
+
+    status: Literal["success"] = "success"
+    message: str
+    component: ComponentRef
+    enabled: bool
+
+
+class RunQueued(BaseModel):
+    """One run queued by ``trigger_run``."""
+
+    status: Literal["success"] = "success"
+    message: str
+    run: Run
+
+
+class BackfillQueued(BaseModel):
+    """One backfill queued by ``trigger_backfill``."""
+
+    status: Literal["success"] = "success"
+    message: str
+    backfill: Backfill
 
 
 class JobList(BaseModel):

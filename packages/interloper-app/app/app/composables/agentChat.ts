@@ -247,7 +247,8 @@ function _extractCard(response: AgentFunctionResponse): Partial<ChatMessage> | n
 
     switch (response.name) {
         case 'request_connection_setup':
-            return payload.connection_key
+            // A non-empty `existing` means the tool proposed reusing a connection instead of a form.
+            return payload.connection_key && !payload.existing?.length
                 ? { connectionSetup: { connectionKey: payload.connection_key, name: payload.name ?? undefined } }
                 : null
         case 'request_user_selection':

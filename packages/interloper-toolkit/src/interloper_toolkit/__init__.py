@@ -7,13 +7,11 @@ the literal ``status`` field, never raising. The docstrings are LLM-facing:
 both the ADK agent and the MCP server surface them verbatim as tool
 descriptions.
 
-Almost every function here is read-only; the sole exceptions are
-:func:`interloper_toolkit.collection.bind_relation` and
-:func:`interloper_toolkit.collection.unbind_relation`, which write and are
-re-exported here as this package's whole write surface. A surface that must
-stay read-only (the MCP server's own registration is one) never registers
-those two; the ADK agent, whose own write tools already live beside them,
-does.
+Reads take no role; writes declare the role they need with
+:func:`~interloper_toolkit.authz.requires_role` and refuse below it. Which
+functions a surface exposes is that surface's registration list (the MCP
+server, for one, never registers ``create_connections``, whose arguments
+would carry credentials through the client).
 """
 
 from interloper_toolkit.authz import requires_role
