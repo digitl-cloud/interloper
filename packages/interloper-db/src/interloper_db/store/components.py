@@ -176,6 +176,7 @@ class ComponentStore:
             elif children is not None:
                 raise ConfigError(f"Components of kind '{kind}' have no children")
             self._relations._sync_relations(session, db_component, relations)
+            self._relations._require_bound(session, db_component)
             commit(session)
             return self._load_component(session, db_component.id)
 
@@ -355,6 +356,7 @@ class ComponentStore:
             elif children is not None:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
             self._relations._sync_relations(session, db_component, relations)
+            self._relations._require_bound(session, db_component)
             commit(session)
             return self._load_component(session, component_id)
 

@@ -7,9 +7,9 @@ lineage and relation tools run against genuinely declared relations.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
@@ -135,6 +135,23 @@ def store(toolkit_db: Engine) -> Store:
     # An identity cipher: connections are encrypted by default, and the
     # write tools create them the way production does.
     return Store(catalog=il.Catalog.from_assets([ShopSource, FinanceSource]), encrypt=lambda b: b, decrypt=lambda b: b)
+
+
+@pytest.fixture
+def create_source(store: Store) -> Callable[[UUID, str], Component]:
+    """A factory for source rows, each bound to the connection its class requires.
+
+    Returns:
+        A callable taking the organisation id and the source's catalog key.
+    """
+
+    def create(org_id: UUID, key: str) -> Component:
+        connection = store.components.create(
+            org_id, kind="connection", key="demo_connection", config={}, encrypted=False
+        )
+        return store.components.create(org_id, kind="source", key=key, relations={"connection": [connection.id]})
+
+    return create
 
 
 @pytest.fixture

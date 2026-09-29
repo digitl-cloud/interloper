@@ -131,7 +131,6 @@ defineExpose({
                              :component="source"
                              :initial-type-key="initialTypeKey"
                              :definitions="catalogStore.sourceDefinitions"
-                             resource-relation-steps
                              name-optional
                              :extra-steps="extraSteps"
                              :options-context="optionsContext"

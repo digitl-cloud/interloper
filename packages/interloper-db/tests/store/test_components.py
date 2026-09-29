@@ -229,6 +229,28 @@ class TestCrud:
         with pytest.raises(ConfigError, match=r"declares no asset\(s\) \['typo'\]"):
             store.components.create(_ORG, kind="source", key="demo_source", children=["a", "typo"])
 
+    def test_create_refuses_an_unbound_required_relation(self, store: Store):
+        # A class declares what it needs to work; a row saved without it
+        # would only fail where it runs, without saying why.
+        with pytest.raises(ConfigError, match=r"'wire_down_source'\.connection is required"):
+            store.components.create(_ORG, kind="source", key="wire_down_source")
+
+    def test_update_refuses_a_row_that_leaves_a_required_relation_unbound(
+        self, store: Store, connection: Component, component_db: Engine
+    ):
+        # A row that predates the guard is caught on its next save, not
+        # waved through because the save touched only its config.
+        with Session(component_db) as session:
+            row = Component(org_id=_ORG, kind="source", key="wire_down_source", name="Legacy")
+            session.add(row)
+            session.commit()
+            row_id = row.id
+
+        with pytest.raises(ConfigError, match=r"'wire_down_source'\.connection is required"):
+            store.components.update(row_id, name="Renamed")
+        repaired = store.components.update(row_id, name="Renamed", relations={"connection": [connection.id]})
+        assert repaired.name == "Renamed"
+
     def test_create_with_relations_by_name(self, store: Store, connection: Component):
         destination = store.components.create(_ORG, kind="destination", key="dest")
 
@@ -414,9 +436,11 @@ class TestDeleteInUseGuard:
             store.components.delete(upstream.id)
         store.components.delete(consumer.id)
 
-    def test_referrer_through_child_reports_parent(self, store: Store):
+    def test_referrer_through_child_reports_parent(self, store: Store, connection: Component):
         up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
-        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        down = store.components.create(
+            _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
+        )
         store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
@@ -482,9 +506,7 @@ class TestDeleteImpact:
         impact = store.components.delete_impact([upstream.id])
 
         assert [r["id"] for r in impact.blocking] == [str(blocking.id)]
-        assert impact.detaching == [
-            {"id": str(detaching.id), "kind": "asset", "key": "guard_optional", "name": "Opt"}
-        ]
+        assert impact.detaching == [{"id": str(detaching.id), "kind": "asset", "key": "guard_optional", "name": "Opt"}]
         assert store.components.get(upstream.id).id == upstream.id  # a preview deletes nothing
 
     def test_a_referrer_that_blocks_anywhere_is_only_blocking(self, store: Store, connection: Component):
@@ -501,9 +523,11 @@ class TestDeleteImpact:
         assert [r["id"] for r in impact.blocking] == [str(mixed.id)]
         assert impact.detaching == []
 
-    def test_a_referrer_through_an_owned_component_reports_its_owner(self, store: Store):
+    def test_a_referrer_through_an_owned_component_reports_its_owner(self, store: Store, connection: Component):
         up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
-        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        down = store.components.create(
+            _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
+        )
         store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
 
         impact = store.components.delete_impact([up.id])
@@ -570,9 +594,11 @@ class TestIntraSourceWiring:
 class TestChildRemovalGuard:
     """Narrowing a source's child set honors the delete guard's semantics."""
 
-    def test_removing_child_with_required_external_upstream_blocked(self, store: Store):
+    def test_removing_child_with_required_external_upstream_blocked(self, store: Store, connection: Component):
         up = store.components.create(_ORG, kind="source", key="wire_up_source", name="Up")
-        down = store.components.create(_ORG, kind="source", key="wire_down_source", name="Down")
+        down = store.components.create(
+            _ORG, kind="source", key="wire_down_source", name="Down", relations={"connection": [connection.id]}
+        )
         store.relations.add(_child(down, "consumer").id, name="rows", dst_id=_child(up, "rows").id)
 
         with pytest.raises(InUseError) as excinfo:
@@ -664,9 +690,7 @@ class TestDerivedNames:
         return Store(catalog=il.Catalog.from_assets([DiscriminatedSource]))
 
     def test_blank_name_defaults_to_instance_name(self, name_store: Store):
-        row = name_store.components.create(
-            _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
-        )
+        row = name_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
         assert row.name == "1"
 
     def test_explicit_name_wins(self, name_store: Store):
@@ -676,16 +700,12 @@ class TestDerivedNames:
         assert row.name == "Mine"
 
     def test_default_name_follows_config_change(self, name_store: Store):
-        row = name_store.components.create(
-            _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
-        )
+        row = name_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
         updated = name_store.components.update(row.id, config={"account_id": "2"})
         assert updated.name == "2"
 
     def test_customized_name_untouched_by_config_change(self, name_store: Store):
-        row = name_store.components.create(
-            _ORG, kind="source", key="discriminated_source", config={"account_id": "1"}
-        )
+        row = name_store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "1"})
         name_store.components.update(row.id, name="Mine")
         updated = name_store.components.update(row.id, config={"account_id": "2"})
         assert updated.name == "Mine"
@@ -948,9 +968,7 @@ class TestReading:
         assert reading.public_config == {}
 
     def test_the_views_agree_with_the_reading(self, store: Store):
-        row = store.components.create(
-            _ORG, kind="source", key="discriminated_source", config={"account_id": "42"}
-        )
+        row = store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "42"})
 
         reading = store.components.read(row)
 
@@ -1301,12 +1319,11 @@ class TestJobPartitionGranularity:
         store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
         daily = store.components.create(_ORG, kind="source", key="demo_source")
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
-        job = store.components.create(
-            _ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]}
-        )
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]})
 
-        with Session(component_db) as session, pytest.raises(
-            ValueError, match="Job targets disagree on partition granularity"
+        with (
+            Session(component_db) as session,
+            pytest.raises(ValueError, match="Job targets disagree on partition granularity"),
         ):
             store.components.job_partition_granularity(session, job.id)
 

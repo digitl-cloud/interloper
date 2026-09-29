@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -72,9 +73,11 @@ class TestLineage:
         assert result.status == "error"
         assert "not found" in result.error
 
-    def test_get_upstream_reports_relation_name(self, ctx: ToolkitContext, store: Store):
-        shop = store.components.create(ctx.org_id, kind="source", key="shop_source")
-        finance = store.components.create(ctx.org_id, kind="source", key="finance_source")
+    def test_get_upstream_reports_relation_name(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        shop = create_source(ctx.org_id, "shop_source")
+        finance = create_source(ctx.org_id, "finance_source")
         orders = next(child for child in shop.children if child.key == "orders")
         revenue = next(child for child in finance.children if child.key == "revenue")
         store.relations.add(revenue.id, name="orders", dst_id=orders.id)
@@ -84,9 +87,11 @@ class TestLineage:
         assert result.status == "success"
         assert [(edge.param_name, edge.asset_id) for edge in result.upstream] == [("orders", str(orders.id))]
 
-    def test_lineage_ignores_non_asset_relations(self, ctx: ToolkitContext, store: Store):
-        shop = store.components.create(ctx.org_id, kind="source", key="shop_source")
-        finance = store.components.create(ctx.org_id, kind="source", key="finance_source")
+    def test_lineage_ignores_non_asset_relations(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        shop = create_source(ctx.org_id, "shop_source")
+        finance = create_source(ctx.org_id, "finance_source")
         orders = next(child for child in shop.children if child.key == "orders")
         revenue = next(child for child in finance.children if child.key == "revenue")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")

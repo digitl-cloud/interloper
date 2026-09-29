@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Iterator
-from uuid import uuid4
+from collections.abc import Callable, Iterator
+from uuid import UUID, uuid4
 
 import pytest
 from interloper.settings import AppSettings, ServerSettings
+from interloper_db.models import Component
 from interloper_db.store import Store
 
 from interloper_toolkit import ToolkitContext, collection
@@ -15,8 +16,10 @@ from interloper_toolkit.models import ComponentCounts, ComponentList, ToolError
 
 
 class TestBindRelation:
-    def test_bind_relation_creates_row(self, ctx: ToolkitContext, store: Store):
-        source = store.components.create(ctx.org_id, kind="source", key="shop_source")
+    def test_bind_relation_creates_row(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        source = create_source(ctx.org_id, "shop_source")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
 
         result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
@@ -24,8 +27,10 @@ class TestBindRelation:
         assert result.status == "success"
         assert (result.name, result.dst_kind) == ("destinations", "destination")
 
-    def test_bind_relation_wrong_kind_is_tool_error(self, ctx: ToolkitContext, store: Store):
-        source = store.components.create(ctx.org_id, kind="source", key="shop_source")
+    def test_bind_relation_wrong_kind_is_tool_error(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        source = create_source(ctx.org_id, "shop_source")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
 
         result = collection.bind_relation(ctx, str(source.id), "connection", str(bq.id))
@@ -38,8 +43,10 @@ class TestBindRelation:
 
         assert result.status == "error"
 
-    def test_unbind_relation_removes_row(self, ctx: ToolkitContext, store: Store):
-        source = store.components.create(ctx.org_id, kind="source", key="shop_source")
+    def test_unbind_relation_removes_row(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        source = create_source(ctx.org_id, "shop_source")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
         store.relations.add(source.id, name="destinations", dst_id=bq.id)
 
@@ -48,9 +55,11 @@ class TestBindRelation:
         assert result.status == "success"
         assert store.relations.list_all(ctx.org_id, name="destinations") == []
 
-    def test_bind_relation_from_another_orgs_component_is_not_found(self, ctx: ToolkitContext, store: Store):
+    def test_bind_relation_from_another_orgs_component_is_not_found(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
         other_org = uuid4()
-        source = store.components.create(other_org, kind="source", key="shop_source")
+        source = create_source(other_org, "shop_source")
         bq = store.components.create(other_org, kind="destination", key="bq")
 
         result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
@@ -58,9 +67,11 @@ class TestBindRelation:
         assert result.status == "error"
         assert store.relations.list_all(other_org, name="destinations") == []
 
-    def test_unbind_relation_from_another_orgs_component_is_not_found(self, ctx: ToolkitContext, store: Store):
+    def test_unbind_relation_from_another_orgs_component_is_not_found(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
         other_org = uuid4()
-        source = store.components.create(other_org, kind="source", key="shop_source")
+        source = create_source(other_org, "shop_source")
         bq = store.components.create(other_org, kind="destination", key="bq")
         store.relations.add(source.id, name="destinations", dst_id=bq.id)
 
@@ -226,8 +237,10 @@ class TestConnections:
 
 
 class TestRelationGate:
-    def test_bind_and_unbind_refuse_a_viewer(self, ctx: ToolkitContext, store: Store):
-        source = store.components.create(ctx.org_id, kind="source", key="shop_source")
+    def test_bind_and_unbind_refuse_a_viewer(
+        self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
+    ):
+        source = create_source(ctx.org_id, "shop_source")
         bq = store.components.create(ctx.org_id, kind="destination", key="bq")
         viewer = dataclasses.replace(ctx, role="viewer")
 

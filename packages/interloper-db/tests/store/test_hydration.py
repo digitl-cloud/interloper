@@ -109,6 +109,16 @@ def store(component_db: Engine) -> Store:
     return Store(catalog=_CATALOG)
 
 
+@pytest.fixture
+def shop_connection(store: Store) -> Component:
+    """The connection row a ``shop`` source must bind.
+
+    Returns:
+        The created connection component.
+    """
+    return store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
+
+
 def _child(source: Component, key: str) -> Component:
     """Pick one child row of a source row by asset key.
 
@@ -171,8 +181,8 @@ class TestBuildInit:
         assert init["connection"]["path"].endswith("ShopConnection")
         assert [target["id"] for target in init["destinations"]] == [str(warehouse.id)]
 
-    def test_asset_target_is_a_reference(self, store: Store):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_asset_target_is_a_reference(self, store: Store, shop_connection: Component):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=_child(shop, "orders").id)
 
@@ -188,9 +198,14 @@ class TestBuildInit:
         assert init["assets"]["e"]["b"] == Spec.reference(str(_child(source, "b").id))
         assert init["assets"]["b"]["a"] == Spec.reference(str(_child(source, "a").id))
 
-    def test_a_target_reached_twice_is_written_out_once_then_referenced(self, store: Store):
+    def test_a_target_reached_twice_is_written_out_once_then_referenced(self, store: Store, shop_connection: Component):
         warehouse = store.components.create(_ORG, kind="destination", key="warehouse")
-        shop = store.components.create(_ORG, kind="source", key="shop", relations={"destinations": [warehouse.id]})
+        shop = store.components.create(
+            _ORG,
+            kind="source",
+            key="shop",
+            relations={"connection": [shop_connection.id], "destinations": [warehouse.id]},
+        )
         finance = store.components.create(
             _ORG, kind="source", key="finance", relations={"destinations": [warehouse.id]}
         )
@@ -210,9 +225,9 @@ class TestBuildInit:
         assert emitted[1] == Spec.reference(str(warehouse.id))
 
     def test_a_relation_name_the_class_does_not_declare_is_an_actionable_error(
-        self, store: Store, component_db: Engine
+        self, store: Store, shop_connection: Component, component_db: Engine
     ):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         warehouse = store.components.create(_ORG, kind="destination", key="warehouse")
         with Session(component_db) as session:
             session.add(
@@ -231,27 +246,23 @@ class TestBuildInit:
             _init(store, shop.id)
 
     def test_two_rows_under_a_single_valued_relation_is_an_actionable_error(
-        self, store: Store, component_db: Engine
+        self, store: Store, shop_connection: Component, component_db: Engine
     ):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         # Hand-inserted: the store's own writes repoint a single-valued name
         # instead of accumulating, so only a rogue writer produces this row.
-        connections = [
-            store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
-            for _ in range(2)
-        ]
+        rogue = store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
         with Session(component_db) as session:
-            for connection in connections:
-                session.add(
-                    ComponentRelation(
-                        src_id=shop.id,
-                        name="connection",
-                        dst_id=connection.id,
-                        org_id=_ORG,
-                        src_kind="source",
-                        dst_kind="connection",
-                    )
+            session.add(
+                ComponentRelation(
+                    src_id=shop.id,
+                    name="connection",
+                    dst_id=rogue.id,
+                    org_id=_ORG,
+                    src_kind="source",
+                    dst_kind="connection",
                 )
+            )
             session.commit()
 
         with pytest.raises(HydrationError, match="holds 2 rows under single-valued relation 'connection'"):
@@ -320,8 +331,8 @@ class TestSourceRoundTrip:
 class TestCrossSourceUpstream:
     """A reference no document carries is resolved through the store."""
 
-    def test_load_resolves_cross_source_upstream_through_store(self, store: Store):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_load_resolves_cross_source_upstream_through_store(self, store: Store, shop_connection: Component):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=shop_orders.id)
@@ -334,8 +345,8 @@ class TestCrossSourceUpstream:
         assert orders.parent is not None
         assert orders.parent.key == "shop"
 
-    def test_an_owned_asset_referencing_another_source_loads(self, store: Store):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_an_owned_asset_referencing_another_source_loads(self, store: Store, shop_connection: Component):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         revenue_row = _child(finance, "revenue")
@@ -346,8 +357,10 @@ class TestCrossSourceUpstream:
         assert isinstance(revenue, il.Asset)
         assert revenue.orders.id == str(shop_orders.id)  # ty: ignore[unresolved-attribute]
 
-    def test_a_shared_upstream_reached_twice_hydrates_once(self, store: Store, monkeypatch: pytest.MonkeyPatch):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_a_shared_upstream_reached_twice_hydrates_once(
+        self, store: Store, shop_connection: Component, monkeypatch: pytest.MonkeyPatch
+    ):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=shop_orders.id)
@@ -373,8 +386,8 @@ class TestCrossSourceUpstream:
         assert revenue_orders.parent is cogs_orders.parent
         assert shop_hydrations == [shop.id]
 
-    def test_a_reference_cycle_across_sources_raises_with_its_trail(self, store: Store):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_a_reference_cycle_across_sources_raises_with_its_trail(self, store: Store, shop_connection: Component):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
         revenue = _child(finance, "revenue")
@@ -384,8 +397,10 @@ class TestCrossSourceUpstream:
         with pytest.raises(HydrationError, match="Reference cycle while hydrating: shop"):
             store.components.load(shop.id)
 
-    def test_a_reference_to_a_drifted_component_raises_component_drift_error(self, store: Store):
-        shop = store.components.create(_ORG, kind="source", key="shop")
+    def test_a_reference_to_a_drifted_component_raises_component_drift_error(
+        self, store: Store, shop_connection: Component
+    ):
+        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=_child(shop, "orders").id)
 
