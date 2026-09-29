@@ -5,7 +5,8 @@ import type { Execution, ExecutionStatus } from '~/types/execution'
 interface StatusMeta {
     key: string
     label: string
-    statuses: ExecutionStatus[]
+    /** Execution or run statuses the bucket gathers (a run is `dispatched` before it runs). */
+    statuses: string[]
     /** Tailwind background class for the dot. */
     colorClass: string
     /** The same color as a CSS value, for components colored by prop (`UProgressGroup`). */
@@ -15,7 +16,7 @@ interface StatusMeta {
 /** Bucket order also drives the proportion-bar segment order and the legend. */
 const STATUS_META: StatusMeta[] = [
     { key: 'success', label: 'Success', statuses: ['success'], colorClass: 'bg-green-500', color: 'var(--color-green-500)' },
-    { key: 'running', label: 'Running', statuses: ['running'], colorClass: 'bg-blue-500', color: 'var(--color-blue-500)' },
+    { key: 'running', label: 'Running', statuses: ['running', 'dispatched'], colorClass: 'bg-blue-500', color: 'var(--color-blue-500)' },
     { key: 'failed', label: 'Failed', statuses: ['failed'], colorClass: 'bg-red-500', color: 'var(--color-red-500)' },
     { key: 'canceled', label: 'Canceled', statuses: ['canceled'], colorClass: 'bg-amber-500', color: 'var(--color-amber-500)' },
     { key: 'skipped', label: 'Skipped', statuses: ['skipped'], colorClass: 'bg-gray-400', color: 'var(--color-gray-400)' },
@@ -25,8 +26,8 @@ const STATUS_META: StatusMeta[] = [
 /** Always shown in the legend, even at zero. Pending only appears when present. */
 const CORE_KEYS = new Set(['success', 'running', 'failed', 'canceled', 'skipped'])
 
-/** Execution statuses grouped under a bucket key (e.g. pending → pending+queued). */
-export function statusesForKey(key: string): ExecutionStatus[] {
+/** Statuses grouped under a bucket key (e.g. pending → pending+queued). */
+export function statusesForKey(key: string): string[] {
     return STATUS_META.find(m => m.key === key)?.statuses ?? []
 }
 

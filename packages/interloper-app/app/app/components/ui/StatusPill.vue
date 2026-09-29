@@ -5,7 +5,9 @@ const props = withDefaults(defineProps<{
     color?: 'success' | 'warning' | 'error' | 'neutral' | 'primary'
     /** Hide the leading dot (e.g. for counts). */
     dot?: boolean
-}>(), { color: 'neutral', dot: true })
+    /** Replace the dot with a spinner (the status is still executing). */
+    spinner?: boolean
+}>(), { color: 'neutral', dot: true, spinner: false })
 
 const COLOR_CLASSES: Record<NonNullable<typeof props.color>, string> = {
     success: 'bg-green-500/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
@@ -19,7 +21,10 @@ const COLOR_CLASSES: Record<NonNullable<typeof props.color>, string> = {
 <template>
     <span class="inline-flex items-center gap-1.5 px-2 py-[3px] rounded-md text-xs font-medium"
           :class="COLOR_CLASSES[color]">
-        <span v-if="dot"
+        <UIcon v-if="spinner"
+               name="i-lucide-loader-circle"
+               class="size-3 animate-spin" />
+        <span v-else-if="dot"
               class="size-1.5 rounded-full bg-current" />
         {{ label }}
     </span>

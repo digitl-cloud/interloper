@@ -24,6 +24,20 @@ export const useBackfillsStore = defineStore('backfills', () => {
         backfills.value = backfills.value.filter(b => b.id !== id)
     }
 
+    // Run counts move with the runs, which never touch the backfills table:
+    // the backfills a burst of run changes concerns are refetched together,
+    // at most once a second.
+    const staleCounts = new Set<string>()
+    let countsTimer: ReturnType<typeof setTimeout> | undefined
+
+    async function _refreshCounts() {
+        countsTimer = undefined
+        const ids = [...staleCounts]
+        staleCounts.clear()
+        const fresh = await Promise.all(ids.map(id => fetchOne(id).catch(() => null)))
+        for (const backfill of fresh) if (backfill) _upsert(backfill)
+    }
+
     /**********************
      * Realtime
      **********************/
@@ -33,6 +47,16 @@ export const useBackfillsStore = defineStore('backfills', () => {
         onInsert: (record: Record<string, any>) => _upsert(record as Backfill),
         onUpdate: (record: Record<string, any>) => _upsert(record as Backfill),
         onDelete: (record: Record<string, any>) => _remove(record.id),
+    })
+
+    useRealtimeSubscription({
+        table: 'runs',
+        scope: () => backfills.value.length ? orgStore.organisation?.id : null,
+        shouldHandle: (record: Record<string, any>) => !!record.backfill_id && backfills.value.some(b => b.id === record.backfill_id),
+        onAny: (_event, record: Record<string, any>) => {
+            staleCounts.add(record.backfill_id)
+            countsTimer ??= setTimeout(_refreshCounts, 1000)
+        },
     })
 
     /**********************

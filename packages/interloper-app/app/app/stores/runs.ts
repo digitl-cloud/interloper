@@ -8,9 +8,11 @@ export interface RunFilters {
     kind: string | null
     /** Target type (catalog key). */
     key: string | null
+    /** Run status, read off the stack's latest attempt. */
+    status: string | null
 }
 
-const NO_FILTERS: RunFilters = { q: '', kind: null, key: null }
+const NO_FILTERS: RunFilters = { q: '', kind: null, key: null, status: null }
 
 export const useRunsStore = defineStore('runs', () => {
     const { apiFetch, apiFetchRaw } = useApi()
@@ -32,7 +34,7 @@ export const useRunsStore = defineStore('runs', () => {
      * Getters
      **********************/
     const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
-    const filtered = computed(() => filters.value.q !== '' || filters.value.kind !== null || filters.value.key !== null)
+    const filtered = computed(() => Object.entries(filters.value).some(([name, value]) => value !== NO_FILTERS[name as keyof RunFilters]))
 
     /**********************
      * Internals
@@ -77,9 +79,10 @@ export const useRunsStore = defineStore('runs', () => {
 
     /** The client-side reading of the active filters, for records arriving over realtime. */
     function _matches(run: Run): boolean {
-        const { q, kind, key } = filters.value
+        const { q, kind, key, status } = filters.value
         if (kind && run.component_kind !== kind) return false
         if (key && run.component_key !== key) return false
+        if (status && run.status !== status) return false
         if (!q) return true
         const needle = q.toLowerCase()
         return [run.component_name, run.component_key].some(text => text?.toLowerCase().includes(needle))
@@ -145,10 +148,11 @@ export const useRunsStore = defineStore('runs', () => {
             const params = new URLSearchParams()
             params.set('limit', String(pageSize.value))
             params.set('offset', String(pageIndex.value * pageSize.value))
-            const { q, kind, key } = filters.value
+            const { q, kind, key, status } = filters.value
             if (q) params.set('q', q)
             if (kind) params.set('component_kind', kind)
             if (key) params.set('component_key', key)
+            if (status) params.set('status', status)
             const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
             runs.value = res._data ?? []
             total.value = Number(res.headers.get('X-Total-Count') ?? runs.value.length)

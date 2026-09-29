@@ -179,7 +179,8 @@ onUnmounted(() => {
             <span class="truncate font-mono text-[15px] font-semibold">{{ runId }}</span>
             <StatusPill v-if="run"
                         :label="statusLabel(run.status)"
-                        :color="statusPillColor(run.status)" />
+                        :color="statusPillColor(run.status)"
+                        :spinner="run.status === 'running' || run.status === 'dispatched'" />
         </NavTitle>
         <NavActions v-if="run?.status === 'failed'">
             <UButton label="Retry failed"

@@ -129,7 +129,9 @@ triggers, hooks and backfills.
 ![Backfills](../assets/ui/backfills-dark.png#only-dark)
 
 A backfill is one run per partition over a range, dispatched newest first with a concurrency
-cap; the range is shown in the target's partition-key shape.
+cap; the range is shown in the target's partition-key shape, and the Partitions column draws
+each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
+Both tables filter by status, and a status still executing spins.
 
 ### Run detail
 
