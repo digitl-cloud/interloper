@@ -137,12 +137,13 @@ frontend:
   affinity: {}
   podAnnotations: {}
 
-# ── MCP (read-only Model Context Protocol server) ──────────────────────────
+# ── MCP (Model Context Protocol server) ────────────────────────────────────
 # Serves the streamable-HTTP MCP endpoint (/mcp) for external AI agents,
 # authenticated per request with personal access tokens minted in the app
-# (Settings → Authentication). Off by default — it is an optional, separate
-# surface from the API. When enabled, the chart's HTTPRoute forwards /mcp
-# and /.well-known/oauth-protected-resource on the app hostnames to it.
+# (Settings → Authentication); a token's role gates the write tools. Off by
+# default — it is an optional, separate surface from the API. When enabled,
+# the chart's HTTPRoute forwards /mcp and /.well-known/oauth-protected-resource
+# on the app hostnames to it.
 mcp:
   enabled: false
   # Rollout safety, see "Zero-downtime rollouts" in the README.

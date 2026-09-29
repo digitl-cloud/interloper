@@ -1,8 +1,9 @@
 """Tool behaviour over a real (in-memory) client-server session.
 
-The properties under test: only the read-only tool surface is exposed, tool
-calls return the toolkit's structured results, and everything is scoped to
-the authenticated organisation.
+The properties under test: every tool carries the annotations a client keys
+on, the writes are gated on the token's role, credentials never travel as
+tool arguments, tool calls return the toolkit's structured results, and
+everything is scoped to the authenticated organisation.
 """
 
 from __future__ import annotations
@@ -28,21 +29,68 @@ def _result_dict(result: CallToolResult) -> dict[str, Any]:
     return payload["result"] if set(payload) == {"result"} else payload
 
 
-def _server(store: Store, catalog: il.Catalog, seeded: dict) -> Any:
+def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor") -> Any:
     init_context(store, catalog)
-    set_static_ctx(seeded["org"].id)
+    set_static_ctx(seeded["org"].id, role=role)
     return create_mcp_server(McpSettings(), store=None)._mcp_server
 
 
-async def test_only_read_only_tools_are_exposed(store: Store, catalog: il.Catalog, seeded: dict):
+WRITES = {
+    "update_component",
+    "bind_relation",
+    "unbind_relation",
+    "create_source",
+    "create_sources",
+    "create_job",
+    "toggle_job",
+    "toggle_asset",
+    "trigger_run",
+    "retry_run",
+    "trigger_backfill",
+    "cancel_backfill",
+}
+
+
+async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments(
+    store: Store, catalog: il.Catalog, seeded: dict
+):
     async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
         tools = (await client.list_tools()).tools
 
-    names = {t.name for t in tools}
-    assert len(names) == 26
-    forbidden = {n for n in names if n.startswith(("trigger_", "toggle_", "create_", "request_", "bind_", "unbind_"))}
-    assert forbidden == set()
-    assert {"list_jobs", "list_definitions", "get_full_lineage", "freshness_check"} <= names
+    by_name = {t.name: t for t in tools}
+    assert "create_connections" not in by_name
+    assert WRITES <= set(by_name)
+    assert all(t.annotations is not None for t in tools)
+    reads = {name for name, t in by_name.items() if t.annotations and t.annotations.readOnlyHint}
+    assert reads == set(by_name) - WRITES
+    cancel, check = by_name["cancel_backfill"].annotations, by_name["check_connection"].annotations
+    assert cancel is not None and cancel.destructiveHint is True
+    assert check is not None and check.openWorldHint is True
+
+
+async def test_a_viewer_token_is_refused_on_writes(store: Store, catalog: il.Catalog, seeded: dict):
+    async with create_connected_server_and_client_session(_server(store, catalog, seeded, role="viewer")) as client:
+        result = _result_dict(
+            await client.call_tool("toggle_job", {"component_id": str(seeded["job_id"]), "enabled": False})
+        )
+
+    assert result == {
+        "status": "error",
+        "error": "Requires editor role or higher",
+        "valid_values": None,
+        "category": None,
+    }
+    assert (store.components.get(seeded["job_id"]).config or {})["enabled"] is True
+
+
+async def test_an_editor_token_writes(store: Store, catalog: il.Catalog, seeded: dict):
+    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+        result = _result_dict(
+            await client.call_tool("toggle_job", {"component_id": str(seeded["job_id"]), "enabled": False})
+        )
+
+    assert result["status"] == "success"
+    assert (store.components.get(seeded["job_id"]).config or {})["enabled"] is False
 
 
 async def test_list_jobs_returns_seeded_job_scoped_to_org(store: Store, catalog: il.Catalog, seeded: dict):
