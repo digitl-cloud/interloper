@@ -12,36 +12,32 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/guide/backfilling/">
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-29-backfill-concurrency-design/">
       
       
-        <link rel="prev" href="../execution/">
-      
-      
-        <link rel="next" href="../events/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/favicon.png">
+      <link rel="icon" href="../../../assets/favicon.png">
       <meta name="generator" content="zensical-0.0.66">
     
     
       
-        <title>Backfilling - Interloper</title>
+        <title>Backfill concurrency - Interloper</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.1502b751.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.1502b751.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -60,9 +56,9 @@
       
     
     
-      <link rel="stylesheet" href="../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -87,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#backfilling" class="md-skip">
+        <a href="#backfill-concurrency" class="md-skip">
           Skip to content
         </a>
       
@@ -103,9 +99,9 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
@@ -122,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Backfilling
+              Backfill concurrency
             
           </span>
         </div>
@@ -210,7 +206,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   Getting started
@@ -226,7 +222,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../tutorial/" class="md-tabs__link">
+      <a href="../../../tutorial/" class="md-tabs__link">
         
   
   Tutorial
@@ -240,8 +236,6 @@
   
   
   
-    
-  
   
     
       
@@ -290,8 +284,8 @@
     
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../assets/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
           
   
   Guide
@@ -323,7 +317,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../ui/" class="md-tabs__link">
+        <a href="../../../ui/" class="md-tabs__link">
           
   
   Web UI
@@ -357,7 +351,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../extending/components/" class="md-tabs__link">
+        <a href="../../../extending/components/" class="md-tabs__link">
           
   
   Extending
@@ -399,7 +393,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../reference/decorators/" class="md-tabs__link">
+        <a href="../../../reference/decorators/" class="md-tabs__link">
           
   
   Reference
@@ -440,9 +434,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     Interloper
@@ -469,7 +463,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -495,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorial/" class="md-nav__link">
+      <a href="../../../tutorial/" class="md-nav__link">
         
   
   
@@ -518,10 +512,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -569,22 +561,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
             
   
   
@@ -602,7 +591,7 @@
           </label>
         
         
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
             <label class="md-nav__title" for="__nav_3">
               <span class="md-nav__icon md-icon"></span>
               
@@ -619,7 +608,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../assets/" class="md-nav__link">
+      <a href="../../../guide/assets/" class="md-nav__link">
         
   
   
@@ -646,7 +635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sources/" class="md-nav__link">
+      <a href="../../../guide/sources/" class="md-nav__link">
         
   
   
@@ -673,7 +662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dependencies/" class="md-nav__link">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
         
   
   
@@ -700,7 +689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../resources/" class="md-nav__link">
+      <a href="../../../guide/resources/" class="md-nav__link">
         
   
   
@@ -727,7 +716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../connections/" class="md-nav__link">
+      <a href="../../../guide/connections/" class="md-nav__link">
         
   
   
@@ -754,7 +743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../oauth/" class="md-nav__link">
+      <a href="../../../guide/oauth/" class="md-nav__link">
         
   
   
@@ -781,7 +770,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../fields/" class="md-nav__link">
+      <a href="../../../guide/fields/" class="md-nav__link">
         
   
   
@@ -808,7 +797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../destinations/" class="md-nav__link">
+      <a href="../../../guide/destinations/" class="md-nav__link">
         
   
   
@@ -835,7 +824,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../schema/" class="md-nav__link">
+      <a href="../../../guide/schema/" class="md-nav__link">
         
   
   
@@ -862,7 +851,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../normalization/" class="md-nav__link">
+      <a href="../../../guide/normalization/" class="md-nav__link">
         
   
   
@@ -889,7 +878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../partitioning/" class="md-nav__link">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
         
   
   
@@ -916,7 +905,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../execution/" class="md-nav__link">
+      <a href="../../../guide/execution/" class="md-nav__link">
         
   
   
@@ -940,36 +929,10 @@
                   
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Backfilling
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
         
   
   
@@ -984,104 +947,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#one-run-per-partition" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        One run per partition
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#one-run-for-the-whole-window" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        One run for the whole window
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#keeping-going-on-failure" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Keeping going on failure
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#watching-progress" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Watching progress
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#trailing-windows" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Trailing windows
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#scheduled-backfills" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Scheduled backfills
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#bounded-history" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Bounded history
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1094,7 +959,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../events/" class="md-nav__link">
+      <a href="../../../guide/events/" class="md-nav__link">
         
   
   
@@ -1121,7 +986,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../jobs/" class="md-nav__link">
+      <a href="../../../guide/jobs/" class="md-nav__link">
         
   
   
@@ -1148,7 +1013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../hooks/" class="md-nav__link">
+      <a href="../../../guide/hooks/" class="md-nav__link">
         
   
   
@@ -1175,7 +1040,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../specs/" class="md-nav__link">
+      <a href="../../../guide/specs/" class="md-nav__link">
         
   
   
@@ -1202,7 +1067,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../catalog/" class="md-nav__link">
+      <a href="../../../guide/catalog/" class="md-nav__link">
         
   
   
@@ -1229,7 +1094,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../../guide/cli/" class="md-nav__link">
         
   
   
@@ -1256,7 +1121,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../telemetry/" class="md-nav__link">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
         
   
   
@@ -1318,7 +1183,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../ui/" class="md-nav__link ">
+            <a href="../../../ui/" class="md-nav__link ">
               
   
   
@@ -1361,7 +1226,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ui/definitions/" class="md-nav__link">
+      <a href="../../../ui/definitions/" class="md-nav__link">
         
   
   
@@ -1388,7 +1253,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ui/running/" class="md-nav__link">
+      <a href="../../../ui/running/" class="md-nav__link">
         
   
   
@@ -1486,7 +1351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/components/" class="md-nav__link">
+      <a href="../../../extending/components/" class="md-nav__link">
         
   
   
@@ -1513,7 +1378,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/representations/" class="md-nav__link">
+      <a href="../../../extending/representations/" class="md-nav__link">
         
   
   
@@ -1540,7 +1405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/runners/" class="md-nav__link">
+      <a href="../../../extending/runners/" class="md-nav__link">
         
   
   
@@ -1567,7 +1432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/operations/" class="md-nav__link">
+      <a href="../../../extending/operations/" class="md-nav__link">
         
   
   
@@ -1594,7 +1459,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
         
   
   
@@ -1700,7 +1565,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/decorators/" class="md-nav__link">
+      <a href="../../../reference/decorators/" class="md-nav__link">
         
   
   
@@ -1727,7 +1592,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/settings/" class="md-nav__link">
+      <a href="../../../reference/settings/" class="md-nav__link">
         
   
   
@@ -1754,7 +1619,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/cli/" class="md-nav__link">
+      <a href="../../../reference/cli/" class="md-nav__link">
         
   
   
@@ -1781,7 +1646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/events/" class="md-nav__link">
+      <a href="../../../reference/events/" class="md-nav__link">
         
   
   
@@ -1808,7 +1673,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/telemetry/" class="md-nav__link">
+      <a href="../../../reference/telemetry/" class="md-nav__link">
         
   
   
@@ -1835,7 +1700,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/errors/" class="md-nav__link">
+      <a href="../../../reference/errors/" class="md-nav__link">
         
   
   
@@ -1862,7 +1727,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/utils/" class="md-nav__link">
+      <a href="../../../reference/utils/" class="md-nav__link">
         
   
   
@@ -1889,7 +1754,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/ecosystem/" class="md-nav__link">
+      <a href="../../../reference/ecosystem/" class="md-nav__link">
         
   
   
@@ -1916,7 +1781,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/claude-code/" class="md-nav__link">
+      <a href="../../../reference/claude-code/" class="md-nav__link">
         
   
   
@@ -1962,93 +1827,6 @@
   
 
 
-  <nav class="md-path" aria-label="Navigation" >
-    <ol class="md-path__list">
-      
-        
-  
-  
-    <li class="md-path__item">
-      <a href="../.." class="md-path__link">
-        
-  
-  <span class="md-ellipsis">
-    Getting started
-  </span>
-
-      </a>
-    </li>
-  
-
-      
-      
-        
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-      <li class="md-path__item">
-        <a href="../assets/" class="md-path__link">
-          
-  
-  <span class="md-ellipsis">
-    Guide
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-    </ol>
-  </nav>
-
               
               <article class="md-content__inner md-typeset">
                 
@@ -2057,74 +1835,152 @@
   
 
 
-<h1 id="backfilling">Backfilling<a class="headerlink" href="#backfilling" title="Permanent link">&para;</a></h1>
-<p>Backfilling means materializing a range of partitions. There is no backfiller object: a range is
-a <code>TimePartitionWindow</code>, and you either iterate it one partition per run, or hand it to assets
-that can take the whole range at once.</p>
-<h2 id="one-run-per-partition">One run per partition<a class="headerlink" href="#one-run-per-partition" title="Permanent link">&para;</a></h2>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dt</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">window</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">TimePartitionWindow</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">31</span><span class="p">))</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="n">window</span><span class="p">:</span>          <span class="c1"># newest first</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">dag</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">partition</span><span class="p">)</span>
+<h1 id="backfill-concurrency">Backfill concurrency<a class="headerlink" href="#backfill-concurrency" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-29. Status: approved design, implementation not started.</p>
+<p>Scope: make a backfill's concurrency real for the backfills cron creates, declared on the job that
+owns them. This is the batch level of the capacity follow-up in <code>2026-09-17-retry-design.md</code>,
+taken on its own; a limit on a contended resource (a connection, an instance) is not designed
+here, and nothing below prevents it.</p>
+<hr />
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">&para;</a></h2>
+<p>A backfill is gated at creation time, not at dispatch. <code>RunStore.create_backfill</code> creates the
+newest <code>concurrency</code> partitions as <code>queued</code> and the rest as <code>pending</code>; when a run completes,
+<code>_advance_backfill</code> counts what is still in flight and promotes <code>pending</code> runs up to the limit.
+The queue worker never reads <code>concurrency</code>: it claims whatever is <code>queued</code>.</p>
+<p>Cron does not call <code>create_backfill</code>. It builds its backfill inline, so the row commits in the same
+transaction as the job's <code>next_run_at</code> advance (a crash between the two would re-create the
+backfill next tick, and <code>create_backfill</code> opens its own transaction). The inline copy creates every
+run <code>queued</code> and leaves the row's <code>concurrency</code> at the column default of 1, which the UI then shows
+as if it were enforced. The choice dates from when a cron firing covered one partition; since
+<code>lookback</code> counts partitions with an offset, a firing is a real backfill, and the fan-out was never
+revisited. A job also declares no concurrency, so a fixed cron would have had nothing to read.</p>
+<p>The consequence in production: a job with <code>lookback: 7</code> launches seven pods at once against one
+vendor, each running up to <code>max_workers</code> operations. Retries amplify it, since a burst of failures
+becomes a burst of retries one delay later.</p>
+<p>A second, smaller gap: <code>_advance_backfill</code> counts <code>queued</code> and <code>running</code> runs as in flight, but a
+claimed run is <code>dispatched</code> until its pod starts (<code>RunExecutor._mark_running</code>). On Kubernetes that
+is minutes of scheduling and image pull, during which a completion promotes a <code>pending</code> run into a
+slot that is not free.</p>
+<hr />
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Where the limit is declared</td>
+<td><code>CronJob.concurrency: int = 1</code>, <code>ge=1</code>, declared after <code>offset</code>: it is a setting of the window the job covers each firing. Section "Operation", so the form shows it with the schedule, <code>enabled</code> and <code>retry</code>: how the job runs, as opposed to what it covers.</td>
+</tr>
+<tr>
+<td>What it means</td>
+<td>How many partitions of one firing are in flight at once. <code>1</code> runs the window serially, newest partition first, matching <code>Backfill.concurrency</code>'s default and dispatch order.</td>
+</tr>
+<tr>
+<td>Where the fan-out lives</td>
+<td>One session-level function, <code>create_backfill_runs(session, db_backfill, window)</code>, next to <code>cancel_backfill_runs</code> in <code>interloper_db/store/runs.py</code>. It creates one run per partition, oldest first in creation order, the newest <code>db_backfill.concurrency</code> of them <code>queued</code> and the rest <code>pending</code>, and sets <code>db_backfill.partitions</code>. <code>create_backfill</code> and cron both call it; the duplicated run loop in <code>cron.py</code> goes.</td>
+</tr>
+<tr>
+<td>What cron stamps</td>
+<td>The job's <code>concurrency</code> on the backfill row, so what the API and the UI report is what is enforced. Cron keeps building the row inline, in the job's transaction, and keeps skipping the quota checks <code>create_backfill</code> applies to user-created backfills.</td>
+</tr>
+<tr>
+<td>In flight</td>
+<td><code>queued</code>, <code>dispatched</code> and <code>running</code>. <code>_advance_backfill</code> counts all three.</td>
+</tr>
+<tr>
+<td>A retry waiting out its delay</td>
+<td>Holds its slot. The slot belongs to the partition (the stack), which is in flight from its first attempt until its last attempt ends, which is how the rest of the system reads stacks. The cost is an idle slot for the delay; promoting past a waiting retry would need a trigger when <code>scheduled_for</code> passes, which nothing provides.</td>
+</tr>
+<tr>
+<td>API-created backfills</td>
+<td>Unchanged. <code>POST /backfills</code> keeps its own <code>concurrency</code> (default 1); a request targeting a job does not read the job's setting, since the request is explicit.</td>
+</tr>
+<tr>
+<td>Unpartitioned jobs</td>
+<td>Unchanged. A firing without a window is a single run and no backfill; <code>concurrency</code> is stored but has nothing to gate.</td>
+</tr>
+<tr>
+<td><code>fail_fast</code></td>
+<td>Out of scope. Cron leaves it <code>False</code> as today.</td>
+</tr>
+<tr>
+<td>Compatibility</td>
+<td>Behaviour change, no migration. Cron top-ups are gated at 1 in flight unless the job says otherwise. <code>Backfill.concurrency</code> and the JSON config need no schema change.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-what-changes">3. What changes<a class="headerlink" href="#3-what-changes" title="Permanent link">&para;</a></h2>
+<h3 id="core">Core<a class="headerlink" href="#core" title="Permanent link">&para;</a></h3>
+<p><code>interloper/job/cron.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">concurrency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">title</span><span class="o">=</span><span class="s2">"Concurrency"</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">"How many partitions of one firing run at once"</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s2">"x-section"</span><span class="p">:</span> <span class="s2">"Operation"</span><span class="p">},</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>Iteration yields the most recent partition first, so an interrupted backfill leaves the recent
-data in place rather than the ancient tail.</p>
-<h2 id="one-run-for-the-whole-window">One run for the whole window<a class="headerlink" href="#one-run-for-the-whole-window" title="Permanent link">&para;</a></h2>
-<p>When every enabled partitioned asset in the DAG declares <code>allow_window=True</code>, pass the
-window itself. Each asset receives the range through <code>context.window</code> and fetches it in one
-call; destinations split the write per partition:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span> <span class="n">allow_window</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="k">return</span> <span class="n">fetch_stats</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">window</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">window</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">dag</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">window</span><span class="p">)</span>
+<p>Declared after <code>offset</code>. The schema lists the job's own fields first, so the Operation section of
+the form reads <code>cron</code>, <code>timezone</code>, <code>concurrency</code>, then the inherited <code>enabled</code> and <code>retry</code>; the
+Partitioning section is unchanged.</p>
+<h3 id="store">Store<a class="headerlink" href="#store" title="Permanent link">&para;</a></h3>
+<p><code>interloper_db/store/runs.py</code></p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_backfill_runs</span><span class="p">(</span><span class="n">session</span><span class="p">:</span> <span class="n">Session</span><span class="p">,</span> <span class="n">db_backfill</span><span class="p">:</span> <span class="n">Backfill</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="n">TimePartitionWindow</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="sd">"""Create a backfill's runs, the newest `concurrency` of them queued and the rest pending."""</span>
 </span></code></pre></div>
-<p>A runner never splits a window into several runs. If any partitioned asset forbids windows, the
-run fails before executing.</p>
-<h2 id="keeping-going-on-failure">Keeping going on failure<a class="headerlink" href="#keeping-going-on-failure" title="Permanent link">&para;</a></h2>
-<p>The default in-process runners stop the current run at the first failure. To collect every
-partition's outcome instead:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">AsyncRunner</span><span class="p">(</span><span class="n">fail_fast</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">results</span> <span class="o">=</span> <span class="p">{</span><span class="n">partition</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">,</span> <span class="n">partition</span><span class="p">))</span> <span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="n">window</span><span class="p">}</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">failed</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">r</span><span class="o">.</span><span class="n">failed_ids</span><span class="p">]</span>
-</span></code></pre></div>
-<h2 id="watching-progress">Watching progress<a class="headerlink" href="#watching-progress" title="Permanent link">&para;</a></h2>
-<p>Pass <code>on_event</code> to the runner:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Event</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="k">if</span> <span class="n">event</span><span class="o">.</span><span class="n">type</span> <span class="ow">is</span> <span class="n">il</span><span class="o">.</span><span class="n">EventType</span><span class="o">.</span><span class="n">RUN_COMPLETED</span><span class="p">:</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        <span class="nb">print</span><span class="p">(</span><span class="s2">"done"</span><span class="p">,</span> <span class="n">event</span><span class="o">.</span><span class="n">metadata</span><span class="p">[</span><span class="s2">"partition_or_window"</span><span class="p">])</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">AsyncRunner</span><span class="p">(</span><span class="n">on_event</span><span class="o">=</span><span class="n">report</span><span class="p">)</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">for</span> <span class="n">partition</span> <span class="ow">in</span> <span class="n">window</span><span class="p">:</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">il</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">,</span> <span class="n">partition</span><span class="p">))</span>
-</span></code></pre></div>
-<p>Or <code>ConsoleEventHandler()</code> from <code>interloper.events</code> to see every lifecycle event through the
-logging stack. See <a href="../events/">Events and logging</a>.</p>
-<h2 id="trailing-windows">Trailing windows<a class="headerlink" href="#trailing-windows" title="Permanent link">&para;</a></h2>
-<p>A scheduled workload usually re-materializes a trailing window on every tick: yesterday, or the
-last seven days, or the last three days because the vendor restates data. The window is counted
-in partitions, and <code>TimePartitionWindow.lookback</code> computes it:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">now</span> <span class="o">=</span> <span class="n">dt</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionWindow</span><span class="o">.</span><span class="n">lookback</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">lookback</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>          <span class="c1"># the seven days ending yesterday</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionWindow</span><span class="o">.</span><span class="n">lookback</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">lookback</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>          <span class="c1"># today, still incomplete</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionWindow</span><span class="o">.</span><span class="n">lookback</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">lookback</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">granularity</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimeGranularity</span><span class="o">.</span><span class="n">MONTH</span><span class="p">)</span>
-</span></code></pre></div>
-<p><code>offset</code> is how many partitions back from the current one the window ends; <code>lookback</code> is how
-many it spans. Pass <code>start=</code> to clamp to an asset's first partition; the result is <code>None</code> when
-nothing remains. <a href="../jobs/">Cron jobs</a> carry these two numbers as fields.</p>
-<h2 id="scheduled-backfills">Scheduled backfills<a class="headerlink" href="#scheduled-backfills" title="Permanent link">&para;</a></h2>
-<p>A cron job's firing is a backfill over its trailing window, the same as one queued by hand: one
-run per partition, dispatched newest first, with at most the job's <code>concurrency</code> of them in flight
-at once. A retry waiting out its delay keeps its partition's slot.</p>
-<h2 id="bounded-history">Bounded history<a class="headerlink" href="#bounded-history" title="Permanent link">&para;</a></h2>
-<p><code>TimePartitionConfig(start=...)</code> marks the first partition an asset has data for. A window
-reaching further back is rejected with <code>PartitionError</code> rather than fetching empty data, so a
-backfill loop should start at the asset's <code>start</code>.</p>
+<p>It reads <code>org_id</code>, <code>component_id</code> and <code>concurrency</code> from the row, creates the rows oldest first
+(so the runs list, ordered by <code>created_at</code> desc, keeps the newest partition on top), and sets
+<code>db_backfill.partitions = window.partition_count()</code>. <code>create_backfill</code> calls it after adding and
+flushing the row; the loop and the <code>first_queued</code> arithmetic move out of the method.</p>
+<p><code>_advance_backfill</code> counts <code>("queued", "dispatched", "running")</code> as in flight.</p>
+<h3 id="scheduler">Scheduler<a class="headerlink" href="#scheduler" title="Permanent link">&para;</a></h3>
+<p><code>interloper_scheduler/cron.py</code> builds the row with <code>concurrency=config.get("concurrency", 1)</code> and
+calls <code>create_backfill_runs</code>. The comment explaining that cron queues every partition at once is
+replaced by one saying why the row is still built inline: atomicity with the state advance, and no
+quota check on top-ups.</p>
+<h3 id="app">App<a class="headerlink" href="#app" title="Permanent link">&para;</a></h3>
+<p>No change. The generated form renders the field from its schema, in the Operation section, and the
+wizard seeds it from the job's stored config like any other field. The backfills table already
+shows <code>concurrency</code>; it now shows a true value for cron backfills.</p>
+<h3 id="docs">Docs<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>docs/guide/jobs.md</code>: <code>concurrency</code> in the <code>CronJob</code> field table, and a sentence that each firing
+  is a backfill gated by it, newest partition first.</li>
+<li><code>docs/guide/backfilling.md</code>: cron top-ups are backfills like any other, gated by the job's
+  <code>concurrency</code>.</li>
+<li><code>docs/ui/index.md</code>: the job form's Operation section carries <code>concurrency</code>.</li>
+</ul>
+<hr />
+<h2 id="4-tests">4. Tests<a class="headerlink" href="#4-tests" title="Permanent link">&para;</a></h2>
+<p>Test files mirror the modules they cover.</p>
+<ul>
+<li><code>interloper-core/tests/job/test_cron.py</code>: the field defaults to 1, rejects 0, and sits in the
+  Operation section; <code>tests/job/test_base.py</code>'s schema-order assertion gains <code>concurrency</code> after
+  <code>offset</code>.</li>
+<li><code>interloper-db/tests/store/test_runs.py</code>: <code>create_backfill_runs</code> on a row with <code>concurrency=2</code>
+  over four partitions queues the newest two and leaves two pending, creation order oldest first;
+  the existing <code>TestCreateBackfill</code> cases keep passing unchanged. <code>_advance_backfill</code> does not
+  promote while a run is <code>dispatched</code>, and does once it completes.</li>
+<li><code>interloper-scheduler/tests/test_cron.py</code>: a partitioned job with <code>lookback: 3</code> and the default
+  concurrency creates a backfill whose row says <code>concurrency == 1</code>, with the newest partition
+  <code>queued</code> and the other two <code>pending</code>; with <code>concurrency: 3</code> all three are <code>queued</code> (the existing
+  window test, made explicit about why). Completing the queued run promotes the next newest.</li>
+</ul>
+<hr />
+<h2 id="5-rollout">5. Rollout<a class="headerlink" href="#5-rollout" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Ships as a <code>feat</code> with a behaviour-change note: cron backfills now honour a concurrency of 1 by
+  default. A job whose firings were meant to run in parallel needs <code>concurrency</code> set.</li>
+<li>Production: the eight Swarovski jobs have <code>lookback: 7</code> (one has 1). After the deploy, each one
+  needs an explicit <code>concurrency</code> chosen against its vendor, set the same way their <code>retry</code> was.
+  Left at the default, each firing runs its seven partitions one at a time, newest first, which
+  lengthens the job's wall-clock time by up to seven times.</li>
+</ul>
 
 
 
@@ -2159,44 +2015,6 @@ backfill loop should start at the asset's <code>start</code>.</p>
       
         <footer class="md-footer">
   
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href="../execution/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Execution">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Execution
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="../events/" class="md-footer__link md-footer__link--next" aria-label="Next: Events &amp; logging">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Events & logging
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </a>
-        
-      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -2233,10 +2051,10 @@ backfill loop should start at the asset's <code>start</code>.</p>
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.b7d3f789.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.b7d3f789.min.js"></script>
       
     
   </body>

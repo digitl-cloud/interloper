@@ -1975,7 +1975,8 @@ relation, when it declares one, is a picker over the matching connections.</p>
 <p>Cron jobs over sources or assets. The schedule column renders the cron expression and its
 timezone; "Next run at" and "Last run at" are the job's state model, shown as columns because
 the definition publishes a <code>state_schema</code>. The job form uses the cron and timezone widgets and
-the partition-window fields (<code>lookback</code>, <code>offset</code>).</p>
+the partition-window fields (<code>lookback</code>, <code>offset</code>); its Operation section carries <code>concurrency</code>,
+how many of a firing's partitions run at once.</p>
 <h2 id="hooks">Hooks<a class="headerlink" href="#hooks" title="Permanent link">&para;</a></h2>
 <p><img alt="Hooks" src="../assets/ui/hooks-light.png#only-light" />
 <img alt="Hooks" src="../assets/ui/hooks-dark.png#only-dark" /></p>
