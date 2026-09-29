@@ -1991,7 +1991,9 @@ triggers, hooks and backfills.</p>
 <p><img alt="Backfills" src="../assets/ui/backfills-light.png#only-light" />
 <img alt="Backfills" src="../assets/ui/backfills-dark.png#only-dark" /></p>
 <p>A backfill is one run per partition over a range, dispatched newest first with a concurrency
-cap; the range is shown in the target's partition-key shape.</p>
+cap; the range is shown in the target's partition-key shape, and the Partitions column draws
+each partition's latest attempt by status, the same bar the runs table draws for a run's assets.
+Both tables filter by status, and a status still executing spins.</p>
 <h3 id="run-detail">Run detail<a class="headerlink" href="#run-detail" title="Permanent link">&para;</a></h3>
 <p><img alt="Run detail" src="../assets/ui/run-light.png#only-light" />
 <img alt="Run detail" src="../assets/ui/run-dark.png#only-dark" /></p>
