@@ -67,6 +67,17 @@ class TestDefinition:
         assert defn.relations["targets"].kinds == ["source", "asset"]
         assert defn.relations["targets"].many is True
 
+    def test_a_concrete_job_leads_with_its_own_fields(self):
+        properties = il.CronJob.config_schema()["properties"]
+        assert list(properties) == ["cron", "timezone", "lookback", "offset", "tags", "enabled", "retry"]
+        assert properties["lookback"]["x-section"] == "Partitioning"
+        assert {name for name, prop in properties.items() if prop.get("x-section") == "Operation"} == {
+            "cron",
+            "timezone",
+            "enabled",
+            "retry",
+        }
+
     def test_anchor_carries_the_workload_only(self):
         defn = il.Job.definition()
         assert set(defn.config_schema["properties"]) == {"enabled", "retry", "tags"}

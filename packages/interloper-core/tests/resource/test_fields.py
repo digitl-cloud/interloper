@@ -60,6 +60,13 @@ class TestPresentationKwargs:
         assert prop["x-discriminator"] is True
         assert prop["x-widget"] == "select"
 
+    def test_section_becomes_x_section(self):
+        class FakeSectionedSource(il.Source):
+            account_id: str = il.InputField(default="", section="Account")
+
+        prop = FakeSectionedSource.definition().config_schema["properties"]["account_id"]
+        assert prop["x-section"] == "Account"
+
 
 class TestTimezoneField:
     def test_emits_timezone_widget(self):

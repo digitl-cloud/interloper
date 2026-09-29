@@ -372,6 +372,19 @@ class TestDefinition:
         asset_keys = {a.key for a in defn.assets}
         assert asset_keys == {"fake_first", "fake_second"}
 
+    def test_config_leads_with_the_sources_own_fields(self):
+        class FakeAccountSource(il.Source):
+            account_id: str = il.InputField(default="")
+
+        properties = FakeAccountSource.config_schema()["properties"]
+        assert [(name, prop.get("x-section")) for name, prop in properties.items()] == [
+            ("account_id", None),
+            ("dataset", "Destination"),
+            ("default_destination_key", "Destination"),
+            ("materialization_strategy", "Materialization"),
+            ("retry", "Operation"),
+        ]
+
     def test_definition_asset_source_keys_are_set(self):
         defn = FakeSourceWithAssets.definition()
         for asset_defn in defn.assets:

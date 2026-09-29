@@ -14,6 +14,7 @@ from interloper.errors import format_exception
 from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthConfig
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
+from interloper.retry import RetryPolicy
 from interloper.utils.concurrency import invoke
 
 #: Hard cap on one credential exchange — a renewal must never hold a run pod hostage.
@@ -86,12 +87,21 @@ class Connection(Resource, Operation):
     billable: ClassVar[bool] = False
     capture_traceback: ClassVar[bool] = False
     renewal_interval: ClassVar[dt.timedelta] = dt.timedelta(days=1)
+    # A connection's only operation is its renewal, which `auto_renew` already
+    # gates; an operation-level switch beside it would only skip the runs the
+    # renewal controller keeps queueing.
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"enabled"})
 
     auto_renew: bool = Field(
         default=True,
         title="Automatic renewal",
         description="Renew this connection's credentials on a schedule",
         json_schema_extra={"x-public": True},
+    )
+    retry: RetryPolicy | None = Field(
+        default=None,
+        title="Retry",
+        description="Attempt budget for each renewal of the credentials",
     )
 
     def check(self) -> bool:
@@ -229,14 +239,17 @@ class Connection(Resource, Operation):
 
         Returns:
             The resource definition with ``checkable`` and ``renewable`` set.
-            ``auto_renew`` is dropped from the config schema when the class
-            has nothing to renew — the toggle would be inert.
+            ``auto_renew`` and ``retry`` are dropped from the config schema
+            when the class has nothing to renew: both govern the renewal and
+            would be inert.
         """
         definition = super().definition()
         definition.checkable = cls.checkable()
         definition.renewable = cls.renewable()
         if not definition.renewable:
-            definition.config_schema.get("properties", {}).pop("auto_renew", None)
+            properties = definition.config_schema.get("properties", {})
+            properties.pop("auto_renew", None)
+            properties.pop("retry", None)
         return definition
 
 

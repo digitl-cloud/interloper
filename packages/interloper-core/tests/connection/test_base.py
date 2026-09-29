@@ -209,8 +209,10 @@ class TestConnectionRenewal:
         assert Plain.renewable() is False
         definition = Plain.definition()
         assert definition.renewable is False
-        # An inert toggle is dropped from the form schema.
-        assert "auto_renew" not in definition.config_schema.get("properties", {})
+        # Settings that only govern the renewal are dropped from the form schema.
+        properties = definition.config_schema.get("properties", {})
+        assert "auto_renew" not in properties
+        assert "retry" not in properties
         with pytest.raises(NotImplementedError):
             Plain().renew()
 
@@ -226,6 +228,17 @@ class TestConnectionRenewal:
         # The toggle is operational metadata: schema-marked disclosable so
         # surfaces that keep the secret payload undisclosed can still show it.
         assert definition.config_schema["properties"]["auto_renew"]["x-public"] is True
+
+    def test_renewal_settings_close_the_credentials(self):
+        class Renewed(Connection):
+            token: str = ""
+
+            def renew(self) -> Renewal:
+                return Renewal()
+
+        properties = Renewed.definition().config_schema["properties"]
+        assert list(properties) == ["token", "auto_renew", "retry"]
+        assert all("x-section" not in prop for prop in properties.values())
 
     async def test_generic_refresh_grant_rotates(self, monkeypatch: pytest.MonkeyPatch):
         requests: list[httpx.Request] = []

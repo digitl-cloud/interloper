@@ -27,21 +27,28 @@ class CronJob(Job):
     see :class:`~interloper.partitioning.time.TimePartitionWindow.lookback`).
     """
 
-    cron: str = CronField(title="Cron expression", description="When the job runs, on the job timezone's clock")
+    cron: str = CronField(
+        title="Cron expression",
+        description="When the job runs, on the job timezone's clock",
+        section="Operation",
+    )
     timezone: str = TimezoneField(
         default="UTC",
         title="Timezone",
         description="IANA timezone the schedule is evaluated in",
+        section="Operation",
     )
     lookback: int | None = Field(
         default=1,
         ge=1,
         description="How many partitions each run covers",
+        json_schema_extra={"x-section": "Partitioning"},
     )
     offset: int = Field(
         default=1,
         ge=0,
         description="How many partitions back from the current one the window ends",
+        json_schema_extra={"x-section": "Partitioning"},
     )
 
     @field_validator("timezone")

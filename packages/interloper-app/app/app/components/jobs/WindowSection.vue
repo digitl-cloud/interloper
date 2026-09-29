@@ -1,15 +1,18 @@
 <script setup lang="ts">
 /**
- * The job wizard's Partitions section, plugged into the definition-driven
- * wizard's `#details` extension slot: whether the selected targets are
- * partitioned (derived, never asked), the generated window fields, and the
- * preview of the partitions a run today would cover.
+ * The job wizard's Partitioning section, plugged into the definition-driven
+ * wizard's `#section-partitioning` slot: whether the selected targets are
+ * partitioned (derived, never asked), the section's generated window fields,
+ * and the preview of the partitions a run today would cover.
  */
 import type { ComponentRecord } from '~/types/component'
 import { jobLookback, jobOffset } from '~/types/component'
 import { KEY_PATTERNS, periodKey, targetGranularities, type PartitionGranularity } from '~/composables/partitionGranularity'
 
 const props = defineProps<{
+    keys: string[]
+    schema: Record<string, any>
+    componentKey?: string
     /** The selected target component ids (live, from the wizard). */
     targetIds: string[]
     /** The job being edited, or null — seeds the window fields. */
@@ -22,14 +25,11 @@ const props = defineProps<{
 const config = defineModel<Record<string, unknown>>('config', { default: () => ({}) })
 const valid = defineModel<boolean>('valid', { default: true })
 
-const JOB_KEY = 'cron_job'
-const WINDOW_FIELDS = ['lookback', 'offset']
-
-const catalogStore = useCatalogStore()
-const jobSchema = computed(() => catalogStore.catalog[JOB_KEY]?.config_schema)
-
+// A stored null lookback means "no window": the job was saved while its targets
+// were unpartitioned. Leaving it unset lets the field start from the schema
+// default instead of blank.
 const partitionConfig = ref<Record<string, unknown>>(
-    props.job ? { lookback: jobLookback(props.job), offset: jobOffset(props.job) } : {},
+    props.job ? { lookback: jobLookback(props.job) ?? undefined, offset: jobOffset(props.job) } : {},
 )
 const partitionConfigValid = ref(true)
 
@@ -76,8 +76,6 @@ watch(
 </script>
 
 <template>
-    <USeparator label="Partitions" />
-
     <template v-if="partitioned">
         <div class="flex items-center gap-2 text-sm text-muted">
             <UIcon name="i-lucide-calendar-days"
@@ -85,12 +83,12 @@ watch(
             <span>Partitioned: the selected targets contain time-partitioned assets.</span>
         </div>
 
-        <SchemaForm v-if="jobSchema"
-                    v-model:data="partitionConfig"
+        <SchemaForm v-model:data="partitionConfig"
                     v-model:is-valid="partitionConfigValid"
-                    :schema="jobSchema"
-                    :component-key="JOB_KEY"
-                    :include="WINDOW_FIELDS" />
+                    :schema="schema"
+                    :component-key="componentKey"
+                    :include="keys"
+                    nested />
 
         <p v-if="windowPreview"
            class="text-sm text-muted">

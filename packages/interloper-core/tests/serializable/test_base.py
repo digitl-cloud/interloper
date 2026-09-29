@@ -159,6 +159,16 @@ class TestFieldOrdering:
         assert ShadowingSerializable.key == "shadowing_serializable"
         assert ShadowingSerializable(name="x").name == "x"
 
+    def test_config_schema_lists_the_most_specific_fields_first(self):
+        class Middle(ShadowingSerializable):
+            gamma: str | None = None
+
+        class Leaf(Middle):
+            delta: str | None = None
+            alpha: str | None = None
+
+        assert list(Leaf.config_schema()["properties"]) == ["delta", "alpha", "gamma", "name", "beta"]
+
     def test_spec_roundtrip_with_shadowing_field(self):
         rebuilt = ShadowingSerializable.from_spec(ShadowingSerializable(name="x").to_spec())
         assert type(rebuilt) is ShadowingSerializable

@@ -12,12 +12,22 @@
  *   - array (default for array: multi-select when items are enum-constrained, tag input otherwise)
  *   - cron (expression input with schedule presets and a human-readable rendering)
  *   - timezone (searchable IANA timezone select, defaulting to the user's profile timezone)
+ *   - object (default for a nested model: its own fields, behind a switch when optional)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
  *   - Sign-in tab shows the OAuth button, manual tab shows all credential fields
  *
  * When no x-widget is specified, the widget is inferred from the JSON Schema type.
+ *
+ * Fields carrying `x-section` render under that section's separator, after the
+ * fields without one, sections in the order they first appear. A
+ * `#section-<name>` slot (name lowercased, e.g. `#section-partitioning`)
+ * replaces a section's generated fields, receiving their `keys`.
+ *
+ * A `#credentials-actions` slot (a connection check) follows the credential
+ * fields: inside the sign-in group on its Manual tab, or after the unsectioned
+ * fields when there is no sign-in.
  */
 
 import type { FormError, TabsItem } from '@nuxt/ui'
@@ -45,7 +55,11 @@ interface JsonSchemaProperty {
     'x-fetch'?: FetchMeta
     'x-discriminator'?: boolean
     'x-info'?: string
+    'x-section'?: string
     items?: JsonSchemaProperty
+    properties?: Record<string, JsonSchemaProperty>
+    required?: string[]
+    nullable?: boolean
     minItems?: number
     minimum?: number
     maximum?: number
@@ -93,6 +107,7 @@ const props = defineProps<{
     optionsContext?: Record<string, { label: string; value: string }[]>
     /** Heading above the form's fields (e.g. 'Credentials'). */
     credentialsLabel?: string
+    nested?: boolean
 }>()
 
 const data = defineModel<Record<string, any>>('data', { default: () => ({}) })
@@ -364,7 +379,7 @@ function resolveProperty(prop: JsonSchemaProperty): JsonSchemaProperty {
     if (resolved.anyOf) {
         const { anyOf, ...siblings } = resolved
         const branch = anyOf.find(b => b.type !== 'null') ?? anyOf[0] ?? {}
-        resolved = { ...deref(branch), ...siblings }
+        resolved = { ...deref(branch), ...siblings, nullable: anyOf.some(b => b.type === 'null') }
     }
     if (resolved.items) {
         resolved = { ...resolved, items: resolveProperty(resolved.items) }
@@ -413,10 +428,21 @@ function enumLabel(value: unknown): string {
     return String(value).replaceAll(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+/**
+ * A nested model's own schema, keyed by field. Kept stable across renders so
+ * the nested form does not see a new schema (and reset) on every update.
+ */
+const nestedSchemas = computed<Record<string, JsonSchema>>(() => Object.fromEntries(
+    Object.entries(resolvedProperties.value)
+        .filter(([, prop]) => prop.type === 'object' && prop.properties)
+        .map(([key, prop]) => [key, { properties: prop.properties, required: prop.required, $defs: props.schema?.$defs }]),
+))
+
 /** Resolve which widget to render for a given field. */
 function resolveWidget(prop: JsonSchemaProperty): string {
     if (prop['x-widget']) return prop['x-widget']
     if (prop['x-options'] || prop['x-options-from'] || prop.enum) return 'select'
+    if (prop.type === 'object' && prop.properties) return 'object'
     switch (prop.type) {
         case 'boolean': return 'switch'
         case 'integer':
@@ -466,9 +492,12 @@ const fields = computed(() => {
             options: resolveOptions(prop),
             min: prop.minimum,
             max: prop.maximum,
+            step: prop.type === 'number' ? 'any' : undefined,
+            nullable: !!prop.nullable,
             minItems: prop.minItems,
             isOAuthField: oauthFieldKeys.value.has(key),
             fetchMeta: prop['x-fetch'] ?? null,
+            section: prop['x-section'] ?? null,
         }))
 })
 
@@ -520,6 +549,34 @@ const visibleFields = computed(() => {
 })
 
 /**
+ * Visible fields by section: the unsectioned group first (always, it hosts the
+ * sign-in), then each section. A nested form sits under its parent's heading,
+ * so it renders flat. With sign-in on offer, the unsectioned group's credential
+ * fields form one block with the sign-in tabs, so the tabs, the sign-in and the
+ * fields they swap between stay together.
+ */
+const sections = computed(() => {
+    const groups = new Map<string | null, typeof visibleFields.value>([[null, []]])
+    for (const field of visibleFields.value) {
+        const section = props.nested ? null : field.section
+        groups.set(section, [...(groups.get(section) ?? []), field])
+    }
+    return [...groups]
+        .filter(([label, group]) => label === null || group.length > 0)
+        .map(([label, group]) => ({
+            label,
+            slot: label ? `section-${label.toLowerCase().replaceAll(/[^a-z0-9]+/g, '-')}` : null,
+            fields: group,
+            blocks: label === null && showOAuth.value
+                ? [
+                        { signIn: true, fields: group.filter(field => field.isOAuthField) },
+                        { signIn: false, fields: group.filter(field => !field.isOAuthField) },
+                    ]
+                : [{ signIn: false, fields: group }],
+        }))
+})
+
+/**
  * Handle OAuth sign-in success — place the returned token into the connection's
  * token field. The app credentials (client_id / client_secret) are resolved
  * server-side from env, so they're never part of the response.
@@ -548,6 +605,9 @@ function initDefaults() {
         }
         else if (field.widget === 'array') {
             data.value[field.key] = []
+        }
+        else if (field.widget === 'object' && !field.nullable) {
+            data.value[field.key] = {}
         }
     }
 }
@@ -581,14 +641,20 @@ watch(
     { immediate: true, deep: true },
 )
 
+/** Validity reported by each nested model's form, keyed by field. */
+const nestedValid = ref<Record<string, boolean>>({})
+
 /** Validate: all required fields must have a non-empty value. In sign-in mode
  * the env-resolved credential fields are skipped (the server fills them); the
  * token stays required so sign-in must complete. Re-runs on tab switch. */
 watch(
-    [data, activeTab],
+    [data, activeTab, nestedValid],
     () => {
         const signIn = oauthAvailable.value && activeTab.value === 'oauth'
-        isValid.value = fields.value
+        const nestedOk = fields.value
+            .filter(f => f.widget === 'object' && data.value[f.key] != null)
+            .every(f => nestedValid.value[f.key] !== false)
+        isValid.value = nestedOk && fields.value
             .filter(f => (f.required || f.minItems) && !(signIn && envResolvedFieldKeys.value.has(f.key)))
             .every((f) => {
                 const value = data.value[f.key]
@@ -599,7 +665,8 @@ watch(
     { deep: true, immediate: true },
 )
 
-const form = useTemplateRef('form')
+const UForm = resolveComponent('UForm')
+const form = useTemplateRef<{ setErrors: (errors: FormError[]) => void }>('form')
 
 /** Surface externally-produced errors (e.g. a connection check) under the matching fields. */
 function setErrors(errors: FormError[]) {
@@ -610,167 +677,203 @@ defineExpose({ setErrors })
 </script>
 
 <template>
-    <UForm ref="form"
-           :state="data"
-           class="flex flex-col gap-4">
+    <component :is="nested ? 'div' : UForm"
+               ref="form"
+               v-bind="nested ? {} : { state: data }"
+               class="flex flex-col gap-4">
         <USeparator v-if="credentialsLabel"
                     :label="credentialsLabel" />
 
-        <!-- OAuth tabs toggle -->
-        <UTabs v-if="showOAuth"
-               v-model="activeTab"
-               :items="oauthTabs"
-               :content="false"
-               variant="pill"
-               size="xs"
-               class="flex" />
+        <template v-for="section in sections"
+                  :key="section.label ?? ''">
+            <USeparator v-if="section.label"
+                        :label="section.label" />
+            <slot v-if="section.slot && $slots[section.slot]"
+                  :name="section.slot"
+                  :keys="section.fields.map(field => field.key)"
+                  :schema="schema"
+                  :component-key="componentKey" />
+            <template v-else>
+                <div v-for="(block, blockIndex) in section.blocks"
+                     :key="blockIndex"
+                     :class="block.signIn ? 'flex flex-col gap-4 rounded-md border border-default p-4' : 'contents'">
+                    <UTabs v-if="block.signIn"
+                           v-model="activeTab"
+                           :items="oauthTabs"
+                           :content="false"
+                           variant="pill"
+                           size="xs"
+                           class="flex" />
 
-        <!-- Form fields -->
-        <UFormField v-for="field in visibleFields"
-                    :key="field.key"
-                    :name="field.key"
-                    :label="field.label"
-                    :description="field.description"
-                    :required="field.required">
-            <!-- Info tooltip next to the label (long explanatory text) -->
-            <template v-if="field.info"
-                      #hint>
-                <UTooltip :text="field.info"
-                          :delay-duration="0"
-                          :ui="{ content: 'max-w-72 h-auto py-2', text: 'whitespace-normal' }">
-                    <UIcon name="i-lucide-info"
-                           class="size-4 text-dimmed transition-colors hover:text-highlighted" />
-                </UTooltip>
+                    <!-- Form fields -->
+                    <UFormField v-for="field in block.fields"
+                                :key="field.key"
+                                :name="field.key"
+                                :label="field.label"
+                                :description="field.description"
+                                :required="field.required">
+                        <!-- Info tooltip next to the label (long explanatory text) -->
+                        <template v-if="field.info"
+                                  #hint>
+                            <UTooltip :text="field.info"
+                                      :delay-duration="0"
+                                      :ui="{ content: 'max-w-72 h-auto py-2', text: 'whitespace-normal' }">
+                                <UIcon name="i-lucide-info"
+                                       class="size-4 text-dimmed transition-colors hover:text-highlighted" />
+                            </UTooltip>
+                        </template>
+
+                        <!-- Password with visibility toggle -->
+                        <UInput v-if="field.widget === 'password'"
+                                v-model="data[field.key]"
+                                :type="revealedFields[field.key] ? 'text' : 'password'"
+                                class="w-full">
+                            <template #trailing>
+                                <UButton :icon="revealedFields[field.key] ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                                         color="neutral"
+                                         variant="link"
+                                         size="sm"
+                                         :padded="false"
+                                         @click="revealedFields[field.key] = !revealedFields[field.key]" />
+                            </template>
+                        </UInput>
+
+                        <!-- Textarea -->
+                        <UTextarea v-else-if="field.widget === 'textarea'"
+                                   v-model="data[field.key]"
+                                   class="w-full" />
+
+                        <!-- Number -->
+                        <UInput v-else-if="field.widget === 'number'"
+                                v-model.number="data[field.key]"
+                                type="number"
+                                :min="field.min"
+                                :max="field.max"
+                                :step="field.step"
+                                class="w-full" />
+
+                        <!-- Fetch select (x-fetch) — with deps available -->
+                        <div v-else-if="field.widget === 'fetch' && field.fetchMeta && fetchDepsReady(field.fetchMeta)"
+                             class="flex flex-col gap-1.5 w-full">
+                            <div class="flex items-center gap-2">
+                                <USelectMenu v-model="data[field.key]"
+                                             :items="fetchState[field.key]?.options ?? []"
+                                             value-key="value"
+                                             :loading="fetchState[field.key]?.loading"
+                                             :disabled="!fetchState[field.key]?.options?.length && !fetchState[field.key]?.loading"
+                                             :placeholder="fetchState[field.key]?.loading ? 'Loading...' : 'Select...'"
+                                             class="flex-1" />
+                                <UButton icon="i-lucide-refresh-cw"
+                                         color="neutral"
+                                         variant="ghost"
+                                         size="xs"
+                                         :loading="fetchState[field.key]?.loading"
+                                         @click="fetchOptions(field.key, field.fetchMeta!)" />
+                            </div>
+                            <p v-if="fetchState[field.key]?.error"
+                               class="text-xs text-error">
+                                {{ fetchState[field.key]!.error }}
+                            </p>
+                        </div>
+
+                        <!-- Fetch field fallback — deps not available, degrade to text input -->
+                        <UInput v-else-if="field.widget === 'fetch'"
+                                v-model="data[field.key]"
+                                class="w-full" />
+
+                        <!-- Cron expression: presets and a human-readable rendering -->
+                        <div v-else-if="field.widget === 'cron'"
+                             class="flex flex-col gap-1.5 w-full">
+                            <UInput v-model="data[field.key]"
+                                    placeholder="0 0 * * *"
+                                    class="w-full font-mono" />
+                            <p v-if="cronText(data[field.key])"
+                               class="text-xs text-muted">
+                                {{ cronText(data[field.key]) }}<template v-if="cronZone"> · {{ cronZone }}</template>
+                            </p>
+                            <div class="flex flex-wrap gap-1.5">
+                                <UButton v-for="preset in CRON_PRESETS"
+                                         :key="preset.value"
+                                         size="xs"
+                                         variant="soft"
+                                         color="neutral"
+                                         :label="preset.label"
+                                         @click="data[field.key] = preset.value" />
+                            </div>
+                        </div>
+
+                        <!-- Timezone: searchable IANA zone picker -->
+                        <TimezoneSelect v-else-if="field.widget === 'timezone'"
+                                        v-model="data[field.key]"
+                                        class="w-full" />
+
+                        <!-- Array of constrained values: multi-select -->
+                        <USelectMenu v-else-if="field.widget === 'array' && field.options"
+                                     v-model="data[field.key]"
+                                     multiple
+                                     :items="(field.options ?? []).map((o: any) => typeof o === 'object' && o.label ? o : { label: String(o), value: o })"
+                                     value-key="value"
+                                     class="w-full" />
+
+                        <!-- Free-form array: tag input -->
+                        <UInputTags v-else-if="field.widget === 'array'"
+                                    v-model="data[field.key]"
+                                    class="w-full" />
+
+                        <!-- Select (x-options or enum) -->
+                        <USelect v-else-if="field.widget === 'select'"
+                                 v-model="data[field.key]"
+                                 :items="(field.options ?? []).map((o: any) => typeof o === 'object' && o.label ? o : { label: String(o), value: o })"
+                                 class="w-full" />
+
+                        <!-- Switch (boolean) -->
+                        <USwitch v-else-if="field.widget === 'switch'"
+                                 v-model="data[field.key]" />
+
+                        <!-- Nested model: its own fields, behind a switch when optional (off = null) -->
+                        <div v-else-if="field.widget === 'object'"
+                             class="flex w-full flex-col gap-3">
+                            <USwitch v-if="field.nullable"
+                                     :model-value="data[field.key] != null"
+                                     @update:model-value="(on: boolean) => data[field.key] = on ? {} : null" />
+                            <div v-if="data[field.key] != null"
+                                 class="rounded-md border border-default p-4">
+                                <SchemaForm v-model:data="data[field.key]"
+                                            v-model:is-valid="nestedValid[field.key]"
+                                            :schema="nestedSchemas[field.key]!"
+                                            :component-key="componentKey"
+                                            nested />
+                            </div>
+                        </div>
+
+                        <!-- JSON / code -->
+                        <UTextarea v-else-if="field.widget === 'json'"
+                                   :model-value="typeof data[field.key] === 'string' ? data[field.key] : JSON.stringify(data[field.key], null, 2)"
+                                   class="w-full font-mono"
+                                   :rows="6"
+                                   @update:model-value="(v: string) => { try { data[field.key] = JSON.parse(v) } catch { data[field.key] = v } }" />
+
+                        <!-- Default: text input -->
+                        <UInput v-else
+                                v-model="data[field.key]"
+                                class="w-full" />
+                    </UFormField>
+
+                    <!-- OAuth sign-in content -->
+                    <UFormField v-if="block.signIn && activeTab === 'oauth'"
+                                label="OAuth"
+                                description="Sign in with the OAuth provider to automatically fill in your credentials."
+                                required>
+                        <OAuthSignIn :provider="oauthMeta!.provider"
+                                     :scope="oauthMeta!.scope"
+                                     :connected="oauthFilled"
+                                     @success="handleOAuthSuccess" />
+                    </UFormField>
+
+                    <slot v-if="block.signIn ? activeTab === 'manual' : !section.label && !showOAuth"
+                          name="credentials-actions" />
+                </div>
             </template>
-
-            <!-- Password with visibility toggle -->
-            <UInput v-if="field.widget === 'password'"
-                    v-model="data[field.key]"
-                    :type="revealedFields[field.key] ? 'text' : 'password'"
-                    class="w-full">
-                <template #trailing>
-                    <UButton :icon="revealedFields[field.key] ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                             color="neutral"
-                             variant="link"
-                             size="sm"
-                             :padded="false"
-                             @click="revealedFields[field.key] = !revealedFields[field.key]" />
-                </template>
-            </UInput>
-
-            <!-- Textarea -->
-            <UTextarea v-else-if="field.widget === 'textarea'"
-                       v-model="data[field.key]"
-                       class="w-full" />
-
-            <!-- Number -->
-            <UInput v-else-if="field.widget === 'number'"
-                    v-model.number="data[field.key]"
-                    type="number"
-                    :min="field.min"
-                    :max="field.max"
-                    class="w-full" />
-
-            <!-- Fetch select (x-fetch) — with deps available -->
-            <div v-else-if="field.widget === 'fetch' && field.fetchMeta && fetchDepsReady(field.fetchMeta)"
-                 class="flex flex-col gap-1.5 w-full">
-                <div class="flex items-center gap-2">
-                    <USelectMenu v-model="data[field.key]"
-                                 :items="fetchState[field.key]?.options ?? []"
-                                 value-key="value"
-                                 :loading="fetchState[field.key]?.loading"
-                                 :disabled="!fetchState[field.key]?.options?.length && !fetchState[field.key]?.loading"
-                                 :placeholder="fetchState[field.key]?.loading ? 'Loading...' : 'Select...'"
-                                 class="flex-1" />
-                    <UButton icon="i-lucide-refresh-cw"
-                             color="neutral"
-                             variant="ghost"
-                             size="xs"
-                             :loading="fetchState[field.key]?.loading"
-                             @click="fetchOptions(field.key, field.fetchMeta!)" />
-                </div>
-                <p v-if="fetchState[field.key]?.error"
-                   class="text-xs text-error">
-                    {{ fetchState[field.key]!.error }}
-                </p>
-            </div>
-
-            <!-- Fetch field fallback — deps not available, degrade to text input -->
-            <UInput v-else-if="field.widget === 'fetch'"
-                    v-model="data[field.key]"
-                    class="w-full" />
-
-            <!-- Cron expression: presets and a human-readable rendering -->
-            <div v-else-if="field.widget === 'cron'"
-                 class="flex flex-col gap-1.5 w-full">
-                <UInput v-model="data[field.key]"
-                        placeholder="0 0 * * *"
-                        class="w-full font-mono" />
-                <p v-if="cronText(data[field.key])"
-                   class="text-xs text-muted">
-                    {{ cronText(data[field.key]) }}<template v-if="cronZone"> · {{ cronZone }}</template>
-                </p>
-                <div class="flex flex-wrap gap-1.5">
-                    <UButton v-for="preset in CRON_PRESETS"
-                             :key="preset.value"
-                             size="xs"
-                             variant="soft"
-                             color="neutral"
-                             :label="preset.label"
-                             @click="data[field.key] = preset.value" />
-                </div>
-            </div>
-
-            <!-- Timezone: searchable IANA zone picker -->
-            <TimezoneSelect v-else-if="field.widget === 'timezone'"
-                            v-model="data[field.key]"
-                            class="w-full" />
-
-            <!-- Array of constrained values: multi-select -->
-            <USelectMenu v-else-if="field.widget === 'array' && field.options"
-                         v-model="data[field.key]"
-                         multiple
-                         :items="(field.options ?? []).map((o: any) => typeof o === 'object' && o.label ? o : { label: String(o), value: o })"
-                         value-key="value"
-                         class="w-full" />
-
-            <!-- Free-form array: tag input -->
-            <UInputTags v-else-if="field.widget === 'array'"
-                        v-model="data[field.key]"
-                        class="w-full" />
-
-            <!-- Select (x-options or enum) -->
-            <USelect v-else-if="field.widget === 'select'"
-                     v-model="data[field.key]"
-                     :items="(field.options ?? []).map((o: any) => typeof o === 'object' && o.label ? o : { label: String(o), value: o })"
-                     class="w-full" />
-
-            <!-- Switch (boolean) -->
-            <USwitch v-else-if="field.widget === 'switch'"
-                     v-model="data[field.key]" />
-
-            <!-- JSON / code -->
-            <UTextarea v-else-if="field.widget === 'json'"
-                       :model-value="typeof data[field.key] === 'string' ? data[field.key] : JSON.stringify(data[field.key], null, 2)"
-                       class="w-full font-mono"
-                       :rows="6"
-                       @update:model-value="(v: string) => { try { data[field.key] = JSON.parse(v) } catch { data[field.key] = v } }" />
-
-            <!-- Default: text input -->
-            <UInput v-else
-                    v-model="data[field.key]"
-                    class="w-full" />
-        </UFormField>
-
-        <!-- OAuth sign-in content -->
-        <UFormField v-if="showOAuth && activeTab === 'oauth'"
-                    label="OAuth"
-                    description="Sign in with the OAuth provider to automatically fill in your credentials."
-                    required>
-            <OAuthSignIn :provider="oauthMeta!.provider"
-                         :scope="oauthMeta!.scope"
-                         :connected="oauthFilled"
-                         @success="handleOAuthSuccess" />
-        </UFormField>
-    </UForm>
+        </template>
+    </component>
 </template>

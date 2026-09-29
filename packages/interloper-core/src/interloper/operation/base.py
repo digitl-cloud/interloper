@@ -119,8 +119,17 @@ class Operation(Component, Workload):
     capture_traceback: ClassVar[bool] = True
     partitioning: ClassVar[PartitionConfig | None] = None
 
-    enabled: bool = Field(default=True, description="Operation will execute")
-    retry: RetryPolicy | None = Field(default=None, description="Attempt budget for this operation's execution")
+    enabled: bool = Field(
+        default=True,
+        description="Operation will execute",
+        json_schema_extra={"x-section": "Operation"},
+    )
+    retry: RetryPolicy | None = Field(
+        default=None,
+        title="Retry",
+        description="Attempt budget for this operation's execution",
+        json_schema_extra={"x-section": "Operation"},
+    )
 
     def operations(self) -> list[Operation]:
         """An operation is trivially its own workload.

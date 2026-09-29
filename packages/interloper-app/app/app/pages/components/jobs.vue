@@ -217,12 +217,14 @@ const enabled = ref<boolean | null>(null)
                                      noun="Job"
                                      :component="editingJob"
                                      :relation-steps="[{ name: 'targets', standaloneAssetsOnly: true }]"
-                                     :exclude="['lookback', 'offset']"
                                      @created="handleSaved"
                                      @updated="handleSaved">
-                <template #details="{ relations, extra, configData }">
+                <template #section-partitioning="{ keys, schema, componentKey, relations, extra, configData }">
                     <JobsWindowSection v-model:config="extra.config"
                                        v-model:valid="extra.valid"
+                                       :keys="keys"
+                                       :schema="schema"
+                                       :component-key="componentKey"
                                        :target-ids="relations.targets ?? []"
                                        :job="editingJob"
                                        :timezone="typeof configData.timezone === 'string' ? configData.timezone : undefined" />
