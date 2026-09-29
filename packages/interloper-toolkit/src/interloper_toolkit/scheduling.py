@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from interloper_toolkit.context import ToolkitContext, clip
+from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.errors import classify
 from interloper_toolkit.models import (
     AttemptTiming,
@@ -35,6 +35,7 @@ from interloper_toolkit.models import (
     ToolError,
 )
 from interloper_toolkit.stats import max_concurrent, percentile, window
+from interloper_toolkit.utils import clip
 
 FAILURE_EVENT_TYPES = ("operation_failed", "run_failed")
 """The event types that record a failure's verdict once.
