@@ -163,10 +163,18 @@ class TestHookEvaluation:
             config={"events": ["run_completed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
-        _terminal_run(store, leaf.id)
+        run = _terminal_run(store, leaf.id)
 
-        controller = _sweep(store)
-        controller._tick()  # second sweep over the same window
+        _sweep(store)
+        # A crash between the claim and the stamp re-evaluates the run: the
+        # claim is what keeps it from firing twice.
+        with Session(engine_module.get_engine()) as session:
+            db_run = session.get(Run, run.id)
+            assert db_run is not None
+            db_run.hooks_evaluated_at = None
+            session.add(db_run)
+            session.commit()
+        _sweep(store)
 
         with Session(engine_module.get_engine()) as session:
             assert len(session.exec(select(Run).where(Run.status == "queued")).all()) == 1
@@ -700,6 +708,28 @@ class TestEvaluateGuards:
             assert db_run is not None
             db_run.component_id = uuid4()
             controller._evaluate(session, db_run)
+
+    def test_a_backfill_without_a_component_is_skipped(self, store: Store):
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            orphan = Backfill(org_id=_ORG, status="success", start_key="2026-09-01", end_key="2026-09-01")
+            session.add(orphan)
+            session.commit()
+            controller._evaluate_backfill(session, orphan)
+
+    def test_a_backfill_whose_target_vanished_is_skipped(self, store: Store):
+        # Defensive: the foreign key makes this unreachable in practice.
+        job = store.components.create(_ORG, kind="job", key="cron_job", name="J", config={"cron": "0 6 * * *"})
+        backfill = store.runs.create_backfill(_ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-01")
+        controller = HookController(store=store, poll_interval=999)
+
+        with Session(engine_module.get_engine()) as session:
+            db_backfill = session.get(Backfill, backfill.id)
+            assert db_backfill is not None
+            db_backfill.status = "success"
+            db_backfill.component_id = uuid4()
+            controller._evaluate_backfill(session, db_backfill)
 
     def test_a_run_with_no_matching_hook_is_skipped(self, store: Store):
         component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
