@@ -94,7 +94,8 @@ def bind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: str
             Must belong to the same organisation as the source.
     """
     try:
-        row = ctx.store.relations.add(UUID(component_id), name=name, dst_id=UUID(dst_id))
+        src = ctx.component(component_id)
+        row = ctx.store.relations.add(src.id, name=name, dst_id=UUID(dst_id))
     except (ConfigError, NotFoundError, ValueError) as e:
         return ToolError(error=str(e))
     return BindResult(src_id=str(row.src_id), name=row.name, dst_id=str(row.dst_id), dst_kind=row.dst_kind)
@@ -114,7 +115,8 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
             an edge that isn't there is a no-op.
     """
     try:
-        ctx.store.relations.remove(UUID(component_id), name=name, dst_id=UUID(dst_id))
+        src = ctx.component(component_id)
+        ctx.store.relations.remove(src.id, name=name, dst_id=UUID(dst_id))
     except (ConfigError, NotFoundError, ValueError) as e:
         return ToolError(error=str(e))
     return UnbindResult(src_id=component_id, name=name, dst_id=dst_id)

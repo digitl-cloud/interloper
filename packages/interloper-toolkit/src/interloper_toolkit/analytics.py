@@ -78,8 +78,8 @@ def partition_coverage(
     Returns which dates have successful runs and which are missing.
     """
     try:
-        jid = UUID(component_id)
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, limit=1000)
+        job = ctx.component(component_id, kind="job")
+        runs = ctx.store.runs.list_all(ctx.org_id, component_id=job.id, limit=1000)
 
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
