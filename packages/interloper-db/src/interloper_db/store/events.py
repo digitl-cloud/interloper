@@ -212,21 +212,24 @@ class EventStore:
             )
             return session.exec(statement).one()
 
-    def get(self, event_id: UUID) -> Event:
+    def get(self, event_id: UUID, *, org_id: UUID | None = None) -> Event:
         """Load an event by ID.
 
         Args:
             event_id: The event UUID.
+            org_id: Organisation the event must belong to (``None`` accepts
+                any); a mismatch raises ``NotFoundError`` like an absent row.
 
         Returns:
             The Event row.
 
         Raises:
-            NotFoundError: If the event is not found.
+            NotFoundError: If the event is not found, or belongs to another
+                organisation.
         """
         with session_scope(self._engine) as session:
             db_event = session.get(Event, event_id)
-            if not db_event:
+            if not db_event or (org_id is not None and db_event.org_id != org_id):
                 raise NotFoundError(f"Event {event_id} not found")
             return db_event
 

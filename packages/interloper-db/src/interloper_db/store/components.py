@@ -179,7 +179,7 @@ class ComponentStore:
             commit(session)
             return self._load_component(session, db_component.id)
 
-    def get(self, component_id: UUID, *, kind: str | None = None) -> Component:
+    def get(self, component_id: UUID, *, kind: str | None = None, org_id: UUID | None = None) -> Component:
         """Load a component row by ID with relations eager-loaded.
 
         Args:
@@ -187,12 +187,15 @@ class ComponentStore:
             kind: Kind the row must have (``None`` accepts any kind); a
                 mismatch raises ``NotFoundError`` like an absent row, so a
                 caller cannot learn that an id exists under another kind.
+            org_id: Organisation the row must belong to (``None`` accepts
+                any); a mismatch raises ``NotFoundError`` like an absent row,
+                so a caller cannot learn that an id exists in another tenant.
 
         Returns:
             The component row, eager-loaded and safe to hand out detached.
         """
         with session_scope(self._engine) as session:
-            return self._load_component(session, component_id, kind=kind)
+            return self._load_component(session, component_id, kind=kind, org_id=org_id)
 
     def list_all(
         self,
@@ -1209,7 +1212,9 @@ class ComponentStore:
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def _load_component(session: Session, component_id: UUID, *, kind: str | None = None) -> Component:
+    def _load_component(
+        session: Session, component_id: UUID, *, kind: str | None = None, org_id: UUID | None = None
+    ) -> Component:
         """Fetch a component row with children and relations eager-loaded.
 
         Args:
@@ -1217,15 +1222,22 @@ class ComponentStore:
             component_id: The component UUID.
             kind: Kind the row must have (``None`` accepts any kind); a
                 mismatch is reported as a missing row.
+            org_id: Organisation the row must belong to (``None`` accepts
+                any); a mismatch is reported as a missing row.
 
         Returns:
             The component row, safe to hand out detached.
 
         Raises:
-            NotFoundError: If no row exists, or it has a different kind.
+            NotFoundError: If no row exists, or it has a different kind or
+                organisation.
         """
         statement = select(Component).where(Component.id == component_id).options(*COMPONENT_LOAD_OPTIONS)
         db_component = session.exec(statement).first()
-        if not db_component or (kind is not None and db_component.kind != kind):
+        if (
+            not db_component
+            or (kind is not None and db_component.kind != kind)
+            or (org_id is not None and db_component.org_id != org_id)
+        ):
             raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
         return db_component

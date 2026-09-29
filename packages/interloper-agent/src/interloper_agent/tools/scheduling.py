@@ -8,11 +8,12 @@ operations — toggling, triggering — stay here, agent-only.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from google.adk.tools.tool_context import ToolContext
 from interloper_toolkit import scheduling as toolkit_scheduling
 
-from interloper_agent.context import serialize, toolkit_ctx
+from interloper_agent.context import get_org_id, get_store, serialize, toolkit_ctx
 
 # --- Jobs ---
 
@@ -37,9 +38,10 @@ def toggle_job(
         enabled: True to enable, false to disable.
     """
     try:
-        ctx = toolkit_ctx(tool_context)
-        job = ctx.component(component_id, kind="job")
-        updated = ctx.store.components.update(job.id, config={**(job.config or {}), "enabled": enabled})
+        store = get_store()
+        jid = UUID(component_id)
+        job = store.components.get(jid, kind="job", org_id=get_org_id(tool_context))
+        updated = store.components.update(jid, config={**(job.config or {}), "enabled": enabled})
         action = "enabled" if enabled else "disabled"
         return {
             "status": "success",
@@ -85,9 +87,10 @@ def trigger_run(
             2026-04-09T13 (hour).
     """
     try:
-        ctx = toolkit_ctx(tool_context)
-        target = ctx.component(component_id)
-        run = ctx.store.runs.create(ctx.org_id, component_id=target.id, partition_key=partition_key)
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        target = store.components.get(UUID(component_id), org_id=org_id)
+        run = store.runs.create(org_id, component_id=target.id, partition_key=partition_key)
         return {
             "status": "success",
             "message": "Run queued successfully",
@@ -124,10 +127,11 @@ def trigger_backfill(
         fail_fast: If true, cancel remaining runs on first failure (default false).
     """
     try:
-        ctx = toolkit_ctx(tool_context)
-        target = ctx.component(component_id)
-        backfill = ctx.store.runs.create_backfill(
-            ctx.org_id,
+        org_id = get_org_id(tool_context)
+        store = get_store()
+        target = store.components.get(UUID(component_id), org_id=org_id)
+        backfill = store.runs.create_backfill(
+            org_id,
             component_id=target.id,
             start_key=start_key,
             end_key=end_key,
@@ -158,9 +162,10 @@ def toggle_asset(
         enabled: True to enable materialization, false to disable.
     """
     try:
-        ctx = toolkit_ctx(tool_context)
-        asset = ctx.component(asset_id, kind="asset")
-        updated = ctx.store.components.update(asset.id, config={**(asset.config or {}), "enabled": enabled})
+        store = get_store()
+        aid = UUID(asset_id)
+        asset = store.components.get(aid, kind="asset", org_id=get_org_id(tool_context))
+        updated = store.components.update(aid, config={**(asset.config or {}), "enabled": enabled})
         action = "enabled" if enabled else "disabled"
         return {
             "status": "success",
