@@ -227,9 +227,9 @@ class RelationStore:
             if not relation.many and len(dst_ids) > 1:
                 raise ConfigError(f"'{src.key}'.{name} is single-valued and takes one target at a time")
             existing = self._rows(session, src.id, name)
-            # Gated on existing rows: creation may leave a non-optional name
-            # unbound, which only hydration refuses; an update that clears
-            # one is a removal.
+            # Gated on existing rows so the message names what happened: an
+            # update that clears a bound name is a removal; a name left
+            # unbound is caught by `_require_bound` once every name is synced.
             if existing and not dst_ids and not relation.optional:
                 raise ConfigError(
                     f"'{src.key}'.{name} is non-optional and cannot be emptied; "
@@ -246,6 +246,25 @@ class RelationStore:
                     continue
                 held.add(dst_id)
                 self._insert(session, src, self._resolve(session, src, relation, name, dst_id), name)
+
+    def _require_bound(self, session: Session, src: Component) -> None:
+        """Refuse a row that leaves a relation its class declares non-optional unbound.
+
+        The class declaration is what the row's code runs against: a Slack
+        hook without its connection, a source without its connection, would
+        only fail where it fires or runs. Checked after every save, so a row
+        that predates the guard is caught on its next save too.
+
+        Args:
+            session: Open session the rows are read through.
+            src: Component row whose relations are checked.
+
+        Raises:
+            ConfigError: If a non-optional relation has no row.
+        """
+        for name, relation in self._vocabulary(session, src).items():
+            if not relation.optional and not self._rows(session, src.id, name):
+                raise ConfigError(f"'{src.key}'.{name} is required: bind a {' or '.join(relation.kinds)}")
 
     def _relation_detaches(self, session: Session, referrer: Component, relation_row: ComponentRelation) -> bool:
         """Whether an edge detaches (rather than blocks) when its destination is deleted.

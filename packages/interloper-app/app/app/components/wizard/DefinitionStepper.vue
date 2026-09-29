@@ -7,7 +7,7 @@
  *      via `definitionKey` (create mode only; `initialTypeKey` preselects).
  *   2. Page-injected extra steps with `placement: 'start'` (e.g. source assets).
  *   3. One picker step per `relationSteps` entry the selected class declares.
- *   4. One step per declared resource relation (when `resourceRelationSteps`).
+ *   4. One step per resource relation the selected class declares.
  *   5. Extra steps with `placement: 'end'` (e.g. source destinations).
  *   6. Details: name and a SchemaForm generated from `config_schema` (grouped
  *      by the fields' `x-section`), with the kind's own action (a connection's
@@ -67,8 +67,6 @@ const props = withDefaults(defineProps<{
     /** Prefill the name instead of the type's default (create mode, with `initialTypeKey`). */
     initialName?: string
     relationSteps?: RelationStep[]
-    /** Render one picker step per declared resource relation. */
-    resourceRelationSteps?: boolean
     extraSteps?: ExtraStep[]
     /** Config fields kept out of the generated form. */
     exclude?: string[]
@@ -91,7 +89,6 @@ const props = withDefaults(defineProps<{
     initialTypeKey: undefined,
     initialName: undefined,
     relationSteps: () => [],
-    resourceRelationSteps: false,
     extraSteps: () => [],
     exclude: () => [],
     nameOptional: false,
@@ -198,7 +195,7 @@ function relationCandidates(step: RelationStep): ComponentRecord[] {
 // ── Resource relation steps ──────────────────────────────────────
 
 const resourceSteps = computed(() => {
-    if (!props.resourceRelationSteps || !definition.value) return []
+    if (!definition.value) return []
     return Object.entries(resourceRelations(definition.value)).map(([name, relation]) => {
         const resourceKey = keysOf(relation)[0] ?? ''
         return { name, resourceKey, optional: relation.optional, definition: catalogStore.catalog[resourceKey] }

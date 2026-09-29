@@ -141,7 +141,6 @@ const typeKey = ref<string | null>(null)
                                      :component="editingDestination"
                                      :initial-type-key="presetTypeKey"
                                      :definitions="catalogStore.destinationDefinitions"
-                                     resource-relation-steps
                                      name-optional
                                      @created="handleSaved"
                                      @updated="handleSaved" />
