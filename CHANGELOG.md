@@ -2,6 +2,93 @@
 
 <!-- version list -->
 
+## v0.89.0 (2026-09-29)
+
+### Bug Fixes
+
+- **db**: Keep component listings in creation order
+  ([`9f8c688`](https://github.com/digitl-cloud/interloper/commit/9f8c688fd8138243b6ad03baa681a539ee71e0ef))
+
+- **db**: Require a component's non-optional relations at save time
+  ([`9fb9cc5`](https://github.com/digitl-cloud/interloper/commit/9fb9cc5ba0312afc9f6089b73a2c4245bdf42ced))
+
+- **toolkit**: Read failure events in the database and drop the hidden caps
+  ([`b55ebfe`](https://github.com/digitl-cloud/interloper/commit/b55ebfe15c2beca77d9ff7480cc371c7f6ef77f3))
+
+- **toolkit**: Scope id lookups and write paths to the caller's org
+  ([`40351f9`](https://github.com/digitl-cloud/interloper/commit/40351f9ff01de01c5d9e97cd2ac641610c3f6c68))
+
+### Documentation
+
+- Spec backfill hook events
+  ([`46b2e96`](https://github.com/digitl-cloud/interloper/commit/46b2e966a7f028d300a67f8867a53c69905af5cb))
+
+### Features
+
+- **api**: Add the app's public URL as server.external_url
+  ([`5a20a90`](https://github.com/digitl-cloud/interloper/commit/5a20a905228fb7ff684013964171fae6c149a633))
+
+- **app**: Open the connection wizard from a deep link
+  ([`13535e0`](https://github.com/digitl-cloud/interloper/commit/13535e03a94757139ad25ef1f7ca7c54b24c05cd))
+
+- **core**: Let hooks observe a backfill's verdict
+  ([`dd0ed9a`](https://github.com/digitl-cloud/interloper/commit/dd0ed9a94445e671c178e335081a89e6a96d59d4))
+
+- **db**: A delivery cursor for the hook evaluator, and a terminal guard on completion
+  ([`84351d1`](https://github.com/digitl-cloud/interloper/commit/84351d14aac05479d66103a2ea1c631e56ef7a89))
+
+- **db**: Add error, interval and coverage queries and the events error index
+  ([`a993b97`](https://github.com/digitl-cloud/interloper/commit/a993b97c870e6d8535d56554904d891a4a5df8c0))
+
+- **mcp**: Register the write tools behind the editor role, with annotations
+  ([`ec9365b`](https://github.com/digitl-cloud/interloper/commit/ec9365b09e0d37ade32de303c0422182a3432e65))
+
+- **scheduler**: Fire hooks on backfill verdicts, swept by the delivery cursor
+  ([`1501fab`](https://github.com/digitl-cloud/interloper/commit/1501fab88576d6474fd60af9bd72c0de2bb0264d))
+
+- **toolkit**: Add error_breakdown, run_stats, asset_coverage and backfill_timeline
+  ([`2d1534f`](https://github.com/digitl-cloud/interloper/commit/2d1534f8de79f606a3444343a82dbcef18bee5df))
+
+- **toolkit**: Add retry_run and cancel_backfill
+  ([`d889562`](https://github.com/digitl-cloud/interloper/commit/d8895621d6d8b5af9b3076e8915c6c0d511a976e))
+
+- **toolkit**: Carry the caller's role and gate writes on it
+  ([`bf7c3ec`](https://github.com/digitl-cloud/interloper/commit/bf7c3ec444179c4ecd6313e05e6b3722d0e3ef6d))
+
+- **toolkit**: Return the app's setup link from request_connection_setup
+  ([`629a975`](https://github.com/digitl-cloud/interloper/commit/629a975b6171584bccabed9be680457b2a374acd))
+
+### Refactoring
+
+- Scope id lookups in the store getters, not on ToolkitContext
+  ([`5b7f7fb`](https://github.com/digitl-cloud/interloper/commit/5b7f7fb13235afd4388b4df3379283cefa4e0e2d))
+
+- **db**: Fold run intervals into the run listing
+  ([`2f7d04c`](https://github.com/digitl-cloud/interloper/commit/2f7d04c5f05e718d3f24eb43070bd79781e3c27c))
+
+- **toolkit**: Mirror the tests to the module layout
+  ([`da14152`](https://github.com/digitl-cloud/interloper/commit/da14152c4d03f259072066146e845cd28dfe48c9))
+
+- **toolkit**: Move clip into a utils module
+  ([`d05dc5d`](https://github.com/digitl-cloud/interloper/commit/d05dc5d6ac6aec08fe0ea36f1e3a84f9bbf39622))
+
+- **toolkit**: Move the write tools out of the agent
+  ([`ddacbad`](https://github.com/digitl-cloud/interloper/commit/ddacbad9480145699add873c100a065009eb9594))
+
+### Testing
+
+- **db**: Cover the investigation store queries
+  ([`6d9f285`](https://github.com/digitl-cloud/interloper/commit/6d9f285c7ee3c09635af8882584315e1b465aab7))
+
+- **scheduler**: Cover the evaluator's claim check and backfill guards
+  ([`a59c4ad`](https://github.com/digitl-cloud/interloper/commit/a59c4adf9f8788a85add4406cdf80b4e669f5976))
+
+### Breaking Changes
+
+- **mcp**: The server is no longer read-only. A personal access token minted for an editor or admin
+  can change the organisation's collection and schedule through MCP.
+
+
 ## v0.88.0 (2026-09-29)
 
 ### Features
