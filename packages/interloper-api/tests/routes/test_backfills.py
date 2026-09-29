@@ -48,7 +48,11 @@ class FakeStore:
         #: Role the fake user holds in the backfill's org. None = not a member.
         self.role: str | None = "editor"
         self.organisations = SimpleNamespace(member_role=self._member_role)
-        self.runs = SimpleNamespace(get_backfill=self._get_backfill, cancel_backfill=self._cancel_backfill)
+        self.runs = SimpleNamespace(
+            get_backfill=self._get_backfill,
+            cancel_backfill=self._cancel_backfill,
+            count_backfill_runs=lambda backfill_ids: {},
+        )
         self.components = SimpleNamespace()
 
     def _get_backfill(self, backfill_id: UUID):
@@ -198,6 +202,33 @@ def test_list_backfills_returns_the_orgs_backfills(store: FakeStore) -> None:
     assert response.status_code == 200
     assert [row["id"] for row in response.json()] == [str(backfill_id)]
     assert listed == [_ORG_ID]
+
+
+def test_list_backfills_carries_each_ones_run_counts(store: FakeStore) -> None:
+    """Every listed backfill reports its partitions per status, counted for the whole page at once."""
+    counted, empty = uuid4(), uuid4()
+    asked: list[list[UUID]] = []
+
+    def count_backfill_runs(backfill_ids: list[UUID]) -> dict[UUID, dict[str, int]]:
+        asked.append(list(backfill_ids))
+        return {counted: {"success": 2, "queued": 1}}
+
+    store.runs.list_backfills = lambda org_id: [_fake_backfill(counted), _fake_backfill(empty)]
+    store.runs.count_backfill_runs = count_backfill_runs
+
+    response = _list_client(store).get("/backfills/")
+
+    assert response.status_code == 200
+    assert [row["run_counts"] for row in response.json()] == [{"success": 2, "queued": 1}, {}]
+    assert asked == [[counted, empty]]
+
+
+def test_get_backfill_carries_its_run_counts(store: FakeStore) -> None:
+    store.runs.count_backfill_runs = lambda backfill_ids: {backfill_ids[0]: {"failed": 3}}
+
+    response = _client(store).get(f"/backfills/{uuid4()}")
+
+    assert response.json()["run_counts"] == {"failed": 3}
 
 
 def test_active_only_narrows_to_the_running_ones(store: FakeStore) -> None:

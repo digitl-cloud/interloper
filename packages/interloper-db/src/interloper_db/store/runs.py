@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -552,6 +553,43 @@ class RunStore:
                 .options(*BACKFILL_LOAD_OPTIONS)
             )
             return list(session.exec(statement).all())
+
+    def count_backfill_runs(self, backfill_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
+        """Count each backfill's partitions by their latest attempt's status, in one query.
+
+        A partition reads as its stack's latest attempt, so one a retry healed
+        counts as a success and one waiting out a retry's backoff as queued.
+
+        Args:
+            backfill_ids: The backfills to count, typically one listing.
+
+        Returns:
+            Per backfill, its partition count per status; a backfill with no
+            runs is absent.
+        """
+        if not backfill_ids:
+            return {}
+        latest = (
+            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
+            .where(col(Run.backfill_id).in_(backfill_ids))
+            .group_by(col(Run.root_run_id))
+            .subquery()
+        )
+        statement = (
+            select(col(Run.backfill_id), col(Run.status), func.count())
+            .join(
+                latest,
+                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
+            )
+            .where(col(Run.backfill_id).in_(backfill_ids))
+            .group_by(col(Run.backfill_id), col(Run.status))
+        )
+        counts: dict[UUID, dict[str, int]] = {}
+        with session_scope(self._engine) as session:
+            for backfill_id, status, count in session.exec(statement).all():
+                assert backfill_id is not None
+                counts.setdefault(backfill_id, {})[status] = count
+        return counts
 
     def list_active_backfills(self, org_id: UUID) -> list[Backfill]:
         """List in-progress backfills for an organisation.

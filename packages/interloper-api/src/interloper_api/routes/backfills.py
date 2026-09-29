@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from interloper.errors import NotFoundError
 from interloper_db.models import Backfill
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
     CurrentUserDep,
@@ -40,6 +40,10 @@ class BackfillResponse(BaseModel):
     The target component's identity is resolved server-side, same contract
     as ``RunResponse``: the ``component_*`` identity fields are ``None``
     exactly when the target was deleted.
+
+    ``run_counts`` is the backfill's partitions per status, each read as its
+    stack's latest attempt, so a listing can draw the backfill's progress
+    without fetching its runs.
     """
 
     id: UUID
@@ -57,13 +61,16 @@ class BackfillResponse(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     created_at: str | None = None
+    run_counts: dict[str, int] = Field(default_factory=dict)
 
     @classmethod
-    def from_backfill(cls, backfill: Backfill) -> BackfillResponse:
+    def from_backfill(cls, backfill: Backfill, run_counts: dict[str, int] | None = None) -> BackfillResponse:
         """Convert a DB Backfill to a BackfillResponse.
 
         Args:
             backfill: The DB Backfill row, with its ``target`` relationship loaded.
+            run_counts: The backfill's partition count per status; None reads
+                as no runs yet.
 
         Returns:
             The response model.
@@ -84,6 +91,7 @@ class BackfillResponse(BaseModel):
             started_at=str(backfill.started_at) if backfill.started_at else None,
             completed_at=str(backfill.completed_at) if backfill.completed_at else None,
             created_at=str(backfill.created_at) if backfill.created_at else None,
+            run_counts=run_counts or {},
         )
 
 
@@ -116,7 +124,8 @@ def list_backfills(
         backfills = store.runs.list_active_backfills(org_id)
     else:
         backfills = store.runs.list_backfills(org_id)
-    return [BackfillResponse.from_backfill(b) for b in backfills]
+    counts = store.runs.count_backfill_runs([backfill.id for backfill in backfills])
+    return [BackfillResponse.from_backfill(backfill, counts.get(backfill.id)) for backfill in backfills]
 
 
 @router.post("/", status_code=201)
@@ -153,7 +162,7 @@ def create_backfill(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return BackfillResponse.from_backfill(backfill)
+    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill.id]).get(backfill.id))
 
 
 @router.get("/{backfill_id}")
@@ -180,7 +189,7 @@ def get_backfill(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
     authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
-    return BackfillResponse.from_backfill(backfill)
+    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill_id]).get(backfill_id))
 
 
 @router.post("/{backfill_id}/cancel")
