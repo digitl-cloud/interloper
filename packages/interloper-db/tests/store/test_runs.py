@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import Store
 from interloper_db.store.runs import create_backfill_runs, partition_key_range
 
@@ -64,7 +64,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Backfill, Component, Run, Quota, Usage):
+    for model in (Backfill, Component, Run, Event, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
@@ -101,6 +101,26 @@ def _run_statuses(store: Store, backfill_id: UUID) -> dict[UUID, str]:
     with Session(store.engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
         return {run.id: run.status for run in runs if run.id}
+
+
+def _runs_of(store: Store, backfill_id: UUID) -> list[Run]:
+    with Session(store.engine) as session:
+        return list(session.exec(select(Run).where(Run.backfill_id == backfill_id)).all())
+
+
+def _record_run_failure(store: Store, run_id: UUID, error: str) -> None:
+    with Session(store.engine) as session:
+        session.add(
+            Event(
+                id=uuid4(),
+                org_id=_ORG_ID,
+                run_id=run_id,
+                event_type="run_failed",
+                error=error,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+            )
+        )
+        session.commit()
 
 
 def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
@@ -673,6 +693,16 @@ class TestGetAndComplete:
         with pytest.raises(NotFoundError, match=f"Backfill {backfill.id} not found"):
             store.runs.get_backfill(backfill.id, org_id=other)
 
+    def test_complete_refuses_a_terminal_run(self, store: Store):
+        # The reaper failing a run whose pod finally started must not overwrite
+        # the executor's verdict, nor queue a retry of work that succeeded.
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=True)
+
+        with pytest.raises(ValueError, match=f"Run {run.id} is already success"):
+            store.runs.complete(run.id, success=False)
+        assert store.runs.get(run.id).status == "success"
+
     def test_complete_records_success(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
@@ -804,6 +834,44 @@ class TestCountBackfillRuns:
             session.commit()
 
         assert store.runs.count_backfill_runs([backfill.id]) == {backfill.id: {"success": 1}}
+
+
+class TestFailedPartitions:
+    """A backfill's failed partitions, read off each stack's latest attempt, with their errors."""
+
+    def test_reads_the_latest_attempt_and_its_error(self, store: Store):
+        backfill = _backfill(store, days=3, concurrency=3)
+        by_partition = {
+            run.partition_key: run for run in _runs_of(store, backfill.id)
+        }
+        store.runs.complete(by_partition["2026-01-01"].id, success=True)
+        failed = by_partition["2026-01-02"]
+        store.runs.complete(failed.id, success=False)
+        _record_run_failure(store, failed.id, "boom")
+        healed = by_partition["2026-01-03"]
+        store.runs.complete(healed.id, success=False)
+        with Session(store.engine) as session:
+            session.add(
+                Run(
+                    org_id=_ORG_ID,
+                    backfill_id=backfill.id,
+                    partition_key=healed.partition_key,
+                    status="success",
+                    retry_of=healed.id,
+                    root_run_id=healed.root_run_id,
+                    attempt=2,
+                )
+            )
+            session.commit()
+
+        assert store.runs.failed_partitions(backfill.id) == [("2026-01-02", "boom")]
+
+    def test_lists_newest_first_and_tolerates_a_missing_error(self, store: Store):
+        backfill = _backfill(store, days=2, concurrency=2)
+        for run in _runs_of(store, backfill.id):
+            store.runs.complete(run.id, success=False)
+
+        assert store.runs.failed_partitions(backfill.id) == [("2026-01-02", None), ("2026-01-01", None)]
 
 
 class TestListActiveBackfills:
