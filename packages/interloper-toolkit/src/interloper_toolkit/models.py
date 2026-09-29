@@ -409,6 +409,97 @@ class BackfillList(BaseModel):
     backfills: list[Backfill]
 
 
+class ErrorCause(BaseModel):
+    """What an error text says about its cause, parsed once at read time.
+
+    ``fingerprint`` is what identical causes share and what error groups merge
+    on; ``summary`` is the one line a reader wants.
+    """
+
+    exception_type: str | None = None
+    http_status: int | None = None
+    method: str | None = None
+    host: str | None = None
+    path: str | None = None
+    vendor_code: int | None = None
+    vendor_subcode: int | None = None
+    fingerprint: str
+    summary: str
+
+
+class Scan(BaseModel):
+    """How much an aggregate read, and whether its cap cut the read short."""
+
+    rows: int
+    truncated: bool
+
+
+class ErrorGroupRow(BaseModel):
+    """Failures sharing one grouping key over the window.
+
+    ``failed_attempts`` counts every attempt that failed, retried ones
+    included; ``terminal_failures`` only those that were the operation's or
+    run's final word.
+    """
+
+    job_id: UUID | None = None
+    job_name: str | None = None
+    asset_key: str | None = None
+    cause: ErrorCause | None = None
+    failed_attempts: int
+    terminal_failures: int
+    runs_affected: int
+    first_seen: datetime
+    last_seen: datetime
+    sample_run_id: UUID
+    sample: str
+
+
+class ErrorBreakdown(BaseModel):
+    """One page of error groups over a window, loudest first."""
+
+    status: Literal["success"] = "success"
+    since: datetime | None = None
+    until: datetime | None = None
+    group_by: list[str]
+    count: int
+    total: int
+    scan: Scan
+    groups: list[ErrorGroupRow]
+
+
+class AttemptTiming(BaseModel):
+    """One run attempt of a backfill, with its timing."""
+
+    run_id: UUID
+    partition_key: str | None = None
+    status: str
+    attempt: int
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    duration_s: float | None = None
+    queue_wait_s: float | None = None
+
+
+class BackfillTimeline(BaseModel):
+    """A backfill's declared settings next to what its runs actually did.
+
+    ``max_concurrent_runs`` is the peak number of attempts running at one
+    instant, to compare with the backfill's declared ``concurrency``.
+    """
+
+    status: Literal["success"] = "success"
+    backfill: Backfill
+    max_concurrent_runs: int
+    first_start_lag_s: float | None = None
+    duration_p50_s: float | None = None
+    duration_p90_s: float | None = None
+    runs_by_status: dict[str, int]
+    count: int
+    total: int
+    attempts: list[AttemptTiming]
+
+
 # -- Analytics ------------------------------------------------------------------
 
 
@@ -454,3 +545,79 @@ class FreshnessReport(BaseModel):
     total_jobs: int
     stale_count: int
     jobs: list[JobFreshness]
+
+
+class JobStats(BaseModel):
+    """One job's run statistics over a window.
+
+    ``stacks`` counts each unit of work once, by its latest attempt's status;
+    ``attempts`` counts every attempt. A retried stack is ``healed`` when a
+    later attempt succeeded and ``still_failing`` when none has.
+    """
+
+    job_id: UUID | None = None
+    job_name: str | None = None
+    stacks: dict[str, int]
+    attempts: int
+    duration_p50_s: float | None = None
+    duration_p90_s: float | None = None
+    duration_max_s: float | None = None
+    stacks_retried: int
+    healed: int
+    still_failing: int
+
+
+class RunStats(BaseModel):
+    """One page of per-job run statistics over a window, most failures first."""
+
+    status: Literal["success"] = "success"
+    since: datetime | None = None
+    until: datetime | None = None
+    count: int
+    total: int
+    jobs: list[JobStats]
+
+
+class PartitionRange(BaseModel):
+    """An inclusive range of partition keys, usable as backfill bounds."""
+
+    start_key: str
+    end_key: str
+
+
+class AssetCoverageRow(BaseModel):
+    """One asset's partition coverage over a range.
+
+    A partition is ``covered`` once any run's execution of the asset
+    succeeded, ``failed`` when every execution failed, and ``never_run`` when
+    no run executed the asset for it. ``missing`` lists the uncovered
+    partitions as ranges, at most 20 of them.
+    """
+
+    asset_id: UUID
+    asset_key: str | None = None
+    covered: int
+    failed: int
+    never_run: int
+    missing: list[PartitionRange]
+    missing_ranges_total: int
+
+
+class AssetCoverage(BaseModel):
+    """Per-asset partition coverage of a job over a range, least covered first.
+
+    The rollup counts the range's partitions by how many of the assets seen
+    in the range are covered for them: all, some, or none.
+    """
+
+    status: Literal["success"] = "success"
+    component_id: UUID
+    start_key: str
+    end_key: str
+    partitions: int
+    all_covered: int
+    partly_covered: int
+    none_covered: int
+    count: int
+    total: int
+    assets: list[AssetCoverageRow]

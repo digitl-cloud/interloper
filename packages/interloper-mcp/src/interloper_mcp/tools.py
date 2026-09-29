@@ -124,9 +124,28 @@ def register_tools(mcp: FastMCP) -> None:
     def list_failures(limit: int = 20, offset: int = 0) -> m.FailureList | m.ToolError:
         return scheduling.list_failures(get_ctx(), limit, offset)
 
+    @mcp.tool(description=scheduling.error_breakdown.__doc__)
+    def error_breakdown(
+        since: str | None = None,
+        until: str | None = None,
+        component_id: str | None = None,
+        backfill_id: str | None = None,
+        run_id: str | None = None,
+        group_by: list[str] | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> m.ErrorBreakdown | m.ToolError:
+        return scheduling.error_breakdown(
+            get_ctx(), since, until, component_id, backfill_id, run_id, group_by, limit, offset
+        )
+
     @mcp.tool(description=scheduling.list_backfills.__doc__)
     def list_backfills(active_only: bool = True, limit: int = 20, offset: int = 0) -> m.BackfillList | m.ToolError:
         return scheduling.list_backfills(get_ctx(), active_only, limit, offset)
+
+    @mcp.tool(description=scheduling.backfill_timeline.__doc__)
+    def backfill_timeline(backfill_id: str, limit: int = 50, offset: int = 0) -> m.BackfillTimeline | m.ToolError:
+        return scheduling.backfill_timeline(get_ctx(), backfill_id, limit, offset)
 
     # -- Analytics ---------------------------------------------------------
 
@@ -141,3 +160,19 @@ def register_tools(mcp: FastMCP) -> None:
     @mcp.tool(description=analytics.freshness_check.__doc__)
     def freshness_check() -> m.FreshnessReport | m.ToolError:
         return analytics.freshness_check(get_ctx())
+
+    @mcp.tool(description=analytics.run_stats.__doc__)
+    def run_stats(
+        since: str | None = None,
+        until: str | None = None,
+        component_id: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> m.RunStats | m.ToolError:
+        return analytics.run_stats(get_ctx(), since, until, component_id, limit, offset)
+
+    @mcp.tool(description=analytics.asset_coverage.__doc__)
+    def asset_coverage(
+        component_id: str, start_key: str, end_key: str, limit: int = 50, offset: int = 0
+    ) -> m.AssetCoverage | m.ToolError:
+        return analytics.asset_coverage(get_ctx(), component_id, start_key, end_key, limit, offset)

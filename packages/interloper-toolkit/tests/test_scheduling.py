@@ -7,9 +7,9 @@ from typing import Any
 from uuid import uuid4
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Component, Event, Run
+from interloper_db.models import Backfill, Component, Event, Run
 from interloper_db.store import Store
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from interloper_toolkit import ToolkitContext, scheduling
 
@@ -186,7 +186,7 @@ class TestRunEvents:
     def test_get_event_of_another_orgs_run_is_not_found(self, ctx: ToolkitContext):
         run_id = _failed_run_with_many_events(uuid4(), early=0)
         with Session(engine_module.get_engine()) as session:
-            event_id = session.exec(__import__("sqlmodel").select(Event.id).where(Event.run_id == run_id)).first()
+            event_id = session.exec(select(Event.id).where(Event.run_id == run_id)).first()
 
         assert scheduling.get_event(ctx, str(event_id)).status == "error"
 
@@ -211,3 +211,102 @@ class TestListingTotals:
         assert (job_page.count, job_page.total) == (1, 3)
         assert (run_page.count, run_page.total) == (3, 6)  # the two backfills add a run each
         assert (backfill_page.count, backfill_page.total) == (1, 2)
+
+
+class TestErrorBreakdown:
+    def _seed(self, ctx: ToolkitContext) -> tuple[Any, Any]:
+        job = Component(org_id=ctx.org_id, kind="job", key="amazon", name="Amazon SP")
+        job_id = job.id
+        run = Run(id=uuid4(), org_id=ctx.org_id, component_id=job_id, status="failed")
+        run_id = run.id
+        error = HTTPX = (
+            "HTTPStatusError: Client error '429 Too Many Requests' for url "
+            "'https://sellingpartnerapi-eu.amazon.com/reports/2021-06-30/reports/1'"
+        )
+        events = [
+            _event(ctx.org_id, run_id, "asset_data_failed", 1, error=error),
+            _event(ctx.org_id, run_id, "operation_retried", 2, error=error),
+            _event(ctx.org_id, run_id, "asset_data_failed", 3, error=HTTPX.replace("/1'", "/2'")),
+            _event(ctx.org_id, run_id, "operation_failed", 4, error=HTTPX.replace("/1'", "/2'")),
+            _event(ctx.org_id, run_id, "run_failed", 5, error="Run failed (1 operation(s) failed)"),
+        ]
+        with Session(engine_module.get_engine()) as session:
+            session.add_all([job, run])
+            session.commit()
+            session.add_all(events)
+            session.commit()
+        return job_id, run_id
+
+    def test_counts_each_failed_attempt_once_and_merges_by_cause(self, ctx: ToolkitContext):
+        job_id, run_id = self._seed(ctx)
+
+        result = scheduling.error_breakdown(ctx, since="2026-09-01")
+
+        assert result.status == "success"
+        assert result.total == 2
+        top = result.groups[0]
+        assert (top.job_id, top.job_name, top.asset_key) == (job_id, "Amazon SP", "orders")
+        assert (top.failed_attempts, top.terminal_failures, top.runs_affected) == (2, 1, 1)
+        assert top.cause is not None
+        assert top.cause.http_status == 429
+        assert top.sample_run_id == run_id
+        assert result.scan.truncated is False
+
+    def test_grouping_by_job_alone_collapses_assets_and_causes(self, ctx: ToolkitContext):
+        self._seed(ctx)
+
+        result = scheduling.error_breakdown(ctx, since="2026-09-01", group_by=["job"])
+
+        assert result.status == "success"
+        assert result.total == 1
+        assert result.groups[0].failed_attempts == 3
+        assert result.groups[0].asset_key is None
+        assert result.groups[0].cause is None
+
+    def test_a_run_scope_opens_the_window(self, ctx: ToolkitContext):
+        _, run_id = self._seed(ctx)
+
+        result = scheduling.error_breakdown(ctx, run_id=str(run_id))
+
+        assert result.status == "success"
+        assert result.since is None
+        assert result.total == 2
+
+    def test_unknown_group_keys_are_refused(self, ctx: ToolkitContext):
+        assert scheduling.error_breakdown(ctx, group_by=["asset", "colour"]).status == "error"
+
+
+class TestBackfillTimeline:
+    def test_observed_concurrency_and_timing(self, ctx: ToolkitContext, store: Store):
+        backfill = store.runs.create_backfill(ctx.org_id, start_key="2026-07-01", end_key="2026-07-03", concurrency=1)
+        t0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.timezone.utc)
+        with Session(engine_module.get_engine()) as session:
+            row = session.get(Backfill, backfill.id)
+            assert row is not None
+            row.created_at = t0
+            session.add(row)
+            runs = session.exec(select(Run).where(Run.backfill_id == backfill.id)).all()
+            for i, run in enumerate(sorted(runs, key=lambda r: r.partition_key or "")):
+                run.created_at = t0
+                run.started_at = t0 + datetime.timedelta(minutes=i)
+                run.completed_at = t0 + datetime.timedelta(minutes=10 + i * 10)
+                run.status = "success"
+                session.add(run)
+            session.commit()
+
+        result = scheduling.backfill_timeline(ctx, str(backfill.id), limit=2)
+
+        assert result.status == "success"
+        assert result.backfill.concurrency == 1
+        assert result.max_concurrent_runs == 3
+        assert result.first_start_lag_s == 0.0
+        assert (result.duration_p50_s, result.duration_p90_s) == (1140.0, 1680.0)
+        assert result.runs_by_status == {"success": 3}
+        assert (result.count, result.total) == (2, 3)
+        assert [a.partition_key for a in result.attempts] == ["2026-07-01", "2026-07-02"]
+        assert result.attempts[1].queue_wait_s == 60.0
+
+    def test_another_orgs_backfill_is_not_found(self, ctx: ToolkitContext, store: Store):
+        backfill = store.runs.create_backfill(uuid4(), start_key="2026-07-01", end_key="2026-07-01")
+
+        assert scheduling.backfill_timeline(ctx, str(backfill.id)).status == "error"

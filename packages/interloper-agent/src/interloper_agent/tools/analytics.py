@@ -36,6 +36,34 @@ def freshness_check(tool_context: ToolContext) -> dict[str, Any]:
     return toolkit_analytics.freshness_check(toolkit_ctx(tool_context)).model_dump(mode="json")
 
 
+def run_stats(
+    since: str | None = None,
+    until: str | None = None,
+    component_id: str | None = None,
+    limit: int = 25,
+    offset: int = 0,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    result = toolkit_analytics.run_stats(toolkit_ctx(tool_context), since, until, component_id, limit, offset)
+    return result.model_dump(mode="json")
+
+
+def asset_coverage(
+    component_id: str,
+    start_key: str,
+    end_key: str,
+    limit: int = 50,
+    offset: int = 0,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    result = toolkit_analytics.asset_coverage(
+        toolkit_ctx(tool_context), component_id, start_key, end_key, limit, offset
+    )
+    return result.model_dump(mode="json")
+
+
 run_history_summary.__doc__ = toolkit_analytics.run_history_summary.__doc__
 partition_coverage.__doc__ = toolkit_analytics.partition_coverage.__doc__
 freshness_check.__doc__ = toolkit_analytics.freshness_check.__doc__
+run_stats.__doc__ = toolkit_analytics.run_stats.__doc__
+asset_coverage.__doc__ = toolkit_analytics.asset_coverage.__doc__
