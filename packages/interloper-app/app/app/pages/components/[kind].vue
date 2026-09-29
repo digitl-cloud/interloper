@@ -36,6 +36,7 @@ const {
     open: drawerOpen,
     editing: editingResource,
     presetTypeKey,
+    presetName,
     openCreate: handleCreate,
     openCreateWithType: handleCreateFromCatalog,
     openEdit: handleEdit,
@@ -43,6 +44,19 @@ const {
 
 componentsStore.fetchAll([kind.value])
 watch(kind, () => componentsStore.fetchAll([kind.value]))
+
+// Deep link: `?new` opens the create wizard; `?new=<definition key>&name=<name>`
+// opens it on that type with the name prefilled (the connection setup hand-off
+// an MCP tool returns). The query is consumed so a reload does not reopen it.
+const router = useRouter()
+watchEffect(() => {
+    const key = route.query.new
+    if (key === undefined) return
+    const name = typeof route.query.name === 'string' ? route.query.name : undefined
+    if (typeof key === 'string' && key) handleCreateFromCatalog(key, name)
+    else handleCreate()
+    router.replace({ query: { ...route.query, new: undefined, name: undefined } })
+})
 
 /**
  * Whether automatic renewal is on for this connection (config, default on).
@@ -255,6 +269,7 @@ const typeKey = ref<string | null>(null)
                                      :noun="kindLabel"
                                      :component="editingResource"
                                      :initial-type-key="presetTypeKey"
+                                     :initial-name="presetName"
                                      :definitions="definitions"
                                      :credentials-label="kind === 'connection' ? 'Credentials' : undefined"
                                      @created="handleSaved"

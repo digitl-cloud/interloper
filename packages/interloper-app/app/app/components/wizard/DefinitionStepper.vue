@@ -64,6 +64,8 @@ const props = withDefaults(defineProps<{
     definitions?: ComponentDefinition[]
     /** Preselect this type and open directly on the next step (create mode). */
     initialTypeKey?: string
+    /** Prefill the name instead of the type's default (create mode, with `initialTypeKey`). */
+    initialName?: string
     relationSteps?: RelationStep[]
     /** Render one picker step per declared resource relation. */
     resourceRelationSteps?: boolean
@@ -87,6 +89,7 @@ const props = withDefaults(defineProps<{
     definitionKey: undefined,
     definitions: undefined,
     initialTypeKey: undefined,
+    initialName: undefined,
     relationSteps: () => [],
     resourceRelationSteps: false,
     extraSteps: () => [],
@@ -284,7 +287,7 @@ watch(selectedKey, (newKey, oldKey) => {
         configValid.value = false
         relationSelections.value = Object.fromEntries(props.relationSteps.map(step => [step.name, []]))
         resourceSelections.value = {}
-        name.value = `My ${definition.value?.name ?? props.noun}`
+        name.value = props.initialName ?? `My ${definition.value?.name ?? props.noun}`
         nextStep()
     }
 })
