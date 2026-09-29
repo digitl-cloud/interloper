@@ -1,8 +1,8 @@
-"""Tests for ``interloper_toolkit.context``."""
+"""Tests for ``interloper_toolkit.utils``."""
 
 from __future__ import annotations
 
-from interloper_toolkit.context import clip
+from interloper_toolkit.utils import clip
 
 
 class TestClip:
