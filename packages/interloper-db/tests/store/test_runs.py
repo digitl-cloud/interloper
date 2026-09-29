@@ -795,14 +795,15 @@ class TestCountBackfillRuns:
 
 
 class TestListActiveBackfills:
-    """The active listing covers the two non-terminal statuses."""
+    """The active listing covers the two non-terminal statuses, and counts what it lists."""
 
     def test_running_and_queued_are_listed(self, store: Store):
         backfill = _backfill(store)
 
-        active = store.runs.list_active_backfills(_ORG_ID)
+        active = store.runs.list_backfills(_ORG_ID, active_only=True)
 
         assert [row.id for row in active] == [backfill.id]
+        assert store.runs.count_backfills(_ORG_ID, active_only=True) == 1
 
     def test_a_terminal_backfill_is_excluded(self, store: Store):
         backfill = _backfill(store)
@@ -813,12 +814,12 @@ class TestListActiveBackfills:
             session.add(row)
             session.commit()
 
-        assert store.runs.list_active_backfills(_ORG_ID) == []
+        assert store.runs.list_backfills(_ORG_ID, active_only=True) == []
 
     def test_another_orgs_backfills_are_excluded(self, store: Store):
         _backfill(store)
 
-        assert store.runs.list_active_backfills(uuid4()) == []
+        assert store.runs.list_backfills(uuid4(), active_only=True) == []
 
 
 class TestBackfillProgression:

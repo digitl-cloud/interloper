@@ -44,7 +44,7 @@ from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 from sqlmodel.sql.expression import SelectOfScalar
 
 from interloper_db.models import Component, ComponentRelation
@@ -194,8 +194,16 @@ class ComponentStore:
         with session_scope(self._engine) as session:
             return self._load_component(session, component_id, kind=kind)
 
-    def list_all(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
-        """List an organisation's component rows, optionally filtered by kind.
+    def list_all(
+        self,
+        org_id: UUID,
+        *,
+        kinds: list[str] | None = None,
+        q: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Component]:
+        """List an organisation's component rows, optionally filtered by kind and text.
 
         Every row lists, owned ones included: this is the row-level view.
         :meth:`list_roots` is the collection view.
@@ -203,12 +211,31 @@ class ComponentStore:
         Args:
             org_id: Organisation UUID.
             kinds: Kinds to include (``None`` = all).
+            q: Keep rows whose name or key contains this, case-insensitively.
+            limit: Max results; ``None`` lists them all.
+            offset: Pagination offset.
 
         Returns:
             Eager-loaded component rows, oldest first.
         """
         with session_scope(self._engine) as session:
-            return list(session.exec(self._listing(org_id, kinds)).all())
+            statement = self._listing(org_id, kinds, q).offset(offset).limit(limit)
+            return list(session.exec(statement).all())
+
+    def count(self, org_id: UUID, *, kinds: list[str] | None = None, q: str | None = None) -> int:
+        """Count component rows matching the same filters as :meth:`list_all`.
+
+        Args:
+            org_id: Organisation UUID.
+            kinds: Kinds to include (``None`` = all).
+            q: Count rows whose name or key contains this, case-insensitively.
+
+        Returns:
+            Total number of matching rows (ignoring limit/offset).
+        """
+        with session_scope(self._engine) as session:
+            statement = select(func.count()).select_from(Component).where(*self._listing_filters(org_id, kinds, q))
+            return session.exec(statement).one()
 
     def list_roots(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
         """List an organisation's root components, owned ones nested under ``children``.
@@ -228,26 +255,45 @@ class ComponentStore:
             statement = self._listing(org_id, kinds).where(col(Component.parent_id).is_(None))
             return list(session.exec(statement).all())
 
-    @staticmethod
-    def _listing(org_id: UUID, kinds: list[str] | None) -> SelectOfScalar[Component]:
+    @classmethod
+    def _listing(cls, org_id: UUID, kinds: list[str] | None, q: str | None = None) -> SelectOfScalar[Component]:
         """The eager-loaded, oldest-first selection of an organisation's components.
 
         Args:
             org_id: Organisation UUID.
             kinds: Kinds to include (``None`` = all).
+            q: Keep rows whose name or key contains this, case-insensitively.
 
         Returns:
             The select statement, for the caller to narrow further.
         """
-        statement = (
+        return (
             select(Component)
-            .where(Component.org_id == org_id)
+            .where(*cls._listing_filters(org_id, kinds, q))
             .options(*COMPONENT_LOAD_OPTIONS)
-            .order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
+            .order_by(Component.created_at, Component.id)  # ty: ignore[invalid-argument-type]
         )
+
+    @staticmethod
+    def _listing_filters(org_id: UUID, kinds: list[str] | None, q: str | None) -> list[Any]:
+        """The shared where-clauses of :meth:`list_all` / :meth:`count`.
+
+        Args:
+            org_id: Organisation UUID; always applied.
+            kinds: Kinds to include (``None`` or empty = all).
+            q: Keep rows whose name or key contains this, case-insensitively.
+
+        Returns:
+            Filter expressions for the given criteria.
+        """
+        filters: list[Any] = [Component.org_id == org_id]
         if kinds:
-            statement = statement.where(col(Component.kind).in_(kinds))
-        return statement
+            filters.append(col(Component.kind).in_(kinds))
+        if q:
+            filters.append(
+                col(Component.name).icontains(q, autoescape=True) | col(Component.key).icontains(q, autoescape=True)
+            )
+        return filters
 
     def update(
         self,

@@ -13,17 +13,21 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any
+from datetime import datetime
+from typing import Any, NamedTuple
 from uuid import UUID, uuid4
 
 import interloper as il
-from sqlalchemy import Engine
+from interloper.errors import NotFoundError
+from sqlalchemy import Engine, case
+from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
 from sqlmodel import col, func, select
 
-from interloper_db.models import Event, Execution
+from interloper_db.models import Event, Execution, Run
 from interloper_db.session import commit, session_scope
+from interloper_db.store.runs import partition_key_range
 
 _MAX_EVENT_TEXT = 60_000
 """Defensive cap for free-text event fields (well under Postgres limits)."""
@@ -47,6 +51,50 @@ Everything else spills into the ``data`` JSONB column. ``run_id`` and ``org_id``
 also arrive via run metadata, but the columns filled from
 :meth:`EventStore.save`'s own arguments are the authoritative ones.
 """
+
+_RUN_ID_CHUNK = 5_000
+"""Run ids bound per ``IN`` list, well under Postgres' bind-parameter ceiling."""
+
+
+class ErrorGroup(NamedTuple):
+    """Error events sharing one job, run, component, event type and error text.
+
+    Attributes:
+        job_id: The run's target, or ``None`` when it was deleted.
+        run_id: The run the events belong to.
+        component_key: The component the events concern (``None`` for a
+            run-level event).
+        event_type: The events' type.
+        error: The error text they share.
+        count: How many events the group holds.
+        first_seen: The earliest event's timestamp.
+        last_seen: The latest event's timestamp.
+    """
+
+    job_id: UUID | None
+    run_id: UUID
+    component_key: str | None
+    event_type: str
+    error: str
+    count: int
+    first_seen: datetime
+    last_seen: datetime
+
+
+class PartitionExecution(NamedTuple):
+    """Whether one asset ever succeeded for one partition of a job.
+
+    Attributes:
+        partition_key: The partition.
+        component_id: The asset.
+        component_key: The asset's key.
+        succeeded: Whether any of its executions for that partition succeeded.
+    """
+
+    partition_key: str
+    component_id: UUID
+    component_key: str | None
+    succeeded: bool
 
 
 class EventStore:
@@ -103,10 +151,11 @@ class EventStore:
         org_id: UUID | None = None,
         component_ids: Sequence[UUID] | None = None,
         event_types: Sequence[str] | None = None,
+        has_error: bool = False,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Event]:
-        """List events, optionally filtered by run, component(s) and/or type(s).
+        """List events, optionally filtered by run, component(s), type(s) and error.
 
         Ordering is ``timestamp ASC, id ASC`` — stable and deterministic so
         ``offset``/``limit`` paging never skips or repeats a row when several
@@ -117,6 +166,7 @@ class EventStore:
             org_id: Optional org filter.
             component_ids: Optional filter to events of any of these components.
             event_types: Optional filter to events of any of these types.
+            has_error: Keep only events carrying an error.
             limit: Max results (default 100).
             offset: Pagination offset.
 
@@ -126,7 +176,7 @@ class EventStore:
         with session_scope(self._engine) as session:
             statement = (
                 select(Event)
-                .where(*self._event_filters(run_id, org_id, component_ids, event_types))
+                .where(*self._event_filters(run_id, org_id, component_ids, event_types, has_error))
                 .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
                 .offset(offset)
                 .limit(limit)
@@ -140,6 +190,7 @@ class EventStore:
         org_id: UUID | None = None,
         component_ids: Sequence[UUID] | None = None,
         event_types: Sequence[str] | None = None,
+        has_error: bool = False,
     ) -> int:
         """Count events matching the same filters as :meth:`list_all`.
 
@@ -148,6 +199,7 @@ class EventStore:
             org_id: Optional org filter.
             component_ids: Optional filter to events of any of these components.
             event_types: Optional filter to events of any of these types.
+            has_error: Count only events carrying an error.
 
         Returns:
             Total number of matching events (ignoring limit/offset).
@@ -156,9 +208,102 @@ class EventStore:
             statement = (
                 select(func.count())
                 .select_from(Event)
-                .where(*self._event_filters(run_id, org_id, component_ids, event_types))
+                .where(*self._event_filters(run_id, org_id, component_ids, event_types, has_error))
             )
             return session.exec(statement).one()
+
+    def get(self, event_id: UUID) -> Event:
+        """Load an event by ID.
+
+        Args:
+            event_id: The event UUID.
+
+        Returns:
+            The Event row.
+
+        Raises:
+            NotFoundError: If the event is not found.
+        """
+        with session_scope(self._engine) as session:
+            db_event = session.get(Event, event_id)
+            if not db_event:
+                raise NotFoundError(f"Event {event_id} not found")
+            return db_event
+
+    def error_groups(
+        self,
+        org_id: UUID,
+        *,
+        event_types: Sequence[str],
+        since: datetime | None = None,
+        until: datetime | None = None,
+        job_id: UUID | None = None,
+        backfill_id: UUID | None = None,
+        run_id: UUID | None = None,
+        max_rows: int = 20_000,
+    ) -> tuple[list[ErrorGroup], bool]:
+        """Group an organisation's error events by job, run, component, type and text.
+
+        Identical texts collapse here, in the database, so a caller classifying
+        errors reads each distinct text once per run rather than every event.
+        Largest groups come first, so a capped scan keeps the loudest errors.
+
+        Args:
+            org_id: Organisation UUID.
+            event_types: The event types to read; the caller picks the ones
+                that record each failure once.
+            since: Keep events at or after this instant.
+            until: Keep events before this instant.
+            job_id: Keep events of runs targeting this component.
+            backfill_id: Keep events of this backfill's runs.
+            run_id: Keep events of this run.
+            max_rows: Cap on the groups returned.
+
+        Returns:
+            The groups, and whether the cap cut any off.
+        """
+        filters: list[Any] = [
+            Event.org_id == org_id,
+            col(Event.error).is_not(None),
+            col(Event.event_type).in_(event_types),
+        ]
+        if since is not None:
+            filters.append(col(Event.timestamp) >= since)
+        if until is not None:
+            filters.append(col(Event.timestamp) < until)
+        if job_id is not None:
+            filters.append(Run.component_id == job_id)
+        if backfill_id is not None:
+            filters.append(Run.backfill_id == backfill_id)
+        if run_id is not None:
+            filters.append(Event.run_id == run_id)
+        count = func.count().label("count")
+        statement = (
+            sa_select(
+                col(Run.component_id),
+                col(Event.run_id),
+                col(Event.component_key),
+                col(Event.event_type),
+                col(Event.error),
+                count,
+                func.min(col(Event.timestamp)),
+                func.max(col(Event.timestamp)),
+            )
+            .join(Run, col(Run.id) == col(Event.run_id))
+            .where(*filters)
+            .group_by(
+                col(Run.component_id),
+                col(Event.run_id),
+                col(Event.component_key),
+                col(Event.event_type),
+                col(Event.error),
+            )
+            .order_by(count.desc(), func.max(col(Event.timestamp)).desc())
+            .limit(max_rows + 1)
+        )
+        with session_scope(self._engine) as session:
+            rows = [ErrorGroup(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
+        return rows[:max_rows], len(rows) > max_rows
 
     # -- Executions --------------------------------------------------------------
 
@@ -197,6 +342,60 @@ class EventStore:
             for run_id, status, count in session.exec(statement).all():
                 counts.setdefault(run_id, {})[status] = count
         return counts
+
+    def partition_coverage(
+        self, org_id: UUID, job_id: UUID, start_key: str, end_key: str
+    ) -> list[PartitionExecution]:
+        """Whether each asset ever succeeded, per partition of a job's runs.
+
+        The runs are selected first and the ``executions`` view is then read by
+        a literal run-id list: a qualifier on the view's partitioning column is
+        what lets Postgres narrow the view's window scan instead of ranking
+        every event the organisation ever wrote.
+
+        Args:
+            org_id: Organisation UUID.
+            job_id: The job whose runs are read.
+            start_key: First partition key of the range.
+            end_key: Last partition key of the range (inclusive); must share
+                the start key's granularity.
+
+        Returns:
+            One row per partition and asset that executed at least once.
+        """
+        with session_scope(self._engine) as session:
+            run_ids = list(
+                session.exec(
+                    select(col(Run.id)).where(
+                        Run.org_id == org_id,
+                        Run.component_id == job_id,
+                        *partition_key_range(start_key, end_key),
+                    )
+                ).all()
+            )
+            merged: dict[tuple[str, UUID], PartitionExecution] = {}
+            for index in range(0, len(run_ids), _RUN_ID_CHUNK):
+                statement = (
+                    select(
+                        col(Run.partition_key),
+                        col(Execution.component_id),
+                        func.max(col(Execution.component_key)),
+                        func.max(case((col(Execution.status) == "success", 1), else_=0)),
+                    )
+                    .join(Run, col(Run.id) == col(Execution.run_id))
+                    .where(col(Execution.run_id).in_(run_ids[index : index + _RUN_ID_CHUNK]))
+                    .group_by(col(Run.partition_key), col(Execution.component_id))
+                )
+                for partition_key, component_id, component_key, succeeded in session.exec(statement).all():
+                    assert partition_key is not None
+                    previous = merged.get((partition_key, component_id))
+                    merged[(partition_key, component_id)] = PartitionExecution(
+                        partition_key,
+                        component_id,
+                        component_key,
+                        bool(succeeded) or (previous is not None and previous.succeeded),
+                    )
+        return list(merged.values())
 
     def latest_executions(self, org_id: UUID) -> list[Execution]:
         """The most recent execution of every asset in an organisation.
@@ -330,6 +529,7 @@ class EventStore:
         org_id: UUID | None,
         component_ids: Sequence[UUID] | None,
         event_types: Sequence[str] | None,
+        has_error: bool = False,
     ) -> list[Any]:
         """The shared where-clauses of :meth:`EventStore.list_all` / ``count``.
 
@@ -342,6 +542,7 @@ class EventStore:
                 empty applies no filter.
             event_types: Keep events of any of these types; ``None`` or empty
                 applies no filter.
+            has_error: Keep only events carrying an error.
 
         Returns:
             Filter expressions for the given (optional) criteria.
@@ -355,4 +556,6 @@ class EventStore:
             filters.append(col(Event.component_id).in_(component_ids))
         if event_types:
             filters.append(col(Event.event_type).in_(event_types))
+        if has_error:
+            filters.append(col(Event.error).is_not(None))
         return filters

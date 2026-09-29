@@ -176,6 +176,15 @@ class Event(SQLModel, table=True):
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_events_run_id_timestamp", "run_id", "timestamp"),
         Index("ix_events_component_lookup", "run_id", "component_id", "event_type", "timestamp"),
+        # Error events are a small fraction of the table, so windowed error
+        # scans (``EventStore.error_groups``) read a small partial index.
+        Index(
+            "ix_events_errors",
+            "org_id",
+            "timestamp",
+            postgresql_where=text("error IS NOT NULL"),
+            sqlite_where=text("error IS NOT NULL"),
+        ),
     )
 
     id: UUID = SQLField(

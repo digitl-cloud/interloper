@@ -161,10 +161,7 @@ def list_backfills(ctx: ToolkitContext, active_only: bool = True) -> BackfillLis
     Returns backfills with their status, date range, and partition progress.
     """
     try:
-        if active_only:
-            backfills = ctx.store.runs.list_active_backfills(ctx.org_id)
-        else:
-            backfills = ctx.store.runs.list_backfills(ctx.org_id)
+        backfills = ctx.store.runs.list_backfills(ctx.org_id, active_only=active_only)
         return BackfillList(count=len(backfills), backfills=backfills)
     except Exception as e:
         return ToolError(error=str(e))
