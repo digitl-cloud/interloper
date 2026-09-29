@@ -52,9 +52,6 @@ also arrive via run metadata, but the columns filled from
 :meth:`EventStore.save`'s own arguments are the authoritative ones.
 """
 
-_RUN_ID_CHUNK = 5_000
-"""Run ids bound per ``IN`` list, well under Postgres' bind-parameter ceiling."""
-
 
 class ErrorGroup(NamedTuple):
     """Error events sharing one job, run, component, event type and error text.
@@ -351,11 +348,6 @@ class EventStore:
     ) -> list[PartitionExecution]:
         """Whether each asset ever succeeded, per partition of a job's runs.
 
-        The runs are selected first and the ``executions`` view is then read by
-        a literal run-id list: a qualifier on the view's partitioning column is
-        what lets Postgres narrow the view's window scan instead of ranking
-        every event the organisation ever wrote.
-
         Args:
             org_id: Organisation UUID.
             job_id: The job whose runs are read.
@@ -366,39 +358,23 @@ class EventStore:
         Returns:
             One row per partition and asset that executed at least once.
         """
-        with session_scope(self._engine) as session:
-            run_ids = list(
-                session.exec(
-                    select(col(Run.id)).where(
-                        Run.org_id == org_id,
-                        Run.component_id == job_id,
-                        *partition_key_range(start_key, end_key),
-                    )
-                ).all()
+        statement = (
+            select(
+                col(Run.partition_key),
+                col(Execution.component_id),
+                func.max(col(Execution.component_key)),
+                func.max(case((col(Execution.status) == "success", 1), else_=0)),
             )
-            merged: dict[tuple[str, UUID], PartitionExecution] = {}
-            for index in range(0, len(run_ids), _RUN_ID_CHUNK):
-                statement = (
-                    select(
-                        col(Run.partition_key),
-                        col(Execution.component_id),
-                        func.max(col(Execution.component_key)),
-                        func.max(case((col(Execution.status) == "success", 1), else_=0)),
-                    )
-                    .join(Run, col(Run.id) == col(Execution.run_id))
-                    .where(col(Execution.run_id).in_(run_ids[index : index + _RUN_ID_CHUNK]))
-                    .group_by(col(Run.partition_key), col(Execution.component_id))
-                )
-                for partition_key, component_id, component_key, succeeded in session.exec(statement).all():
-                    assert partition_key is not None
-                    previous = merged.get((partition_key, component_id))
-                    merged[(partition_key, component_id)] = PartitionExecution(
-                        partition_key,
-                        component_id,
-                        component_key,
-                        bool(succeeded) or (previous is not None and previous.succeeded),
-                    )
-        return list(merged.values())
+            .join(Run, col(Run.id) == col(Execution.run_id))
+            .where(Run.org_id == org_id, Run.component_id == job_id, *partition_key_range(start_key, end_key))
+            .group_by(col(Run.partition_key), col(Execution.component_id))
+        )
+        with session_scope(self._engine) as session:
+            return [
+                PartitionExecution(partition_key, component_id, component_key, bool(succeeded))
+                for partition_key, component_id, component_key, succeeded in session.exec(statement).all()
+                if partition_key is not None
+            ]
 
     def latest_executions(self, org_id: UUID) -> list[Execution]:
         """The most recent execution of every asset in an organisation.
