@@ -113,7 +113,7 @@ how many of a firing's partitions run at once.
 ![Hooks](../assets/ui/hooks-light.png#only-light)
 ![Hooks](../assets/ui/hooks-dark.png#only-dark)
 
-Reactions to run outcomes: a webhook posting failures to an operations endpoint, and a trigger
+Reactions to run and backfill outcomes: a webhook posting failures to an operations endpoint, and a trigger
 hook starting the monthly rollup when the daily job completes. The watched components and, for
 trigger hooks, the targets are relation pickers derived from the hook class's vocabulary.
 
