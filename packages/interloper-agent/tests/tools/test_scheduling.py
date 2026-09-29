@@ -34,6 +34,8 @@ def ctx(monkeypatch: pytest.MonkeyPatch) -> ToolContext:
             lambda ctx: scheduling.trigger_run("jid", "2026-07-01", tool_context=ctx),
             ("jid", "2026-07-01"),
         ),
+        ("retry_run", lambda ctx: scheduling.retry_run("rid", "failed", tool_context=ctx), ("rid", "failed")),
+        ("cancel_backfill", lambda ctx: scheduling.cancel_backfill("bid", tool_context=ctx), ("bid",)),
         (
             "trigger_backfill",
             lambda ctx: scheduling.trigger_backfill("jid", "2026-07-01", "2026-07-02", tool_context=ctx),

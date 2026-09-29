@@ -86,6 +86,10 @@ def error_breakdown(
     return result.model_dump(mode="json")
 
 
+def retry_run(run_id: str, scope: str = "all", tool_context: ToolContext | None = None) -> dict[str, Any]:
+    return toolkit_scheduling.retry_run(toolkit_ctx(tool_context), run_id, scope).model_dump(mode="json")
+
+
 def trigger_run(
     component_id: str, partition_key: str | None = None, tool_context: ToolContext | None = None
 ) -> dict[str, Any]:
@@ -108,6 +112,10 @@ def backfill_timeline(
 ) -> dict[str, Any]:
     result = toolkit_scheduling.backfill_timeline(toolkit_ctx(tool_context), backfill_id, limit, offset)
     return result.model_dump(mode="json")
+
+
+def cancel_backfill(backfill_id: str, tool_context: ToolContext | None = None) -> dict[str, Any]:
+    return toolkit_scheduling.cancel_backfill(toolkit_ctx(tool_context), backfill_id).model_dump(mode="json")
 
 
 def trigger_backfill(
@@ -141,9 +149,11 @@ for _wrapper in (
     get_event,
     list_failures,
     error_breakdown,
+    retry_run,
     trigger_run,
     list_backfills,
     backfill_timeline,
+    cancel_backfill,
     trigger_backfill,
     toggle_asset,
 ):

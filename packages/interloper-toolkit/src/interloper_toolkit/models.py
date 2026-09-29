@@ -452,6 +452,27 @@ class BackfillQueued(BaseModel):
     backfill: Backfill
 
 
+class BackfillCanceled(BaseModel):
+    """One backfill canceled by ``cancel_backfill``.
+
+    ``runs_canceled`` counts the runs that will now never execute; runs
+    already dispatched or running drain to their own verdict.
+    """
+
+    status: Literal["success"] = "success"
+    message: str
+    backfill: Backfill
+    runs_canceled: int
+
+
+class RunRetried(BaseModel):
+    """The new attempt ``retry_run`` queued."""
+
+    status: Literal["success"] = "success"
+    message: str
+    run: Run
+
+
 class JobList(BaseModel):
     """One page of the org's scheduled jobs (full component rows)."""
 
