@@ -231,8 +231,10 @@ class ConnectionsCreated(BaseModel):
 class ConnectionSetup(BaseModel):
     """The hand-off ``request_connection_setup`` makes.
 
-    A non-empty ``existing`` means no form was presented: the collection
-    already holds connections of this definition to reuse.
+    ``setup_url`` opens the app's connection form for this definition, when
+    the deployment knows its public URL. A non-empty ``existing`` means no
+    form was presented: the collection already holds connections of this
+    definition to reuse.
     """
 
     status: Literal["success"] = "success"
@@ -241,6 +243,7 @@ class ConnectionSetup(BaseModel):
     name: str | None = None
     oauth: bool
     oauth_available: bool
+    setup_url: str | None = None
     existing: list[ComponentRef] = []
 
 

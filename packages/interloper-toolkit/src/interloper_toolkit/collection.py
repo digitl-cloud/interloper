@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
@@ -28,6 +29,7 @@ from interloper.errors import (
     NotFoundError,
 )
 from interloper.oauth import OAuthAppCredentials
+from interloper.settings import AppSettings
 from interloper.utils.concurrency import invoke
 from pydantic import ValidationError
 
@@ -253,7 +255,11 @@ def request_connection_setup(
     Call this to let the user create a connection: the app presents the form
     for the given definition (OAuth sign-in when available, manual credential
     entry otherwise) and the credentials go directly to the API. Never ask the
-    user to share credentials in the chat instead.
+    user to share credentials in the chat instead. In the app the form opens
+    in the conversation; elsewhere, give the user ``setup_url`` to open it,
+    ask them to say when they are done, then verify with check_connection.
+    A null ``setup_url`` means this deployment has no public app URL: the
+    user sets the connection up in the app themselves.
 
     When the collection already holds connections of this definition, no form
     is presented: ``existing`` lists them so you can ask the user whether to
@@ -287,6 +293,7 @@ def request_connection_setup(
             name=name,
             oauth=oauth is not None,
             oauth_available=OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False,
+            setup_url=_setup_url(connection_key, name),
         )
         if not force_new:
             existing = [
@@ -424,6 +431,23 @@ async def check_connection(ctx: ToolkitContext, connection_id: str) -> Connectio
         return ConnectionCheck(connection=info, ok=True, live=True)
     except Exception as e:
         return ToolError(error=str(e))
+
+
+def _setup_url(connection_key: str, name: str | None) -> str | None:
+    """The app's connection form for a definition, pre-filled with a name.
+
+    Args:
+        connection_key: The connection definition to open the form for.
+        name: The display name to prefill, or ``None``.
+
+    Returns:
+        The deep link, or ``None`` when the deployment has no public app URL.
+    """
+    base = AppSettings.get().server.external_url.rstrip("/")
+    if not base:
+        return None
+    query = {"new": connection_key, **({"name": name} if name else {})}
+    return f"{base}/components/connections?{urlencode(query)}"
 
 
 def categorise(exc: Exception) -> tuple[str, str]:
