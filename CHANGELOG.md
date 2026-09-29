@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.88.0 (2026-09-29)
+
+### Features
+
+- **api**: Report each backfill's partitions by status
+  ([`5d77b27`](https://github.com/digitl-cloud/interloper/commit/5d77b27f95e03a28a1db7048ebc23ca0eb44eadb))
+
+- **app**: Draw backfill progress, filter runs and backfills by status, spin an executing badge
+  ([`e9cc55c`](https://github.com/digitl-cloud/interloper/commit/e9cc55c64cd9b88f4b17af784e186438dee6bcfa))
+
+
 ## v0.87.0 (2026-09-29)
 
 ### Documentation
