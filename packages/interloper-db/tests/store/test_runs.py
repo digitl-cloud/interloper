@@ -752,6 +752,48 @@ class TestBackfillGranularity:
         assert backfill.partitions == 3
 
 
+class TestCountBackfillRuns:
+    """One partition count per status, per backfill, read off each stack's latest attempt."""
+
+    def test_counts_each_requested_backfill_by_status(self, store: Store):
+        first = _backfill(store, days=3, concurrency=2)
+        second = _backfill(store, days=1, concurrency=1)
+        unrequested = _backfill(store, days=1, concurrency=1)
+        queued = [run_id for run_id, status in _run_statuses(store, first.id).items() if status == "queued"]
+        store.runs.complete(queued[0], success=True)
+        store.runs.complete(queued[1], success=False)
+
+        counts = store.runs.count_backfill_runs([first.id, second.id])
+
+        assert counts == {
+            first.id: {"success": 1, "failed": 1, "queued": 1},
+            second.id: {"queued": 1},
+        }
+        assert unrequested.id not in counts
+        assert store.runs.count_backfill_runs([]) == {}
+
+    def test_a_retried_partition_counts_once_as_its_latest_attempt(self, store: Store):
+        backfill = _backfill(store, days=1, concurrency=1)
+        with Session(store.engine) as session:
+            first = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
+            first.status = "failed"
+            session.add(first)
+            session.add(
+                Run(
+                    org_id=_ORG_ID,
+                    backfill_id=backfill.id,
+                    partition_key=first.partition_key,
+                    status="success",
+                    retry_of=first.id,
+                    root_run_id=first.root_run_id,
+                    attempt=2,
+                )
+            )
+            session.commit()
+
+        assert store.runs.count_backfill_runs([backfill.id]) == {backfill.id: {"success": 1}}
+
+
 class TestListActiveBackfills:
     """The active listing covers the two non-terminal statuses."""
 
