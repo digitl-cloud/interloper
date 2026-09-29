@@ -271,7 +271,7 @@ class ComponentStore:
             select(Component)
             .where(*cls._listing_filters(org_id, kinds, q))
             .options(*COMPONENT_LOAD_OPTIONS)
-            .order_by(Component.created_at, Component.id)  # ty: ignore[invalid-argument-type]
+            .order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
         )
 
     @staticmethod
