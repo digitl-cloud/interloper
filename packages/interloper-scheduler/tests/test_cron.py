@@ -134,7 +134,57 @@ class TestScheduling:
         assert backfill.start_key == (now.date() - dt.timedelta(days=3)).isoformat()
         runs = _runs(store)
         assert len(runs) == 3
-        assert all(run.status == "queued" and run.backfill_id == backfill.id for run in runs)
+        assert all(run.backfill_id == backfill.id for run in runs)
+
+    def test_a_firing_is_gated_by_the_jobs_concurrency(self, store: Store) -> None:
+        store = _catalog_store()
+        _job_targeting(
+            store,
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 3},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.concurrency == 1
+        statuses = {run.partition_key: run.status for run in _runs(store)}
+        assert statuses[backfill.end_key] == "queued"
+        assert list(statuses.values()).count("pending") == 2
+
+    def test_a_concurrency_covering_the_window_queues_every_partition(self, store: Store) -> None:
+        store = _catalog_store()
+        _job_targeting(
+            store,
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 3, "concurrency": 3},
+        )
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        assert backfill.concurrency == 3
+        assert all(run.status == "queued" for run in _runs(store))
+
+    def test_completing_a_gated_run_promotes_the_next_newest(self, store: Store) -> None:
+        store = _catalog_store()
+        _job_targeting(
+            store,
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 3},
+        )
+        CronController(store=store)._tick()
+        queued = next(run for run in _runs(store) if run.status == "queued")
+        assert queued.id is not None
+
+        store.runs.complete(queued.id, success=True)
+
+        statuses = {run.partition_key: run.status for run in _runs(store)}
+        with Session(store.engine) as session:
+            backfill = session.exec(select(Backfill)).one()
+        next_newest = (dt.date.fromisoformat(backfill.end_key) - dt.timedelta(days=1)).isoformat()
+        assert statuses[next_newest] == "queued"
+        assert statuses[backfill.start_key] == "pending"
 
     def test_offset_shifts_the_window_back(self, store: Store) -> None:
         store = _catalog_store()

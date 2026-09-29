@@ -83,6 +83,12 @@ il.TimePartitionWindow.lookback(now, lookback=3, offset=1, granularity=il.TimeGr
 many it spans. Pass `start=` to clamp to an asset's first partition; the result is `None` when
 nothing remains. [Cron jobs](jobs.md) carry these two numbers as fields.
 
+## Scheduled backfills
+
+A cron job's firing is a backfill over its trailing window, the same as one queued by hand: one
+run per partition, dispatched newest first, with at most the job's `concurrency` of them in flight
+at once. A retry waiting out its delay keeps its partition's slot.
+
 ## Bounded history
 
 `TimePartitionConfig(start=...)` marks the first partition an asset has data for. A window
