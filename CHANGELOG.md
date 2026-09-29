@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.87.0 (2026-09-29)
+
+### Documentation
+
+- Spec and plan backfill concurrency
+  ([`066dbf0`](https://github.com/digitl-cloud/interloper/commit/066dbf0d7dd96ab500a88cc91139d0cd3a3de3ef))
+
+### Features
+
+- **core**: Declare a cron job's backfill concurrency
+  ([`050c834`](https://github.com/digitl-cloud/interloper/commit/050c83486b07240dfd8219d8cede8901cc7d4ffd))
+
+- **db**: Fan a backfill's runs out through one function, counting dispatched runs as in flight
+  ([`a142423`](https://github.com/digitl-cloud/interloper/commit/a142423146f42f3318272ac032217acd4fd1a54e))
+
+- **scheduler**: Gate a cron job's firing by its concurrency
+  ([`19e7371`](https://github.com/digitl-cloud/interloper/commit/19e7371a47d30d9c1b0890f228c3b30f6632c724))
+
+
 ## v0.86.0 (2026-09-29)
 
 ### Bug Fixes
