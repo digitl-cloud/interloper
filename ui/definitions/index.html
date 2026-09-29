@@ -1341,6 +1341,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#order-and-sections" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Order and sections
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fetched-options" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2245,11 +2256,32 @@ from the JSON Schema type otherwise:</p>
 <td></td>
 <td>Dropdown of the enum values.</td>
 </tr>
+<tr>
+<td>nested model field (e.g. <code>retry: RetryPolicy \| None</code>)</td>
+<td></td>
+<td>The model's own fields in a bordered group; an optional model sits behind a switch (off saves <code>null</code>, on starts from the model's defaults).</td>
+</tr>
 </tbody>
 </table>
 <p>Presentation keywords carry over: <code>label</code> is the form label, <code>description</code> the help line under
 it, <code>info</code> a tooltip next to the label. <code>required</code> follows the pydantic definition, and the form
 is only submittable when every required field has a value.</p>
+<h3 id="order-and-sections">Order and sections<a class="headerlink" href="#order-and-sections" title="Permanent link">&para;</a></h3>
+<p>Fields render in the schema's property order, which lists a component's own fields before those
+it inherits (see <a href="../../guide/fields/#what-ends-up-in-the-config-schema">Fields</a>). Fields carrying
+<code>x-section</code> render under that section's separator, after the fields without one; sections appear
+in the order their first field does. Sources group <code>dataset</code> and the default destination under
+"Destination", and their materialization strategy under "Materialization"; a cron job's window fields sit
+under "Partitioning"; <code>enabled</code> and <code>retry</code>, which the operation, job and source bases declare, sit
+under "Operation", joined there by a job's cron expression and timezone. A connection's only
+operation is its renewal, so it hides <code>enabled</code> (Automatic renewal is the switch) and keeps <code>retry</code>
+beside Automatic renewal among its credentials; a connection with nothing to renew shows neither. A connection's sign-in tabs, the OAuth sign-in and the credential fields they
+govern render together in one bordered group.</p>
+<p>A page can replace a section's generated fields through the wizard's <code>#section-&lt;name&gt;</code> slot (the
+section name lowercased, e.g. <code>#section-partitioning</code>). The slot receives the section's field
+<code>keys</code> and the schema, plus the wizard's <code>extra</code> contract: <code>extra.config</code> merges into the saved
+config and <code>extra.valid</code> gates submit. The job wizard uses it to show the partition window only
+when the selected targets are partitioned, with a preview of what a run covers.</p>
 <h3 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h3>
 <p>A <code>FetchField(provider="connection.accounts")</code> renders as a dropdown that fills itself once the
 <code>connection</code> relation is filled. The form posts the component key, the field name and that

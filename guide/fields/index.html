@@ -2123,8 +2123,13 @@ Every helper is a thin wrapper around <code>pydantic.Field</code>: all standard 
 <td><code>discriminator=True</code></td>
 <td>Marks the field whose value distinguishes instances of the component. See <a href="../sources/#the-discriminator">Sources</a>.</td>
 </tr>
+<tr>
+<td><code>section=</code></td>
+<td>The labelled group of the form the field renders under (sets <code>x-section</code>). Fields without one lead the form.</td>
+</tr>
 </tbody>
 </table>
+<p>A plain <code>Field</code> declares a section through <code>json_schema_extra={"x-section": "Operation"}</code>.</p>
 <h2 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h2>
 <p>A <code>FetchField</code> resolves its options by instantiating the resource of the named relation from the
 credentials the form already holds and calling a method on it. The method must be allow-listed
@@ -2150,8 +2155,11 @@ silently in a form. <code>il.is_fetch_field_provider(obj)</code> tests whether a
 framework strips <code>id</code>, plus anything the class lists in <code>internal_fields</code> (sources hide <code>assets</code>,
 <code>normalizer</code>, <code>select</code>; assets hide <code>normalizer</code>). Relations (<code>destinations</code>, <code>connection</code>, and
 so on) are not fields at all and never appear in the schema. Field helpers add <code>x-widget</code>,
-<code>x-info</code>, <code>x-options</code>, <code>x-options-from</code>, <code>x-fetch</code> and <code>x-discriminator</code> extensions that forms
-read. The schema is part of every <a href="../catalog/#definitions">component definition</a>.</p>
+<code>x-info</code>, <code>x-options</code>, <code>x-options-from</code>, <code>x-fetch</code>, <code>x-discriminator</code> and <code>x-section</code> extensions
+that forms read. The schema is part of every <a href="../catalog/#definitions">component definition</a>.</p>
+<p>Properties are listed most specific first: the class's own fields, then each ancestor's, closest
+first, each in declaration order. A source's form therefore opens with its own account field
+rather than with the settings every source shares, and forms render in this order.</p>
 
 
 
