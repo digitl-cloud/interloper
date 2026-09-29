@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
 from interloper_db import engine as engine_module
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import Store
@@ -54,13 +55,22 @@ class TestLineage:
         assert result.total_affected == 2
         assert {i.asset_key for i in result.by_source["facebook_ads"]} == {"b", "c"}
 
-    def test_other_orgs_edges_are_invisible(self, ctx: ToolkitContext):
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda ctx, aid: lineage.get_upstream(ctx, aid),
+            lambda ctx, aid: lineage.get_downstream(ctx, aid),
+            lambda ctx, aid: lineage.get_full_lineage(ctx, aid),
+            lambda ctx, aid: lineage.impact_analysis(ctx, aid),
+        ],
+    )
+    def test_another_orgs_asset_is_not_found(self, ctx: ToolkitContext, call: Any):
         ids = _seed_chain(org_id=uuid4())
 
-        result = lineage.get_full_lineage(ctx, str(ids["c"]), direction="upstream")
+        result = call(ctx, str(ids["c"]))
 
-        assert result.status == "success"
-        assert result.lineage_count == 0
+        assert result.status == "error"
+        assert "not found" in result.error
 
     def test_get_upstream_reports_relation_name(self, ctx: ToolkitContext, store: Store):
         shop = store.components.create(ctx.org_id, kind="source", key="shop_source")

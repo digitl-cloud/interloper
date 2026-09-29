@@ -29,3 +29,14 @@ class TestAnalytics:
         assert result.status == "success"
         assert result.covered_days == 2
         assert result.missing_dates == ["2026-07-02"]
+
+    def test_partition_coverage_of_another_orgs_job_is_not_found(self, ctx: ToolkitContext):
+        job = Component(org_id=uuid4(), kind="job", key="daily")
+        job_id = job.id
+        with Session(engine_module.get_engine()) as session:
+            session.add(job)
+            session.commit()
+
+        result = analytics.partition_coverage(ctx, str(job_id), "2026-07-01", "2026-07-03")
+
+        assert result.status == "error"

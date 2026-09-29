@@ -37,3 +37,27 @@ class TestScheduling:
         assert result.status == "success"
         assert result.health.success_rate == 0.67
         assert result.health.avg_duration_seconds == 60.0
+
+    def test_get_job_health_of_another_orgs_job_is_not_found(self, ctx: ToolkitContext):
+        job = Component(org_id=uuid4(), kind="job", key="daily")
+        job_id = job.id
+        with Session(engine_module.get_engine()) as session:
+            session.add(job)
+            session.commit()
+
+        result = scheduling.get_job_health(ctx, str(job_id))
+
+        assert result.status == "error"
+        assert "not found" in result.error
+
+    def test_get_run_detail_of_another_orgs_run_is_not_found(self, ctx: ToolkitContext):
+        run = Run(id=uuid4(), org_id=uuid4(), status="failed")
+        run_id = run.id
+        with Session(engine_module.get_engine()) as session:
+            session.add(run)
+            session.commit()
+
+        result = scheduling.get_run_detail(ctx, str(run_id))
+
+        assert result.status == "error"
+        assert "not found" in result.error

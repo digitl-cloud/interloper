@@ -30,8 +30,8 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
     including the relation name used for each dependency.
     """
     try:
+        target = ctx.component(asset_id, kind="asset").id
         deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
-        target = UUID(asset_id)
 
         upstream = []
         for dep in deps:
@@ -58,8 +58,8 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
     Returns the list of assets that directly depend on this asset.
     """
     try:
+        target = ctx.component(asset_id, kind="asset").id
         deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
-        target = UUID(asset_id)
 
         downstream = []
         for dep in deps:
@@ -87,8 +87,8 @@ def get_full_lineage(ctx: ToolkitContext, asset_id: str, direction: str = "upstr
     Returns an ordered list of assets in the lineage chain with depth levels.
     """
     try:
+        target = ctx.component(asset_id, kind="asset").id
         adj, asset_info = _build_adjacency(ctx, direction)
-        target = UUID(asset_id)
 
         visited: set[UUID] = set()
         result: list[LineageItem] = []
@@ -125,8 +125,8 @@ def impact_analysis(ctx: ToolkitContext, asset_id: str) -> ImpactAnalysis | Tool
     Returns all downstream assets grouped by source, with total affected count.
     """
     try:
+        target = ctx.component(asset_id, kind="asset").id
         adj, asset_info = _build_adjacency(ctx, "downstream")
-        target = UUID(asset_id)
 
         visited: set[UUID] = set()
         affected: list[LineageItem] = []
