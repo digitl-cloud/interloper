@@ -41,6 +41,7 @@ export interface AdminConfig {
         worker: { enabled: boolean, poll_interval: number }
         reaper: { enabled: boolean, timeout: number, poll_interval: number }
         smtp: { enabled: boolean, host: string, from_addr: string }
+        app_external_url: string
         mcp_external_url: string
     }
     data: {
