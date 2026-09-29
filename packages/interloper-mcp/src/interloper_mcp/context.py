@@ -41,13 +41,14 @@ def init_context(store: Store, catalog: Catalog) -> None:
     _catalog_dump = catalog.dump()
 
 
-def set_static_ctx(org_id: UUID) -> None:
+def set_static_ctx(org_id: UUID, *, role: str = "viewer") -> None:
     """Seed the static (stdio) context with an organisation scope.
 
     Args:
         org_id: The organisation all tool calls are scoped to.
+        role: The caller's role in it, gating the write tools.
     """
-    _static_ctx.set(ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=org_id))
+    _static_ctx.set(ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=org_id, role=role))
 
 
 def get_ctx() -> ToolkitContext:
@@ -63,7 +64,9 @@ def get_ctx() -> ToolkitContext:
     """
     token = get_access_token()
     if isinstance(token, PatAccessToken):
-        return ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=UUID(token.org_id))
+        return ToolkitContext(
+            store=_require_store(), catalog=_require_catalog(), org_id=UUID(token.org_id), role=token.role
+        )
 
     ctx = _static_ctx.get()
     if ctx is None:

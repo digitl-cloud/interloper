@@ -16,8 +16,9 @@ those two; the ADK agent, whose own write tools already live beside them,
 does.
 """
 
+from interloper_toolkit.authz import requires_role
 from interloper_toolkit.collection import bind_relation, unbind_relation
 from interloper_toolkit.context import ToolkitContext, serialize
 from interloper_toolkit.models import ToolError
 
-__all__ = ["ToolError", "ToolkitContext", "bind_relation", "serialize", "unbind_relation"]
+__all__ = ["ToolError", "ToolkitContext", "bind_relation", "requires_role", "serialize", "unbind_relation"]
