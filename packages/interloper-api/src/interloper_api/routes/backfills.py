@@ -120,10 +120,7 @@ def list_backfills(
     Returns:
         The organisation's backfills, as response models.
     """
-    if active_only:
-        backfills = store.runs.list_active_backfills(org_id)
-    else:
-        backfills = store.runs.list_backfills(org_id)
+    backfills = store.runs.list_backfills(org_id, active_only=active_only)
     counts = store.runs.count_backfill_runs([backfill.id for backfill in backfills])
     return [BackfillResponse.from_backfill(backfill, counts.get(backfill.id)) for backfill in backfills]
 

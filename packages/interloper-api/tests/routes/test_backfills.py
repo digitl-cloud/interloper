@@ -194,8 +194,7 @@ def test_list_backfills_returns_the_orgs_backfills(store: FakeStore) -> None:
     """The default listing covers every backfill, terminal ones included."""
     listed: list[UUID] = []
     backfill_id = uuid4()
-    store.runs.list_backfills = lambda org_id: listed.append(org_id) or [_fake_backfill(backfill_id)]
-    store.runs.list_active_backfills = lambda org_id: []
+    store.runs.list_backfills = lambda org_id, active_only: listed.append(org_id) or [_fake_backfill(backfill_id)]
 
     response = _list_client(store).get("/backfills/")
 
@@ -213,7 +212,7 @@ def test_list_backfills_carries_each_ones_run_counts(store: FakeStore) -> None:
         asked.append(list(backfill_ids))
         return {counted: {"success": 2, "queued": 1}}
 
-    store.runs.list_backfills = lambda org_id: [_fake_backfill(counted), _fake_backfill(empty)]
+    store.runs.list_backfills = lambda org_id, active_only: [_fake_backfill(counted), _fake_backfill(empty)]
     store.runs.count_backfill_runs = count_backfill_runs
 
     response = _list_client(store).get("/backfills/")
@@ -232,10 +231,9 @@ def test_get_backfill_carries_its_run_counts(store: FakeStore) -> None:
 
 
 def test_active_only_narrows_to_the_running_ones(store: FakeStore) -> None:
-    """``active_only`` uses the dedicated store query, not a client-side filter."""
+    """``active_only`` narrows in the store query, not a client-side filter."""
     active_id = uuid4()
-    store.runs.list_backfills = lambda org_id: [_fake_backfill(uuid4())]
-    store.runs.list_active_backfills = lambda org_id: [_fake_backfill(active_id)]
+    store.runs.list_backfills = lambda org_id, active_only: [_fake_backfill(active_id if active_only else uuid4())]
 
     response = _list_client(store).get("/backfills/?active_only=true")
 
