@@ -433,11 +433,9 @@ class RunStore:
 
         The bounds are partition keys whose shape carries the granularity
         (``2026-08-21``, ``2026-08``, ``2026``, ``2026-08-21T13``), so a
-        monthly backfill is just two month keys. Runs are dispatched
-        **newest partition first**: the latest ``concurrency`` of them are
-        queued immediately and the rest are ``"pending"`` until earlier runs
-        complete. The freshest data lands first, and an interrupted backfill
-        keeps the recent window rather than the ancient tail.
+        monthly backfill is just two month keys. The runs are fanned out by
+        :func:`create_backfill_runs`: newest partition first, ``concurrency``
+        of them queued at once.
 
         Args:
             org_id: Organisation UUID.
@@ -483,25 +481,7 @@ class RunStore:
             )
             session.add(db_backfill)
             session.flush()
-
-            # Rows are created oldest-first but the *newest* `concurrency` of
-            # them are the ones queued, so the freshest partitions run first
-            # (`_advance_backfill` promotes in the same order). Creation order
-            # is deliberately left alone: `list_runs` orders by `created_at`
-            # desc, so reversing it would flip the runs list to oldest-first.
-            first_queued = max(0, span - concurrency)
-            for index, value in enumerate(window.granularity.period_range(window.start, window.end)):
-                db_run = Run(
-                    org_id=org_id,
-                    component_id=component_id,
-                    backfill_id=db_backfill.id,
-                    partition_key=window.granularity.format(value),
-                    status="queued" if index >= first_queued else "pending",
-                )
-                session.add(db_run)
-
-            db_backfill.partitions = span
-            session.add(db_backfill)
+            create_backfill_runs(session, db_backfill, window)
             commit(session)
             session.refresh(db_backfill)
             _ = db_backfill.target  # load before the session closes; readers reach it detached
@@ -710,11 +690,12 @@ class RunStore:
         """Advance a backfill after a run completes.
 
         1. **Fail-fast**: if enabled and the run failed, cancel pending runs.
-        2. **Finalize**: if nothing in-flight or pending, mark complete. The
-           verdict reads each stack's latest attempt, so an attempt a later one
-           healed no longer condemns the batch. A queued successor still counts
-           as in flight, which is what keeps the batch open while a retry waits
-           out its backoff.
+        2. **Finalize**: if nothing in-flight or pending, mark complete. In
+           flight is queued, dispatched or running: a claimed run occupies its
+           slot before its pod first writes. The verdict reads each stack's
+           latest attempt, so an attempt a later one healed no longer condemns
+           the batch. A queued successor still counts as in flight, which is
+           what keeps the batch open while a retry waits out its backoff.
         3. **Advance**: promote next pending runs up to concurrency limit.
 
         Args:
@@ -743,7 +724,7 @@ class RunStore:
             session.exec(
                 select(Run).where(
                     Run.backfill_id == backfill_id,
-                    col(Run.status).in_(["queued", "running"]),
+                    col(Run.status).in_(["queued", "dispatched", "running"]),
                 )
             ).all()
         )
@@ -780,6 +761,39 @@ class RunStore:
         for pending_run in pending_runs[:available_slots]:
             pending_run.status = "queued"
             session.add(pending_run)
+
+
+def create_backfill_runs(session: Session, db_backfill: Backfill, window: TimePartitionWindow) -> None:
+    """Create a backfill's runs: one per partition, the newest ``concurrency`` of them queued.
+
+    Part of the caller's transaction (the caller commits), on a backfill row
+    already flushed so the runs can reference it. Rows are created oldest
+    first, so a runs list ordered by ``created_at`` desc keeps the newest
+    partition on top, while the *newest* ``concurrency`` of them are ``queued``
+    and the rest wait ``pending``; ``_advance_backfill`` promotes in the same
+    newest-first order, so the freshest data lands first and an interrupted
+    backfill keeps the recent window rather than the ancient tail.
+
+    Args:
+        session: Active database session (the caller commits).
+        db_backfill: The flushed backfill row the runs belong to; its
+            ``partitions`` count is stamped here.
+        window: The partitions the backfill covers.
+    """
+    span = window.partition_count()
+    first_queued = max(0, span - db_backfill.concurrency)
+    for index, value in enumerate(window.granularity.period_range(window.start, window.end)):
+        session.add(
+            Run(
+                org_id=db_backfill.org_id,
+                component_id=db_backfill.component_id,
+                backfill_id=db_backfill.id,
+                partition_key=window.granularity.format(value),
+                status="queued" if index >= first_queued else "pending",
+            )
+        )
+    db_backfill.partitions = span
+    session.add(db_backfill)
 
 
 def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:

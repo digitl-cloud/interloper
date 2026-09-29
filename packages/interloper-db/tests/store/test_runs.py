@@ -21,6 +21,7 @@ from sqlmodel import Session, col, select
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Quota, Run, Usage
 from interloper_db.store import Store
+from interloper_db.store.runs import create_backfill_runs
 
 _ORG_ID = uuid4()
 
@@ -492,6 +493,46 @@ class TestCreateBackfill:
             store.runs.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
 
 
+class TestCreateBackfillRuns:
+    """The fan-out every backfill shares: newest `concurrency` queued, the rest pending."""
+
+    def test_queues_the_newest_partitions_and_leaves_the_rest_pending(self, store: Store):
+        window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 4))
+        with Session(store.engine) as session:
+            db_backfill = Backfill(
+                org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=2, status="running"
+            )
+            session.add(db_backfill)
+            session.flush()
+
+            create_backfill_runs(session, db_backfill, window)
+            session.commit()
+            backfill_id = db_backfill.id
+
+        assert store.runs.get_backfill(backfill_id).partitions == 4
+        assert _partition_statuses(store, backfill_id) == {
+            "2026-01-01": "pending",
+            "2026-01-02": "pending",
+            "2026-01-03": "queued",
+            "2026-01-04": "queued",
+        }
+
+    def test_creates_rows_oldest_first(self, store: Store):
+        window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
+        with Session(store.engine) as session:
+            db_backfill = Backfill(
+                org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-03", concurrency=1, status="running"
+            )
+            session.add(db_backfill)
+            session.flush()
+            create_backfill_runs(session, db_backfill, window)
+            session.commit()
+            runs = session.exec(
+                select(Run).where(Run.backfill_id == db_backfill.id).order_by(col(Run.created_at))
+            ).all()
+        assert [run.partition_key for run in runs] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+
+
 class TestCancelBackfill:
     def test_cancels_pending_and_queued_runs_only(self, store: Store):
         backfill = _backfill(store)  # 2 queued + 2 pending
@@ -790,6 +831,32 @@ class TestBackfillProgression:
         assert statuses["2026-01-04"] == "success"
         # Newest-first, matching the initial dispatch order.
         assert statuses["2026-01-03"] == "queued"
+
+    def test_a_dispatched_run_holds_its_slot(self, store: Store):
+        # Between the queue's claim and the pod's first write a run is
+        # `dispatched`: still occupying its slot, not yet `running`.
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=2
+        )
+        _mark_dispatched(store, backfill.id)
+        second = _mark_dispatched(store, backfill.id)
+
+        store.runs.complete(second, success=True)
+
+        statuses = _partition_statuses(store, backfill.id)
+        assert list(statuses.values()).count("queued") == 1
+        assert statuses["2026-01-01"] == "pending"
+
+    def test_a_dispatched_run_keeps_the_backfill_open(self, store: Store):
+        backfill = store.runs.create_backfill(
+            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
+        )
+        _mark_dispatched(store, backfill.id)
+        second = _mark_dispatched(store, backfill.id)
+
+        store.runs.complete(second, success=True)
+
+        assert store.runs.get_backfill(backfill.id).status == "running"
 
     def test_a_completion_outside_any_backfill_is_a_no_op(self, store: Store):
         run = store.runs.create(_ORG_ID)
