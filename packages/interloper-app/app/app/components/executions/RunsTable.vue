@@ -6,6 +6,7 @@ import type { Run } from '~/types/run'
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const EntityBadge = resolveComponent('EntityBadge')
+const StatusBadge = resolveComponent('StatusBadge')
 const UProgressGroup = resolveComponent('UProgressGroup')
 
 type RunRow = Run & { children?: Run[] }
@@ -56,18 +57,26 @@ const type = computed({
     get: () => filters.value.key,
     set: (value: string | null) => applyFilters({ key: value }),
 })
+const status = computed({
+    get: () => filters.value.status,
+    set: (value: string | null) => applyFilters({ status: value }),
+})
+
+const RUN_STATUSES = ['pending', 'queued', 'dispatched', 'running', 'success', 'failed', 'canceled']
 
 watchDebounced(search, value => applyFilters({ q: value.trim() }), { debounce: 300 })
 
 async function applyFilters(next: Partial<RunFilters>) {
     await runsStore.setFilters(next)
-    const { q, kind, key } = filters.value
-    router.replace({ query: { ...route.query, q: q || undefined, kind: kind ?? undefined, type: key ?? undefined } })
+    const { q, kind, key, status } = filters.value
+    router.replace({
+        query: { ...route.query, q: q || undefined, kind: kind ?? undefined, type: key ?? undefined, status: status ?? undefined },
+    })
 }
 
 function clearFilters() {
     search.value = ''
-    applyFilters({ q: '', kind: null, key: null })
+    applyFilters({ q: '', kind: null, key: null, status: null })
 }
 
 /** Type choices follow the kind in view, so the two filters never contradict. */
@@ -79,11 +88,12 @@ onMounted(async () => {
     // Target icons and type names read the catalog; the filter choices read the collection.
     if (!catalogStore.loaded) catalogStore.fetchCatalog()
     if (componentsStore.all.length === 0) componentsStore.fetchAll()
-    const { q, kind, type } = route.query
+    const { q, kind, type, status } = route.query
     await runsStore.setFilters({
         q: typeof q === 'string' ? q : '',
         kind: typeof kind === 'string' ? kind : null,
         key: typeof type === 'string' ? type : null,
+        status: typeof status === 'string' ? status : null,
     })
 })
 
@@ -145,10 +155,7 @@ const columns: TableColumn<RunRow>[] = [
     {
         accessorKey: 'status',
         header: 'Status',
-        cell: ({ row }) => {
-            const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
-        },
+        cell: ({ row }) => h(StatusBadge, { status: row.getValue<string>('status') }),
     },
     {
         id: 'assets',
@@ -200,6 +207,8 @@ function onPageChange(page: number) {
                             :components="componentsStore.all" />
                 <TypeFilter v-model="type"
                             :components="typeChoices" />
+                <StatusFilter v-model="status"
+                              :statuses="RUN_STATUSES" />
             </div>
         </div>
 

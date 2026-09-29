@@ -16,4 +16,5 @@ export interface Backfill {
     started_at: string | null
     completed_at: string | null
     created_at: string | null
+    run_counts?: Record<string, number>
 }

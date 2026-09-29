@@ -6,8 +6,11 @@ import type { Backfill } from '~/types/backfill'
 
 const PAGE_SIZE = 50
 
-const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
+const StatusBadge = resolveComponent('StatusBadge')
+const UProgressGroup = resolveComponent('UProgressGroup')
+
+const BACKFILL_STATUSES = ['queued', 'running', 'success', 'failed', 'canceled']
 
 const backfillsStore = useBackfillsStore()
 const catalogStore = useCatalogStore()
@@ -25,11 +28,13 @@ onMounted(async () => {
  * range backfills and hide them, so they stay out unless asked for.
  */
 const search = ref('')
+const status = ref<string | null>(null)
 const showSinglePartition = ref(false)
 const shown = computed(() => {
     const needle = search.value.trim().toLowerCase()
     return backfills.value.filter(backfill =>
         (showSinglePartition.value || backfill.partitions !== 1)
+        && (!status.value || backfill.status === status.value)
         && (!needle || [backfill.component_name, backfill.component_key].some(text => text?.toLowerCase().includes(needle))),
     )
 })
@@ -55,10 +60,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
         accessorKey: 'status',
         header: 'Status',
-        cell: ({ row }) => {
-            const status = row.getValue<string>('status')
-            return h(UBadge, { color: statusColor(status) }, () => statusLabel(status))
-        },
+        cell: ({ row }) => h(StatusBadge, { status: row.getValue<string>('status') }),
     },
     {
         id: 'range',
@@ -71,7 +73,14 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
     {
         accessorKey: 'partitions',
         header: 'Partitions',
-        cell: ({ row }) => h('span', { class: 'text-muted' }, row.getValue<number | null>('partitions') ?? '—'),
+        cell: ({ row }) => {
+            const stats = runStats(null, row.original.run_counts ?? {})
+            if (!stats.total) return h('span', { class: 'text-muted' }, '—')
+            return h('div', { class: 'flex w-40 items-center gap-2', title: outcomeSummary(stats).join(' · ') }, [
+                h(UProgressGroup, { items: progressSegments(stats), max: stats.total, size: 'sm', class: 'flex-1' }),
+                h('span', { class: 'text-xs text-muted tabular-nums' }, `${stats.succeeded}/${stats.total}`),
+            ])
+        },
     },
     {
         accessorKey: 'started_at',
@@ -99,6 +108,8 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
             <UCheckbox v-model="showSinglePartition"
                        label="Show single partition"
                        class="ml-auto" />
+            <StatusFilter v-model="status"
+                          :statuses="BACKFILL_STATUSES" />
         </div>
 
         <div v-if="!loading && backfills.length === 0"
