@@ -66,6 +66,66 @@ class TestFire:
 
         assert _text(slack) == ":x: *c1* failed\npartition `2026-07-30`"
 
+    def test_posts_backfill_failure_with_its_partitions(self, slack):
+        _hook().fire(
+            il.HookContext(
+                event_type="backfill_failed",
+                component_id="c1",
+                backfill_id="b1",
+                start_key="2026-09-22",
+                end_key="2026-09-28",
+                metadata={
+                    "status": "failed",
+                    "component_name": "Facebook Ads",
+                    "partitions": 7,
+                    "counts": {"success": 5, "failed": 2},
+                    "failed_partitions": [["2026-09-26", "rate limited"], ["2026-09-23", None]],
+                },
+            )
+        )
+
+        assert slack.json_body()["text"] == "Facebook Ads backfill failed"
+        assert _text(slack) == (
+            ":x: *Facebook Ads* backfill failed\n"
+            "`2026-09-22` → `2026-09-28` · 5 succeeded, 2 failed\n"
+            "• `2026-09-26`: rate limited\n"
+            "• `2026-09-23`"
+        )
+
+    def test_caps_the_listed_partitions_at_ten(self, slack):
+        failed = [[f"2026-09-{day:02d}", "boom"] for day in range(30, 18, -1)]
+        _hook().fire(
+            il.HookContext(
+                event_type="backfill_failed",
+                component_id="c1",
+                backfill_id="b1",
+                start_key="2026-09-19",
+                end_key="2026-09-30",
+                metadata={"component_name": "Facebook Ads", "counts": {"failed": 12}, "failed_partitions": failed},
+            )
+        )
+
+        lines = _text(slack).split("\n")
+        assert lines[1] == "`2026-09-19` → `2026-09-30` · 12 failed"
+        assert len([line for line in lines if line.startswith("•")]) == 10
+        assert lines[-1] == "and 2 more"
+
+    def test_posts_backfill_completion_without_errors(self, slack):
+        _hook().fire(
+            il.HookContext(
+                event_type="backfill_completed",
+                component_id="c1",
+                backfill_id="b1",
+                start_key="2026-09-22",
+                end_key="2026-09-28",
+                metadata={"component_name": "Facebook Ads", "counts": {"success": 7}, "failed_partitions": []},
+            )
+        )
+
+        assert _text(slack) == (
+            ":white_check_mark: *Facebook Ads* backfill completed\n`2026-09-22` → `2026-09-28` · 7 succeeded"
+        )
+
     def test_request_carries_the_configured_timeout(self, slack):
         _hook(timeout=2.5).fire(il.HookContext(event_type="run_failed", component_id="c1"))
 
