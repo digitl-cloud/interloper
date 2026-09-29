@@ -201,8 +201,10 @@ scheduling_agent = Agent(
         scheduling.list_run_events,
         scheduling.get_event,
         scheduling.list_failures,
+        scheduling.error_breakdown,
         scheduling.trigger_run,
         scheduling.list_backfills,
+        scheduling.backfill_timeline,
         scheduling.trigger_backfill,
         scheduling.toggle_asset,
         collection.list_components,
@@ -222,6 +224,8 @@ analytics_agent = Agent(
         analytics.run_history_summary,
         analytics.partition_coverage,
         analytics.freshness_check,
+        analytics.run_stats,
+        analytics.asset_coverage,
     ],
 )
 

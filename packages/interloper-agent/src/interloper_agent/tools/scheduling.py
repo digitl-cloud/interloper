@@ -120,6 +120,23 @@ def trigger_run(
         return {"status": "error", "error": str(e)}
 
 
+def error_breakdown(
+    since: str | None = None,
+    until: str | None = None,
+    component_id: str | None = None,
+    backfill_id: str | None = None,
+    run_id: str | None = None,
+    group_by: list[str] | None = None,
+    limit: int = 25,
+    offset: int = 0,
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    result = toolkit_scheduling.error_breakdown(
+        toolkit_ctx(tool_context), since, until, component_id, backfill_id, run_id, group_by, limit, offset
+    )
+    return result.model_dump(mode="json")
+
+
 # --- Backfills ---
 
 
@@ -127,6 +144,13 @@ def list_backfills(
     active_only: bool = True, limit: int = 20, offset: int = 0, tool_context: ToolContext | None = None
 ) -> dict[str, Any]:
     result = toolkit_scheduling.list_backfills(toolkit_ctx(tool_context), active_only, limit, offset)
+    return result.model_dump(mode="json")
+
+
+def backfill_timeline(
+    backfill_id: str, limit: int = 50, offset: int = 0, tool_context: ToolContext | None = None
+) -> dict[str, Any]:
+    result = toolkit_scheduling.backfill_timeline(toolkit_ctx(tool_context), backfill_id, limit, offset)
     return result.model_dump(mode="json")
 
 
@@ -206,4 +230,6 @@ get_run_detail.__doc__ = toolkit_scheduling.get_run_detail.__doc__
 list_run_events.__doc__ = toolkit_scheduling.list_run_events.__doc__
 get_event.__doc__ = toolkit_scheduling.get_event.__doc__
 list_failures.__doc__ = toolkit_scheduling.list_failures.__doc__
+error_breakdown.__doc__ = toolkit_scheduling.error_breakdown.__doc__
 list_backfills.__doc__ = toolkit_scheduling.list_backfills.__doc__
+backfill_timeline.__doc__ = toolkit_scheduling.backfill_timeline.__doc__
