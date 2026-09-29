@@ -31,6 +31,9 @@ class TestWebhookHook:
             "component_id": "c1",
             "run_id": "r1",
             "partition_key": None,
+            "backfill_id": None,
+            "start_key": None,
+            "end_key": None,
             "hook_id": "h1",
             "metadata": {"error": "boom"},
         }

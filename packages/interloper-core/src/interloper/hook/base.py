@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from interloper.job.base import Job
     from interloper.source.base import Source
 
-#: Event types a hook may subscribe to (v1: run-terminal outcomes).
-HookEvent = Literal["run_completed", "run_failed"]
+#: Event types a hook may subscribe to: a run's verdict, or a backfill's.
+HookEvent = Literal["run_completed", "run_failed", "backfill_completed", "backfill_failed"]
 HOOK_EVENT_TYPES: tuple[str, ...] = get_args(HookEvent)
 
 
@@ -24,7 +24,9 @@ class HookContext(BaseModel):
 
     Carries the event's identity and metadata, plus the capabilities the
     operator injects: ``trigger`` creates a run for a component id, so
-    trigger-style hooks stay free of any persistence dependency.
+    trigger-style hooks stay free of any persistence dependency. A run event
+    names its run and partition; a backfill event names its backfill and the
+    range it covered.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -33,6 +35,9 @@ class HookContext(BaseModel):
     component_id: str
     run_id: str | None = None
     partition_key: str | None = None
+    backfill_id: str | None = None
+    start_key: str | None = None
+    end_key: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     trigger: Callable[[str], None] | None = Field(default=None, exclude=True)
 
@@ -74,7 +79,7 @@ class Hook(Component):
     events: list[HookEvent] = Field(
         default=["run_failed"],
         min_length=1,
-        description="Run outcomes this hook reacts to",
+        description="Outcomes this hook reacts to",
     )
     enabled: bool = Field(default=True, description="Hook will fire on matching events")
 

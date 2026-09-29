@@ -14,7 +14,23 @@ from interloper_slack.connection import SlackConnection
 _OUTCOMES: dict[str, tuple[str, str]] = {
     "run_completed": (":white_check_mark:", "completed"),
     "run_failed": (":x:", "failed"),
+    "backfill_completed": (":white_check_mark:", "backfill completed"),
+    "backfill_failed": (":x:", "backfill failed"),
 }
+
+#: Status → the word a count of partitions reads with, in the order they are listed.
+_COUNT_LABELS: dict[str, str] = {
+    "success": "succeeded",
+    "failed": "failed",
+    "canceled": "canceled",
+    "running": "running",
+    "dispatched": "running",
+    "queued": "queued",
+    "pending": "pending",
+}
+
+#: How many failed partitions a message lists before summarizing the rest.
+_MAX_LISTED_PARTITIONS = 10
 
 
 class SlackHook(Hook):
@@ -90,6 +106,7 @@ class SlackHook(Hook):
             lines.append(details)
         if error := context.metadata.get("error"):
             lines.append(f"```{error}```")
+        lines.extend(self._failed_partitions(context))
 
         return {
             "channel": self.channel,
@@ -98,17 +115,44 @@ class SlackHook(Hook):
         }
 
     def _details(self, context: HookContext) -> str:
-        """Render the run/partition context line.
+        """Render the context line: a run and its partition, or a backfill's range and counts.
 
         Args:
-            context: The hook context whose run and partition are rendered.
+            context: The hook context whose subject is rendered.
 
         Returns:
-            The line, or ``""`` when the context carries neither.
+            The line, or ``""`` when the context carries none of it.
         """
         parts = []
+        if context.backfill_id:
+            parts.append(f"`{context.start_key}` → `{context.end_key}`")
+            counts = context.metadata.get("counts") or {}
+            summary = ", ".join(
+                f"{counts[status]} {label}" for status, label in _COUNT_LABELS.items() if counts.get(status)
+            )
+            if summary:
+                parts.append(summary)
         if context.run_id:
             parts.append(f"Run `{context.run_id}`")
         if context.partition_key:
             parts.append(f"partition `{context.partition_key}`")
         return " · ".join(parts)
+
+    def _failed_partitions(self, context: HookContext) -> list[str]:
+        """Render a backfill's failed partitions, one bullet each, capped.
+
+        Args:
+            context: The hook context whose ``failed_partitions`` metadata is rendered.
+
+        Returns:
+            The bullet lines, then an "and N more" line past the cap; empty
+            when the event carries none.
+        """
+        failed = context.metadata.get("failed_partitions") or []
+        lines = [
+            f"• `{partition_key}`: {error}" if error else f"• `{partition_key}`"
+            for partition_key, error in failed[:_MAX_LISTED_PARTITIONS]
+        ]
+        if len(failed) > _MAX_LISTED_PARTITIONS:
+            lines.append(f"and {len(failed) - _MAX_LISTED_PARTITIONS} more")
+        return lines

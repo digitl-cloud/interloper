@@ -110,6 +110,13 @@ class TestFire:
     def test_default_events(self):
         assert il.Hook().events == ["run_failed"]
 
+    def test_events_span_runs_and_backfills(self):
+        assert il.HOOK_EVENT_TYPES == ("run_completed", "run_failed", "backfill_completed", "backfill_failed")
+
+    def test_context_carries_no_backfill_by_default(self):
+        context = il.HookContext(event_type="run_failed", component_id="c1")
+        assert (context.backfill_id, context.start_key, context.end_key) == (None, None, None)
+
     def test_watches_bind_from_the_constructor(self):
         source = FakeSource()
         assert FakeNotifyHook(watches=[source]).watches == [source]

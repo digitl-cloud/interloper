@@ -45,6 +45,9 @@ class WebhookHook(Hook):
             "component_id": context.component_id,
             "run_id": context.run_id,
             "partition_key": context.partition_key,
+            "backfill_id": context.backfill_id,
+            "start_key": context.start_key,
+            "end_key": context.end_key,
             "hook_id": self.id,
             "metadata": context.metadata,
         }
