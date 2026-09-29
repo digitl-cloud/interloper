@@ -15,7 +15,7 @@ from sqlalchemy import Engine, func
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, col, select
 
-from interloper_db.models import Backfill, Component, Run
+from interloper_db.models import Backfill, Component, Event, Run
 from interloper_db.session import commit, session_scope
 from interloper_db.store.quotas import (
     QUOTA_MAX_BACKFILL_PARTITIONS,
@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 # which rejects outer joins.
 RUN_LOAD_OPTIONS = (joinedload(Run.target),)  # ty: ignore[invalid-argument-type]
 BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
+
+TERMINAL_RUN_STATUSES = frozenset({"success", "failed", "canceled"})
 
 _ACTIVE_BACKFILL_STATUSES = ("running", "queued")
 
@@ -319,11 +321,16 @@ class RunStore:
 
         Raises:
             NotFoundError: If the run is not found.
+            ValueError: If the run is already terminal, so a late completion
+                (the reaper's, after a pod finally started) cannot overwrite
+                the verdict or queue a retry of work that succeeded.
         """
         with session_scope(self._engine) as session:
             db_run = session.get(Run, run_id)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
+            if db_run.status in TERMINAL_RUN_STATUSES:
+                raise ValueError(f"Run {run_id} is already {db_run.status}")
 
             db_run.status = "success" if success else "failed"
             db_run.completed_at = datetime.now(timezone.utc)
@@ -622,6 +629,55 @@ class RunStore:
         with session_scope(self._engine) as session:
             statement = select(func.count()).select_from(Backfill).where(*self._backfill_filters(org_id, active_only))
             return session.exec(statement).one()
+
+    def failed_partitions(self, backfill_id: UUID) -> list[tuple[str, str | None]]:
+        """A backfill's failed partitions, newest first, each with its recorded error.
+
+        A partition reads as its stack's latest attempt, so one a retry healed
+        is absent. The error is what that attempt's ``run_failed`` event
+        recorded; ``None`` when nothing was.
+
+        Args:
+            backfill_id: The backfill UUID.
+
+        Returns:
+            ``(partition_key, error)`` pairs, newest partition first.
+        """
+        latest = (
+            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
+            .where(Run.backfill_id == backfill_id)
+            .group_by(col(Run.root_run_id))
+            .subquery()
+        )
+        statement = (
+            select(Run)
+            .join(
+                latest,
+                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
+            )
+            .where(Run.backfill_id == backfill_id, Run.status == "failed")
+            .order_by(col(Run.partition_key).desc())
+        )
+        with session_scope(self._engine) as session:
+            failed = session.exec(statement).all()
+            return [(run.partition_key or "", self._recorded_error(session, run.id)) for run in failed]
+
+    @staticmethod
+    def _recorded_error(session: Session, run_id: UUID) -> str | None:
+        """The error a run's newest ``run_failed`` event recorded.
+
+        Args:
+            session: Open session the event is read through.
+            run_id: The run whose failure is read.
+
+        Returns:
+            The error text, or ``None`` when no failure event carries one.
+        """
+        return session.exec(
+            select(Event.error)
+            .where(Event.run_id == run_id, Event.event_type == "run_failed", col(Event.error).is_not(None))
+            .order_by(col(Event.timestamp).desc())
+        ).first()
 
     def count_backfill_runs(self, backfill_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each backfill's partitions by their latest attempt's status, in one query.

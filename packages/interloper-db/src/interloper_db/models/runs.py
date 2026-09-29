@@ -24,6 +24,14 @@ class Backfill(SQLModel, table=True):
     """
 
     __tablename__: ClassVar[str] = "backfills"
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        Index(
+            "ix_backfills_hooks_pending",
+            "completed_at",
+            postgresql_where=text("hooks_evaluated_at IS NULL"),
+            sqlite_where=text("hooks_evaluated_at IS NULL"),
+        ),
+    )
 
     id: UUID = SQLField(
         default=None,
@@ -43,6 +51,7 @@ class Backfill(SQLModel, table=True):
     partitions: int = 0
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    hooks_evaluated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()
 
     runs: list["Run"] = Relationship(back_populates="backfill")
@@ -58,6 +67,10 @@ class Run(SQLModel, table=True):
     ``scheduled_for`` is the earliest instant the queue may claim the run,
     which is how a retry's backoff is served without a second status.
 
+    ``hooks_evaluated_at`` is the hook evaluator's cursor: a terminal run is
+    swept until it is stamped, however long it took to commit and whatever
+    the scheduler was doing at the time.
+
     ``quota_reserved_at`` is set when a dispatch-time quota reservation was
     taken; its month tells settlement which usage period to release.
     ``billable`` records the operation's declaration at creation time, so
@@ -71,6 +84,12 @@ class Run(SQLModel, table=True):
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_runs_org_id_created_at", "org_id", "created_at"),
         Index("ix_runs_backfill_id_status", "backfill_id", "status"),
+        Index(
+            "ix_runs_hooks_pending",
+            "completed_at",
+            postgresql_where=text("hooks_evaluated_at IS NULL"),
+            sqlite_where=text("hooks_evaluated_at IS NULL"),
+        ),
     )
 
     id: UUID = SQLField(
@@ -101,6 +120,7 @@ class Run(SQLModel, table=True):
     quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    hooks_evaluated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()
 
     backfill: Backfill | None = Relationship(back_populates="runs")
