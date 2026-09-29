@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterator
 from uuid import uuid4
 
+import pytest
+from interloper.settings import AppSettings, ServerSettings
 from interloper_db.store import Store
 
 from interloper_toolkit import ToolkitContext, collection
@@ -147,7 +150,32 @@ class TestUpdateComponent:
         assert store.components.get(bq.id).name != "Nope"
 
 
+@pytest.fixture
+def external_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """Activate settings whose public app URL is the parametrised value.
+
+    Yields:
+        The URL the settings carry.
+    """
+    settings = AppSettings.model_construct(server=ServerSettings(external_url=request.param))
+    AppSettings.activate(settings)
+    try:
+        yield request.param
+    finally:
+        AppSettings.clear_active()
+
+
 class TestConnections:
+    @pytest.mark.parametrize("external_url", ["https://app.example.com/", ""], indirect=True)
+    def test_request_connection_setup_links_the_form_when_the_app_has_a_public_url(
+        self, ctx: ToolkitContext, external_url: str
+    ):
+        result = collection.request_connection_setup(ctx, "demo_connection", name="Main account")
+
+        assert result.status == "success"
+        expected = "https://app.example.com/components/connections?new=demo_connection&name=Main+account"
+        assert result.setup_url == (expected if external_url else None)
+
     def test_request_connection_setup_presents_a_form_or_the_existing_connections(
         self, ctx: ToolkitContext, store: Store
     ):
