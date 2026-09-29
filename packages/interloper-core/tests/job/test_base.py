@@ -62,6 +62,7 @@ class TestDefinition:
             "tags",
             "lookback",
             "offset",
+            "concurrency",
         }
         assert "cron" in defn.config_schema.get("required", [])
         assert defn.relations["targets"].kinds == ["source", "asset"]
@@ -69,11 +70,21 @@ class TestDefinition:
 
     def test_a_concrete_job_leads_with_its_own_fields(self):
         properties = il.CronJob.config_schema()["properties"]
-        assert list(properties) == ["cron", "timezone", "lookback", "offset", "tags", "enabled", "retry"]
+        assert list(properties) == [
+            "cron",
+            "timezone",
+            "lookback",
+            "offset",
+            "concurrency",
+            "tags",
+            "enabled",
+            "retry",
+        ]
         assert properties["lookback"]["x-section"] == "Partitioning"
         assert {name for name, prop in properties.items() if prop.get("x-section") == "Operation"} == {
             "cron",
             "timezone",
+            "concurrency",
             "enabled",
             "retry",
         }

@@ -24,3 +24,17 @@ class TestTimezone:
         prop = CronJob.model_json_schema()["properties"]["timezone"]
         assert prop["x-widget"] == "timezone"
         assert prop["default"] == "UTC"
+
+
+class TestConcurrency:
+    def test_defaults_to_one(self) -> None:
+        assert CronJob(cron="0 6 * * *").concurrency == 1
+
+    def test_rejects_zero(self) -> None:
+        with pytest.raises(ValueError, match="greater than or equal to 1"):
+            CronJob(cron="0 6 * * *", concurrency=0)
+
+    def test_sits_in_the_operation_section(self) -> None:
+        prop = CronJob.config_schema()["properties"]["concurrency"]
+        assert prop["x-section"] == "Operation"
+        assert prop["title"] == "Concurrency"

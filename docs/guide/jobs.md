@@ -52,12 +52,14 @@ job = il.CronJob(
 | `timezone` | `"UTC"` | IANA zone the schedule is evaluated in. Unknown names are rejected. |
 | `lookback` | `1` | How many partitions each run covers. |
 | `offset` | `1` | How many partitions back from the current one the window ends. |
+| `concurrency` | `1` | How many partitions of one firing run at once. |
 
 For daily targets the defaults mean "yesterday, in the job's timezone". `offset=3, lookback=3`
 covers the three days ending three days ago, for a vendor whose numbers settle late. The window
 itself is computed with `TimePartitionWindow.lookback`; hourly targets always use UTC windows
 because hour ids are UTC labels. Whether a job is partitioned is derived from its targets, never
-stored.
+stored. Each firing is a backfill over the window, dispatched newest partition first and gated by
+`concurrency`: at `1` the partitions run one at a time.
 
 ## Jobs as specs
 
