@@ -1,4 +1,4 @@
-"""Tests for the shared JSON serialization helpers."""
+"""Tests for ``interloper.utils.json``."""
 
 import datetime
 import math
@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from interloper_google_cloud.serialization import json_default, replace_non_finite
+from interloper.utils.json import json_default, replace_non_finite
 
 
 class TestReplaceNonFinite:

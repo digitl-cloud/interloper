@@ -7,6 +7,7 @@ from interloper.destination.database import DatabaseDestination, PartitionFilter
 from interloper.destination.decorator import destination
 from interloper.destination.file import FileDestination
 from interloper.destination.memory import MemoryDestination
+from interloper.destination.object_store import ObjectStoreDestination, StoredObject
 
 __all__ = [
     "CSVDestination",
@@ -15,6 +16,8 @@ __all__ = [
     "FileDestination",
     "IOContext",
     "MemoryDestination",
+    "ObjectStoreDestination",
     "PartitionFilter",
+    "StoredObject",
     "destination",
 ]

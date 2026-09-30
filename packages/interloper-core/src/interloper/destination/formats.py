@@ -1,4 +1,4 @@
-"""File formats for the GCS destination: records ⇄ bytes, one class per format."""
+"""File formats for object-store destinations: records to bytes and back, one class per format."""
 
 from __future__ import annotations
 
@@ -8,13 +8,15 @@ import io
 import json
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 from interloper.schema import FieldSpec
+from interloper.utils.json import json_default, replace_non_finite
 
-from interloper_google_cloud.serialization import json_default, replace_non_finite
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+_PYARROW_MISSING = "Parquet needs pyarrow: pip install pyarrow"
 
 
 class FileFormat(ABC):
@@ -23,7 +25,7 @@ class FileFormat(ABC):
     ``serialize`` receives records (and the effective field specs, when a
     schema is known) and returns the object payload; ``deserialize`` parses a
     payload back into records.  Type restoration from text formats is the
-    caller's concern (``Schema.reconcile``) — formats only deal in bytes.
+    caller's concern (``Schema.reconcile``); formats only deal in bytes.
     """
 
     key: ClassVar[str]
@@ -57,7 +59,7 @@ class FileFormat(ABC):
 
 
 class JSONLFormat(FileFormat):
-    """Newline-delimited JSON — the load format BigQuery and most lakes expect."""
+    """Newline-delimited JSON, the load format BigQuery and most lakes expect."""
 
     key = "jsonl"
     extension = "jsonl"
@@ -130,7 +132,11 @@ class CSVFormat(FileFormat):
 
 
 class ParquetFormat(FileFormat):
-    """Parquet via pyarrow — full type fidelity, ideal for external tables."""
+    """Parquet via pyarrow: full type fidelity, ideal for external tables.
+
+    pyarrow is imported on use, so core does not depend on it: only a
+    destination configured for Parquet needs it installed.
+    """
 
     key = "parquet"
     extension = "parquet"
@@ -149,7 +155,15 @@ class ParquetFormat(FileFormat):
 
         Returns:
             The Parquet payload.
+
+        Raises:
+            ImportError: If pyarrow is not installed.
         """
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+        except ImportError as error:
+            raise ImportError(_PYARROW_MISSING) from error
         if specs is not None:
             rows = _stringify_untyped(rows, specs)
             table = pa.Table.from_pylist(rows, schema=pa.schema([_spec_to_arrow_field(spec) for spec in specs]))
@@ -167,7 +181,15 @@ class ParquetFormat(FileFormat):
 
         Returns:
             One dict per row.
+
+        Raises:
+            ImportError: If pyarrow is not installed.
         """
+        try:
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+        except ImportError as error:
+            raise ImportError(_PYARROW_MISSING) from error
         return pq.read_table(pa.BufferReader(payload)).to_pylist()
 
 
@@ -183,6 +205,8 @@ def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
     Returns:
         The Arrow field, wrapped in ``list_`` when the spec is repeated.
     """
+    import pyarrow as pa
+
     if spec.fields is not None:
         arrow_type: pa.DataType = pa.struct([_spec_to_arrow_field(sub) for sub in spec.fields])
     else:
@@ -195,7 +219,7 @@ def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
 def _is_concrete_type(py_type: Any) -> bool:
     """Return whether *py_type* is a real class the Arrow mapping can use.
 
-    ``typing.Any`` is excluded explicitly — on Python 3.11+ it *is* an
+    ``typing.Any`` is excluded explicitly: on Python 3.11+ it *is* an
     ``isinstance(..., type)``, but it types nothing.
 
     Args:
@@ -211,7 +235,7 @@ def _is_concrete_type(py_type: Any) -> bool:
 def _py_type_to_arrow_type(py_type: Any) -> pa.DataType:
     """Map a Python *type* (from a FieldSpec) to an Arrow type.
 
-    Mirrors the BigQuery mapping (``Decimal`` → NUMERIC precision/scale) so
+    Mirrors the BigQuery mapping (``Decimal`` to NUMERIC precision/scale) so
     parquet files load into BigQuery without casts.
 
     Args:
@@ -221,6 +245,8 @@ def _py_type_to_arrow_type(py_type: Any) -> pa.DataType:
         The Arrow type.
 
     """
+    import pyarrow as pa
+
     if not _is_concrete_type(py_type):
         return pa.string()  # typing.Any or unresolvable annotations
     if issubclass(py_type, bool):
@@ -244,7 +270,7 @@ def _stringify_untyped(rows: list[dict[str, Any]], specs: list[FieldSpec]) -> li
     """Stringify values of untyped (``Any``) scalar fields.
 
     Those fields map to Arrow strings, and ``from_pylist`` does not coerce
-    e.g. ints into a string column — pre-convert so the write cannot fail on
+    e.g. ints into a string column, so pre-convert so the write cannot fail on
     a column the schema could not type.
 
     Args:
