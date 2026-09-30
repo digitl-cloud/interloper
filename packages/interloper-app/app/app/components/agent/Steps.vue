@@ -3,8 +3,8 @@
  * A stretch of a turn's work, folded behind one row: the reasoning and tool
  * calls between two things the user is shown (an answer, a card, an
  * approval). Closed by default; the row says which step is in progress
- * while the turn runs, the dot matrix working beside it, and how much was
- * done once it is over.
+ * while the turn runs (the message's avatar animates beside it) and how much
+ * was done once it is over.
  */
 import type { UIMessage } from 'ai'
 import { getToolName, isReasoningUIPart, isToolUIPart } from 'ai'
@@ -38,10 +38,7 @@ function _failed(output: unknown) {
     <UCollapsible class="w-full">
         <button type="button"
                 class="group flex items-center gap-1.5 w-full text-left text-sm text-muted hover:text-highlighted transition-colors cursor-pointer">
-            <AgentIndicator v-if="live"
-                            class="text-primary" />
-            <UIcon v-else
-                   :name="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
+            <UIcon :name="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
                    class="size-4 shrink-0"
                    :class="failed ? 'text-error' : ''" />
             <UChatShimmer v-if="live"
