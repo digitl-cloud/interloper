@@ -24,9 +24,9 @@ from interloper.representation import Representation
 from interloper.resource.fields import InputField
 from interloper.rest import RESTClient
 from interloper.schema import FieldSpec
+from interloper.utils.json import json_default, replace_non_finite
 
 from interloper_google_cloud.connection import GoogleCloudConnection
-from interloper_google_cloud.serialization import json_default, replace_non_finite
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 

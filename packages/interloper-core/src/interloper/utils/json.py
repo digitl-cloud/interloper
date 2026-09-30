@@ -1,4 +1,4 @@
-"""JSON serialization helpers shared by the Google Cloud destinations."""
+"""JSON encoding helpers for destinations that write JSON payloads."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def replace_non_finite(obj: Any) -> Any:
 
     pandas represents missing numeric values as ``float('nan')``. Python's
     ``json.dumps`` serialises these to the bare tokens ``NaN`` / ``Infinity``,
-    which are invalid JSON — BigQuery's load parser rejects them with "Parser
+    which are invalid JSON; BigQuery's load parser rejects them with "Parser
     terminated before end of string". Neither BigQuery nor JSONL files have a
     NaN concept, so map non-finite floats to ``None`` (JSON ``null``).
 

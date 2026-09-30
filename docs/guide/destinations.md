@@ -136,9 +136,9 @@ instantiated. `partition_row_counts` feeds `asset.partition_row_counts()` and th
 per partition, slicing the data through its [representation](../extending/representations.md)
 on the partition column; a window read returns one result per partition, newest first. A
 destination written this way is partition-correct by construction, and `CSVDestination`,
-`FileDestination`, `MemoryDestination` and `GCSDestination` are all built exactly like this. The
-partitions a context covers are on the context itself, `context.partitions` and `context.slices(data)`,
-for a backend that needs them.
+`FileDestination`, `MemoryDestination` and `ObjectStoreDestination`, the base of `GCSDestination`, are
+all built exactly like this. The partitions a context covers are on the context itself,
+`context.partitions` and `context.slices(data)`, for a backend that needs them.
 
 The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
 [decorators reference](../reference/decorators.md). A destination's own connection is a relation,
@@ -148,6 +148,45 @@ declared as an annotation or through `relations=`; see
 A backend whose storage is not per partition may override `write()` or `read()`
 wholesale. `DatabaseDestination` below does that for writes: rows carry the partition column, so
 a window clears every partition it covers and inserts the whole batch once.
+
+### Object store destinations
+
+`ObjectStoreDestination` (imported from `interloper.destination`, together with `StoredObject`)
+is a destination whose partitions are objects in a bucket. A backend writes its storage calls and
+nothing else, in four hooks that all take an object name relative to the bucket root:
+
+| Hook | Called for |
+|------|-----------|
+| `put_object(name, payload, content_type, metadata)` | writing; uploads the serialized partition, overwriting any object of that name, with the given custom metadata |
+| `get_object(name)` | reading; returns the object's bytes, or `None` when it does not exist, which the base turns into a `DataNotFoundError` |
+| `list_objects(prefix)` | `partition_row_counts`; yields a `StoredObject(name, metadata)` per object under the prefix |
+| `object_uri(name)` | messages; the backend's URI for the object, such as `gs://bucket/name` |
+
+The base declares two fields, `format` (`parquet`, the default, `jsonl` or `csv`) and `prefix`
+(a path prefix inside the bucket), and lays objects out hive style, one per partition:
+
+```
+{prefix}/{dataset}/{table}/data.{ext}
+{prefix}/{dataset}/{table}/{column}={partition_id}/data.{ext}
+```
+
+Behaviour the base class owns:
+
+- **The partition column lives in the path only**: it is dropped from a partition's file contents
+  on write, since external readers like BigQuery external tables and DuckDB reject a duplicate
+  partition column, and re-injected from the partition on read, so round trips stay lossless.
+- **Row counts need no download**: every object carries its row count as `row_count` metadata,
+  so `partition_row_counts` is one listing. An object without it, written by another tool, is
+  downloaded and counted.
+- **Reads come back as rows**, reconciled against `context.schema` when there is one, which
+  restores the declared types that JSONL and CSV read back as strings.
+- **File shapes follow the schema**: a Parquet file's columns are built from the effective
+  schema's field specs, so every partition has the same shape even when a column is all null.
+
+The formats live in `interloper.destination.formats` (`FileFormat`, `ParquetFormat`,
+`JSONLFormat`, `CSVFormat`). Parquet needs `pyarrow`, which core does not depend on: it is
+imported on first use and a missing install raises `ImportError` naming it. The packages that
+ship an object-store backend depend on it themselves.
 
 ### Database destinations
 

@@ -33,7 +33,7 @@ otel = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2"]
+dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2", "pyarrow>=14"]
 
 [tool.uv.sources]
 interloper-duckdb = { workspace = true }

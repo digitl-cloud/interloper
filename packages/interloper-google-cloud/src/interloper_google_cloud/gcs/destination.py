@@ -3,27 +3,17 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from functools import cached_property
-from typing import Any
 
 import google.auth
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from google.oauth2 import service_account
-from interloper.destination import IOContext, destination
-from interloper.destination.base import Destination
-from interloper.errors import DataNotFoundError
-from interloper.partitioning import Partition
-from interloper.representation import Representation
-from interloper.resource.fields import FetchField, InputField, SelectField
-from interloper.schema import FieldSpec
+from interloper.destination import ObjectStoreDestination, StoredObject, destination
+from interloper.resource.fields import FetchField
 
 from interloper_google_cloud.connection import GoogleCloudConnection
-from interloper_google_cloud.gcs.formats import FORMATS, FileFormat
-
-# Custom blob metadata key carrying the partition's row count, so
-# partition_row_counts introspects from a single list call without downloads.
-_ROW_COUNT_METADATA_KEY = "row_count"
 
 
 @destination(
@@ -32,19 +22,15 @@ _ROW_COUNT_METADATA_KEY = "row_count"
     icon="icon:gcs",
     tags=["Cloud"],
 )
-class GCSDestination(Destination):
+class GCSDestination(ObjectStoreDestination):
     """Google Cloud Storage destination.
 
-    Writes one object per partition in a hive-partitioned layout::
+    An :class:`~interloper.destination.ObjectStoreDestination` over Cloud
+    Storage: the base owns the hive layout, the formats and the row-count
+    metadata, so objects land at::
 
         gs://{bucket}/{prefix}/{dataset}/{table}/data.{ext}
         gs://{bucket}/{prefix}/{dataset}/{table}/{column}={partition}/data.{ext}
-
-    Following the hive convention, the partition column lives in the *path
-    only*: it is dropped from partitioned file contents on write (external
-    readers like BigQuery external tables and DuckDB reject a duplicate
-    partition column) and re-injected from the partition on read, so
-    interloper round-trips stay lossless.
     """
 
     connection: GoogleCloudConnection
@@ -56,16 +42,6 @@ class GCSDestination(Destination):
         description="Cloud Storage bucket",
         discriminator=True,
     )
-    format: str = SelectField(
-        default="parquet",
-        description="Output file format",
-        options=[
-            {"label": "Parquet", "value": "parquet"},
-            {"label": "JSONL", "value": "jsonl"},
-            {"label": "CSV", "value": "csv"},
-        ],
-    )
-    prefix: str | None = InputField(default=None, description="Path prefix inside the bucket")
 
     @cached_property
     def client(self) -> storage.Client:
@@ -84,156 +60,54 @@ class GCSDestination(Destination):
         credentials, project = google.auth.default()
         return storage.Client(project=project, credentials=credentials)
 
-    # -- Helpers ---------------------------------------------------------------
+    # -- Object hooks ----------------------------------------------------------
 
-    @property
-    def _format(self) -> FileFormat:
-        """The configured file format strategy.
-
-        Returns:
-            The strategy for the configured format.
-
-        """
-        return FORMATS[self.format]
-
-    def _asset_prefix(self, context: IOContext) -> str:
-        """Return the object-name prefix for an asset (no trailing slash).
+    def put_object(self, name: str, payload: bytes, content_type: str, metadata: dict[str, str]) -> None:
+        """Upload a blob, overwriting any blob of the same name.
 
         Args:
-            context: The IO context naming the asset.
-
-        Returns:
-            The prefix every object for the asset sits under.
-
+            name: The blob name, relative to the bucket root.
+            payload: The blob's bytes.
+            content_type: The payload's media type.
+            metadata: Custom metadata to store on the blob.
         """
-        parts = [self.prefix or "", context.asset.dataset or "", context.asset.table]
-        return "/".join(part.strip("/") for part in parts if part and part.strip("/"))
+        blob = self.client.bucket(self.bucket).blob(name)
+        blob.metadata = metadata
+        blob.upload_from_string(payload, content_type=content_type)
 
-    def _blob_name(self, context: IOContext, partition: Partition | None) -> str:
-        """Build the object name for a partition.
+    def get_object(self, name: str) -> bytes | None:
+        """Download a blob.
 
         Args:
-            context: The IO context naming the asset.
-            partition: The partition being addressed, or ``None`` for the whole.
+            name: The blob name, relative to the bucket root.
 
         Returns:
-            ``.../data.{ext}``, inside a ``{column}={id}`` segment for
-            partitions.
+            The blob's bytes, or ``None`` when no blob has that name.
         """
-        parts = [self._asset_prefix(context)]
-        if partition is not None:
-            assert context.asset.partitioning
-            parts.append(f"{context.asset.partitioning.column}={partition.id}")
-        parts.append(f"data.{self._format.extension}")
-        return "/".join(parts)
-
-    def _effective_specs(self, context: IOContext, partition: Partition | None) -> list[FieldSpec] | None:
-        """Return the field specs for a partition's file contents.
-
-        Partitions exclude the partition column (its value lives in the
-        object path).
-
-        Args:
-            context: The IO context carrying the schema.
-            partition: The partition being addressed, or ``None`` for the whole.
-
-        Returns:
-            The specs, or ``None`` when the context carries no schema.
-        """
-        if context.schema is None:
-            return None
-        specs = context.schema.field_specs()
-        if partition is not None:
-            assert context.asset.partitioning
-            specs = [spec for spec in specs if spec.name != context.asset.partitioning.column]
-        return specs
-
-    # -- Partition hooks -------------------------------------------------------
-
-    def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Serialize one partition's data and upload it, overwriting its object.
-
-        The row count is stamped as blob metadata so introspection never has
-        to download data.
-
-        Args:
-            context: The IO context naming the asset.
-            partition: The partition being written, or ``None`` for the whole.
-            data: The rows to write.
-
-        """
-        rows = Representation.of(data).records
-        if partition is not None:
-            assert context.asset.partitioning
-            column = context.asset.partitioning.column
-            rows = [{k: v for k, v in row.items() if k != column} for row in rows]
-
-        payload = self._format.serialize(rows, self._effective_specs(context, partition))
-        blob = self.client.bucket(self.bucket).blob(self._blob_name(context, partition))
-        blob.metadata = {_ROW_COUNT_METADATA_KEY: str(len(rows))}
-        blob.upload_from_string(payload, content_type=self._format.content_type)
-
-    def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
-        """Download and parse one partition's object.
-
-        The partition column is re-injected from the partition, and rows are
-        reconciled against the context schema when one is set (restoring the
-        declared types — text formats read everything back as strings).
-
-        Args:
-            context: The IO context carrying the schema.
-            partition: The partition being read, or ``None`` for the whole.
-
-        Returns:
-            Rows as a list of dicts.
-
-        Raises:
-            DataNotFoundError: If the partition's object does not exist.
-        """
-        name = self._blob_name(context, partition)
         try:
-            payload = self.client.bucket(self.bucket).blob(name).download_as_bytes()
+            return self.client.bucket(self.bucket).blob(name).download_as_bytes()
         except NotFound:
-            raise DataNotFoundError(
-                f"Object 'gs://{self.bucket}/{name}' does not exist. Has the asset been materialized?"
-            ) from None
+            return None
 
-        rows = self._format.deserialize(payload)
-        if partition is not None:
-            assert context.asset.partitioning
-            column = context.asset.partitioning.column
-            rows = [{**row, column: partition.id} for row in rows]
-        if context.schema is not None:
-            rows = context.schema.reconcile(rows)
-        return rows
-
-    # -- Introspection ---------------------------------------------------------
-
-    def partition_row_counts(self, context: IOContext) -> dict[str, int]:
-        """Return row counts grouped by partition from a single list call.
-
-        Counts come from the ``row_count`` blob metadata stamped at write
-        time; objects missing it (written by other tools) are downloaded and
-        counted.
+    def list_objects(self, prefix: str) -> Iterator[StoredObject]:
+        """List the blobs under a name prefix; the listing carries their metadata.
 
         Args:
-            context: The IO context naming the asset.
+            prefix: The name prefix, ending with ``/``.
+
+        Yields:
+            One stored object per blob.
+        """
+        for blob in self.client.list_blobs(self.bucket, prefix=prefix):
+            yield StoredObject(name=blob.name, metadata=dict(blob.metadata or {}))
+
+    def object_uri(self, name: str) -> str:
+        """Return the ``gs://`` URI of a blob.
+
+        Args:
+            name: The blob name, relative to the bucket root.
 
         Returns:
-            Mapping from partition value (as string) to row count.
+            ``gs://{bucket}/{name}``.
         """
-        assert context.asset.partitioning is not None
-        column = context.asset.partitioning.column
-        prefix = self._asset_prefix(context) + "/"
-
-        counts: dict[str, int] = {}
-        for blob in self.client.list_blobs(self.bucket, prefix=prefix):
-            segment = blob.name[len(prefix) :].split("/", 1)[0]
-            if not segment.startswith(f"{column}="):
-                continue
-            value = segment.split("=", 1)[1]
-            row_count = (blob.metadata or {}).get(_ROW_COUNT_METADATA_KEY)
-            if row_count is None:
-                row_count = len(self._format.deserialize(blob.download_as_bytes()))
-            counts[value] = counts.get(value, 0) + int(row_count)
-        return counts
+        return f"gs://{self.bucket}/{name}"
