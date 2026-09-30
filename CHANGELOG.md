@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.92.0 (2026-09-30)
+
+### Bug Fixes
+
+- Parse TikTok's OAuth exchange envelope so the token reaches the form
+  ([`791e92a`](https://github.com/digitl-cloud/interloper/commit/791e92aea065d00f2559af4986991d1c7adb3d52))
+
+- **assets**: Keep the cursor when paging Instagram accounts
+  ([`d4d0e14`](https://github.com/digitl-cloud/interloper/commit/d4d0e14e22a202024678a07983a3e24d1475173f))
+
+### Features
+
+- **agent**: Elide older tool returns from the conversation history
+  ([`9f16997`](https://github.com/digitl-cloud/interloper/commit/9f169973811d17ac5df10a9a885fdf4e1d7bf9ea))
+
+- **assets**: Implement the ten shell sources ported from cloud-connectors
+  ([`0295614`](https://github.com/digitl-cloud/interloper/commit/029561467075655369995cbee428ecc14b825a3a))
+
+### Testing
+
+- **assets**: Cover the ported sources' lookups and request paths
+  ([`5baac6e`](https://github.com/digitl-cloud/interloper/commit/5baac6ee7c5500dd3bf0e2e471223d2ca6cea9e5))
+
+- **assets**: Mirror the source layout in the test tree
+  ([`7075c05`](https://github.com/digitl-cloud/interloper/commit/7075c0578805f3812a20fa5f81e36df990267469))
+
+
 ## v0.91.0 (2026-09-30)
 
 ### Bug Fixes
