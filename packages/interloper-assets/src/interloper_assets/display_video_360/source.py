@@ -122,10 +122,10 @@ def _get_report(
     filters: list[dict],
 ) -> list[_Record]:
     """Create, run, download, and parse a report query, deleting it after."""
-    dbm_client = connection.dbm_client
-    query_id = dbm_client.queries().create(body=_report_body(title, date, dimensions, metrics, filters)).execute()[
-        "queryId"
-    ]
+    dbm_client = connection.dbm_client()
+    query_id = (
+        dbm_client.queries().create(body=_report_body(title, date, dimensions, metrics, filters)).execute()["queryId"]
+    )
     logger.info(f"Query id: {query_id} ({title})")
     try:
         report_id = dbm_client.queries().run(queryId=query_id, synchronous=False).execute()["key"]["reportId"]
@@ -265,7 +265,7 @@ class DisplayVideo360(il.Source):
     )
     def audiences(self, context: il.ExecutionContext) -> list[_Record]:
         """First-party and partner audiences of the configured partner or advertiser."""
-        rows = _list_audiences(self.connection.dv_client, self._audience_scope)
+        rows = _list_audiences(self.connection.dv_client(), self._audience_scope)
         return [{**row, "date": context.partition_date} for row in rows]
 
     @il.asset(
@@ -283,7 +283,8 @@ class DisplayVideo360(il.Source):
         if not self.audience_id:
             raise ValueError("The custom_audiences asset requires the source's audience_id to be set")
         audience = (
-            self.connection.dv_client.firstPartyAndPartnerAudiences()
+            self.connection.dv_client()
+            .firstPartyAndPartnerAudiences()
             .get(**self._audience_scope, firstPartyAndPartnerAudienceId=self.audience_id)
             .execute()
         )
