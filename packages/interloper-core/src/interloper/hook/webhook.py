@@ -48,6 +48,7 @@ class WebhookHook(Hook):
             "backfill_id": context.backfill_id,
             "start_key": context.start_key,
             "end_key": context.end_key,
+            "url": context.url,
             "hook_id": self.id,
             "metadata": context.metadata,
         }

@@ -33,8 +33,9 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
+from interloper.settings import AppSettings
 from interloper_db import Store
-from interloper_db.models import Backfill, Component, ComponentRelation, Run
+from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Run
 from interloper_db.models import Event as EventRow
 from sqlalchemy import func
 from sqlalchemy.orm import aliased
@@ -161,6 +162,7 @@ class HookController(Controller):
                 component_id=str(run.component_id),
                 run_id=str(run.id),
                 partition_key=run.partition_key,
+                url=self._subject_url(f"/executions/runs/{run.id}"),
                 metadata=metadata,
                 trigger=lambda component_id, watched_ids=watched_ids: self._trigger(
                     session, run, component_id, watched_ids
@@ -185,7 +187,7 @@ class HookController(Controller):
         if target is None:
             return
 
-        metadata = self._backfill_metadata(backfill, target, event_type)
+        metadata = self._backfill_metadata(session, backfill, target, event_type)
         for hook_row, hook, claim in self._unclaimed_hooks(session, backfill.org_id, target, backfill.id, event_type):
             watched_ids = {str(watch.id) for watch in hook.watches}
             context = il.HookContext(
@@ -194,6 +196,7 @@ class HookController(Controller):
                 backfill_id=str(backfill.id),
                 start_key=backfill.start_key,
                 end_key=backfill.end_key,
+                url=self._subject_url(f"/executions/backfills/{backfill.id}"),
                 metadata=metadata,
                 trigger=lambda component_id, watched_ids=watched_ids: self._trigger_backfill(
                     session, backfill, component_id, watched_ids
@@ -211,6 +214,19 @@ class HookController(Controller):
             )
             session.add(hook_row)
             session.commit()
+
+    @staticmethod
+    def _subject_url(path: str) -> str | None:
+        """The app page for a run or backfill, when the deployment has a public URL.
+
+        Args:
+            path: The page's path under the app, such as ``/executions/runs/<id>``.
+
+        Returns:
+            The absolute URL, or ``None`` when ``server.external_url`` is unset.
+        """
+        base = AppSettings.get().server.external_url.rstrip("/")
+        return f"{base}{path}" if base else None
 
     def _unclaimed_hooks(
         self, session: Session, org_id: UUID, target: Component, subject_id: UUID, event_type: str
@@ -249,7 +265,7 @@ class HookController(Controller):
 
         The ids in the context are the machine-readable half; this is the half
         a hook addressing humans (a Slack message) renders, so it carries the
-        component's display name, the stack's position (this attempt's number
+        organisation's and the component's display names, the stack's position (this attempt's number
         and how many the stack holds, so a message can say it succeeded on the
         second or failed after three) and, for a failure, the error the run
         recorded, which lives on the run's event rows rather than the run.
@@ -259,6 +275,7 @@ class HookController(Controller):
         """
         metadata: dict[str, Any] = {
             "status": run.status,
+            "organisation_name": self._organisation_name(session, run.org_id),
             "component_name": target.name or target.key,
             "component_key": target.key,
             "attempt": run.attempt,
@@ -278,10 +295,13 @@ class HookController(Controller):
                 metadata["error"] = error
         return metadata
 
-    def _backfill_metadata(self, backfill: Backfill, target: Component, event_type: str) -> dict[str, Any]:
+    def _backfill_metadata(
+        self, session: Session, backfill: Backfill, target: Component, event_type: str
+    ) -> dict[str, Any]:
         """Describe a backfill event for the hooks about to see it.
 
         Args:
+            session: Open session the organisation is read through.
             backfill: The terminal backfill the event describes.
             target: The backfill's component.
             event_type: The hook event type the backfill's status produced.
@@ -296,6 +316,7 @@ class HookController(Controller):
         """
         metadata: dict[str, Any] = {
             "status": backfill.status,
+            "organisation_name": self._organisation_name(session, backfill.org_id),
             "component_name": target.name or target.key,
             "component_key": target.key,
             "partitions": backfill.partitions,
@@ -306,6 +327,20 @@ class HookController(Controller):
                 [partition_key, error] for partition_key, error in self._store.runs.failed_partitions(backfill.id)
             ]
         return metadata
+
+    @staticmethod
+    def _organisation_name(session: Session, org_id: UUID) -> str | None:
+        """The display name of the organisation a subject belongs to.
+
+        Args:
+            session: Open session the organisation is read through.
+            org_id: The subject's organisation.
+
+        Returns:
+            The name, or ``None`` when the organisation row is gone.
+        """
+        organisation = session.get(Organisation, org_id)
+        return organisation.name if organisation else None
 
     def _matching_hooks(self, session: Session, org_id: UUID, target: Component) -> list[Component]:
         """Hooks watching *target* (the subject's component) or its parent.

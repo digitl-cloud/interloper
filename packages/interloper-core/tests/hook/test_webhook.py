@@ -18,11 +18,7 @@ class TestWebhookHook:
 
         monkeypatch.setattr(httpx, "post", fake_post)
         hook = il.WebhookHook(id="h1", url="https://example.test/hook")
-        hook.fire(
-            il.HookContext(
-                event_type="run_failed", component_id="c1", run_id="r1", metadata={"error": "boom"}
-            )
-        )
+        hook.fire(il.HookContext(event_type="run_failed", component_id="c1", run_id="r1", metadata={"error": "boom"}))
 
         url, payload = calls[0]
         assert url == "https://example.test/hook"
@@ -34,6 +30,7 @@ class TestWebhookHook:
             "backfill_id": None,
             "start_key": None,
             "end_key": None,
+            "url": None,
             "hook_id": "h1",
             "metadata": {"error": "boom"},
         }

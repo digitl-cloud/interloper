@@ -45,6 +45,10 @@ A non-success response raises:
   "component_id": "…",
   "run_id": "…",
   "partition_key": "2026-01-15",
+  "backfill_id": null,
+  "start_key": null,
+  "end_key": null,
+  "url": "https://app.example.com/executions/runs/…",
   "hook_id": "…",
   "metadata": {}
 }
@@ -72,7 +76,9 @@ class EmailHook(il.Hook):
 | `component_id` | The watched component whose run ended. |
 | `run_id` | The run. |
 | `partition_key` | The run's partition id, if any. |
-| `metadata` | Event details supplied by the operator. |
+| `backfill_id`, `start_key`, `end_key` | The backfill and its range, on a backfill event. |
+| `url` | The run's or backfill's page in the app, when `server.external_url` is set. |
+| `metadata` | Event details supplied by the operator: always `status`, `organisation_name`, `component_name` and `component_key`, plus what the event kind adds below. |
 | `trigger` | A callable creating a run for a component id, when the operator provides it. |
 
 A hook that acts on other components extends the relation vocabulary the way `TriggerHook`
