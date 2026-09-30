@@ -112,7 +112,6 @@ printed; see [Events](events.md#events-across-processes).
 | `interloper db init\|reset\|upgrade\|downgrade` | `interloper-db` | Database provisioning and migrations. |
 | `interloper app` | `interloper-db`, plus `interloper-api` and `interloper-scheduler` for the corresponding services | Run the API, cron controller, queue worker and reaper. |
 | `interloper launch <run_id>` | `interloper-db`, `interloper-scheduler` | Execute one persisted run. |
-| `interloper agent` | `interloper-agent` | Start the agent development UI. |
 
 A command whose packages are missing exits with a message naming them. Every flag is listed in
 [CLI flags](../reference/cli.md).

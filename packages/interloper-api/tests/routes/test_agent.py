@@ -1,298 +1,214 @@
 """Tests for ``interloper_api.routes.agent``.
 
-The ADK's in-memory session service is real here — it needs no network —
-while the Runner is faked, since building the real one pulls in the whole
-agent and its model client.
+A real store over in-memory SQLite and the assistant over pydantic-ai's
+deterministic test models, so a turn streams end to end without a network.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Iterator
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from interloper_agent import build_agent
+from interloper_agent.toolset import toolset
+from interloper_db import engine as engine_module
+from interloper_db.models import (
+    Backfill,
+    Component,
+    ComponentRelation,
+    Conversation,
+    Event,
+    Organisation,
+    Profile,
+    Quota,
+    Run,
+    Usage,
+    UserOrganisation,
+)
+from interloper_db.store import Store
+from interloper_toolkit import ToolkitContext
+from pydantic_ai import Agent, DeferredToolRequests
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
+from pydantic_ai.models.test import TestModel
+from sqlalchemy import Engine, event
+from sqlalchemy.pool import StaticPool
 
-from interloper_api.dependencies import get_catalog, get_org_id, get_store, require_editor, require_viewer
+from interloper_api import app as app_module
+from interloper_api.dependencies import (
+    get_agent,
+    get_catalog,
+    get_current_user,
+    get_org_id,
+    get_store,
+    require_editor,
+    require_viewer,
+)
 from interloper_api.routes import agent as agent_module
 
-_ORG_ID = uuid4()
-_USER_ID = uuid4()
 
-
-@pytest.fixture(autouse=True)
-def reset_singletons() -> Iterator[None]:
-    """Give each test a fresh runner and session service.
-
-    Both are process-wide lazily-built singletons, so a session created by
-    one test would otherwise be visible to the next.
+@pytest.fixture
+def agent_db() -> Iterator[Engine]:
+    """A fresh in-memory database with the auth and data tables the routes touch.
 
     Yields:
-        ``None``; the teardown restores the originals.
+        The engine bound to that database, disposed once the test finishes.
     """
-    saved = (agent_module._runner, agent_module._session_service)
-    agent_module._runner = None
-    agent_module._session_service = None
-    yield
-    agent_module._runner, agent_module._session_service = saved
+    eng = engine_module.init_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
+    @event.listens_for(eng, "connect")
+    def _configure_connection(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+        dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-def _profile() -> SimpleNamespace:
-    return SimpleNamespace(id=_USER_ID, email="ada@example.com", is_super_admin=False)
+    models = (Profile, Organisation, UserOrganisation, Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
+    for model in (*models, Conversation):
+        model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
+    try:
+        yield eng
+    finally:
+        eng.dispose()
+        engine_module._engine = None
 
 
 @pytest.fixture
-def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
-    """Mount the agent router with the runner stubbed out.
+def store(agent_db: Engine) -> Store:
+    return Store(catalog=il.Catalog(components={}))
 
-    Args:
-        monkeypatch: Fixture used to keep ``_get_runner`` from building the
-            real ADK Runner.
+
+@pytest.fixture
+def member(store: Store) -> SimpleNamespace:
+    """An editor in a fresh organisation.
 
     Returns:
-        The probe app.
+        The profile and organisation ids the routes resolve.
     """
-    monkeypatch.setattr(agent_module, "_get_runner", lambda store, catalog: SimpleNamespace())
+    profile = store.auth.upsert_profile(google_id="g-1", email="ada@example.com", name="Ada")
+    org = store.organisations.create(name="Acme", creator_id=profile.id)
+    return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
+
+
+def _client(store: Store, member: SimpleNamespace, agent: Agent[ToolkitContext, Any]) -> TestClient:
     app = FastAPI()
+    for error_type, handler in app_module._ERROR_HANDLERS.items():
+        app.add_exception_handler(error_type, handler)
     app.include_router(agent_module.router)
-    app.dependency_overrides[get_store] = lambda: SimpleNamespace(
-        organisations=SimpleNamespace(member_role=lambda user_id, org_id: "editor")
-    )
-    app.dependency_overrides[get_catalog] = lambda: SimpleNamespace()
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-    app.dependency_overrides[require_viewer] = _profile
-    app.dependency_overrides[require_editor] = _profile
-    return app
-
-
-@pytest.fixture
-def client(app: FastAPI) -> TestClient:
-    """A client for the probe app.
-
-    Args:
-        app: The probe app.
-
-    Returns:
-        The client.
-    """
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})
+    app.dependency_overrides[get_agent] = lambda: agent
+    app.dependency_overrides[get_current_user] = lambda: member
+    app.dependency_overrides[require_editor] = lambda: member
+    app.dependency_overrides[require_viewer] = lambda: member
+    app.dependency_overrides[get_org_id] = lambda: member.org_id
     return TestClient(app)
 
 
-class TestSessionService:
-    """The lazily-built in-memory session service is a process-wide singleton."""
-
-    def test_it_is_created_once_and_reused(self) -> None:
-        first = agent_module._get_session_service()
-
-        assert agent_module._get_session_service() is first
-        assert isinstance(first, InMemorySessionService)
+def _turn(text: str) -> dict[str, Any]:
+    return {
+        "trigger": "submit-message",
+        "id": str(uuid4()),
+        "messages": [{"id": str(uuid4()), "role": "user", "parts": [{"type": "text", "text": text}]}],
+    }
 
 
-class TestGetRunner:
-    """The runner injects the API's store and catalog into the agent context."""
-
-    def test_the_store_and_catalog_reach_the_agent_context(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        injected: dict[str, Any] = {}
-        store, catalog = SimpleNamespace(name="store"), SimpleNamespace(name="catalog")
-
-        import interloper_agent.context as agent_context
-
-        monkeypatch.setattr("interloper_agent.agent.root_agent", SimpleNamespace(name="root"))
-        monkeypatch.setattr(agent_context, "set_store", lambda value: injected.update(store=value))
-        monkeypatch.setattr(agent_context, "set_catalog", lambda value: injected.update(catalog=value))
-        monkeypatch.setattr(agent_module, "App", lambda name, root_agent: SimpleNamespace(name=name))
-        monkeypatch.setattr(agent_module, "Runner", lambda **kwargs: SimpleNamespace(**kwargs))
-
-        runner = agent_module._get_runner(store=store, catalog=catalog)  # ty: ignore[invalid-argument-type]
-
-        assert injected == {"store": store, "catalog": catalog}
-        assert runner is not None
-
-    def test_it_is_built_once_and_reused(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        builds: list[int] = []
-
-        import interloper_agent.context as agent_context
-
-        monkeypatch.setattr("interloper_agent.agent.root_agent", SimpleNamespace(name="root"))
-        monkeypatch.setattr(agent_context, "set_store", lambda value: None)
-        monkeypatch.setattr(agent_context, "set_catalog", lambda value: None)
-        monkeypatch.setattr(agent_module, "App", lambda name, root_agent: SimpleNamespace(name=name))
-        monkeypatch.setattr(
-            agent_module, "Runner", lambda **kwargs: builds.append(1) or SimpleNamespace(**kwargs)
-        )
-        store, catalog = SimpleNamespace(), SimpleNamespace()
-
-        first = agent_module._get_runner(store=store, catalog=catalog)  # ty: ignore[invalid-argument-type]
-        second = agent_module._get_runner(store=store, catalog=catalog)  # ty: ignore[invalid-argument-type]
-
-        assert first is second
-        assert builds == [1]
-
-    def test_a_missing_store_or_catalog_is_not_injected(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        injected: dict[str, Any] = {}
-
-        import interloper_agent.context as agent_context
-
-        monkeypatch.setattr("interloper_agent.agent.root_agent", SimpleNamespace(name="root"))
-        monkeypatch.setattr(agent_context, "set_store", lambda value: injected.update(store=value))
-        monkeypatch.setattr(agent_context, "set_catalog", lambda value: injected.update(catalog=value))
-        monkeypatch.setattr(agent_module, "App", lambda name, root_agent: SimpleNamespace(name=name))
-        monkeypatch.setattr(agent_module, "Runner", lambda **kwargs: SimpleNamespace(**kwargs))
-
-        agent_module._get_runner(store=None, catalog=None)  # ty: ignore[invalid-argument-type]
-
-        assert injected == {}
+def _echo_agent() -> Agent[ToolkitContext, Any]:
+    agent = build_agent("google:gemini-2.5-flash")
+    return agent  # the tests override its model per case
 
 
-class TestCreateSession:
-    """``POST /agent/sessions`` — the org and the user's role are stamped into the session state."""
+class TestConversationLifecycle:
+    def test_create_list_read_and_delete(self, store: Store, member: SimpleNamespace):
+        client = _client(store, member, _echo_agent())
 
-    def test_the_active_org_and_role_are_stamped_into_the_state(self, client: TestClient) -> None:
-        # Agent tools read org_id off the session state to scope themselves, and role to gate writes.
-        response = client.post("/agent/sessions")
+        created = client.post("/agent/conversations")
+        listed = client.get("/agent/conversations")
+        detail = client.get(f"/agent/conversations/{created.json()['id']}")
+        deleted = client.delete(f"/agent/conversations/{created.json()['id']}")
 
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["state"] == {"org_id": str(_ORG_ID), "role": "editor"}
-        assert payload["user_id"] == str(_USER_ID)
-        assert payload["app_name"] == agent_module.APP_NAME
-        assert payload["event_count"] == 0
+        assert created.status_code == 201
+        assert [row["id"] for row in listed.json()] == [created.json()["id"]]
+        assert detail.json()["messages"] == []
+        assert deleted.status_code == 204
+        assert client.get("/agent/conversations").json() == []
 
+    def test_another_members_conversation_is_not_found(self, store: Store, member: SimpleNamespace):
+        other = store.auth.upsert_profile(google_id="g-2", email="bob@example.com", name="Bob")
+        theirs = store.conversations.create(member.org_id, other.id)
+        client = _client(store, member, _echo_agent())
 
-class TestListSessions:
-    """``GET /agent/sessions`` — scoped to the calling user."""
-
-    def test_lists_the_users_sessions(self, client: TestClient) -> None:
-        created = client.post("/agent/sessions").json()
-
-        response = client.get("/agent/sessions")
-
-        assert [session["id"] for session in response.json()] == [created["id"]]
-
-    def test_no_sessions_is_an_empty_list(self, client: TestClient) -> None:
-        assert client.get("/agent/sessions").json() == []
-
-    def test_another_users_sessions_are_not_listed(self, app: FastAPI, client: TestClient) -> None:
-        client.post("/agent/sessions")
-        other = SimpleNamespace(id=uuid4(), email="bob@example.com", is_super_admin=False)
-        app.dependency_overrides[require_viewer] = lambda: other
-
-        assert client.get("/agent/sessions").json() == []
-
-
-class TestGetSession:
-    """``GET /agent/sessions/{id}`` — the ADK's own serialization, verbatim."""
-
-    def test_returns_the_session_with_its_events(self, client: TestClient) -> None:
-        created = client.post("/agent/sessions").json()
-
-        response = client.get(f"/agent/sessions/{created['id']}")
-
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "application/json"
-        assert response.json()["id"] == created["id"]
-
-    def test_an_unknown_session_is_a_404(self, client: TestClient) -> None:
-        response = client.get("/agent/sessions/not-a-session")
-
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Session not found"
-
-
-class TestDeleteSession:
-    """``DELETE /agent/sessions/{id}``."""
-
-    def test_deletes_the_session(self, client: TestClient) -> None:
-        created = client.post("/agent/sessions").json()
-
-        response = client.delete(f"/agent/sessions/{created['id']}")
-
-        assert response.json() == {"status": "deleted"}
-        assert client.get("/agent/sessions").json() == []
-
-    def test_an_unknown_session_is_a_404(self, client: TestClient) -> None:
-        response = client.delete("/agent/sessions/not-a-session")
-
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Session not found"
+        assert client.get(f"/agent/conversations/{theirs.id}").status_code == 404
+        assert client.delete(f"/agent/conversations/{theirs.id}").status_code == 404
 
 
 class TestChat:
-    """``POST /agent/sessions/{id}/chat`` — one SSE ``data`` line per ADK event."""
+    def test_a_turn_streams_and_persists_the_history(self, store: Store, member: SimpleNamespace):
+        agent = _echo_agent()
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
 
-    def test_each_event_becomes_an_sse_data_line(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        class FakeEvent:
-            def __init__(self, text: str) -> None:
-                self._text = text
-
-            def model_dump_json(self, **kwargs: Any) -> str:
-                return f'{{"text": "{self._text}"}}'
-
-        captured: dict[str, Any] = {}
-
-        async def run_async(**kwargs: Any) -> AsyncIterator[FakeEvent]:
-            captured.update(kwargs)
-            yield FakeEvent("hello")
-            yield FakeEvent("world")
-
-        monkeypatch.setattr(
-            agent_module, "_get_runner", lambda store, catalog: SimpleNamespace(run_async=run_async)
-        )
-
-        response = client.post("/agent/sessions/s-1/chat", json={"message": "hi"})
+        with agent.override(model=TestModel(call_tools=[], custom_output_text="Hello Ada")):
+            response = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("hi there"))
+            again = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("and again"))
 
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/event-stream")
-        assert response.text == 'data: {"text": "hello"}\n\ndata: {"text": "world"}\n\n'
+        assert '"type":"text-delta"' in response.text and '"delta":"Ada"' in response.text
+        assert again.status_code == 200
+        row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
+        assert row.title == "hi there"
+        assert len(row.messages) == 4
+        detail = client.get(f"/agent/conversations/{conversation_id}").json()
+        assert [m["role"] for m in detail["messages"]] == ["user", "assistant", "user", "assistant"]
+        assert detail["messages"][1]["parts"][0] == {"type": "text", "text": "Hello Ada", "state": "done"}
 
-    def test_the_message_and_session_reach_the_runner(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        captured: dict[str, Any] = {}
+    def test_a_create_pauses_for_approval_and_runs_once_approved(self, store: Store, member: SimpleNamespace):
+        async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+            if len(messages) == 1:
+                args = {"name": "Daily", "cron": "0 6 * * *", "target_source_ids": [str(uuid4())]}
+                yield {0: DeltaToolCall(name="create_job", json_args=json.dumps(args), tool_call_id="call-1")}
+            else:
+                yield "Job attempted"
 
-        async def run_async(**kwargs: Any) -> AsyncIterator[Any]:
-            captured.update(kwargs)
-            return
-            yield  # pragma: no cover - makes this an async generator
-
-        monkeypatch.setattr(
-            agent_module, "_get_runner", lambda store, catalog: SimpleNamespace(run_async=run_async)
+        agent = Agent[ToolkitContext, str | DeferredToolRequests](
+            FunctionModel(stream_function=model),
+            deps_type=ToolkitContext,
+            output_type=[str, DeferredToolRequests],
+            toolsets=[toolset()],
         )
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
 
-        client.post("/agent/sessions/s-1/chat", json={"message": "what failed?"})
+        paused = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("schedule it"))
+        approval = {
+            "trigger": "submit-message",
+            "id": str(uuid4()),
+            "messages": [
+                {
+                    "id": "a1",
+                    "role": "assistant",
+                    "parts": [
+                        {
+                            "type": "tool-create_job",
+                            "toolCallId": "call-1",
+                            "state": "approval-responded",
+                            "input": {"name": "Daily", "cron": "0 6 * * *", "target_source_ids": []},
+                            "approval": {"id": "call-1", "approved": True},
+                        }
+                    ],
+                }
+            ],
+        }
+        resumed = client.post(f"/agent/conversations/{conversation_id}/chat", json=approval)
 
-        assert captured["user_id"] == str(_USER_ID)
-        assert captured["session_id"] == "s-1"
-        assert captured["new_message"].role == "user"
-        assert captured["new_message"].parts[0].text == "what failed?"
-
-    def test_a_missing_message_is_rejected(self, client: TestClient) -> None:
-        assert client.post("/agent/sessions/s-1/chat", json={}).status_code == 422
-
-
-class TestSessionResponse:
-    """``from_session`` flattens the ADK session onto the wire model."""
-
-    def test_the_event_count_replaces_the_event_list(self) -> None:
-        session = SimpleNamespace(
-            id="s-1",
-            user_id=str(_USER_ID),
-            app_name=agent_module.APP_NAME,
-            state={"org_id": str(_ORG_ID)},
-            last_update_time=1234.5,
-            events=[object(), object(), object()],
-        )
-
-        response = agent_module.SessionResponse.from_session(session)
-
-        assert response.event_count == 3
-        assert response.last_update_time == 1234.5
-        assert response.state == {"org_id": str(_ORG_ID)}
+        assert paused.status_code == 200
+        assert "tool-approval-request" in paused.text
+        assert resumed.status_code == 200
+        assert "Job attempted" in resumed.text
+        assert "tool-output-available" in resumed.text

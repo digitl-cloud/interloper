@@ -217,7 +217,7 @@ The [documentation](https://docs.interloper.dev) has a page per concept, an exte
 | [`interloper-api`](packages/interloper-api) | FastAPI backend |
 | [`interloper-app`](packages/interloper-app) | Web UI (Nuxt SPA) |
 | [`interloper-mcp`](packages/interloper-mcp) | MCP server over the catalog, lineage and run history |
-| [`interloper-agent`](packages/interloper-agent) | AI agent (Google ADK) |
+| [`interloper-agent`](packages/interloper-agent) | The assistant (pydantic-ai) |
 | [`interloper-toolkit`](packages/interloper-toolkit) | Read-only tool functions shared by the agent and MCP server |
 
 One version for all packages, released together to PyPI.

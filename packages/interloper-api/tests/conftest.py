@@ -31,7 +31,7 @@ def fake_settings() -> SimpleNamespace:
             },
         ),
         runner=SimpleNamespace(type="async", config={"max_workers": 8, "env": "r-secret"}),
-        agent=SimpleNamespace(enabled=True, model="gemini-2.5-flash"),
+        agent=SimpleNamespace(enabled=True, model="google:gemini-2.5-flash"),
         auth=SimpleNamespace(
             allowed_domains=["digitlcloud.com"],
             super_admin_emails=["boss@example.com"],

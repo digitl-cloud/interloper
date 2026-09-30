@@ -15,6 +15,7 @@ from interloper_db import Store
 
 from interloper_api.dependencies import (
     set_admin_config,
+    set_agent,
     set_auth_config,
     set_catalog,
     set_features,
@@ -249,7 +250,11 @@ def _install_state(
         set_store(store)
     if catalog:
         set_catalog(catalog)
+    if agent_available:
+        from interloper.settings import AgentSettings
+        from interloper_agent import build_agent
 
+        set_agent(build_agent(settings.agent.model if settings else AgentSettings().model))
     set_features({"agent": agent_available})
 
     if settings:

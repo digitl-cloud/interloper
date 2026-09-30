@@ -1,289 +1,221 @@
-"""Agent API: ADK-powered chat sessions with SSE streaming.
+"""Agent API: conversations with the assistant, streamed the Vercel AI SDK way.
 
-Provides endpoints for creating agent chat sessions, sending messages,
-and streaming responses. The ADK Runner executes the interloper agent
-in-process, reusing the API's authenticated Store and catalog.
+A conversation is a member's own: its history lives in the store and the
+server, not the client, is its source of truth. Each turn is one
+:meth:`~pydantic_ai.ui.vercel_ai.VercelAIAdapter.dispatch_request`: the
+client's request carries the new message (and any tool approvals or answers
+the app collected), the stored history is passed as ``message_history``, and
+the whole history is saved back when the run completes.
 
 Available when ``interloper-agent`` is installed.
 """
 
 from __future__ import annotations
 
-import logging
-from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response
-from fastapi.responses import StreamingResponse
-from google.adk.apps import App
-from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from google.adk.runners import Runner
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from google.genai import types
-from interloper.catalog.base import Catalog
-from interloper_db import Store
+from fastapi import APIRouter, Request, Response
+from interloper_agent import TURN_LIMITS
+from interloper_db.models import Conversation
+from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
+from pydantic_ai.agent import AgentRunResult
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
+from pydantic_ai.ui.vercel_ai import VercelAIAdapter
 
-from interloper_api.dependencies import (
-    CatalogDep,
-    EditorDep,
-    OrgIdDep,
-    StoreDep,
-    ViewerDep,
-)
-
-logger = logging.getLogger(__name__)
+from interloper_api.dependencies import AgentDep, CatalogDep, EditorDep, OrgIdDep, StoreDep, ViewerDep
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
-APP_NAME = "interloper_agent"
-
-# -- Lazy runner singleton -----------------------------------------------------
-
-_runner: Runner | None = None
-_session_service: InMemorySessionService | None = None
+SDK_VERSION = 6
+"""The AI SDK major version the app speaks; tool approvals need at least 6."""
 
 
-def _get_session_service() -> InMemorySessionService:
-    """Return the shared session service, creating it on first call.
+class ConversationResponse(BaseModel):
+    """A conversation as the list shows it."""
 
-    Returns:
-        The process-wide in-memory session service.
-    """
-    global _session_service
-    if _session_service is None:
-        _session_service = InMemorySessionService()
-    return _session_service
-
-
-def _get_runner(store: Store, catalog: Catalog) -> Runner:
-    """Return the shared Runner, creating it on first call.
-
-    On first call, injects the API's Store and catalog into the agent
-    context so that agent tools can access them.
-
-    Args:
-        store: The Store instance (from API dependencies).
-        catalog: The Catalog instance (from API dependencies).
-
-    Returns:
-        The process-wide ADK Runner.
-    """
-    global _runner
-    if _runner is None:
-        from interloper_agent.agent import root_agent
-        from interloper_agent.context import set_catalog, set_store
-
-        if store is not None:
-            set_store(store)
-        if catalog is not None:
-            set_catalog(catalog)
-
-        app = App(name=APP_NAME, root_agent=root_agent)
-        _runner = Runner(
-            app=app,
-            session_service=_get_session_service(),
-            artifact_service=InMemoryArtifactService(),
-        )
-        logger.info("Agent runner initialized")
-    return _runner
-
-
-# -- Request / response models -------------------------------------------------
-
-
-class ChatRequest(BaseModel):
-    """Request body for sending a chat message."""
-
-    message: str
-
-
-class SessionResponse(BaseModel):
-    """Response body for an agent session."""
-
-    id: str
-    user_id: str
-    app_name: str
-    state: dict[str, Any]
-    last_update_time: float
-    event_count: int
+    id: UUID
+    title: str | None
+    created_at: datetime | None
+    updated_at: datetime | None
 
     @classmethod
-    def from_session(cls, session: Any) -> SessionResponse:
-        """Convert an ADK Session to a response model.
+    def from_conversation(cls, conversation: Conversation) -> ConversationResponse:
+        """Project a conversation row.
 
         Args:
-            session: The ADK Session object.
+            conversation: The row.
 
         Returns:
             The response model.
         """
         return cls(
-            id=session.id,
-            user_id=session.user_id,
-            app_name=session.app_name,
-            state=session.state,
-            last_update_time=session.last_update_time,
-            event_count=len(session.events),
+            id=conversation.id,
+            title=conversation.title,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at,
         )
 
 
-# -- Endpoints -----------------------------------------------------------------
+class ConversationDetailResponse(ConversationResponse):
+    """A conversation with its history in the AI SDK's ``UIMessage`` shape."""
+
+    messages: list[dict[str, Any]]
+
+    @classmethod
+    def from_conversation(cls, conversation: Conversation) -> ConversationDetailResponse:
+        """Project a conversation row and render its history for the app.
+
+        Args:
+            conversation: The row.
+
+        Returns:
+            The response model, its messages as the app's ``useChat`` loads them.
+        """
+        history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
+        messages = VercelAIAdapter.dump_messages(history, sdk_version=SDK_VERSION)
+        return cls(
+            **ConversationResponse.from_conversation(conversation).model_dump(),
+            messages=[message.model_dump(by_alias=True, exclude_none=True) for message in messages],
+        )
 
 
-@router.post("/sessions")
-async def create_session(
-    user: EditorDep,
-    org_id: OrgIdDep,
-    store: StoreDep,
-    catalog: CatalogDep,
-) -> SessionResponse:
-    """Create a new agent chat session.
-
-    The active ``org_id`` and the user's role in it are stamped into the ADK
-    session state: the org scopes every tool, the role gates the writes.
+@router.post("/conversations", status_code=201)
+def create_conversation(user: EditorDep, org_id: OrgIdDep, store: StoreDep) -> ConversationResponse:
+    """Start a conversation in the active organisation.
 
     Args:
         user: The authenticated user, required to hold at least the ``editor`` role.
         org_id: The active organisation's UUID.
         store: The Store instance.
-        catalog: The Catalog instance.
 
     Returns:
-        The created session, as a response model.
+        The new, empty conversation.
     """
-    _get_runner(store=store, catalog=catalog)
-    session_service = _get_session_service()
-    session = await session_service.create_session(
-        app_name=APP_NAME,
-        user_id=str(user.id),
-        state={"org_id": str(org_id), "role": store.organisations.member_role(user.id, org_id)},
-    )
-    return SessionResponse.from_session(session)
+    return ConversationResponse.from_conversation(store.conversations.create(org_id, user.id))
 
 
-@router.get("/sessions")
-async def list_sessions(
-    user: ViewerDep,
-) -> list[SessionResponse]:
-    """List all agent sessions for the current user.
+@router.get("/conversations")
+def list_conversations(user: ViewerDep, org_id: OrgIdDep, store: StoreDep) -> list[ConversationResponse]:
+    """List the caller's conversations in the active organisation, newest first.
 
     Args:
         user: The authenticated user, required to hold at least the ``viewer`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
 
     Returns:
-        The user's agent sessions, as response models.
+        The conversations, as response models.
     """
-    session_service = _get_session_service()
-    result = await session_service.list_sessions(
-        app_name=APP_NAME,
-        user_id=str(user.id),
-    )
-    sessions = result.sessions if hasattr(result, "sessions") else result
-    return [SessionResponse.from_session(s) for s in sessions]
+    rows = store.conversations.list_all(org_id, user.id)
+    return [ConversationResponse.from_conversation(row) for row in rows]
 
 
-@router.get("/sessions/{session_id}")
-async def get_session(
-    session_id: str,
-    user: ViewerDep,
-) -> Response:
-    """Get a session with its full event history.
-
-    Returns the session object including all events (messages and tool calls).
+@router.get("/conversations/{conversation_id}")
+def get_conversation(
+    conversation_id: UUID, user: ViewerDep, org_id: OrgIdDep, store: StoreDep
+) -> ConversationDetailResponse:
+    """Read one of the caller's conversations with its history.
 
     Args:
-        session_id: The ADK session ID.
+        conversation_id: The conversation UUID.
         user: The authenticated user, required to hold at least the ``viewer`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
 
     Returns:
-        The session serialized by the ADK's own model, as raw JSON.
-
-    Raises:
-        HTTPException: 404 if the user has no session with that ID.
+        The conversation and its messages, as response models.
     """
-    session_service = _get_session_service()
-    session = await session_service.get_session(
-        app_name=APP_NAME,
-        user_id=str(user.id),
-        session_id=session_id,
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return Response(
-        content=session.model_dump_json(exclude_none=True, by_alias=True),
-        media_type="application/json",
-    )
+    row = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
+    return ConversationDetailResponse.from_conversation(row)
 
 
-@router.delete("/sessions/{session_id}")
-async def delete_session(
-    session_id: str,
-    user: EditorDep,
-) -> dict[str, str]:
-    """Delete an agent session.
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: UUID, user: EditorDep, org_id: OrgIdDep, store: StoreDep) -> Response:
+    """Delete one of the caller's conversations.
 
     Args:
-        session_id: The ADK session ID.
+        conversation_id: The conversation UUID.
         user: The authenticated user, required to hold at least the ``editor`` role.
+        org_id: The active organisation's UUID.
+        store: The Store instance.
 
     Returns:
-        A confirmation that the session was deleted.
-
-    Raises:
-        HTTPException: 404 if the user has no session with that ID.
+        An empty response.
     """
-    session_service = _get_session_service()
-    session = await session_service.get_session(
-        app_name=APP_NAME,
-        user_id=str(user.id),
-        session_id=session_id,
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    await session_service.delete_session(
-        app_name=APP_NAME,
-        user_id=str(user.id),
-        session_id=session_id,
-    )
-    return {"status": "deleted"}
+    row = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
+    store.conversations.delete(row.id)
+    return Response(status_code=204)
 
 
-@router.post("/sessions/{session_id}/chat")
+@router.post("/conversations/{conversation_id}/chat")
 async def chat(
-    session_id: str,
-    body: ChatRequest,
+    conversation_id: UUID,
+    request: Request,
     user: EditorDep,
+    org_id: OrgIdDep,
     store: StoreDep,
     catalog: CatalogDep,
-) -> StreamingResponse:
-    """Send a message and stream the agent's response as SSE.
+    agent: AgentDep,
+) -> Response:
+    """Run one turn of a conversation and stream it as the AI SDK expects.
 
-    Each SSE ``data`` line contains a JSON-serialized ADK Event.
-    Events with ``content.parts`` containing ``text`` are the agent's
-    text responses. Events with ``function_call`` or ``function_response``
-    parts represent tool invocations.
+    The request body is the AI SDK's: the client's message list, of which the
+    adapter takes the new user message and any approvals or tool answers.
+    Everything before comes from the stored history, saved back whole once
+    the run completes.
 
     Args:
-        session_id: The ADK session ID to continue.
-        body: The chat message to send.
+        conversation_id: The conversation UUID.
+        request: The raw request, handed to the adapter.
         user: The authenticated user, required to hold at least the ``editor`` role.
+        org_id: The active organisation's UUID.
         store: The Store instance.
         catalog: The Catalog instance.
+        agent: The assistant.
 
     Returns:
-        A ``text/event-stream`` response carrying the agent's events.
+        The turn as a ``text/event-stream`` response.
     """
-    runner = _get_runner(store=store, catalog=catalog)
-    user_id = str(user.id)
-    message = types.Content(parts=[types.Part(text=body.message)], role="user")
+    conversation = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
+    context = ToolkitContext(
+        store=store,
+        catalog=catalog.dump(),
+        org_id=org_id,
+        role=store.organisations.member_role(user.id, org_id) or "viewer",
+    )
 
-    async def event_stream() -> AsyncIterator[str]:
-        async for event in runner.run_async(
-            user_id=user_id,
-            session_id=session_id,
-            new_message=message,
-        ):
-            yield f"data: {event.model_dump_json(exclude_none=True, by_alias=True)}\n\n"
+    def save(result: AgentRunResult[Any]) -> None:
+        messages = result.all_messages()
+        history = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
+        store.conversations.save(conversation.id, history, title=_first_prompt(messages))
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return await VercelAIAdapter.dispatch_request(
+        request,
+        agent=agent,
+        sdk_version=SDK_VERSION,
+        deps=context,
+        message_history=ModelMessagesTypeAdapter.validate_python(conversation.messages),
+        conversation_id=str(conversation.id),
+        usage_limits=TURN_LIMITS,
+        on_complete=save,
+    )
+
+
+def _first_prompt(messages: list[ModelMessage]) -> str | None:
+    """The first thing the user said, which titles the conversation.
+
+    Args:
+        messages: The conversation's history.
+
+    Returns:
+        The first user prompt's text, or ``None`` when there is none yet.
+    """
+    for message in messages:
+        if isinstance(message, ModelRequest):
+            for part in message.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    return part.content
+    return None

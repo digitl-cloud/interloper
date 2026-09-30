@@ -195,7 +195,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # ── mcp ───────────────────────────────────────────────────────
 # Like the api, the MCP server only reads catalog metadata — assets stay
-# importable but the heavy SDK extras are skipped. google-adk is never
+# importable but the heavy SDK extras are skipped. pydantic-ai is never
 # pulled: the shared tool logic lives in interloper-toolkit.
 FROM base AS build-mcp
 ARG CORE_EXTRAS

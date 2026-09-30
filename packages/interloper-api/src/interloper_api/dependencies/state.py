@@ -15,6 +15,7 @@ from interloper_db import Store
 
 _store: Store | None = None
 _catalog: Catalog | None = None
+_agent: Any | None = None
 _auth_config: Any | None = None
 _smtp_config: Any | None = None
 _features: dict[str, bool] = {}
@@ -40,6 +41,31 @@ def set_catalog(catalog: Catalog) -> None:
     """
     global _catalog
     _catalog = catalog
+
+
+def set_agent(agent: Any) -> None:
+    """Set the process-wide assistant.
+
+    Args:
+        agent: The built ``interloper_agent`` agent; typed loosely because the
+            agent extra is optional and this module must import without it.
+    """
+    global _agent
+    _agent = agent
+
+
+def get_agent() -> Any:
+    """Return the process-wide assistant.
+
+    Returns:
+        The agent the chat route runs.
+
+    Raises:
+        RuntimeError: If the agent has not been set.
+    """
+    if _agent is None:
+        raise RuntimeError("Agent not initialized. Call set_agent() first.")
+    return _agent
 
 
 def set_auth_config(auth_config: Any) -> None:
@@ -176,6 +202,7 @@ def get_quota_defaults() -> Any:
 
 StoreDep = Annotated[Store, Depends(get_store)]
 CatalogDep = Annotated[Catalog, Depends(get_catalog)]
+AgentDep = Annotated[Any, Depends(get_agent)]
 AuthConfigDep = Annotated[Any, Depends(get_auth_config)]
 AdminConfigDep = Annotated[Any, Depends(get_admin_config)]
 QuotaDefaultsDep = Annotated[Any, Depends(get_quota_defaults)]

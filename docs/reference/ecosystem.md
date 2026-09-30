@@ -31,7 +31,7 @@ own README. All are versioned and released together.
 | `interloper-api` | FastAPI backend reading catalog metadata and persisted state. |
 | `interloper-app` | The web UI (Nuxt SPA), served by the API image or standalone. |
 | `interloper-mcp` | An MCP server exposing the catalog, lineage and run history to agents. |
-| `interloper-agent` | An AI agent (Google ADK) over the same data. |
+| `interloper-agent` | The assistant (pydantic-ai) over the same data. |
 | `interloper-toolkit` | Shared tooling for the agent and MCP server. |
 
 Deployment artifacts (Docker images, a Helm chart) are described in the repository README.

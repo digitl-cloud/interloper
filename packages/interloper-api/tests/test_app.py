@@ -20,7 +20,7 @@ def test_agent_routes_absent_when_disabled(fake_settings: SimpleNamespace):
     app = create_app(settings=fake_settings)
     client = TestClient(app)
 
-    assert client.post("/api/agent/sessions").status_code == 404
+    assert client.post("/api/agent/conversations").status_code == 404
     assert get_features() == {"agent": False}
 
 
@@ -30,7 +30,7 @@ def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
     client = TestClient(app)
 
     # 401 (not 404): the router is mounted and the auth guard answers first.
-    assert client.post("/api/agent/sessions").status_code == 401
+    assert client.post("/api/agent/conversations").status_code == 401
     assert get_features() == {"agent": True}
 
 
@@ -118,7 +118,7 @@ class TestCreateApp:
             app = create_app(settings=fake_settings)
 
         assert "the 'agent' extra is not installed" in caplog.text
-        assert TestClient(app).post("/api/agent/sessions").status_code == 404
+        assert TestClient(app).post("/api/agent/conversations").status_code == 404
 
     def test_the_agent_feature_flag_follows_the_mount(self, fake_settings: SimpleNamespace) -> None:
         from interloper_api.dependencies import get_features

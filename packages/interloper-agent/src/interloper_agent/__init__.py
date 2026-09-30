@@ -1,17 +1,5 @@
-"""Interloper Agent: the ADK multi-agent system and the tools it routes to."""
+"""Interloper Agent: the assistant, on pydantic-ai, over the shared toolkit."""
 
-import warnings
+from interloper_agent.agent import TURN_LIMITS, build_agent
 
-with warnings.catch_warnings():
-    # google-adk's own config classes subclass their deprecated BaseAgentConfig,
-    # tripping four DeprecationWarnings on first import (their bug, present through
-    # 2.4.0 and main). Import it once here with exactly that message contained, so
-    # no consumer of this package sees the noise — while a genuine use of the
-    # deprecated class in our code would still warn at its own definition site.
-    warnings.filterwarnings("ignore", message="BaseAgentConfig is deprecated", category=DeprecationWarning)
-    import google.adk.agents
-
-from interloper_agent import agent
-from interloper_agent.context import init, set_catalog, set_store
-
-__all__ = ["agent", "init", "set_catalog", "set_store"]
+__all__ = ["TURN_LIMITS", "build_agent"]
