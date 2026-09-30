@@ -1,51 +1,15 @@
-PAGE_DIMENSIONS = [
-    "date",
-    "PAGE",
-    "QUERY",
-    "COUNTRY",
-    "DEVICE",
-]
+API_SERVICE = "searchconsole"
+API_VERSION = "v1"
+SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
 
-PAGE_SEARCH_TYPES = [
-    "WEB",
-    "IMAGE",
-    "VIDEO",
-    "NEWS",
-]
+# Search Analytics caps a single response at 25,000 rows; page with startRow.
+ROW_LIMIT = 25_000
 
-SITE_DIMENSIONS = [
-    "date",
-    "QUERY",
-    "COUNTRY",
-    "DEVICE",
-]
-
-SITE_SEARCH_TYPES = [
-    "WEB",
-    "IMAGE",
-    "VIDEO",
-    "NEWS",
-]
-
+PAGE_DIMENSIONS = ["DATE", "PAGE", "QUERY", "COUNTRY", "DEVICE"]
+SITE_DIMENSIONS = ["DATE", "QUERY", "COUNTRY", "DEVICE"]
+SITE_BY_COUNTRY_DEVICE_DIMENSIONS = ["DATE", "COUNTRY", "DEVICE"]
+SITE_BY_COUNTRY_PAGE_DIMENSIONS = ["DATE", "COUNTRY", "PAGE"]
 SEARCH_APPEARANCE_DIMENSIONS = ["SEARCH_APPEARANCE"]
 
-SEARCH_TYPES = [
-    "WEB",
-    "IMAGE",
-    "VIDEO",
-    "NEWS",
-    "DISCOVER",
-    "GOOGLE_NEWS",
-]
-
-SITE_BY_COUNTRY_DEVICE_DIMENSIONS = [
-    "date",
-    "COUNTRY",
-    "DEVICE",
-]
-
-SITE_BY_COUNTRY_PAGE_DIMENSIONS = [
-    "date",
-    "COUNTRY",
-    "PAGE",
-]
+SEARCH_TYPES = ["WEB", "IMAGE", "VIDEO", "NEWS"]
+ALL_SEARCH_TYPES = [*SEARCH_TYPES, "DISCOVER", "GOOGLE_NEWS"]
