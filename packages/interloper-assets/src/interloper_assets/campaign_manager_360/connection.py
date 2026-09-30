@@ -23,16 +23,31 @@ class CampaignManager360Connection(il.Connection):
     service_account_key: str = il.JsonField(description="Google service account key JSON")
 
     @cached_property
-    def client(self) -> Any:
-        """Build the Campaign Manager 360 (DFA Reporting) API service client."""
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
+    def credentials(self) -> Any:
+        """Load the service account credentials, shared by every client built from them.
 
-        credentials = service_account.Credentials.from_service_account_info(
+        Returns:
+            The ``google.oauth2`` service account credentials, scoped to CM360 reporting.
+        """
+        from google.oauth2 import service_account
+
+        return service_account.Credentials.from_service_account_info(
             json.loads(self.service_account_key),
             scopes=constants.SCOPES,
         )
-        return build(constants.API_SERVICE, constants.API_VERSION, credentials=credentials)
+
+    def client(self) -> Any:
+        """Build a fresh Campaign Manager 360 (DFA Reporting) API service client.
+
+        Not cached: the client's ``httplib2`` transport is not thread-safe and
+        the assets run concurrently in threads, so each caller builds its own.
+
+        Returns:
+            The ``dfareporting`` discovery client over the shared credentials.
+        """
+        from googleapiclient.discovery import build
+
+        return build(constants.API_SERVICE, constants.API_VERSION, credentials=self.credentials)
 
     @il.fetch_field_provider
     async def profiles(self) -> list[dict[str, str]]:
@@ -45,7 +60,7 @@ class CampaignManager360Connection(il.Connection):
             The options for the field's dropdown.
 
         """
-        response = await asyncio.to_thread(lambda: self.client.userProfiles().list().execute())
+        response = await asyncio.to_thread(lambda: self.client().userProfiles().list().execute())
         return [
             {
                 "profile_id": str(p["profileId"]),

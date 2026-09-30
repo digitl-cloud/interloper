@@ -23,38 +23,44 @@ class DisplayVideo360Connection(il.Connection):
     service_account_key: str = il.JsonField(description="Google service account key JSON")
 
     @cached_property
+    def credentials(self) -> Any:
+        """Load the service account credentials, shared by every client built from them.
+
+        Returns:
+            The ``google.oauth2`` service account credentials, scoped to both the
+            Display & Video API and the Bid Manager API.
+        """
+        from google.oauth2 import service_account
+
+        return service_account.Credentials.from_service_account_info(
+            json.loads(self.service_account_key),
+            scopes=[*constants.DV_SCOPES, *constants.DBM_SCOPES],
+        )
+
     def dv_client(self) -> Any:
-        """Build and return the Display & Video API client (entities)."""
-        from google.oauth2 import service_account
+        """Build a fresh Display & Video API service client (entities).
+
+        Not cached: the client's ``httplib2`` transport is not thread-safe and
+        the assets run concurrently in threads, so each caller builds its own.
+
+        Returns:
+            The ``displayvideo`` discovery client over the shared credentials.
+        """
         from googleapiclient.discovery import build
 
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(self.service_account_key),
-            scopes=constants.DV_SCOPES,
-        )
+        return build(constants.DV_API_SERVICE, constants.DV_API_VERSION, credentials=self.credentials)
 
-        return build(
-            constants.DV_API_SERVICE,
-            constants.DV_API_VERSION,
-            credentials=credentials,
-        )
-
-    @cached_property
     def dbm_client(self) -> Any:
-        """Build and return the Bid Manager API client (DV360 reporting)."""
-        from google.oauth2 import service_account
+        """Build a fresh Bid Manager API service client (DV360 reporting).
+
+        Not cached, for the same thread-safety reason as ``dv_client``.
+
+        Returns:
+            The ``doubleclickbidmanager`` discovery client over the shared credentials.
+        """
         from googleapiclient.discovery import build
 
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(self.service_account_key),
-            scopes=constants.DBM_SCOPES,
-        )
-
-        return build(
-            constants.DBM_API_SERVICE,
-            constants.DBM_API_VERSION,
-            credentials=credentials,
-        )
+        return build(constants.DBM_API_SERVICE, constants.DBM_API_VERSION, credentials=self.credentials)
 
     def _list_partners(self) -> list[dict[str, Any]]:
         """Page through the partners accessible to the service account.
@@ -63,10 +69,11 @@ class DisplayVideo360Connection(il.Connection):
             Every partner, across all pages.
 
         """
+        service = self.dv_client()
         partners: list[dict[str, Any]] = []
         page_token: str | None = None
         while True:
-            response = self.dv_client.partners().list(pageToken=page_token).execute()
+            response = service.partners().list(pageToken=page_token).execute()
             partners.extend(response.get("partners") or [])
             page_token = response.get("nextPageToken")
             if not page_token:

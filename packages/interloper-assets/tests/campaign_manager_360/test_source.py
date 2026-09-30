@@ -10,8 +10,10 @@ DAG-spec round-trip.
 
 from __future__ import annotations
 
+import datetime as dt
 import math
 from io import BytesIO
+from types import SimpleNamespace
 from typing import Any
 
 from interloper.asset import Asset
@@ -20,6 +22,7 @@ from interloper.dag.base import DAG
 from interloper.representation import Representation
 
 from interloper_assets.campaign_manager_360 import schemas
+from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.source import (
     CampaignManager360,
     CampaignManager360Normalizer,
@@ -71,9 +74,7 @@ class TestHeaderNormalization:
 
     def test_percent_headers_do_not_collide(self):
         normalizer = _normalizer()
-        assert normalizer.column_name("Active View: % Viewable Impressions") == (
-            "active_view_pct_viewable_impressions"
-        )
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
         assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
 
     def test_digit_and_symbol_headers(self):
@@ -104,6 +105,48 @@ class TestSourceNormalizer:
             assert isinstance(asset.normalizer, CampaignManager360Normalizer), type(asset).key
 
 
+class FakeRemarketingLists:
+    """Serve canned ``remarketingLists.list`` pages, keyed by page token."""
+
+    def __init__(self, pages: dict[str | None, dict[str, Any]]):
+        """Hold the pages to serve."""
+        self.pages = pages
+
+    def remarketingLists(self) -> FakeRemarketingLists:
+        return self
+
+    def list(self, profileId: str, advertiserId: str, pageToken: str | None) -> SimpleNamespace:
+        return SimpleNamespace(execute=lambda: self.pages[pageToken])
+
+
+class TestServicePerAsset:
+    """Each asset builds its own service once per run, since the transport is not thread-safe."""
+
+    def test_custom_audiences_pages_through_one_service(self):
+        services: list[FakeRemarketingLists] = []
+
+        def client() -> FakeRemarketingLists:
+            services.append(
+                FakeRemarketingLists(
+                    {
+                        None: {"remarketingLists": [{"id": "1"}], "nextPageToken": "next"},
+                        "next": {"remarketingLists": [{"id": "2"}]},
+                    }
+                )
+            )
+            return services[-1]
+
+        connection = CampaignManager360Connection(service_account_key="{}")
+        connection.__dict__["client"] = client
+        src = CampaignManager360(
+            id="src-1", profile_id="111", account_id="222", advertiser_id="9", connection=connection
+        )
+        asset = next(a for a in src.assets if type(a).key == "custom_audiences")
+        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert [row["id"] for row in rows] == ["1", "2"]
+        assert len(services) == 1
+
+
 class TestSpecRoundtrip:
     """The host→child spec round-trip must preserve the normalizer subclass."""
 
@@ -120,6 +163,4 @@ class TestSpecRoundtrip:
         assert normalizer.snake_case_digits is True
         assert normalizer.flatten_max_level == 2
         # The % -> pct behavior must survive in the child pod.
-        assert normalizer.column_name("Active View: % Viewable Impressions") == (
-            "active_view_pct_viewable_impressions"
-        )
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")

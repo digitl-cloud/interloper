@@ -8,7 +8,9 @@ schema columns — and survive the host→child DAG-spec round-trip.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -19,6 +21,7 @@ from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.display_video_360 import schemas
+from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 from interloper_assets.display_video_360.source import (
     DisplayVideo360,
     DisplayVideo360Normalizer,
@@ -96,9 +99,7 @@ class TestReports:
 
     def test_percent_headers_do_not_collide(self):
         normalizer = DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2)
-        assert normalizer.column_name("Active View: % Viewable Impressions") == (
-            "active_view_pct_viewable_impressions"
-        )
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")
         assert normalizer.column_name("Active View: Viewable Impressions") == "active_view_viewable_impressions"
         assert normalizer.column_name("CM360 Placement ID") == "cm_360_placement_id"
         assert normalizer.column_name("YouTube Revenue (eCPV) (Adv Currency)") == (
@@ -143,6 +144,46 @@ class TestNormalizerMapping:
             assert isinstance(asset.normalizer, DisplayVideo360Normalizer), type(asset).key
 
 
+class FakeAudiences:
+    """Serve canned ``firstPartyAndPartnerAudiences.list`` pages, keyed by page token."""
+
+    def __init__(self, pages: dict[str | None, dict[str, Any]]):
+        """Hold the pages to serve."""
+        self.pages = pages
+
+    def firstPartyAndPartnerAudiences(self) -> FakeAudiences:
+        return self
+
+    def list(self, partnerId: str, pageToken: str | None) -> SimpleNamespace:
+        return SimpleNamespace(execute=lambda: self.pages[pageToken])
+
+
+class TestServicePerAsset:
+    """Each asset builds its own service once per run, since the transport is not thread-safe."""
+
+    def test_audiences_pages_through_one_service(self):
+        services: list[FakeAudiences] = []
+
+        def dv_client() -> FakeAudiences:
+            services.append(
+                FakeAudiences(
+                    {
+                        None: {"firstPartyAndPartnerAudiences": [{"name": "a"}], "nextPageToken": "next"},
+                        "next": {"firstPartyAndPartnerAudiences": [{"name": "b"}]},
+                    }
+                )
+            )
+            return services[-1]
+
+        connection = DisplayVideo360Connection(service_account_key="{}")
+        connection.__dict__["dv_client"] = dv_client
+        src = DisplayVideo360(id="src-1", partner_id="123", connection=connection)
+        asset = next(a for a in src.assets if type(a).key == "audiences")
+        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert [row["name"] for row in rows] == ["a", "b"]
+        assert len(services) == 1
+
+
 class TestSpecRoundtrip:
     """The host→child spec round-trip must preserve the normalizer subclass."""
 
@@ -159,6 +200,4 @@ class TestSpecRoundtrip:
         assert normalizer.snake_case_digits is True
         assert normalizer.flatten_max_level == 2
         # The % -> pct behavior must survive in the child pod.
-        assert normalizer.column_name("Active View: % Viewable Impressions") == (
-            "active_view_pct_viewable_impressions"
-        )
+        assert normalizer.column_name("Active View: % Viewable Impressions") == ("active_view_pct_viewable_impressions")

@@ -135,7 +135,7 @@ def _parse_report_csv(file: BytesIO) -> list[_Record]:
 
 def _get_report(connection: CampaignManager360Connection, profile_id: str, report_body: dict) -> list[_Record]:
     """Insert, run, download, and parse a report, deleting its definition after."""
-    service = connection.client
+    service = connection.client()
     report_id = int(service.reports().insert(profileId=profile_id, body=report_body).execute()["id"])
     logger.info(f"Report id: {report_id} ({report_body['type']})")
     try:
@@ -273,7 +273,7 @@ class CampaignManager360(il.Source):
         """
         if not self.advertiser_id:
             raise ValueError("The custom_audiences asset requires the source's advertiser_id to be set")
-        items = _list_remarketing_lists(self.connection.client, self.profile_id, self.advertiser_id)
+        items = _list_remarketing_lists(self.connection.client(), self.profile_id, self.advertiser_id)
         for item in items:
             rule = item.get("listPopulationRule")
             # Clauses are a nested list; JSON-encode them onto the string column.
