@@ -2159,7 +2159,7 @@ into a failed result.</p>
 into every event and into <code>MultiProcessRunner</code> workers, and <code>TRACEPARENT</code> / <code>TRACESTATE</code>
 environment variables carry it into spawned processes. <code>child_process_env()</code> builds the
 environment a child needs (trace context plus the <code>INTERLOPER_OTEL_*</code> configuration, with the
-service name reset to <code>interloper-run</code>). httpx client spans are enabled when the httpx
+service name reset to <code>interloper-run</code>). httpx2 client spans are enabled when the httpx2
 instrumentation is installed, so REST-based sources get egress spans for free.</p>
 <h2 id="metrics">Metrics<a class="headerlink" href="#metrics" title="Permanent link">&para;</a></h2>
 <table>

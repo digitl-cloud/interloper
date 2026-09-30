@@ -2140,7 +2140,7 @@ override on a subclass:</p>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">ACME</span> <span class="o">=</span> <span class="n">AcmeProvider</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s2">"acme"</span><span class="p">,</span> <span class="n">auth_url</span><span class="o">=</span><span class="s2">"..."</span><span class="p">,</span> <span class="n">token_url</span><span class="o">=</span><span class="s2">"..."</span><span class="p">,</span> <span class="n">token_encoding</span><span class="o">=</span><span class="s2">"form"</span><span class="p">)</span>
 </span></code></pre></div>
-<p><code>_token_request(params)</code> builds the POST in the provider's encoding. Requests are <code>httpx.Request</code>
+<p><code>_token_request(params)</code> builds the POST in the provider's encoding. Requests are <code>httpx2.Request</code>
 objects; the caller owns the client and error handling.</p>
 <h2 id="registering-a-provider">Registering a provider<a class="headerlink" href="#registering-a-provider" title="Permanent link">&para;</a></h2>
 <p>Providers register through the <code>interloper.oauth_providers</code> entry-point group. The entry may
