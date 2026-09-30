@@ -99,7 +99,8 @@ const SUGGESTIONS = [
 
                     <template #leading="{ message }">
                         <AgentAvatar v-if="message.role === 'assistant'"
-                                     :live="message.id === chat.liveMessageId.value" />
+                                     :live="message.id === chat.liveMessageId.value"
+                                     size="sm" />
                     </template>
 
                     <template #content="{ message }">

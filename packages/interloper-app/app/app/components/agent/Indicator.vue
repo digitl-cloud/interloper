@@ -3,7 +3,8 @@
  * The dot-matrix "at work" indicator, ported from the Nuxt UI chat template's
  * own `ChatIndicator` so the agent reads the way their reference chat does.
  *
- * A 4x4 grid steps through a few patterns, one frame every 120ms.
+ * A 4x4 grid steps through a few patterns, one frame every 120ms. It fills
+ * whatever size its parent gives it.
  */
 const SIZE = 4
 const GAP = 2
@@ -45,7 +46,7 @@ onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
-    <div class="shrink-0 grid size-4"
+    <div class="shrink-0 grid size-full"
          :style="{ gridTemplateColumns: `repeat(${SIZE}, 1fr)`, gap: `${GAP}px` }">
         <span v-for="i in TOTAL_DOTS"
               :key="i"
