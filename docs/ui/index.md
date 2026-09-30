@@ -140,7 +140,7 @@ Both tables filter by status, and a status still executing spins.
 
 One run: the per-asset execution timeline (or the run's graph), and the full event stream the
 framework emitted, filterable to lifecycle events, errors or the log lines assets wrote through
-`context.logger`. Failed runs offer "Retry failed" and "Retry all".
+`context.logger`. A stack's latest attempt, when it failed, offers "Retry failed" and "Retry all".
 
 ## Search and switching
 

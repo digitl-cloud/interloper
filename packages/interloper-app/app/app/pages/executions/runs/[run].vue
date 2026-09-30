@@ -118,6 +118,14 @@ function toggleRail() {
 
 const retrying = ref(false)
 
+// A retry continues the stack from its latest attempt, so only that attempt
+// offers one; an attempt whose stack has not loaded yet is treated as latest.
+const retryable = computed(() => {
+    if (run.value?.status !== 'failed') return false
+    const latest = attempts.value.at(-1)?.run
+    return !latest || latest.id === run.value.id
+})
+
 async function onRetry(scope: 'all' | 'failed') {
     retrying.value = true
     try {
@@ -182,7 +190,7 @@ onUnmounted(() => {
                         :color="statusPillColor(run.status)"
                         :spinner="run.status === 'running' || run.status === 'dispatched'" />
         </NavTitle>
-        <NavActions v-if="run?.status === 'failed'">
+        <NavActions v-if="retryable">
             <UButton label="Retry failed"
                      icon="i-lucide-rotate-ccw"
                      color="neutral"

@@ -771,6 +771,33 @@ class TestRetryValidation:
         with pytest.raises(ValueError, match="is not failed"):
             store.runs.retry(run.id)
 
+    def test_an_earlier_attempt_retries_the_stack_from_its_head(self, store: Store):
+        first = store.runs.create(_ORG_ID)
+        store.runs.complete(first.id, success=False)
+        second = store.runs.retry(first.id)
+        store.runs.complete(second.id, success=False)
+
+        third = store.runs.retry(first.id)
+
+        assert (third.attempt, third.retry_of, third.root_run_id) == (3, second.id, first.id)
+
+    def test_a_stack_with_an_attempt_in_flight_is_not_retried_again(self, store: Store):
+        target = _job_with_retry(store, max_attempts=2, delay=60)
+        run = store.runs.create(_ORG_ID, component_id=target)
+        store.runs.complete(run.id, success=False)
+
+        with pytest.raises(ValueError, match="latest attempt 2 is 'queued'"):
+            store.runs.retry(run.id)
+
+    def test_a_stack_healed_by_a_later_attempt_is_not_retried(self, store: Store):
+        first = store.runs.create(_ORG_ID)
+        store.runs.complete(first.id, success=False)
+        second = store.runs.retry(first.id)
+        store.runs.complete(second.id, success=True)
+
+        with pytest.raises(ValueError, match="latest attempt 2 is 'success'"):
+            store.runs.retry(first.id)
+
     def test_the_failed_scope_is_accepted(self, store: Store):
         run = store.runs.create(_ORG_ID)
         store.runs.complete(run.id, success=False)

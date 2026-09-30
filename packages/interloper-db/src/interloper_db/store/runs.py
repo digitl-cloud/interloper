@@ -354,14 +354,19 @@ class RunStore:
             return db_run
 
     def retry(self, run_id: UUID, *, scope: str = "all") -> Run:
-        """Queue a new run that retries a failed one.
+        """Queue the next attempt of a failed run's stack.
 
-        Each retry is a fresh ``Run`` row linked to its predecessor via
-        ``retry_of`` with an incremented ``attempt``. The new run is created
-        outside any backfill so backfill accounting is unaffected.
+        A stack has one head, its latest attempt, and every retry continues
+        from it: retrying an earlier attempt retries the stack, so attempt
+        numbers stay unique and the hook evaluator's "failed with a
+        successor" gate keeps meaning what it says. The head must have
+        failed: a stack whose head succeeded is healed, and one whose head
+        is still queued or running already has its next attempt. The new
+        run is created outside any backfill so backfill accounting is
+        unaffected.
 
         Args:
-            run_id: The failed run to retry.
+            run_id: The failed run to retry, any attempt of its stack.
             scope: ``"all"`` to re-run the whole DAG, or ``"failed"`` to
                 re-run only the previously failed/cancelled assets.
 
@@ -370,7 +375,8 @@ class RunStore:
 
         Raises:
             NotFoundError: If the run is not found.
-            ValueError: If the run is not in a failed state or ``scope`` is invalid.
+            ValueError: If ``scope`` is invalid, the run has not failed, or
+                the stack's latest attempt is not a failure.
         """
         if scope not in ("all", "failed"):
             raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
@@ -381,19 +387,28 @@ class RunStore:
                 raise NotFoundError(f"Run {run_id} not found")
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
+            head = session.exec(
+                select(Run).where(Run.root_run_id == src.root_run_id).order_by(col(Run.attempt).desc())
+            ).first()
+            assert head is not None
+            if head.status != "failed":
+                raise ValueError(
+                    f"Run {run_id} is attempt {src.attempt} of a stack whose latest attempt {head.attempt} "
+                    f"is {head.status!r}; only a stack whose latest attempt failed can be retried"
+                )
 
-            if src.billable:
-                self._quotas.check(src.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
+            if head.billable:
+                self._quotas.check(head.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
             db_run = Run(
-                root_run_id=src.root_run_id,
-                org_id=src.org_id,
-                component_id=src.component_id,
-                partition_key=src.partition_key,
+                root_run_id=head.root_run_id,
+                org_id=head.org_id,
+                component_id=head.component_id,
+                partition_key=head.partition_key,
                 status="queued",
-                retry_of=run_id,
-                attempt=src.attempt + 1,
+                retry_of=head.id,
+                attempt=head.attempt + 1,
                 retry_scope=scope,
-                billable=src.billable,
+                billable=head.billable,
             )
             session.add(db_run)
             commit(session)

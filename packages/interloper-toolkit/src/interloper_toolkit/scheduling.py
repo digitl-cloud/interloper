@@ -229,7 +229,10 @@ def retry_run(ctx: ToolkitContext, run_id: str, scope: str = "all") -> RunRetrie
             the operations that failed or were canceled.
 
     Returns the queued attempt; its ``attempt`` number and ``root_run_id``
-    tie it to the run it retries. A run that is not failed cannot be retried.
+    tie it to the run it retries. The retry continues from the stack's latest
+    attempt, so retrying an earlier attempt retries the stack. A run that is
+    not failed, or a stack whose latest attempt is pending or succeeded,
+    cannot be retried.
     """
     try:
         ctx.store.runs.get(UUID(run_id), org_id=ctx.org_id)
