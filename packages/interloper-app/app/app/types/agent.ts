@@ -1,67 +1,16 @@
-/** Agent session returned by the API. */
-export interface AgentSession {
+import type { UIMessage } from 'ai'
+
+/** A conversation with the assistant, as the list shows it. */
+export interface Conversation {
     id: string
-    user_id: string
-    app_name: string
-    state: Record<string, any>
-    last_update_time: number
-    event_count: number
+    title: string | null
+    created_at: string | null
+    updated_at: string | null
 }
 
-/** A tool call the model emitted. `id` is absent on providers that don't mint one. */
-export interface AgentFunctionCall {
-    id?: string
-    name: string
-    args?: Record<string, any>
-}
-
-/** The result of a tool call, carrying the `id` of the call it answers when there is one. */
-export interface AgentFunctionResponse {
-    id?: string
-    name: string
-    response?: Record<string, any>
-}
-
-/** A single part within an ADK event content. */
-export interface AgentEventPart {
-    text?: string
-    /**
-     * Set on the model's thought summaries. The ADK leaves them on the event and
-     * merely keeps them out of the answer it assembles, so anything reading
-     * `text` has to tell the two apart itself.
-     */
-    thought?: boolean
-    functionCall?: AgentFunctionCall
-    functionResponse?: AgentFunctionResponse
-}
-
-/** ADK event content. */
-export interface AgentEventContent {
-    role?: string
-    parts?: AgentEventPart[]
-}
-
-/** ADK event actions. */
-export interface AgentEventActions {
-    stateDelta?: Record<string, any>
-    transferToAgent?: string
-}
-
-/** A single ADK event from the SSE stream. */
-export interface AgentEvent {
-    id: string
-    invocationId: string
-    author: string
-    content?: AgentEventContent
-    actions?: AgentEventActions
-    partial?: boolean
-    timestamp?: number
-}
-
-/** Inline connection-setup request emitted by the agent's request_connection_setup tool. */
-export interface ConnectionSetupRequest {
-    connectionKey: string
-    name?: string
+/** A conversation with its history in the AI SDK's message shape. */
+export interface ConversationDetail extends Conversation {
+    messages: UIMessage[]
 }
 
 /** One choice within a selection request. */
@@ -70,69 +19,22 @@ export interface SelectionOption {
     value: string
 }
 
-/** Inline selection request emitted by the agent's request_user_selection tool. */
+/** The input of a `request_user_selection` tool call. */
 export interface SelectionRequest {
     prompt: string
     options: SelectionOption[]
-    multi: boolean
+    multi?: boolean
 }
 
-/** Inline confirmation summary emitted by the agent's request_confirmation tool. */
-export interface ConfirmationRequest {
-    title: string
-    items: { label: string, value: string }[]
+/** The input of a `request_connection_setup` tool call. */
+export interface ConnectionSetupRequest {
+    connection_key: string
+    name?: string | null
 }
 
-/** How far along a tool call or handover is. */
-export type AgentActivityState = 'running' | 'done' | 'error'
-
-/**
- * One step the agent took on its way to an answer: a tool call, or a handover
- * to one of its specialists.
- *
- * Built from the functionCall/functionResponse parts the ADK already streams,
- * so a turn that spends twenty seconds in tools shows what it is doing rather
- * than nothing at all.
- */
-export interface AgentActivity {
-    id: string
-    /** The tool's function name, or the target agent's name for a handover. */
+/** What the app reports back for a `request_connection_setup` call. */
+export interface ConnectionSetupResult {
+    connection_id: string
     name: string
-    kind: 'tool' | 'transfer'
-    state: AgentActivityState
-    args?: Record<string, any>
-    response?: Record<string, any>
-}
-
-/** A thought summary the model emitted on its way to an answer. */
-export interface AgentThought {
-    id: string
-    kind: 'thought'
-    text: string
-    /** Whole seconds the model spent reaching it, for the collapsible's "Thought for N" label. */
-    seconds?: number
-}
-
-/**
- * One entry in a turn's work trail: what the model thought, or what it did.
- *
- * Kept as a single ordered list because the two interleave, and the order is
- * the account: thought, the tool it reached for, what it made of the result.
- */
-export type AgentStep = AgentThought | AgentActivity
-
-/** Simplified chat message for UI rendering. */
-export interface ChatMessage {
-    id: string
-    role: 'user' | 'assistant'
-    text: string
-    loading?: boolean
-    /** When set, the message renders the inline connection setup card. */
-    connectionSetup?: ConnectionSetupRequest
-    /** When set, the message renders the inline selection card. */
-    selection?: SelectionRequest
-    /** When set, the message renders the inline confirmation summary card. */
-    confirmation?: ConfirmationRequest
-    /** When set, the message renders the turn's work trail: thoughts and steps, in order. */
-    steps?: AgentStep[]
+    verified: boolean
 }

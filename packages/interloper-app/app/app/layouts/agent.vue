@@ -4,29 +4,29 @@ const route = useRoute()
 const agentStore = useAgentStore()
 
 const sidebarItems = computed(() => {
-    if (!agentStore.sessions.length) return []
+    if (!agentStore.conversations.length) return []
 
     return [
         { label: 'Recent', type: 'label' as const, class: 'mt-2' },
-        ...agentStore.sessions.map(s => ({
-            id: s.id,
-            label: `Chat ${s.id.slice(0, 8)}`,
+        ...agentStore.conversations.map(c => ({
+            id: c.id,
+            label: c.title ?? 'New conversation',
             icon: 'i-lucide-message-square',
-            to: `/agent/chat/${s.id}`,
+            to: `/agent/chat/${c.id}`,
             slot: 'chat' as const,
         })),
     ]
 })
 
 async function deleteChat(id: string) {
-    await agentStore.deleteSession(id)
+    await agentStore.deleteConversation(id)
     if (route.params.id === id) {
         navigateTo('/agent')
     }
 }
 
 onMounted(() => {
-    agentStore.fetchSessions()
+    agentStore.fetchConversations()
 })
 </script>
 

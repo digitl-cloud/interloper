@@ -2,24 +2,25 @@
 /**
  * Inline selection card rendered in the agent chat.
  *
- * Triggered by the agent's `request_user_selection` tool: the wizard's
+ * Triggered by the agent's `request_user_selection` tool call: the wizard's
  * SelectionCard rows, compacted for the agent panel — checkbox rows for
- * multi-select, plain accent-border rows for single. On confirm the parent
- * reports the selection back into the chat as the user's message so the
- * agent continues with it.
+ * multi-select, plain accent-border rows for single. The confirmed values
+ * become the tool call's output, and the agent continues with them; a call
+ * already answered (`answer`) renders locked.
  */
 import type { SelectionRequest } from '~/types/agent'
 
 const props = defineProps<{
     request: SelectionRequest
+    answer?: string[]
 }>()
 
 const emit = defineEmits<{
-    selected: [labels: string[], values: string[]]
+    selected: [values: string[]]
 }>()
 
-const picked = ref<string[]>([])
-const submitted = ref(false)
+const picked = ref<string[]>(props.answer ?? [])
+const submitted = ref(!!props.answer)
 
 function toggle(value: string) {
     if (submitted.value) return
@@ -44,7 +45,7 @@ const selectedLabels = computed(() =>
 function confirm() {
     if (!picked.value.length) return
     submitted.value = true
-    emit('selected', selectedLabels.value, [...picked.value])
+    emit('selected', [...picked.value])
 }
 </script>
 

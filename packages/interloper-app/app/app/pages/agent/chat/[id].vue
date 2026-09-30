@@ -1,41 +1,32 @@
 <script setup lang="ts">
+import type { UIMessage } from 'ai'
+
 definePageMeta({ layout: 'agent' })
 
 const route = useRoute()
-const sessionId = computed(() => route.params.id as string)
+const agentStore = useAgentStore()
+const conversationId = route.params.id as string
 
-const { messages, streaming, status, liveMessageId, error, send, loadHistory } = useAgentChat(sessionId)
+const { data: conversation, error: loadError } = await useAsyncData(
+    `conversation-${conversationId}`,
+    () => agentStore.getConversation(conversationId),
+)
+
+const chat = conversation.value
+    ? useAgentChat(conversationId, conversation.value.messages as UIMessage[])
+    : undefined
 
 const input = ref('')
 
 function onSubmit(e: Event) {
     e.preventDefault()
-    if (!input.value.trim() || streaming.value) return
-    send(input.value)
+    chat?.send(input.value)
     input.value = ''
 }
 
-/** Report a completed connection setup back into the chat so the agent continues. */
-function onConnectionCreated(name: string, verified: boolean) {
-    send(`I completed the setup — connection "${name}" is created${verified ? ' and the connection check passed' : ''}.`)
-}
-
-/** Report a confirmed selection back into the chat so the agent continues. */
-function onSelection(labels: string[], values: string[]) {
-    send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
-}
-
-/** Report a confirmation decision back into the chat so the agent proceeds or stops. */
-function onDecision(confirmed: boolean) {
-    send(confirmed ? 'Confirmed — go ahead.' : 'Cancel that — do not proceed.')
-}
-
-onMounted(async () => {
-    await loadHistory()
+onMounted(() => {
     const initialQuery = route.query.q as string | undefined
-    if (initialQuery && !messages.value.length) {
-        send(initialQuery)
-    }
+    if (initialQuery && chat && !chat.messages.value.length) chat.send(initialQuery)
 })
 </script>
 
@@ -46,69 +37,45 @@ onMounted(async () => {
         <template #body>
             <UContainer class="flex-1 flex flex-col gap-4 sm:gap-6 pt-6"
                         :ui="{ base: 'max-w-3xl' }">
-                <UChatMessages should-auto-scroll
-                               :status="status"
+                <div v-if="loadError || !chat"
+                     class="flex flex-col items-center justify-center h-full text-muted py-12">
+                    <UIcon name="i-lucide-message-square-off"
+                           class="size-8 mb-2" />
+                    <p class="text-sm">
+                        This conversation is not available.
+                    </p>
+                </div>
+
+                <UChatMessages v-else
+                               :messages="chat.messages.value"
+                               :status="chat.status.value"
+                               should-auto-scroll
                                :spacing-offset="120"
+                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1' } }"
                                class="pb-4 sm:pb-6">
                     <template #indicator>
                         <AgentThinking />
                     </template>
 
-                    <template v-if="!messages.length && !streaming">
-                        <div class="flex flex-col items-center justify-center h-full text-muted py-12">
-                            <UIcon name="i-lucide-sparkles"
-                                   class="size-8 mb-2" />
-                            <p class="text-sm">
-                                Start a conversation
-                            </p>
-                        </div>
+                    <template #content="{ message }">
+                        <AgentParts :message="message"
+                                    @approve="(id, approved) => chat?.addToolApprovalResponse({ id, approved })"
+                                    @output="(tool, toolCallId, output) => chat?.addToolOutput({ tool, toolCallId, output })" />
                     </template>
-
-                    <UChatMessage v-for="message in messages"
-                                  :id="message.id"
-                                  :key="message.id"
-                                  :role="message.role === 'user' ? 'user' : 'assistant'"
-                                  :parts="[{ type: 'text', text: message.text }]"
-                                  :variant="message.role === 'user' ? 'soft' : 'naked'"
-                                  :side="message.role === 'user' ? 'right' : 'left'"
-                                  :icon="message.role === 'assistant' && !message.steps?.length ? 'i-lucide-sparkles' : undefined"
-                                  :ui="message.role === 'assistant' ? { body: 'flex-1' } : undefined">
-                        <template #content>
-                            <!-- Render the work trail or connect card, markdown for assistant, plain text for user -->
-                            <AgentWork v-if="message.steps?.length"
-                                       :steps="message.steps"
-                                       :streaming="message.id === liveMessageId" />
-                            <AgentConnectCard v-else-if="message.connectionSetup"
-                                              :request="message.connectionSetup"
-                                              @created="onConnectionCreated" />
-                            <AgentSelectCard v-else-if="message.selection"
-                                             :request="message.selection"
-                                             @selected="onSelection" />
-                            <AgentConfirmCard v-else-if="message.confirmation"
-                                              :request="message.confirmation"
-                                              @decided="onDecision" />
-                            <MDC v-else-if="message.role === 'assistant'"
-                                 :value="message.text"
-                                 :cache-key="message.id"
-                                 class="*:first:mt-0 *:last:mb-0" />
-                            <p v-else
-                               class="whitespace-pre-wrap">
-                                {{ message.text }}
-                            </p>
-                        </template>
-                    </UChatMessage>
                 </UChatMessages>
 
                 <UChatPrompt v-model="input"
                              variant="subtle"
                              placeholder="Ask anything..."
-                             :disabled="streaming"
+                             :disabled="!chat"
+                             :error="chat?.error.value"
                              class="sticky bottom-0 [view-transition-name:chat-prompt] rounded-b-none z-10"
                              :ui="{ base: 'px-1.5' }"
                              @submit="onSubmit">
-                    <UChatPromptSubmit :status="status"
+                    <UChatPromptSubmit :status="chat?.status.value ?? 'ready'"
                                        color="neutral"
-                                       size="sm" />
+                                       size="sm"
+                                       @stop="chat?.stop()" />
                 </UChatPrompt>
             </UContainer>
         </template>
