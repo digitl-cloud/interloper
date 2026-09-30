@@ -28,6 +28,7 @@ jobs:
             deps
             docker
             docs
+            duckdb
             google-cloud
             k8s
             mcp
