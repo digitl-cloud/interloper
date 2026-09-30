@@ -1,7 +1,7 @@
 """Shared fixtures: a seeded in-memory database behind a real Store.
 
 SQLite stands in for Postgres as in the interloper-db tests; the tables
-created are exactly those the read-only toolkit and the PAT verifier touch.
+created are exactly those the toolkit and the PAT verifier touch.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 [project]
 name = "interloper-mcp"
 version = "0.90.0"
-description = "Interloper MCP server — read-only platform access for AI agents"
+description = "Interloper MCP server, platform access for AI agents"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"

@@ -4,7 +4,7 @@
 [project]
 name = "interloper-toolkit"
 version = "0.90.0"
-description = "Interloper shared read-only tool functions for AI surfaces (agent, MCP)"
+description = "Interloper tool functions shared by the AI surfaces (agent, MCP)"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"

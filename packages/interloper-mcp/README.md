@@ -1,8 +1,9 @@
 # interloper-mcp
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server exposing
-read-only interloper platform access to AI agents: catalog definitions,
-collection listings, lineage, run/backfill monitoring, and analytics.
+the interloper platform to AI agents: catalog definitions, the collection,
+lineage, run/backfill monitoring, analytics and, for tokens holding the
+editor role, the writes (edits, creates, triggers, retries, cancels).
 
 Authentication uses **personal access tokens** (PATs) minted via the
 interloper API (`POST /api/tokens`, session-authenticated). Tokens are
