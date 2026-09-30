@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.92.1 (2026-09-30)
+
+### Bug Fixes
+
+- **assets**: Build CM360 and DV360 discovery services per call
+  ([`09bfc04`](https://github.com/digitl-cloud/interloper/commit/09bfc04b1f013ab17b917b5091086214ab318c6b))
+
+### Testing
+
+- **assets**: Cover the CM360 and DV360 report and audience service builds
+  ([`e8ae816`](https://github.com/digitl-cloud/interloper/commit/e8ae816bb1a441e48c720dc0477cae163d57298b))
+
+
 ## v0.92.0 (2026-09-30)
 
 ### Bug Fixes
