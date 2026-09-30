@@ -13,6 +13,7 @@ dependencies = [
     "interloper-api",
     "interloper-app",
     "interloper-assets",
+    "interloper-aws",
     "interloper-core",
     "interloper-db",
     "interloper-docker",
@@ -55,6 +56,7 @@ interloper-api = { workspace = true }
 interloper-scheduler = { workspace = true }
 interloper-google-cloud = { workspace = true }
 interloper-duckdb = { workspace = true }
+interloper-aws = { workspace = true }
 interloper-agent = { workspace = true }
 interloper-app = { workspace = true }
 interloper-mcp = { workspace = true }
@@ -174,6 +176,7 @@ version_toml = [
     "packages/interloper-db/pyproject.toml:project.version",
     "packages/interloper-google-cloud/pyproject.toml:project.version",
     "packages/interloper-duckdb/pyproject.toml:project.version",
+    "packages/interloper-aws/pyproject.toml:project.version",
     "packages/interloper-docker/pyproject.toml:project.version",
     "packages/interloper-k8s/pyproject.toml:project.version",
     "packages/interloper-scheduler/pyproject.toml:project.version",

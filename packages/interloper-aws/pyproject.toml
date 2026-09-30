@@ -1,0 +1,42 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-aws"
+version = "0.93.0"
+description = "Interloper AWS integration: Amazon S3 destination and connection"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "interloper-core",
+    "boto3>=1.34",
+    "pyarrow>=14",
+]
+
+[project.entry-points."interloper.components"]
+aws = "interloper_aws"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-core = { workspace = true }
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

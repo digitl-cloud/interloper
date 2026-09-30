@@ -19,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 duckdb = ["interloper-duckdb"]
+aws = ["interloper-aws"]
 google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
 sql = ["interloper-sql"]
@@ -37,6 +38,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2", "pyar
 
 [tool.uv.sources]
 interloper-duckdb = { workspace = true }
+interloper-aws = { workspace = true }
 interloper-google-cloud = { workspace = true }
 interloper-slack = { workspace = true }
 interloper-sql = { workspace = true }

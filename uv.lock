@@ -17,6 +17,7 @@ members = [
     "interloper-api",
     "interloper-app",
     "interloper-assets",
+    "interloper-aws",
     "interloper-core",
     "interloper-db",
     "interloper-docker",
@@ -1933,6 +1934,23 @@ requires-dist = [
 provides-extras = ["bing", "google", "facebook"]
 
 [[package]]
+name = "interloper-aws"
+version = "0.93.0"
+source = { editable = "packages/interloper-aws" }
+dependencies = [
+    { name = "boto3" },
+    { name = "interloper-core" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.34" },
+    { name = "interloper-core", editable = "packages/interloper-core" },
+    { name = "pyarrow", specifier = ">=14" },
+]
+
+[[package]]
 name = "interloper-core"
 version = "0.93.0"
 source = { editable = "packages/interloper-core" }
@@ -1946,6 +1964,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+aws = [
+    { name = "interloper-aws" },
+]
 duckdb = [
     { name = "interloper-duckdb" },
 ]
@@ -1979,6 +2000,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx2", specifier = ">=2.13.1" },
+    { name = "interloper-aws", marker = "extra == 'aws'", editable = "packages/interloper-aws" },
     { name = "interloper-duckdb", marker = "extra == 'duckdb'", editable = "packages/interloper-duckdb" },
     { name = "interloper-google-cloud", marker = "extra == 'google-cloud'", editable = "packages/interloper-google-cloud" },
     { name = "interloper-slack", marker = "extra == 'slack'", editable = "packages/interloper-slack" },
@@ -1994,7 +2016,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
-provides-extras = ["duckdb", "google-cloud", "slack", "sql", "snowflake", "otel"]
+provides-extras = ["duckdb", "aws", "google-cloud", "slack", "sql", "snowflake", "otel"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2245,6 +2267,7 @@ dependencies = [
     { name = "interloper-api" },
     { name = "interloper-app" },
     { name = "interloper-assets" },
+    { name = "interloper-aws" },
     { name = "interloper-core" },
     { name = "interloper-db" },
     { name = "interloper-docker" },
@@ -2280,6 +2303,7 @@ requires-dist = [
     { name = "interloper-api", editable = "packages/interloper-api" },
     { name = "interloper-app", editable = "packages/interloper-app" },
     { name = "interloper-assets", editable = "packages/interloper-assets" },
+    { name = "interloper-aws", editable = "packages/interloper-aws" },
     { name = "interloper-core", editable = "packages/interloper-core" },
     { name = "interloper-db", editable = "packages/interloper-db" },
     { name = "interloper-docker", editable = "packages/interloper-docker" },

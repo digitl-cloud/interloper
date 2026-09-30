@@ -136,9 +136,9 @@ instantiated. `partition_row_counts` feeds `asset.partition_row_counts()` and th
 per partition, slicing the data through its [representation](../extending/representations.md)
 on the partition column; a window read returns one result per partition, newest first. A
 destination written this way is partition-correct by construction, and `CSVDestination`,
-`FileDestination`, `MemoryDestination` and `ObjectStoreDestination`, the base of `GCSDestination`, are
-all built exactly like this. The partitions a context covers are on the context itself,
-`context.partitions` and `context.slices(data)`, for a backend that needs them.
+`FileDestination`, `MemoryDestination` and `ObjectStoreDestination`, the base of `GCSDestination` and
+`S3Destination`, are all built exactly like this. The partitions a context covers are on the context
+itself, `context.partitions` and `context.slices(data)`, for a backend that needs them.
 
 The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
 [decorators reference](../reference/decorators.md). A destination's own connection is a relation,
