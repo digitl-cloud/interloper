@@ -6,7 +6,7 @@ source-level ``DataFrameNormalizer`` bridges the two — these tests pin that
 the normalizer reaches every asset instance, survives the host→child spec
 round-trip, and that a raw API-shaped row normalizes and validates against
 the schema (the same chain that broke in prod for AmazonAds; see
-``test_amazon_ads.py``).
+``amazon_ads/test_source.py``).
 """
 
 from __future__ import annotations

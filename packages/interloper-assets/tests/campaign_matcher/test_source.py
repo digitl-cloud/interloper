@@ -236,7 +236,7 @@ def test_example_manifest_loads_and_wires_without_redeclaring_what_cascades(monk
         "TIKTOK_ADS_ADVERTISER_ID",
     ):
         monkeypatch.setenv(name, "placeholder")
-    manifest = Path(__file__).parents[3] / "examples" / "campaign_matcher.yaml"
+    manifest = Path(__file__).parents[4] / "examples" / "campaign_matcher.yaml"
 
     dag = il.DAG.from_spec_file(manifest)
     matches = next(operation for operation in dag.operations if operation.key == "campaign_matches")
