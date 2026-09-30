@@ -50,6 +50,16 @@ def _child(key: str) -> Any:
     return next(a for a in child_dag.operations if type(a).key == key)
 
 
+async def _run(source: Any, key: str) -> list[dict[str, Any]]:
+    asset = next(a for a in source.assets if type(a).key == key)
+    context = il.ExecutionContext(
+        asset_key=asset.key,
+        partitioning=asset.partitioning,
+        partition_or_window=il.TimePartition(value=DAY),
+    )
+    return await asset.data(context=context)
+
+
 def _source_with_api(handler: Any) -> Any:
     connection = PinterestAdsConnection(client_id="cid", client_secret="secret", refresh_token="refresh")
     connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
@@ -291,17 +301,40 @@ class TestReportFlow:
         with pytest.raises(RuntimeError, match="FAILED"):
             await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
 
-    async def test_asset_requests_its_level_and_columns(self, fake_api):
+    async def test_report_not_ready_in_time_raises(self, fake_api, monkeypatch: Any):
+        source, api = fake_api({"report_status": "IN_PROGRESS"})
+        monkeypatch.setattr(source_module, "_REPORT_TIMEOUT", 0)
+        with pytest.raises(RuntimeError, match="not ready within 0s"):
+            await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"])
+        assert api.polls == 1
+
+    async def test_empty_download_yields_no_rows(self, fake_api):
+        source, _ = fake_api({"report_status": "FINISHED", "url": "https://storage.example/r.json"})
+        assert await source._report(DAY, level="CAMPAIGN", columns=["CAMPAIGN_ID"]) == []
+
+    @pytest.mark.parametrize(
+        ("key", "level", "columns", "targeting_types"),
+        [
+            ("ads_stats", "PIN_PROMOTION", [*constants.AD_METRICS, "AD_ID"], None),
+            ("campaigns_stats", "CAMPAIGN", constants.CAMPAIGN_METRICS, None),
+            ("ads_conversions_stats", "PIN_PROMOTION", constants.ADS_CONVERSIONS_METRICS, None),
+            (
+                "videos_stats_by_targeting",
+                "PIN_PROMOTION_TARGETING",
+                constants.VIDEOS_METRICS,
+                constants.VIDEO_TARGETING_TYPES,
+            ),
+        ],
+    )
+    async def test_asset_requests_its_level_and_columns(
+        self, fake_api, key: str, level: str, columns: list[str], targeting_types: list[str] | None
+    ):
         source, api = fake_api({"report_status": "FINISHED", "url": None})
-        asset = next(a for a in source.assets if type(a).key == "ads_stats")
-        context = il.ExecutionContext(
-            asset_key=asset.key,
-            partitioning=asset.partitioning,
-            partition_or_window=il.TimePartition(value=DAY),
-        )
-        assert await asset.data(context=context) == []
-        assert api.created[0]["level"] == "PIN_PROMOTION"
-        assert api.created[0]["columns"] == [*constants.AD_METRICS, "AD_ID"]
+        assert await _run(source, key) == []
+        (body,) = api.created
+        assert body["level"] == level
+        assert body["columns"] == columns
+        assert body.get("targeting_types") == targeting_types
 
 
 class TestEntityListing:
@@ -319,3 +352,26 @@ class TestEntityListing:
         rows = await _source_with_api(handler)._list("ads", DAY)
         assert rows == [{"id": "1", "date": DAY}, {"id": "2", "date": DAY}, {"id": "3", "date": DAY}]
         assert paths == {"/v5/ad_accounts/549759962542/ads"}
+
+    async def test_ad_accounts_fetches_the_sources_account(self):
+        seen: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request)
+            return httpx2.Response(200, json={"id": "549759962542", "name": "Brand", "currency": "EUR"})
+
+        rows = await _run(_source_with_api(handler), "ad_accounts")
+        assert rows == [{"id": "549759962542", "name": "Brand", "currency": "EUR", "date": DAY}]
+        assert [request.url.path for request in seen] == ["/v5/ad_accounts/549759962542"]
+
+    @pytest.mark.parametrize("key", ["campaigns", "ad_groups", "ads"])
+    async def test_listing_assets_page_through_their_resource(self, key: str):
+        seen: list[httpx2.URL] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request.url)
+            return httpx2.Response(200, json={"items": [{"id": "1"}], "bookmark": None})
+
+        assert await _run(_source_with_api(handler), key) == [{"id": "1", "date": DAY}]
+        assert [url.path for url in seen] == [f"/v5/ad_accounts/549759962542/{key}"]
+        assert seen[0].params["page_size"] == str(constants.PAGE_SIZE)

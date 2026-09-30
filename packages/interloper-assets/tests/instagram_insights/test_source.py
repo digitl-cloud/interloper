@@ -217,6 +217,27 @@ class TestFollowersStats:
         rows = await _run(_faked_source(_serving(body)), "followers_stats_by_country")
         assert rows == [{"country": "DE", "follower_demographics": 7, "date": DAY}]
 
+    async def test_city_breakdown(self):
+        body = {
+            "data": [
+                {
+                    "name": "follower_demographics",
+                    "total_value": {
+                        "breakdowns": [
+                            {
+                                "dimension_keys": ["city"],
+                                "results": [{"dimension_values": ["Hamburg, Germany"], "value": 5}],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        urls: list[httpx2.URL] = []
+        rows = await _run(_faked_source(_serving(body, urls)), "followers_stats_by_city")
+        assert urls[0].params["breakdown"] == "city"
+        assert rows == [{"city": "Hamburg, Germany", "follower_demographics": 5, "date": DAY}]
+
 
 class TestEntities:
     async def test_profile_row_reconciles(self):

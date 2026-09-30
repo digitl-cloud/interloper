@@ -251,3 +251,29 @@ class TestRequests:
             "https://api.linkedin.com/rest/industryTaxonomyVersions/DEFAULT/industries",
             "https://api.linkedin.com/rest/industryTaxonomyVersions/DEFAULT/industries?start=1&count=1",
         ]
+
+    async def test_followers_stats_use_the_organizational_entity_finder(self):
+        seen: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request)
+            return httpx2.Response(200, json={"elements": [FOLLOWER_ROW]})
+
+        rows = await _run(_faked_source(handler), "followers_stats")
+        assert rows == [{**FOLLOWER_ROW, "date": DAY}]
+        assert seen[0].url.path == "/rest/organizationalEntityFollowerStatistics"
+        assert (
+            seen[0].url.query.decode()
+            == "q=organizationalEntity&organizationalEntity=urn%3Ali%3Aorganization%3A2414183"
+        )
+
+    async def test_taxonomies_read_their_own_endpoint(self):
+        for key, path in (("job_functions", "/rest/functions"), ("seniorities", "/rest/seniorities")):
+            seen: list[httpx2.URL] = []
+
+            def handler(request: httpx2.Request, seen: list[httpx2.URL] = seen) -> httpx2.Response:
+                seen.append(request.url)
+                return httpx2.Response(200, json={"elements": [{"id": 1}]})
+
+            assert await _run(_faked_source(handler), key) == [{"id": 1, "date": DAY}], key
+            assert [url.path for url in seen] == [path], key

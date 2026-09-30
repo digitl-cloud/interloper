@@ -147,6 +147,26 @@ class TestExport:
         rows, _ = self._export(monkeypatch, [url], {url: httpx2.Response(200, text="")})
         assert rows == []
 
+    @pytest.mark.parametrize(
+        ("key", "aggregation"), [("consents_stats", "granular"), ("interactions_stats", "interaction")]
+    )
+    def test_each_asset_exports_its_aggregation(self, monkeypatch: Any, key: str, aggregation: str):
+        exports: list[tuple[str, dt.date]] = []
+
+        async def export(self: Any, aggregation: str, date: dt.date) -> list[dict[str, Any]]:
+            exports.append((aggregation, date))
+            return [{"day": date.isoformat()}]
+
+        monkeypatch.setattr(Usercentrics, "_export", export)
+        asset = _asset(key)
+        context = il.ExecutionContext(
+            asset_key=asset.key,
+            partitioning=asset.partitioning,
+            partition_or_window=il.TimePartition(value=dt.date(2026, 6, 14)),
+        )
+        assert asyncio.run(asset.data(context=context)) == [{"day": "2026-06-14"}]
+        assert exports == [(aggregation, dt.date(2026, 6, 14))]
+
     def test_failed_download_raises(self, monkeypatch: Any):
         url = "https://storage.example/1.csv"
         with pytest.raises(httpx2.HTTPStatusError):

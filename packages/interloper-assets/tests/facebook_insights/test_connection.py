@@ -1,6 +1,8 @@
 """Regression tests for the Facebook Insights connection.
 
-Page and post insights only answer to a Page access token, which the
+The connection's client carries the long-lived user token as its bearer, and
+the ``pages`` lookup walks ``/me/accounts`` along its absolute ``paging.next``
+links. Page and post insights only answer to a Page access token, which the
 connection derives from its user token via ``GET /{page_id}?fields=access_token``.
 """
 
@@ -23,6 +25,40 @@ def _connection(handler: Callable[[httpx2.Request], httpx2.Response]) -> Faceboo
         GRAPH, auth=il.HTTPBearerAuth("user-token"), transport=httpx2.MockTransport(handler)
     )
     return connection
+
+
+class TestClient:
+    def test_targets_the_pinned_graph_version_as_the_user(self):
+        client = FacebookInsightsConnection(client_id="cid", client_secret="secret", refresh_token="user-token").client
+        assert str(client.base_url).rstrip("/") == GRAPH
+        request = client.build_request("GET", "/me")
+        assert client.auth is not None
+        next(client.auth.auth_flow(request))
+        assert request.headers["Authorization"] == "Bearer user-token"
+
+
+class TestPages:
+    async def test_follows_the_next_link_across_pages(self):
+        next_link = f"{GRAPH}/me/accounts?fields=id%2Cname&limit=100&after=cursor-1"
+        seen: list[httpx2.URL] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request.url)
+            if "after" not in request.url.params:
+                return httpx2.Response(200, json={"data": [{"id": "1", "name": "Acme"}], "paging": {"next": next_link}})
+            return httpx2.Response(200, json={"data": [{"id": "2"}], "paging": {}})
+
+        assert await _connection(handler).pages() == [{"id": "1", "name": "Acme"}, {"id": "2", "name": "2"}]
+        assert str(seen[0]) == f"{GRAPH}/me/accounts?fields=id%2Cname&limit=100"
+        assert str(seen[1]) == next_link
+
+    async def test_check_runs_the_lookup(self):
+        assert await _connection(lambda request: httpx2.Response(200, json={"data": []})).check() is True
+
+    async def test_check_raises_on_a_rejected_token(self):
+        connection = _connection(lambda request: httpx2.Response(401, json={"error": {"code": 190}}))
+        with pytest.raises(httpx2.HTTPStatusError):
+            await connection.check()
 
 
 class TestPageClient:

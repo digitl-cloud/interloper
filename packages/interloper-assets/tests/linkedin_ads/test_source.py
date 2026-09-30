@@ -20,7 +20,7 @@ from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.representation import Representation
 
-from interloper_assets.linkedin_ads import schemas
+from interloper_assets.linkedin_ads import constants, schemas
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 from interloper_assets.linkedin_ads.source import LinkedinAds, LinkedinAdsNormalizer, LinkedinAdsStatsNormalizer
 
@@ -202,6 +202,18 @@ class TestRequests:
         assert len(seen) == 2
         assert seen[0].startswith("q=search&pageSize=1000&fields=id,name,type,status,")
         assert seen[1].endswith("&pageToken=tok%2F1")
+
+    async def test_campaign_groups_search_their_own_resource(self):
+        seen: list[httpx2.URL] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request.url)
+            return httpx2.Response(200, json={"elements": [{"id": 7}], "metadata": {}})
+
+        rows = await _run(_faked_source(handler), "campaign_groups")
+        assert rows == [{"id": 7, "date": DAY}]
+        assert [url.path for url in seen] == ["/rest/adAccounts/123/adCampaignGroups"]
+        assert seen[0].query.decode() == f"q=search&pageSize=1000&fields={','.join(constants.CAMPAIGN_GROUP_FIELDS)}"
 
     def test_epoch_unit_is_configurable(self):
         normalizer = LinkedinAdsNormalizer(flatten_max_level=1, epoch_columns=["run_schedule_start"], epoch_unit="s")
