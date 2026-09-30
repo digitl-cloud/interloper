@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
+sql = ["interloper-sql"]
 # Instruments only what core itself depends on (httpx2); FastAPI and
 # SQLAlchemy instrumentation ship with interloper-api[otel] / interloper-db[otel].
 otel = [
@@ -35,6 +36,7 @@ dev = ["pytest>=8.0.0", "pytest-cov>=7.0.0", "opentelemetry-sdk>=1.42,<2"]
 [tool.uv.sources]
 interloper-google-cloud = { workspace = true }
 interloper-slack = { workspace = true }
+interloper-sql = { workspace = true }
 
 
 [project.entry-points."interloper.kinds"]

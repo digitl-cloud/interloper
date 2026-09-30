@@ -45,7 +45,7 @@
 # can reach them (an ARG is only in scope where it is redeclared).
 #
 #   CORE_EXTRAS       comma-separated interloper-core extras
-#                     (default: google-cloud,slack). Each extra maps to
+#                     (default: google-cloud,slack,sql). Each extra maps to
 #                     --package interloper-{name}.
 #   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
 #                     Each extra maps to --extra {name} on interloper-assets.
@@ -66,7 +66,7 @@
 #
 # ================================================================
 
-ARG CORE_EXTRAS=google-cloud,slack
+ARG CORE_EXTRAS=google-cloud,slack,sql
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
@@ -96,6 +96,7 @@ COPY packages/interloper-pandas/pyproject.toml      packages/interloper-pandas/p
 COPY packages/interloper-mcp/pyproject.toml         packages/interloper-mcp/pyproject.toml
 COPY packages/interloper-toolkit/pyproject.toml     packages/interloper-toolkit/pyproject.toml
 COPY packages/interloper-slack/pyproject.toml       packages/interloper-slack/pyproject.toml
+COPY packages/interloper-sql/pyproject.toml         packages/interloper-sql/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────
