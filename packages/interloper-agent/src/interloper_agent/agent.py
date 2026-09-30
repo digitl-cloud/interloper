@@ -32,7 +32,16 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
 
     Returns:
         The agent, ready to run with a :class:`ToolkitContext` as deps.
+
+    Raises:
+        ValueError: If *model* names no provider, which pydantic-ai would
+            only reject on the first turn.
     """
+    if ":" not in model:
+        raise ValueError(
+            f"agent.model {model!r} names no provider; use pydantic-ai's provider:model form, "
+            "e.g. google:gemini-2.5-flash, google-cloud:gemini-2.5-flash, anthropic:claude-sonnet-4-5"
+        )
     agent = Agent[ToolkitContext, str | DeferredToolRequests](
         model,
         name="interloper",

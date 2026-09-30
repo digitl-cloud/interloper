@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 
+import pytest
 from interloper_toolkit import ToolkitContext
 from pydantic_ai.messages import ModelRequest
 from pydantic_ai.models.test import TestModel
@@ -13,6 +14,10 @@ from interloper_agent.agent import model_settings
 
 
 class TestBuildAgent:
+    def test_a_model_without_a_provider_is_refused_up_front(self):
+        with pytest.raises(ValueError, match="provider:model"):
+            build_agent("gemini-2.5-flash")
+
     def test_builds_without_credentials_and_names_the_model(self):
         agent = build_agent("google:gemini-2.5-flash")
 

@@ -12,6 +12,8 @@ Available when ``interloper-agent`` is installed.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -23,14 +25,54 @@ from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
-from pydantic_ai.ui.vercel_ai import VercelAIAdapter
+from pydantic_ai.ui import UIEventStream
+from pydantic_ai.ui.vercel_ai import VercelAIAdapter, VercelAIEventStream
+from pydantic_ai.ui.vercel_ai.request_types import RequestData
+from pydantic_ai.ui.vercel_ai.response_types import BaseChunk
 
 from interloper_api.dependencies import AgentDep, CatalogDep, EditorDep, OrgIdDep, StoreDep, ViewerDep
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 SDK_VERSION = 7
 """The AI SDK major version the app speaks; tool approvals need at least 6."""
+
+
+class LoggedEventStream(VercelAIEventStream[ToolkitContext, Any]):
+    """The Vercel event stream, with a run's failure in the server log too.
+
+    The adapter answers a failed run with a 200 and an error chunk, which the
+    app renders as a generic message; without this, the cause would exist
+    nowhere on the server side.
+    """
+
+    async def on_error(self, error: Exception) -> AsyncIterator[BaseChunk]:
+        """Log the failure, then encode it for the client as the base class does.
+
+        Args:
+            error: The exception that ended the run.
+
+        Yields:
+            The protocol's error chunks.
+        """
+        logger.error("Agent turn failed: %s", error, exc_info=error)
+        async for chunk in super().on_error(error):
+            yield chunk
+
+
+class LoggedAdapter(VercelAIAdapter[ToolkitContext, Any]):
+    """The Vercel adapter, building :class:`LoggedEventStream`."""
+
+    def build_event_stream(self) -> UIEventStream[RequestData, BaseChunk, ToolkitContext, Any]:
+        """Build the event stream that also logs failures.
+
+        Returns:
+            The stream transformer for this request.
+        """
+        return LoggedEventStream(
+            self.run_input, accept=self.accept, sdk_version=self.sdk_version, server_message_id=self.server_message_id
+        )
 
 
 class ConversationResponse(BaseModel):
@@ -192,7 +234,7 @@ async def chat(
         history = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
         store.conversations.save(conversation.id, history, title=_first_prompt(messages))
 
-    return await VercelAIAdapter.dispatch_request(
+    return await LoggedAdapter.dispatch_request(
         request,
         agent=agent,
         sdk_version=SDK_VERSION,

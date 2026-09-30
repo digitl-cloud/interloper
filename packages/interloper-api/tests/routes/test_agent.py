@@ -212,3 +212,23 @@ class TestChat:
         assert resumed.status_code == 200
         assert "Job attempted" in resumed.text
         assert "tool-output-available" in resumed.text
+
+    def test_a_failing_turn_is_logged_server_side(
+        self, store: Store, member: SimpleNamespace, caplog: pytest.LogCaptureFixture
+    ):
+        async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+            raise RuntimeError("provider exploded")
+            yield ""
+
+        agent = Agent[ToolkitContext, str | DeferredToolRequests](
+            FunctionModel(stream_function=model), deps_type=ToolkitContext, output_type=[str, DeferredToolRequests]
+        )
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
+
+        with caplog.at_level("ERROR", logger="interloper_api.routes.agent"):
+            response = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("hi"))
+
+        assert response.status_code == 200
+        assert '"type":"error"' in response.text
+        assert "Agent turn failed: provider exploded" in caplog.text
