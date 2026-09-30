@@ -27,12 +27,45 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        """Async REST client for the Facebook Graph API.
+        """Async REST client for the Facebook Graph API, authenticated as the user.
 
-        The ``refresh_token`` field holds a long-lived access token, used
+        The ``refresh_token`` field holds a long-lived user access token, used
         directly as the bearer.
+
+        Returns:
+            The client, pinned to ``constants.API_VERSION`` and cached per connection instance.
         """
-        return il.AsyncRESTClient(constants.BASE_URL, auth=il.HTTPBearerAuth(self.refresh_token))
+        return il.AsyncRESTClient(
+            f"{constants.BASE_URL}/{constants.API_VERSION}",
+            auth=il.HTTPBearerAuth(self.refresh_token),
+        )
+
+    async def page_client(self, page_id: str) -> il.AsyncRESTClient:
+        """Build a Graph API client authenticated as the Page.
+
+        Page and post insights (and the Page's published posts and stories)
+        only answer to a Page access token; the connection holds a user token,
+        so the Page token is derived from it via ``GET /{page_id}?fields=access_token``,
+        which returns one only when the user can perform the ``ANALYZE`` task on the Page.
+
+        Args:
+            page_id: The Facebook Page to act as.
+
+        Returns:
+            A new client carrying the Page access token as its bearer; the caller closes it.
+
+        Raises:
+            PermissionError: If the user token yields no Page access token for *page_id*.
+        """
+        response = await self.client.get(f"/{page_id}", params={"fields": "access_token"})
+        response.raise_for_status()
+        page_token = response.json().get("access_token")
+        if not page_token:
+            raise PermissionError(f"The connection's user cannot obtain a Page access token for page {page_id}")
+        return il.AsyncRESTClient(
+            f"{constants.BASE_URL}/{constants.API_VERSION}",
+            auth=il.HTTPBearerAuth(page_token),
+        )
 
     @il.fetch_field_provider
     async def pages(self) -> list[dict[str, str]]:
@@ -48,7 +81,7 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
 
         """
         pages: list[dict[str, str]] = []
-        path: str | None = "/v21.0/me/accounts"
+        path: str | None = "/me/accounts"
         params: dict[str, str] | None = {"fields": "id,name", "limit": "100"}
 
         while path:
@@ -57,10 +90,12 @@ class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
             data = response.json()
 
             for page in data.get("data", []):
-                pages.append({
-                    "id": page["id"],
-                    "name": page.get("name", page["id"]),
-                })
+                pages.append(
+                    {
+                        "id": page["id"],
+                        "name": page.get("name", page["id"]),
+                    }
+                )
 
             # The "next" link already carries the cursor + fields params.
             path = data.get("paging", {}).get("next")

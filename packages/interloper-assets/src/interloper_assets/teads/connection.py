@@ -20,7 +20,11 @@ class TeadsConnection(il.Connection):
 
     @cached_property
     def client(self) -> il.AsyncRESTClient:
-        """Async REST client for the Teads API."""
+        """The Teads API client every caller shares.
+
+        Returns:
+            The authenticated client, cached per connection instance.
+        """
         client = il.AsyncRESTClient(constants.BASE_URL)
         client.headers.update(
             {

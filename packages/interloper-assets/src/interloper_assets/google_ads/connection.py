@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from google.ads.googleads.client import GoogleAdsClient
 
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
-_BASE_URL = "https://googleads.googleapis.com/v20"
+_BASE_URL = f"https://googleads.googleapis.com/{API_VERSION}"
 
 
 @il.connection(
@@ -48,6 +48,9 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
         OAuth trio comes from the provider-scoped ``INTERLOPER_GOOGLE_*``). An
         explicit value overrides the in-house one; when neither the caller nor
         env supplies one, the required check fails.
+
+        Args:
+            data: The raw connection input, before field validation.
 
         Returns:
             The (possibly augmented) input data.
@@ -86,8 +89,7 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
 
         """
         async with httpx2.AsyncClient(timeout=30) as client:
-            # Exchange the refresh token for an access token.
-            token_resp = await client.post(
+            token_response = await client.post(
                 _TOKEN_URL,
                 data={
                     "grant_type": "refresh_token",
@@ -96,36 +98,33 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                     "client_secret": self.client_secret,
                 },
             )
-            token_resp.raise_for_status()
-            access_token = token_resp.json()["access_token"]
+            token_response.raise_for_status()
+            access_token = token_response.json()["access_token"]
 
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "developer-token": self.developer_token,
             }
 
-            # Step 1: List accessible customer resource names.
-            list_resp = await client.get(
+            list_response = await client.get(
                 f"{_BASE_URL}/customers:listAccessibleCustomers",
                 headers=headers,
             )
-            list_resp.raise_for_status()
-            resource_names: list[str] = list_resp.json().get("resourceNames", [])
+            list_response.raise_for_status()
+            resource_names: list[str] = list_response.json().get("resourceNames", [])
 
-            # Step 2: Fetch descriptive name for each customer.
             results: list[dict[str, str]] = []
-            for rn in resource_names:
-                # rn is like "customers/1234567890"
-                customer_id = rn.split("/")[-1]
+            for resource_name in resource_names:
+                customer_id = resource_name.split("/")[-1]
                 query = "SELECT customer.id, customer.descriptive_name, customer.status FROM customer LIMIT 1"
                 try:
-                    search_resp = await client.post(
-                        f"{_BASE_URL}/{rn}/googleAds:searchStream",
+                    search_response = await client.post(
+                        f"{_BASE_URL}/{resource_name}/googleAds:searchStream",
                         headers=headers,
                         json={"query": query},
                     )
-                    search_resp.raise_for_status()
-                    batches = search_resp.json()
+                    search_response.raise_for_status()
+                    batches = search_response.json()
                     for batch in batches:
                         for row in batch.get("results", []):
                             customer = row.get("customer", {})

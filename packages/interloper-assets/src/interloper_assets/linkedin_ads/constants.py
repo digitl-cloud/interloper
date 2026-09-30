@@ -1,7 +1,10 @@
 BASE_URL = "https://api.linkedin.com/rest"
 AUTH_BASE_URL = "https://api.linkedin.com"
-LINKEDIN_VERSION = "202509"
+LINKEDIN_VERSION = "202607"
 RESTLI_PROTOCOL_VERSION = "2.0.0"
+
+# Max page size of the cursor-paginated ``q=search`` finders.
+SEARCH_PAGE_SIZE = 1000
 
 ACCOUNT_FIELDS = [
     "id",
@@ -53,3 +56,6 @@ ANALYTICS_FIELDS = [
     "opens",
     "companyPageClicks",
 ]
+
+# One row per sponsored share per campaign per day.
+ANALYTICS_PIVOTS = "List(SHARE,CAMPAIGN)"
