@@ -21,6 +21,7 @@ Key design decisions:
 
 from interloper_db.models.auth import AuthSession, Invitation, Organisation, Profile, UserOrganisation
 from interloper_db.models.components import Component, ComponentRelation
+from interloper_db.models.conversations import Conversation
 from interloper_db.models.quotas import Quota, Usage
 from interloper_db.models.runs import Backfill, Event, Execution, Run
 from interloper_db.models.tokens import PersonalAccessToken
@@ -30,6 +31,7 @@ __all__ = [
     "Backfill",
     "Component",
     "ComponentRelation",
+    "Conversation",
     "Event",
     "Execution",
     "Invitation",

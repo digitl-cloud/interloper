@@ -22,6 +22,7 @@ from interloper_db.models import (
     Backfill,
     Component,
     ComponentRelation,
+    Conversation,
     Event,
     Invitation,
     Organisation,
@@ -82,7 +83,7 @@ def auth_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     auth_models = (Profile, Organisation, UserOrganisation, Invitation, AuthSession, PersonalAccessToken)
-    org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
+    org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage, Conversation)
     for model in auth_models + org_data_models:
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:

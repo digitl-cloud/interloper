@@ -19,6 +19,7 @@ depends on the part it uses rather than on all of it:
 - ``store.auth`` — profiles and the sessions authenticating them
 - ``store.organisations`` — organisations, memberships, invitations
 - ``store.tokens`` — personal access tokens (programmatic/MCP access)
+- ``store.conversations`` — a member's conversations with the agent
 - ``store.components`` — component CRUD, hydration and catalog status, for every kind
 - ``store.relations`` — the vocabulary-checked edges between components
 - ``store.events`` — run events and asset executions
@@ -39,6 +40,7 @@ from interloper_db.session import commit, session_scope, transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.base import Store
 from interloper_db.store.components import ComponentReading, ComponentStore, DeleteImpact
+from interloper_db.store.conversations import ConversationStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.organisations import OrganisationStore
 from interloper_db.store.quotas import QuotaStore
@@ -50,6 +52,7 @@ __all__ = [
     "AuthStore",
     "ComponentReading",
     "ComponentStore",
+    "ConversationStore",
     "DeleteImpact",
     "EventStore",
     "OrganisationStore",

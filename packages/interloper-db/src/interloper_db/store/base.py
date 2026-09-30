@@ -14,6 +14,7 @@ from interloper_db.engine import engine_from_settings, get_engine
 from interloper_db.session import transaction
 from interloper_db.store.auth import AuthStore
 from interloper_db.store.components import ComponentStore
+from interloper_db.store.conversations import ConversationStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.hydration import Hydrator
 from interloper_db.store.organisations import OrganisationStore
@@ -39,6 +40,7 @@ class Store:
     Attributes:
         auth: Profiles, sessions, organisations, members and invitations.
         tokens: Personal access tokens.
+        conversations: A member's conversations with the agent.
         relations: The vocabulary-checked edges between components.
         components: Component CRUD and hydration, for every kind.
         events: Run events and the asset executions derived from them.
@@ -78,6 +80,7 @@ class Store:
         self.auth = AuthStore(self._engine)
         self.organisations = OrganisationStore(self._engine)
         self.tokens = TokenStore(self._engine, self.organisations)
+        self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.events = EventStore(self._engine)
