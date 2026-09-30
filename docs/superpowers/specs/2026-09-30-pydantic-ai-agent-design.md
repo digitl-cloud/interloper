@@ -63,7 +63,7 @@ components are built for (`VercelAIAdapter`, approvals as `approval-requested` t
 
 - Table `conversations`: `id`, `org_id`, `user_id`, `title`, `messages` (JSONB, the
   `ModelMessage` list), `created_at`, `updated_at`; index `(org_id, user_id, updated_at)`.
-  Migration 006.
+  Migration 007.
 - Facet `store.conversations`: `create`, `get(id, *, org_id, user_id)` (foreign reads as missing),
   `list(org_id, user_id)`, `delete`, `save(id, messages, title=None)` (whole-history replace).
 - Routes, replacing `/agent/sessions`:
