@@ -48,7 +48,7 @@ instead (`def orders(self, connection: ShopConnection)`).
 
 ### REST clients and pagination
 
-`il.RESTClient` and `il.AsyncRESTClient` extend the httpx clients with `paginate()`:
+`il.RESTClient` and `il.AsyncRESTClient` extend the httpx2 clients with `paginate()`:
 
 ```py
 @il.asset
@@ -97,7 +97,7 @@ or async and must use lightweight HTTP, not a heavy SDK, because it may run insi
 process:
 
 ```py
-import httpx
+import httpx2
 from interloper.errors import ConnectionCheckError
 
 @il.connection(name="Shop API")
@@ -105,7 +105,7 @@ class ShopConnection(il.Connection):
     ...
 
     async def check(self) -> bool:
-        async with httpx.AsyncClient() as client:
+        async with httpx2.AsyncClient() as client:
             response = await client.get(f"{self.base_url}/me", headers={"Authorization": f"Bearer {self.api_key}"})
         if response.status_code == 403:
             raise ConnectionCheckError("The key is valid but lacks the reporting scope.")

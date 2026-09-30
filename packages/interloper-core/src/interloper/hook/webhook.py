@@ -21,14 +21,14 @@ class WebhookHook(Hook):
     def fire(self, context: HookContext) -> None:
         """POST the event payload to the configured URL.
 
-        An error status from the receiver raises ``httpx.HTTPStatusError``.
+        An error status from the receiver raises ``httpx2.HTTPStatusError``.
 
         Args:
             context: The event context, serialized into the POST payload.
         """
-        import httpx
+        import httpx2
 
-        response = httpx.post(self.url, json=self._payload(context), timeout=self.timeout)
+        response = httpx2.post(self.url, json=self._payload(context), timeout=self.timeout)
         response.raise_for_status()
 
     def _payload(self, context: HookContext) -> dict[str, Any]:

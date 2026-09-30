@@ -54,7 +54,7 @@ Reference: https://docs.interloper.dev/reference/events/
    | `ValidationError: api_key Field required` / `client_id Field required` | env var not set (`SHOP_API_KEY`, `INTERLOPER_<PROVIDER>_CLIENT_ID`) | export it; `--dry-run` never checks credentials | after the fix |
    | `TypeError: X.y() missing 1 required positional argument: 'orders'` | `data()` called directly instead of through the DAG, with a relation parameter never filled; an unbound optional relation reaching the DAG resolves to `None` instead | wire the relation: bind an instance, or a `{ref: id}` in the spec, see interloper-manifest | no |
    | `ConfigError: ... is unbound and non-optional` | a relation nothing filled: the upstream source is absent from the run, or a connection was never bound | include the upstream in the run, or bind the relation | no |
-   | `httpx.HTTPStatusError: 429` / `5xx` / timeouts | vendor limit or outage; core has no retry | backoff honouring `Retry-After` in `data()`, lower `max_workers`, space backfills | yes, later |
+   | `httpx2.HTTPStatusError: 429` / `5xx` / timeouts | vendor limit or outage; core has no retry | backoff honouring `Retry-After` in `data()`, lower `max_workers`, space backfills | yes, later |
    | `ModuleNotFoundError: No module named 'shop'` | CLI import without `PYTHONPATH=.` | set it or install the package | no |
    | `ConnectionCheckError` | credentials rejected by the service | fix the connection, "Test connection" in the UI | after the fix |
 

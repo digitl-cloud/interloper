@@ -216,7 +216,7 @@ def format_exception(exception: BaseException) -> str:
     """Format an exception as a non-empty, single-line error string.
 
     ``str(exception)`` alone is empty for message-less exceptions (e.g.
-    ``httpx.ReadTimeout``), which downstream consumers (event rows, run
+    ``httpx2.ReadTimeout``), which downstream consumers (event rows, run
     results, the UI) treat as "no error". Always lead with the type name so
     the error stays identifiable either way.
 

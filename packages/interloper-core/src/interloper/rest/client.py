@@ -1,4 +1,4 @@
-"""REST clients (sync + async) extending httpx with pagination support."""
+"""REST clients (sync + async) extending httpx2 with pagination support."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-import httpx
+import httpx2
 
 from interloper.rest.paginator import BasePaginator, DataSelector, RangePaginator, select
 from interloper.utils.concurrency import bounded_gather
@@ -14,13 +14,13 @@ from interloper.utils.concurrency import bounded_gather
 logger = logging.getLogger(__name__)
 
 
-class RESTClient(httpx.Client):
-    """A REST client that extends httpx.Client with pagination support."""
+class RESTClient(httpx2.Client):
+    """A REST client that extends httpx2.Client with pagination support."""
 
     def __init__(
         self,
         base_url: str,
-        auth: httpx.Auth | None = None,
+        auth: httpx2.Auth | None = None,
         timeout: float | None = None,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
@@ -30,11 +30,11 @@ class RESTClient(httpx.Client):
 
         Args:
             base_url: The base URL of the API.
-            auth: The authentication method (httpx.Auth instance).
+            auth: The authentication method (httpx2.Auth instance).
             timeout: The timeout for requests.
             headers: The headers to include in requests.
             params: The parameters to include in requests.
-            **kwargs: Additional keyword arguments to pass to httpx.Client.
+            **kwargs: Additional keyword arguments to pass to httpx2.Client.
         """
         super().__init__(
             base_url=base_url,
@@ -85,7 +85,7 @@ class RESTClient(httpx.Client):
             paginator.update_state(response)
 
 
-class AsyncRESTClient(httpx.AsyncClient):
+class AsyncRESTClient(httpx2.AsyncClient):
     """Async counterpart to :class:`RESTClient` for IO-bound extraction.
 
     Same construction surface as :class:`RESTClient`; a connection exposes it as
@@ -97,7 +97,7 @@ class AsyncRESTClient(httpx.AsyncClient):
     def __init__(
         self,
         base_url: str,
-        auth: httpx.Auth | None = None,
+        auth: httpx2.Auth | None = None,
         timeout: float | None = None,
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
@@ -107,11 +107,11 @@ class AsyncRESTClient(httpx.AsyncClient):
 
         Args:
             base_url: The base URL of the API.
-            auth: The authentication method (httpx.Auth instance).
+            auth: The authentication method (httpx2.Auth instance).
             timeout: The timeout for requests.
             headers: The headers to include in requests.
             params: The parameters to include in requests.
-            **kwargs: Additional keyword arguments to pass to httpx.AsyncClient.
+            **kwargs: Additional keyword arguments to pass to httpx2.AsyncClient.
         """
         super().__init__(
             base_url=base_url,
@@ -122,7 +122,7 @@ class AsyncRESTClient(httpx.AsyncClient):
             **kwargs,
         )
 
-    async def _send_checked(self, request: httpx.Request) -> httpx.Response:
+    async def _send_checked(self, request: httpx2.Request) -> httpx2.Response:
         """Send a request and raise on a non-success status.
 
         Args:

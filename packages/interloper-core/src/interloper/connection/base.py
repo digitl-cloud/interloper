@@ -7,7 +7,7 @@ import datetime as dt
 import os
 from typing import Any, ClassVar, cast
 
-import httpx
+import httpx2
 from pydantic import BaseModel, Field, model_validator
 
 from interloper.errors import format_exception
@@ -111,10 +111,10 @@ class Connection(Resource, Operation):
         that proves the credentials work — often a one-line delegation to an
         existing ``@fetch_field_provider`` method. Like fetch providers, it
         may run inside the API process, so it must use lightweight HTTP
-        (``httpx``), never a heavy provider SDK.
+        (``httpx2``), never a heavy provider SDK.
 
         Returns ``True`` when the connection works, ``False`` when it
-        provably doesn't. Exceptions are also failures: ``httpx`` errors are
+        provably doesn't. Exceptions are also failures: ``httpx2`` errors are
         categorised by the caller (401/403 → bad credentials, timeouts →
         network); raise :class:`~interloper.errors.ConnectionCheckError` to
         surface a curated message instead.
@@ -135,7 +135,7 @@ class Connection(Resource, Operation):
 
         Override in a subclass (sync or ``async``) to exchange the stored
         credential for a fresh one — same execution contract as
-        :meth:`check`: lightweight HTTP (``httpx``), never a heavy provider
+        :meth:`check`: lightweight HTTP (``httpx2``), never a heavy provider
         SDK. OAuth connections need no override: ``OAuthConnection`` derives
         the whole flow from the provider and the ``oauth.fields`` mapping.
 
@@ -161,7 +161,7 @@ class Connection(Resource, Operation):
         """Describe a failed renewal in terms that are safe to persist.
 
         Provider token exchanges carry credentials in URLs and bodies, and
-        httpx error strings embed the request URL — so raw messages must
+        httpx2 error strings embed the request URL — so raw messages must
         never reach the connection's state or the run's error event.
         HTTP-layer failures collapse to their category; anything else formats
         through :func:`~interloper.errors.format_exception` (which already
@@ -173,11 +173,11 @@ class Connection(Resource, Operation):
         Returns:
             A short, curated message.
         """
-        if isinstance(error, httpx.HTTPStatusError):
+        if isinstance(error, httpx2.HTTPStatusError):
             return f"The provider rejected the renewal (HTTP {error.response.status_code})."
-        if isinstance(error, (httpx.TimeoutException, TimeoutError, asyncio.TimeoutError)):
+        if isinstance(error, (httpx2.TimeoutException, TimeoutError, asyncio.TimeoutError)):
             return "The renewal timed out."
-        if isinstance(error, httpx.TransportError):
+        if isinstance(error, httpx2.TransportError):
             return "Network error during renewal."
         return format_exception(error)
 
@@ -389,7 +389,7 @@ class OAuthConnection(Connection):
             refresh_token=refresh_token,
             scope=self.oauth.scope,
         )
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with httpx2.AsyncClient(timeout=30, follow_redirects=True) as client:
             response = await client.send(request)
         response.raise_for_status()
         parsed = spec.parse_refresh_token_response(response.json())

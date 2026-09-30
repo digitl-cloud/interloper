@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-import httpx
 import httpx2
 import interloper as il
 import pytest
@@ -66,31 +65,31 @@ def connection_catalog() -> il.Catalog:
 
 @pytest.fixture
 def mock_graph(monkeypatch: pytest.MonkeyPatch):
-    """Patch the Facebook connection's httpx client with a mock transport.
+    """Patch the Facebook connection's httpx2 client with a mock transport.
 
     Returns:
         The list the transport records each handled request into.
     """
 
     def install(handler) -> None:
-        real_client = httpx.AsyncClient
+        real_client = httpx2.AsyncClient
 
         def factory(*args, **kwargs):
-            kwargs["transport"] = httpx.MockTransport(handler)
+            kwargs["transport"] = httpx2.MockTransport(handler)
             return real_client(*args, **kwargs)
 
-        monkeypatch.setattr(fb_connection.httpx, "AsyncClient", factory)
+        monkeypatch.setattr(fb_connection.httpx2, "AsyncClient", factory)
 
     return install
 
 
 class TestResolve:
     def test_resolves_provider_options(self, source_catalog: il.Catalog, mock_graph):
-        captured: list[httpx.Request] = []
+        captured: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             captured.append(request)
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "data": [
@@ -141,7 +140,7 @@ def _check(catalog: il.Catalog, config: dict) -> httpx2.Response:
 
 class TestCheck:
     def test_live_check_passes(self, connection_catalog: il.Catalog, mock_graph):
-        mock_graph(lambda request: httpx.Response(200, json={"data": []}))
+        mock_graph(lambda request: httpx2.Response(200, json={"data": []}))
 
         resp = _check(connection_catalog, CONNECTION_CONFIG)
 
@@ -150,15 +149,15 @@ class TestCheck:
         assert (body["ok"], body["live"]) == (True, True)
 
     def test_rejected_credentials_reported_as_auth(self, connection_catalog: il.Catalog, mock_graph):
-        mock_graph(lambda request: httpx.Response(401, json={"error": "bad token"}))
+        mock_graph(lambda request: httpx2.Response(401, json={"error": "bad token"}))
 
         body = _check(connection_catalog, CONNECTION_CONFIG).json()
 
         assert (body["ok"], body["live"], body["category"]) == (False, True, "auth")
 
     def test_unreachable_provider_reported_as_network(self, connection_catalog: il.Catalog, mock_graph):
-        def handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError("no route to host")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.ConnectError("no route to host")
 
         mock_graph(handler)
 
@@ -1095,10 +1094,10 @@ class TestHandleError:
     """``handle_error`` maps a provider failure to a status, never a traceback."""
 
     @staticmethod
-    def _status_error(status: int) -> httpx.HTTPStatusError:
-        request = httpx.Request("GET", "https://provider.example.com/x")
-        return httpx.HTTPStatusError(
-            "boom", request=request, response=httpx.Response(status, request=request)
+    def _status_error(status: int) -> httpx2.HTTPStatusError:
+        request = httpx2.Request("GET", "https://provider.example.com/x")
+        return httpx2.HTTPStatusError(
+            "boom", request=request, response=httpx2.Response(status, request=request)
         )
 
     @pytest.mark.parametrize("status", [401, 403])
@@ -1143,21 +1142,21 @@ class TestCheckResponseFromFailure:
     """A failed connection check is a categorised result, never a raised error."""
 
     @staticmethod
-    def _status_error(status: int) -> httpx.HTTPStatusError:
-        request = httpx.Request("GET", "https://provider.example.com/x")
-        return httpx.HTTPStatusError(
-            "boom", request=request, response=httpx.Response(status, request=request)
+    def _status_error(status: int) -> httpx2.HTTPStatusError:
+        request = httpx2.Request("GET", "https://provider.example.com/x")
+        return httpx2.HTTPStatusError(
+            "boom", request=request, response=httpx2.Response(status, request=request)
         )
 
     def test_a_connection_check_error_carries_its_own_message(self) -> None:
         from interloper.errors import ConnectionCheckError
 
         response = components_module.CheckResponse.from_failure(
-            ConnectionCheckError("missing httpx extra"), "facebook_ads"
+            ConnectionCheckError("missing httpx2 extra"), "facebook_ads"
         )
 
         assert (response.ok, response.live, response.category) == (False, True, "error")
-        assert response.message == "missing httpx extra"
+        assert response.message == "missing httpx2 extra"
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_a_rejected_credential_is_categorised_as_auth(self, status: int) -> None:
@@ -1174,7 +1173,7 @@ class TestCheckResponseFromFailure:
 
     @pytest.mark.parametrize(
         "exception",
-        [TimeoutError("slow"), httpx.TimeoutException("slow")],
+        [TimeoutError("slow"), httpx2.TimeoutException("slow")],
     )
     def test_a_timeout_is_categorised_as_network(self, exception: Exception) -> None:
         response = components_module.CheckResponse.from_failure(exception, "fb")
@@ -1183,7 +1182,7 @@ class TestCheckResponseFromFailure:
         assert response.message == "The provider did not respond in time."
 
     def test_an_unreachable_provider_is_categorised_as_network(self) -> None:
-        response = components_module.CheckResponse.from_failure(httpx.ConnectError("no route"), "fb")
+        response = components_module.CheckResponse.from_failure(httpx2.ConnectError("no route"), "fb")
 
         assert response.category == "network"
         assert response.message == "The provider could not be reached."
@@ -1220,8 +1219,8 @@ class TestResolveEdgeCases:
     def test_a_provider_failure_is_mapped_not_raised(
         self, source_catalog: il.Catalog, mock_graph
     ) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError("no route to host")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.ConnectError("no route to host")
 
         mock_graph(handler)
 

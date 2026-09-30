@@ -22,7 +22,7 @@ import logging
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-import httpx
+import httpx2
 from fastapi import APIRouter, HTTPException, Query
 from interloper.component import KINDS
 from interloper.connection.base import Connection
@@ -676,7 +676,7 @@ def handle_error(error: Exception, context: str) -> None:
     """
     logger.error("Error %s: %s", context, error)
 
-    if isinstance(error, httpx.HTTPStatusError):
+    if isinstance(error, httpx2.HTTPStatusError):
         status = error.response.status_code
         if status in (401, 403):
             raise HTTPException(status_code=status, detail=f"Authorization failed while {context}.")
@@ -830,16 +830,16 @@ class CheckResponse(BaseModel):
 
         if isinstance(exception, ConnectionCheckError):
             return cls(ok=False, live=True, category="error", message=str(exception))
-        if isinstance(exception, httpx.HTTPStatusError):
+        if isinstance(exception, httpx2.HTTPStatusError):
             status = exception.response.status_code
             if status in (401, 403):
                 return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
             return cls(
                 ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
             )
-        if isinstance(exception, (TimeoutError, httpx.TimeoutException)):
+        if isinstance(exception, (TimeoutError, httpx2.TimeoutException)):
             return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
-        if isinstance(exception, httpx.TransportError):
+        if isinstance(exception, httpx2.TransportError):
             return cls(ok=False, live=True, category="network", message="The provider could not be reached.")
         return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
 

@@ -3,7 +3,7 @@
 Every error the platform records went through
 :func:`interloper.errors.format_exception`, so it opens with the exception's
 type name; what follows is the library's own message. Three families carry
-an HTTP request in a recognisable shape: httpx (``Client error '429 …' for
+an HTTP request in a recognisable shape: httpx2 (``Client error '429 …' for
 url '…'``), google-api-core (``403 POST https://…: message``) and the
 Facebook SDK (``Method:`` / ``Path:`` / ``Status:`` lines over a JSON body
 with ``code`` and ``error_subcode``). Everything else is grouped by its
@@ -49,8 +49,8 @@ def classify(text: str) -> ErrorCause:
 
     status: int | None = None
     method: str | None = None
-    if httpx := _HTTPX_STATUS.search(message):
-        status = int(httpx.group(1))
+    if httpx2 := _HTTPX_STATUS.search(message):
+        status = int(httpx2.group(1))
     elif google := _GOOGLE_STATUS.match(message.strip()):
         status = int(google.group(1))
         method = google.group(2)

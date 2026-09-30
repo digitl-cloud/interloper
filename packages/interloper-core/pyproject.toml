@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.11.7",
     "pydantic-settings>=2.11.0",
-    "httpx>=0.28.1",
+    "httpx2>=2.13.1",
     "pyyaml>=6.0.0",
     "typing_extensions>=4.0.0",
     "opentelemetry-api>=1.42,<2",
@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
-# Instruments only what core itself depends on (httpx); FastAPI and
+# Instruments only what core itself depends on (httpx2); FastAPI and
 # SQLAlchemy instrumentation ship with interloper-api[otel] / interloper-db[otel].
 otel = [
     "opentelemetry-sdk>=1.42,<2",

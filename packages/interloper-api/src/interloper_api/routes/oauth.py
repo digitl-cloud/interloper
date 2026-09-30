@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any
 
-import httpx
+import httpx2
 from fastapi import APIRouter, HTTPException
 from interloper.oauth import PROVIDERS, OAuthAppCredentials
 from pydantic import BaseModel
@@ -139,12 +139,12 @@ async def exchange_authorization_code(
             client_id=config.client_id,
             client_secret=config.client_secret,
         )
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with httpx2.AsyncClient(timeout=30, follow_redirects=True) as client:
             response = await client.send(request)
         response.raise_for_status()
         logger.info("Successfully exchanged auth code for provider %s", provider)
         return response.json()
-    except httpx.HTTPStatusError as exception:
+    except httpx2.HTTPStatusError as exception:
         detail = exception.response.text
         logger.error("Token exchange failed for %s: %s %s", provider, exception.response.status_code, detail)
         raise HTTPException(status_code=500, detail=f"Failed to exchange auth code: {detail}")

@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urlencode
 from uuid import UUID
 
-import httpx
+import httpx2
 from interloper.component import KINDS
 from interloper.connection.base import Connection
 from interloper.errors import (
@@ -466,12 +466,12 @@ def categorise(exc: Exception) -> tuple[str, str]:
     """
     if isinstance(exc, ConnectionCheckError):
         return "error", str(exc)
-    if isinstance(exc, httpx.HTTPStatusError):
+    if isinstance(exc, httpx2.HTTPStatusError):
         if exc.response.status_code in (401, 403):
             return "auth", "The provider rejected the credentials."
         return "error", f"The provider responded with HTTP {exc.response.status_code}."
-    if isinstance(exc, (TimeoutError, httpx.TimeoutException)):
+    if isinstance(exc, (TimeoutError, httpx2.TimeoutException)):
         return "network", "The provider did not respond in time."
-    if isinstance(exc, httpx.TransportError):
+    if isinstance(exc, httpx2.TransportError):
         return "network", "The provider could not be reached."
     return "error", "The connection check failed unexpectedly."

@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cached_property
 from typing import Any
 
-import httpx
+import httpx2
 from interloper.connection import Connection, connection
 from interloper.resource.fields import SecretField, fetch_field_provider
 from interloper.rest import HTTPBearerAuth, JSONCursorPaginator, RESTClient
@@ -24,7 +24,7 @@ _CHANNEL_TYPES = "public_channel,private_channel"
 _TIMEOUT = 30.0
 
 
-def _channels(response: httpx.Response) -> list[dict[str, Any]]:
+def _channels(response: httpx2.Response) -> list[dict[str, Any]]:
     """Select one page of channels, checking Slack's in-body ``ok`` flag.
 
     ``paginate`` only raises for HTTP status, so the selector is where a

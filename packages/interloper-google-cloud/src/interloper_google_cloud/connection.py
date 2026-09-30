@@ -6,7 +6,7 @@ import json
 import time
 from typing import Any
 
-import httpx
+import httpx2
 from google.auth import crypt, jwt
 from interloper.connection import Connection, connection
 from interloper.resource.fields import JsonField, fetch_field_provider
@@ -24,7 +24,7 @@ def _make_assertion(key_info: dict[str, Any], scope: str) -> str:
     """Build a signed JWT-bearer assertion for the service account.
 
     Only the signing comes from google-auth; the token exchange itself goes
-    through httpx like every other external fetch.
+    through httpx2 like every other external fetch.
 
     Args:
         key_info: The parsed service account key.
@@ -45,7 +45,7 @@ def _make_assertion(key_info: dict[str, Any], scope: str) -> str:
     return jwt.encode(signer, payload).decode()
 
 
-async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any], scope: str) -> str:
+async def _get_access_token(client: httpx2.AsyncClient, key_info: dict[str, Any], scope: str) -> str:
     """Exchange a service account JWT assertion for an access token.
 
     Args:
@@ -68,7 +68,7 @@ async def _get_access_token(client: httpx.AsyncClient, key_info: dict[str, Any],
     return resp.json()["access_token"]
 
 
-async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[dict[str, str]]:
+async def _list_projects(client: httpx2.AsyncClient, access_token: str) -> list[dict[str, str]]:
     """List the projects the credential has BigQuery access to, following pagination.
 
     Args:
@@ -101,7 +101,7 @@ async def _list_projects(client: httpx.AsyncClient, access_token: str) -> list[d
     return sorted(results, key=lambda p: p["name"].lower())
 
 
-async def _list_buckets(client: httpx.AsyncClient, access_token: str, project: str) -> list[dict[str, str]]:
+async def _list_buckets(client: httpx2.AsyncClient, access_token: str, project: str) -> list[dict[str, str]]:
     """List the Cloud Storage buckets in *project*, following pagination.
 
     Args:
@@ -158,7 +158,7 @@ class GoogleCloudConnection(Connection):
 
         Backs the BigQuery destination's ``project`` ``FetchField``. Signs a
         JWT-bearer assertion from the service account key and exchanges it for
-        an access token over httpx (only the signing uses google-auth), then
+        an access token over httpx2 (only the signing uses google-auth), then
         pages through BigQuery's ``projects.list``.
 
         Returns:
@@ -166,7 +166,7 @@ class GoogleCloudConnection(Connection):
 
         """
         key_info: dict[str, Any] = json.loads(self.service_account_key)
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             access_token = await _get_access_token(client, key_info, _BIGQUERY_SCOPE)
             return await _list_projects(client, access_token)
 
@@ -184,7 +184,7 @@ class GoogleCloudConnection(Connection):
 
         """
         key_info: dict[str, Any] = json.loads(self.service_account_key)
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             access_token = await _get_access_token(client, key_info, _STORAGE_SCOPE)
             return await _list_buckets(client, access_token, key_info["project_id"])
 

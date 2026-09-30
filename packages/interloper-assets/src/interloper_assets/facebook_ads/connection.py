@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
@@ -71,14 +71,14 @@ class FacebookAdsConnection(il.OAuthConnection):
         """List the active ad accounts reachable by this connection.
 
         Backs the source's ``account_id`` ``FetchField``. Uses the Graph API
-        over httpx (not the SDK) so it runs in the API process, which omits
+        over httpx2 (not the SDK) so it runs in the API process, which omits
         the heavy SDK extras.
 
         Returns:
             The options for the field's dropdown.
 
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             response = await client.get(
                 f"{_GRAPH_URL}/me/adaccounts",
                 params={

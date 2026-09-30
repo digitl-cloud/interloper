@@ -5,7 +5,7 @@ import time
 from io import StringIO
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 import pandas as pd
 from interloper_pandas import DataFrameNormalizer
@@ -131,7 +131,7 @@ def _get_report(
         report_id = dbm_client.queries().run(queryId=query_id, synchronous=False).execute()["key"]["reportId"]
         report = _wait_for_report(dbm_client, query_id, report_id)
         url = report["metadata"]["googleCloudStoragePath"]
-        response = httpx.get(url, timeout=None)
+        response = httpx2.get(url, timeout=None)
         response.raise_for_status()
         return _parse_report_csv(response.content.decode("utf-8-sig"))
     finally:

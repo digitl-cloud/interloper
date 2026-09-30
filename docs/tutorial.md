@@ -12,7 +12,7 @@ An asset is a function returning data. Here it fetches yesterday's hourly foreca
 ```py
 import datetime as dt
 
-import httpx
+import httpx2
 import interloper as il
 
 URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
@@ -27,7 +27,7 @@ def forecast() -> list[dict]:
         "end_date": date.isoformat(),
         "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
     }
-    payload = httpx.get(URL, params=params).json()["hourly"]
+    payload = httpx2.get(URL, params=params).json()["hourly"]
     return [dict(zip(payload, values)) for values in zip(*payload.values())]
 ```
 
@@ -46,7 +46,7 @@ awaited natively:
 ```py
 @il.asset
 async def forecast() -> list[dict]:
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         response = await client.get(URL, params=params)
     ...
 ```
@@ -74,7 +74,7 @@ class OpenMeteo(il.Source):
             "end_date": date.isoformat(),
             "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
         }
-        payload = httpx.get(URL, params=params).json()["hourly"]
+        payload = httpx2.get(URL, params=params).json()["hourly"]
         return [dict(zip(payload, values)) for values in zip(*payload.values())]
 ```
 
@@ -203,7 +203,7 @@ def forecast(self, context: il.ExecutionContext) -> list[dict]:
         "end_date": date.isoformat(),
         "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
     }
-    payload = httpx.get(URL, params=params).json()["hourly"]
+    payload = httpx2.get(URL, params=params).json()["hourly"]
     rows = [dict(zip(payload, values)) for values in zip(*payload.values())]
     for row in rows:
         row["date"] = date
@@ -285,7 +285,7 @@ The runner comes from `interloper.yaml` or `INTERLOPER_RUNNER_*` variables. See
 ```py
 import datetime as dt
 
-import httpx
+import httpx2
 import interloper as il
 
 URL = "https://historical-forecast-api.open-meteo.com/v1/forecast"
@@ -323,7 +323,7 @@ class OpenMeteo(il.Source):
             "end_date": date.isoformat(),
             "hourly": ["temperature_2m", "precipitation", "wind_speed_10m"],
         }
-        payload = httpx.get(URL, params=params).json()["hourly"]
+        payload = httpx2.get(URL, params=params).json()["hourly"]
         rows = [dict(zip(payload, values)) for values in zip(*payload.values())]
         for row in rows:
             row["date"] = date

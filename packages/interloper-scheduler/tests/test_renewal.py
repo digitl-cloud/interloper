@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
 
-import httpx
+import httpx2
 import interloper as il
 import pytest
 from interloper_db import Store
@@ -192,8 +192,8 @@ class TestRenewalRuns:
         run_id = self._queued_run(store, conn_id)
 
         def boom(self: RenewableConn) -> il.Renewal:
-            request = httpx.Request("GET", "https://provider/exchange?client_secret=SECRET")
-            raise httpx.HTTPStatusError("boom", request=request, response=httpx.Response(400, request=request))
+            request = httpx2.Request("GET", "https://provider/exchange?client_secret=SECRET")
+            raise httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(400, request=request))
 
         monkeypatch.setattr(RenewableConn, "renew", boom)
 

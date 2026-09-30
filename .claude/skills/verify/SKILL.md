@@ -13,11 +13,11 @@ description: Build, launch, and drive a seeded interloper dev instance headlessl
 
 Sessions are plain DB rows (`sessions.token_hash` = sha256 hexdigest of a `secrets.token_urlsafe(48)` token). Mint one with a short psycopg2 script inserting `(user_id, organisation_id, token_hash, expires_at)` for the seeded profile, keep the raw token in a scratchpad file, and send it as the `session_token` cookie. Delete the session row when done.
 
-Note: shell commands that interpolate the token (`TOK=$(cat …); curl -b …`) get denied — drive everything from python (httpx) / node scripts that read the token file themselves.
+Note: shell commands that interpolate the token (`TOK=$(cat …); curl -b …`) get denied — drive everything from python (httpx2) / node scripts that read the token file themselves.
 
 ## Drive
 
-- **API**: httpx with `follow_redirects=True` (collection routes 307-redirect to the trailing-slash form; httpx doesn't follow by default) against `http://localhost:<port>/api`.
+- **API**: httpx2 with `follow_redirects=True` (collection routes 307-redirect to the trailing-slash form; httpx2 doesn't follow by default) against `http://localhost:<port>/api`.
 - **UI**: `npm install playwright-core` in the scratchpad, `chromium.launch({channel: 'chrome', headless: true})`, add the `session_token` cookie via `context.addCookies`, then click through the real pages and screenshot. Toasts are readable via `[role="alert"]` innerTexts.
 
 ## Hygiene

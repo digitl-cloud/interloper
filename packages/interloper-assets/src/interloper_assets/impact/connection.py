@@ -1,6 +1,6 @@
 from functools import cached_property
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -29,7 +29,7 @@ class ImpactConnection(il.Connection):
         """
         return il.AsyncRESTClient(
             f"{BASE_URL}/Advertisers/{self.account_sid}",
-            auth=httpx.BasicAuth(username=self.account_sid, password=self.auth_token),
+            auth=httpx2.BasicAuth(username=self.account_sid, password=self.auth_token),
             headers={"Accept": "application/json"},
         )
 

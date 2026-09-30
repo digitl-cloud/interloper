@@ -87,15 +87,15 @@ def _capture_posts(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     Returns:
         The list the captured payloads accumulate into.
     """
-    import httpx
+    import httpx2
 
     payloads: list[dict[str, Any]] = []
 
-    def fake_post(url: str, *, json: dict[str, Any], **kwargs: Any) -> httpx.Response:
+    def fake_post(url: str, *, json: dict[str, Any], **kwargs: Any) -> httpx2.Response:
         payloads.append(json)
-        return httpx.Response(200, request=httpx.Request("POST", url))
+        return httpx2.Response(200, request=httpx2.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr(httpx2, "post", fake_post)
     return payloads
 
 
@@ -199,15 +199,15 @@ class TestHookEvaluation:
             assert session.exec(select(EventRow)).all() == []
 
     def test_watching_parent_matches_child_run(self, store: Store, monkeypatch: pytest.MonkeyPatch):
-        import httpx
+        import httpx2
 
         posted: list[str] = []
 
-        def fake_post(url: str, **kwargs: Any) -> httpx.Response:
+        def fake_post(url: str, **kwargs: Any) -> httpx2.Response:
             posted.append(url)
-            return httpx.Response(200, request=httpx.Request("POST", url))
+            return httpx2.Response(200, request=httpx2.Request("POST", url))
 
-        monkeypatch.setattr(httpx, "post", fake_post)
+        monkeypatch.setattr(httpx2, "post", fake_post)
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         child = next(c for c in source.children if c.key == "a")
@@ -223,12 +223,12 @@ class TestHookEvaluation:
         assert posted == ["https://example.test/n"]
 
     def test_failure_recorded_on_claim(self, store: Store, monkeypatch: pytest.MonkeyPatch):
-        import httpx
+        import httpx2
 
         def boom(*args: Any, **kwargs: Any) -> None:
-            raise httpx.ConnectError("no route")
+            raise httpx2.ConnectError("no route")
 
-        monkeypatch.setattr(httpx, "post", boom)
+        monkeypatch.setattr(httpx2, "post", boom)
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(

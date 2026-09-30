@@ -1,6 +1,6 @@
 from functools import cached_property
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -25,5 +25,5 @@ class AdserviceConnection(il.Connection):
             The authenticated client, cached per connection instance.
         """
         base_url = "https://api.adservice.com/v2/client"
-        auth = httpx.BasicAuth(username="api", password=self.api_key)
+        auth = httpx2.BasicAuth(username="api", password=self.api_key)
         return il.AsyncRESTClient(base_url, auth)

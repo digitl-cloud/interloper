@@ -18,14 +18,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-import httpx
+import httpx2
 
 # -- Data selection ------------------------------------------------------------
 
 
 #: How a page's records are pulled from a response: a dotted JSON path
 #: (``"data.list"``), a callable taking the response, or ``None`` (raw ``.json()``).
-DataSelector = str | Callable[[httpx.Response], Any] | None
+DataSelector = str | Callable[[httpx2.Response], Any] | None
 
 _MISSING = object()
 
@@ -58,7 +58,7 @@ def _extract(data: Any, path: str, default: Any = _MISSING) -> Any:
     return current
 
 
-def select(response: httpx.Response, selector: DataSelector) -> Any:
+def select(response: httpx2.Response, selector: DataSelector) -> Any:
     """Pull a page's records out of a response per ``selector``.
 
     Args:
@@ -89,7 +89,7 @@ class BasePaginator(ABC):
     send → :meth:`update_state` → (:attr:`has_next`?) → :meth:`update_request`.
     """
 
-    def init_request(self, request: httpx.Request) -> None:  # noqa: B027 - an optional hook, no-op by default
+    def init_request(self, request: httpx2.Request) -> None:  # noqa: B027 - an optional hook, no-op by default
         """Set first-page params on the initial request (default: no-op).
 
         Args:
@@ -97,7 +97,7 @@ class BasePaginator(ABC):
         """
 
     @abstractmethod
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Read next-page info (cursor / link / total) from ``response`` and set state.
 
         Args:
@@ -105,7 +105,7 @@ class BasePaginator(ABC):
         """
 
     @abstractmethod
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Mutate ``request`` in place to fetch the next page.
 
         Args:
@@ -118,7 +118,7 @@ class BasePaginator(ABC):
         """Whether another page should be fetched after the last response."""
 
     @staticmethod
-    def _with_param(request: httpx.Request, key: str, value: Any) -> None:
+    def _with_param(request: httpx2.Request, key: str, value: Any) -> None:
         """Override a single query parameter on ``request`` in place.
 
         Args:
@@ -129,7 +129,7 @@ class BasePaginator(ABC):
         request.url = request.url.copy_set_param(key, str(value))
 
     @staticmethod
-    def _clone_with_param(request: httpx.Request, key: str, value: Any) -> httpx.Request:
+    def _clone_with_param(request: httpx2.Request, key: str, value: Any) -> httpx2.Request:
         """Copy ``request`` with one query parameter overridden (for concurrent fan-out).
 
         Args:
@@ -140,7 +140,7 @@ class BasePaginator(ABC):
         Returns:
             A new request identical to ``request`` but with ``key=value``.
         """
-        return httpx.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
+        return httpx2.Request(request.method, request.url.copy_set_param(key, str(value)), headers=request.headers)
 
 
 class RangePaginator(BasePaginator):
@@ -153,8 +153,8 @@ class RangePaginator(BasePaginator):
 
     @abstractmethod
     def remaining_requests(
-        self, base_request: httpx.Request, first_response: httpx.Response
-    ) -> list[httpx.Request] | None:
+        self, base_request: httpx2.Request, first_response: httpx2.Response
+    ) -> list[httpx2.Request] | None:
         """Requests for every page after the first, or ``None`` if the total is unknown.
 
         Args:
@@ -169,14 +169,14 @@ class RangePaginator(BasePaginator):
 class SinglePagePaginator(BasePaginator):
     """No pagination — a single request is the whole result."""
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """No-op; there is never a next page.
 
         Args:
             response: The single page's response, ignored.
         """
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """No-op; there is never a next page.
 
         Args:
@@ -228,7 +228,7 @@ class PageNumberPaginator(RangePaginator):
         self._page = base_page
         self._has_next = True
 
-    def init_request(self, request: httpx.Request) -> None:
+    def init_request(self, request: httpx2.Request) -> None:
         """Reset state and set the first page parameter.
 
         Args:
@@ -238,7 +238,7 @@ class PageNumberPaginator(RangePaginator):
         self._has_next = True
         self._with_param(request, self.page_param, self.base_page)
 
-    def _last_page(self, response: httpx.Response) -> int | None:
+    def _last_page(self, response: httpx2.Response) -> int | None:
         """Resolve the last page number from a response, falling back to ``maximum_page``.
 
         Args:
@@ -253,7 +253,7 @@ class PageNumberPaginator(RangePaginator):
             return int(total)
         return self.maximum_page
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Stop at the known last page, or on an empty page when no total is known.
 
         Args:
@@ -264,7 +264,7 @@ class PageNumberPaginator(RangePaginator):
         empty = self.stop_on_empty and not select(response, self.data_selector)
         self._has_next = not (reached_last or empty)
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Advance to the next page number.
 
         Args:
@@ -279,8 +279,8 @@ class PageNumberPaginator(RangePaginator):
         return self._has_next
 
     def remaining_requests(
-        self, base_request: httpx.Request, first_response: httpx.Response
-    ) -> list[httpx.Request] | None:
+        self, base_request: httpx2.Request, first_response: httpx2.Response
+    ) -> list[httpx2.Request] | None:
         """Build requests for pages ``base_page+1..last`` when the total is known.
 
         Args:
@@ -341,7 +341,7 @@ class OffsetPaginator(RangePaginator):
         self._offset = base_offset
         self._has_next = True
 
-    def init_request(self, request: httpx.Request) -> None:
+    def init_request(self, request: httpx2.Request) -> None:
         """Reset state and set the first offset + limit params.
 
         Args:
@@ -352,7 +352,7 @@ class OffsetPaginator(RangePaginator):
         self._with_param(request, self.limit_param, self.limit)
         self._with_param(request, self.offset_param, self.base_offset)
 
-    def _last_offset(self, response: httpx.Response) -> int | None:
+    def _last_offset(self, response: httpx2.Response) -> int | None:
         """Resolve the total record count from a response, falling back to ``maximum_offset``.
 
         Args:
@@ -367,7 +367,7 @@ class OffsetPaginator(RangePaginator):
             return int(total)
         return self.maximum_offset
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Stop once the next offset would reach the total, or on an empty page.
 
         Args:
@@ -378,7 +378,7 @@ class OffsetPaginator(RangePaginator):
         empty = self.stop_on_empty and not select(response, self.data_selector)
         self._has_next = not (reached_last or empty)
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Advance to the next offset.
 
         Args:
@@ -393,8 +393,8 @@ class OffsetPaginator(RangePaginator):
         return self._has_next
 
     def remaining_requests(
-        self, base_request: httpx.Request, first_response: httpx.Response
-    ) -> list[httpx.Request] | None:
+        self, base_request: httpx2.Request, first_response: httpx2.Response
+    ) -> list[httpx2.Request] | None:
         """Build requests for offsets ``limit, 2*limit, … < total`` when the total is known.
 
         Args:
@@ -421,18 +421,18 @@ class HeaderLinkPaginator(BasePaginator):
             rel: The ``Link`` header relation naming the next page.
         """
         self.rel = rel
-        self._next_url: httpx.URL | None = None
+        self._next_url: httpx2.URL | None = None
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Read the ``rel=next`` link from the response ``Link`` header.
 
         Args:
             response: The response just received for the current page.
         """
         link = response.links.get(self.rel)
-        self._next_url = httpx.URL(link["url"]) if link else None
+        self._next_url = httpx2.URL(link["url"]) if link else None
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Point the request at the next link URL.
 
         Args:
@@ -459,7 +459,7 @@ class JSONLinkPaginator(BasePaginator):
         self.next_url_path = next_url_path
         self._next_url: str | None = None
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Read the next-page URL from the response JSON.
 
         Args:
@@ -467,7 +467,7 @@ class JSONLinkPaginator(BasePaginator):
         """
         self._next_url = _extract(response.json(), self.next_url_path, None)
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Point the request at the next URL (absolute or base-relative).
 
         Args:
@@ -496,7 +496,7 @@ class JSONCursorPaginator(BasePaginator):
         self.cursor_param = cursor_param
         self._cursor: Any = None
 
-    def update_state(self, response: httpx.Response) -> None:
+    def update_state(self, response: httpx2.Response) -> None:
         """Read the next cursor from the response JSON.
 
         Args:
@@ -504,7 +504,7 @@ class JSONCursorPaginator(BasePaginator):
         """
         self._cursor = _extract(response.json(), self.cursor_path, None)
 
-    def update_request(self, request: httpx.Request) -> None:
+    def update_request(self, request: httpx2.Request) -> None:
         """Set the cursor query parameter for the next page.
 
         Args:

@@ -66,7 +66,7 @@ class AcmeProvider(il.OAuthProvider):
 ACME = AcmeProvider(key="acme", auth_url="...", token_url="...", token_encoding="form")
 ```
 
-`_token_request(params)` builds the POST in the provider's encoding. Requests are `httpx.Request`
+`_token_request(params)` builds the POST in the provider's encoding. Requests are `httpx2.Request`
 objects; the caller owns the client and error handling.
 
 ## Registering a provider

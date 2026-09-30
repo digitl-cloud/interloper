@@ -14,7 +14,7 @@ import json
 from types import SimpleNamespace
 from uuid import uuid4
 
-import httpx
+import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -128,20 +128,20 @@ def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> No
 
 def _mock_async_client(monkeypatch: pytest.MonkeyPatch, handler) -> None:
     """Route the exchange's AsyncClient through a mock transport."""
-    real = httpx.AsyncClient
+    real = httpx2.AsyncClient
 
     def factory(**kwargs):
-        return real(transport=httpx.MockTransport(handler), **kwargs)
+        return real(transport=httpx2.MockTransport(handler), **kwargs)
 
-    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    monkeypatch.setattr(httpx2, "AsyncClient", factory)
 
 
 def test_exchange_spends_env_credentials_and_relays_the_raw_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: list[httpx.Request] = []
+    captured: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         captured.append(request)
-        return httpx.Response(200, json={"refresh_token": "rt"})
+        return httpx2.Response(200, json={"refresh_token": "rt"})
 
     _mock_async_client(monkeypatch, handler)
     _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
@@ -167,10 +167,10 @@ def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatc
     # Providers such as TikTok 3xx-redirect to the trailing-slash URL; the
     # route's client must follow it rather than surfacing the redirect page
     # as an error.
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         if not request.url.path.endswith("/token/"):
-            return httpx.Response(307, headers={"Location": f"{request.url}/"})
-        return httpx.Response(200, json={"refresh_token": "rt"})
+            return httpx2.Response(307, headers={"Location": f"{request.url}/"})
+        return httpx2.Response(200, json={"refresh_token": "rt"})
 
     _mock_async_client(monkeypatch, handler)
     _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
@@ -184,8 +184,8 @@ def test_exchange_follows_trailing_slash_redirect(monkeypatch: pytest.MonkeyPatc
 def test_exchange_relays_a_provider_rejection_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 4xx from the provider becomes a 500 carrying its body, not a traceback."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, text="invalid_grant")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(400, text="invalid_grant")
 
     _mock_async_client(monkeypatch, handler)
     _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")
@@ -199,8 +199,8 @@ def test_exchange_relays_a_provider_rejection_as_a_500(monkeypatch: pytest.Monke
 def test_exchange_relays_a_transport_failure_as_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unreachable provider is a 500, and the code never leaks into the detail."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("no route to host")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ConnectError("no route to host")
 
     _mock_async_client(monkeypatch, handler)
     _configure(monkeypatch, "amazon", client_id="cid", client_secret="cs", redirect_uri="https://r")

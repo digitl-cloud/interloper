@@ -1,6 +1,6 @@
 from functools import cached_property
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -47,7 +47,7 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
             The token response.
 
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{constants.BASE_URL}/oauth/token",
                 auth=(self.client_id, self.client_secret),
@@ -64,7 +64,7 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
         """List the ad accounts reachable by this connection.
 
         Backs the source's ``account_id`` ``FetchField``. Talks to the v5 API
-        over httpx (not the SDK) so it runs in the API process.
+        over httpx2 (not the SDK) so it runs in the API process.
 
         Returns:
             The options for the field's dropdown.
@@ -76,7 +76,7 @@ class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
         accounts: list[dict[str, str]] = []
         bookmark: str | None = None
 
-        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+        async with httpx2.AsyncClient(timeout=30, headers=headers) as client:
             while True:
                 params: dict[str, str] = {"page_size": "100"}
                 if bookmark:
