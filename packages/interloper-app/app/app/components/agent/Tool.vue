@@ -53,7 +53,6 @@ function _failed(output: unknown) {
 <template>
     <UChatTool :text="text"
                :icon="icon"
-               :loading="running"
                :streaming="running"
                :actions="actions"
                :variant="pending ? 'card' : 'inline'"

@@ -5,9 +5,8 @@
  * What the user acts on or reads stands on its own: the answer, the
  * selection and connect cards on their tool parts (answered through
  * `output`), and a tool row waiting for Approve/Deny. Everything between,
- * the reasoning and the tool calls, folds into an `AgentSteps` trail. While
- * the turn is still running (`live`) and nothing is visibly streaming, the
- * thinking indicator holds the tail.
+ * the reasoning and the tool calls, folds into an `AgentSteps` trail, which
+ * names the step in progress while the turn is still running (`live`).
  */
 import type { UIMessage } from 'ai'
 import { getToolName, isReasoningUIPart, isTextUIPart, isToolUIPart } from 'ai'
@@ -49,14 +48,6 @@ const segments = computed<Segment[]>(() => {
         }
     }
     return result
-})
-
-const thinking = computed(() => {
-    if (!props.live) return false
-    const last = props.message.parts[props.message.parts.length - 1]
-    if (!last) return true
-    if (isStep(last)) return false
-    return !(isTextUIPart(last) && isPartStreaming(last))
 })
 
 /** The tool call's output, when it has one: the answer a card was given. */
@@ -105,7 +96,4 @@ function onCreated(part: Part, result: ConnectionSetupResult) {
             </p>
         </template>
     </template>
-
-    <AgentThinking v-if="thinking"
-                   class="mt-2" />
 </template>
