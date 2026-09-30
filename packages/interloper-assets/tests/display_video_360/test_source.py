@@ -20,7 +20,7 @@ from interloper.dag.base import DAG
 from interloper.representation import Representation
 from interloper_pandas import DataFrameNormalizer
 
-from interloper_assets.display_video_360 import schemas
+from interloper_assets.display_video_360 import schemas, source
 from interloper_assets.display_video_360.connection import DisplayVideo360Connection
 from interloper_assets.display_video_360.source import (
     DisplayVideo360,
@@ -158,6 +158,34 @@ class FakeAudiences:
         return SimpleNamespace(execute=lambda: self.pages[pageToken])
 
 
+class FakeService:
+    """Record a discovery call chain and answer ``execute()`` by the chain's last method."""
+
+    def __init__(self, responses: dict[str, Any]):
+        """Hold the responses to serve, keyed by method name."""
+        self.responses = responses
+        self.calls: list[str] = []
+
+    def __getattr__(self, name: str) -> Any:
+        """Answer any discovery method with a call that records its name and chains on.
+
+        Args:
+            name: The discovery method being looked up.
+
+        Returns:
+            A callable accepting any arguments, which records ``name`` and returns this fake.
+        """
+
+        def call(*args: Any, **kwargs: Any) -> FakeService:
+            self.calls.append(name)
+            return self
+
+        return call
+
+    def execute(self) -> Any:
+        return self.responses.get(self.calls[-1], {})
+
+
 class TestServicePerAsset:
     """Each asset builds its own service once per run, since the transport is not thread-safe."""
 
@@ -182,6 +210,45 @@ class TestServicePerAsset:
         rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
         assert [row["name"] for row in rows] == ["a", "b"]
         assert len(services) == 1
+
+    def test_custom_audiences_fetches_on_one_service(self):
+        services: list[FakeService] = []
+
+        def dv_client() -> FakeService:
+            services.append(FakeService({"get": {"name": "audience"}}))
+            return services[-1]
+
+        connection = DisplayVideo360Connection(service_account_key="{}")
+        connection.__dict__["dv_client"] = dv_client
+        src = DisplayVideo360(id="src-1", partner_id="123", audience_id="7", connection=connection)
+        asset = next(a for a in src.assets if type(a).key == "custom_audiences")
+        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert rows == [{"name": "audience", "date": dt.date(2026, 7, 10)}]
+        assert len(services) == 1
+
+    def test_report_runs_on_one_service(self, monkeypatch: pytest.MonkeyPatch):
+        services: list[FakeService] = []
+
+        def dbm_client() -> FakeService:
+            services.append(FakeService({"create": {"queryId": "q"}, "run": {"key": {"reportId": "r"}}}))
+            return services[-1]
+
+        monkeypatch.setattr(
+            source, "_wait_for_report", lambda *args: {"metadata": {"googleCloudStoragePath": "https://report"}}
+        )
+        monkeypatch.setattr(
+            source.httpx2,
+            "get",
+            lambda url, timeout: SimpleNamespace(content=_REPORT_CSV.encode(), raise_for_status=lambda: None),
+        )
+        connection = DisplayVideo360Connection(service_account_key="{}")
+        connection.__dict__["dbm_client"] = dbm_client
+        src = DisplayVideo360(id="src-1", partner_id="123", connection=connection)
+        asset = next(a for a in src.assets if type(a).key == "line_items_stats")
+        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert len(rows) == 2
+        assert len(services) == 1
+        assert services[0].calls == ["queries", "create", "queries", "run", "queries", "delete"]
 
 
 class TestSpecRoundtrip:
