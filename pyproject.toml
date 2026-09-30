@@ -23,6 +23,7 @@ dependencies = [
     "interloper-scheduler",
     "interloper-slack",
     "interloper-sql",
+    "interloper-snowflake",
     "interloper-toolkit",
 ]
 
@@ -57,6 +58,7 @@ interloper-app = { workspace = true }
 interloper-mcp = { workspace = true }
 interloper-slack = { workspace = true }
 interloper-sql = { workspace = true }
+interloper-snowflake = { workspace = true }
 interloper-toolkit = { workspace = true }
 
 [tool.uv.workspace]
@@ -178,6 +180,7 @@ version_toml = [
     "packages/interloper-mcp/pyproject.toml:project.version",
     "packages/interloper-slack/pyproject.toml:project.version",
     "packages/interloper-sql/pyproject.toml:project.version",
+    "packages/interloper-snowflake/pyproject.toml:project.version",
     "packages/interloper-toolkit/pyproject.toml:project.version",
 ]
 # Keep the Helm chart in lockstep with the Python version. `version` (chart

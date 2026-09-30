@@ -35,5 +35,6 @@ jobs:
             scheduler
             slack
             sql
+            snowflake
             toolkit
           requireScope: false
