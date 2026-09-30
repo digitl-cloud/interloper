@@ -5,8 +5,8 @@ a JSONB column. The DDL is idempotent because ``create_all`` creates the
 table from the model and *then* runs the chain: on a fresh database it
 already exists by the time this runs, and on an existing one it does not.
 
-Revision ID: 006
-Revises: 005
+Revision ID: 007
+Revises: 006
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from __future__ import annotations
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "006"
-down_revision: str | None = "005"
+revision: str = "007"
+down_revision: str | None = "006"
 branch_labels: str | None = None
 depends_on: str | None = None
 
