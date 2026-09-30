@@ -21,6 +21,13 @@ class TestClient:
             "autocommit": True,
         }
 
+    def test_connect_passes_session_settings(self, session):
+        _connection().connect(warehouse="LOAD_WH", database="ANALYTICS")
+
+        assert session.connect_kwargs["warehouse"] == "LOAD_WH"
+        assert session.connect_kwargs["database"] == "ANALYTICS"
+        assert session.connect_kwargs["autocommit"] is True
+
     def test_role_defaults_to_none(self, session):
         _ = _connection().client
 

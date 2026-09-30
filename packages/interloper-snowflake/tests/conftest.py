@@ -7,6 +7,7 @@ each statement and serves scripted results; nothing reaches the network.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -89,13 +90,18 @@ class FakeSession:
 
     Tables listed in ``tables`` (as ``(schema, table)``) answer the
     information-schema existence probe; other statements answer with the
-    first scripted result whose prefix they start with, or an empty one.
+    first scripted result whose prefix they start with, or an empty one. A
+    ``PUT`` reads back the Parquet file it uploads into ``uploads``, and a
+    statement starting with a prefix in ``failures`` raises that error.
     """
 
     def __init__(self) -> None:
         """Start with no tables, no script and no recorded traffic."""
         self.connect_kwargs: dict[str, Any] = {}
+        self.connect_calls: list[dict[str, Any]] = []
         self.statements: list[tuple[str, Any]] = []
+        self.uploads: list[pd.DataFrame] = []
+        self.failures: dict[str, Exception] = {}
         self.cursors_used: list[FakeCursor] = []
         self.tables: set[tuple[str, str]] = set()
         self._script: list[tuple[str, Result]] = []
@@ -115,6 +121,15 @@ class FakeSession:
         Returns:
             The scripted result, or an empty one.
         """
+        for prefix, error in self.failures.items():
+            if sql.startswith(prefix):
+                raise error
+        if sql.startswith("PUT "):
+            # The real connector reads the file during PUT; the file is gone once PUT returns.
+            match = re.match(r"PUT 'file://(.+?)' ", sql)
+            assert match is not None
+            self.uploads.append(pd.read_parquet(match.group(1)))
+            return Result()
         if "information_schema.tables" in sql:
             return Result(rows=[(1,)] if tuple(params) in self.tables else [])
         for prefix, result in self._script:
@@ -151,6 +166,7 @@ def session(monkeypatch: pytest.MonkeyPatch) -> FakeSession:
 
     def connect(**kwargs: Any) -> FakeSession:
         fake.connect_kwargs = kwargs
+        fake.connect_calls.append(kwargs)
         return fake
 
     monkeypatch.setattr(snowflake.connector, "connect", connect)

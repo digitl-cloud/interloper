@@ -21,8 +21,8 @@ from snowflake.connector import SnowflakeConnection as Session
 class SnowflakeConnection(Connection):
     """Connection resource holding Snowflake credentials.
 
-    One connection is one Snowflake session, shared by every destination
-    bound to it; each destination picks its own database and warehouse.
+    The connection holds the credentials; each destination bound to it opens
+    its own session on its own database and warehouse.
     """
 
     model_config = SettingsConfigDict(env_prefix="snowflake_")
@@ -32,15 +32,18 @@ class SnowflakeConnection(Connection):
     password: str = SecretField(description="Snowflake user password")
     role: str | None = InputField(default=None, description="Role to assume; the user's default role when empty")
 
-    @cached_property
-    def client(self) -> Session:
-        """The Snowflake session every statement goes through.
+    def connect(self, **session: Any) -> Session:
+        """Open a new Snowflake session with this connection's credentials.
 
-        Autocommit stays on so a lone statement commits by itself; a
-        destination that needs atomicity opens an explicit ``BEGIN``.
+        Autocommit stays on so a lone statement commits by itself; a caller
+        that needs atomicity opens an explicit ``BEGIN``.
+
+        Args:
+            **session: Session settings passed to the connector, such as
+                ``warehouse`` and ``database``.
 
         Returns:
-            The connector session, cached per connection instance.
+            The new connector session.
         """
         return snowflake.connector.connect(
             account=self.account,
@@ -48,7 +51,21 @@ class SnowflakeConnection(Connection):
             password=self.password,
             role=self.role,
             autocommit=True,
+            **session,
         )
+
+    @cached_property
+    def client(self) -> Session:
+        """The session the connection's own check and pickers run on.
+
+        A destination opens its own session through :meth:`connect` instead,
+        so its warehouse and transactions never touch a session another
+        component shares.
+
+        Returns:
+            The connector session, cached per connection instance.
+        """
+        return self.connect()
 
     def _names(self, sql: str) -> list[dict[str, str]]:
         """Run a ``SHOW`` statement and return its ``name`` column as options.
