@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import tempfile
 import threading
+import uuid
 import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
+from functools import cached_property
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -15,13 +20,15 @@ from interloper.errors import ConfigError, DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField
 from interloper.schema import FieldSpec
+from interloper.utils.data import is_empty
 from pydantic import PrivateAttr
 from snowflake.connector import SnowflakeConnection as Session
 from snowflake.connector.cursor import SnowflakeCursor
-from snowflake.connector.pandas_tools import write_pandas
 
 from interloper_snowflake.connection import SnowflakeConnection
 from interloper_snowflake.types import column_type
+
+_STAGE = "interloper_load"
 
 
 def _quote(identifier: str) -> str:
@@ -34,6 +41,23 @@ def _quote(identifier: str) -> str:
         The identifier in double quotes, embedded quotes doubled.
     """
     return '"' + identifier.replace('"', '""') + '"'
+
+
+@dataclass(frozen=True)
+class _Staged:
+    """Data uploaded to a stage, ready to be copied into its table.
+
+    Attributes:
+        table: The target table name.
+        schema: The resolved schema name.
+        location: The stage path holding the file, ``@stage/prefix``.
+        columns: The file's columns, all of them the table's.
+    """
+
+    table: str
+    schema: str
+    location: str
+    columns: tuple[str, ...]
 
 
 @destination(
@@ -49,10 +73,11 @@ class SnowflakeDestination(DatabaseDestination):
     identifier is quoted, so tables and columns keep the case the asset gives
     them.
 
-    The connection's session is shared by every asset written through this
-    destination, and a Snowflake transaction belongs to the session, so
-    transactions are serialised: two concurrent writes would otherwise commit
-    or roll back each other's statements.
+    The destination opens its own session on its warehouse and database. That
+    session is still shared by every asset written through the destination,
+    and a Snowflake transaction belongs to the session, so writes are
+    serialised: two concurrent writes would otherwise commit or roll back each
+    other's statements.
     """
 
     connection: SnowflakeConnection
@@ -72,28 +97,20 @@ class SnowflakeDestination(DatabaseDestination):
     )
     default_dataset: str | None = InputField(default=None, description="Default schema for assets without a dataset")
 
-    _warehouse_in_use: bool = PrivateAttr(default=False)
+    _stages: set[str] = PrivateAttr(default_factory=set)
     _lock: Any = PrivateAttr(default_factory=threading.RLock)
-    _transaction: threading.local = PrivateAttr(default_factory=threading.local)
+    _local: threading.local = PrivateAttr(default_factory=threading.local)
 
-    # -- Session -----------------------------------------------------------------
-
-    @property
-    def _session(self) -> Session:
-        """The connection's session, with this destination's warehouse selected.
+    @cached_property
+    def client(self) -> Session:
+        """The destination's own session, on its warehouse and database.
 
         Returns:
-            The connector session.
+            The connector session, cached per destination instance.
         """
-        session = self.connection.client
-        if not self._warehouse_in_use:
-            cursor = session.cursor()
-            try:
-                cursor.execute(f"USE WAREHOUSE {_quote(self.warehouse)}")
-            finally:
-                cursor.close()
-            self._warehouse_in_use = True
-        return session
+        return self.connection.connect(warehouse=self.warehouse, database=self.database)
+
+    # -- Session -----------------------------------------------------------------
 
     def _execute(self, sql: str, params: Sequence[Any] | None = None) -> SnowflakeCursor:
         """Run one statement, on the open transaction's cursor or on a fresh one.
@@ -105,9 +122,9 @@ class SnowflakeDestination(DatabaseDestination):
         Returns:
             The cursor the statement ran on, ready to fetch from.
         """
-        cursor = getattr(self._transaction, "cursor", None)
+        cursor = getattr(self._local, "cursor", None)
         if cursor is None:
-            cursor = self._session.cursor()
+            cursor = self.client.cursor()
         cursor.execute(sql, params)
         return cursor
 
@@ -120,9 +137,9 @@ class SnowflakeDestination(DatabaseDestination):
             re-raised if it raises.
         """
         with self._lock:
-            cursor = self._session.cursor()
+            cursor = self.client.cursor()
             cursor.execute("BEGIN")
-            self._transaction.cursor = cursor
+            self._local.cursor = cursor
             try:
                 yield
             except BaseException:
@@ -131,8 +148,39 @@ class SnowflakeDestination(DatabaseDestination):
             else:
                 cursor.execute("COMMIT")
             finally:
-                self._transaction.cursor = None
+                self._local.cursor = None
                 cursor.close()
+
+    # -- Destination interface -----------------------------------------------------
+
+    def write(self, context: IOContext, data: Any) -> None:
+        """Stage the data, then let the base replace its partitions.
+
+        Snowflake commits an open transaction whenever it runs DDL, and the
+        base calls :meth:`insert` inside :meth:`transaction`. So everything
+        that is DDL or file transfer (creating the schema, the table and the
+        stage, and the ``PUT``) runs here, before the base opens ``BEGIN``;
+        inside it, only the ``DELETE`` and the ``COPY INTO`` run. Both of the
+        base's paths, a single partition and a window, pass through here.
+
+        The whole write holds the destination's lock: the session is shared,
+        so another write's DDL would otherwise commit this one's open
+        transaction.
+
+        Args:
+            context: IO context carrying the target asset, the partition or window,
+                and the effective schema.
+            data: The data to write, in its native representation.
+        """
+        if is_empty(data):
+            return
+        table, dataset = self._target(context)
+        with self._lock:
+            self._local.staged = self._stage(table, dataset, data, context)
+            try:
+                super().write(context, data)
+            finally:
+                self._local.staged = None
 
     # -- Naming --------------------------------------------------------------------
 
@@ -185,16 +233,87 @@ class SnowflakeDestination(DatabaseDestination):
         )
         return bool(cursor.fetchall())
 
-    # -- DatabaseDestination hooks ---------------------------------------------------
+    # -- Staging -------------------------------------------------------------------
 
-    def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
-        """Insert data through one ``write_pandas`` load, creating the schema and table first if missing.
+    def _ensure_table(self, table: str, schema: str, specs: Sequence[FieldSpec]) -> None:
+        """Create the schema and a typed table when the table does not exist.
+
+        Args:
+            table: Table name.
+            schema: The resolved schema name.
+            specs: The table's field specs.
+        """
+        if self._table_exists(table, schema):
+            return
+        self._execute(f"CREATE SCHEMA IF NOT EXISTS {_quote(self.database)}.{_quote(schema)}")
+        self._execute(f"CREATE TABLE IF NOT EXISTS {self._table_ref(table, schema)} ({_columns_ddl(specs)})")
+
+    def _ensure_stage(self, schema: str) -> str:
+        """Create the session's temporary stage in a schema, once per session.
+
+        Args:
+            schema: The resolved schema name.
+
+        Returns:
+            The stage's fully-qualified, quoted name.
+        """
+        stage = f"{_quote(self.database)}.{_quote(schema)}.{_quote(_STAGE)}"
+        if schema not in self._stages:
+            self._execute(f"CREATE TEMPORARY STAGE IF NOT EXISTS {stage}")
+            self._stages.add(schema)
+        return stage
+
+    def _stage(self, table: str, dataset: str | None, data: Any, context: IOContext) -> _Staged:
+        """Create what the load needs and upload the data as one Parquet file.
 
         A new table is typed from the effective schema (declared on the asset,
         or inferred during conform), or from a schema inferred from the data
         when the context carries none. The frame is aligned to the table's
         columns: an extra column is dropped with a warning, since an existing
-        table is never altered.
+        table is never altered. The file goes under a prefix of its own, so
+        concurrent writes never load each other's files.
+
+        Args:
+            table: Target table name.
+            dataset: The Snowflake schema, or ``None`` for the destination's default.
+            data: The data in its native representation.
+            context: IO context carrying the asset and effective schema.
+
+        Returns:
+            Where the file was staged and the columns it carries.
+        """
+        schema = self._resolve_dataset(dataset)
+        specs = (context.schema or Representation.of(data).infer()).field_specs()
+        self._ensure_table(table, schema, specs)
+        stage = self._ensure_stage(schema)
+
+        frame = Representation.of(data).to("dataframe")
+        names = [spec.name for spec in specs]
+        extras = [str(c) for c in frame.columns if str(c) not in names]
+        if extras:
+            warnings.warn(
+                f"Columns {extras} are not in the schema for '{self._table_ref(table, schema)}' "
+                "and will not be written.",
+                UserWarning,
+                stacklevel=3,
+            )
+        columns = tuple(c for c in names if c in frame.columns)
+
+        location = f"@{stage}/{uuid.uuid4().hex}"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "data.parquet"
+            frame[list(columns)].to_parquet(path, index=False)
+            uri = path.as_posix().replace("'", "\\'")
+            self._execute(f"PUT 'file://{uri}' {location} OVERWRITE=TRUE AUTO_COMPRESS=FALSE")
+        return _Staged(table=table, schema=schema, location=location, columns=columns)
+
+    # -- DatabaseDestination hooks ---------------------------------------------------
+
+    def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
+        """Copy the staged data into the table.
+
+        :meth:`write` has already staged the data outside the transaction;
+        called any other way, the data is staged here first.
 
         Args:
             table: Target table name.
@@ -202,42 +321,28 @@ class SnowflakeDestination(DatabaseDestination):
             data: The data in its native representation.
             context: IO context carrying the asset and effective schema.
         """
-        schema = self._resolve_dataset(dataset)
-        specs = (context.schema or Representation.of(data).infer()).field_specs()
-        if not self._table_exists(table, schema):
-            self._execute(f"CREATE SCHEMA IF NOT EXISTS {_quote(self.database)}.{_quote(schema)}")
-            self._execute(f"CREATE TABLE IF NOT EXISTS {self._table_ref(table, schema)} ({_columns_ddl(specs)})")
+        staged = getattr(self._local, "staged", None)
+        if staged is None or staged.table != table or staged.schema != self._resolve_dataset(dataset):
+            staged = self._stage(table, dataset, data, context)
+        self._copy(staged)
 
-        frame = Representation.of(data).to("dataframe")
-        columns = [spec.name for spec in specs]
-        extras = [str(c) for c in frame.columns if str(c) not in columns]
-        if extras:
-            warnings.warn(
-                f"Columns {extras} are not in the schema for '{self._table_ref(table, schema)}' "
-                "and will not be written.",
-                UserWarning,
-                stacklevel=2,
-            )
-        frame = frame[[c for c in columns if c in frame.columns]].reset_index(drop=True)
-        self._load(frame, table, schema)
+    def _copy(self, staged: _Staged) -> None:
+        """Load a staged Parquet file with ``COPY INTO``, projecting its columns by name.
 
-    def _load(self, frame: pd.DataFrame, table: str, schema: str) -> None:
-        """Load a DataFrame into an existing table through a stage and ``COPY INTO``.
+        Parquet data is one ``$1`` object per row, so each column is read as
+        ``$1:"name"`` and the file's column order does not matter. Binary
+        columns stay binary, and logical types (dates, timestamps, decimals)
+        are honoured. The file is purged once loaded.
 
         Args:
-            frame: The DataFrame to load, aligned to the table's columns.
-            table: Target table name.
-            schema: The resolved schema name.
+            staged: The staged file and its columns.
         """
-        write_pandas(
-            self._session,
-            frame,
-            table_name=table,
-            database=self.database,
-            schema=schema,
-            quote_identifiers=True,
-            auto_create_table=False,
-            use_logical_type=True,
+        targets = ", ".join(_quote(c) for c in staged.columns)
+        projection = ", ".join(f"$1:{_quote(c)}" for c in staged.columns)
+        self._execute(
+            f"COPY INTO {self._table_ref(staged.table, staged.schema)} ({targets}) "
+            f"FROM (SELECT {projection} FROM {staged.location}) "
+            "FILE_FORMAT=(TYPE=PARQUET USE_LOGICAL_TYPE=TRUE BINARY_AS_TEXT=FALSE) PURGE=TRUE"
         )
 
     def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:
