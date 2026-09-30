@@ -45,7 +45,7 @@
 # can reach them (an ARG is only in scope where it is redeclared).
 #
 #   CORE_EXTRAS       comma-separated interloper-core extras
-#                     (default: google-cloud,slack,sql). Each extra maps to
+#                     (default: aws,google-cloud,slack,sql). Each extra maps to
 #                     --package interloper-{name}. duckdb and snowflake
 #                     are not in the default: neither publishes musllinux
 #                     wheels, so they cannot install on this Alpine base.
@@ -68,7 +68,7 @@
 #
 # ================================================================
 
-ARG CORE_EXTRAS=google-cloud,slack,sql
+ARG CORE_EXTRAS=aws,google-cloud,slack,sql
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
@@ -101,6 +101,7 @@ COPY packages/interloper-toolkit/pyproject.toml     packages/interloper-toolkit/
 COPY packages/interloper-slack/pyproject.toml       packages/interloper-slack/pyproject.toml
 COPY packages/interloper-sql/pyproject.toml         packages/interloper-sql/pyproject.toml
 COPY packages/interloper-snowflake/pyproject.toml   packages/interloper-snowflake/pyproject.toml
+COPY packages/interloper-aws/pyproject.toml         packages/interloper-aws/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────

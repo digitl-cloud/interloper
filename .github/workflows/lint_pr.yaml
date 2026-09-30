@@ -21,6 +21,7 @@ jobs:
             api
             app
             assets
+            aws
             chart
             ci
             core

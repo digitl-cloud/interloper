@@ -8,6 +8,7 @@ own README. All are versioned and released together.
 | Extra | Adds |
 |-------|------|
 | `interloper-core[otel]` | The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation. |
+| `interloper-core[aws]` | Pulls in `interloper-aws`. |
 | `interloper-core[google-cloud]` | Pulls in `interloper-google-cloud`. |
 | `interloper-core[duckdb]` | Pulls in `interloper-duckdb`. |
 | `interloper-core[slack]` | Pulls in `interloper-slack`. |
@@ -21,6 +22,7 @@ own README. All are versioned and released together.
 | `interloper-pandas` | `DataFrameRepresentation`, `DataFrameNormalizer`: assets may return pandas DataFrames, normalized and conformed natively. | `interloper.representations`: `dataframe` |
 | `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (an `ObjectStoreDestination` over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), `GoogleSheetsDestination` (a `DatabaseDestination` writing one tab per asset). | `interloper.components` |
 | `interloper-duckdb` | `DuckDBConnection`, `DuckDBDestination` (a `DatabaseDestination` writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset). | `interloper.components` |
+| `interloper-aws` | `AWSConnection` (an access key pair, or boto3's default credential chain), `S3Destination` (an `ObjectStoreDestination` over Amazon S3: hive-partitioned Parquet, JSONL or CSV). | `interloper.components` |
 | `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `interloper.components` |
 | `interloper-sql` | `SQLConnection`, `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
 | `interloper-snowflake` | `SnowflakeConnection`, `SnowflakeDestination` (a `DatabaseDestination` with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet `COPY INTO`). | `interloper.components` |
