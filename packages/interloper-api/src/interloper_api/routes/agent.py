@@ -29,7 +29,7 @@ from interloper_api.dependencies import AgentDep, CatalogDep, EditorDep, OrgIdDe
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
-SDK_VERSION = 6
+SDK_VERSION = 7
 """The AI SDK major version the app speaks; tool approvals need at least 6."""
 
 
