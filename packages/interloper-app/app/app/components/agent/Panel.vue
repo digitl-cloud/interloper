@@ -15,10 +15,12 @@ const resumed = ref(false)
 const creating = ref(false)
 const unavailable = ref(false)
 const chat = shallowRef<ReturnType<typeof useAgentChat>>()
+const summary = ref<string | null>(null)
 
 /** Make a conversation the panel's, with its history. */
 async function attach(conversation: Conversation) {
     const detail = await agentStore.getConversation(conversation.id)
+    summary.value = detail.summary
     chat.value = useAgentChat(detail.id, detail.messages)
 }
 
@@ -26,6 +28,7 @@ async function attach(conversation: Conversation) {
 function startNew() {
     if (chat.value?.busy.value) return
     chat.value = undefined
+    summary.value = null
 }
 
 watch(open, async (v) => {
@@ -124,6 +127,9 @@ const SUGGESTIONS = [
             </div>
 
             <template v-else>
+                <AgentSummary v-if="chat && summary"
+                              :text="summary"
+                              class="mb-4" />
                 <UChatMessages v-if="chat"
                                :messages="chat.messages.value"
                                :status="chat.status.value"

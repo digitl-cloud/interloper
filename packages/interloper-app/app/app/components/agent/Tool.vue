@@ -20,7 +20,8 @@ const PREVIEW_LIMIT = 4000
 const name = computed(() => getToolName(props.part))
 const running = computed(() => isToolStreaming(props.part))
 const pending = computed(() => isToolApprovalPending(props.part))
-const failed = computed(() => props.part.state === 'output-error' || _failed(props.part.output))
+const failed = computed(() => props.part.state === 'output-error' || status(props.part.output) === 'error')
+const elided = computed(() => status(props.part.output) === 'elided')
 const denied = computed(() => props.part.state === 'output-denied')
 
 const text = computed(() => {
@@ -45,8 +46,9 @@ function preview(payload: unknown) {
     return json.length > PREVIEW_LIMIT ? `${json.slice(0, PREVIEW_LIMIT)}\n…` : json
 }
 
-function _failed(output: unknown) {
-    return typeof output === 'object' && output !== null && (output as { status?: string }).status === 'error'
+/** The toolkit's envelope discriminator, when the output carries one. */
+function status(output: unknown) {
+    return typeof output === 'object' && output !== null ? (output as { status?: string }).status : undefined
 }
 </script>
 
@@ -64,7 +66,11 @@ function _failed(output: unknown) {
                 <div class="eyebrow text-dimmed mb-1">Input</div>
                 <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(part.input) }}</pre>
             </div>
-            <div v-if="part.output !== undefined">
+            <p v-if="elided"
+               class="text-[12px] text-dimmed">
+                Result no longer kept: older results are dropped from the conversation.
+            </p>
+            <div v-else-if="part.output !== undefined">
                 <div class="eyebrow text-dimmed mb-1">Output</div>
                 <pre class="overflow-x-auto rounded-md bg-elevated/50 p-2 text-[11px]/4 font-mono text-toned">{{ preview(part.output) }}</pre>
             </div>

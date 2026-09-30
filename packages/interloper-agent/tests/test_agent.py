@@ -13,7 +13,8 @@ from pydantic_ai.models.openai import OpenAICompaction
 from pydantic_ai.models.test import TestModel
 
 from interloper_agent import TURN_LIMITS, build_agent
-from interloper_agent.agent import COMPACTION_THRESHOLD, capabilities, model_settings
+from interloper_agent.agent import capabilities, model_settings
+from interloper_agent.history import COMPACTION_THRESHOLD, elide_tool_returns, summarise
 
 
 class TestBuildAgent:
@@ -49,18 +50,19 @@ class TestModelSettings:
 
 
 class TestCapabilities:
-    def test_every_provider_elides_and_only_native_ones_compact(self):
+    def test_every_provider_elides_and_compacts_natively_or_by_summary(self):
         google = capabilities("google:gemini-2.5-flash")
         anthropic = capabilities("anthropic:claude-sonnet-4-5")
         openai = capabilities("openai:gpt-5")
         chat = capabilities("openai-chat:gpt-5")
 
-        assert [type(c) for c in google] == [ProcessHistory]
+        assert [type(c) for c in google] == [ProcessHistory, ProcessHistory]
+        assert [c.processor for c in google if isinstance(c, ProcessHistory)] == [elide_tool_returns, summarise]
         assert [type(c) for c in anthropic] == [ProcessHistory, AnthropicCompaction]
         assert [type(c) for c in openai] == [ProcessHistory, OpenAICompaction]
-        assert [type(c) for c in chat] == [ProcessHistory]
+        assert [type(c) for c in chat] == [ProcessHistory, ProcessHistory]
 
-    def test_anthropic_compacts_at_the_threshold_and_openai_at_its_default(self):
+    def test_anthropic_compacts_at_the_shared_threshold_and_openai_at_its_default(self):
         anthropic = capabilities("anthropic:claude-sonnet-4-5")[1]
         openai = capabilities("openai:gpt-5")[1]
 
