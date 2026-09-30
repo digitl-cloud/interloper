@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.90.0 (2026-09-30)
+
+### Features
+
+- Link hook notifications back to the run or backfill in the app
+  ([`3d2d0ae`](https://github.com/digitl-cloud/interloper/commit/3d2d0ae40aee8b8af4d40e66e82ad568dcde3d5a))
+
+
 ## v0.89.0 (2026-09-29)
 
 ### Bug Fixes
