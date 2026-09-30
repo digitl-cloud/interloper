@@ -12,18 +12,12 @@ from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.models.openai import OpenAICompaction
 from pydantic_ai.settings import ModelSettings
 
-from interloper_agent.history import elide_tool_returns
+from interloper_agent.history import COMPACTION_THRESHOLD, elide_tool_returns, summarise
 from interloper_agent.prompts import INSTRUCTIONS
 from interloper_agent.toolset import toolset
 
 TURN_LIMITS = UsageLimits(request_limit=40)
 """What one turn may spend: enough for a long setup flow, a bound on a loop that never converges."""
-
-COMPACTION_THRESHOLD = 100_000
-"""Input tokens past which a provider with native compaction summarises the history.
-
-Half of Claude's window: room for a long, tool-heavy turn after the summary.
-"""
 
 
 def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]:
@@ -80,10 +74,11 @@ def capabilities(model: str) -> list[AbstractCapability[ToolkitContext]]:
 
     Every provider gets the elision of older tool returns
     (:mod:`interloper_agent.history`), which removes most of a
-    conversation's bulk without a model call. A provider with native
-    compaction also summarises server-side once the input crosses
-    :data:`COMPACTION_THRESHOLD` (Anthropic) or its own default (OpenAI's
-    Responses API); Gemini has none, so eliding is all it gets.
+    conversation's bulk without a model call. Past a size the older turns
+    are summarised: server-side where the provider compacts natively
+    (Anthropic at :data:`~interloper_agent.history.COMPACTION_THRESHOLD`,
+    OpenAI's Responses API at its own default), by the agent's own
+    summariser everywhere else, Gemini included.
 
     Args:
         model: The ``provider:model`` name.
@@ -97,6 +92,8 @@ def capabilities(model: str) -> list[AbstractCapability[ToolkitContext]]:
         built.append(AnthropicCompaction(token_threshold=COMPACTION_THRESHOLD))
     elif provider in ("openai", "openai-responses"):
         built.append(OpenAICompaction())
+    else:
+        built.append(ProcessHistory(summarise))
     return built
 
 

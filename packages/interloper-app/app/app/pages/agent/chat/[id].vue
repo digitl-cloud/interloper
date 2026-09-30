@@ -46,7 +46,9 @@ onMounted(() => {
                     </p>
                 </div>
 
-                <UChatMessages v-else
+                <AgentSummary v-if="chat && conversation?.summary"
+                              :text="conversation.summary" />
+                <UChatMessages v-if="chat"
                                :messages="chat.messages.value"
                                :status="chat.status.value"
                                should-auto-scroll

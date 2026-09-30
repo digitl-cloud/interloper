@@ -15,7 +15,7 @@ type Part = UIMessage['parts'][number]
 const props = defineProps<{ parts: Part[], live?: boolean }>()
 
 const tools = computed(() => props.parts.filter(isToolUIPart))
-const failed = computed(() => tools.value.filter(part => part.state === 'output-error' || _failed(part.output)).length)
+const failed = computed(() => tools.value.filter(part => part.state === 'output-error' || failedOutput(part.output)).length)
 
 const text = computed(() => {
     if (props.live) {
@@ -29,7 +29,7 @@ const text = computed(() => {
 
 const suffix = computed(() => !props.live && failed.value ? `${failed.value} failed` : undefined)
 
-function _failed(output: unknown) {
+function failedOutput(output: unknown) {
     return typeof output === 'object' && output !== null && (output as { status?: string }).status === 'error'
 }
 </script>

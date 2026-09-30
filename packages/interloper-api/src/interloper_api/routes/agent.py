@@ -19,7 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Request, Response
-from interloper_agent import TURN_LIMITS
+from interloper_agent import TURN_LIMITS, summary_of
 from interloper_db.models import Conversation
 from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
@@ -102,8 +102,13 @@ class ConversationResponse(BaseModel):
 
 
 class ConversationDetailResponse(ConversationResponse):
-    """A conversation with its history in the AI SDK's ``UIMessage`` shape."""
+    """A conversation with its history in the AI SDK's ``UIMessage`` shape.
 
+    ``summary`` is what the older turns were compacted into, when they were;
+    the messages then start where the summary ends.
+    """
+
+    summary: str | None
     messages: list[dict[str, Any]]
 
     @classmethod
@@ -117,9 +122,11 @@ class ConversationDetailResponse(ConversationResponse):
             The response model, its messages as the app's ``useChat`` loads them.
         """
         history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
-        messages = _fold_turns(VercelAIAdapter.dump_messages(history, sdk_version=SDK_VERSION))
+        dumped = VercelAIAdapter.dump_messages(history, sdk_version=SDK_VERSION)
+        messages = _fold_turns([message for message in dumped if message.role != "system"])
         return cls(
             **ConversationResponse.from_conversation(conversation).model_dump(),
+            summary=summary_of(history),
             messages=[message.model_dump(by_alias=True, exclude_none=True) for message in messages],
         )
 

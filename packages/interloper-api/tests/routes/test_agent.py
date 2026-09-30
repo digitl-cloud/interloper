@@ -17,6 +17,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper_agent import build_agent
+from interloper_agent.history import SUMMARY_LEAD
 from interloper_agent.toolset import toolset
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -40,6 +41,7 @@ from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
     ModelRequest,
     ModelResponse,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -177,6 +179,23 @@ class TestHistory:
         assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
         assert [p["type"] for p in messages[1]["parts"]] == ["tool-list_jobs", "tool-list_recent_runs", "text"]
         assert messages[1]["parts"][0]["state"] == "output-available"
+
+    def test_a_compacted_history_restores_its_summary_beside_the_remaining_messages(
+        self, store: Store, member: SimpleNamespace
+    ):
+        history: list[ModelMessage] = [
+            ModelRequest(parts=[SystemPromptPart(content=SUMMARY_LEAD + "The user asked about jobs; none exist.")]),
+            ModelRequest(parts=[UserPromptPart(content="thanks")]),
+            ModelResponse(parts=[TextPart("Any time.")]),
+        ]
+        conversation = store.conversations.create(member.org_id, member.id)
+        store.conversations.save(conversation.id, ModelMessagesTypeAdapter.dump_python(history, mode="json"))
+        client = _client(store, member, _echo_agent())
+
+        detail = client.get(f"/agent/conversations/{conversation.id}").json()
+
+        assert detail["summary"] == "The user asked about jobs; none exist."
+        assert [m["role"] for m in detail["messages"]] == ["user", "assistant"]
 
 
 class TestChat:

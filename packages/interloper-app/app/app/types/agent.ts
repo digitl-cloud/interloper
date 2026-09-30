@@ -8,8 +8,9 @@ export interface Conversation {
     updated_at: string | null
 }
 
-/** A conversation with its history in the AI SDK's message shape. */
+/** A conversation with its history in the AI SDK's message shape; `summary` is what older turns were compacted into. */
 export interface ConversationDetail extends Conversation {
+    summary: string | null
     messages: UIMessage[]
 }
 
