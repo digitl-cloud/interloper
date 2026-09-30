@@ -6,14 +6,17 @@
  *
  * The two card tools render their own components off the tool part and
  * answer through `output`; every other tool is a `AgentTool` row, which
- * carries the Approve/Deny actions when the agent is waiting.
+ * carries the Approve/Deny actions when the agent is waiting. While the
+ * turn is still running (`live`) and nothing is visibly streaming, the
+ * thinking indicator holds the tail: a tool settles in milliseconds and the
+ * model then thinks for seconds, which otherwise reads as a stall.
  */
 import type { UIMessage } from 'ai'
 import { getToolName, isReasoningUIPart, isTextUIPart, isToolUIPart } from 'ai'
 import { isPartStreaming } from '@nuxt/ui/utils/ai'
 import type { ConnectionSetupRequest, ConnectionSetupResult, SelectionRequest } from '~/types/agent'
 
-defineProps<{ message: UIMessage }>()
+const props = defineProps<{ message: UIMessage, live?: boolean }>()
 
 const emit = defineEmits<{
     approve: [id: string, approved: boolean]
@@ -23,6 +26,12 @@ const emit = defineEmits<{
 const CARDS = { request_user_selection: 'select', request_connection_setup: 'connect' } as const
 
 type Part = UIMessage['parts'][number]
+
+const thinking = computed(() => {
+    if (!props.live) return false
+    const last = props.message.parts[props.message.parts.length - 1]
+    return !last || !((isTextUIPart(last) || isReasoningUIPart(last)) && isPartStreaming(last))
+})
 
 function card(part: Part) {
     return isToolUIPart(part) ? CARDS[getToolName(part) as keyof typeof CARDS] : undefined
@@ -80,4 +89,7 @@ function onCreated(part: Part, result: ConnectionSetupResult) {
             </p>
         </template>
     </template>
+
+    <AgentThinking v-if="thinking"
+                   class="mt-2" />
 </template>
