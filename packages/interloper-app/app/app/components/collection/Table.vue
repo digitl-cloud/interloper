@@ -254,10 +254,10 @@ function onRowClick(row: any) {
                              @click.stop="row.toggleExpanded()" />
                     <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
-                    <span class="flex flex-col items-start gap-1">
-                        <span class="font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
+                    <span class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+                        <span class="truncate font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
                         <span v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
-                              class="id-chip max-w-full truncate">
+                              class="id-chip max-w-full truncate sm:shrink-0">
                             {{ sourceInfoById.get(row.original.sourceId)!.discriminator }}
                         </span>
                     </span>
