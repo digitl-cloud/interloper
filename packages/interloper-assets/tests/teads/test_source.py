@@ -161,3 +161,8 @@ class TestReportFlow:
     def test_failed_report_raises(self, monkeypatch: Any):
         with pytest.raises(RuntimeError, match="failed"):
             self._run(monkeypatch, [{"status": "error"}])
+
+    def test_report_not_finished_in_time_raises(self, monkeypatch: Any):
+        monkeypatch.setattr(constants, "REPORT_TIMEOUT", 0)
+        with pytest.raises(RuntimeError, match="did not finish within 0s"):
+            self._run(monkeypatch, [{"status": "running"}])
