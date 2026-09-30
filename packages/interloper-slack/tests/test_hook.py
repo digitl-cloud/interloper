@@ -126,6 +126,41 @@ class TestFire:
             ":white_check_mark: *Facebook Ads* backfill completed\n`2026-09-22` → `2026-09-28` · 7 succeeded"
         )
 
+    def test_names_the_organisation_before_the_component(self, slack):
+        _hook().fire(
+            il.HookContext(
+                event_type="run_failed",
+                component_id="c1",
+                run_id="r1",
+                metadata={"organisation_name": "Swarovski", "component_name": "Facebook Ads"},
+            )
+        )
+
+        assert slack.json_body()["text"] == "Swarovski · Facebook Ads failed"
+        assert _text(slack) == ":x: *Swarovski · Facebook Ads* failed\nRun `r1`"
+
+    def test_links_to_the_app_when_the_context_knows_its_page(self, slack):
+        _hook().fire(
+            il.HookContext(
+                event_type="run_failed", component_id="c1", run_id="r1", url="https://app.test/executions/runs/r1"
+            )
+        )
+
+        blocks = slack.json_body()["blocks"]
+        assert [block["type"] for block in blocks] == ["section", "actions"]
+        assert blocks[1]["elements"] == [
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "View in interloper"},
+                "url": "https://app.test/executions/runs/r1",
+            }
+        ]
+
+    def test_without_a_url_there_is_no_button(self, slack):
+        _hook().fire(il.HookContext(event_type="run_failed", component_id="c1", run_id="r1"))
+
+        assert [block["type"] for block in slack.json_body()["blocks"]] == ["section"]
+
     def test_request_carries_the_configured_timeout(self, slack):
         _hook(timeout=2.5).fire(il.HookContext(event_type="run_failed", component_id="c1"))
 

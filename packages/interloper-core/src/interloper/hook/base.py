@@ -26,7 +26,8 @@ class HookContext(BaseModel):
     operator injects: ``trigger`` creates a run for a component id, so
     trigger-style hooks stay free of any persistence dependency. A run event
     names its run and partition; a backfill event names its backfill and the
-    range it covered.
+    range it covered. ``url`` is the subject's page in the app, when the
+    deployment has a public URL, so a notification can link back to it.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -38,6 +39,7 @@ class HookContext(BaseModel):
     backfill_id: str | None = None
     start_key: str | None = None
     end_key: str | None = None
+    url: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     trigger: Callable[[str], None] | None = Field(default=None, exclude=True)
 

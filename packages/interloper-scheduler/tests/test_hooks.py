@@ -13,10 +13,11 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
+from interloper.settings import AppSettings, ServerSettings
 from interloper_assets.demo.source import DemoSource, demo_asset
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
 from interloper_db.store.events import EventStore
 from sqlalchemy import event
@@ -46,7 +47,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Backfill, Run, EventRow, Quota, Usage):
+    for model in (Organisation, Component, ComponentRelation, Backfill, Run, EventRow, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
 
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
@@ -280,11 +281,28 @@ class TestHookEvaluation:
 
         assert payloads[0]["metadata"] == {
             "status": "success",
+            "organisation_name": None,
             "component_name": "Demo",
             "component_key": "demo_source",
             "attempt": 1,
             "attempts": 1,
         }
+
+    def test_metadata_names_the_organisation(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        organisation = store.organisations.create("Swarovski")
+        source = store.components.create(organisation.id, kind="source", key="demo_source", name="Demo")
+        store.components.create(
+            organisation.id, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed"], "url": "https://example.test/n"},
+            relations={"watches": [source.id]},
+        )
+        run = store.runs.create(organisation.id, component_id=source.id)
+        store.runs.complete(run.id, success=True)
+
+        _sweep(store)
+
+        assert payloads[0]["metadata"]["organisation_name"] == "Swarovski"
 
     def test_metadata_falls_back_to_key_when_unnamed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
@@ -586,6 +604,7 @@ class TestBackfillEvents:
         assert payload["run_id"] is None
         assert (payload["start_key"], payload["end_key"]) == ("2026-09-01", "2026-09-03")
         assert payload["metadata"]["component_name"] == "Nightly"
+        assert payload["metadata"]["organisation_name"] is None
         assert payload["metadata"]["partitions"] == 3
         assert payload["metadata"]["counts"] == {"success": 1, "failed": 2}
         assert payload["metadata"]["failed_partitions"] == [["2026-09-03", None], ["2026-09-02", "rate limited"]]
@@ -672,6 +691,62 @@ class TestBackfillEvents:
         assert payloads == []
         assert self._backfill_evaluated_at(backfill.id) is not None
         assert all(_evaluated_at(run.id) is not None for run in self._runs(backfill.id).values())
+
+
+class TestSubjectUrl:
+    """The context links to the subject's page when the app has a public URL."""
+
+    @pytest.fixture
+    def public_url(self) -> Iterator[None]:
+        AppSettings.activate(AppSettings(server=ServerSettings(external_url="https://app.test/")))
+        yield
+        AppSettings.clear_active()
+
+    def _watch(self, store: Store, component_id: UUID, event: str) -> None:
+        store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": [event], "url": "https://example.invalid/hook"},
+            relations={"watches": [component_id]},
+        )
+
+    def test_a_run_event_links_to_the_run(self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None):
+        payloads = _capture_posts(monkeypatch)
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        leaf = next(c for c in source.children if c.key == "e")
+        self._watch(store, leaf.id, "run_completed")
+        run = _terminal_run(store, leaf.id)
+
+        _sweep(store)
+
+        assert [payload["url"] for payload in payloads] == [f"https://app.test/executions/runs/{run.id}"]
+
+    def test_a_backfill_event_links_to_the_backfill(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None
+    ):
+        payloads = _capture_posts(monkeypatch)
+        job = store.components.create(_ORG, kind="job", key="cron_job", name="Nightly", config={"cron": "0 6 * * *"})
+        self._watch(store, job.id, "backfill_completed")
+        backfill = store.runs.create_backfill(
+            _ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-02", concurrency=2
+        )
+        with Session(engine_module.get_engine()) as session:
+            for run in session.exec(select(Run).where(Run.backfill_id == backfill.id)).all():
+                store.runs.complete(run.id, success=True)
+
+        _sweep(store)
+
+        assert [payload["url"] for payload in payloads] == [f"https://app.test/executions/backfills/{backfill.id}"]
+
+    def test_without_a_public_url_the_context_carries_none(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        leaf = next(c for c in source.children if c.key == "e")
+        self._watch(store, leaf.id, "run_completed")
+        _terminal_run(store, leaf.id)
+
+        _sweep(store)
+
+        assert [payload["url"] for payload in payloads] == [None]
 
 
 class TestEvaluateGuards:

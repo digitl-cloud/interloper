@@ -89,7 +89,10 @@ class SlackHook(Hook):
         """Build the ``chat.postMessage`` payload.
 
         ``text`` carries the headline on its own so notification previews and
-        screen readers get the outcome without parsing blocks.
+        screen readers get the outcome without parsing blocks. The subject is
+        prefixed with its organisation when the operator names it, since one
+        channel may hear from several. A context that knows its page in the
+        app gets a link button under the message.
 
         Args:
             context: The hook context the message describes.
@@ -99,6 +102,8 @@ class SlackHook(Hook):
         """
         emoji, verb = _OUTCOMES.get(context.event_type, (":bell:", context.event_type))
         subject = context.metadata.get("component_name") or context.component_id
+        if organisation := context.metadata.get("organisation_name"):
+            subject = f"{organisation} · {subject}"
         headline = f"{emoji} *{subject}* {verb}"
 
         lines = [headline]
@@ -108,11 +113,16 @@ class SlackHook(Hook):
             lines.append(f"```{error}```")
         lines.extend(self._failed_partitions(context))
 
-        return {
-            "channel": self.channel,
-            "text": f"{subject} {verb}",
-            "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}],
-        }
+        blocks: list[dict[str, Any]] = [{"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}}]
+        if context.url:
+            button = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "View in interloper"},
+                "url": context.url,
+            }
+            blocks.append({"type": "actions", "elements": [button]})
+
+        return {"channel": self.channel, "text": f"{subject} {verb}", "blocks": blocks}
 
     def _details(self, context: HookContext) -> str:
         """Render the context line: a run and its partition, or a backfill's range and counts.
