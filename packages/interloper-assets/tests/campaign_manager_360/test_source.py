@@ -16,12 +16,13 @@ from io import BytesIO
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from interloper.asset import Asset
 from interloper.dag import DAGSpec
 from interloper.dag.base import DAG
 from interloper.representation import Representation
 
-from interloper_assets.campaign_manager_360 import schemas
+from interloper_assets.campaign_manager_360 import schemas, source
 from interloper_assets.campaign_manager_360.connection import CampaignManager360Connection
 from interloper_assets.campaign_manager_360.source import (
     CampaignManager360,
@@ -119,6 +120,34 @@ class FakeRemarketingLists:
         return SimpleNamespace(execute=lambda: self.pages[pageToken])
 
 
+class FakeService:
+    """Record a discovery call chain and answer ``execute()`` by the chain's last method."""
+
+    def __init__(self, responses: dict[str, Any]):
+        """Hold the responses to serve, keyed by method name."""
+        self.responses = responses
+        self.calls: list[str] = []
+
+    def __getattr__(self, name: str) -> Any:
+        """Answer any discovery method with a call that records its name and chains on.
+
+        Args:
+            name: The discovery method being looked up.
+
+        Returns:
+            A callable accepting any arguments, which records ``name`` and returns this fake.
+        """
+
+        def call(*args: Any, **kwargs: Any) -> FakeService:
+            self.calls.append(name)
+            return self
+
+        return call
+
+    def execute(self) -> Any:
+        return self.responses.get(self.calls[-1], {})
+
+
 class TestServicePerAsset:
     """Each asset builds its own service once per run, since the transport is not thread-safe."""
 
@@ -145,6 +174,24 @@ class TestServicePerAsset:
         rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
         assert [row["id"] for row in rows] == ["1", "2"]
         assert len(services) == 1
+
+    def test_report_runs_on_one_service(self, monkeypatch: pytest.MonkeyPatch):
+        services: list[FakeService] = []
+
+        def client() -> FakeService:
+            services.append(FakeService({"insert": {"id": "1"}, "run": {"id": "2"}}))
+            return services[-1]
+
+        monkeypatch.setattr(source, "_wait_for_file", lambda *args: None)
+        monkeypatch.setattr(source, "_download_file", lambda *args: BytesIO(_REPORT_FILE))
+        connection = CampaignManager360Connection(service_account_key="{}")
+        connection.__dict__["client"] = client
+        src = CampaignManager360(id="src-1", profile_id="111", account_id="222", connection=connection)
+        asset = next(a for a in src.assets if type(a).key == "campaigns_stats")
+        rows = asset.data(context=SimpleNamespace(partition_date=dt.date(2026, 7, 10)))
+        assert len(rows) == 2
+        assert len(services) == 1
+        assert services[0].calls == ["reports", "insert", "reports", "run", "reports", "delete"]
 
 
 class TestSpecRoundtrip:
