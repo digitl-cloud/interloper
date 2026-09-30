@@ -1,9 +1,12 @@
 <script setup lang="ts">
 /**
  * Docked agent chat panel (design: 400px right panel that pushes the app
- * layout, non-modal). A conversation is created lazily on first open, then
+ * layout, non-modal). The first time it opens it picks the conversation up
+ * where it was left, the most recent one, or starts one when there is none;
  * turns stream through useAgentChat.
  */
+import type { Conversation } from '~/types/agent'
+
 const { open, width, dragging, startResize, resetWidth } = useAgentPanel()
 const agentStore = useAgentStore()
 
@@ -11,13 +14,24 @@ const conversationId = ref('')
 const unavailable = ref(false)
 const chat = shallowRef<ReturnType<typeof useAgentChat>>()
 
-/** Create the backing conversation the first time the panel opens. */
+/** Make a conversation the panel's, with its history. */
+async function attach(conversation: Conversation) {
+    const detail = await agentStore.getConversation(conversation.id)
+    conversationId.value = detail.id
+    chat.value = useAgentChat(detail.id, detail.messages)
+}
+
+/** Start a fresh conversation in place of the current one. */
+async function startNew() {
+    if (chat.value?.busy.value) return
+    await attach(await agentStore.createConversation())
+}
+
 watch(open, async (v) => {
     if (!v || conversationId.value || unavailable.value) return
     try {
-        const conversation = await agentStore.createConversation()
-        conversationId.value = conversation.id
-        chat.value = useAgentChat(conversation.id)
+        if (!agentStore.conversations.length) await agentStore.fetchConversations()
+        await attach(agentStore.conversations[0] ?? await agentStore.createConversation())
     }
     catch {
         unavailable.value = true
@@ -63,6 +77,14 @@ const SUGGESTIONS = [
                 <div class="text-[15px] font-bold tracking-[-0.01em] text-highlighted">Agent</div>
                 <div class="text-[11.5px] text-dimmed">Reads your sources, jobs & runs</div>
             </div>
+            <UButton icon="i-lucide-plus"
+                     color="neutral"
+                     variant="ghost"
+                     size="sm"
+                     class="rounded-md text-muted"
+                     aria-label="New conversation"
+                     :disabled="!chat || chat.busy.value"
+                     @click="startNew" />
             <UButton icon="i-lucide-x"
                      color="neutral"
                      variant="soft"
