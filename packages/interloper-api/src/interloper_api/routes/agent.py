@@ -233,6 +233,15 @@ async def chat(
         messages = result.all_messages()
         history = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
         store.conversations.save(conversation.id, history, title=_first_prompt(messages))
+        usage = result.usage
+        logger.info(
+            "Agent turn on conversation %s: %d requests, %d input tokens, %d output tokens, %d messages stored",
+            conversation.id,
+            usage.requests,
+            usage.input_tokens,
+            usage.output_tokens,
+            len(messages),
+        )
 
     return await LoggedAdapter.dispatch_request(
         request,
