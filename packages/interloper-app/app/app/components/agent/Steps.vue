@@ -37,7 +37,7 @@ function _failed(output: unknown) {
 <template>
     <UCollapsible class="w-full">
         <button type="button"
-                class="group flex items-center gap-1.5 w-full text-left text-sm text-muted hover:text-highlighted transition-colors cursor-pointer">
+                class="group flex items-center gap-1.5 w-full min-h-6 text-left text-sm text-muted hover:text-highlighted transition-colors cursor-pointer">
             <UIcon :name="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
                    class="size-4 shrink-0"
                    :class="failed ? 'text-error' : ''" />
