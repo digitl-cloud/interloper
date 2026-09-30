@@ -1,59 +1,26 @@
 <script setup lang="ts">
 /**
  * Docked agent chat panel (design: 400px right panel that pushes the app
- * layout, non-modal). Drives the real agent: a session is created lazily
- * on first open, then messages stream over SSE via useAgentChat.
+ * layout, non-modal). A conversation is created lazily on first open, then
+ * turns stream through useAgentChat.
  */
 const { open, width, dragging, startResize, resetWidth } = useAgentPanel()
 const agentStore = useAgentStore()
 
-const sessionId = ref('')
-const sessionError = ref(false)
-const { messages, streaming, status, liveMessageId, error, send } = useAgentChat(sessionId)
+const conversationId = ref('')
+const unavailable = ref(false)
+const chat = shallowRef<ReturnType<typeof useAgentChat>>()
 
-/**
- * Messages in the UIMessage shape UChatMessages expects. A work trail drops the
- * assistant avatar: it is an account of how the answer was reached, not a remark
- * in its own right.
- */
-const displayMessages = computed(() => messages.value
-    .filter(m => m.text || m.role === 'user' || m.connectionSetup || m.selection || m.confirmation || m.steps?.length)
-    .map(m => ({
-        id: m.id,
-        role: m.role,
-        text: m.text,
-        parts: [{ type: 'text' as const, text: m.text }],
-        icon: m.role === 'assistant' && !m.steps?.length ? 'i-lucide-sparkles' : undefined,
-        connectionSetup: m.connectionSetup,
-        selection: m.selection,
-        confirmation: m.confirmation,
-        steps: m.steps,
-    })))
-
-/** Report a completed connection setup back into the chat so the agent continues. */
-function onConnectionCreated(name: string, verified: boolean) {
-    send(`I completed the setup — connection "${name}" is created${verified ? ' and the connection check passed' : ''}.`)
-}
-
-/** Report a confirmed selection back into the chat so the agent continues. */
-function onSelection(labels: string[], values: string[]) {
-    send(`I selected: ${labels.map((label, i) => `${label} (${values[i]})`).join(', ')}`)
-}
-
-/** Report a confirmation decision back into the chat so the agent proceeds or stops. */
-function onDecision(confirmed: boolean) {
-    send(confirmed ? 'Confirmed — go ahead.' : 'Cancel that — do not proceed.')
-}
-
-/** Create the backing session the first time the panel opens. */
+/** Create the backing conversation the first time the panel opens. */
 watch(open, async (v) => {
-    if (!v || sessionId.value || sessionError.value) return
+    if (!v || conversationId.value || unavailable.value) return
     try {
-        const session = await agentStore.createSession()
-        sessionId.value = session.id
+        const conversation = await agentStore.createConversation()
+        conversationId.value = conversation.id
+        chat.value = useAgentChat(conversation.id)
     }
     catch {
-        sessionError.value = true
+        unavailable.value = true
     }
 }, { immediate: true })
 
@@ -65,8 +32,7 @@ function onSubmit(e: Event) {
 }
 
 function submit(text: string) {
-    if (!text.trim() || streaming.value || !sessionId.value) return
-    send(text)
+    chat.value?.send(text)
     input.value = ''
 }
 
@@ -110,19 +76,19 @@ const SUGGESTIONS = [
              the floating scroll-to-bottom button to the visible area. -->
         <div class="relative flex-1 min-h-0 flex flex-col">
         <div class="flex-1 min-h-0 overflow-y-auto p-[18px]">
-            <div v-if="sessionError"
+            <div v-if="unavailable"
                  class="flex flex-col items-center gap-2 py-10 text-center">
                 <UIcon name="i-lucide-plug-zap"
                        class="size-6 text-dimmed" />
                 <p class="text-sm text-muted">The agent isn't available in this workspace.</p>
             </div>
 
-            <template v-else>
-                <UChatMessages :messages="displayMessages"
-                               :status="status"
+            <template v-else-if="chat">
+                <UChatMessages :messages="chat.messages.value"
+                               :status="chat.status.value"
                                compact
                                should-auto-scroll
-                               :assistant="{ ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
+                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
                                :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
                                :ui="{ viewport: 'top-auto bottom-3' }"
@@ -132,32 +98,19 @@ const SUGGESTIONS = [
                     </template>
 
                     <template #content="{ message }">
-                        <AgentWork v-if="(message as any).steps?.length"
-                                   :steps="(message as any).steps"
-                                   :streaming="message.id === liveMessageId" />
-                        <AgentConnectCard v-else-if="(message as any).connectionSetup"
-                                          :request="(message as any).connectionSetup"
-                                          @created="onConnectionCreated" />
-                        <AgentSelectCard v-else-if="(message as any).selection"
-                                         :request="(message as any).selection"
-                                         @selected="onSelection" />
-                        <AgentConfirmCard v-else-if="(message as any).confirmation"
-                                          :request="(message as any).confirmation"
-                                          @decided="onDecision" />
-                        <MDC v-else
-                             :value="message.text"
-                             :cache-key="message.id"
-                             :class="['*:first:mt-0 *:last:mb-0 [&_code]:text-[12px]', message.role === 'user' ? '[&_p]:whitespace-pre-wrap' : '']" />
+                        <AgentParts :message="message"
+                                    @approve="(id, approved) => chat?.addToolApprovalResponse({ id, approved })"
+                                    @output="(tool, toolCallId, output) => chat?.addToolOutput({ tool, toolCallId, output })" />
                     </template>
                 </UChatMessages>
 
-                <p v-if="error && !streaming"
+                <p v-if="chat.error.value && !chat.busy.value"
                    class="text-[12.5px] text-error mt-1">
                     Something went wrong — try again.
                 </p>
 
                 <!-- Suggested prompts on a fresh conversation -->
-                <div v-if="!messages.length && !streaming"
+                <div v-if="!chat.messages.value.length && !chat.busy.value"
                      class="flex flex-col gap-2">
                     <p class="text-[13.5px] text-toned leading-relaxed mb-2">
                         Hi — I'm your Interloper agent. Ask about pipeline health, why something
@@ -184,11 +137,12 @@ const SUGGESTIONS = [
                          variant="outline"
                          placeholder="Ask about your workspace…"
                          :maxrows="6"
-                         :disabled="streaming || sessionError"
+                         :disabled="!chat || unavailable"
                          :ui="{ base: 'px-1.5 text-[13.5px]/5', body: 'items-center' }"
                          @submit="onSubmit">
-                <UChatPromptSubmit :status="status"
-                                   size="sm" />
+                <UChatPromptSubmit :status="chat?.status.value ?? 'ready'"
+                                   size="sm"
+                                   @stop="chat?.stop()" />
             </UChatPrompt>
         </div>
     </aside>

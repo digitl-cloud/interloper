@@ -1,4 +1,4 @@
-import type { AgentSession } from '~/types/agent'
+import type { Conversation, ConversationDetail } from '~/types/agent'
 
 export const useAgentStore = defineStore('agent', () => {
     const { apiFetch } = useApi()
@@ -6,19 +6,18 @@ export const useAgentStore = defineStore('agent', () => {
     /**********************
      * State
      **********************/
-    const sessions = ref<AgentSession[]>([])
+    const conversations = ref<Conversation[]>([])
     const loading = ref(false)
     const error = ref<Error | null>(null)
 
     /**********************
      * Actions
      **********************/
-
-    async function fetchSessions() {
+    async function fetchConversations() {
         loading.value = true
         error.value = null
         try {
-            sessions.value = await apiFetch<AgentSession[]>('/agent/sessions')
+            conversations.value = await apiFetch<Conversation[]>('/agent/conversations')
         }
         catch (e) {
             error.value = e as Error
@@ -28,48 +27,44 @@ export const useAgentStore = defineStore('agent', () => {
         }
     }
 
-    async function createSession(): Promise<AgentSession> {
-        const session = await apiFetch<AgentSession>('/agent/sessions', {
-            method: 'POST',
-        })
-        sessions.value.unshift(session)
-        return session
+    async function createConversation(): Promise<Conversation> {
+        const conversation = await apiFetch<Conversation>('/agent/conversations', { method: 'POST' })
+        conversations.value.unshift(conversation)
+        return conversation
     }
 
-    async function getSession(sessionId: string): Promise<any> {
-        return apiFetch(`/agent/sessions/${sessionId}`)
+    async function getConversation(id: string): Promise<ConversationDetail> {
+        return apiFetch<ConversationDetail>(`/agent/conversations/${id}`)
     }
 
-    async function deleteSession(sessionId: string) {
-        await apiFetch(`/agent/sessions/${sessionId}`, { method: 'DELETE' })
-        sessions.value = sessions.value.filter(s => s.id !== sessionId)
+    async function deleteConversation(id: string) {
+        await apiFetch(`/agent/conversations/${id}`, { method: 'DELETE' })
+        conversations.value = conversations.value.filter(c => c.id !== id)
     }
 
-    /**********************
-     * Lookups
-     **********************/
-
-    function findById(id: string): AgentSession | undefined {
-        return sessions.value.find(s => s.id === id)
+    /** Reflect a title the server set on the first turn without refetching the list. */
+    function setTitle(id: string, title: string) {
+        const conversation = conversations.value.find(c => c.id === id)
+        if (conversation && !conversation.title) conversation.title = title
     }
 
     function $reset() {
-        sessions.value = []
+        conversations.value = []
         loading.value = false
         error.value = null
     }
 
-    useOrgScopedRefetch(() => fetchSessions(), $reset)
+    useOrgScopedRefetch(() => fetchConversations(), $reset)
 
     return {
-        sessions,
+        conversations,
         loading,
         error,
-        fetchSessions,
-        createSession,
-        getSession,
-        deleteSession,
-        findById,
+        fetchConversations,
+        createConversation,
+        getConversation,
+        deleteConversation,
+        setTitle,
         $reset,
     }
 })

@@ -2,7 +2,7 @@
 /**
  * Inline connection-setup card rendered in the agent chat.
  *
- * Triggered by the agent's `request_connection_setup` tool: reuses
+ * Triggered by the agent's `request_connection_setup` tool call: reuses
  * SchemaForm (OAuth sign-in or manual credentials) so secrets go straight
  * from the form to the API, never through the conversation.
  *
@@ -11,11 +11,12 @@
  * failure is surfaced by the button itself — it turns into an error state
  * carrying the categorised message, and a click retries. Config failures
  * additionally land under the form fields via `SchemaForm.setErrors`; any
- * edit resets the button. On success the parent reports completion back
- * into the chat so the agent can continue.
+ * edit resets the button. The created connection becomes the tool call's
+ * output, and the agent continues with it; a call already answered
+ * (`answer`) renders locked.
  */
 import type { FormError } from '@nuxt/ui'
-import type { ConnectionSetupRequest } from '~/types/agent'
+import type { ConnectionSetupRequest, ConnectionSetupResult } from '~/types/agent'
 
 interface CheckResult {
     ok: boolean
@@ -27,10 +28,11 @@ interface CheckResult {
 
 const props = defineProps<{
     request: ConnectionSetupRequest
+    answer?: ConnectionSetupResult
 }>()
 
 const emit = defineEmits<{
-    created: [name: string, verified: boolean]
+    created: [result: ConnectionSetupResult]
 }>()
 
 const catalogStore = useCatalogStore()
@@ -38,13 +40,13 @@ const componentsStore = useComponentsStore()
 const { apiFetch } = useApi()
 const toast = useToast()
 
-const defn = computed(() => catalogStore.catalog[props.request.connectionKey])
+const defn = computed(() => catalogStore.catalog[props.request.connection_key])
 const schema = computed(() => (defn.value as any)?.config_schema ?? null)
 
 const name = ref(props.request.name ?? '')
 const formData = ref<Record<string, unknown>>({})
 const formValid = ref(false)
-const createdName = ref<string | null>(null)
+const createdName = ref<string | null>(props.answer?.name ?? null)
 const schemaForm = ref<{ setErrors: (errors: FormError[]) => void } | null>(null)
 
 /** The submit button drives the whole flow, including failure display. */
@@ -95,7 +97,7 @@ async function submit() {
     try {
         check = await apiFetch<CheckResult>('/components/check', {
             method: 'POST',
-            body: { component_key: props.request.connectionKey, config: formData.value },
+            body: { component_key: props.request.connection_key, config: formData.value },
         })
     }
     catch (e) {
@@ -117,15 +119,15 @@ async function submit() {
 
     state.value = 'creating'
     try {
-        await componentsStore.create({
+        const created = await componentsStore.create({
             kind: 'connection',
-            key: props.request.connectionKey,
+            key: props.request.connection_key,
             name: name.value.trim(),
             config: formData.value,
         })
         createdName.value = name.value.trim()
         toast.add({ title: `Connection "${createdName.value}" created`, color: 'success' })
-        emit('created', createdName.value, check.live)
+        emit('created', { connection_id: created.id, name: createdName.value, verified: check.live })
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to create connection'))
@@ -141,14 +143,14 @@ async function submit() {
              class="flex items-center gap-2 text-[13px] text-muted">
             <UIcon name="i-lucide-circle-alert"
                    class="size-4 shrink-0" />
-            Connection type "{{ request.connectionKey }}" is not in the catalog.
+            Connection type "{{ request.connection_key }}" is not in the catalog.
         </div>
 
         <!-- Created: locked summary -->
         <div v-else-if="createdName"
              class="flex items-center gap-2.5">
             <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
-                <UIcon :name="componentIcon(request.connectionKey)"
+                <UIcon :name="componentIcon(request.connection_key)"
                        class="size-4.5" />
             </div>
             <div class="flex-1 min-w-0 text-[13px]">
@@ -164,7 +166,7 @@ async function submit() {
              class="flex flex-col gap-3">
             <div class="flex items-center gap-2.5">
                 <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
-                    <UIcon :name="componentIcon(request.connectionKey)"
+                    <UIcon :name="componentIcon(request.connection_key)"
                            class="size-4.5" />
                 </div>
                 <div class="flex-1 min-w-0">

@@ -70,7 +70,7 @@ export default defineNuxtConfig({
         '@nuxt/eslint',
         '@nuxt/ui',
         '@nuxtjs/google-fonts',
-        '@nuxtjs/mdc',
+        '@comark/nuxt',
         '@pinia/nuxt',
         '@vueuse/nuxt',
     ],

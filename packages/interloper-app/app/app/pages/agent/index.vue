@@ -16,11 +16,11 @@ async function onSubmit(e: Event) {
     if (!prompt.value.trim() || creating.value) return
     creating.value = true
     try {
-        const session = await agentStore.createSession()
+        const conversation = await agentStore.createConversation()
         const initialMessage = prompt.value
         prompt.value = ''
         await navigateTo({
-            path: `/agent/chat/${session.id}`,
+            path: `/agent/chat/${conversation.id}`,
             query: { q: initialMessage },
         })
     }
