@@ -160,7 +160,9 @@ A job's policy works one level up: when a run fails, the platform queues the nex
 backoff. Those attempts form a **stack**, and the rest of the system reads the stack rather than any
 one attempt. An automatic retry always re-runs only what failed, carrying forward every operation
 that already succeeded anywhere in the stack; the manual retry endpoint additionally offers re-running
-everything, for when the earlier success is the thing you distrust.
+everything, for when the earlier success is the thing you distrust. Either way a retry continues from
+the stack's latest attempt: retrying an earlier attempt retries the stack, and a stack whose latest
+attempt is still pending, or succeeded, has nothing to retry.
 
 ## Running single assets
 
