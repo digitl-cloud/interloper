@@ -6,10 +6,12 @@ import datetime
 
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, UsageLimits
+from pydantic_ai.capabilities import ProcessHistory
 from pydantic_ai.models.anthropic import AnthropicModelSettings
 from pydantic_ai.models.google import GoogleModelSettings
 from pydantic_ai.settings import ModelSettings
 
+from interloper_agent.history import elide_tool_returns
 from interloper_agent.prompts import INSTRUCTIONS
 from interloper_agent.toolset import toolset
 
@@ -25,7 +27,10 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
     is created on the first run, so building needs no credentials. A turn
     ends either with the answer or with :class:`DeferredToolRequests`: the
     tool calls waiting for the user's approval or for an answer the app
-    collects (a selection, a connection set up in the secure form).
+    collects (a selection, a connection set up in the secure form). Before
+    each request the history is trimmed of older tool returns
+    (:mod:`interloper_agent.history`), which is what keeps a long-lived
+    conversation affordable.
 
     Args:
         model: The ``provider:model`` name.
@@ -49,6 +54,7 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
         output_type=[str, DeferredToolRequests],
         instructions=INSTRUCTIONS,
         toolsets=[toolset()],
+        capabilities=[ProcessHistory(elide_tool_returns)],
         model_settings=model_settings(model),
         defer_model_check=True,
     )
