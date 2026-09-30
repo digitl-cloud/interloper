@@ -201,6 +201,23 @@ class TestWrite:
         rows = _query(destination, 'SELECT "value" FROM "main"."monthly" ORDER BY "day"')
         assert rows == [(15,), (99,)]
 
+    def test_hourly_bounds_compare_as_iso_on_a_varchar_column(self, destination):
+        class HourRow(Schema):
+            hour: str | None
+            value: int | None
+
+        @il.asset(partitioning=il.TimePartitionConfig(column="hour", granularity=il.TimeGranularity.HOUR))
+        def hourly() -> list:
+            return []
+
+        rows = [{"hour": f"2024-01-01T{h:02d}:00:00", "value": h} for h in (2, 3, 4)]
+        destination.write(_ctx(hourly(), schema=HourRow), rows)
+        partition = TimePartition(datetime.datetime(2024, 1, 1, 3), il.TimeGranularity.HOUR)
+        destination.write(_ctx(hourly(), partition, HourRow), [{"hour": "2024-01-01T03:30:00", "value": 30}])
+
+        assert _query(destination, 'SELECT "value" FROM "main"."hourly" ORDER BY "hour"') == [(2,), (30,), (4,)]
+        assert destination.read(_ctx(hourly(), partition))["value"].tolist() == [30]
+
     def test_non_time_partition_replaces_by_equality(self, destination):
         rows = [{"region": "eu", "value": 1}, {"region": "us", "value": 2}]
         destination.write(_ctx(regional(), schema=RegionRow), rows)

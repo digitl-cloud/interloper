@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import threading
 import warnings
 from collections.abc import Iterator
@@ -173,6 +174,9 @@ class DuckDBDestination(DatabaseDestination):
 
         Each parameter is cast to the column's type, so a partition id that
         arrives as a string compares against a ``DATE`` or ``BIGINT`` column.
+        Against a ``VARCHAR`` column, date and datetime bounds are rendered in
+        ISO 8601 (``T`` separator), the form the rows carry, since DuckDB's
+        own cast to text separates with a space and would compare out of order.
 
         Args:
             where: The filter to render.
@@ -182,10 +186,13 @@ class DuckDBDestination(DatabaseDestination):
             The predicate text and its parameters.
         """
         column = _quote(where.column)
-        placeholder = f"CAST(? AS {types[where.column]})" if where.column in types else "?"
+        column_type = types.get(where.column)
+        placeholder = f"CAST(? AS {column_type})" if column_type is not None else "?"
         if where.bounds is None:
             return f"{column} = {placeholder}", [where.value]
         start, end = where.bounds
+        if column_type == "VARCHAR":
+            start, end = (_iso(bound) for bound in (start, end))
         return f"{column} >= {placeholder} AND {column} < {placeholder}", [start, end]
 
     # -- DatabaseDestination hooks ---------------------------------------------
@@ -338,6 +345,18 @@ class DuckDBDestination(DatabaseDestination):
         finally:
             del self._transactions[ident]
             held.cursor.close()
+
+
+def _iso(value: Any) -> Any:
+    """Render a date or datetime as ISO 8601, leaving any other value as is.
+
+    Args:
+        value: A partition bound.
+
+    Returns:
+        The ISO string for a date or datetime, else *value*.
+    """
+    return value.isoformat() if isinstance(value, datetime.date) else value
 
 
 def _quote(identifier: str) -> str:
