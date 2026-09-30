@@ -14,6 +14,7 @@ from typing import Any
 import interloper as il
 from interloper.settings import McpSettings
 from interloper_db.store import Store
+from interloper_toolkit import TOOLS
 from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import CallToolResult
 
@@ -58,6 +59,7 @@ async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments
         tools = (await client.list_tools()).tools
 
     by_name = {t.name: t for t in tools}
+    assert set(by_name) == {t.name for t in TOOLS if not t.carries_secrets}
     assert "create_connections" not in by_name
     assert WRITES <= set(by_name)
     assert all(t.annotations is not None for t in tools)

@@ -2,94 +2,78 @@
 
 from __future__ import annotations
 
-import inspect
-from typing import Any
-
 from interloper_db.store import Store
-from interloper_toolkit import ToolkitContext, collection, scheduling, sources
-from interloper_toolkit.models import ToolError
+from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
+from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.usage import RunUsage
 
-from interloper_agent.toolset import TOOLS, bind, toolset
+from interloper_agent.toolset import TOOLS, toolset
 
 
-class TestBind:
-    def test_keeps_the_name_docstring_and_parameters_minus_the_context(self):
-        tool = bind(scheduling.list_recent_runs)
+def agent_calling(tool_name: str, args: dict) -> Agent[ToolkitContext, str | DeferredToolRequests]:
+    """An agent whose model calls one tool, then answers.
 
-        assert tool.__name__ == "list_recent_runs"
-        assert tool.__doc__ == scheduling.list_recent_runs.__doc__
-        parameters = inspect.signature(tool).parameters
-        assert list(parameters) == ["run_context", "component_id", "status", "limit", "offset"]
-        assert parameters["run_context"].annotation == RunContext[ToolkitContext]
-        assert parameters["limit"].default == 20
-        assert parameters["status"].annotation == (str | None)
+    Returns:
+        The agent, over the real toolset.
+    """
 
-    def test_forwards_the_deps_as_the_toolkit_context(self, ctx: ToolkitContext):
-        run_context: Any = type("Ctx", (), {"deps": ctx})()
+    def call(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart(tool_name, args)])
+        return ModelResponse(parts=[TextPart("done")])
 
-        result = bind(scheduling.list_jobs)(run_context)
-
-        assert result.status == "success"
-        assert result.total == 0
-
-    async def test_binds_async_tools_too(self, ctx: ToolkitContext):
-        run_context: Any = type("Ctx", (), {"deps": ctx})()
-
-        result = await bind(collection.check_connection)(run_context, "not-a-uuid")
-
-        assert isinstance(result, ToolError)
+    return Agent[ToolkitContext, str | DeferredToolRequests](
+        FunctionModel(call), deps_type=ToolkitContext, output_type=[str, DeferredToolRequests], toolsets=[toolset()]
+    )
 
 
 class TestRegistry:
-    def test_every_toolkit_tool_is_registered_once(self):
-        names = [fn.__name__ for fn, _ in TOOLS]
+    def test_the_agent_registers_the_toolkit_table_plus_the_selection_card(self):
+        assert TOOLS[: len(TOOLKIT_TOOLS)] == TOOLKIT_TOOLS
+        assert [tool.name for tool in TOOLS[len(TOOLKIT_TOOLS) :]] == ["request_user_selection"]
 
-        assert len(names) == len(set(names))
-        for module in (collection, scheduling, sources):
-            public = {
-                name
-                for name, member in vars(module).items()
-                if callable(member) and not name.startswith("_") and member.__module__ == module.__name__
-            }
-            helpers = {"categorise", "normalized_asset_keys", "source_relations", "unresolved_requirements"}
-            missing = public - set(names) - helpers - {"request_connection_setup"}
-            assert missing == set(), f"{module.__name__}: {missing}"
+    async def test_the_toolset_exposes_every_tool_with_its_schema(self, ctx: ToolkitContext):
+        run_context = RunContext(deps=ctx, model=TestModel(), usage=RunUsage())
 
-    def test_only_creates_and_cancels_require_approval(self):
-        approved = {fn.__name__ for fn, requires_approval in TOOLS if requires_approval}
+        tools = await toolset().get_tools(run_context)
 
-        assert approved == {"create_connections", "create_source", "create_sources", "create_job", "cancel_backfill"}
-
-    def test_the_toolset_exposes_every_tool_with_its_schema(self):
-        tools = toolset().tools
-
-        assert set(tools) == {fn.__name__ for fn, _ in TOOLS}
-        schema = tools["list_recent_runs"].function_schema.json_schema
+        assert set(tools) == {tool.name for tool in TOOLS}
+        schema = tools["list_recent_runs"].tool_def.parameters_json_schema
         assert set(schema["properties"]) == {"component_id", "status", "limit", "offset"}
         assert "Filter by job UUID" in schema["properties"]["component_id"]["description"]
 
 
 class TestApproval:
     def test_a_create_stops_the_run_until_approved(self, ctx: ToolkitContext, store: Store):
-        def call_create_job(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            if len(messages) == 1:
-                return ModelResponse(
-                    parts=[ToolCallPart("create_job", {"name": "Daily", "cron": "0 6 * * *", "target_source_ids": []})]
-                )
-            return ModelResponse(parts=[TextPart("done")])
-
-        agent = Agent[ToolkitContext, str | DeferredToolRequests](
-            FunctionModel(call_create_job),
-            deps_type=ToolkitContext,
-            output_type=[str, DeferredToolRequests],
-            toolsets=[toolset()],
-        )
+        agent = agent_calling("create_job", {"name": "Daily", "cron": "0 6 * * *", "target_source_ids": []})
 
         result = agent.run_sync("schedule it", deps=ctx)
 
         assert isinstance(result.output, DeferredToolRequests)
         assert [call.tool_name for call in result.output.approvals] == ["create_job"]
         assert store.components.count(ctx.org_id, kinds=["job"]) == 0
+
+
+class TestDeferral:
+    def test_a_selection_stops_the_run_for_the_app_to_answer(self, ctx: ToolkitContext):
+        agent = agent_calling("request_user_selection", {"prompt": "Which?", "options": [{"label": "A", "value": "1"}]})
+
+        result = agent.run_sync("pick", deps=ctx)
+
+        assert isinstance(result.output, DeferredToolRequests)
+        assert [call.tool_name for call in result.output.calls] == ["request_user_selection"]
+
+    def test_a_connection_setup_stops_the_run_only_when_the_form_is_presented(self, ctx: ToolkitContext, store: Store):
+        agent = agent_calling("request_connection_setup", {"connection_key": "demo_connection"})
+
+        fresh = agent.run_sync("connect", deps=ctx)
+        store.components.create(ctx.org_id, kind="connection", key="demo_connection", config={})
+        existing = agent.run_sync("connect", deps=ctx)
+
+        assert isinstance(fresh.output, DeferredToolRequests)
+        assert [call.tool_name for call in fresh.output.calls] == ["request_connection_setup"]
+        assert existing.output == "done"
