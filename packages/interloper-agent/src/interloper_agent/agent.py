@@ -6,9 +6,10 @@ import datetime
 
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, UsageLimits
-from pydantic_ai.capabilities import ProcessHistory
-from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.capabilities import AbstractCapability, ProcessHistory
+from pydantic_ai.models.anthropic import AnthropicCompaction, AnthropicModelSettings
 from pydantic_ai.models.google import GoogleModelSettings
+from pydantic_ai.models.openai import OpenAICompaction
 from pydantic_ai.settings import ModelSettings
 
 from interloper_agent.history import elide_tool_returns
@@ -17,6 +18,12 @@ from interloper_agent.toolset import toolset
 
 TURN_LIMITS = UsageLimits(request_limit=40)
 """What one turn may spend: enough for a long setup flow, a bound on a loop that never converges."""
+
+COMPACTION_THRESHOLD = 100_000
+"""Input tokens past which a provider with native compaction summarises the history.
+
+Half of Claude's window: room for a long, tool-heavy turn after the summary.
+"""
 
 
 def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]:
@@ -27,10 +34,9 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
     is created on the first run, so building needs no credentials. A turn
     ends either with the answer or with :class:`DeferredToolRequests`: the
     tool calls waiting for the user's approval or for an answer the app
-    collects (a selection, a connection set up in the secure form). Before
-    each request the history is trimmed of older tool returns
-    (:mod:`interloper_agent.history`), which is what keeps a long-lived
-    conversation affordable.
+    collects (a selection, a connection set up in the secure form). What the
+    agent does to a long history is decided per provider by
+    :func:`capabilities`.
 
     Args:
         model: The ``provider:model`` name.
@@ -54,7 +60,7 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
         output_type=[str, DeferredToolRequests],
         instructions=INSTRUCTIONS,
         toolsets=[toolset()],
-        capabilities=[ProcessHistory(elide_tool_returns)],
+        capabilities=capabilities(model),
         model_settings=model_settings(model),
         defer_model_check=True,
     )
@@ -67,6 +73,31 @@ def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]
         return f"Current date and time: {now:%Y-%m-%d %H:%M} UTC. Compute relative timestamps from it."
 
     return agent
+
+
+def capabilities(model: str) -> list[AbstractCapability[ToolkitContext]]:
+    """What the agent does to a long history, by provider.
+
+    Every provider gets the elision of older tool returns
+    (:mod:`interloper_agent.history`), which removes most of a
+    conversation's bulk without a model call. A provider with native
+    compaction also summarises server-side once the input crosses
+    :data:`COMPACTION_THRESHOLD` (Anthropic) or its own default (OpenAI's
+    Responses API); Gemini has none, so eliding is all it gets.
+
+    Args:
+        model: The ``provider:model`` name.
+
+    Returns:
+        The capabilities to build the agent with.
+    """
+    provider, _, _ = model.partition(":")
+    built: list[AbstractCapability[ToolkitContext]] = [ProcessHistory(elide_tool_returns)]
+    if provider == "anthropic":
+        built.append(AnthropicCompaction(token_threshold=COMPACTION_THRESHOLD))
+    elif provider in ("openai", "openai-responses"):
+        built.append(OpenAICompaction())
+    return built
 
 
 def model_settings(model: str) -> ModelSettings | None:
