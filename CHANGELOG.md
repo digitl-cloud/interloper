@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.93.0 (2026-09-30)
+
+### Features
+
+- **agent**: Compact the history natively where the provider can
+  ([`9be6b72`](https://github.com/digitl-cloud/interloper/commit/9be6b727f67d1d4482619b0f365a3237cb889a20))
+
+- **agent**: Summarise a conversation past a size, and show what was compacted
+  ([`00d49f0`](https://github.com/digitl-cloud/interloper/commit/00d49f01e1a74aad7aa1376f4f744ae7ed998ade))
+
+
 ## v0.92.1 (2026-09-30)
 
 ### Bug Fixes
