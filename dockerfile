@@ -46,7 +46,9 @@
 #
 #   CORE_EXTRAS       comma-separated interloper-core extras
 #                     (default: google-cloud,slack,sql). Each extra maps to
-#                     --package interloper-{name}.
+#                     --package interloper-{name}. snowflake is not in the
+#                     default: it publishes no musllinux wheels, so it
+#                     cannot install on this Alpine base.
 #   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
 #                     Each extra maps to --extra {name} on interloper-assets.
 #                     Pass "" to disable.
@@ -97,6 +99,7 @@ COPY packages/interloper-mcp/pyproject.toml         packages/interloper-mcp/pypr
 COPY packages/interloper-toolkit/pyproject.toml     packages/interloper-toolkit/pyproject.toml
 COPY packages/interloper-slack/pyproject.toml       packages/interloper-slack/pyproject.toml
 COPY packages/interloper-sql/pyproject.toml         packages/interloper-sql/pyproject.toml
+COPY packages/interloper-snowflake/pyproject.toml   packages/interloper-snowflake/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────
