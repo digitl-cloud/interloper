@@ -12,7 +12,7 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/superpowers/plans/2026-09-07-relation-model-phase-4-app/">
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-30-pydantic-ai-agent-design/">
       
       
       
@@ -25,7 +25,7 @@
     
     
       
-        <title>Relation model, phase 4 (app) Implementation Plan - Interloper</title>
+        <title>The agent on pydantic-ai - Interloper</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#relation-model-phase-4-app-implementation-plan" class="md-skip">
+        <a href="#the-agent-on-pydantic-ai" class="md-skip">
           Skip to content
         </a>
       
@@ -118,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Relation model, phase 4 (app) Implementation Plan
+              The agent on pydantic-ai
             
           </span>
         </div>
@@ -1836,98 +1836,123 @@
   
 
 
-<h1 id="relation-model-phase-4-app-implementation-plan">Relation model, phase 4 (app) Implementation Plan<a class="headerlink" href="#relation-model-phase-4-app-implementation-plan" title="Permanent link">&para;</a></h1>
-<blockquote>
-<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
-</blockquote>
-<p><strong>Goal:</strong> The Nuxt app reads and writes relations by <code>name</code>, derives the resource and upstream views from one <code>relations</code> map filtered by kind, and handles many-valued relations in the wizard, the graph and the pages.</p>
-<p><strong>Architecture:</strong> Two type files change shape (<code>types/component.ts</code>, <code>types/catalog.ts</code>); every other file changes only in which helper it calls or which literal it passes. Helpers stay in the type files, as today. Spec: <code>docs/superpowers/specs/2026-09-07-relation-model-design.md</code>, section 9 (App).</p>
-<p><strong>Tech Stack:</strong> Nuxt 4, TypeScript, Pinia, @nuxt/ui. Verification is <code>pnpm run lint</code>, <code>pnpm exec nuxt typecheck</code>, and a headless walk of the wizard and graph against a dev instance (the <code>verify</code> skill).</p>
-<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">&para;</a></h2>
+<h1 id="the-agent-on-pydantic-ai">The agent on pydantic-ai<a class="headerlink" href="#the-agent-on-pydantic-ai" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-09-30. Status: approved design, shipped with the implementation PR.</p>
+<p>Scope: the in-app agent's runtime (<code>interloper-agent</code>), its API (<code>interloper-api</code> agent routes), its
+persistence (<code>interloper-db</code>) and its UI (<code>interloper-app</code>). The tool surface itself is the toolkit,
+settled by the two preceding specs (investigation tools, MCP write parity); nothing here changes a
+tool's behaviour.</p>
+<hr />
+<h2 id="1-diagnosis">1. Diagnosis<a class="headerlink" href="#1-diagnosis" title="Permanent link">&para;</a></h2>
+<p>The agent runs on Google's ADK as a router plus five specialists and a duplicated "consultant"
+agent. Three things about that are debt rather than design:</p>
 <ul>
-<li>Stacked PR: branch <code>feat/relation-model-app</code> from <code>feat/campaign-matcher</code> (phase 3) once its final review is clean; PR base is the phase 3 branch, retargeted as the stack merges.</li>
-<li>Conventional Commits ending <code>By Digitl</code>; <code>feat(app):</code>. Commit only when Guillaume has asked.</li>
-<li>Frontend commands run from <code>packages/interloper-app/app/</code>. Follow <code>packages/interloper-app/app/AGENTS.md</code>.</li>
-<li>Dev instance on a non-3000 port: <code>INTERLOPER_SERVER_PORT=3100 make dev-up</code>.</li>
-<li>No em-dashes anywhere. Comment sparingly; no attribute-level comments.</li>
-<li><code>packages/interloper-app/app/app/</code> is the root of every path below.</li>
+<li><strong>Sessions are in memory.</strong> <code>InMemorySessionService</code> loses every conversation on an API restart
+  and cannot be shared by a second replica.</li>
+<li><strong>The stream is the ADK's internal event shape.</strong> The app parses <code>author</code>, <code>content.parts</code> with
+  <code>text|thought|functionCall|functionResponse</code> and <code>actions.transferToAgent</code> by hand (307 lines in
+  <code>agentChat.ts</code>), rebuilds a "trail" of thoughts and steps, and keys three interaction cards on the
+  response shapes of three tools.</li>
+<li><strong>Confirmation is prompt-enforced.</strong> <code>request_confirmation</code> returns a "STOP" message and the
+  model is asked to wait; nothing mechanical prevents a write without it.</li>
 </ul>
-<hr />
-<h3 id="task-1-types-and-helpers">Task 1: Types and helpers<a class="headerlink" href="#task-1-types-and-helpers" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong>
-- Modify: <code>types/component.ts:14-30</code> (<code>RelationRef { dst_id, dst_kind }</code>, <code>Relation { src_id, name, dst_id, dst_kind }</code>, <code>RelationInput { dst_id }</code>), <code>:83-98</code> (helpers)
-- Modify: <code>types/catalog.ts:1-35</code> (<code>RelationDefinition { kind: string | string[], key: string | string[], many, optional, on_delete, name }</code>; drop <code>Dependency</code>), <code>:71-95</code> (helpers)</p>
-<p><strong>Interfaces:</strong>
-- Produces in <code>types/component.ts</code>:
-  <div class="language-ts highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">relationRefs</span><span class="p">(</span><span class="nx">c</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">RelationRef</span><span class="p">[]</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">relationIds</span><span class="p">(</span><span class="nx">c</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">resourceMap</span><span class="p">(</span><span class="nx">c</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentRecord</span><span class="p">,</span><span class="w"> </span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="w"> </span><span class="o">|</span><span class="w"> </span><span class="kc">undefined</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="o">&gt;</span><span class="w">   </span><span class="c1">// name -&gt; dst_id for relations whose kind is a resource kind</span>
-</span></code></pre></div>
-- Produces in <code>types/catalog.ts</code>:
-  <div class="language-ts highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">RESOURCE_KINDS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s1">'connection'</span><span class="p">,</span><span class="w"> </span><span class="s1">'config'</span><span class="p">,</span><span class="w"> </span><span class="s1">'resource'</span><span class="p">]</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="kd">const</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">kindsOf</span><span class="p">(</span><span class="nx">r</span><span class="o">:</span><span class="w"> </span><span class="kt">RelationDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">keysOf</span><span class="p">(</span><span class="nx">r</span><span class="o">:</span><span class="w"> </span><span class="kt">RelationDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">resourceRelations</span><span class="p">(</span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">RelationDefinition</span><span class="o">&gt;</span><span class="w">   </span><span class="c1">// kind in RESOURCE_KINDS</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">upstreamRelations</span><span class="p">(</span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="nx">RelationDefinition</span><span class="o">&gt;</span><span class="w">   </span><span class="c1">// kind includes 'asset'</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">requiredUpstreams</span><span class="p">(</span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="nx">Record</span><span class="o">&lt;</span><span class="kt">string</span><span class="p">,</span><span class="w"> </span><span class="kt">string</span><span class="o">&gt;</span><span class="w">              </span><span class="c1">// name -&gt; first key, non-optional only</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">allowedDestinationKeys</span><span class="p">(</span><span class="nx">defn</span><span class="o">:</span><span class="w"> </span><span class="kt">ComponentDefinition</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">[]</span><span class="w">                        </span><span class="c1">// keysOf(relations.destinations)</span>
-</span></code></pre></div>
-- <code>resourceMap</code> needs the definition to know which names are resources; callers pass the catalog definition they already hold.</p>
-<ul class="task-list">
-<li class="task-list-item">
-<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite the two type files</strong> with the shapes above. Keep <code>parseQualifiedKey</code>.</p>
-</li>
-<li class="task-list-item">
-<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Typecheck to list every broken call site</strong></p>
-</li>
+<p>pydantic-ai gives each of these a primitive: message history that serialises
+(<code>ModelMessagesTypeAdapter</code>), a UI adapter that speaks the Vercel AI SDK stream Nuxt UI's chat
+components are built for (<code>VercelAIAdapter</code>, approvals as <code>approval-requested</code> tool states), and
+<code>requires_approval</code> / <code>CallDeferred</code> for human-in-the-loop tools.</p>
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>One agent, all toolsets, one instruction.</strong> No router, no specialists, no consultant.</li>
+<li><strong>Vercel AI SDK protocol end to end.</strong> <code>VercelAIAdapter.dispatch_request</code> on the server, <code>useChat</code>
+   from <code>@ai-sdk/vue</code> in the app, Nuxt UI's <code>UChatMessages</code> / <code>UChatReasoning</code> / <code>UChatTool</code>
+   rendering the parts.</li>
+<li><strong>Conversations in Postgres</strong>, renamed from "sessions" (which is the auth session here).</li>
+<li><strong>Approval on creates and cancels</strong>: <code>create_source</code>, <code>create_sources</code>, <code>create_job</code>,
+   <code>create_connections</code>, <code>cancel_backfill</code>. Every other write runs when called. MCP is unaffected
+   (its clients decide from the annotations).</li>
+<li><strong>Markdown via <code>@comark/nuxt</code></strong>, replacing <code>@nuxtjs/mdc</code>, which only the chat used.</li>
+</ol>
+<h2 id="3-the-agent-interloper-agent">3. The agent (<code>interloper-agent</code>)<a class="headerlink" href="#3-the-agent-interloper-agent" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>agent.py</code>: <code>build_agent(model: str) -&gt; Agent[ToolkitContext, str]</code>. Deps type is <code>ToolkitContext</code>
+  as it stands. Instructions from <code>prompts.py</code> plus a dynamic instruction adding the current UTC
+  time. Model settings enable thought summaries for Google models and adaptive thinking for
+  Anthropic, keyed on the provider prefix. <code>UsageLimits(request_limit=…)</code> bounds a turn.</li>
+<li><code>toolset.py</code>: one <code>FunctionToolset</code> from the toolkit functions. <code>bind(fn)</code> adapts
+  <code>f(ctx: ToolkitContext, …)</code> to a pydantic-ai tool: same name and docstring, the signature minus
+  <code>ctx</code>, forwarding <code>run_context.deps</code>. The registration list is a sequence of
+  <code>(function, requires_approval)</code> pairs, reads first.</li>
+<li>Interaction tools: <code>request_user_selection</code> raises <code>CallDeferred</code>; <code>request_connection_setup</code>
+  returns the toolkit result when connections exist, else raises <code>CallDeferred</code>; the app supplies
+  the outputs. <code>request_confirmation</code> is deleted.</li>
+<li><code>context.py</code> (globals, <code>set_store</code>, <code>get_org_id</code>, <code>toolkit_ctx</code>) is deleted; the ADK wrappers
+  under <code>tools/</code> are deleted.</li>
+<li>Dependencies: <code>google-adk[extensions]</code> out, <code>pydantic-ai-slim[google,anthropic,openai]</code> in.
+  <code>agent.model</code> takes <code>provider:model</code> (<code>google-gla:gemini-2.5-flash</code> default); LiteLLM's
+  <code>provider/model</code> form is gone.</li>
 </ul>
-<p>Run: <code>pnpm exec nuxt typecheck 2&gt;&amp;1 | grep -c "error TS"</code>
-Expected: a non-zero count; the files it names are Tasks 2 to 4's checklist.</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Commit</strong></li>
+<h2 id="4-conversations-interloper-db-and-the-api">4. Conversations (<code>interloper-db</code>) and the API<a class="headerlink" href="#4-conversations-interloper-db-and-the-api" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Table <code>conversations</code>: <code>id</code>, <code>org_id</code>, <code>user_id</code>, <code>title</code>, <code>messages</code> (JSONB, the
+  <code>ModelMessage</code> list), <code>created_at</code>, <code>updated_at</code>; index <code>(org_id, user_id, updated_at)</code>.
+  Migration 007.</li>
+<li>Facet <code>store.conversations</code>: <code>create</code>, <code>get(id, *, org_id, user_id)</code> (foreign reads as missing),
+  <code>list(org_id, user_id)</code>, <code>delete</code>, <code>save(id, messages, title=None)</code> (whole-history replace).</li>
+<li>Routes, replacing <code>/agent/sessions</code>:</li>
 </ul>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>add<span class="w"> </span>app/types/component.ts<span class="w"> </span>app/types/catalog.ts
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(app): relation types keyed by name; resource and upstream views derived by kind</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="s2">By Digitl"</span>
-</span></code></pre></div>
-<hr />
-<h3 id="task-2-components-store">Task 2: Components store<a class="headerlink" href="#task-2-components-store" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong>
-- Modify: <code>stores/components.ts:19</code> (<code>upstreams</code> computed: <code>relations.value.filter(r =&gt; r.dst_kind === 'asset' &amp;&amp; componentById(r.src_id)?.kind === 'asset')</code>, or filter on a <code>src_kind</code> field if the API adds it; prefer asking the API for <code>src_kind</code> in <code>RelationResponse</code> if it is not there), <code>:175-190</code> (<code>_relationDetaches</code>: <code>const defn = vocabulary?.[r.name]; return defn.on_delete === 'detach' || defn.optional</code>), <code>:270-285</code> (dedup key <code>${r.src_id}|${r.name}|${r.dst_id}</code>, delete match on <code>name</code>), the <code>addRelation(componentId, { name, dst_id })</code> and <code>removeRelation(componentId, name, dstId)</code> signatures and their fetch paths (<code>/components/${id}/relations/${name}/${dstId}</code>)</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Apply the changes</strong>, <strong>Step 2: Typecheck</strong> (<code>pnpm exec nuxt typecheck</code>), <strong>Step 3: Commit</strong> <code>feat(app): components store addresses relations by name</code>.</li>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /agent/conversations</code></td>
+<td>editor</td>
+</tr>
+<tr>
+<td><code>GET /agent/conversations</code></td>
+<td>viewer</td>
+</tr>
+<tr>
+<td><code>GET /agent/conversations/{id}</code> (history as <code>UIMessage[]</code> via <code>dump_messages</code>)</td>
+<td>viewer</td>
+</tr>
+<tr>
+<td><code>DELETE /agent/conversations/{id}</code></td>
+<td>editor</td>
+</tr>
+<tr>
+<td><code>POST /agent/conversations/{id}/chat</code></td>
+<td>editor</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>The chat route is one <code>VercelAIAdapter.dispatch_request(request, agent=…, sdk_version=6,
+  deps=ToolkitContext(...), message_history=stored, conversation_id=…, usage_limits=…,
+  on_complete=save)</code>. Approvals and deferred-tool outputs arrive in the client's next request.</li>
+<li>The agent is built once at API startup and exposed as a dependency.</li>
 </ul>
-<hr />
-<h3 id="task-3-wizard-asset-select-collection-composables">Task 3: Wizard, asset select, collection composables<a class="headerlink" href="#task-3-wizard-asset-select-collection-composables" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong>
-- Modify: <code>components/wizard/DefinitionStepper.vue:24-35</code> (<code>RelationStep.name</code> replaces <code>type</code>), <code>:139-200</code> (resource steps from <code>resourceRelations(definition)</code>: <code>{ name, resourceKey: keysOf(r)[0] ?? '', optional: r.optional }</code>), <code>:245-255</code> (seed selections by name; <code>resourceMap(props.component, definition.value)</code>), <code>:300-395</code> (step slots <code>relation-${name}</code> and <code>resource-${name}</code>; submit builds <code>relations: { ...Object.fromEntries(relationSteps.map(s =&gt; [s.name, ids.map(id =&gt; ({ dst_id: id }))])), ...Object.fromEntries(Object.entries(resourceSelections).map(([name, id]) =&gt; [name, [{ dst_id: id }]])) }</code>)
-- Modify: <code>components/sources/Wizard.vue:34</code> (<code>relationIds(props.source, 'destinations')</code>), <code>:57</code> (step name <code>destinations</code>), <code>:89</code> (<code>addRelation(childId, { name: paramName, dst_id: upstreamId })</code>), <code>:133</code> (unchanged call)
-- Modify: <code>components/sources/AssetSelect.vue:55-80</code> (<code>upstreamRelations(assetDefn)</code>; per relation: <code>keys = keysOf(r)</code>, treat each key; a wildcard key <code>*.x</code> lists candidates from every source; <code>many</code> renders a multi-select and binds every chosen id; <code>optional</code> from <code>r.optional</code>)
-- Modify: <code>composables/collection.ts:143</code> (<code>resourceRelations(sourceDefn)</code>), <code>:159</code> (<code>relationIds(source, 'destinations')</code>), <code>composables/warnings.ts:102</code> (unchanged helper name, new shape), <code>:123</code> (<code>relationRefs(source, 'destinations')</code>), <code>composables/destinationBadge.ts:39</code>, <code>composables/partitionGranularity.ts:104</code> (<code>'targets'</code>), <code>composables/stepperFlow.ts:12</code> (by name, unchanged)
-- Modify: <code>pages/hooks.vue:60,146,150</code> (<code>'watches'</code>, <code>'targets'</code>), <code>pages/jobs.vue:94,199,206</code> (<code>'targets'</code>), <code>pages/sources.vue:125</code> (<code>'destinations'</code>), <code>pages/destinations.vue:66</code> (<code>resourceMap(row.original, catalogStore.catalog[row.original.key]).connection</code>)</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Apply the changes file by file, typechecking after each</strong>, <strong>Step 2: <code>pnpm run lint</code></strong>, <strong>Step 3: Commit</strong> <code>feat(app): wizard, asset select and pages bind relations by name; many-valued upstream picker</code>.</li>
+<h2 id="5-the-app">5. The app<a class="headerlink" href="#5-the-app" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>ai</code> + <code>@ai-sdk/vue</code>; <code>useChat</code> with <code>DefaultChatTransport</code> on the chat route and
+  <code>sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls</code>.</li>
+<li>Parts: reasoning → <code>UChatReasoning</code>; tools → <code>UChatTool</code> (Approve/Deny actions on
+  <code>approval-requested</code>); <code>tool-request_user_selection</code> → <code>SelectCard</code>; <code>tool-request_connection_setup</code>
+  → <code>ConnectCard</code>, both resolving with <code>addToolOutput</code>; text → comark <code>Markdown</code>.</li>
+<li>Deleted: <code>agentChat.ts</code>, the ADK event types, <code>ConfirmCard.vue</code>, <code>Work.vue</code>, <code>Thinking.vue</code>.</li>
+<li><code>stores/agent.ts</code> becomes the conversations store.</li>
 </ul>
-<hr />
-<h3 id="task-4-graph">Task 4: Graph<a class="headerlink" href="#task-4-graph" title="Permanent link">&para;</a></h3>
-<p><strong>Files:</strong>
-- Modify: <code>composables/graph.ts:225-240</code> (pair by <code>upstreamRelations(spec)</code>; a candidate satisfies a relation when any of <code>keysOf(r)</code> matches its qualified key, with <code>*.x</code> matching any source; <code>paramName</code> is the relation name), <code>components/graph/AssetNode.vue:87,128</code> (<code>requiredUpstreams</code>, <code>removeRelation(d.src_id, d.name, d.dst_id)</code>), <code>components/graph/AssetPanel.vue:85,234</code> (<code>'destinations'</code>), <code>components/graph/GraphCanvas.vue:553</code> (edge <code>type: 'upstream'</code> is a Vue Flow edge type name, unrelated to relations; leave it), the drop handler that calls <code>addRelation</code> (<code>{ name: paramName, dst_id }</code>)</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Apply</strong>, <strong>Step 2: Typecheck and lint</strong>, <strong>Step 3: Commit</strong> <code>feat(app): graph pairs assets by relation name and key list</code>.</li>
-</ul>
-<hr />
-<h3 id="task-5-verification-and-build">Task 5: Verification and build<a class="headerlink" href="#task-5-verification-and-build" title="Permanent link">&para;</a></h3>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: <code>pnpm run lint &amp;&amp; pnpm exec nuxt typecheck</code></strong> clean.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Headless walk</strong> (verify skill, port 3100): create a connection, a destination, a source through the wizard (connection step bound by name, destinations step), open the graph, drag a cross-source upstream onto an asset with a many-valued relation and see two edges, delete a destination that a source uses and see the blocking preview, delete a job target's source and see the detaching preview.</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Retired-name sweep</strong></li>
-</ul>
-<p>Run: <code>grep -rn "\.slot\b\|slots\b\|slotted\|'upstream'\|'destination'\|'target'\|'watch'\|'resource'" app --include='*.ts' --include='*.vue' | grep -v "handleType\|edge\|type: 'upstream'\|byKind(\|category\|id: 'target'" || echo clean</code>
-Expected: <code>clean</code> after reviewing the exclusions (Vue Flow handle types, table column ids and warning categories legitimately use those words).</p>
-<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: <code>make build-app</code></strong> from the repo root, then open the PR <code>feat(app): relations by name</code> when Guillaume asks.</li>
-</ul>
+<h2 id="6-tests-and-rollout">6. Tests and rollout<a class="headerlink" href="#6-tests-and-rollout" title="Permanent link">&para;</a></h2>
+<p>Deterministic agent and route tests over pydantic-ai's <code>TestModel</code>/<code>FunctionModel</code>; store facet
+and migration tests; app lint and typecheck. One PR, commits: db conversations; agent on
+pydantic-ai; API routes over the Vercel stream; app over the AI SDK; drop google-adk and document
+the model format. Live check (real Gemini, dev instance) before merge: a read, an approved
+<code>create_job</code>, a selection card, the connect card, a restored conversation after reload.</p>
+<p>Out of scope: multi-agent delegation, AG-UI, cost tracking, lifting the <code>kubernetes</code> pin.</p>
 
 
 
