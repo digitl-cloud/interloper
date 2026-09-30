@@ -59,6 +59,7 @@ onMounted(() => {
 
                     <template #content="{ message }">
                         <AgentParts :message="message"
+                                    :live="message.id === chat.liveMessageId.value"
                                     @approve="(id, approved) => chat?.addToolApprovalResponse({ id, approved })"
                                     @output="(tool, toolCallId, output) => chat?.addToolOutput({ tool, toolCallId, output })" />
                     </template>

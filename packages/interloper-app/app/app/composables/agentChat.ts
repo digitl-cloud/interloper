@@ -30,10 +30,17 @@ export function useAgentChat(conversationId: string, initialMessages: UIMessage[
 
     const busy = computed(() => chat.status.value === 'submitted' || chat.status.value === 'streaming')
 
+    /** The assistant message the running turn is still adding to, if any. */
+    const liveMessageId = computed(() => {
+        if (!busy.value) return undefined
+        const last = chat.messages.value[chat.messages.value.length - 1]
+        return last?.role === 'assistant' ? last.id : undefined
+    })
+
     function send(text: string) {
         if (!text.trim() || busy.value) return
         chat.sendMessage({ text })
     }
 
-    return { ...chat, busy, send }
+    return { ...chat, busy, liveMessageId, send }
 }
