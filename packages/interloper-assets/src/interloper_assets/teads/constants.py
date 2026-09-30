@@ -1,4 +1,11 @@
+import httpx2
+
 BASE_URL = "https://ads.teads.tv"
+
+REPORT_TIMEZONE = "Etc/GMT+0"
+REPORT_POLL_INTERVAL = 30.0
+REPORT_TIMEOUT = 30 * 60
+DOWNLOAD_TIMEOUT = httpx2.Timeout(300.0, connect=30.0)
 
 STANDARD_DIMENSIONS = [
     "day",

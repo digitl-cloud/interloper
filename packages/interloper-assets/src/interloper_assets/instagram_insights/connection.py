@@ -31,8 +31,14 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
 
         The ``refresh_token`` field holds a long-lived access token, used
         directly as the bearer.
+
+        Returns:
+            The client, pinned to ``constants.API_VERSION`` and cached per connection instance.
         """
-        return il.AsyncRESTClient(constants.BASE_URL, auth=il.HTTPBearerAuth(self.refresh_token))
+        return il.AsyncRESTClient(
+            f"{constants.BASE_URL}/{constants.API_VERSION}",
+            auth=il.HTTPBearerAuth(self.refresh_token),
+        )
 
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
@@ -48,14 +54,14 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        params = {
+        params: dict[str, str] | None = {
             "fields": "instagram_business_account{id,username,name},name",
             "access_token": self.refresh_token,
             "limit": "100",
         }
 
         accounts: list[dict[str, str]] = []
-        path: str | None = "/v21.0/me/accounts"
+        path: str | None = "/me/accounts"
 
         while path:
             response = await self.client.get(path, params=params)
@@ -67,14 +73,16 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
                 if not ig_account:
                     continue
                 name = ig_account.get("username") or ig_account.get("name") or page.get("name", ig_account["id"])
-                accounts.append({
-                    "id": str(ig_account["id"]),
-                    "name": name,
-                })
+                accounts.append(
+                    {
+                        "id": str(ig_account["id"]),
+                        "name": name,
+                    }
+                )
 
-            # Cursor pagination: follow the absolute `next` URL (already carries params).
+            # The "next" link already carries the cursor, fields and token.
             path = data.get("paging", {}).get("next")
-            params = {}
+            params = None
 
         return accounts
 
