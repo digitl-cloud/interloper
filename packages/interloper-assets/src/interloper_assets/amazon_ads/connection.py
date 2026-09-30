@@ -1,7 +1,7 @@
 from enum import Enum
 from functools import cached_property
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -101,7 +101,7 @@ class AmazonAdsConnection(il.RefreshTokenOAuthConnection):
         """
         location = self.api_location
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             token_resp = await client.post(
                 f"{location.auth_url}/auth/o2/token",
                 data={

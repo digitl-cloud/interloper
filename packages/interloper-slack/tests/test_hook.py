@@ -2,7 +2,7 @@
 
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
@@ -184,9 +184,9 @@ class TestFire:
             _hook().fire(il.HookContext(event_type="run_failed", component_id="c1"))
 
     def test_http_error_propagates(self, slack):
-        slack.raw(httpx.Response(500))
+        slack.raw(httpx2.Response(500))
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(httpx2.HTTPStatusError):
             _hook().fire(il.HookContext(event_type="run_failed", component_id="c1"))
 
 

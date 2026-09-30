@@ -83,7 +83,7 @@ Trace context propagates automatically: the run span's context rides `metadata["
 into every event and into `MultiProcessRunner` workers, and `TRACEPARENT` / `TRACESTATE`
 environment variables carry it into spawned processes. `child_process_env()` builds the
 environment a child needs (trace context plus the `INTERLOPER_OTEL_*` configuration, with the
-service name reset to `interloper-run`). httpx client spans are enabled when the httpx
+service name reset to `interloper-run`). httpx2 client spans are enabled when the httpx2
 instrumentation is installed, so REST-based sources get egress spans for free.
 
 ## Metrics

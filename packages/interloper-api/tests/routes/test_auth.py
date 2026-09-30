@@ -1,6 +1,6 @@
 """Tests for ``interloper_api.routes.auth`` — login callback policies.
 
-The Google OAuth exchange is faked at the httpx layer; a lightweight fake store
+The Google OAuth exchange is faked at the httpx2 layer; a lightweight fake store
 records the calls. Two properties under test: a user whose email is in
 ``auth_config.super_admin_emails`` is promoted on login (promote-only — an
 existing super-admin is left alone), and ``allowed_domains`` gates
@@ -89,12 +89,12 @@ def _client(
 def fake_google(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fake the token exchange and userinfo fetch."""
     monkeypatch.setattr(
-        auth_module.httpx,
+        auth_module.httpx2,
         "post",
         lambda *a, **k: SimpleNamespace(status_code=200, json=lambda: {"access_token": "at"}),
     )
     monkeypatch.setattr(
-        auth_module.httpx,
+        auth_module.httpx2,
         "get",
         lambda *a, **k: SimpleNamespace(
             status_code=200,
@@ -292,7 +292,7 @@ class TestGoogleCallbackFailures:
 
     def test_a_rejected_code_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            auth_module.httpx, "post", lambda *a, **k: SimpleNamespace(status_code=400, json=dict)
+            auth_module.httpx2, "post", lambda *a, **k: SimpleNamespace(status_code=400, json=dict)
         )
 
         response = _client(FakeStore()).get("/auth/google/callback?code=bad")
@@ -304,7 +304,7 @@ class TestGoogleCallbackFailures:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            auth_module.httpx,
+            auth_module.httpx2,
             "post",
             lambda *a, **k: SimpleNamespace(status_code=200, json=lambda: {"scope": "openid"}),
         )
@@ -316,7 +316,7 @@ class TestGoogleCallbackFailures:
 
     def test_a_failed_userinfo_lookup_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            auth_module.httpx, "get", lambda *a, **k: SimpleNamespace(status_code=403, json=dict)
+            auth_module.httpx2, "get", lambda *a, **k: SimpleNamespace(status_code=403, json=dict)
         )
 
         response = _client(FakeStore()).get("/auth/google/callback?code=c")
@@ -332,7 +332,7 @@ class TestGoogleCallbackFailures:
         self, monkeypatch: pytest.MonkeyPatch, userinfo: dict[str, str]
     ) -> None:
         monkeypatch.setattr(
-            auth_module.httpx,
+            auth_module.httpx2,
             "get",
             lambda *a, **k: SimpleNamespace(status_code=200, json=lambda: userinfo),
         )

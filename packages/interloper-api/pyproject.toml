@@ -13,7 +13,7 @@ dependencies = [
     "interloper-db",
     "fastapi>=0.115.0",
     "google-auth>=2.0.0",
-    "httpx>=0.28.0",
+    "httpx2>=2.13.1",
     "psycopg2-binary>=2.9.0",
     "uvicorn[standard]>=0.41.0",
     "wsproto>=1.2.0",

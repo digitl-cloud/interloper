@@ -4,7 +4,7 @@ import datetime as dt
 import urllib.parse
 from typing import ClassVar
 
-import httpx
+import httpx2
 import pytest
 from pydantic_settings import SettingsConfigDict
 
@@ -191,14 +191,14 @@ class TestConnectionCheck:
 
 def _mock_transport(monkeypatch: pytest.MonkeyPatch, handler) -> None:
     """Route the AsyncClient the generic renew constructs through a mock transport."""
-    real = httpx.AsyncClient
+    real = httpx2.AsyncClient
 
     def factory(**kwargs):
         kwargs.pop("timeout", None)
         kwargs.pop("follow_redirects", None)
-        return real(transport=httpx.MockTransport(handler), **kwargs)
+        return real(transport=httpx2.MockTransport(handler), **kwargs)
 
-    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    monkeypatch.setattr(httpx2, "AsyncClient", factory)
 
 
 class TestConnectionRenewal:
@@ -241,11 +241,11 @@ class TestConnectionRenewal:
         assert all("x-section" not in prop for prop in properties.values())
 
     async def test_generic_refresh_grant_rotates(self, monkeypatch: pytest.MonkeyPatch):
-        requests: list[httpx.Request] = []
+        requests: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx.Response(
+            return httpx2.Response(
                 200, json={"access_token": "a", "refresh_token": "NEW", "refresh_token_expires_in": 1000}
             )
 
@@ -267,8 +267,8 @@ class TestConnectionRenewal:
         assert "refresh_token=OLD" in body
 
     async def test_generic_refresh_grant_without_rotation(self, monkeypatch: pytest.MonkeyPatch):
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"access_token": "a", "refresh_token": "OLD"})
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json={"access_token": "a", "refresh_token": "OLD"})
 
         _mock_transport(monkeypatch, handler)
 
@@ -282,11 +282,11 @@ class TestConnectionRenewal:
         assert renewal.expires_in is None
 
     async def test_generic_refresh_grant_basic_auth(self, monkeypatch: pytest.MonkeyPatch):
-        requests: list[httpx.Request] = []
+        requests: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx.Response(200, json={"access_token": "a"})
+            return httpx2.Response(200, json={"access_token": "a"})
 
         _mock_transport(monkeypatch, handler)
 
@@ -317,11 +317,11 @@ class TestConnectionRenewal:
         assert TkConn.definition().renewable is False
 
     async def test_scope_reaches_providers_that_require_it(self, monkeypatch: pytest.MonkeyPatch):
-        requests: list[httpx.Request] = []
+        requests: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx.Response(200, json={"access_token": "a"})
+            return httpx2.Response(200, json={"access_token": "a"})
 
         _mock_transport(monkeypatch, handler)
 
@@ -335,11 +335,11 @@ class TestConnectionRenewal:
         assert urllib.parse.parse_qs(request.content.decode())["scope"] == ["offline_access msads.manage"]
 
     async def test_mapped_fields_renew_through_the_provider(self, monkeypatch: pytest.MonkeyPatch):
-        requests: list[httpx.Request] = []
+        requests: list[httpx2.Request] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             requests.append(request)
-            return httpx.Response(200, json={"access_token": "FRESH", "expires_in": 5183944})
+            return httpx2.Response(200, json={"access_token": "FRESH", "expires_in": 5183944})
 
         _mock_transport(monkeypatch, handler)
 
@@ -371,8 +371,8 @@ class TestRenewalFailureMessage:
     def test_http_status_error_hides_the_url(self):
         # Token exchanges carry credentials as query params; the URL must not
         # survive into the persisted message.
-        request = httpx.Request("GET", "https://provider/exchange?client_secret=SECRET")
-        error = httpx.HTTPStatusError("boom", request=request, response=httpx.Response(400, request=request))
+        request = httpx2.Request("GET", "https://provider/exchange?client_secret=SECRET")
+        error = httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(400, request=request))
 
         message = Connection.renewal_failure_message(error)
 
@@ -380,8 +380,8 @@ class TestRenewalFailureMessage:
         assert "SECRET" not in message
 
     def test_network_errors_collapse_to_category(self):
-        assert Connection.renewal_failure_message(httpx.ConnectTimeout("t")) == "The renewal timed out."
-        assert Connection.renewal_failure_message(httpx.ConnectError("c")) == "Network error during renewal."
+        assert Connection.renewal_failure_message(httpx2.ConnectTimeout("t")) == "The renewal timed out."
+        assert Connection.renewal_failure_message(httpx2.ConnectError("c")) == "Network error during renewal."
 
     def test_other_errors_format_through_format_exception(self):
         assert Connection.renewal_failure_message(ValueError("boom")) == "ValueError: boom"
@@ -430,8 +430,8 @@ class TestConnectionOperation:
             def renew(self) -> Renewal:
                 return Renewal()
 
-        request = httpx.Request("GET", "https://provider/exchange?client_secret=SECRET")
-        error = httpx.HTTPStatusError("boom", request=request, response=httpx.Response(400, request=request))
+        request = httpx2.Request("GET", "https://provider/exchange?client_secret=SECRET")
+        error = httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(400, request=request))
 
         failure = Renewed().failure(error)
 

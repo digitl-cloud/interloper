@@ -37,7 +37,7 @@ def fetch_field_provider(fn: F) -> F:
 
     The method runs inside the API process, which installs the connection
     *classes* but not their heavy provider SDK extras, so a provider must
-    use lightweight HTTP (``httpx``), never ``self.api`` (the SDK client).
+    use lightweight HTTP (``httpx2``), never ``self.api`` (the SDK client).
 
     It returns a ``list[dict]``; the ``FetchField`` picks ``label_key`` /
     ``value_key`` out of each item::

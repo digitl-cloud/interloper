@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from interloper.rest.client import AsyncRESTClient
 
@@ -13,16 +13,16 @@ class TestAsyncRESTClient:
     async def test_applies_base_url_headers_and_params(self):
         seen: dict[str, str | None] = {}
 
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             seen["path"] = request.url.path
             seen["token"] = request.headers.get("Access-Token")
             seen["a"] = request.url.params.get("a")
-            return httpx.Response(200, json={"ok": True})
+            return httpx2.Response(200, json={"ok": True})
 
         client = AsyncRESTClient(
             "https://api.test",
             headers={"Access-Token": "tok"},
-            transport=httpx.MockTransport(handler),
+            transport=httpx2.MockTransport(handler),
         )
         async with client:
             response = await client.get("/things", params={"a": "1"})

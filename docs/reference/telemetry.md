@@ -77,5 +77,5 @@ histograms export with delta temporality; up-down counters and gauges stay cumul
 | `tracer()`, `meter()` | The framework's cached tracer and meter. |
 
 `init_telemetry` sets `OTEL_SEMCONV_STABILITY_OPT_IN=http` unless already set, so HTTP spans use
-the stable semantic conventions. Contrib instrumentors for httpx and SQLAlchemy are activated
+the stable semantic conventions. Contrib instrumentors for httpx2 and SQLAlchemy are activated
 when installed.

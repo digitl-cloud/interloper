@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 from interloper.settings import McpSettings
 from interloper_db.store import Store
@@ -30,11 +30,11 @@ INITIALIZE = {
 HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
 
 
-async def _post(app: Any, json: dict, headers: dict[str, str]) -> httpx.Response:
+async def _post(app: Any, json: dict, headers: dict[str, str]) -> httpx2.Response:
     # The session manager only runs inside the app lifespan.
     async with app.router.lifespan_context(app):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        transport = httpx2.ASGITransport(app=app)
+        async with httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client:
             return await client.post("/mcp", json=json, headers=headers)
 
 

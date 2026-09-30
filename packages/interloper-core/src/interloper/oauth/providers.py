@@ -15,7 +15,7 @@ from __future__ import annotations
 import base64
 from typing import Any, ClassVar
 
-import httpx
+import httpx2
 
 from interloper.oauth.base import OAuthProvider, RefreshTokenResponse
 
@@ -30,7 +30,7 @@ class FacebookProvider(OAuthProvider):
         redirect_uri: str,
         client_id: str,
         client_secret: str,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the authorization-code grant: a GET carrying no ``grant_type``.
 
         Args:
@@ -42,7 +42,7 @@ class FacebookProvider(OAuthProvider):
         Returns:
             The request to send.
         """
-        return httpx.Request(
+        return httpx2.Request(
             "GET",
             self.token_url,
             params={
@@ -60,7 +60,7 @@ class FacebookProvider(OAuthProvider):
         client_secret: str,
         refresh_token: str,
         scope: str | None = None,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the renewal: Facebook's ``fb_exchange_token`` grant.
 
         Facebook has no refresh-token grant — a long-lived access token
@@ -76,7 +76,7 @@ class FacebookProvider(OAuthProvider):
         Returns:
             The request to send.
         """
-        return httpx.Request(
+        return httpx2.Request(
             "GET",
             self.token_url,
             params={
@@ -113,7 +113,7 @@ class MicrosoftProvider(OAuthProvider):
         client_secret: str,
         refresh_token: str,
         scope: str | None = None,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the refresh grant, scope included.
 
         Microsoft rejects some refresh tokens when the grant omits ``scope``
@@ -151,7 +151,7 @@ class PinterestProvider(OAuthProvider):
         redirect_uri: str,
         client_id: str,
         client_secret: str,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the standard authorization-code grant with the Basic header added.
 
         Args:
@@ -176,7 +176,7 @@ class PinterestProvider(OAuthProvider):
         client_secret: str,
         refresh_token: str,
         scope: str | None = None,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the standard refresh grant with the Basic header added.
 
         Args:
@@ -213,7 +213,7 @@ class TikTokProvider(OAuthProvider):
         redirect_uri: str,
         client_id: str,
         client_secret: str,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build TikTok's authorization-code grant: ``app_id`` / ``secret`` / ``auth_code``.
 
         Args:
@@ -226,7 +226,7 @@ class TikTokProvider(OAuthProvider):
         Returns:
             The request to send.
         """
-        return httpx.Request(
+        return httpx2.Request(
             "POST",
             self.token_url,
             json={"app_id": client_id, "secret": client_secret, "auth_code": code},

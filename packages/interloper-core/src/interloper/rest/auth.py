@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 from collections.abc import Generator
 
-import httpx
+import httpx2
 
 from interloper.errors import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
 
-class HTTPBearerAuth(httpx.Auth):
+class HTTPBearerAuth(httpx2.Auth):
     """HTTP Bearer authentication."""
 
     def __init__(self, token: str):
@@ -23,10 +23,10 @@ class HTTPBearerAuth(httpx.Auth):
         """
         self._token = token
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response, None]:
         """Authenticate the request with a Bearer token.
 
-        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx drive
+        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx2 drive
         the same generator for :class:`~interloper.rest.client.RESTClient` and
         :class:`~interloper.rest.client.AsyncRESTClient`; a sync-only flow leaves
         the async client's requests unauthenticated.
@@ -41,7 +41,7 @@ class HTTPBearerAuth(httpx.Auth):
         yield request
 
 
-class OAuth2Auth(httpx.Auth):
+class OAuth2Auth(httpx2.Auth):
     """OAuth2 authentication with automatic token acquisition and 401 refresh.
 
     Async-native: the token request is *yielded into the active client's flow*
@@ -126,16 +126,16 @@ class OAuth2Auth(httpx.Auth):
         """Clear the cached access token (forces re-acquisition on the next request)."""
         self._access_token = None
 
-    def _token_request(self) -> httpx.Request:
+    def _token_request(self) -> httpx2.Request:
         """Build the token-exchange request to be executed by the active client.
 
         Returns:
             A POST to the token endpoint carrying the grant's ``auth_data``.
         """
         url = self._base_url.rstrip("/") + self._token_endpoint
-        return httpx.Request("POST", url, data=self.auth_data, headers=self.auth_headers or {})
+        return httpx2.Request("POST", url, data=self.auth_data, headers=self.auth_headers or {})
 
-    def _store_token(self, response: httpx.Response) -> None:
+    def _store_token(self, response: httpx2.Response) -> None:
         """Persist the access/refresh tokens from a token-endpoint response.
 
         Args:
@@ -148,10 +148,10 @@ class OAuth2Auth(httpx.Auth):
         self._refresh_token = token_data.get("refresh_token", self._refresh_token)
         logger.info("OAuth2 access token acquired")
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response, None]:
         """Attach a Bearer token, acquiring/refreshing it via yielded requests.
 
-        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx drive
+        Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx2 drive
         the same generator for sync and async clients: the yielded token request
         is executed by whichever client is active.
 

@@ -2,7 +2,7 @@ from collections.abc import Generator
 from enum import Enum
 from functools import cached_property
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
@@ -85,7 +85,7 @@ class LWATokenAuth(il.OAuth2RefreshTokenAuth):
     override the flow to place the token there and refresh on 401/403.
     """
 
-    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+    def auth_flow(self, request: httpx2.Request) -> Generator[httpx2.Request, httpx2.Response, None]:
         """Sign each request, refreshing the access token when it has expired.
 
         Args:
@@ -177,7 +177,7 @@ class AmazonSellingPartnerConnection(il.Connection):
             True — an invalid client id/secret or refresh token raises out of the
             token exchange.
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{self.api_location.auth_url}/auth/o2/token",
                 data={

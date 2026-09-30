@@ -10,7 +10,7 @@ from __future__ import annotations
 import json as jsonlib
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 
 from interloper_slack import connection as connection_module
@@ -25,8 +25,8 @@ class FakeSlack:
 
     def __init__(self) -> None:
         """Start with an empty script and no recorded traffic."""
-        self.requests: list[httpx.Request] = []
-        self._script: list[httpx.Response] = []
+        self.requests: list[httpx2.Request] = []
+        self._script: list[httpx2.Response] = []
 
     # -- Scripting -------------------------------------------------------------
 
@@ -36,7 +36,7 @@ class FakeSlack:
         Returns:
             The fake, for chaining.
         """
-        return self.raw(httpx.Response(200, json={"ok": True, **payload}))
+        return self.raw(httpx2.Response(200, json={"ok": True, **payload}))
 
     def error(self, code: str) -> FakeSlack:
         """Queue a Slack rejection — HTTP 200 with ``ok: false``.
@@ -44,9 +44,9 @@ class FakeSlack:
         Returns:
             The fake, for chaining.
         """
-        return self.raw(httpx.Response(200, json={"ok": False, "error": code}))
+        return self.raw(httpx2.Response(200, json={"ok": False, "error": code}))
 
-    def raw(self, response: httpx.Response) -> FakeSlack:
+    def raw(self, response: httpx2.Response) -> FakeSlack:
         """Queue an arbitrary response (transport failures, malformed bodies).
 
         Returns:
@@ -91,7 +91,7 @@ class FakeSlack:
         return self.requests[index].headers.get("Authorization")
 
     def timeout(self, index: int = 0) -> Any:
-        """The timeout httpx resolved for the *index*-th request.
+        """The timeout httpx2 resolved for the *index*-th request.
 
         Returns:
             The resolved timeout.
@@ -100,14 +100,14 @@ class FakeSlack:
 
     # -- Transport -------------------------------------------------------------
 
-    def handle(self, request: httpx.Request) -> httpx.Response:
+    def handle(self, request: httpx2.Request) -> httpx2.Response:
         """Record *request* and answer with the next scripted response.
 
         Returns:
             The next scripted response.
         """
         self.requests.append(request)
-        return self._script.pop(0) if self._script else httpx.Response(200, json={"ok": True})
+        return self._script.pop(0) if self._script else httpx2.Response(200, json={"ok": True})
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def slack(monkeypatch: pytest.MonkeyPatch) -> FakeSlack:
     real = connection_module.RESTClient
 
     def factory(*args: Any, **kwargs: Any) -> Any:
-        return real(*args, transport=httpx.MockTransport(fake.handle), **kwargs)
+        return real(*args, transport=httpx2.MockTransport(fake.handle), **kwargs)
 
     monkeypatch.setattr(connection_module, "RESTClient", factory)
     return fake

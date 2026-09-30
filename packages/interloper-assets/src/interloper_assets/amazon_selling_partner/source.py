@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 from interloper_pandas import DataFrameNormalizer
 
@@ -79,7 +79,7 @@ async def _wait_for_report(connection: AmazonSellingPartnerConnection, report_id
             response.raise_for_status()
             payload = response.json()
             status = payload["processingStatus"]
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             logger.debug(f"Transient error polling report {report_id}: {exc}")
             if loop.time() >= deadline:
                 raise RuntimeError(f"Report {report_id} did not complete within {_REPORT_TIMEOUT:.0f}s") from exc
@@ -106,7 +106,7 @@ async def _report_document_url(connection: AmazonSellingPartnerConnection, docum
 
 async def _download_gzip_json(url: str) -> dict:
     """Download and gzip-decompress a report document from its pre-signed URL."""
-    async with httpx.AsyncClient(timeout=None) as client:
+    async with httpx2.AsyncClient(timeout=None) as client:
         response = await client.get(url)
         response.raise_for_status()
     return json.loads(gzip.decompress(response.content))
@@ -169,7 +169,7 @@ async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: 
             response.raise_for_status()
             payload = response.json()
             status = payload["processingStatus"]
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             logger.debug(f"Transient error polling query {query_id}: {exc}")
             if loop.time() >= deadline:
                 raise RuntimeError(f"Query {query_id} did not complete within {_QUERY_TIMEOUT:.0f}s") from exc
@@ -188,7 +188,7 @@ async def _wait_for_query(connection: AmazonSellingPartnerConnection, query_id: 
 
 async def _download_json(url: str) -> Any:
     """Download a Data Kiosk document (plain JSON) from its pre-signed URL."""
-    async with httpx.AsyncClient(timeout=None) as client:
+    async with httpx2.AsyncClient(timeout=None) as client:
         response = await client.get(url)
         response.raise_for_status()
     return response.json()

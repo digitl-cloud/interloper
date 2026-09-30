@@ -20,7 +20,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
    ```py
    from functools import cached_property
 
-   import httpx
+   import httpx2
    import interloper as il
    from pydantic_settings import SettingsConfigDict
 
@@ -40,7 +40,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 
    ```py
        async def check(self) -> bool:
-           async with httpx.AsyncClient() as client:
+           async with httpx2.AsyncClient() as client:
                response = await client.get("https://api.shop.example/me", headers={"Authorization": f"Bearer {self.api_key}"})
            return response.is_success
    ```

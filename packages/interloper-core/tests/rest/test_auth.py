@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from interloper.rest.auth import HTTPBearerAuth, OAuth2ClientCredentialsAuth, OAuth2RefreshTokenAuth
 from interloper.rest.client import AsyncRESTClient, RESTClient
@@ -17,22 +17,22 @@ def _oauth_handler(*, expect_grant: str, token: str = "tok-1"):
     Returns:
         The handler and the list it appends every seen request to.
     """
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen.append(request)
         if request.url.path == "/oauth2/token":
-            form = dict(httpx.QueryParams(request.content.decode()))
+            form = dict(httpx2.QueryParams(request.content.decode()))
             assert form["grant_type"] == expect_grant
-            return httpx.Response(200, json={"access_token": token, "refresh_token": "rt-new"})
+            return httpx2.Response(200, json={"access_token": token, "refresh_token": "rt-new"})
         if request.headers.get("Authorization") != f"Bearer {token}":
-            return httpx.Response(401, json={"error": "expired"})
-        return httpx.Response(200, json={"ok": True})
+            return httpx2.Response(401, json={"error": "expired"})
+        return httpx2.Response(200, json={"ok": True})
 
     return handler, seen
 
 
-def _echo_authorization(request: httpx.Request) -> httpx.Response:
+def _echo_authorization(request: httpx2.Request) -> httpx2.Response:
     """A transport that echoes the request's ``Authorization`` header back as JSON.
 
     Args:
@@ -41,7 +41,7 @@ def _echo_authorization(request: httpx.Request) -> httpx.Response:
     Returns:
         A 200 response whose body carries the header under ``auth``.
     """
-    return httpx.Response(200, json={"auth": request.headers.get("Authorization")})
+    return httpx2.Response(200, json={"auth": request.headers.get("Authorization")})
 
 
 class TestHTTPBearerAuth:
@@ -49,13 +49,13 @@ class TestHTTPBearerAuth:
 
     def test_sync_client_sends_bearer_header(self):
         auth = HTTPBearerAuth("t")
-        client = RESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(_echo_authorization))
+        client = RESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(_echo_authorization))
         with client:
             assert client.get("/data").json() == {"auth": "Bearer t"}
 
     async def test_async_client_sends_bearer_header(self):
         auth = HTTPBearerAuth("t")
-        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(_echo_authorization))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(_echo_authorization))
         async with client:
             response = await client.get("/data")
         assert response.json() == {"auth": "Bearer t"}
@@ -65,7 +65,7 @@ class TestOAuth2SyncClient:
     def test_acquires_token_via_the_active_client(self):
         handler, seen = _oauth_handler(expect_grant="client_credentials")
         auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret")
-        client = RESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
+        client = RESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
         with client:
             response = client.get("/data")
         assert response.json() == {"ok": True}
@@ -78,7 +78,7 @@ class TestOAuth2AsyncClient:
     async def test_acquires_token_natively(self):
         handler, seen = _oauth_handler(expect_grant="refresh_token")
         auth = OAuth2RefreshTokenAuth("https://api.test", "cid", "secret", refresh_token="rt-0")
-        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
         async with client:
             response = await client.get("/data")
         assert response.json() == {"ok": True}
@@ -87,7 +87,7 @@ class TestOAuth2AsyncClient:
     async def test_refreshes_on_401(self):
         handler, seen = _oauth_handler(expect_grant="client_credentials")
         auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret", access_token="stale")
-        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
         async with client:
             response = await client.get("/data")
         assert response.json() == {"ok": True}
@@ -98,7 +98,7 @@ class TestOAuth2AsyncClient:
     async def test_clear_token_forces_reacquire(self):
         handler, seen = _oauth_handler(expect_grant="client_credentials")
         auth = OAuth2ClientCredentialsAuth("https://api.test", "cid", "secret", access_token="tok-1")
-        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx.MockTransport(handler))
+        client = AsyncRESTClient("https://api.test", auth=auth, transport=httpx2.MockTransport(handler))
         async with client:
             await client.get("/data")  # uses the pre-seeded token, no exchange
             assert [r.url.path for r in seen] == ["/data"]

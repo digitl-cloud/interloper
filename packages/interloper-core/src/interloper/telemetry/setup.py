@@ -256,10 +256,10 @@ def _register_metrics_handler() -> OtelMetricsHandler | None:
 def _instrument_libraries(*, enable: bool = True) -> None:
     """Toggle the contrib instrumentors, each activating iff installed.
 
-    httpx ships with core's ``otel`` extra (core's own dependency);
+    The httpx2 instrumentor ships with core's ``otel`` extra (core's own dependency);
     SQLAlchemy with ``interloper-db[otel]``. Both are global: SQLAlchemy
     patches engines created after this point (init runs before any Store
-    is built), httpx covers the framework's REST clients and user code
+    is built), httpx2 covers the framework's REST clients and user code
     alike. Activation stays here, not in the satellites — only
     ``init_telemetry`` knows telemetry is enabled.
 
@@ -273,9 +273,9 @@ def _instrument_libraries(*, enable: bool = True) -> None:
     except ImportError:
         pass
     try:
-        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+        from opentelemetry.instrumentation.httpx import HTTPX2ClientInstrumentor
 
-        HTTPXClientInstrumentor().instrument() if enable else HTTPXClientInstrumentor().uninstrument()
+        HTTPX2ClientInstrumentor().instrument() if enable else HTTPX2ClientInstrumentor().uninstrument()
     except ImportError:
         pass
 

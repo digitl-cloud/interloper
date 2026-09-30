@@ -61,7 +61,7 @@ with `@il.fetch_field_provider`; only such methods may be invoked from a form:
 class GoogleAnalyticsConnection(il.RefreshTokenOAuthConnection):
     @il.fetch_field_provider
     async def properties(self) -> list[dict]:
-        async with httpx.AsyncClient() as client:
+        async with httpx2.AsyncClient() as client:
             response = await client.get(ADMIN_URL, headers=self.headers)
         return response.json()["properties"]
 ```

@@ -30,7 +30,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
-import httpx
+import httpx2
 
 from interloper.registry import Registry
 
@@ -103,7 +103,7 @@ class OAuthProvider:
         redirect_uri: str,
         client_id: str,
         client_secret: str,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the authorization-code grant's token request (RFC 6749 §4.1.3).
 
         Args:
@@ -132,7 +132,7 @@ class OAuthProvider:
         client_secret: str,
         refresh_token: str,
         scope: str | None = None,
-    ) -> httpx.Request:
+    ) -> httpx2.Request:
         """Build the refresh-token grant request (RFC 6749 §6).
 
         The default grant omits ``scope`` even when given: it is optional per
@@ -177,7 +177,7 @@ class OAuthProvider:
             expires_in=payload.get("refresh_token_expires_in"),
         )
 
-    def _token_request(self, params: dict[str, str]) -> httpx.Request:
+    def _token_request(self, params: dict[str, str]) -> httpx2.Request:
         """Build a POST to the token endpoint in the provider's body encoding.
 
         Args:
@@ -187,8 +187,8 @@ class OAuthProvider:
             The built request.
         """
         if self.token_encoding == "form":
-            return httpx.Request("POST", self.token_url, data=params)
-        return httpx.Request("POST", self.token_url, json=params)
+            return httpx2.Request("POST", self.token_url, data=params)
+        return httpx2.Request("POST", self.token_url, json=params)
 
 
 # -- Registry ------------------------------------------------------------------

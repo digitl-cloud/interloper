@@ -2,7 +2,7 @@ import os
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
@@ -85,7 +85,7 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             # Exchange the refresh token for an access token.
             token_resp = await client.post(
                 _TOKEN_URL,
@@ -136,7 +136,7 @@ class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
                                     "name": f"{name} ({customer_id})",
                                 }
                             )
-                except httpx.HTTPStatusError:
+                except httpx2.HTTPStatusError:
                     # Some customers may not be queryable (suspended, etc.)
                     results.append(
                         {

@@ -3,7 +3,7 @@ import datetime as dt
 import logging
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 import pandas as pd
 from interloper_pandas import DataFrameNormalizer
@@ -84,7 +84,7 @@ async def _wait_for_job(connection: ImpactConnection, job_id: str) -> None:
             response = await connection.client.get(f"/Jobs/{job_id}")
             response.raise_for_status()
             status = response.json()["Status"]
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             logger.debug(f"Transient error polling Impact job {job_id}: {exc}")
             status = None
 

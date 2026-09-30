@@ -7,7 +7,7 @@ own README. All are versioned and released together.
 
 | Extra | Adds |
 |-------|------|
-| `interloper-core[otel]` | The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx instrumentation. |
+| `interloper-core[otel]` | The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation. |
 | `interloper-core[google-cloud]` | Pulls in `interloper-google-cloud`. |
 | `interloper-core[slack]` | Pulls in `interloper-slack`. |
 

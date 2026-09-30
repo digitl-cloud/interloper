@@ -4,13 +4,13 @@ from functools import cached_property
 from typing import Any
 from xml.etree import ElementTree as ET
 
-import httpx
+import httpx2
 import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
 # Microsoft Advertising OAuth + Customer Management SOAP endpoints. These are
-# used only by the ``accounts`` fetch provider, which talks raw SOAP over httpx
+# used only by the ``accounts`` fetch provider, which talks raw SOAP over httpx2
 # (see below) instead of the ``bingads`` SDK.
 _TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 _OAUTH_SCOPE = "https://ads.microsoft.com/msads.manage offline_access"
@@ -160,7 +160,7 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
     async def accounts(self) -> list[dict[str, str]]:
         """Fetch the accounts this connection's token can access.
 
-        Talks raw SOAP over httpx rather than the ``bingads`` SDK: fetch
+        Talks raw SOAP over httpx2 rather than the ``bingads`` SDK: fetch
         providers run inside the API process, which installs the connection
         classes but not the heavy SDK extra. Resolves the authenticated user
         (``GetUser``) then lists every account they can reach
@@ -170,7 +170,7 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx2.AsyncClient(timeout=30) as client:
             token_response = await client.post(
                 _TOKEN_URL,
                 data={
@@ -219,7 +219,7 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
 
     async def _soap_call(
         self,
-        client: httpx.AsyncClient,
+        client: httpx2.AsyncClient,
         access_token: str,
         action: str,
         body: str,

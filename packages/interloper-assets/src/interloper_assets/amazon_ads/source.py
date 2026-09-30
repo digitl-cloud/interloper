@@ -4,7 +4,7 @@ import json
 from functools import partial
 from typing import Any
 
-import httpx
+import httpx2
 import interloper as il
 import tenacity as tc
 from interloper_pandas import DataFrameNormalizer
@@ -64,7 +64,7 @@ def get_report_status(connection: AmazonAdsConnection, profile_id: str, report_i
 
 def download_report(url: str) -> list[dict]:
     """Download and decompress a completed report."""
-    response = httpx.get(url, timeout=None)
+    response = httpx2.get(url, timeout=None)
     response.raise_for_status()
     return json.loads(gzip.decompress(response.content))
 
@@ -78,7 +78,7 @@ def _log_retry(context: il.ExecutionContext, retry_state: tc.RetryCallState) -> 
     if retry_state.outcome.failed:
         ex = retry_state.outcome.exception()
         context.logger.debug(f"Retrying in {retry_state.next_action.sleep}. Raised {ex.__class__.__name__}: {ex}.")
-        if isinstance(ex, httpx.HTTPStatusError) and ex.response.status_code == 429:
+        if isinstance(ex, httpx2.HTTPStatusError) and ex.response.status_code == 429:
             context.logger.debug(f"Retry-After response header: {ex.response.headers.get('Retry-After')}")
     else:
         context.logger.debug(f"Retrying in {retry_state.next_action.sleep}. Returned {retry_state.outcome.result()}")
@@ -134,7 +134,7 @@ def request_and_download_report(
     for attempt in ConfiguredRetrying(
         stop=tc.stop_after_delay(max_wait_delay),
         retry=tc.retry_if_result(lambda status: status != "COMPLETED")
-        | tc.retry_if_exception(lambda e: issubclass(e.__class__, httpx.HTTPError)),
+        | tc.retry_if_exception(lambda e: issubclass(e.__class__, httpx2.HTTPError)),
     ):
         with attempt:
             context.logger.info(f"Waiting for report {report_id} (profile {profile_id}) ")

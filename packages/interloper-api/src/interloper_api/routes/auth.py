@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-import httpx
+import httpx2
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from interloper.errors import NotFoundError
@@ -158,7 +158,7 @@ def google_callback(
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
 
-    token_resp = httpx.post(
+    token_resp = httpx2.post(
         GOOGLE_TOKEN_URL,
         data={
             "code": code,
@@ -176,7 +176,7 @@ def google_callback(
     if not access_token:
         raise HTTPException(status_code=401, detail="No access token in response")
 
-    userinfo_resp = httpx.get(
+    userinfo_resp = httpx2.get(
         GOOGLE_USERINFO_URL,
         headers={"Authorization": f"Bearer {access_token}"},
     )
