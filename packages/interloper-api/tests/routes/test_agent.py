@@ -35,7 +35,16 @@ from interloper_db.models import (
 from interloper_db.store import Store
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import Engine, event
@@ -145,6 +154,29 @@ class TestConversationLifecycle:
 
         assert client.get(f"/agent/conversations/{theirs.id}").status_code == 404
         assert client.delete(f"/agent/conversations/{theirs.id}").status_code == 404
+
+
+class TestHistory:
+    def test_a_turns_tool_rounds_restore_as_one_assistant_message(self, store: Store, member: SimpleNamespace):
+        history: list[ModelMessage] = [
+            ModelRequest(parts=[UserPromptPart(content="how are the jobs?")]),
+            ModelResponse(parts=[ToolCallPart("list_jobs", {}, tool_call_id="c1")]),
+            ModelRequest(parts=[ToolReturnPart("list_jobs", {"total": 0}, tool_call_id="c1")]),
+            ModelResponse(parts=[ToolCallPart("list_recent_runs", {}, tool_call_id="c2")]),
+            ModelRequest(parts=[ToolReturnPart("list_recent_runs", {"total": 0}, tool_call_id="c2")]),
+            ModelResponse(parts=[TextPart("Nothing scheduled.")]),
+            ModelRequest(parts=[UserPromptPart(content="thanks")]),
+            ModelResponse(parts=[TextPart("Any time.")]),
+        ]
+        conversation = store.conversations.create(member.org_id, member.id)
+        store.conversations.save(conversation.id, ModelMessagesTypeAdapter.dump_python(history, mode="json"))
+        client = _client(store, member, _echo_agent())
+
+        messages = client.get(f"/agent/conversations/{conversation.id}").json()["messages"]
+
+        assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
+        assert [p["type"] for p in messages[1]["parts"]] == ["tool-list_jobs", "tool-list_recent_runs", "text"]
+        assert messages[1]["parts"][0]["state"] == "output-available"
 
 
 class TestChat:

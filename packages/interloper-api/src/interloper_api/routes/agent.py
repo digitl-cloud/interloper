@@ -27,7 +27,7 @@ from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
 from pydantic_ai.ui import UIEventStream
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter, VercelAIEventStream
-from pydantic_ai.ui.vercel_ai.request_types import RequestData
+from pydantic_ai.ui.vercel_ai.request_types import RequestData, UIMessage
 from pydantic_ai.ui.vercel_ai.response_types import BaseChunk
 
 from interloper_api.dependencies import AgentDep, CatalogDep, EditorDep, OrgIdDep, StoreDep, ViewerDep
@@ -117,7 +117,7 @@ class ConversationDetailResponse(ConversationResponse):
             The response model, its messages as the app's ``useChat`` loads them.
         """
         history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
-        messages = VercelAIAdapter.dump_messages(history, sdk_version=SDK_VERSION)
+        messages = _fold_turns(VercelAIAdapter.dump_messages(history, sdk_version=SDK_VERSION))
         return cls(
             **ConversationResponse.from_conversation(conversation).model_dump(),
             messages=[message.model_dump(by_alias=True, exclude_none=True) for message in messages],
@@ -244,6 +244,30 @@ async def chat(
         usage_limits=TURN_LIMITS,
         on_complete=save,
     )
+
+
+def _fold_turns(messages: list[UIMessage]) -> list[UIMessage]:
+    """Merge each turn's assistant messages into one, as the stream builds them.
+
+    ``dump_messages`` yields one assistant message per model response, so a
+    turn with several tool rounds restores as several messages; the app
+    renders each with its own avatar. Live, the SDK accumulates a turn into
+    one message, and a reload should read the same.
+
+    Args:
+        messages: The history as the adapter dumps it.
+
+    Returns:
+        The history with consecutive assistant messages folded into the first.
+    """
+    folded: list[UIMessage] = []
+    for message in messages:
+        last = folded[-1] if folded else None
+        if last is not None and last.role == "assistant" and message.role == "assistant":
+            last.parts.extend(message.parts)
+        else:
+            folded.append(message.model_copy(update={"parts": list(message.parts)}))
+    return folded
 
 
 def _first_prompt(messages: list[ModelMessage]) -> str | None:
