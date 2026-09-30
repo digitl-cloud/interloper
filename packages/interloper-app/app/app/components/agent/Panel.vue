@@ -2,36 +2,39 @@
 /**
  * Docked agent chat panel (design: 400px right panel that pushes the app
  * layout, non-modal). The first time it opens it picks the conversation up
- * where it was left, the most recent one, or starts one when there is none;
- * turns stream through useAgentChat.
+ * where it was left, the most recent one. Without one, and after "new", the
+ * panel holds no conversation until the first message is sent, so nothing
+ * empty is ever stored; turns stream through useAgentChat.
  */
 import type { Conversation } from '~/types/agent'
 
 const { open, width, dragging, startResize, resetWidth } = useAgentPanel()
 const agentStore = useAgentStore()
 
-const conversationId = ref('')
+const resumed = ref(false)
+const creating = ref(false)
 const unavailable = ref(false)
 const chat = shallowRef<ReturnType<typeof useAgentChat>>()
 
 /** Make a conversation the panel's, with its history. */
 async function attach(conversation: Conversation) {
     const detail = await agentStore.getConversation(conversation.id)
-    conversationId.value = detail.id
     chat.value = useAgentChat(detail.id, detail.messages)
 }
 
-/** Start a fresh conversation in place of the current one. */
-async function startNew() {
+/** Leave the current conversation for a blank one. */
+function startNew() {
     if (chat.value?.busy.value) return
-    await attach(await agentStore.createConversation())
+    chat.value = undefined
 }
 
 watch(open, async (v) => {
-    if (!v || conversationId.value || unavailable.value) return
+    if (!v || resumed.value || unavailable.value) return
+    resumed.value = true
     try {
         if (!agentStore.conversations.length) await agentStore.fetchConversations()
-        await attach(agentStore.conversations[0] ?? await agentStore.createConversation())
+        const latest = agentStore.conversations[0]
+        if (latest) await attach(latest)
     }
     catch {
         unavailable.value = true
@@ -45,7 +48,22 @@ function onSubmit(e: Event) {
     submit(input.value)
 }
 
-function submit(text: string) {
+/** Send a message, creating the conversation on the first one. */
+async function submit(text: string) {
+    if (!text.trim() || creating.value) return
+    if (!chat.value) {
+        creating.value = true
+        try {
+            await attach(await agentStore.createConversation())
+        }
+        catch {
+            unavailable.value = true
+            return
+        }
+        finally {
+            creating.value = false
+        }
+    }
     chat.value?.send(text)
     input.value = ''
 }
@@ -105,8 +123,9 @@ const SUGGESTIONS = [
                 <p class="text-sm text-muted">The agent isn't available in this workspace.</p>
             </div>
 
-            <template v-else-if="chat">
-                <UChatMessages :messages="chat.messages.value"
+            <template v-else>
+                <UChatMessages v-if="chat"
+                               :messages="chat.messages.value"
                                :status="chat.status.value"
                                compact
                                should-auto-scroll
@@ -133,13 +152,13 @@ const SUGGESTIONS = [
                     </template>
                 </UChatMessages>
 
-                <p v-if="chat.error.value && !chat.busy.value"
+                <p v-if="chat?.error.value && !chat.busy.value"
                    class="text-[12.5px] text-error mt-1">
                     Something went wrong — try again.
                 </p>
 
                 <!-- Suggested prompts on a fresh conversation -->
-                <div v-if="!chat.messages.value.length && !chat.busy.value"
+                <div v-if="!chat || (!chat.messages.value.length && !chat.busy.value)"
                      class="flex flex-col gap-2">
                     <p class="text-[13.5px] text-toned leading-relaxed mb-2">
                         Hi — I'm your Interloper agent. Ask about pipeline health, why something
@@ -166,10 +185,10 @@ const SUGGESTIONS = [
                          variant="outline"
                          placeholder="Ask about your workspace…"
                          :maxrows="6"
-                         :disabled="!chat || unavailable"
+                         :disabled="unavailable || creating"
                          :ui="{ base: 'px-1.5 text-[13.5px]/5', body: 'items-center' }"
                          @submit="onSubmit">
-                <UChatPromptSubmit :status="chat?.status.value ?? 'ready'"
+                <UChatPromptSubmit :status="chat?.status.value ?? (creating ? 'submitted' : 'ready')"
                                    size="sm"
                                    @stop="chat?.stop()" />
             </UChatPrompt>
