@@ -1,3 +1,4 @@
 # interloper-agent
 
-Interloper AI agent powered by [Google ADK](https://google.github.io/adk-docs/).
+The Interloper assistant: one [pydantic-ai](https://ai.pydantic.dev) agent over the
+shared `interloper-toolkit`, served by `interloper-api` and rendered by the app.

@@ -1,241 +1,75 @@
-"""Interloper Agent — multi-agent system for asset discovery, lineage, and scheduling."""
+"""The assistant: one pydantic-ai agent over the toolkit."""
 
 from __future__ import annotations
 
 import datetime
-from collections.abc import Callable
-from typing import TYPE_CHECKING
 
-from google.adk.agents import Agent
-from google.adk.planners import BuiltInPlanner
-from google.adk.tools.agent_tool import AgentTool
-from google.genai import types
-from interloper.settings import AppSettings
+from interloper_toolkit import ToolkitContext
+from pydantic_ai import Agent, DeferredToolRequests, UsageLimits
+from pydantic_ai.models.anthropic import AnthropicModelSettings
+from pydantic_ai.models.google import GoogleModelSettings
+from pydantic_ai.settings import ModelSettings
 
-from interloper_agent.prompts import (
-    ANALYTICS_INSTRUCTION,
-    CATALOG_CONSULT_INSTRUCTION,
-    CATALOG_INSTRUCTION,
-    COLLECTION_INSTRUCTION,
-    LINEAGE_INSTRUCTION,
-    ROOT_INSTRUCTION,
-    SCHEDULING_INSTRUCTION,
-)
-from interloper_agent.tools import analytics, catalog, collection, interaction, lineage, scheduling
+from interloper_agent.prompts import INSTRUCTIONS
+from interloper_agent.toolset import toolset
 
-if TYPE_CHECKING:
-    from google.adk.agents.readonly_context import ReadonlyContext
-    from google.adk.models import BaseLlm
+TURN_LIMITS = UsageLimits(request_limit=40)
+"""What one turn may spend: enough for a long setup flow, a bound on a loop that never converges."""
 
 
-def with_current_time(instruction: str) -> Callable[[ReadonlyContext], str]:
-    """Turn a static instruction into a provider that appends the current UTC time.
+def build_agent(model: str) -> Agent[ToolkitContext, str | DeferredToolRequests]:
+    """Build the assistant for a model.
 
-    The model has no reliable notion of "now", so without this the relative
-    timestamps the presentation rules ask for drift to its training data.
+    The model is named the pydantic-ai way, ``provider:model`` (e.g.
+    ``google:gemini-2.5-flash``, ``anthropic:claude-sonnet-4-5``); its client
+    is created on the first run, so building needs no credentials. A turn
+    ends either with the answer or with :class:`DeferredToolRequests`: the
+    tool calls waiting for the user's approval or for an answer the app
+    collects (a selection, a connection set up in the secure form).
 
     Args:
-        instruction: The static instruction the provider decorates.
+        model: The ``provider:model`` name.
 
     Returns:
-        A provider the ADK calls per turn.
-
+        The agent, ready to run with a :class:`ToolkitContext` as deps.
     """
+    agent = Agent[ToolkitContext, str | DeferredToolRequests](
+        model,
+        name="interloper",
+        deps_type=ToolkitContext,
+        output_type=[str, DeferredToolRequests],
+        instructions=INSTRUCTIONS,
+        toolsets=[toolset()],
+        model_settings=model_settings(model),
+        defer_model_check=True,
+    )
 
-    def provider(_: ReadonlyContext) -> str:
+    @agent.instructions
+    def current_time() -> str:
+        # The model has no reliable notion of "now"; without this the relative
+        # timestamps the presentation rules ask for drift to its training data.
         now = datetime.datetime.now(datetime.timezone.utc)
-        return f"{instruction}\nCurrent date and time: {now:%Y-%m-%d %H:%M} UTC. Compute relative timestamps from it."
+        return f"Current date and time: {now:%Y-%m-%d %H:%M} UTC. Compute relative timestamps from it."
 
-    return provider
-
-
-def resolve_model(name: str | None = None) -> str | BaseLlm:
-    """Resolve a model name into an ADK model reference.
-
-    Bare names (``gemini-2.5-flash``) are native Gemini models; names with a
-    provider prefix (``anthropic/claude-sonnet-4-5``) are routed through
-    LiteLLM, which reads the provider's standard credential env vars.
-
-    Returns:
-        The model name for a Gemini model, else a ``LiteLlm`` wrapper.
-
-    """
-    name = name or AppSettings.get().agent.model
-    if "/" in name:
-        from google.adk.models.lite_llm import LiteLlm
-
-        return LiteLlm(model=name)
-    return name
+    return agent
 
 
-_model = resolve_model()
+def model_settings(model: str) -> ModelSettings | None:
+    """The settings that surface the model's reasoning to the app.
 
+    The app shows thought summaries while a turn is in flight, which is the
+    only account of a long turn the model can give. Each provider asks for
+    them differently; a provider with no such switch gets none.
 
-def resolve_planner() -> BuiltInPlanner | None:
-    """Resolve the planner that asks the model for thought summaries.
-
-    The app shows those summaries while a turn is in flight, which is the only
-    account of a long turn the model can give. ``BuiltInPlanner`` errors on a
-    model without built-in thinking, so it is reserved for the native Gemini
-    models; a LiteLLM-routed provider reports its reasoning by its own means or
-    not at all.
+    Args:
+        model: The ``provider:model`` name.
 
     Returns:
-        The planner for a native Gemini model, else None.
-
+        The provider's settings, or ``None``.
     """
-    if not isinstance(_model, str):
-        return None
-    return BuiltInPlanner(thinking_config=types.ThinkingConfig(include_thoughts=True))
-
-
-_planner = resolve_planner()
-
-
-def _catalog_tools() -> list:
-    """The catalog toolset, shared by the routing agent and the consultant instance.
-
-    Returns:
-        The catalog tool functions.
-
-    """
-    return [
-        catalog.list_definitions,
-        catalog.get_definition,
-        catalog.get_asset_schema,
-        catalog.search_fields,
-        catalog.compare_schemas,
-    ]
-
-
-catalog_agent = Agent(
-    name="CatalogAgent",
-    model=_model,
-    description=(
-        "The catalog of component definitions the platform ships: which sources and connections are "
-        "available to add, asset schemas, field search, and schema comparison."
-    ),
-    instruction=with_current_time(CATALOG_INSTRUCTION),
-    planner=_planner,
-    tools=_catalog_tools(),
-)
-
-# A second instance (an ADK agent can only have one parent): the catalog
-# specialist as a consultable tool — the caller keeps the conversation and
-# receives the specialist's answer as a tool result, unlike a transfer.
-catalog_consultant = Agent(
-    name="consult_catalog",
-    model=_model,
-    description=(
-        "Consult the catalog specialist: ask a question about the catalog of component definitions "
-        "(available sources and connections, asset schemas, fields, comparisons) and get a concise, "
-        "grounded answer back as a tool result."
-    ),
-    instruction=with_current_time(CATALOG_CONSULT_INSTRUCTION),
-    planner=_planner,
-    tools=_catalog_tools(),
-)
-
-collection_agent = Agent(
-    name="CollectionAgent",
-    model=_model,
-    description=(
-        "The organisation's collection of component instances: lists their sources, connections, and "
-        "destinations, checks connection health, sets up new connections via the app's secure form "
-        "(never collecting credentials in chat), creates sources conversationally (resolving "
-        "provider-backed options like the account to use through an existing connection), edits "
-        "existing components (rename, config changes, a source's enabled assets), and binds or "
-        "unbinds a component's relations by name (a source's connection, a job's targets)."
-    ),
-    instruction=with_current_time(COLLECTION_INSTRUCTION),
-    planner=_planner,
-    tools=[
-        collection.list_components,
-        collection.request_connection_setup,
-        collection.create_connections,
-        collection.check_connection,
-        collection.resolve_source_field_options,
-        collection.create_source,
-        collection.create_sources,
-        collection.update_component,
-        collection.bind_relation,
-        collection.unbind_relation,
-        collection.create_job,
-        interaction.request_user_selection,
-        interaction.request_confirmation,
-        AgentTool(agent=catalog_consultant),
-    ],
-)
-
-lineage_agent = Agent(
-    name="LineageAgent",
-    model=_model,
-    description="Analyzes asset dependencies — upstream/downstream traversal, impact analysis, and cross-source edges.",
-    instruction=with_current_time(LINEAGE_INSTRUCTION),
-    planner=_planner,
-    tools=[
-        lineage.get_upstream,
-        lineage.get_downstream,
-        lineage.get_full_lineage,
-        lineage.impact_analysis,
-        lineage.cross_source_dependencies,
-    ],
-)
-
-scheduling_agent = Agent(
-    name="SchedulingAgent",
-    model=_model,
-    description=(
-        "Monitors run health, recent failures, job schedules, and backfill progress; "
-        "triggers runs, starts backfills, toggles jobs or assets on/off, and creates "
-        "or edits cron jobs over the collection's sources."
-    ),
-    instruction=with_current_time(SCHEDULING_INSTRUCTION),
-    planner=_planner,
-    tools=[
-        scheduling.list_jobs,
-        scheduling.get_job_health,
-        scheduling.toggle_job,
-        scheduling.list_recent_runs,
-        scheduling.get_run_detail,
-        scheduling.list_run_events,
-        scheduling.get_event,
-        scheduling.list_failures,
-        scheduling.error_breakdown,
-        scheduling.retry_run,
-        scheduling.trigger_run,
-        scheduling.list_backfills,
-        scheduling.backfill_timeline,
-        scheduling.cancel_backfill,
-        scheduling.trigger_backfill,
-        scheduling.toggle_asset,
-        collection.list_components,
-        collection.create_job,
-        collection.update_component,
-        interaction.request_confirmation,
-    ],
-)
-
-analytics_agent = Agent(
-    name="AnalyticsAgent",
-    model=_model,
-    description="Provides run statistics, partition coverage analysis, and data freshness checks.",
-    instruction=with_current_time(ANALYTICS_INSTRUCTION),
-    planner=_planner,
-    tools=[
-        analytics.run_history_summary,
-        analytics.partition_coverage,
-        analytics.freshness_check,
-        analytics.run_stats,
-        analytics.asset_coverage,
-    ],
-)
-
-root_agent = Agent(
-    name="InterloperAgent",
-    model=_model,
-    instruction=with_current_time(ROOT_INSTRUCTION),
-    planner=_planner,
-    description="Main Interloper assistant that routes queries to specialized sub-agents.",
-    sub_agents=[catalog_agent, collection_agent, lineage_agent, scheduling_agent, analytics_agent],
-)
+    provider, _, _ = model.partition(":")
+    if provider in ("google", "google-cloud"):
+        return GoogleModelSettings(google_thinking_config={"include_thoughts": True})
+    if provider == "anthropic":
+        return AnthropicModelSettings(anthropic_thinking={"type": "adaptive"})
+    return None

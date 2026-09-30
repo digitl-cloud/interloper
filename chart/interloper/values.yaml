@@ -211,22 +211,20 @@ dbInit:
 # whole submodel).
 externalUrl: ""
 
-# Agent (ADK chat) support. The loaded api image always bundles
-# interloper-agent; this enables the /agent routes via the generated
-# interloper.yaml (the API reports availability to the app, which shows or
-# hides the Agent UI).
+# The assistant. The loaded api image always bundles interloper-agent; this
+# enables the /agent routes via the generated interloper.yaml (the API
+# reports availability to the app, which shows or hides the Agent UI).
 #
-# `model` takes a bare name for native Gemini models (default
-# "gemini-2.5-flash") or a LiteLLM `provider/model` reference such as
-# "anthropic/claude-sonnet-4-5" or "openai/gpt-5". Credentials come from the
+# `model` is a pydantic-ai `provider:model` name (default
+# "google:gemini-2.5-flash"): "google-cloud:gemini-2.5-flash" for Vertex,
+# "anthropic:claude-sonnet-4-5", "openai:gpt-5". Credentials come from the
 # provider's standard env vars supplied via api.extraEnv / api.extraEnvFrom
-# (e.g. GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY). For Gemini on
-# GKE, Vertex AI needs no key at all: set GOOGLE_GENAI_USE_VERTEXAI=TRUE,
-# GOOGLE_CLOUD_PROJECT, and GOOGLE_CLOUD_LOCATION and grant the pod's
-# service account Vertex access via workload identity.
+# (e.g. GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY); Vertex on GKE
+# needs no key at all with GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION set
+# and the pod's service account granted Vertex access via workload identity.
 agent:
   enabled: false
-  model: ""  # defaults to gemini-2.5-flash
+  model: ""  # defaults to google:gemini-2.5-flash
 
 # How runs are launched (where they execute). The loaded scheduler image
 # carries every launcher, so this is a pure runtime choice.

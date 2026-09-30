@@ -22,7 +22,7 @@ def test_agent_settings_defaults():
     settings = AgentSettings()
 
     assert settings.enabled is True
-    assert settings.model == "gemini-2.5-flash"
+    assert settings.model == "google:gemini-2.5-flash"
 
 
 def test_agent_settings_env_override(monkeypatch: pytest.MonkeyPatch):

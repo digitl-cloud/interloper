@@ -60,12 +60,3 @@ service must be enabled.
 
 Requires `interloper-db` and `interloper-scheduler`. Executes one persisted run; on any failure
 before the executor takes over, the run is marked failed.
-
-## `interloper agent`
-
-Requires `interloper-agent`.
-
-| Flag | Default |
-|------|---------|
-| `--host` | `127.0.0.1` |
-| `--port` | `8000` |

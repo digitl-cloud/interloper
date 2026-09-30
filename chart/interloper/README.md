@@ -23,7 +23,7 @@ one on the bare tag, and the extras-free **slim** one on `-slim`.
 
 ```
 ghcr.io/digitl-cloud/interloper-scheduler:<version>   # every launcher + sources + destinations
-ghcr.io/digitl-cloud/interloper-api:<version>         # + the ADK agent
+ghcr.io/digitl-cloud/interloper-api:<version>         # + the assistant
 ghcr.io/digitl-cloud/interloper-frontend:<version>
 ghcr.io/digitl-cloud/interloper-core:<version>        # the framework; kubernetes runner per-asset Job target
 ghcr.io/digitl-cloud/interloper-mcp:<version>         # MCP server

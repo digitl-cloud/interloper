@@ -151,16 +151,16 @@ class AgentSettings(BaseSettings):
 
     The agent is only available when the ``agent`` extra is installed
     (interloper-api[agent]); ``enabled`` switches it off without changing
-    the installation. ``model`` takes a bare name for native Gemini models
-    (``gemini-2.5-flash``) or a LiteLLM ``provider/model`` reference
-    (``anthropic/claude-sonnet-4-5``) — provider credentials are read from
-    the provider's standard environment variables.
+    the installation. ``model`` is a pydantic-ai ``provider:model`` name
+    (``google:gemini-2.5-flash``, ``google-cloud:gemini-2.5-flash`` for
+    Vertex, ``anthropic:claude-sonnet-4-5``, ``openai:gpt-5``); provider
+    credentials are read from the provider's standard environment variables.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}AGENT_")
 
     enabled: bool = True
-    model: str = "gemini-2.5-flash"
+    model: str = "google:gemini-2.5-flash"
 
 
 class McpSettings(BaseSettings):

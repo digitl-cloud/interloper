@@ -84,7 +84,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
     subparsers = parser.add_subparsers(dest="command")
 
-    from interloper.cli.commands.agent import register as register_agent
     from interloper.cli.commands.app import register as register_app
     from interloper.cli.commands.db import register as register_db
     from interloper.cli.commands.launch import register as register_launch
@@ -94,7 +93,6 @@ def main() -> None:
     register_db(subparsers)
     register_app(subparsers)
     register_launch(subparsers)
-    register_agent(subparsers)
 
     args = parser.parse_args()
 

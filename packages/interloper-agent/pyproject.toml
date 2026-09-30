@@ -4,7 +4,7 @@
 [project]
 name = "interloper-agent"
 version = "0.90.0"
-description = "Interloper AI agent powered by Google ADK"
+description = "Interloper AI agent, on pydantic-ai"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ dependencies = [
     "interloper-db",
     "interloper-assets",
     "interloper-toolkit",
-    "google-adk[extensions]>=1.0.0",
+    "pydantic-ai-slim[google,anthropic,openai]>=2.51.0",
 ]
 
 [build-system]
@@ -42,4 +42,4 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]
-"src/interloper_agent/tools/*.py" = ["D417", "DOC201", "D103", "BLE001"]
+"src/interloper_agent/interaction.py" = ["D417", "DOC201", "DOC501"]
