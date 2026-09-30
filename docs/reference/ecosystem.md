@@ -16,7 +16,7 @@ own README. All are versioned and released together.
 | Package | Provides | Registers |
 |---------|----------|-----------|
 | `interloper-pandas` | `DataFrameRepresentation`, `DataFrameNormalizer`: assets may return pandas DataFrames, normalized and conformed natively. | `interloper.representations`: `dataframe` |
-| `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (hive-partitioned Parquet, JSONL or CSV). | `interloper.components` |
+| `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (hive-partitioned Parquet, JSONL or CSV), `GoogleSheetsDestination` (a `DatabaseDestination` writing one tab per asset). | `interloper.components` |
 | `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `interloper.components` |
 | `interloper-assets` | Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the `demo` source. | `interloper.components` |
 | `interloper-docker` | `DockerRunner`: each operation runs in a container, events stream back to the host. | `interloper.runners`: `docker`; `interloper.launchers`: `docker` |
