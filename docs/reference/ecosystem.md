@@ -10,6 +10,7 @@ own README. All are versioned and released together.
 | `interloper-core[otel]` | The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation. |
 | `interloper-core[google-cloud]` | Pulls in `interloper-google-cloud`. |
 | `interloper-core[slack]` | Pulls in `interloper-slack`. |
+| `interloper-core[sql]` | Pulls in `interloper-sql`. |
 
 ## Framework extensions
 
@@ -18,6 +19,7 @@ own README. All are versioned and released together.
 | `interloper-pandas` | `DataFrameRepresentation`, `DataFrameNormalizer`: assets may return pandas DataFrames, normalized and conformed natively. | `interloper.representations`: `dataframe` |
 | `interloper-google-cloud` | `GoogleCloudConnection`, `BigQueryDestination` (a `DatabaseDestination` with typed Parquet loads and time partitioning), `GCSDestination` (hive-partitioned Parquet, JSONL or CSV). | `interloper.components` |
 | `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `interloper.components` |
+| `interloper-sql` | `SQLConnection`, `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
 | `interloper-assets` | Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the `demo` source. | `interloper.components` |
 | `interloper-docker` | `DockerRunner`: each operation runs in a container, events stream back to the host. | `interloper.runners`: `docker`; `interloper.launchers`: `docker` |
 | `interloper-k8s` | `KubernetesRunner`: each operation runs as a Kubernetes Job. | `interloper.runners`: `kubernetes`; `interloper.launchers`: `kubernetes` |
