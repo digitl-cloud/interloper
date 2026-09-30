@@ -2,6 +2,83 @@
 
 <!-- version list -->
 
+## v0.91.0 (2026-09-30)
+
+### Bug Fixes
+
+- **agent**: Refuse a model without a provider up front, and log failed turns
+  ([`c6a44d9`](https://github.com/digitl-cloud/interloper/commit/c6a44d9164e9510dea7d26f7e242b9aefe80ec74))
+
+- **api**: Restore a turn as one assistant message
+  ([`4269715`](https://github.com/digitl-cloud/interloper/commit/4269715ea95573480cf4bfc8da910b09f8454112))
+
+- **api**: Speak the AI SDK version the app installs
+  ([`22e88df`](https://github.com/digitl-cloud/interloper/commit/22e88dfa41be3bc2c43398cf5ef1bc88fc20199a))
+
+- **app**: Keep the source discriminator on the name's line
+  ([`0938512`](https://github.com/digitl-cloud/interloper/commit/09385124cb7af17965500039eae010647105fffe))
+
+- **app**: Keep the thinking indicator up for the whole turn
+  ([`2f00f6e`](https://github.com/digitl-cloud/interloper/commit/2f00f6e49518cd55c9596912b044a2cd0404334e))
+
+- **app**: Let the indicator's parent set its size
+  ([`ada7bed`](https://github.com/digitl-cloud/interloper/commit/ada7bedfa8796523792e11b267142ac8df5f70fd))
+
+- **app**: One dot matrix per live message
+  ([`c4b8d29`](https://github.com/digitl-cloud/interloper/commit/c4b8d29c6461d9477b3c82bce58280172190fb0d))
+
+- **app**: Size and align the assistant's mark
+  ([`1c0a6c9`](https://github.com/digitl-cloud/interloper/commit/1c0a6c9d7207247efe38462a8d716268d0b73cad))
+
+- **app**: The panel creates a conversation on the first message
+  ([`098060f`](https://github.com/digitl-cloud/interloper/commit/098060f9c3435db06f24a090466b6c67873276c7))
+
+- **db**: Number the conversations migration after hook_cursors
+  ([`b159f30`](https://github.com/digitl-cloud/interloper/commit/b159f30c5e4cddcf8decca6ecd3aca9802f3dcd7))
+
+- **db**: Retry a run stack from its latest attempt
+  ([`e8f8a9e`](https://github.com/digitl-cloud/interloper/commit/e8f8a9e1961853aeb6659f953cfc0dc437ed7c06))
+
+### Documentation
+
+- Record the pydantic-ai agent design
+  ([`89fd4ad`](https://github.com/digitl-cloud/interloper/commit/89fd4ad949ca33b20806aa4938fafa7e608fa9c9))
+
+### Features
+
+- **agent**: Run the assistant on pydantic-ai, served as conversations
+  ([`2fb0cf3`](https://github.com/digitl-cloud/interloper/commit/2fb0cf3036e8623ab9b9c65b84ff2eb672e2f693))
+
+- **app**: Chat with the assistant over the AI SDK
+  ([`977e686`](https://github.com/digitl-cloud/interloper/commit/977e6865c995a651fb5045836d10b9464b54e5fb))
+
+- **app**: Fold a turn's steps behind one row
+  ([`81dd04a`](https://github.com/digitl-cloud/interloper/commit/81dd04ac15d0c65edab864015954fcd5eb0c4a5b))
+
+- **app**: The dot matrix marks a turn at work
+  ([`aae4e74`](https://github.com/digitl-cloud/interloper/commit/aae4e74a7b0e425a30fe72c17b602a8a9dfd916e))
+
+- **app**: The panel resumes the latest conversation
+  ([`c2c29e4`](https://github.com/digitl-cloud/interloper/commit/c2c29e4a6c5b203969a7928ccbe66aa50aaf090e))
+
+- **db**: Add conversations
+  ([`1cca015`](https://github.com/digitl-cloud/interloper/commit/1cca015cd420e25b590590de08e69ff6411e2964))
+
+### Refactoring
+
+- Move from httpx to httpx2
+  ([`58f20da`](https://github.com/digitl-cloud/interloper/commit/58f20daea149d79539b05126437beaf199d9c75e))
+
+- **toolkit**: One tool table for the agent and the MCP server
+  ([`4d7141e`](https://github.com/digitl-cloud/interloper/commit/4d7141e57a38c866f8a927be7e5ad5989acdbdb5))
+
+### Breaking Changes
+
+- RESTClient and AsyncRESTClient subclass httpx2 clients. Pass httpx2 Auth and transport objects
+  (httpx ones raise TypeError), and catch httpx2 exceptions: `except httpx.HTTPStatusError` no
+  longer matches.
+
+
 ## v0.90.0 (2026-09-30)
 
 ### Features

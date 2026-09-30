@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-mcp"
-version = "0.90.0"
+version = "0.91.0"
 description = "Interloper MCP server, platform access for AI agents"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
