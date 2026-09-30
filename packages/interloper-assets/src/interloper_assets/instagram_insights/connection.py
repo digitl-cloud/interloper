@@ -54,7 +54,7 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
             The options for the field's dropdown.
 
         """
-        params = {
+        params: dict[str, str] | None = {
             "fields": "instagram_business_account{id,username,name},name",
             "access_token": self.refresh_token,
             "limit": "100",
@@ -80,9 +80,9 @@ class InstagramInsightsConnection(il.RefreshTokenOAuthConnection):
                     }
                 )
 
-            # Cursor pagination: follow the absolute `next` URL (already carries params).
+            # The "next" link already carries the cursor, fields and token.
             path = data.get("paging", {}).get("next")
-            params = {}
+            params = None
 
         return accounts
 
