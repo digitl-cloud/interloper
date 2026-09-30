@@ -51,10 +51,15 @@ onMounted(() => {
                                :status="chat.status.value"
                                should-auto-scroll
                                :spacing-offset="120"
-                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1' } }"
+                               :assistant="{ ui: { body: 'flex-1' } }"
                                class="pb-4 sm:pb-6">
                     <template #indicator>
                         <AgentThinking />
+                    </template>
+
+                    <template #leading="{ message }">
+                        <AgentAvatar v-if="message.role === 'assistant'"
+                                     :live="message.id === chat.liveMessageId.value" />
                     </template>
 
                     <template #content="{ message }">

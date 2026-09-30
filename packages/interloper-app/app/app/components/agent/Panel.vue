@@ -88,13 +88,18 @@ const SUGGESTIONS = [
                                :status="chat.status.value"
                                compact
                                should-auto-scroll
-                               :assistant="{ icon: 'i-lucide-sparkles', ui: { body: 'flex-1', content: 'text-[13.5px]', leadingIcon: 'text-primary' } }"
+                               :assistant="{ ui: { body: 'flex-1', content: 'text-[13.5px]' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
                                :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
                                :ui="{ viewport: 'top-auto bottom-3' }"
                                class="pb-2">
                     <template #indicator>
                         <AgentThinking />
+                    </template>
+
+                    <template #leading="{ message }">
+                        <AgentAvatar v-if="message.role === 'assistant'"
+                                     :live="message.id === chat.liveMessageId.value" />
                     </template>
 
                     <template #content="{ message }">
