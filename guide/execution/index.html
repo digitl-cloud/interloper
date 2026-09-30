@@ -2267,7 +2267,9 @@ out.</p>
 backoff. Those attempts form a <strong>stack</strong>, and the rest of the system reads the stack rather than any
 one attempt. An automatic retry always re-runs only what failed, carrying forward every operation
 that already succeeded anywhere in the stack; the manual retry endpoint additionally offers re-running
-everything, for when the earlier success is the thing you distrust.</p>
+everything, for when the earlier success is the thing you distrust. Either way a retry continues from
+the stack's latest attempt: retrying an earlier attempt retries the stack, and a stack whose latest
+attempt is still pending, or succeeded, has nothing to retry.</p>
 <h2 id="running-single-assets">Running single assets<a class="headerlink" href="#running-single-assets" title="Permanent link">&para;</a></h2>
 <p><code>asset.run()</code> and <code>asset.materialize()</code> bypass the runner. Pass the DAG when the asset has
 dependencies, so upstream data can be read:</p>
