@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v0.95.0 (2026-10-01)
+
+### Chores
+
+- **docker**: Pin the Python stages to Debian trixie
+  ([`fc2d281`](https://github.com/digitl-cloud/interloper/commit/fc2d281e2bcbb6c59fa8143cd988d6f6c9b4e9c1))
+
+### Features
+
+- **docker**: Build the Python images on Debian and ship DuckDB and Snowflake
+  ([`13b6629`](https://github.com/digitl-cloud/interloper/commit/13b662988450a3022aa712678f4e0e475564f637))
+
+
 ## v0.94.2 (2026-10-01)
 
 
