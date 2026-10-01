@@ -186,31 +186,6 @@ class QuotaStore:
         with session_scope(self._engine) as session:
             definition.check(session, org_id, limit, used=used, subject=subject)
 
-    def run_status(self, org_id: UUID) -> tuple[int, int | None]:
-        """The org's committed run usage this period: ``(used + reserved, limit)``.
-
-        Limit None means unlimited (and the ledger is not read at all).
-
-        Args:
-            org_id: Organisation whose run usage is reported.
-
-        Returns:
-            The committed count paired with the effective limit; ``(0, None)``
-            while the quota is unlimited.
-
-        Raises:
-            TypeError: If the run quota key is registered as something other
-                than a consumption quota.
-        """
-        with session_scope(self._engine) as session:
-            definition = QUOTAS[QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH]
-            if not isinstance(definition, ConsumptionQuota):
-                raise TypeError(f"'{QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH}' is not registered as a consumption quota")
-            limit = self.effective_limit(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
-            if limit is None:
-                return 0, None
-            return definition.committed(session, org_id), limit
-
     def try_reserve_run(self, db_run: Run) -> bool:
         """Atomically reserve a run-quota slot at dispatch time.
 

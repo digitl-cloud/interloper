@@ -249,25 +249,6 @@ class TestSetQuota:
             store.quotas.set_overrides(org_id, {"max_sources": -1})
 
 
-class TestRunStatus:
-    """``run_status`` reports the committed count against the effective limit."""
-
-    def test_an_unlimited_quota_reads_the_ledger_not_at_all(self, store: Store, org_id: UUID):
-        # No default and no override, so the ledger is never touched.
-        assert store.quotas.run_status(org_id) == (0, None)
-
-    def test_a_limited_quota_reports_the_committed_count(
-        self, store: Store, org_id: UUID, make_run
-    ):
-        store.quotas.set_overrides(org_id, {QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH: 5})
-        run = make_run()
-        store.quotas.try_reserve_run(run)
-
-        used, limit = store.quotas.run_status(org_id)
-
-        assert (used, limit) == (1, 5)
-
-
 class TestTryReserveRunUnlimited:
     """An unlimited quota reserves without writing a ledger row."""
 
