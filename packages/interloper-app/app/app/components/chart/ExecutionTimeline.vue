@@ -35,6 +35,10 @@ interface Props {
     minBarRatio?: number
     refreshRate?: number
     markerTime?: Date | null
+    /** Epoch ms from which the plot is the future: hatched, and scheduled bars live there. */
+    futureFrom?: number | null
+    /** Pill shown in the ruler at the marker (e.g. "Now · 11:17"); ticks it would cover are hidden. */
+    markerLabel?: string | null
     /** Row highlighted from outside (e.g. the event in focus); loses to a selection. */
     highlightedId?: string | null
     emptyMessage?: string
@@ -51,6 +55,8 @@ const props = withDefaults(defineProps<Props>(), {
     // throttles the layout updates to at most once per `refreshRate` ms.
     refreshRate: 0,
     markerTime: null,
+    futureFrom: null,
+    markerLabel: null,
     highlightedId: null,
     emptyMessage: 'No executions yet',
 })
@@ -66,6 +72,7 @@ const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
 
 function getStatusColor(status: string) {
+    if (status === 'scheduled') return 'transparent'
     const entry = CHART_STATUS_COLORS[status] ?? CHART_STATUS_COLORS.default!
     return isDark.value ? entry.dark : entry.light
 }
@@ -327,11 +334,28 @@ const markerPercent = computed(() => {
     return pct
 })
 
+/** Centre-to-centre distance below which a tick label would collide with the marker pill. */
+const MARKER_LABEL_CLEARANCE = 80
+
+/** Ruler ticks, minus those the marker pill would sit on. */
+const rulerTicks = computed(() => {
+    const marker = markerPercent.value
+    if (!props.markerLabel || marker === null || !plotWidth.value) return ticks.value
+    return ticks.value.filter(t => Math.abs(t.percent - marker) * plotWidth.value / 100 >= MARKER_LABEL_CLEARANCE)
+})
+
+const futurePercent = computed(() => {
+    if (props.futureFrom === null) return null
+    const pct = toPercent(props.futureFrom - baseTime.value)
+    return pct < 0 ? 0 : pct > 100 ? null : pct
+})
+
 /**********************
  * Virtualization
  **********************/
 const scrollEl = ref<HTMLElement | null>(null)
 const plotEl = ref<HTMLElement | null>(null)
+const plotWidth = ref(0)
 const scrollTop = ref(0)
 const viewportH = ref(600)
 
@@ -491,9 +515,11 @@ let resizeObserver: ResizeObserver | null = null
 onMounted(() => {
     if (scrollEl.value) {
         viewportH.value = scrollEl.value.clientHeight
+        plotWidth.value = plotEl.value?.clientWidth ?? 0
         scrollEl.value.addEventListener('wheel', onWheel, { passive: false })
         resizeObserver = new ResizeObserver(() => {
             if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight
+            plotWidth.value = plotEl.value?.clientWidth ?? 0
         })
         resizeObserver.observe(scrollEl.value)
     }
@@ -539,7 +565,7 @@ watch(axisMax, () => {
             <div ref="plotEl"
                  class="relative flex-1"
                  :style="{ marginInline: PLOT_GUTTER + 'px' }">
-                <div v-for="t in ticks"
+                <div v-for="t in rulerTicks"
                      :key="t.value"
                      class="absolute top-0 flex h-full items-center whitespace-nowrap text-[12.5px] font-medium text-muted"
                      :style="{
@@ -547,6 +573,12 @@ watch(axisMax, () => {
                          transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
                      }">
                     {{ t.label }}
+                </div>
+
+                <div v-if="markerLabel && markerPercent !== null"
+                     class="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white"
+                     :style="{ left: `${markerPercent}%` }">
+                    {{ markerLabel }}
                 </div>
 
                 <UButton v-if="!fitted"
@@ -595,6 +627,10 @@ watch(axisMax, () => {
             <!-- Plot area: gridlines, bars, marker -->
             <div class="absolute inset-y-0"
                  :style="{ left: labelWidth + PLOT_GUTTER + 'px', right: PLOT_GUTTER + 'px' }">
+                <div v-if="futurePercent !== null"
+                     class="pointer-events-none absolute top-0 bottom-0 bg-[repeating-linear-gradient(135deg,var(--ui-bg-muted)_0_6px,var(--ui-bg-elevated)_6px_7px)]"
+                     :style="{ left: `${futurePercent}%`, right: 0 }" />
+
                 <!-- Gridlines -->
                 <div v-for="t in ticks"
                      :key="`grid-${t.value}`"
@@ -625,14 +661,17 @@ watch(axisMax, () => {
                     <div v-for="layout in bars"
                          :key="layout.bar.id"
                          class="absolute flex items-center gap-1.5 overflow-hidden rounded-md cursor-pointer transition-opacity"
-                         :class="labelWidth ? '' : 'px-2'"
+                         :class="[
+                             labelWidth ? '' : 'px-2',
+                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : '',
+                         ]"
                          :style="{
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
                              left: `${layout.geometry.left}%`,
                              width: `${layout.geometry.width}%`,
                              minWidth: '6px',
                              height: BAR_HEIGHT + 'px',
-                             backgroundColor: getStatusColor(layout.bar.status),
+                             backgroundColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
                              opacity: rowOpacity(row.id) * 0.96,
                          }"
                          :title="barTooltip(row, layout)"

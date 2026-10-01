@@ -10,6 +10,7 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
+const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
@@ -32,7 +33,7 @@ function watchedBy(hook: ComponentRecord): RelationRef[] {
 }
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    nameColumn('Hook'),
+    nameColumn('Hook', row => statusBadge(row.status)),
     typeColumn(),
     {
         id: 'events',
@@ -104,6 +105,7 @@ function matchesFilters(hook: ComponentRecord): boolean {
                      @click="handleCreate" />
         </NavActions>
         <NavComponentsHub>
+            <DriftBanner kind="hook" />
             <DataTable :columns="columns"
                        :data="hooks"
                        :filter="matchesFilters"

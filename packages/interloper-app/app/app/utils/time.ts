@@ -124,3 +124,16 @@ export function formatElapsed(start?: string | Date | null, end?: string | Date 
     result += `${seconds}s`
     return result.trim()
 }
+
+/** Compact relative label: "in 4h", "2h ago", "tomorrow", "in 3d". */
+export function relativeTime(date: Date, now: Date = new Date()): string {
+    const diff = date.getTime() - now.getTime()
+    const abs = Math.abs(diff)
+    const future = diff >= 0
+    if (abs < 60_000) return future ? 'now' : 'just now'
+    const minutes = Math.round(abs / 60_000)
+    const hours = Math.round(abs / 3_600_000)
+    if (abs >= DAY && future && startOfDay(date.getTime()) === startOfDay(now.getTime() + DAY)) return 'tomorrow'
+    const label = abs < 3_600_000 ? `${minutes}m` : abs < DAY ? `${hours}h` : `${Math.round(abs / DAY)}d`
+    return future ? `in ${label}` : `${label} ago`
+}

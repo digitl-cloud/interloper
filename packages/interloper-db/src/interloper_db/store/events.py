@@ -11,6 +11,7 @@ and an oversized payload is replaced rather than allowed to bloat the row.
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from collections.abc import Sequence
 from datetime import datetime
@@ -19,7 +20,8 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
-from sqlalchemy import Engine, case
+from interloper.partitioning import TimeGranularity
+from sqlalchemy import Engine, String, and_, case, cast, or_
 from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
@@ -92,6 +94,30 @@ class PartitionExecution(NamedTuple):
     component_id: UUID
     component_key: str | None
     succeeded: bool
+
+
+class CoverageRow(NamedTuple):
+    """Whether one asset ever succeeded for one partition of one job, org-wide.
+
+    Attributes:
+        job_id: The job whose runs were read.
+        partition_key: The partition, in its own granularity's key format.
+        asset_id: The asset.
+        asset_key: The asset's key.
+        succeeded: Whether any execution of the asset for that partition succeeded.
+        failed: Whether any execution of the asset for that partition failed;
+            an asset attempted but neither succeeded nor failed (in flight,
+            canceled) is neither.
+        failed_run_id: One run whose execution of the asset failed, or ``None``.
+    """
+
+    job_id: UUID
+    partition_key: str
+    asset_id: UUID
+    asset_key: str | None
+    succeeded: bool
+    failed: bool
+    failed_run_id: UUID | None
 
 
 class EventStore:
@@ -376,6 +402,64 @@ class EventStore:
                 if partition_key is not None
             ]
 
+    def coverage_rows(self, org_id: UUID, since: dt.date, until: dt.date) -> list[CoverageRow]:
+        """Per job, partition and asset, whether it ever succeeded or failed, over a window of days.
+
+        Every granularity is read: a key counts when its period overlaps the
+        window, so an hourly key inside a day and a monthly key spanning it
+        both list. The caller rolls them onto days.
+
+        Args:
+            org_id: Organisation UUID.
+            since: First day of the window.
+            until: Last day of the window, inclusive.
+
+        Returns:
+            One row per job, partition and asset that executed at least once.
+        """
+        end_of_until = datetime(until.year, until.month, until.day, 23)
+        ranges = [
+            partition_key_range(
+                granularity.format(granularity.truncate(since)),
+                granularity.format(end_of_until if granularity is TimeGranularity.HOUR else until),
+            )
+            for granularity in TimeGranularity
+            if granularity.key_format is not None
+        ]
+        # Cast for a portable min(): Postgres has no min(uuid), and UUID() parses both its dashed text and SQLite's hex.
+        failed_run = func.min(case((col(Execution.status) == "failed", cast(col(Run.id), String))))
+        statement = (
+            sa_select(
+                col(Run.component_id),
+                col(Run.partition_key),
+                col(Execution.component_id),
+                func.max(col(Execution.component_key)),
+                func.max(case((col(Execution.status) == "success", 1), else_=0)),
+                failed_run,
+            )
+            .join(Run, col(Run.id) == col(Execution.run_id))
+            .where(
+                col(Run.org_id) == org_id,
+                col(Run.component_id).is_not(None),
+                col(Run.partition_key).is_not(None),
+                or_(*(and_(*bounds) for bounds in ranges)),
+            )
+            .group_by(col(Run.component_id), col(Run.partition_key), col(Execution.component_id))
+        )
+        with session_scope(self._engine) as session:
+            return [
+                CoverageRow(
+                    job_id,
+                    key,
+                    asset_id,
+                    asset_key,
+                    succeeded=bool(succeeded),
+                    failed=failed is not None,
+                    failed_run_id=UUID(failed) if failed else None,
+                )
+                for job_id, key, asset_id, asset_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
+            ]
+
     def latest_executions(self, org_id: UUID) -> list[Execution]:
         """The most recent execution of every asset in an organisation.
 
@@ -396,6 +480,43 @@ class EventStore:
         with session_scope(self._engine) as session:
             statement = select(latest).where(ranked.c.rank == 1)
             return list(session.exec(statement).all())
+
+    def latest_by_component(
+        self, org_id: UUID, *, event_types: Sequence[str], since: datetime | None = None
+    ) -> list[Event]:
+        """The newest event of the given types per component.
+
+        No index serves this read, so callers bound it with *since*.
+
+        Args:
+            org_id: Organisation UUID.
+            event_types: The event types that count; others are ignored.
+            since: Keep events at or after this instant; ``None`` reads the
+                whole history.
+
+        Returns:
+            One event per component that has at least one in the window,
+            newest by timestamp.
+        """
+        rank = (
+            func.row_number()
+            .over(
+                partition_by=col(Event.component_id),
+                order_by=(col(Event.timestamp).desc(), col(Event.id).desc()),
+            )
+            .label("rank")
+        )
+        filters: list[Any] = [
+            Event.org_id == org_id,
+            col(Event.component_id).is_not(None),
+            col(Event.event_type).in_(event_types),
+        ]
+        if since is not None:
+            filters.append(col(Event.timestamp) >= since)
+        ranked = select(Event, rank).where(*filters).subquery()
+        latest = aliased(Event, ranked)
+        with session_scope(self._engine) as session:
+            return list(session.exec(select(latest).where(ranked.c.rank == 1)).all())
 
     # -- Internals -------------------------------------------------------------
 

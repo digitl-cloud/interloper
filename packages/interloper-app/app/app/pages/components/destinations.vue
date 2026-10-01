@@ -10,6 +10,7 @@ const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const { statusBadge } = useDrift()
 
 const destinations = computed(() => componentsStore.byKind('destination'))
 
@@ -37,7 +38,7 @@ function connectionOf(destination: ComponentRecord): RelationRef | undefined {
 }
 
 const columns: TableColumn<ComponentRecord>[] = [
-    nameColumn('Destination'),
+    nameColumn('Destination', row => statusBadge(row.status)),
     typeColumn(typeIcon),
     {
         id: 'connection',
@@ -81,6 +82,7 @@ const typeKey = ref<string | null>(null)
                      @click="handleCreate" />
         </NavActions>
         <NavComponentsHub>
+            <DriftBanner kind="destination" />
             <DataTable :columns="columns"
                        :data="destinations"
                        :filter="row => typeKey === null || row.key === typeKey"

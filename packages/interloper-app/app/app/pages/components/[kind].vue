@@ -47,15 +47,25 @@ watch(kind, () => componentsStore.fetchAll([kind.value]))
 
 // Deep link: `?new` opens the create wizard; `?new=<definition key>&name=<name>`
 // opens it on that type with the name prefilled (the connection setup hand-off
-// an MCP tool returns). The query is consumed so a reload does not reopen it.
+// an MCP tool returns). `?edit=<id>` opens the edit wizard for that component
+// (the overview's Reconnect link); an empty `?edit=` opens nothing. The query
+// is consumed so a reload does not reopen it.
 const router = useRouter()
 watchEffect(() => {
     const key = route.query.new
-    if (key === undefined) return
-    const name = typeof route.query.name === 'string' ? route.query.name : undefined
-    if (typeof key === 'string' && key) handleCreateFromCatalog(key, name)
-    else handleCreate()
-    router.replace({ query: { ...route.query, new: undefined, name: undefined } })
+    const edit = route.query.edit
+    if (key === undefined && edit === undefined) return
+    if (typeof edit === 'string' && edit) {
+        componentsStore.fetchOne(edit)
+            .then(handleEdit)
+            .catch(e => toast.add(errorToast(e, 'Could not open the connection')))
+    }
+    else if (edit === undefined) {
+        const name = typeof route.query.name === 'string' ? route.query.name : undefined
+        if (typeof key === 'string' && key) handleCreateFromCatalog(key, name)
+        else handleCreate()
+    }
+    router.replace({ query: { ...route.query, new: undefined, name: undefined, edit: undefined } })
 })
 
 /**
@@ -201,6 +211,7 @@ const typeKey = ref<string | null>(null)
                      @click="handleCreate" />
         </NavActions>
         <NavComponentsHub>
+            <DriftBanner :kind="kind" />
             <DataTable :columns="columns"
                        :data="resources"
                        :filter="row => typeKey === null || row.key === typeKey"

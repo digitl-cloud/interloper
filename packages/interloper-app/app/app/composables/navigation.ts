@@ -70,6 +70,7 @@ export function useNavDestinations() {
     const componentViews = useComponentViews()
 
     return computed<NavDestination[]>(() => [
+        { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/', keywords: ['home', 'dashboard', 'health'] },
         { label: 'Timeline', icon: 'i-lucide-gantt-chart', to: '/timeline', keywords: ['gantt', 'schedule', 'runs', 'history'] },
         { label: 'Graph', icon: 'i-lucide-workflow', to: '/graph', keywords: ['dag', 'pipeline', 'lineage'] },
         { label: 'Collection', icon: 'i-lucide-library', to: '/collection', keywords: ['catalog', 'library'] },

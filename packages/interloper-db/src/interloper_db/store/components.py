@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import functools
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
@@ -1160,6 +1160,29 @@ class ComponentStore:
             names = ", ".join(sorted(g.value for g in granularities))
             raise ValueError(f"Job targets disagree on partition granularity ({names})")
         return next(iter(granularities), None)
+
+    def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, TimeGranularity | None]:
+        """Resolve :meth:`job_partition_granularity` for several jobs in one session.
+
+        A read-side view, for callers that describe windows rather than
+        schedule them: a job whose targets disagree reads as unpartitioned
+        instead of failing the whole batch.
+
+        Args:
+            job_ids: UUIDs of the job components.
+
+        Returns:
+            Each job's granularity by id, ``None`` when no partitioned target
+            resolves or the targets disagree.
+        """
+        granularities: dict[UUID, TimeGranularity | None] = {}
+        with session_scope(self._engine) as session:
+            for job_id in job_ids:
+                try:
+                    granularities[job_id] = self.job_partition_granularity(session, job_id)
+                except ValueError:
+                    granularities[job_id] = None
+        return granularities
 
     def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.

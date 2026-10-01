@@ -744,3 +744,136 @@ class TestPartitionCoverage:
 
     def test_a_job_without_runs_has_no_coverage(self, store: Store) -> None:
         assert store.events.partition_coverage(_ORG_ID, uuid4(), "2026-07-01", "2026-07-02") == []
+
+
+@pytest.mark.usefixtures("run_tables")
+class TestCoverageRows:
+    """Org-wide coverage: every job's partitions overlapping a day window, at any granularity."""
+
+    def _execution(self, run_id: UUID, asset_id: UUID, status: str) -> None:
+        with Session(engine_module.get_engine()) as session:
+            session.add(
+                Execution(run_id=run_id, component_id=asset_id, org_id=_ORG_ID, component_key="orders", status=status)
+            )
+            session.commit()
+
+    def test_every_granularity_overlapping_the_window_is_read(self, store: Store) -> None:
+        job, asset = uuid4(), uuid4()
+        day = _run(job_id=job, partition_key="2026-07-02")
+        hour = _run(job_id=job, partition_key="2026-07-01T13")
+        month = _run(job_id=job, partition_key="2026-06")
+        year = _run(job_id=job, partition_key="2026")
+        outside_day = _run(job_id=job, partition_key="2026-07-03")
+        outside_month = _run(job_id=job, partition_key="2026-05")
+        for run in (day, hour, month, year, outside_day, outside_month):
+            self._execution(run, asset, "success")
+
+        rows = store.events.coverage_rows(_ORG_ID, dt.date(2026, 6, 30), dt.date(2026, 7, 2))
+
+        assert sorted(r.partition_key for r in rows) == ["2026", "2026-06", "2026-07-01T13", "2026-07-02"]
+        assert all(r.job_id == job and r.asset_id == asset and r.succeeded for r in rows)
+
+    def test_a_failed_run_is_reported_until_an_execution_succeeds(self, store: Store) -> None:
+        job, asset = uuid4(), uuid4()
+        failed = _run(job_id=job, partition_key="2026-07-01")
+        healed = _run(job_id=job, partition_key="2026-07-01")
+        still_failed = _run(job_id=job, partition_key="2026-07-02")
+        self._execution(failed, asset, "failed")
+        self._execution(healed, asset, "success")
+        self._execution(still_failed, asset, "failed")
+
+        rows = {
+            r.partition_key: r for r in store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 2))
+        }
+
+        assert rows["2026-07-01"].succeeded and rows["2026-07-01"].failed_run_id == failed
+        assert not rows["2026-07-02"].succeeded and rows["2026-07-02"].failed_run_id == still_failed
+
+    def test_only_a_failed_execution_marks_the_row_failed(self, store: Store) -> None:
+        job, asset = uuid4(), uuid4()
+        self._execution(_run(job_id=job, partition_key="2026-07-01"), asset, "failed")
+        self._execution(_run(job_id=job, partition_key="2026-07-02"), asset, "running")
+        self._execution(_run(job_id=job, partition_key="2026-07-03"), asset, "canceled")
+
+        rows = {
+            r.partition_key: r for r in store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 3))
+        }
+
+        assert {key: (row.succeeded, row.failed) for key, row in rows.items()} == {
+            "2026-07-01": (False, True),
+            "2026-07-02": (False, False),
+            "2026-07-03": (False, False),
+        }
+
+    def test_unpartitioned_runs_deleted_jobs_and_other_orgs_stay_out(self, store: Store) -> None:
+        asset = uuid4()
+        self._execution(_run(job_id=uuid4(), partition_key=None), asset, "success")
+        self._execution(_run(job_id=None, partition_key="2026-07-01"), asset, "success")
+        self._execution(_run(org_id=uuid4(), job_id=uuid4(), partition_key="2026-07-01"), asset, "success")
+
+        assert store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 2)) == []
+
+
+class TestLatestByComponent:
+    """One event per component: its newest of the given types, other types and orgs dropped."""
+
+    def test_the_newest_event_of_the_types_is_kept(self, store: Store) -> None:
+        hook_a, hook_b, hook_c = uuid4(), uuid4(), uuid4()
+        low_id, high_id = UUID(int=1), UUID(int=2)
+        _seed(
+            [
+                Event(id=uuid4(), org_id=_ORG_ID, component_id=None, event_type="hook_fired", timestamp=_BASE_TS),
+                Event(id=low_id, org_id=_ORG_ID, component_id=hook_c, event_type="hook_fired", timestamp=_BASE_TS),
+                Event(id=high_id, org_id=_ORG_ID, component_id=hook_c, event_type="hook_failed", timestamp=_BASE_TS),
+                Event(id=uuid4(), org_id=_ORG_ID, component_id=hook_a, event_type="hook_failed", timestamp=_BASE_TS),
+                Event(
+                    id=uuid4(),
+                    org_id=_ORG_ID,
+                    component_id=hook_a,
+                    event_type="hook_fired",
+                    timestamp=_BASE_TS + timedelta(minutes=1),
+                ),
+                Event(
+                    id=uuid4(),
+                    org_id=_ORG_ID,
+                    component_id=hook_a,
+                    event_type="log",
+                    timestamp=_BASE_TS + timedelta(minutes=2),
+                ),
+                Event(id=uuid4(), org_id=_ORG_ID, component_id=hook_b, event_type="hook_failed", timestamp=_BASE_TS),
+                Event(id=uuid4(), org_id=uuid4(), component_id=uuid4(), event_type="hook_failed", timestamp=_BASE_TS),
+            ]
+        )
+
+        rows = store.events.latest_by_component(_ORG_ID, event_types=["hook_fired", "hook_failed"])
+
+        assert {(e.component_id, e.event_type) for e in rows} == {
+            (hook_a, "hook_fired"),
+            (hook_b, "hook_failed"),
+            (hook_c, "hook_failed"),
+        }
+        assert {e.id for e in rows if e.component_id == hook_c} == {high_id}
+        assert store.events.latest_by_component(uuid4(), event_types=["hook_fired"]) == []
+
+    def test_since_bounds_the_read(self, store: Store) -> None:
+        recent_hook, stale_hook = uuid4(), uuid4()
+        _seed(
+            [
+                Event(
+                    id=uuid4(),
+                    org_id=_ORG_ID,
+                    component_id=recent_hook,
+                    event_type="hook_fired",
+                    timestamp=_BASE_TS + timedelta(days=1),
+                ),
+                Event(
+                    id=uuid4(), org_id=_ORG_ID, component_id=stale_hook, event_type="hook_failed", timestamp=_BASE_TS
+                ),
+            ]
+        )
+
+        rows = store.events.latest_by_component(
+            _ORG_ID, event_types=["hook_fired", "hook_failed"], since=_BASE_TS + timedelta(hours=1)
+        )
+
+        assert [e.component_id for e in rows] == [recent_hook]

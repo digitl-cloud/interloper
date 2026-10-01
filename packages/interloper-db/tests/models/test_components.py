@@ -1,8 +1,8 @@
 """Tests for the behaviour on ``interloper_db.models.components``.
 
-The row carries two pieces of logic beyond its declarations: resolving an
-owned asset's parent key, and merging machine-owned state without touching
-the spec.
+The row carries a little logic beyond its declarations: resolving an owned
+asset's parent key, merging and reading machine-owned state without touching
+the spec, and reading whether its config leaves it enabled.
 """
 
 from __future__ import annotations
@@ -97,6 +97,42 @@ class TestStampState:
 
         with pytest.raises(pydantic.ValidationError):
             row.stamp_state(next_run_at=object())
+
+
+class TestStateDatetime:
+    """State timestamps read back aware, naive ones as UTC."""
+
+    def test_an_aware_stamp_round_trips(self):
+        stamp = dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.timezone.utc)
+        row = Component(org_id=_ORG, kind="job", key="cron_job")
+        row.stamp_state(next_run_at=stamp)
+
+        assert row.state_datetime("next_run_at") == stamp
+
+    def test_a_naive_value_reads_as_utc(self):
+        row = Component(org_id=_ORG, kind="job", key="cron_job", state={"next_run_at": "2026-06-01T12:30:00"})
+
+        assert row.state_datetime("next_run_at") == dt.datetime(2026, 6, 1, 12, 30, tzinfo=dt.timezone.utc)
+
+    def test_an_absent_key_reads_none(self):
+        row = Component(org_id=_ORG, kind="job", key="cron_job", state={"next_run_at": None})
+
+        assert row.state_datetime("next_run_at") is None
+        assert row.state_datetime("last_run_at") is None
+
+
+class TestEnabled:
+    """A row is enabled unless its config says otherwise."""
+
+    def test_a_row_without_the_flag_is_enabled(self):
+        assert Component(org_id=_ORG, kind="job", key="cron_job", config={"cron": "0 2 * * *"}).enabled
+        assert Component(org_id=_ORG, kind="source", key="demo_source").enabled
+
+    def test_a_false_flag_disables_it(self):
+        assert not Component(org_id=_ORG, kind="job", key="cron_job", config={"enabled": False}).enabled
+
+    def test_a_null_flag_reads_enabled(self):
+        assert Component(org_id=_ORG, kind="job", key="cron_job", config={"enabled": None}).enabled
 
 
 class TestComponentRelation:
