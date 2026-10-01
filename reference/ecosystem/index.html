@@ -2009,6 +2009,10 @@ own README. All are versioned and released together.</p>
 <td>The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation.</td>
 </tr>
 <tr>
+<td><code>interloper-core[aws]</code></td>
+<td>Pulls in <code>interloper-aws</code>.</td>
+</tr>
+<tr>
 <td><code>interloper-core[google-cloud]</code></td>
 <td>Pulls in <code>interloper-google-cloud</code>.</td>
 </tr>
@@ -2047,12 +2051,17 @@ own README. All are versioned and released together.</p>
 </tr>
 <tr>
 <td><code>interloper-google-cloud</code></td>
-<td><code>GoogleCloudConnection</code>, <code>BigQueryDestination</code> (a <code>DatabaseDestination</code> with typed Parquet loads and time partitioning), <code>GCSDestination</code> (hive-partitioned Parquet, JSONL or CSV), <code>GoogleSheetsDestination</code> (a <code>DatabaseDestination</code> writing one tab per asset).</td>
+<td><code>GoogleCloudConnection</code>, <code>BigQueryDestination</code> (a <code>DatabaseDestination</code> with typed Parquet loads and time partitioning), <code>GCSDestination</code> (an <code>ObjectStoreDestination</code> over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), <code>GoogleSheetsDestination</code> (a <code>DatabaseDestination</code> writing one tab per asset).</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>
 <td><code>interloper-duckdb</code></td>
 <td><code>DuckDBConnection</code>, <code>DuckDBDestination</code> (a <code>DatabaseDestination</code> writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset).</td>
+<td><code>interloper.components</code></td>
+</tr>
+<tr>
+<td><code>interloper-aws</code></td>
+<td><code>AWSConnection</code> (an access key pair, or boto3's default credential chain), <code>S3Destination</code> (an <code>ObjectStoreDestination</code> over Amazon S3: hive-partitioned Parquet, JSONL or CSV).</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>

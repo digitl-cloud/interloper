@@ -951,6 +951,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#object-store-destinations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Object store destinations
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#database-destinations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2209,9 +2220,9 @@ instantiated. <code>partition_row_counts</code> feeds <code>asset.partition_row_
 per partition, slicing the data through its <a href="../../extending/representations/">representation</a>
 on the partition column; a window read returns one result per partition, newest first. A
 destination written this way is partition-correct by construction, and <code>CSVDestination</code>,
-<code>FileDestination</code>, <code>MemoryDestination</code> and <code>GCSDestination</code> are all built exactly like this. The
-partitions a context covers are on the context itself, <code>context.partitions</code> and <code>context.slices(data)</code>,
-for a backend that needs them.</p>
+<code>FileDestination</code>, <code>MemoryDestination</code> and <code>ObjectStoreDestination</code>, the base of <code>GCSDestination</code> and
+<code>S3Destination</code>, are all built exactly like this. The partitions a context covers are on the context
+itself, <code>context.partitions</code> and <code>context.slices(data)</code>, for a backend that needs them.</p>
 <p>The decorator accepts the class's public ClassVars and field defaults, plus <code>relations=</code>; see the
 <a href="../../reference/decorators/">decorators reference</a>. A destination's own connection is a relation,
 declared as an annotation or through <code>relations=</code>; see
@@ -2219,6 +2230,58 @@ declared as an annotation or through <code>relations=</code>; see
 <p>A backend whose storage is not per partition may override <code>write()</code> or <code>read()</code>
 wholesale. <code>DatabaseDestination</code> below does that for writes: rows carry the partition column, so
 a window clears every partition it covers and inserts the whole batch once.</p>
+<h3 id="object-store-destinations">Object store destinations<a class="headerlink" href="#object-store-destinations" title="Permanent link">&para;</a></h3>
+<p><code>ObjectStoreDestination</code> (imported from <code>interloper.destination</code>, together with <code>StoredObject</code>)
+is a destination whose partitions are objects in a bucket. A backend writes its storage calls and
+nothing else, in four hooks that all take an object name relative to the bucket root:</p>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>Called for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>put_object(name, payload, content_type, metadata)</code></td>
+<td>writing; uploads the serialized partition, overwriting any object of that name, with the given custom metadata</td>
+</tr>
+<tr>
+<td><code>get_object(name)</code></td>
+<td>reading; returns the object's bytes, or <code>None</code> when it does not exist, which the base turns into a <code>DataNotFoundError</code></td>
+</tr>
+<tr>
+<td><code>list_objects(prefix)</code></td>
+<td><code>partition_row_counts</code>; yields a <code>StoredObject(name, metadata)</code> per object under the prefix</td>
+</tr>
+<tr>
+<td><code>object_uri(name)</code></td>
+<td>messages; the backend's URI for the object, such as <code>gs://bucket/name</code></td>
+</tr>
+</tbody>
+</table>
+<p>The base declares two fields, <code>format</code> (<code>parquet</code>, the default, <code>jsonl</code> or <code>csv</code>) and <code>prefix</code>
+(a path prefix inside the bucket), and lays objects out hive style, one per partition:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>{prefix}/{dataset}/{table}/data.{ext}
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>{prefix}/{dataset}/{table}/{column}={partition_id}/data.{ext}
+</span></code></pre></div>
+<p>Behaviour the base class owns:</p>
+<ul>
+<li><strong>The partition column lives in the path only</strong>: it is dropped from a partition's file contents
+  on write, since external readers like BigQuery external tables and DuckDB reject a duplicate
+  partition column, and re-injected from the partition on read, so round trips stay lossless.</li>
+<li><strong>Row counts need no download</strong>: every object carries its row count as <code>row_count</code> metadata,
+  so <code>partition_row_counts</code> is one listing. An object without it, written by another tool, is
+  downloaded and counted.</li>
+<li><strong>Reads come back as rows</strong>, reconciled against <code>context.schema</code> when there is one, which
+  restores the declared types that JSONL and CSV read back as strings.</li>
+<li><strong>File shapes follow the schema</strong>: a Parquet file's columns are built from the effective
+  schema's field specs, so every partition has the same shape even when a column is all null.</li>
+</ul>
+<p>The formats live in <code>interloper.destination.formats</code> (<code>FileFormat</code>, <code>ParquetFormat</code>,
+<code>JSONLFormat</code>, <code>CSVFormat</code>). Parquet needs <code>pyarrow</code>, which core does not depend on: it is
+imported on first use and a missing install raises <code>ImportError</code> naming it. The packages that
+ship an object-store backend depend on it themselves.</p>
 <h3 id="database-destinations">Database destinations<a class="headerlink" href="#database-destinations" title="Permanent link">&para;</a></h3>
 <p><code>DatabaseDestination</code> (imported from <code>interloper.destination</code>, together with <code>PartitionFilter</code>)
 is a destination whose partitions are rows selected by a filter in a table. A backend writes its
