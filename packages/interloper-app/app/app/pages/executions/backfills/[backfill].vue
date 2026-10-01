@@ -8,20 +8,59 @@ import type { Backfill } from '~/types/backfill'
 // from the nav lands on the backfills list instead.
 definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions/backfills', customNavbar: true })
 
+const PAGE_SIZE = 50
+
 const UBadge = resolveComponent('UBadge')
 
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
 
-const { apiFetch } = useApi()
+const { apiFetchRaw } = useApi()
 const backfillsStore = useBackfillsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
 const backfill = ref<Backfill | null>(null)
 const backfillRuns = ref<Run[]>([])
+const runsTotal = ref(0)
+const runsPage = ref(0)
 const runsLoading = ref(false)
 const sorting = ref([{ id: 'partition_key', desc: false }])
+// The server orders the runs, so a sort spans every page rather than the one loaded.
+const sortingOptions = { manualSorting: true }
+
+async function fetchRuns() {
+    runsLoading.value = true
+    try {
+        const params = new URLSearchParams({
+            backfill_id: backfillId,
+            limit: String(PAGE_SIZE),
+            offset: String(runsPage.value * PAGE_SIZE),
+        })
+        const [order] = sorting.value
+        if (order) params.set('sort', `${order.desc ? '-' : ''}${order.id}`)
+        const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
+        backfillRuns.value = res._data ?? []
+        runsTotal.value = Number(res.headers.get('X-Total-Count') ?? backfillRuns.value.length)
+    }
+    finally {
+        runsLoading.value = false
+    }
+}
+
+function reloadRuns() {
+    fetchRuns().catch(e => toast.add(errorToast(e, 'Failed to load runs')))
+}
+
+function onPageChange(page: number) {
+    runsPage.value = page - 1
+    reloadRuns()
+}
+
+watch(sorting, () => {
+    runsPage.value = 0
+    reloadRuns()
+})
 
 const cancellable = computed(() => backfill.value != null && ['running', 'queued'].includes(backfill.value.status))
 const cancelling = ref(false)
@@ -39,7 +78,7 @@ async function onCancel() {
     cancelling.value = true
     try {
         backfill.value = await backfillsStore.cancelBackfill(backfillId)
-        backfillRuns.value = await apiFetch<Run[]>(`/runs?backfill_id=${backfillId}`)
+        await fetchRuns()
         toast.add({ title: 'Backfill canceled', color: 'success' })
     }
     catch (e) {
@@ -55,20 +94,12 @@ const backfillTargetName = computed(() => backfill.value ? targetLabel(backfill.
 const fetchError = ref<unknown>(null)
 
 onMounted(async () => {
-    runsLoading.value = true
     try {
-        const [fetchedBackfill, runs] = await Promise.all([
-            backfillsStore.fetchOne(backfillId),
-            apiFetch<Run[]>(`/runs?backfill_id=${backfillId}`),
-        ])
+        const [fetchedBackfill] = await Promise.all([backfillsStore.fetchOne(backfillId), fetchRuns()])
         backfill.value = fetchedBackfill
-        backfillRuns.value = runs
     }
     catch (e) {
         fetchError.value = e
-    }
-    finally {
-        runsLoading.value = false
     }
 })
 
@@ -117,7 +148,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
              :error="fetchError"
              back-to="/executions/backfills"
              resource-label="backfill">
-        <div>
+        <div class="flex flex-col flex-1 min-h-0 gap-2">
             <NavTitle>
                 <ULink to="/executions/backfills"
                        class="text-[15px] font-medium text-muted hover:text-highlighted">Backfills</ULink>
@@ -139,7 +170,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
             </NavActions>
 
         <div v-if="backfill"
-             class="flex items-center gap-4 mb-4 text-sm text-muted">
+             class="flex items-center gap-4 mb-2 text-sm text-muted">
             <div class="flex items-center gap-1.5">
                 <UIcon name="i-lucide-briefcase"
                        class="size-4" />
@@ -167,10 +198,19 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                 :data="backfillRuns"
                 :columns="columns"
                 :loading="runsLoading"
+                :sorting-options="sortingOptions"
                 sticky
                 :ui="{ tr: 'cursor-pointer' }"
-                class="flex-1"
+                class="flex-1 min-h-0"
                 @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+
+        <TableFooter class="shrink-0"
+                     :page="runsPage + 1"
+                     :total="runsTotal"
+                     :page-size="PAGE_SIZE"
+                     @update:page="onPageChange">
+            {{ runsTotal }} run(s) total.
+        </TableFooter>
         </div>
     </OrganizationGate>
 </template>
