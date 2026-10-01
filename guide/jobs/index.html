@@ -2123,6 +2123,10 @@ itself is computed with <code>TimePartitionWindow.lookback</code>; hourly target
 because hour ids are UTC labels. Whether a job is partitioned is derived from its targets, never
 stored. Each firing is a backfill over the window, dispatched newest partition first and gated by
 <code>concurrency</code>: at <code>1</code> the partitions run one at a time.</p>
+<p>On the platform, a firing is quota-checked like a manual backfill: its window counts against the
+organisation's <code>max_backfill_partitions</code>, and it needs the monthly run quota. A firing the quotas
+reject is skipped, logged as a warning event on the job, and the job moves on to its next
+scheduled time.</p>
 <h2 id="jobs-as-specs">Jobs as specs<a class="headerlink" href="#jobs-as-specs" title="Permanent link">&para;</a></h2>
 <p>A job is the natural unit for a declarative run. Its spec lists targets with their configuration
 and the workload-level defaults. A connection a target needs is not a job field, so it is nested
