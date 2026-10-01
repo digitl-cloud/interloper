@@ -65,6 +65,11 @@ const groupingOptions = ref<GroupingOptions>({
 // expanded state before the default-expanded type rows can show.
 const expandedOptions = { autoResetExpanded: false }
 
+// Fully expanded, a large collection mounts every row at once and freezes the
+// page. Nuxt UI sizes virtual rows by this estimate and never measures them,
+// so it must match the rendered row height.
+const virtualize = { estimateSize: 61, overscan: 10 }
+
 const emit = defineEmits<{
     'edit-source': [sourceId: string]
     'view-asset': [assetId: string, sourceId: string]
@@ -223,6 +228,7 @@ function onRowClick(row: any) {
                 :grouping="grouping"
                 :grouping-options="groupingOptions"
                 :expanded-options="expandedOptions"
+                :virtualize="virtualize"
                 sticky
                 class="flex-1 min-h-0"
                 :ui="{
