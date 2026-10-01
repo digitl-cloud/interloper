@@ -77,7 +77,7 @@ ARG COMMON_EXTRAS=otel
 # Debian rather than Alpine: some vendor packages (DuckDB, the Snowflake
 # connector) publish no musllinux wheels and would have to compile from source.
 # Both stages pin the same release, since the venv built here runs there.
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base
+FROM ghcr.io/astral-sh/uv:python3.12-trixie-slim AS base
 
 WORKDIR /interloper
 ENV UV_COMPILE_BYTECODE=1 \
@@ -106,7 +106,7 @@ COPY packages/interloper-aws/pyproject.toml         packages/interloper-aws/pypr
 
 
 # ── Python runtime base ───────────────────────────────────────
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12-slim-trixie AS runtime
 
 RUN groupadd --system app && useradd --system --gid app --create-home app
 ENV PATH="/interloper/.venv/bin:$PATH"
