@@ -176,6 +176,29 @@ class TestRunTargetOperations:
         run = store.runs.create(_ORG_ID, component_id=target)
         assert run.billable is False
 
+    def test_backfill_runs_record_billable_from_the_operation(self, store: Store):
+        target = _component(store, kind="fake_plumbing")
+        backfill = store.runs.create_backfill(
+            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-03"
+        )
+        with Session(store.engine) as session:
+            runs = session.exec(select(Run).where(Run.backfill_id == backfill.id)).all()
+        assert len(runs) == 3
+        assert all(run.billable is False for run in runs)
+
+    def test_non_billable_backfill_skips_the_run_quota(self, store: Store):
+        from types import SimpleNamespace
+
+        from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
+
+        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
+        with Session(store.engine) as session:
+            ledger = UsageLedger(session)
+            ledger.increment(_ORG_ID, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
+            session.commit()
+        target = _component(store, kind="fake_plumbing")
+        store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
+
 
 class TestTargetResolution:
     """Runs carry their target component, eagerly joined and deletion-aware."""

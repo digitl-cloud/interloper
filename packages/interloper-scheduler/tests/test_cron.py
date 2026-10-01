@@ -18,7 +18,7 @@ import pytest
 from interloper.errors import ConfigError
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -45,7 +45,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill, Quota, Usage):
+    for model in (Component, ComponentRelation, Run, Backfill, Event, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))
@@ -70,6 +70,11 @@ def _job(store: Store, *, config: dict[str, Any], state: dict[str, Any] | None =
 def _runs(store: Store) -> list[Run]:
     with Session(store.engine) as session:
         return list(session.exec(select(Run)).all())
+
+
+def _events(store: Store) -> list[Event]:
+    with Session(store.engine) as session:
+        return list(session.exec(select(Event)).all())
 
 
 def _state(store: Store, job_id: UUID) -> dict[str, Any]:
@@ -237,7 +242,7 @@ class TestConfig:
             CronController(store=store, reconcile_interval=10, max_execution_delay=5)
 
 
-class TestRunQuota:
+class TestQuotas:
     def test_exhausted_org_skips_run_but_advances_schedule(self, store: Store) -> None:
         from types import SimpleNamespace
 
@@ -260,6 +265,48 @@ class TestRunQuota:
         assert _runs(store) == []
         # The schedule still advances so the job doesn't re-fire every tick.
         assert _state(store, job_id)["next_run_at"] > now.isoformat()
+        (skipped,) = _events(store)
+        assert skipped.component_id == job_id
+        assert skipped.level == "warning"
+        assert skipped.data == {"quota": "max_successful_runs_per_month", "limit": 1, "used": 1}
+
+    def test_a_lookback_over_the_partition_limit_skips_the_firing(self, store: Store) -> None:
+        from types import SimpleNamespace
+
+        store = _catalog_store()
+        job_id = _job_targeting(
+            store,
+            "daily_source",
+            config={"cron": "0 * * * *", "enabled": True, "lookback": 3},
+        )
+        # Lowered after the job was saved: only the fire-time gate sees it.
+        store._quota_defaults = SimpleNamespace(max_backfill_partitions=2)
+        before = _state(store, job_id)["next_run_at"]
+        CronController(store=store)._tick()
+
+        assert _runs(store) == []
+        with Session(store.engine) as session:
+            assert session.exec(select(Backfill)).all() == []
+        assert _state(store, job_id)["next_run_at"] > before
+        (skipped,) = _events(store)
+        assert skipped.component_id == job_id
+        assert skipped.data == {"quota": "max_backfill_partitions", "limit": 2, "used": 3}
+        assert "spans 3 partitions" in (skipped.message or "")
+
+    def test_a_skipped_job_does_not_block_the_rest_of_the_batch(self, store: Store) -> None:
+        from types import SimpleNamespace
+
+        store = _catalog_store()
+        _job_targeting(store, "daily_source", config={"cron": "0 * * * *", "enabled": True, "lookback": 3})
+        fits = _job_targeting(store, "hourly_source", config={"cron": "0 * * * *", "enabled": True, "lookback": 2})
+        store._quota_defaults = SimpleNamespace(max_backfill_partitions=2)
+        CronController(store=store)._tick()
+
+        with Session(store.engine) as session:
+            (backfill,) = session.exec(select(Backfill)).all()
+        assert backfill.component_id == fits
+        assert len(_runs(store)) == 2
+        assert len(_events(store)) == 1
 
 
 # -- Granularity resolution ----------------------------------------------------

@@ -18,14 +18,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, tzinfo
 from typing import Any, cast
+from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import croniter
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, QuotaExceededError
 from interloper.partitioning.time import TimePartitionWindow
 from interloper_db import Store
-from interloper_db.models import Backfill, Component, Run
-from interloper_db.store.runs import create_backfill_runs
+from interloper_db.models import Component, Event
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
@@ -40,7 +40,8 @@ class CronController(Controller):
     Each tick:
     1. ``SELECT FOR UPDATE SKIP LOCKED`` (lock due job rows)
     2. update ``state.next_run_at`` (calculate next)
-    3. ``INSERT run`` with ``status='queued'`` (create run)
+    3. create the firing's backfill (or single run) through the store,
+       quota-checked like any other
     4. ``COMMIT`` (release locks)
     """
 
@@ -124,26 +125,6 @@ class CronController(Controller):
 
                 self._set_state(session, job, next_run_at=next_run)
 
-                # Quota-exhausted orgs skip run creation but still advance
-                # next_run_at (committed with this session) — otherwise the
-                # blocked job would re-fire every tick forever.
-                committed, limit = self._store.quotas.run_status(job.org_id)
-                if limit is not None and committed >= limit:
-                    logger.warning(
-                        "Skipping job '%s' - monthly successful-run quota exhausted (%d/%d) for org %s",
-                        job.name,
-                        committed,
-                        limit,
-                        job.org_id,
-                    )
-                    continue
-
-                # The backfill row is built inline rather than through
-                # Store.runs.create_backfill: it must commit atomically with
-                # the job's state advance (a crash between the two would
-                # re-create it next tick), and a top-up skips the quota
-                # checks a user-created backfill pays. The fan-out itself is
-                # the shared one, gated by the job's concurrency.
                 try:
                     window = self._backfill_window(session, job, config, now.astimezone(zone))
                 except ValueError as exc:
@@ -151,31 +132,55 @@ class CronController(Controller):
                     # backfill a window that is wrong for some of them.
                     logger.error("Skipping job '%s': %s", job.name, exc)
                     continue
-                if window is not None:
-                    backfill = Backfill(
-                        org_id=job.org_id,
-                        component_id=job.id,
-                        start_key=window.granularity.format(window.start),
-                        end_key=window.granularity.format(window.end),
-                        concurrency=config.get("concurrency", 1),
-                        status="running",
-                        started_at=now,
-                    )
-                    session.add(backfill)
-                    session.flush()
-                    create_backfill_runs(session, backfill, window)
-                else:
-                    run = Run(
-                        component_id=job.id,
-                        org_id=job.org_id,
-                        status="queued",
-                    )
-                    session.add(run)
+
+                # The store calls join this tick's transaction, so the firing
+                # commits atomically with the state advance above. A quota
+                # rejection is raised before they write anything, and the
+                # advanced next_run_at still commits: a blocked job must not
+                # re-fire every tick.
+                try:
+                    if window is not None:
+                        self._store.runs.create_backfill(
+                            job.org_id,
+                            component_id=job.id,
+                            start_key=window.granularity.format(window.start),
+                            end_key=window.granularity.format(window.end),
+                            concurrency=config.get("concurrency", 1),
+                        )
+                    else:
+                        self._store.runs.create(job.org_id, component_id=job.id)
+                except QuotaExceededError as exc:
+                    self._skip_over_quota(session, job, exc)
 
             session.commit()
             logger.info("Processed %d job(s)", len(jobs))
 
     # -- Internals -------------------------------------------------------------
+
+    @staticmethod
+    def _skip_over_quota(session: Session, job: Component, error: QuotaExceededError) -> None:
+        """Record a firing the organisation's quotas rejected, on the job itself.
+
+        Args:
+            session: Open session the event is written through.
+            job: The job whose firing was rejected.
+            error: The rejection, carrying the quota and its message.
+        """
+        logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, error)
+        session.add(
+            Event(
+                id=uuid4(),
+                org_id=job.org_id,
+                component_id=job.id,
+                component_kind=job.kind,
+                component_key=job.key,
+                event_type="log",
+                level="warning",
+                message=f"Scheduled firing skipped: {error}",
+                data={"quota": error.quota, "limit": error.limit, "used": error.used},
+                timestamp=datetime.now(timezone.utc),
+            )
+        )
 
     def _backfill_window(
         self,

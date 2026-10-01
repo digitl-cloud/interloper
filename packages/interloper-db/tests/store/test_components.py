@@ -789,7 +789,7 @@ class TestTelemetry:
 
 
 class TestQuotaGates:
-    """Capacity quotas gate source creation and the child-asset set size."""
+    """Quotas gate source creation, the child-asset set size, and a job's lookback."""
 
     def _store(self, **limits: int | None) -> Store:
         from types import SimpleNamespace
@@ -833,6 +833,19 @@ class TestQuotaGates:
             store.components.create(_ORG, kind="source", key="demo_source", config={"dataset": "full"})
         # Shrinking or staying within the limit is fine.
         assert {c.key for c in store.components.update(source.id, children=["a"]).children} == {"a"}
+
+    def test_job_lookback_is_bounded_by_the_partition_limit(self, component_db: Engine):
+        from interloper.errors import QuotaExceededError
+
+        store = self._store(max_backfill_partitions=7)
+        job = store.components.create(_ORG, kind="job", key="cron_job", name="Daily", config={"lookback": 7})
+        with pytest.raises(QuotaExceededError) as excinfo:
+            store.components.update(job.id, config={"lookback": 8})
+        assert excinfo.value.quota == "max_backfill_partitions"
+        assert (excinfo.value.limit, excinfo.value.used) == (7, 8)
+        assert "Job 'Daily' lookback spans 8 partitions" in str(excinfo.value)
+        with pytest.raises(QuotaExceededError):
+            store.components.create(_ORG, kind="job", key="cron_job", name="Wide", config={"lookback": 30})
 
     def test_unconfigured_quotas_gate_nothing(self, component_db: Engine):
         store = self._store()
