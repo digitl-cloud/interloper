@@ -50,12 +50,7 @@ from sqlmodel.sql.expression import SelectOfScalar
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.hydration import Hydrator
-from interloper_db.store.quotas import (
-    QUOTA_MAX_ASSETS_PER_SOURCE,
-    QUOTA_MAX_BACKFILL_PARTITIONS,
-    QUOTA_MAX_SOURCES,
-    QuotaStore,
-)
+from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
@@ -173,8 +168,6 @@ class ComponentStore:
             self._apply_config(db_component, config, encrypted)
             if name is None:
                 db_component.name = self._derived_name(db_component, config)
-            if kind == "job":
-                self._check_job_lookback(db_component)
             session.add(db_component)
             session.flush()
             if kind == "source":
@@ -354,10 +347,8 @@ class ComponentStore:
                 self._refresh_derived_name(db_component, new_config=config, explicit_rename=name is not None)
                 spec_changed = config != (db_component.config or {})
                 self._apply_config(db_component, config, encrypted)
-                if db_component.kind == "job":
-                    self._check_job_lookback(db_component)
-                    if spec_changed:
-                        db_component.stamp_state(next_run_at=None)
+                if db_component.kind == "job" and spec_changed:
+                    db_component.stamp_state(next_run_at=None)
             if db_component.kind == "source":
                 self._check_source_collision(session, db_component)
                 if children is not None:
@@ -1008,26 +999,6 @@ class ComponentStore:
             return self.decode_config(db_component)
         except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
             return None
-
-    def _check_job_lookback(self, db_job: Component) -> None:
-        """Hold a job's lookback to the backfill-partition quota when it is saved.
-
-        Each firing of a partitioned job refills ``lookback`` partitions, so
-        the declared value is bounded like a manual backfill's span. The
-        scheduler enforces the same quota again at fire time, for limits
-        lowered after the job was saved.
-
-        Args:
-            db_job: The job row whose config is being saved.
-        """
-        lookback = (db_job.config or {}).get("lookback")
-        if isinstance(lookback, int):
-            self._quotas.check(
-                db_job.org_id,
-                QUOTA_MAX_BACKFILL_PARTITIONS,
-                used=lookback,
-                subject=f"Job '{db_job.name or db_job.key}' lookback",
-            )
 
     def _check_source_collision(self, session: Session, db_source: Component) -> None:
         """Reject a source instance whose materialization target collides with a sibling.
