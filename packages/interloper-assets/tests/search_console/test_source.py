@@ -136,6 +136,7 @@ class TestSearchAnalyticsQuery:
         assert request["siteUrl"] == "https://example.com/"
         assert request["startDate"] == request["endDate"] == "2026-09-28"
         assert request["aggregationType"] == "BY_PROPERTY"
+        assert request["dataState"] == "final"
         assert request["rowLimit"] == constants.ROW_LIMIT
 
     def test_pages_past_the_row_limit(self):
