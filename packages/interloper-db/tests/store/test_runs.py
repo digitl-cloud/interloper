@@ -624,8 +624,19 @@ def _timed_run(
     started_at: dt.datetime | None,
     completed_at: dt.datetime | None,
     org_id: UUID = _ORG_ID,
+    status: str | None = None,
+    created_at: dt.datetime | None = None,
 ) -> UUID:
     """Insert a run occupying a known interval.
+
+    Args:
+        store: The store whose database the run is written to.
+        started_at: When the run started; ``None`` for one that never did.
+        completed_at: When the run completed; ``None`` for one still going.
+        org_id: The organisation the run belongs to.
+        status: The run's status; ``None`` derives ``success`` from a set
+            *completed_at* and ``running`` otherwise.
+        created_at: The run's creation instant; ``None`` keeps the default.
 
     Returns:
         The id of the inserted run.
@@ -634,10 +645,12 @@ def _timed_run(
         run = Run(
             id=uuid4(),
             org_id=org_id,
-            status="success" if completed_at else "running",
+            status=status or ("success" if completed_at else "running"),
             started_at=started_at,
             completed_at=completed_at,
         )
+        if created_at is not None:
+            run.created_at = created_at
         session.add(run)
         session.commit()
         return run.id
@@ -729,6 +742,46 @@ class TestListRunsSort:
     def test_an_unknown_field_is_rejected(self, store: Store):
         with pytest.raises(ValueError, match="Cannot sort runs by 'org_id'"):
             store.runs.list_all(_ORG_ID, sort="-org_id")
+
+
+class TestListRunsCompleted:
+    """`completed_after`/`completed_before` select runs by the instant they completed."""
+
+    def test_a_run_that_failed_before_starting_is_kept(self, store: Store):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        never_started = _timed_run(store, started_at=None, completed_at=base + _H(1), status="failed")
+
+        by_completion = store.runs.list_all(_ORG_ID, completed_after=base, completed_before=base + _H(4))
+        by_overlap = store.runs.list_all(_ORG_ID, after=base, before=base + _H(4))
+
+        assert [r.id for r in by_completion] == [never_started]
+        assert by_overlap == []
+        assert store.runs.count(_ORG_ID, completed_after=base, completed_before=base + _H(4)) == 1
+
+    def test_runs_not_completed_or_completed_outside_are_left_out(self, store: Store):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        at_start = _timed_run(store, started_at=base - _H(1), completed_at=base)
+        at_end = _timed_run(store, started_at=base, completed_at=base + _H(4))
+        _timed_run(store, started_at=base - _H(3), completed_at=base - _H(2))
+        _timed_run(store, started_at=base + _H(1), completed_at=base + _H(5))
+        _timed_run(store, started_at=base, completed_at=None)
+        _timed_run(store, started_at=None, completed_at=None, status="queued")
+
+        found = store.runs.list_all(_ORG_ID, completed_after=base, completed_before=base + _H(4))
+
+        assert {r.id for r in found} == {at_start, at_end}
+        assert len(store.runs.list_all(_ORG_ID, completed_before=base + _H(4))) == 3
+
+    def test_completed_order_lists_the_most_recently_completed_first(self, store: Store):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        long_run = _timed_run(store, started_at=base, completed_at=base + _H(5), created_at=base)
+        short_run = _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2), created_at=base + _H(1))
+
+        by_created = store.runs.list_all(_ORG_ID)
+        by_completed = store.runs.list_all(_ORG_ID, sort="-completed_at")
+
+        assert [r.id for r in by_created] == [short_run, long_run]
+        assert [r.id for r in by_completed] == [long_run, short_run]
 
 
 class TestGetAndComplete:
@@ -1185,3 +1238,102 @@ class TestRunFilters:
         listed = {row.id for row in store.runs.list_all(_ORG_ID, q="SWARO")}
         assert listed == {by_name.id, by_key.id}
         assert store.runs.count(_ORG_ID, q="SWARO") == 2
+
+
+class TestLatestByTarget:
+    """One run per target: its most recently created attempt, whatever its stack."""
+
+    @staticmethod
+    def _run(
+        store: Store,
+        component_id: UUID | None,
+        *,
+        status: str,
+        created: dt.datetime,
+        root: UUID | None = None,
+        attempt: int = 1,
+        org_id: UUID = _ORG_ID,
+        partition_key: str | None = None,
+    ) -> Run:
+        """Insert a run with a known creation time, as the first attempt of a stack or a later one.
+
+        Args:
+            store: The store whose database the run is written to.
+            component_id: The run's target; ``None`` for a run whose target was deleted.
+            status: The run's status.
+            created: The run's creation instant.
+            root: The stack's root run; ``None`` starts a new stack.
+            attempt: The run's attempt number within its stack.
+            org_id: The organisation the run belongs to.
+            partition_key: The run's partition; ``None`` for an unpartitioned run.
+
+        Returns:
+            The inserted run.
+        """
+        run = Run(
+            org_id=org_id,
+            component_id=component_id,
+            status=status,
+            attempt=attempt,
+            created_at=created,
+            partition_key=partition_key,
+        )
+        if root is not None:
+            run.root_run_id = root
+        with Session(store.engine) as session:
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+        return run
+
+    def test_the_most_recently_created_attempt_wins(self, store: Store) -> None:
+        job = _component(store, kind="job", key="cron_job")
+        t0 = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        self._run(store, job, status="success", created=t0)
+        first = self._run(store, job, status="failed", created=t0 + _H(1))
+        retry = self._run(store, job, status="success", created=t0 + _H(2), root=first.id, attempt=2)
+
+        rows = store.runs.latest_by_target(_ORG_ID)
+
+        assert [(row.id, row.status) for row in rows] == [(retry.id, "success")]
+
+    def test_an_interleaved_retry_is_the_most_recent_attempt(self, store: Store) -> None:
+        job = _component(store, kind="job", key="cron_job")
+        t0 = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        first = self._run(store, job, status="failed", created=t0)
+        self._run(store, job, status="success", created=t0 + _H(1))
+        retry = self._run(store, job, status="failed", created=t0 + _H(2), root=first.id, attempt=2)
+
+        rows = store.runs.latest_by_target(_ORG_ID)
+
+        assert [(row.id, row.status) for row in rows] == [(retry.id, "failed")]
+
+    def test_kind_filter_and_org_scoping(self, store: Store) -> None:
+        job = _component(store, kind="job", key="cron_job")
+        source = _component(store, kind="source", key="demo")
+        t0 = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        self._run(store, job, status="failed", created=t0)
+        self._run(store, source, status="success", created=t0)
+        self._run(store, job, status="failed", created=t0 + _H(1), org_id=uuid4())
+
+        jobs_only = store.runs.latest_by_target(_ORG_ID, component_kind="job")
+
+        assert [(row.component_id, row.status) for row in jobs_only] == [(job, "failed")]
+        assert {row.org_id for row in store.runs.latest_by_target(_ORG_ID)} == {_ORG_ID}
+        assert store.runs.latest_by_target(uuid4()) == []
+
+    def test_a_creation_tie_goes_to_the_later_partition(self, store: Store) -> None:
+        job = _component(store, kind="job", key="cron_job")
+        created = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        later = self._run(store, job, status="failed", created=created, partition_key="2026-01-02")
+        self._run(store, job, status="success", created=created, partition_key="2026-01-01")
+        self._run(store, job, status="success", created=created)
+
+        rows = store.runs.latest_by_target(_ORG_ID)
+
+        assert [row.id for row in rows] == [later.id]
+
+    def test_a_deleted_target_is_left_out(self, store: Store) -> None:
+        self._run(store, None, status="failed", created=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
+
+        assert store.runs.latest_by_target(_ORG_ID) == []

@@ -56,10 +56,13 @@ export function useDrift() {
         return 'ok'
     }
 
+    /** Top-level components of a kind whose own key has drifted out of the catalog. */
+    function missingOf(kind: string): ComponentRecord[] {
+        return componentsStore.byKind(kind).filter(c => c.status === 'missing' && c.parent_id === null)
+    }
+
     /** Sources whose own key has drifted out of the catalog. */
-    const missingSources = computed(() =>
-        sources.value.filter(s => s.status === 'missing'),
-    )
+    const missingSources = computed(() => missingOf('source'))
 
     /** Live sources that have at least one drifted asset. */
     const partialSources = computed(() =>
@@ -80,6 +83,7 @@ export function useDrift() {
     return {
         statusBadge,
         sourceDrift,
+        missingOf,
         missingSources,
         partialSources,
         missingAssetCount,

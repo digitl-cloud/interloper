@@ -176,6 +176,8 @@ class RunStore:
         status: str | None = None,
         after: datetime | None = None,
         before: datetime | None = None,
+        completed_after: datetime | None = None,
+        completed_before: datetime | None = None,
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
@@ -204,6 +206,8 @@ class RunStore:
             status: Optional status filter.
             after: Keep runs still executing at or after this instant.
             before: Keep runs that had started by this instant.
+            completed_after: Keep runs that completed at or after this instant.
+            completed_before: Keep runs that completed at or before this instant.
             q: Keep runs whose target's name or key contains this, case-insensitively.
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
@@ -230,6 +234,8 @@ class RunStore:
                 status,
                 after,
                 before,
+                completed_after=completed_after,
+                completed_before=completed_before,
                 q=q,
                 component_kind=component_kind,
                 component_key=component_key,
@@ -258,6 +264,8 @@ class RunStore:
         status: str | None = None,
         after: datetime | None = None,
         before: datetime | None = None,
+        completed_after: datetime | None = None,
+        completed_before: datetime | None = None,
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
@@ -275,6 +283,8 @@ class RunStore:
             status: Optional status filter.
             after: Keep runs still executing at or after this instant.
             before: Keep runs that had started by this instant.
+            completed_after: Keep runs that completed at or after this instant.
+            completed_before: Keep runs that completed at or before this instant.
             q: Keep runs whose target's name or key contains this, case-insensitively.
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
@@ -295,6 +305,8 @@ class RunStore:
                 status,
                 after,
                 before,
+                completed_after=completed_after,
+                completed_before=completed_before,
                 q=q,
                 component_kind=component_kind,
                 component_key=component_key,
@@ -735,6 +747,48 @@ class RunStore:
                 counts.setdefault(backfill_id, {})[status] = count
         return counts
 
+    def latest_by_target(self, org_id: UUID, *, component_kind: str | None = None) -> list[Run]:
+        """The most recent attempt of every target.
+
+        What a reader means by "the last time this job ran": the most recently
+        created attempt targeting the component, whatever stack it belongs to.
+        That attempt is necessarily the latest of its own stack, so no
+        per-stack reduction is needed. The runs of one backfill share their
+        creation instant, so a tie goes to the later partition key, then to
+        the greater id. Runs whose target was deleted have no target to
+        report on and are left out.
+
+        Args:
+            org_id: Organisation UUID.
+            component_kind: Keep targets of this kind; ``None`` keeps every kind.
+
+        Returns:
+            One run per target, newest first, with the target loaded.
+        """
+        rank = (
+            func.row_number()
+            .over(
+                partition_by=col(Run.component_id),
+                order_by=(
+                    col(Run.created_at).desc(),
+                    col(Run.partition_key).desc().nulls_last(),
+                    col(Run.id).desc(),
+                ),
+            )
+            .label("rank")
+        )
+        ranked = (
+            select(col(Run.id), rank)
+            .where(Run.org_id == org_id, col(Run.component_id).is_not(None))
+            .subquery()
+        )
+        filters: list[Any] = [col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))]
+        if component_kind:
+            filters.append(col(Run.target).has(col(Component.kind) == component_kind))
+        with session_scope(self._engine) as session:
+            statement = select(Run).where(*filters).order_by(col(Run.created_at).desc()).options(*RUN_LOAD_OPTIONS)
+            return list(session.exec(statement).all())
+
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
@@ -794,6 +848,8 @@ class RunStore:
         after: datetime | None = None,
         before: datetime | None = None,
         *,
+        completed_after: datetime | None = None,
+        completed_before: datetime | None = None,
         q: str | None = None,
         component_kind: str | None = None,
         component_key: str | None = None,
@@ -806,7 +862,10 @@ class RunStore:
         ``after``/``before`` select the runs whose execution *overlaps* the window
         — a run occupies ``[started_at, completed_at)``, left open-ended while it
         is still running. Runs that never started occupy no time and so fall
-        outside every window.
+        outside every window. ``completed_after``/``completed_before`` read
+        the completion instant alone, so they keep a run that ended without
+        ever starting (failed or canceled in the queue) and drop every run
+        not yet completed.
 
         The target filters read the target component through the relationship,
         so a run whose target was deleted matches none of them.
@@ -822,6 +881,10 @@ class RunStore:
                 instant. ``None`` leaves the window open-ended in the past.
             before: Window end — keep runs that had started by this instant.
                 ``None`` leaves the window open-ended in the future.
+            completed_after: Keep runs that completed at or after this
+                instant; ``None`` applies no lower completion bound.
+            completed_before: Keep runs that completed at or before this
+                instant; ``None`` applies no upper completion bound.
             q: Keep runs whose target's name or key contains this text,
                 case-insensitively; ``None`` applies no search.
             component_kind: Keep runs whose target is of this kind; ``None``
@@ -868,6 +931,10 @@ class RunStore:
             # An `after` bound alone still means "ran at some point", so a
             # never-started run must not slip through on the NULL completed_at.
             filters.append(col(Run.started_at).is_not(None))
+        if completed_after is not None:
+            filters.append(col(Run.completed_at) >= completed_after)
+        if completed_before is not None:
+            filters.append(col(Run.completed_at) <= completed_before)
         return filters
 
     @staticmethod

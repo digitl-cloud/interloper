@@ -14,4 +14,6 @@ export const CHART_AXIS_COLORS = {
     axis: { light: '#52525b', dark: '#71717a' }, // gray-600 / gray-500
     grid: { light: '#e4e4e7', dark: '#3f3f46' }, // gray-200 / gray-700
     bar: { light: '#2d7df6', dark: '#5c9ef8' }, // blue-500 / blue-400
+    surface: { light: '#ffffff', dark: '#18181b' }, // --ui-bg
+    ink: { light: '#09090b', dark: '#fafafa' }, // gray-950 / gray-50
 }

@@ -11,6 +11,7 @@ const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
+const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
 
@@ -95,7 +96,7 @@ function lastRunColumn(): TableColumn<ComponentRecord> {
 }
 
 const columns = computed<TableColumn<ComponentRecord>[]>(() => [
-    nameColumn('Job'),
+    nameColumn('Job', row => statusBadge(row.status)),
     {
         id: 'schedule',
         header: 'Schedule',
@@ -177,6 +178,7 @@ const enabled = ref<boolean | null>(null)
                      @click="handleCreate" />
         </NavActions>
         <NavComponentsHub>
+            <DriftBanner kind="job" />
             <DataTable :columns="columns"
                        :data="jobs"
                        :filter="row => enabled === null || jobEnabled(row) === enabled"

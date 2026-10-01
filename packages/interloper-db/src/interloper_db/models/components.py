@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
 import interloper as il
+from interloper.utils.time import assume_utc
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlmodel import Column, LargeBinary, Relationship, Session, SQLModel, text
 from sqlmodel import Field as SQLField
@@ -125,6 +126,34 @@ class Component(SQLModel, table=True):
         if model is not None:
             model.model_validate(state)
         self.state = state
+
+    def state_datetime(self, key: str) -> datetime | None:
+        """Read a timestamp out of the row's machine-owned state.
+
+        Args:
+            key: The state key holding an ISO-8601 timestamp.
+
+        Returns:
+            The timestamp as an aware datetime, a naive stored value read as
+            UTC, or ``None`` when the key is absent or empty.
+        """
+        value = (self.state or {}).get(key)
+        if not value:
+            return None
+        return assume_utc(datetime.fromisoformat(value))
+
+    @property
+    def enabled(self) -> bool:
+        """Whether the row's config leaves it enabled, which is the default.
+
+        Reads the plain ``config`` column, never the encrypted ``data``
+        payload, so it holds for every kind without decrypting.
+
+        Returns:
+            ``False`` only when the config sets ``enabled`` to ``False``; an
+            absent or null flag reads as enabled.
+        """
+        return (self.config or {}).get("enabled") is not False
 
 
 class ComponentRelation(SQLModel, table=True):

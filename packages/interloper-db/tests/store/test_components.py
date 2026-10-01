@@ -1338,6 +1338,24 @@ class TestJobPartitionGranularity:
             assert reader.components.job_partition_granularity(session, job.id) is None
 
 
+class TestJobPartitionGranularities:
+    """Many jobs resolve in one read, a disagreeing one as unpartitioned."""
+
+    def test_each_job_maps_to_its_granularity_or_none(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
+        daily_job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [daily.id]})
+        plain_job = store.components.create(_ORG, kind="job", key="cron_job")
+        mixed_job = store.components.create(
+            _ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]}
+        )
+
+        granularities = store.components.job_partition_granularities([daily_job.id, plain_job.id, mixed_job.id])
+
+        assert granularities == {daily_job.id: TimeGranularity.DAY, plain_job.id: None, mixed_job.id: None}
+
+
 class TestCheckJobTargets:
     """A job whose target drifted cannot be hydrated."""
 

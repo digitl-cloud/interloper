@@ -4,7 +4,8 @@ import type { ExecutionStatus } from '~/types/execution'
 export interface TimelineBar {
     /** Identity of the execution itself (e.g. a run id); carried back on click. */
     id: string
-    status: ExecutionStatus
+    /** `scheduled` is a firing that has not happened yet: drawn as an outline. */
+    status: ExecutionStatus | 'scheduled'
     /** Absolute epoch ms. */
     start: number
     /** Absolute epoch ms, or null while still running — the bar then grows with the clock. */

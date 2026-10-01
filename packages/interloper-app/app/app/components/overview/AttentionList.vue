@@ -1,0 +1,105 @@
+<script setup lang="ts">
+import type { AttentionItem } from '~/types/overview'
+
+defineProps<{
+    items: AttentionItem[]
+    generatedAt: string
+}>()
+
+const editor = useCanEdit()
+
+const KIND_META: Record<AttentionItem['kind'], { label: string, icon: string, rowIcon: string }> = {
+    error_group: { label: 'Error group', icon: 'i-lucide-circle-alert', rowIcon: 'i-lucide-x' },
+    connection: { label: 'Connection', icon: 'i-lucide-key-round', rowIcon: 'i-lucide-key-round' },
+    run_stack: { label: 'Run stack', icon: 'i-lucide-activity', rowIcon: 'i-lucide-repeat' },
+    drift: { label: 'Catalog drift', icon: 'i-lucide-library', rowIcon: 'i-lucide-circle-help' },
+    overdue: { label: 'Overdue job', icon: 'i-lucide-calendar-clock', rowIcon: 'i-lucide-clock' },
+}
+
+function openTarget(item: AttentionItem): { label: string, to: string } {
+    switch (item.kind) {
+        case 'error_group':
+        case 'run_stack':
+            return { label: 'Open run', to: `/executions/runs/${item.run_id}` }
+        case 'connection':
+            return { label: 'Open connection', to: kindPath('connection') }
+        case 'drift':
+            return { label: 'Open collection', to: '/collection' }
+        case 'overdue':
+            return { label: 'Open job', to: kindPath('job') }
+    }
+}
+
+function fix(item: AttentionItem): { label: string, icon: string, to: string } | null {
+    if (!editor.value) return null
+    if (item.kind === 'connection' && item.component_id) {
+        return { label: 'Reconnect', icon: 'i-lucide-plug-zap', to: `${kindPath('connection')}?edit=${item.component_id}` }
+    }
+    return null
+}
+
+function when(item: AttentionItem): string {
+    if (!item.since) return ''
+    if (item.kind === 'overdue') return `due ${formatDate(item.since)}`
+    if (item.kind === 'error_group') return `last seen ${timeSince(new Date(item.since))} ago`
+    return `${timeSince(new Date(item.since))} ago`
+}
+</script>
+
+<template>
+    <OverviewSection title="Needs attention"
+                     :meta="items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined">
+        <div v-if="items.length"
+             class="overflow-hidden rounded-lg border border-default divide-y divide-default">
+            <div v-for="item in items"
+                 :key="`${item.kind}:${item.run_id ?? item.component_id ?? ''}:${item.title}`"
+                 class="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-muted">
+                <span class="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full"
+                      :class="item.severity === 'error' ? 'bg-error/10 text-error' : 'bg-warning/15 text-warning'">
+                    <UIcon :name="KIND_META[item.kind].rowIcon"
+                           class="size-[15px]" />
+                </span>
+                <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div class="text-[13.5px] font-medium leading-snug text-highlighted">{{ item.title }}</div>
+                    <div class="flex flex-wrap items-center gap-2 text-xs text-dimmed">
+                        <span class="inline-flex items-center gap-1.5 text-muted">
+                            <UIcon :name="KIND_META[item.kind].icon"
+                                   class="size-[13px]" />{{ KIND_META[item.kind].label }}
+                        </span>
+                        <template v-if="item.target">
+                            <span>·</span>
+                            <span class="font-mono text-[11.5px]">{{ item.target }}</span>
+                        </template>
+                        <template v-if="when(item)">
+                            <span>·</span>
+                            <span>{{ when(item) }}</span>
+                        </template>
+                    </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                    <UButton v-if="fix(item)"
+                             :icon="fix(item)!.icon"
+                             :label="fix(item)!.label"
+                             :to="fix(item)!.to"
+                             size="sm" />
+                    <UButton :label="openTarget(item).label"
+                             :to="openTarget(item).to"
+                             size="sm"
+                             color="neutral"
+                             variant="outline" />
+                </div>
+            </div>
+        </div>
+        <div v-else
+             class="flex items-center gap-3.5 rounded-lg border border-default bg-muted px-5 py-[22px]">
+            <span class="inline-flex size-[34px] shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+                <UIcon name="i-lucide-check"
+                       class="size-4" />
+            </span>
+            <div class="flex flex-col gap-0.5">
+                <div class="text-sm font-semibold text-highlighted">All clear</div>
+                <div class="text-[13px] text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt)) }}.</div>
+            </div>
+        </div>
+    </OverviewSection>
+</template>

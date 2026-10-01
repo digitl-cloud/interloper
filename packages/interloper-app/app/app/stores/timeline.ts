@@ -91,16 +91,20 @@ export const useTimelineStore = defineStore('timeline', () => {
     /**********************
      * Actions
      **********************/
-    /** Re-anchor the window to now and load the runs that executed inside it. */
-    async function fetch() {
+    /**
+     * Re-anchor the window to now and load the runs that executed inside it.
+     * `futureRatio` is the share of the window that lies after now; the
+     * default 0 ends the window at the fetch.
+     */
+    async function fetch(options: { futureRatio?: number } = {}) {
         loading.value = true
         error.value = null
-        rangeEnd.value = Date.now()
+        rangeEnd.value = Date.now() + span.value * (options.futureRatio ?? 0)
         rangeStart.value = rangeEnd.value - span.value
         try {
             const params = new URLSearchParams({
                 after: new Date(rangeStart.value).toISOString(),
-                before: new Date(rangeEnd.value).toISOString(),
+                before: new Date(Math.min(rangeEnd.value, Date.now())).toISOString(),
                 limit: String(MAX_RUNS),
             })
             const res = await apiFetchRaw<Run[]>(`/runs?${params}`)

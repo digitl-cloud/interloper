@@ -6,7 +6,7 @@
  * Sources/assets: single partition date → run (backfills are job-only).
  * Mirrors the MaterializeModal layout from the old app.
  */
-import { today } from '@internationalized/date'
+import { parseDate, today } from '@internationalized/date'
 import type { DateRange } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
 import { jobTimezone, relationIds } from '~/types/component'
@@ -24,10 +24,13 @@ const props = withDefaults(defineProps<{
     target: ComponentRecord
     /** Whether the target takes a partition date. Defaults to the job's config for jobs. */
     partitioned?: boolean
+    /** Partition keys to open on instead of today (e.g. the coverage calendar's selected day). */
+    initialRange?: { start: string, end: string }
 }>(), {
     // Vue casts an absent Boolean prop to false; default it to undefined so the
     // ?? fallback to the job's config below can actually kick in.
     partitioned: undefined,
+    initialRange: undefined,
 })
 
 const runsStore = useRunsStore()
@@ -150,9 +153,12 @@ const activePreset = computed(() =>
 watch(open, (isOpen) => {
     if (isOpen) {
         const t = today(clockZone.value)
-        dateRange.value = { start: t, end: t }
-        startKey.value = previousPeriodKey(granularity.value, clockZone.value)
-        endKey.value = startKey.value
+        const preset = granularity.value === 'day' ? props.initialRange : undefined
+        dateRange.value = preset
+            ? { start: parseDate(preset.start), end: parseDate(preset.end) }
+            : { start: t, end: t }
+        startKey.value = preset?.start ?? previousPeriodKey(granularity.value, clockZone.value)
+        endKey.value = preset?.end ?? startKey.value
         failFast.value = false
         submitting.value = false
     }
