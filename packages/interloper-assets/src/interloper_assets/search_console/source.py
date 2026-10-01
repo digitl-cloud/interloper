@@ -69,7 +69,7 @@ class SearchConsole(il.Source):
                 "dimensions": dimensions,
                 "type": search_type,
                 "aggregationType": aggregation_type,
-                "dataState": "ALL",
+                "dataState": "final",
                 "rowLimit": constants.ROW_LIMIT,
                 "startRow": 0,
             }
