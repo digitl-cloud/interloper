@@ -2016,6 +2016,10 @@ own README. All are versioned and released together.</p>
 <td><code>interloper-core[slack]</code></td>
 <td>Pulls in <code>interloper-slack</code>.</td>
 </tr>
+<tr>
+<td><code>interloper-core[sql]</code></td>
+<td>Pulls in <code>interloper-sql</code>.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="framework-extensions">Framework extensions<a class="headerlink" href="#framework-extensions" title="Permanent link">&para;</a></h2>
@@ -2041,6 +2045,11 @@ own README. All are versioned and released together.</p>
 <tr>
 <td><code>interloper-slack</code></td>
 <td><code>SlackConnection</code>, <code>SlackHook</code>: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when <code>server.external_url</code> is set.</td>
+<td><code>interloper.components</code></td>
+</tr>
+<tr>
+<td><code>interloper-sql</code></td>
+<td><code>SQLConnection</code>, <code>SQLDestination</code>: a <code>DatabaseDestination</code> over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed.</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>
