@@ -1,12 +1,23 @@
 import type { ComponentRecord, ComponentStatus, Relation } from '~/types/component'
 import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
+import type { Execution } from '~/types/execution'
+import { stateFromExecution } from '~/types/graph'
 import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
 import { kindsOf, keysOf, resourceRelations } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
 import type { SourceDriftStatus } from '~/composables/drift'
+import { rollupState } from '~/composables/nodeStatus'
 
 // ─── Types ───────────────────────────────────────────────────────────
+
+/** What the Last Run column shows for an asset or a source. */
+export interface LastRun {
+    status: string
+    at: string
+    share?: string
+    note?: string
+}
 
 export interface CollectionRow {
     id: string
@@ -20,8 +31,7 @@ export interface CollectionRow {
     dependencies: Array<{ name: string; icon: string }>
     warnings: AssetWarning[]
     jobs: Array<{ name: string }>
-    lastRunStatus: string | null
-    lastRunAt: string | null
+    lastRun: LastRun | null
     connectionName: string | null
     connectionIcon: string | null
     destinations: Array<{ name: string; icon: string }>
@@ -33,12 +43,28 @@ export interface CollectionRow {
 
 // ─── Collection Rows ─────────────────────────────────────────────────
 
+function executionAt(execution: Execution): string | null {
+    return execution.completed_at ?? execution.started_at ?? execution.created_at
+}
+
+function timeOf(at: string | null): number {
+    return at ? new Date(at).getTime() : 0
+}
+
+/** A failed run whose counts are known and hold no execution: it never reached its assets. */
+function failedBeforeExecuting(run: Run): boolean {
+    return run.status === 'failed'
+        && !!run.execution_counts
+        && Object.values(run.execution_counts).every(n => n === 0)
+}
+
 interface UseCollectionRowsOptions {
     sources: Ref<ComponentRecord[]>
     upstreams: Ref<Relation[]>
     destinations: Ref<ComponentRecord[]>
     jobs: Ref<ComponentRecord[]>
     runs: Ref<Run[]>
+    latestExecutions: Ref<Map<string, Execution>>
     getWarnings: (assetId: string, assetKey: string) => AssetWarning[]
 }
 
@@ -114,13 +140,12 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         return map
     })
 
-    function getLastRunForSource(sourceId: string): { status: string | null; at: string | null } {
+    function latestRunForSource(source: ComponentRecord): Run | undefined {
         // Runs targeting the source itself or its assets count, alongside its jobs' runs.
-        const source = options.sources.value.find(s => s.id === sourceId)
         const targetIds = [
-            sourceId,
-            ...(source?.children.map(a => a.id) ?? []),
-            ...(jobsBySourceId.value.get(sourceId) ?? []).map(j => j.id),
+            source.id,
+            ...source.children.map(a => a.id),
+            ...(jobsBySourceId.value.get(source.id) ?? []).map(j => j.id),
         ]
         let latest: Run | undefined
         for (const id of targetIds) {
@@ -130,7 +155,46 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                 latest = run
             }
         }
-        return { status: latest?.status ?? null, at: latest?.started_at ?? null }
+        return latest
+    }
+
+    function assetLastRun(assetId: string): LastRun | null {
+        const execution = options.latestExecutions.value.get(assetId)
+        const at = execution && executionAt(execution)
+        return execution && at ? { status: execution.status, at } : null
+    }
+
+    /**
+     * A source reads its assets' latest executions, loudest state first: a job
+     * run fails as a whole when one asset does, so its status would paint every
+     * source it covers. A run that failed before any asset executed has no
+     * executions to read, so it shows as the source's own failure.
+     */
+    function sourceLastRun(source: ComponentRecord): LastRun | null {
+        const executions = source.children
+            .map(a => options.latestExecutions.value.get(a.id))
+            .filter((e): e is Execution => !!e)
+
+        const run = latestRunForSource(source)
+        const runAt = run && (run.completed_at ?? run.started_at ?? run.created_at)
+        if (run && runAt && failedBeforeExecuting(run)
+            && executions.every(e => timeOf(executionAt(e)) < timeOf(run.created_at ?? runAt))) {
+            return { status: 'failed', at: runAt, note: 'The run failed before any asset executed' }
+        }
+
+        const state = rollupState(executions.map(e => stateFromExecution(e.status)))
+        const carrying = executions.filter(e => e.status === state)
+        const at = carrying.map(executionAt).filter(t => t !== null).sort((a, b) => timeOf(b) - timeOf(a))[0]
+        if (!at) return null
+
+        const total = source.children.length
+        if (carrying.length === total) return { status: state, at }
+        return {
+            status: state,
+            at,
+            share: `${carrying.length}/${total}`,
+            note: `${statusLabel(state)}: ${carrying.length} of ${total} assets`,
+        }
     }
 
     /** Connection resource for each source (first resource of kind "connection"). */
@@ -166,7 +230,6 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             })
 
             const sourceJobs = (jobsBySourceId.value.get(source.id) ?? []).map(j => ({ name: j.name ?? j.key }))
-            const lastRun = getLastRunForSource(source.id)
             const conn = connectionBySourceId.value.get(source.id)
 
             for (const asset of source.children) {
@@ -183,8 +246,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     dependencies: dependenciesByAssetId.value.get(asset.id) ?? [],
                     warnings: options.getWarnings(asset.id, asset.key),
                     jobs: sourceJobs,
-                    lastRunStatus: lastRun.status,
-                    lastRunAt: lastRun.at,
+                    lastRun: assetLastRun(asset.id),
                     connectionName: conn?.name ?? null,
                     connectionIcon: conn?.icon ?? null,
                     destinations: destInfos,
@@ -228,8 +290,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     dependencies: [],
                     warnings: [],
                     jobs: sourceJobs,
-                    lastRunStatus: lastRun.status,
-                    lastRunAt: lastRun.at,
+                    lastRun: null,
                     connectionName: conn?.name ?? null,
                     connectionIcon: conn?.icon ?? null,
                     destinations: destInfos,
@@ -251,6 +312,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             assetCount: number
             warnings: AssetWarning[]
             drift: SourceDriftStatus
+            lastRun: LastRun | null
         }>()
         for (const source of options.sources.value) {
             const sourceDefn: SourceDefinition | undefined = catalogStore.getSourceDefinition(source.key)
@@ -271,6 +333,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                 assetCount: source.children.length,
                 warnings,
                 drift: sourceDrift(source),
+                lastRun: sourceLastRun(source),
             })
         }
         return map

@@ -2,7 +2,7 @@
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
-import type { CollectionRow } from '~/composables/collection'
+import type { CollectionRow, LastRun } from '~/composables/collection'
 
 const componentsStore = useComponentsStore()
 const runsStore = useRunsStore()
@@ -13,6 +13,7 @@ const sources = computed(() => componentsStore.byKind('source'))
 const destinations = computed(() => componentsStore.byKind('destination'))
 const jobs = computed(() => componentsStore.byKind('job'))
 const { runs } = storeToRefs(runsStore)
+const { latestByAssetId } = storeToRefs(useExecutionsStore())
 const { getWarnings, filterByCategory } = useAssetWarnings()
 const { statusBadge } = useDrift()
 const { data, sourceInfoById, typeInfoByKey, assetCount } = useCollectionRows({
@@ -21,8 +22,15 @@ const { data, sourceInfoById, typeInfoByKey, assetCount } = useCollectionRows({
     destinations,
     jobs,
     runs,
+    latestExecutions: latestByAssetId,
     getWarnings,
 })
+
+function lastRunOf(row: { depth: number; original: CollectionRow }): LastRun | null {
+    return row.depth === 1
+        ? sourceInfoById.value.get(row.original.sourceId)?.lastRun ?? null
+        : row.original.lastRun
+}
 
 /** Drift badge meta for a source's rollup status, or null when healthy. */
 function sourceDriftBadge(sourceId: string) {
@@ -466,14 +474,20 @@ function onRowClick(row: any) {
             <!-- Last Run (source and asset level) -->
             <template #lastRun-cell="{ row }">
                 <template v-if="row.getIsGrouped() && row.depth > 0">
-                    <span v-if="!row.original.lastRunStatus || !row.original.lastRunAt"
+                    <span v-if="!lastRunOf(row)"
                           class="text-dimmed">&mdash;</span>
                     <div v-else
                          class="flex items-center justify-center">
-                        <UBadge :color="statusColor(row.original.lastRunStatus)"
-                                :icon="statusIcon(row.original.lastRunStatus)">
-                            {{ timeSince(new Date(row.original.lastRunAt)) }} ago
-                        </UBadge>
+                        <UTooltip :text="lastRunOf(row)!.note"
+                                  :disabled="!lastRunOf(row)!.note"
+                                  :delay-duration="0">
+                            <UBadge :color="statusColor(lastRunOf(row)!.status)"
+                                    :icon="statusIcon(lastRunOf(row)!.status)">
+                                {{ timeSince(new Date(lastRunOf(row)!.at)) }} ago
+                                <span v-if="lastRunOf(row)!.share"
+                                      class="opacity-75">&middot; {{ lastRunOf(row)!.share }}</span>
+                            </UBadge>
+                        </UTooltip>
                     </div>
                 </template>
             </template>
