@@ -50,7 +50,7 @@ from sqlmodel.sql.expression import SelectOfScalar
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.hydration import Hydrator
-from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QUOTA_MAX_SOURCES, QuotaStore
+from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
@@ -162,8 +162,7 @@ class ComponentStore:
             ConfigError: If ``children`` is passed for a kind that has none.
         """
         with session_scope(self._engine) as session:
-            if kind == "source":
-                self._quotas.check(org_id, QUOTA_MAX_SOURCES)
+            self._quotas.admit_component(org_id, kind)
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
             self._apply_config(db_component, config, encrypted)
             if name is None:

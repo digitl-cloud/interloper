@@ -19,7 +19,6 @@ from interloper_db.models import Backfill, Component, Event, Run
 from interloper_db.session import commit, session_scope
 from interloper_db.store.quotas import (
     QUOTA_MAX_BACKFILL_PARTITIONS,
-    QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
     QuotaStore,
     UsageLedger,
 )
@@ -101,12 +100,8 @@ class RunStore:
         if partition_key is not None:
             TimePartition.from_key(partition_key)
         with session_scope(self._engine) as session:
-            billable = True
-            if component_id is not None:
-                _, anchor = self._target_anchor(session, component_id)
-                billable = anchor.billable
-            if billable:
-                self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH)
+            billable = self._target_billable(session, component_id)
+            self._quotas.admit_run(org_id, billable=billable)
             db_run = Run(
                 org_id=org_id,
                 component_id=component_id,
@@ -121,21 +116,26 @@ class RunStore:
             return db_run
 
     @staticmethod
-    def _target_anchor(session: Session, component_id: UUID) -> tuple[str, type[il.Workload]]:
-        """Resolve a run target's kind anchor, requiring it to declare a workload.
+    def _target_billable(session: Session, component_id: UUID | None) -> bool:
+        """Resolve whether runs of a target count against the run quota.
+
+        The target's kind must declare a workload, whose ``billable`` decides;
+        an untargeted run is billable.
 
         Args:
             session: Open session the component row is read through.
-            component_id: The target component UUID.
+            component_id: The target component UUID, or None for an
+                untargeted run.
 
         Returns:
-            The target's kind and its anchor class, narrowed to the
-            workload contract.
+            The billability the target's workload declares.
 
         Raises:
             NotFoundError: If the component does not exist.
             ValueError: If the kind's anchor declares no workload.
         """
+        if component_id is None:
+            return True
         db_component = session.get(Component, component_id)
         if not db_component:
             raise NotFoundError(f"Component {component_id} not found")
@@ -143,7 +143,7 @@ class RunStore:
         if not issubclass(anchor, il.Workload):
             # A caller mistake, not a type bug: routes map ValueError to 400.
             raise ValueError(f"Components of kind '{db_component.kind}' cannot be run")  # noqa: TRY004
-        return db_component.kind, anchor
+        return anchor.billable
 
     def get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
         """Load a run by ID.
@@ -403,8 +403,7 @@ class RunStore:
                     f"is {head.status!r}; only a stack whose latest attempt failed can be retried"
                 )
 
-            if head.billable:
-                self._quotas.check(head.org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="retry")
+            self._quotas.admit_run(head.org_id, billable=head.billable, subject="retry")
             db_run = Run(
                 root_run_id=head.root_run_id,
                 org_id=head.org_id,
@@ -539,13 +538,9 @@ class RunStore:
         span = window.partition_count()
 
         with session_scope(self._engine) as session:
-            billable = True
-            if component_id is not None:
-                _, anchor = self._target_anchor(session, component_id)
-                billable = anchor.billable
+            billable = self._target_billable(session, component_id)
             self._quotas.check(org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
-            if billable:
-                self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
+            self._quotas.admit_run(org_id, billable=billable, subject="backfill")
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,

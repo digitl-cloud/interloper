@@ -136,6 +136,48 @@ class TestRunCreationGate:
         assert backfill.partitions == 2
 
 
+class TestAdmitComponent:
+    """Capacity quotas admit the component kinds they count, and only those."""
+
+    def _add(self, store: Store, org_id: UUID, kind: str) -> None:
+        with Session(store.engine) as session:
+            session.add(Component(org_id=org_id, kind=kind, key=kind, name=kind))
+            session.commit()
+
+    def test_a_counted_kind_is_admitted_up_to_the_limit(self, store: Store, org_id: UUID):
+        store._quota_defaults = _defaults(max_sources=1)
+        store.quotas.admit_component(org_id, "source")
+        self._add(store, org_id, "source")
+        with pytest.raises(QuotaExceededError) as excinfo:
+            store.quotas.admit_component(org_id, "source")
+        assert excinfo.value.quota == "max_sources"
+        assert (excinfo.value.limit, excinfo.value.used) == (1, 1)
+
+    def test_a_kind_no_quota_counts_is_always_admitted(self, store: Store, org_id: UUID):
+        store._quota_defaults = _defaults(max_sources=0)
+        store.quotas.admit_component(org_id, "destination")
+
+
+class TestAdmitRun:
+    """The creation-time run gate checks billable runs only."""
+
+    def _exhaust(self, store: Store, org_id: UUID) -> None:
+        store._quota_defaults = _defaults(max_successful_runs_per_month=1)
+        with Session(store.engine) as session:
+            ledger = UsageLedger(session)
+            ledger.increment(org_id, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
+            session.commit()
+
+    def test_a_billable_run_is_refused_at_the_limit(self, store: Store, org_id: UUID):
+        self._exhaust(store, org_id)
+        with pytest.raises(QuotaExceededError, match="Cannot queue retry"):
+            store.quotas.admit_run(org_id, billable=True, subject="retry")
+
+    def test_a_non_billable_run_is_admitted_past_the_limit(self, store: Store, org_id: UUID):
+        self._exhaust(store, org_id)
+        store.quotas.admit_run(org_id, billable=False)
+
+
 class TestTryReserveRun:
     """The reservation joins the dispatching caller's unit of work when there is one."""
 
