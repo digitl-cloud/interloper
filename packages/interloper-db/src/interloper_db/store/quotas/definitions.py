@@ -109,15 +109,17 @@ class QuotaDefinition(abc.ABC):
 class CapacityQuota(QuotaDefinition):
     """Limits how many of something can exist right now (never metered).
 
-    Two check flavors: without ``used`` the current amount is measured via
-    ``count`` and admitting one more must stay within the limit; with
-    ``used`` the caller states the *desired final* amount (declarative —
-    no counting race regardless of what exists today).
+    Two check flavors: a quota naming a component ``kind`` counts that kind
+    across the organisation, and admitting one more must stay within the
+    limit — :meth:`~interloper_db.store.quotas.base.QuotaStore.admit_component`
+    runs this check on every creation of that kind. Without a kind, the
+    caller states the *desired final* amount as ``used`` (declarative — no
+    counting race regardless of what exists today).
     """
 
     requires_lock: ClassVar[bool] = True
 
-    count: Callable[[Session, UUID], int] | None = None
+    kind: str | None = None
 
     def check(
         self,
@@ -134,23 +136,39 @@ class CapacityQuota(QuotaDefinition):
             session: Open session the work is done through.
             org_id: Organisation the quota is enforced for.
             limit: The effective limit, already resolved under the row lock.
-            used: The desired final amount, or None to measure the current
-                amount and admit one more.
+            used: The desired final amount, or None to count the components
+                of ``kind`` and admit one more.
             subject: Context interpolated into the rejection message, or None
                 when the message needs none.
 
         Raises:
-            ValueError: If ``used`` is omitted and the definition carries no
-                ``count`` callback.
+            ValueError: If ``used`` is omitted and the definition counts no
+                component kind.
         """
         if used is None:
-            if self.count is None:
-                raise ValueError(f"Quota '{self.key}' has no usage counter; pass used= to check it declaratively")
-            current = self.count(session, org_id)
+            if self.kind is None:
+                raise ValueError(f"Quota '{self.key}' counts no component kind; pass used= to check it declaratively")
+            current = self._count(session, org_id)
             if current >= limit:
                 self._reject(current, limit, subject)
         elif used > limit:
             self._reject(used, limit, subject)
+
+    def _count(self, session: Session, org_id: UUID) -> int:
+        """Count the organisation's components of this quota's kind.
+
+        Args:
+            session: Open session the work is done through.
+            org_id: Organisation whose components are counted.
+
+        Returns:
+            The number of components of ``kind`` the organisation owns.
+        """
+        return session.exec(
+            select(func.count())
+            .select_from(Component)
+            .where(col(Component.org_id) == org_id, col(Component.kind) == self.kind)
+        ).one()
 
 
 @dataclass(frozen=True)
@@ -265,29 +283,12 @@ class ConsumptionQuota(QuotaDefinition):
 QUOTAS: Registry[QuotaDefinition] = Registry()
 
 
-def _count_sources(session: Session, org_id: UUID) -> int:
-    """Current number of sources — the usage side of ``max_sources``.
-
-    Args:
-        session: Open session the work is done through.
-        org_id: Organisation whose sources are counted.
-
-    Returns:
-        The number of source components the organisation owns.
-    """
-    return session.exec(
-        select(func.count())
-        .select_from(Component)
-        .where(col(Component.org_id) == org_id, col(Component.kind) == "source")
-    ).one()
-
-
 QUOTAS.register(
     QUOTA_MAX_SOURCES,
     CapacityQuota(
         key=QUOTA_MAX_SOURCES,
         label="Max sources",
-        count=_count_sources,
+        kind="source",
         message=lambda used, limit, _subject: f"Organisation is at its source limit ({used}/{limit})",
     ),
 )

@@ -26,9 +26,9 @@ class TestRegistry:
 
         assert set(QuotaSettings.model_fields) == set(QUOTAS.keys())
 
-    def test_capacity_quotas_carry_counters_and_consumption_metrics(self):
+    def test_capacity_quotas_carry_kinds_and_consumption_metrics(self):
         sources = QUOTAS["max_sources"]
-        assert isinstance(sources, CapacityQuota) and sources.count is not None
+        assert isinstance(sources, CapacityQuota) and sources.kind == "source"
         runs = QUOTAS["max_successful_runs_per_month"]
         assert isinstance(runs, ConsumptionQuota) and runs.metric == METRIC_SUCCESSFUL_RUNS
 
@@ -54,7 +54,7 @@ class TestRegistry:
         with pytest.raises(ValueError, match="pass used="):
             definition.check(None, org_id, 5)  # ty: ignore[invalid-argument-type]
 
-    def test_counterless_capacity_quota_rejects_a_measured_check(self, org_id: UUID):
+    def test_kindless_capacity_quota_rejects_a_measured_check(self, org_id: UUID):
         definition = QUOTAS[QUOTA_MAX_ASSETS_PER_SOURCE]
-        with pytest.raises(ValueError, match="no usage counter"):
+        with pytest.raises(ValueError, match="counts no component kind"):
             definition.check(None, org_id, 5)  # ty: ignore[invalid-argument-type]

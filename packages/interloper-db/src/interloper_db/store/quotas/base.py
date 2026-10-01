@@ -18,6 +18,7 @@ from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.quotas.definitions import (
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
     QUOTAS,
+    CapacityQuota,
     ConsumptionQuota,
 )
 from interloper_db.store.quotas.metering import METRIC_SUCCESSFUL_RUNS, UsageLedger
@@ -185,6 +186,38 @@ class QuotaStore:
                 return
         with session_scope(self._engine) as session:
             definition.check(session, org_id, limit, used=used, subject=subject)
+
+    def admit_component(self, org_id: UUID, kind: str) -> None:
+        """Admit one more component of ``kind`` past every capacity quota counting it.
+
+        Part of the caller's transaction. A kind no quota counts is admitted
+        without touching the database.
+
+        Args:
+            org_id: Organisation the component is created in.
+            kind: Kind of the component being created.
+        """
+        for definition in QUOTAS.values():
+            if isinstance(definition, CapacityQuota) and definition.kind == kind:
+                self.check(org_id, definition.key)
+
+    def admit_run(self, org_id: UUID, *, billable: bool, subject: str | None = None) -> None:
+        """Fail fast when the organisation cannot queue another billable run.
+
+        Part of the caller's transaction, and advisory: the authoritative gate
+        is the dispatch-time reservation in :meth:`try_reserve_run`. A
+        non-billable run is admitted unchecked, since it is never reserved or
+        charged either.
+
+        Args:
+            org_id: Organisation the run is queued for.
+            billable: Whether the run counts against the run quota, as its
+                target's workload declares.
+            subject: What is being queued, for the rejection message, or None
+                for a plain run.
+        """
+        if billable:
+            self.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject=subject)
 
     def try_reserve_run(self, db_run: Run) -> bool:
         """Atomically reserve a run-quota slot at dispatch time.
