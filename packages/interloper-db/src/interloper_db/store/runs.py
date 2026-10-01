@@ -37,6 +37,8 @@ TERMINAL_RUN_STATUSES = frozenset({"success", "failed", "canceled"})
 
 _ACTIVE_BACKFILL_STATUSES = ("running", "queued")
 
+RUN_SORT_FIELDS = frozenset({"id", "partition_key", "status", "created_at", "started_at", "completed_at"})
+
 
 def partition_key_range(start_key: str, end_key: str) -> list[Any]:
     """Filter runs to the partition keys from *start_key* to *end_key*, inclusive.
@@ -181,6 +183,7 @@ class RunStore:
         partition_from: str | None = None,
         partition_to: str | None = None,
         all_attempts: bool = False,
+        sort: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Run]:
@@ -209,6 +212,10 @@ class RunStore:
                 lies in that inclusive range (see :func:`partition_key_range`).
             partition_to: Last partition key of that range.
             all_attempts: Keep every attempt rather than each stack's latest.
+            sort: A field of :data:`RUN_SORT_FIELDS` to order by, ``-``-prefixed
+                for descending (any other field raises ``ValueError``); None
+                keeps the default (newest first, or a stack's latest attempt
+                first).
             limit: Max results (default 50).
             offset: Pagination offset.
 
@@ -232,11 +239,10 @@ class RunStore:
             )
             if root_run_id is None and not all_attempts:
                 filters.append(self._latest_attempt_only(org_id))
-            order = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
             statement = (
                 select(Run)
                 .where(*filters)
-                .order_by(order)
+                .order_by(*_run_order(sort, root_run_id))
                 .offset(offset)
                 .limit(limit)
                 .options(*RUN_LOAD_OPTIONS)
@@ -942,6 +948,35 @@ class RunStore:
         for pending_run in pending_runs[:available_slots]:
             pending_run.status = "queued"
             session.add(pending_run)
+
+
+def _run_order(sort: str | None, root_run_id: UUID | None) -> tuple[Any, ...]:
+    """The ORDER BY of a runs listing, ending on the id so pages never overlap.
+
+    A backfill's runs share one ``created_at`` (one transaction creates them
+    all), so without the tiebreaker offset paging could repeat or skip rows.
+
+    Args:
+        sort: A field of :data:`RUN_SORT_FIELDS`, ``-``-prefixed for
+            descending; None picks the listing's default.
+        root_run_id: Set when listing one stack, whose default is its
+            attempts newest first.
+
+    Returns:
+        The ordering clauses.
+
+    Raises:
+        ValueError: If *sort* names a field outside :data:`RUN_SORT_FIELDS`.
+    """
+    if sort is None:
+        primary = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
+    else:
+        field = sort.removeprefix("-")
+        if field not in RUN_SORT_FIELDS:
+            raise ValueError(f"Cannot sort runs by '{field}'. Known: {', '.join(sorted(RUN_SORT_FIELDS))}")
+        column = col(getattr(Run, field))
+        primary = (column.desc() if sort.startswith("-") else column.asc()).nulls_last()
+    return (primary, col(Run.id).asc())
 
 
 def create_backfill_runs(session: Session, db_backfill: Backfill, window: TimePartitionWindow) -> None:

@@ -349,6 +349,25 @@ def test_list_runs_without_window_passes_none(store: FakeStore) -> None:
     assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == (None, None)
 
 
+def test_list_runs_forwards_the_sort(store: FakeStore) -> None:
+    assert _viewer_client(store).get("/runs/", params={"sort": "-partition_key"}).status_code == 200
+    assert store.list_calls[0]["sort"] == "-partition_key"
+
+
+def test_list_runs_rejects_an_unknown_sort(store: FakeStore) -> None:
+    """The store refuses a field outside its whitelist; the route reports it as a 400."""
+
+    def list_all(org_id, **kwargs):
+        raise ValueError("Cannot sort runs by 'org_id'")
+
+    store.runs.list_all = list_all
+
+    resp = _viewer_client(store).get("/runs/", params={"sort": "org_id"})
+
+    assert resp.status_code == 400
+    assert "org_id" in resp.json()["detail"]
+
+
 # -- Create / executions --------------------------------------------------------
 
 
