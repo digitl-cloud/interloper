@@ -509,7 +509,9 @@ class RunStore:
         (``2026-08-21``, ``2026-08``, ``2026``, ``2026-08-21T13``), so a
         monthly backfill is just two month keys. The runs are fanned out by
         :func:`create_backfill_runs`: newest partition first, ``concurrency``
-        of them queued at once.
+        of them queued at once. Like :meth:`create`, the runs record the
+        target workload's billability, and a non-billable backfill skips the
+        run quota.
 
         Args:
             org_id: Organisation UUID.
@@ -537,12 +539,13 @@ class RunStore:
         span = window.partition_count()
 
         with session_scope(self._engine) as session:
+            billable = True
             if component_id is not None:
-                self._target_anchor(session, component_id)
-            # Cron top-ups (a job's `lookback` window) are deliberately not
-            # bounded here — they never pass through this method.
+                _, anchor = self._target_anchor(session, component_id)
+                billable = anchor.billable
             self._quotas.check(org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
-            self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
+            if billable:
+                self._quotas.check(org_id, QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH, subject="backfill")
             db_backfill = Backfill(
                 org_id=org_id,
                 component_id=component_id,
@@ -555,7 +558,7 @@ class RunStore:
             )
             session.add(db_backfill)
             session.flush()
-            create_backfill_runs(session, db_backfill, window)
+            create_backfill_runs(session, db_backfill, window, billable=billable)
             commit(session)
             session.refresh(db_backfill)
             _ = db_backfill.target  # load before the session closes; readers reach it detached
@@ -979,7 +982,9 @@ def _run_order(sort: str | None, root_run_id: UUID | None) -> tuple[Any, ...]:
     return (primary, col(Run.id).asc())
 
 
-def create_backfill_runs(session: Session, db_backfill: Backfill, window: TimePartitionWindow) -> None:
+def create_backfill_runs(
+    session: Session, db_backfill: Backfill, window: TimePartitionWindow, *, billable: bool = True
+) -> None:
     """Create a backfill's runs: one per partition, the newest ``concurrency`` of them queued.
 
     Part of the caller's transaction (the caller commits), on a backfill row
@@ -995,6 +1000,8 @@ def create_backfill_runs(session: Session, db_backfill: Backfill, window: TimePa
         db_backfill: The flushed backfill row the runs belong to; its
             ``partitions`` count is stamped here.
         window: The partitions the backfill covers.
+        billable: Whether the runs count against the run quota, as the
+            target's workload declares.
     """
     span = window.partition_count()
     first_queued = max(0, span - db_backfill.concurrency)
@@ -1006,6 +1013,7 @@ def create_backfill_runs(session: Session, db_backfill: Backfill, window: TimePa
                 backfill_id=db_backfill.id,
                 partition_key=window.granularity.format(value),
                 status="queued" if index >= first_queued else "pending",
+                billable=billable,
             )
         )
     db_backfill.partitions = span
