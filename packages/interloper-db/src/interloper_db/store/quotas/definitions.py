@@ -317,8 +317,6 @@ QUOTAS.register(
     BoundQuota(
         key=QUOTA_MAX_BACKFILL_PARTITIONS,
         label="Max backfill partitions",
-        message=lambda used, limit, subject: (
-            f"{subject or 'Backfill'} spans {used} partitions, exceeding the limit of {limit}"
-        ),
+        message=lambda used, limit, _subject: f"Backfill spans {used} partitions, exceeding the limit of {limit}",
     ),
 )

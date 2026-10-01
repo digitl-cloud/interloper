@@ -61,10 +61,10 @@ because hour ids are UTC labels. Whether a job is partitioned is derived from it
 stored. Each firing is a backfill over the window, dispatched newest partition first and gated by
 `concurrency`: at `1` the partitions run one at a time.
 
-On the platform, a firing is quota-checked like a manual backfill: `lookback` counts against the
-organisation's `max_backfill_partitions` both when the job is saved and when it fires, and the
-firing needs the monthly run quota. A firing the quotas reject is skipped, logged as a warning
-event on the job, and the job moves on to its next scheduled time.
+On the platform, a firing is quota-checked like a manual backfill: its window counts against the
+organisation's `max_backfill_partitions`, and it needs the monthly run quota. A firing the quotas
+reject is skipped, logged as a warning event on the job, and the job moves on to its next
+scheduled time.
 
 ## Jobs as specs
 
