@@ -2,6 +2,47 @@
 
 <!-- version list -->
 
+## v0.94.0 (2026-10-01)
+
+### Bug Fixes
+
+- **app**: Report each source's own last run in the collection table
+  ([`d7253b5`](https://github.com/digitl-cloud/interloper/commit/d7253b5cf9db1b7b09e1a9f68af92f9736de14d1))
+
+- **duckdb**: Compare VARCHAR partition bounds in ISO form and redraw the icon
+  ([`df0846f`](https://github.com/digitl-cloud/interloper/commit/df0846f10667d7907b32f89669d428b85c43f233))
+
+- **snowflake**: Make partition replaces atomic and scope the warehouse per destination
+  ([`cfa548e`](https://github.com/digitl-cloud/interloper/commit/cfa548e39aea1956660102d9738a4cfd529cb22d))
+
+### Features
+
+- **aws**: Add the S3 destination
+  ([`cd4f7ac`](https://github.com/digitl-cloud/interloper/commit/cd4f7aca597754d3e427f20599d02ad3b87246c4))
+
+- **duckdb**: Add the DuckDB destination
+  ([`1aa2132`](https://github.com/digitl-cloud/interloper/commit/1aa213208b7480285f0587fee33726d7008a4aa1))
+
+- **google-cloud**: Add the Google Sheets destination
+  ([`67e41b0`](https://github.com/digitl-cloud/interloper/commit/67e41b053edb2d712f17f135b5be9cd3de6e3626))
+
+- **snowflake**: Add the Snowflake destination
+  ([`ed17f84`](https://github.com/digitl-cloud/interloper/commit/ed17f84b23e9e43d46fe562b3c6cde6ac4752415))
+
+- **sql**: Add the SQLAlchemy-backed SQL destination
+  ([`66d2be0`](https://github.com/digitl-cloud/interloper/commit/66d2be07c319707be9f9bec9ed6d52a8d4e5bdd0))
+
+### Refactoring
+
+- **core**: Extract ObjectStoreDestination and the file formats from the GCS destination
+  ([`4a0e355`](https://github.com/digitl-cloud/interloper/commit/4a0e3551f9c6e377942cd6d2d259a422d5a006d7))
+
+### Testing
+
+- **google-cloud**: Mirror the package layout in the test tree
+  ([`d03db93`](https://github.com/digitl-cloud/interloper/commit/d03db934ad627a91cdaabea8c235c7aa6a4c4f9e))
+
+
 ## v0.93.0 (2026-09-30)
 
 ### Features
