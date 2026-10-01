@@ -162,7 +162,7 @@ class _SheetsAPI:
 @destination(
     key="google_sheets_destination",
     name="Google Sheets",
-    icon="icon:google_sheets",
+    icon="icon:google-sheets",
     tags=["Cloud"],
 )
 class GoogleSheetsDestination(DatabaseDestination):
