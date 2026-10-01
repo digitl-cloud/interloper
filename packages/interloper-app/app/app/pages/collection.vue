@@ -65,6 +65,7 @@ function onCloseAnimationEnd() {
 componentsStore.fetchAll()
 componentsStore.fetchRelations()
 runsStore.fetch()
+useExecutionsStore().fetchLatest()
 if (!catalogStore.loaded) catalogStore.fetchCatalog()
 
 function handleSaved() {
