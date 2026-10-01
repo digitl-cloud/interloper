@@ -667,6 +667,47 @@ class TestListRunsWindow:
         assert len(store.runs.list_all(_ORG_ID, limit=100)) == 2
 
 
+class TestListRunsSort:
+    """`sort` orders the listing on a whitelisted field, the id breaking ties."""
+
+    def test_a_backfill_pages_by_partition_without_overlap(self, store: Store):
+        backfill = _backfill(store, days=5, concurrency=1)
+
+        pages = [
+            store.runs.list_all(_ORG_ID, backfill_id=backfill.id, sort="partition_key", limit=2, offset=offset)
+            for offset in (0, 2, 4)
+        ]
+
+        assert [[run.partition_key for run in page] for page in pages] == [
+            ["2026-01-01", "2026-01-02"],
+            ["2026-01-03", "2026-01-04"],
+            ["2026-01-05"],
+        ]
+
+    def test_a_dash_prefix_sorts_descending(self, store: Store):
+        backfill = _backfill(store, days=3, concurrency=1)
+
+        runs = store.runs.list_all(_ORG_ID, backfill_id=backfill.id, sort="-partition_key")
+
+        assert [run.partition_key for run in runs] == ["2026-01-03", "2026-01-02", "2026-01-01"]
+
+    def test_runs_never_started_sort_last_either_way(self, store: Store):
+        base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
+        earlier = _timed_run(store, started_at=base, completed_at=base + _H(1))
+        later = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
+        never = _timed_run(store, started_at=None, completed_at=None)
+
+        ascending = store.runs.list_all(_ORG_ID, sort="started_at")
+        descending = store.runs.list_all(_ORG_ID, sort="-started_at")
+
+        assert [run.id for run in ascending] == [earlier, later, never]
+        assert [run.id for run in descending] == [later, earlier, never]
+
+    def test_an_unknown_field_is_rejected(self, store: Store):
+        with pytest.raises(ValueError, match="Cannot sort runs by 'org_id'"):
+            store.runs.list_all(_ORG_ID, sort="-org_id")
+
+
 class TestGetAndComplete:
     """Id-addressed reads and the terminal transition."""
 

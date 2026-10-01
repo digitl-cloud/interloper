@@ -240,6 +240,7 @@ def list_runs(
     component_kind: str | None = None,
     component_key: str | None = None,
     root_run_id: UUID | None = None,
+    sort: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[RunResponse]:
@@ -271,6 +272,9 @@ def list_runs(
         component_key: Keep only runs targeting a component of this type (catalog key); None
             applies no filter.
         root_run_id: List this stack's attempts rather than one row per stack.
+        sort: The field to order by (``id``, ``partition_key``, ``status``,
+            ``created_at``, ``started_at`` or ``completed_at``), ``-``-prefixed
+            for descending; None lists newest first.
         limit: Maximum number of runs on the page.
         offset: Number of matching runs to skip before the page starts.
         user: The authenticated user, required to hold at least the ``viewer`` role.
@@ -279,6 +283,9 @@ def list_runs(
 
     Returns:
         The matching page of runs, as response models.
+
+    Raises:
+        HTTPException: 400 if ``sort`` names a field runs cannot be ordered by.
     """
     total = store.runs.count(
         org_id,
@@ -293,20 +300,24 @@ def list_runs(
         root_run_id=root_run_id,
     )
     response.headers["X-Total-Count"] = str(total)
-    runs = store.runs.list_all(
-        org_id,
-        component_id=component_id,
-        backfill_id=backfill_id,
-        status=status,
-        after=after,
-        before=before,
-        q=q,
-        component_kind=component_kind,
-        component_key=component_key,
-        root_run_id=root_run_id,
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        runs = store.runs.list_all(
+            org_id,
+            component_id=component_id,
+            backfill_id=backfill_id,
+            status=status,
+            after=after,
+            before=before,
+            q=q,
+            component_kind=component_kind,
+            component_key=component_key,
+            root_run_id=root_run_id,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     counts = store.events.count_executions([run.id for run in runs])
     return [RunResponse.from_run(run, counts.get(run.id)) for run in runs]
 
