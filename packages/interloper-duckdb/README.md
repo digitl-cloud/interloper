@@ -96,11 +96,3 @@ duckdb.connect("warehouse.duckdb", read_only=True).sql("SELECT * FROM raw.ads_st
 Another process can open the file only while no process holds it for
 writing. Open it `read_only`, so the reader does not lock the instance out in
 turn.
-
-## Docker images
-
-The published interloper images do not ship this package. They are built on
-Alpine, and DuckDB publishes no musllinux wheels, so installing it there means
-compiling DuckDB from source. Run it from a glibc-based image (for example a
-`python:3.12-slim` base with `pip install interloper-duckdb`), or anywhere
-outside the images: the CLI, a notebook, a local scheduler.

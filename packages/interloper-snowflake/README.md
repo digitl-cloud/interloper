@@ -126,11 +126,3 @@ warehouse and database, so destinations sharing a connection never switch
 each other's warehouse. That session is shared by every asset the destination
 writes, and a Snowflake transaction belongs to the session rather than to a
 cursor, so the destination serialises its writes.
-
-## Docker images
-
-The published interloper images do not ship this package. They are built on
-Alpine, and `snowflake-connector-python` publishes no musllinux wheels, so
-installing it there means compiling its C++ extension from source. Run it from
-a glibc-based image (for example a `python:3.12-slim` base with
-`pip install interloper-snowflake`), or anywhere outside the images.

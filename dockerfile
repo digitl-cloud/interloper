@@ -45,10 +45,8 @@
 # can reach them (an ARG is only in scope where it is redeclared).
 #
 #   CORE_EXTRAS       comma-separated interloper-core extras
-#                     (default: aws,google-cloud,slack,sql). Each extra maps to
-#                     --package interloper-{name}. duckdb and snowflake
-#                     are not in the default: neither publishes musllinux
-#                     wheels, so they cannot install on this Alpine base.
+#                     (default: aws,duckdb,google-cloud,slack,snowflake,sql).
+#                     Each extra maps to --package interloper-{name}.
 #   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
 #                     Each extra maps to --extra {name} on interloper-assets.
 #                     Pass "" to disable.
@@ -68,7 +66,7 @@
 #
 # ================================================================
 
-ARG CORE_EXTRAS=aws,google-cloud,slack,sql
+ARG CORE_EXTRAS=aws,duckdb,google-cloud,slack,snowflake,sql
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
@@ -76,7 +74,10 @@ ARG COMMON_EXTRAS=otel
 
 
 # ── Python base: workspace manifests for dependency caching ────
-FROM ghcr.io/astral-sh/uv:python3.12-alpine AS base
+# Debian rather than Alpine: some vendor packages (DuckDB, the Snowflake
+# connector) publish no musllinux wheels and would have to compile from source.
+# Both stages pin the same release, since the venv built here runs there.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base
 
 WORKDIR /interloper
 ENV UV_COMPILE_BYTECODE=1 \
@@ -105,9 +106,9 @@ COPY packages/interloper-aws/pyproject.toml         packages/interloper-aws/pypr
 
 
 # ── Python runtime base ───────────────────────────────────────
-FROM python:3.12-alpine AS runtime
+FROM python:3.12-slim-bookworm AS runtime
 
-RUN addgroup -S app && adduser -S app -G app
+RUN groupadd --system app && useradd --system --gid app --create-home app
 ENV PATH="/interloper/.venv/bin:$PATH"
 
 
