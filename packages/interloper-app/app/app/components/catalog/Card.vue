@@ -7,9 +7,12 @@
  *   footer with info chips (left) and a "Set up →" action (right).
  * - `compact`: single row — icon tile, title/caption, trailing "+".
  */
+import type { Maturity } from '~/types/catalog'
+
 withDefaults(defineProps<{
     icon: string
     title: string
+    maturity?: Maturity
     /** Mono uppercase caption under the title (e.g. tag or provider). */
     caption?: string
     /** Rich variant only: body text, clamped to two lines. */
@@ -19,7 +22,7 @@ withDefaults(defineProps<{
     variant?: 'rich' | 'compact'
     /** Set false for static usage (e.g. selected-type summary): no hover/cursor. */
     interactive?: boolean
-}>(), { variant: 'rich', caption: undefined, description: undefined, chips: () => [], interactive: true })
+}>(), { variant: 'rich', maturity: undefined, caption: undefined, description: undefined, chips: () => [], interactive: true })
 </script>
 
 <template>
@@ -38,7 +41,10 @@ withDefaults(defineProps<{
                            class="size-5" />
                 </div>
                 <div class="flex-1 min-w-0">
-                    <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</span>
+                        <MaturityBadge :maturity="maturity" />
+                    </div>
                     <div v-if="caption"
                          class="font-mono text-[11px] uppercase tracking-[0.04em] text-dimmed mt-0.5 truncate">
                         {{ caption }}
@@ -87,7 +93,10 @@ withDefaults(defineProps<{
                        class="size-6" />
             </div>
             <div class="flex-1 min-w-0">
-                <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</span>
+                    <MaturityBadge :maturity="maturity" />
+                </div>
                 <div v-if="caption"
                      class="font-mono text-[11px] uppercase tracking-[0.05em] text-dimmed mt-0.5 truncate">
                     {{ caption }}

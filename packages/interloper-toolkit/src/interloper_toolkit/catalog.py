@@ -99,6 +99,7 @@ def list_definitions(
                 description=defn.get("description"),
                 icon=defn.get("icon"),
                 tags=defn.get("tags", []),
+                maturity=defn.get("maturity", "stable"),
             )
             if kind == "source":
                 count = collection_counts.get(key, 0)

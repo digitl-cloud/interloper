@@ -70,6 +70,7 @@ class DefinitionEntry(BaseModel):
     description: str | None = None
     icon: str | None = None
     tags: list[str] = []
+    maturity: str = "stable"
     asset_count: int | None = None
     in_collection: bool | None = None
     collection_count: int | None = None

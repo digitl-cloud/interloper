@@ -251,6 +251,7 @@ function onRowClick(row: any) {
                     <UIcon :name="typeInfoByKey.get(row.original.sourceKey)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
                     <span class="font-semibold">{{ typeInfoByKey.get(row.original.sourceKey)?.name ?? row.original.sourceKey }}</span>
+                    <MaturityBadge :maturity="typeInfoByKey.get(row.original.sourceKey)?.maturity" />
                     <UBadge color="neutral"
                             variant="soft"
                             class="ml-2">
@@ -298,6 +299,7 @@ function onRowClick(row: any) {
                     <UIcon :name="row.original.icon"
                            class="size-4.5 shrink-0 text-dimmed" />
                     <span>{{ row.original.name }}</span>
+                    <MaturityBadge :maturity="row.original.maturity" />
                     <UBadge v-if="statusBadge(row.original.assetStatus)"
                             :color="statusBadge(row.original.assetStatus)!.color"
                             :icon="statusBadge(row.original.assetStatus)!.icon">

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 /** Wizard summary of the selected type, with an optional "Change" action. */
+import type { Maturity } from '~/types/catalog'
+
 withDefaults(defineProps<{
     icon: string
     title: string
+    maturity?: Maturity
     caption?: string
     /** Show the "Change" action (create mode only — editing can't change type). */
     changeable?: boolean
-}>(), { caption: undefined, changeable: false })
+}>(), { maturity: undefined, caption: undefined, changeable: false })
 
 const emit = defineEmits<{ change: [] }>()
 </script>
@@ -16,6 +19,7 @@ const emit = defineEmits<{ change: [] }>()
                  :interactive="false"
                  :icon="icon"
                  :title="title"
+                 :maturity="maturity"
                  :caption="caption">
         <template v-if="changeable"
                   #trailing>

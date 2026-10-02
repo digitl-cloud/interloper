@@ -3,7 +3,7 @@ import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 import type { Execution } from '~/types/execution'
 import { stateFromExecution } from '~/types/graph'
-import type { AssetDefinition, SourceDefinition } from '~/types/catalog'
+import type { AssetDefinition, Maturity, SourceDefinition } from '~/types/catalog'
 import { kindsOf, keysOf, resourceRelations } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
 import type { SourceDriftStatus } from '~/composables/drift'
@@ -28,6 +28,7 @@ export interface CollectionRow {
     sourceKey: string
     assetStatus: ComponentStatus
     tags: string[]
+    maturity: Maturity
     dependencies: Array<{ name: string; icon: string }>
     warnings: AssetWarning[]
     jobs: Array<{ name: string }>
@@ -230,6 +231,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             })
 
             const sourceJobs = (jobsBySourceId.value.get(source.id) ?? []).map(j => ({ name: j.name ?? j.key }))
+            const sourceMaturity = catalogStore.getSourceDefinition(source.key)?.maturity ?? 'stable'
             const conn = connectionBySourceId.value.get(source.id)
 
             for (const asset of source.children) {
@@ -243,6 +245,8 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     sourceKey: source.key,
                     assetStatus: asset.status,
                     tags: assetDefn?.tags ?? [],
+                    // The source's row already shows its maturity; an asset repeats it only when it is less mature.
+                    maturity: assetDefn && assetDefn.maturity !== sourceMaturity ? assetDefn.maturity : 'stable',
                     dependencies: dependenciesByAssetId.value.get(asset.id) ?? [],
                     warnings: options.getWarnings(asset.id, asset.key),
                     jobs: sourceJobs,
@@ -287,6 +291,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     sourceKey: source.key,
                     assetStatus: 'ok',
                     tags: [],
+                    maturity: 'stable',
                     dependencies: [],
                     warnings: [],
                     jobs: sourceJobs,
@@ -341,7 +346,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
 
     /** Display info for each source type (catalog key) present in the collection. */
     const typeInfoByKey = computed(() => {
-        const map = new Map<string, { name: string; icon: string; sourceCount: number }>()
+        const map = new Map<string, { name: string; icon: string; maturity: Maturity; sourceCount: number }>()
         for (const source of options.sources.value) {
             const existing = map.get(source.key)
             if (existing) {
@@ -351,6 +356,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             map.set(source.key, {
                 name: catalogStore.getSourceDefinition(source.key)?.name ?? source.key,
                 icon: componentIcon(source.key, 'i-lucide-database'),
+                maturity: catalogStore.getSourceDefinition(source.key)?.maturity ?? 'stable',
                 sourceCount: 1,
             })
         }
