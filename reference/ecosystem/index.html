@@ -2032,6 +2032,10 @@ own README. All are versioned and released together.</p>
 <td><code>interloper-core[snowflake]</code></td>
 <td>Pulls in <code>interloper-snowflake</code>.</td>
 </tr>
+<tr>
+<td><code>interloper-core[clickhouse]</code></td>
+<td>Pulls in <code>interloper-clickhouse</code>.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="framework-extensions">Framework extensions<a class="headerlink" href="#framework-extensions" title="Permanent link">&para;</a></h2>
@@ -2077,6 +2081,11 @@ own README. All are versioned and released together.</p>
 <tr>
 <td><code>interloper-snowflake</code></td>
 <td><code>SnowflakeConnection</code>, <code>SnowflakeDestination</code> (a <code>DatabaseDestination</code> with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet <code>COPY INTO</code>).</td>
+<td><code>interloper.components</code></td>
+</tr>
+<tr>
+<td><code>interloper-clickhouse</code></td>
+<td><code>ClickHouseConnection</code>, <code>ClickHouseDestination</code> (a <code>DatabaseDestination</code> writing <code>MergeTree</code> tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and <code>REPLACE PARTITION</code>; self-hosted servers and ClickHouse Cloud).</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>
