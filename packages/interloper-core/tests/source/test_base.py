@@ -385,6 +385,30 @@ class TestDefinition:
             ("retry", "Operation"),
         ]
 
+    def test_assets_show_the_less_mature_of_their_own_and_the_sources_maturity(self):
+        @il.source(maturity="beta")
+        class FakeBetaSource(il.Source):
+            @il.asset
+            def plain(self) -> list:
+                return []
+
+            @il.asset(maturity="alpha")
+            def early(self) -> list:
+                return []
+
+        defn = FakeBetaSource.definition()
+        assert defn.maturity is il.Maturity.BETA
+        assert {a.key: a.maturity for a in defn.assets} == {"plain": il.Maturity.BETA, "early": il.Maturity.ALPHA}
+
+    def test_a_stable_source_keeps_each_assets_own_maturity(self):
+        @il.source
+        class FakeStableSource(il.Source):
+            @il.asset(maturity="beta")
+            def early(self) -> list:
+                return []
+
+        assert FakeStableSource.definition().assets[0].maturity is il.Maturity.BETA
+
     def test_definition_asset_source_keys_are_set(self):
         defn = FakeSourceWithAssets.definition()
         for asset_defn in defn.assets:

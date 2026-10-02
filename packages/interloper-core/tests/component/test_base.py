@@ -204,6 +204,32 @@ class TestDefinition:
         assert defn.path.endswith(".FakeComponent")
         assert defn.name  # derived from class name
 
+    def test_maturity_defaults_to_stable(self):
+        assert FakeComponent.maturity is il.Maturity.STABLE
+        assert FakeComponent.definition().maturity is il.Maturity.STABLE
+
+    def test_maturity_declared_in_the_class_body_is_coerced_and_defined(self):
+        class FakeAlphaComponent(Component):
+            maturity = "alpha"
+
+        assert FakeAlphaComponent.maturity is il.Maturity.ALPHA
+        assert FakeAlphaComponent.definition().model_dump(mode="json")["maturity"] == "alpha"
+
+    def test_maturity_is_inherited_by_subclasses(self):
+        class FakeBetaComponent(Component):
+            maturity = il.Maturity.BETA
+
+        class FakeBetaChild(FakeBetaComponent):
+            pass
+
+        assert FakeBetaChild.definition().maturity is il.Maturity.BETA
+
+    def test_an_unknown_maturity_fails_at_class_creation(self):
+        with pytest.raises(TypeError, match="Unknown maturity 'gamma'"):
+
+            class FakeTypoComponent(Component):
+                maturity = "gamma"
+
     def test_definition_description_from_docstring(self):
         class FakeDocumentedComponent(Component):
             """A documented component."""

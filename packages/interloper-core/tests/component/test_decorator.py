@@ -36,6 +36,27 @@ class TestOverrideChannel:
         assert rows.icon == "carbon:data-table"
         assert rows.name == "Rows"
 
+    def test_a_maturity_override_is_coerced_to_the_member(self):
+        @il.asset(maturity="beta")
+        def rows() -> list[dict[str, Any]]:
+            return []
+
+        assert rows.maturity is il.Maturity.BETA
+
+    def test_a_maturity_override_on_a_subclass_is_coerced_too(self):
+        @il.destination(maturity="alpha")
+        class FakeAlphaDestination(il.MemoryDestination):
+            pass
+
+        assert FakeAlphaDestination.maturity is il.Maturity.ALPHA
+
+    def test_an_unknown_maturity_override_raises(self):
+        with pytest.raises(TypeError, match="Unknown maturity 'gamma'"):
+
+            @il.asset(maturity="gamma")
+            def rows() -> list[dict[str, Any]]:
+                return []
+
     def test_a_field_override_becomes_the_field_default(self):
         @il.asset(dataset="raw")
         def rows() -> list[dict[str, Any]]:

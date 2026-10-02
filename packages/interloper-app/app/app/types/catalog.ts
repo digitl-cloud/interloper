@@ -18,6 +18,8 @@ export interface RelationDefinition {
     name: string
 }
 
+export type Maturity = 'alpha' | 'beta' | 'stable'
+
 export interface ComponentDefinition {
     kind: string
     key: string
@@ -26,6 +28,7 @@ export interface ComponentDefinition {
     icon: string
     description: string
     tags: string[]
+    maturity: Maturity
     config_schema: Record<string, unknown>
     /** JSON Schema of the kind's machine-owned state (`{}` = stateless). */
     state_schema: Record<string, unknown>

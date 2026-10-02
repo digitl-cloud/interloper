@@ -28,6 +28,7 @@ const connectorCards = computed(() => catalogStore.sourceDefinitions
         props: {
             icon: componentIcon(d.key),
             title: d.name,
+            maturity: d.maturity,
             caption: d.provider,
             description: d.description,
             chips: [

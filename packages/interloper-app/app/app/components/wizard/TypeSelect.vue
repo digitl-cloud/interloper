@@ -78,6 +78,7 @@ const groups = computed(() => {
                                    class="size-[26px]" />
                         </div>
                         <span class="text-[13.5px] font-semibold text-highlighted text-center leading-tight line-clamp-2">{{ defn.name }}</span>
+                        <MaturityBadge :maturity="defn.maturity" />
                     </SelectionCard>
                 </div>
             </div>

@@ -7,6 +7,7 @@ from interloper.component import (
     Component,
     ComponentDefinition,
     ComponentIdentity,
+    Maturity,
     Relation,
 )
 from interloper.config import Config, config
@@ -118,6 +119,7 @@ __all__ = [
     "JobState",
     "JsonField",
     "MaterializationStrategy",
+    "Maturity",
     "MemoryDestination",
     "MultiProcessRunner",
     "Normalizer",

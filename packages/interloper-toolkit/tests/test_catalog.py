@@ -6,6 +6,7 @@ import json
 
 from interloper_toolkit import ToolkitContext
 from interloper_toolkit import catalog as catalog_tools
+from interloper_toolkit.models import DefinitionList
 
 
 class TestCatalog:
@@ -30,6 +31,12 @@ class TestCatalog:
         assert result.shared_fields[0].field == "campaign_id"
         assert result.only_in_a == ["spend"]
         assert result.only_in_b == ["clicks"]
+
+    def test_list_definitions_reports_each_maturity(self, ctx: ToolkitContext):
+        result = catalog_tools.list_definitions(ctx, "source")
+        assert isinstance(result, DefinitionList)
+        assert result.definitions
+        assert {entry.maturity for entry in result.definitions} <= {"alpha", "beta", "stable"}
 
     def test_unknown_definition_is_a_structured_error(self, ctx: ToolkitContext):
         result = catalog_tools.get_definition(ctx, "nope")

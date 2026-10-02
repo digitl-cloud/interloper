@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from typing_extensions import Self
 
+from interloper.component.maturity import Maturity
 from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 from interloper.errors import ConfigError
 from interloper.registry import Registry
@@ -61,7 +62,7 @@ class ComponentDefinition(BaseModel):
     entity, just a structured projection of the class for API consumers.
     Every kind is self-describing: ``config_schema`` is the JSON Schema of
     its user-configurable fields, ``relations`` the links it declares toward
-    other components.
+    other components, ``maturity`` how far it is from being relied on.
     """
 
     kind: str
@@ -71,6 +72,7 @@ class ComponentDefinition(BaseModel):
     icon: str = ""
     description: str = ""
     tags: list[str] = Field(default_factory=list)
+    maturity: Maturity = Maturity.STABLE
     config_schema: dict[str, Any] = Field(default_factory=dict)
     state_schema: dict[str, Any] = Field(default_factory=dict)
     relations: dict[str, Relation] = Field(default_factory=dict)
@@ -99,6 +101,7 @@ class Component(Serializable):
 
     kind: ClassVar[str] = ""
     icon: ClassVar[str] = ""
+    maturity: ClassVar[Maturity] = Maturity.STABLE
     relations: ClassVar[dict[str, Relation]] = {}
     sensitive: ClassVar[bool] = False
     state_model: ClassVar[type[BaseModel] | None] = None
@@ -111,12 +114,14 @@ class Component(Serializable):
     # -- Construction ----------------------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind`` and collect the class's relations.
+        """Auto-derive ``kind``, check ``maturity`` and collect the class's relations.
 
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation comes from :class:`Serializable`.)
+        (``key`` derivation comes from :class:`Serializable`.) A ``maturity``
+        declared in the class body is coerced here, so an unknown value fails
+        where it is written; the decorator coerces its own argument.
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
@@ -124,6 +129,8 @@ class Component(Serializable):
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
+        if "maturity" in cls.__dict__:
+            cls.maturity = Maturity.of(cls.__dict__["maturity"])
         cls._collect()
 
     @classmethod
@@ -615,6 +622,7 @@ class Component(Serializable):
             icon=cls.icon,
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
+            maturity=cls.maturity,
             config_schema=cls.config_schema(),
             state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
             relations=dict(cls.relations),

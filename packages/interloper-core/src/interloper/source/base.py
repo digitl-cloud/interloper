@@ -10,7 +10,7 @@ from typing_extensions import Self
 
 from interloper.asset import Asset
 from interloper.asset.base import AssetDefinition
-from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation
+from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
@@ -371,10 +371,18 @@ class Source(Component, Workload):
     def definition(cls) -> SourceDefinition:
         """Produce a structured definition of this source including its assets.
 
+        An asset shows the less mature of its own maturity and the source's:
+        an alpha source makes every one of its assets alpha.
+
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        assets = [asset_cls.definition().model_copy(update={"source_key": cls.key}) for asset_cls in cls.asset_types]
+        assets = [
+            asset_cls.definition().model_copy(
+                update={"source_key": cls.key, "maturity": Maturity.least(asset_cls.maturity, cls.maturity)}
+            )
+            for asset_cls in cls.asset_types
+        ]
         return SourceDefinition(**dict(super().definition()), assets=assets)
 
     # -- Reconfiguration -------------------------------------------------------

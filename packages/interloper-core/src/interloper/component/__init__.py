@@ -5,6 +5,7 @@ from interloper.component.base import (
     Component,
     ComponentDefinition,
 )
+from interloper.component.maturity import Maturity
 from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "Component",
     "ComponentDefinition",
     "ComponentIdentity",
+    "Maturity",
     "Relation",
     "unwrap_optional",
 ]

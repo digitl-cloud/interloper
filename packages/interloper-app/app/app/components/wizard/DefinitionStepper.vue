@@ -137,6 +137,7 @@ const summaryCard = computed(() => hasTypeStep.value || isEditing.value
     ? definition.value && {
             icon: componentIcon(definition.value.key),
             title: definition.value.name,
+            maturity: definition.value.maturity,
             caption: definition.value.tags?.[0] ?? props.noun,
             changeable: hasTypeStep.value,
         }

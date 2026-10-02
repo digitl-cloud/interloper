@@ -249,6 +249,7 @@ const typeKey = ref<string | null>(null)
                                      variant="compact"
                                      :icon="componentIcon(def.key)"
                                      :title="def.name"
+                                     :maturity="def.maturity"
                                      :caption="def.provider"
                                      @click="handleCreateFromCatalog(def.key)" />
                     </div>

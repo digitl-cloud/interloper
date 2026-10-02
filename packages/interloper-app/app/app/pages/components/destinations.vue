@@ -122,6 +122,7 @@ const typeKey = ref<string | null>(null)
                                      variant="rich"
                                      :icon="typeIcon(def.key)"
                                      :title="def.name"
+                                     :maturity="def.maturity"
                                      :caption="def.provider"
                                      :description="def.description"
                                      :chips="(def.tags ?? []).map(t => ({ label: t }))"
