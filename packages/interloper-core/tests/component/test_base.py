@@ -208,11 +208,10 @@ class TestDefinition:
         assert FakeComponent.maturity is il.Maturity.STABLE
         assert FakeComponent.definition().maturity is il.Maturity.STABLE
 
-    def test_maturity_declared_in_the_class_body_is_coerced_and_defined(self):
+    def test_maturity_declared_in_the_class_body_is_defined(self):
         class FakeAlphaComponent(Component):
-            maturity = "alpha"
+            maturity = il.Maturity.ALPHA
 
-        assert FakeAlphaComponent.maturity is il.Maturity.ALPHA
         assert FakeAlphaComponent.definition().model_dump(mode="json")["maturity"] == "alpha"
 
     def test_maturity_is_inherited_by_subclasses(self):
@@ -224,11 +223,12 @@ class TestDefinition:
 
         assert FakeBetaChild.definition().maturity is il.Maturity.BETA
 
-    def test_an_unknown_maturity_fails_at_class_creation(self):
-        with pytest.raises(TypeError, match="Unknown maturity 'gamma'"):
+    def test_an_unknown_maturity_fails_when_the_definition_is_built(self):
+        class FakeTypoComponent(Component):
+            maturity = "gamma"
 
-            class FakeTypoComponent(Component):
-                maturity = "gamma"
+        with pytest.raises(ValidationError, match="maturity"):
+            FakeTypoComponent.definition()
 
     def test_definition_description_from_docstring(self):
         class FakeDocumentedComponent(Component):

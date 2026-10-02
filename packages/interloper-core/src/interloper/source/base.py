@@ -372,18 +372,19 @@ class Source(Component, Workload):
         """Produce a structured definition of this source including its assets.
 
         An asset shows the less mature of its own maturity and the source's:
-        an alpha source makes every one of its assets alpha.
+        an alpha source makes every one of its assets alpha. Both are read
+        from the validated definitions, never from the declared class values.
 
         Returns:
             A SourceDefinition with metadata and nested asset definitions.
         """
-        assets = [
-            asset_cls.definition().model_copy(
-                update={"source_key": cls.key, "maturity": Maturity.least(asset_cls.maturity, cls.maturity)}
-            )
-            for asset_cls in cls.asset_types
-        ]
-        return SourceDefinition(**dict(super().definition()), assets=assets)
+        own = super().definition()
+        assets = []
+        for asset_cls in cls.asset_types:
+            asset = asset_cls.definition()
+            maturity = Maturity.least(asset.maturity, own.maturity)
+            assets.append(asset.model_copy(update={"source_key": cls.key, "maturity": maturity}))
+        return SourceDefinition(**dict(own), assets=assets)
 
     # -- Reconfiguration -------------------------------------------------------
 

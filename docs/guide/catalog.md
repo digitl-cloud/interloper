@@ -90,8 +90,9 @@ class WarehouseDestination(il.Destination): ...
 | `stable` | Relied on. The default for a component that declares nothing. |
 | `deprecated` | Still works but is being phased out; avoid it for new setups. It will be removed in a future release. |
 
-The value is `il.Maturity` or its string, set through the decorator or as a class attribute
-(`maturity = "alpha"`); anything else is a `TypeError` where it is written. It is
+The value is set through the decorator, as `il.Maturity` or its string, or as a class attribute
+(`maturity = il.Maturity.ALPHA`). The component's definition validates it, so an unknown value
+fails when the catalog is built. It is
 informational: a component behaves the same at every level, and the app shows a Deprecated, Alpha
 or Beta badge wherever the component is offered or listed.
 
