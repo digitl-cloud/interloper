@@ -114,6 +114,16 @@ FROM python:3.12-slim-trixie AS runtime
 RUN groupadd --system app && useradd --system --gid app --create-home app
 ENV PATH="/interloper/.venv/bin:$PATH"
 
+# ── Executing runtime: system libraries vendor drivers load ────
+# Only the roles that run assets (scheduler, core) open vendor connections;
+# the api and mcp import the same classes to describe them and never load the
+# drivers. mssql-python (interloper-azure, Fabric) dlopens these at connect.
+FROM runtime AS runtime-exec
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libltdl7 libkrb5-3 libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 
 # ================================================================
 # BUILD STAGES
@@ -254,7 +264,7 @@ RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 # ================================================================
 
 # ── scheduler (cron + worker + reaper; singleton) ─────────────
-FROM runtime AS scheduler
+FROM runtime-exec AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
@@ -265,7 +275,7 @@ USER app
 CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
 # ── core (the framework; also the per-asset Job target) ───────
-FROM runtime AS core
+FROM runtime-exec AS core
 COPY --from=build-core --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 CMD ["interloper"]

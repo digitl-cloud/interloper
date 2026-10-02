@@ -83,6 +83,10 @@ loads a few system libraries on Linux. On Debian or Ubuntu:
 apt-get install -y libltdl7 libkrb5-3 libgssapi-krb5-2
 ```
 
+The published scheduler and core images, the ones that run assets, ship these
+libraries. The api and mcp images only describe the destination and never open
+a session, so they leave them out.
+
 Without them the package imports fine (the catalog, the connection check and
 the workspace picker all work), but opening a warehouse session fails with
 `Failed to load the driver`. `mssql-python` also offers an alternate, Rust-based
