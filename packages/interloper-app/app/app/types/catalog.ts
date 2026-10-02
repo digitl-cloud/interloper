@@ -20,6 +20,11 @@ export interface RelationDefinition {
 
 export type Maturity = 'deprecated' | 'alpha' | 'beta' | 'stable'
 
+/** Whether a maturity is flagged with a badge; stable, the default, shows nothing. */
+export function showsMaturity(maturity?: Maturity | null): maturity is Exclude<Maturity, 'stable'> {
+    return maturity === 'deprecated' || maturity === 'alpha' || maturity === 'beta'
+}
+
 export interface ComponentDefinition {
     kind: string
     key: string
