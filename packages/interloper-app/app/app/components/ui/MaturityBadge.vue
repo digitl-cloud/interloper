@@ -5,6 +5,7 @@
  * sites pass the definition's value without checking it themselves.
  */
 import type { Maturity } from '~/types/catalog'
+import { showsMaturity } from '~/types/catalog'
 
 const props = defineProps<{
     maturity?: Maturity | null
@@ -28,16 +29,14 @@ const LEVELS = {
     },
 } as const
 
-const level = computed(() =>
-    props.maturity && props.maturity !== 'stable' && props.maturity in LEVELS ? LEVELS[props.maturity] : null,
-)
+const level = computed(() => showsMaturity(props.maturity) ? LEVELS[props.maturity] : null)
 </script>
 
 <template>
     <UTooltip v-if="level"
               :text="level.description">
         <UBadge :color="level.color"
-                variant="subtle"
+                variant="soft"
                 size="sm"
                 class="shrink-0">
             {{ level.label }}

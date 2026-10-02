@@ -8,8 +8,9 @@
  * - `compact`: single row — icon tile, title/caption, trailing "+".
  */
 import type { Maturity } from '~/types/catalog'
+import { showsMaturity } from '~/types/catalog'
 
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     icon: string
     title: string
     maturity?: Maturity
@@ -23,11 +24,13 @@ withDefaults(defineProps<{
     /** Set false for static usage (e.g. selected-type summary): no hover/cursor. */
     interactive?: boolean
 }>(), { variant: 'rich', maturity: undefined, caption: undefined, description: undefined, chips: () => [], interactive: true })
+
+const flagged = computed(() => showsMaturity(props.maturity))
 </script>
 
 <template>
     <UCard v-if="variant === 'rich'"
-           class="cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5"
+           class="relative cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5"
            :ui="{
                root: 'rounded-lg shadow-xs divide-y-0 flex flex-col',
                header: 'p-4 pb-0 sm:p-4 sm:pb-0',
@@ -35,16 +38,18 @@ withDefaults(defineProps<{
                footer: 'p-4 pt-0 sm:p-4 sm:pt-0',
            }">
         <template #header>
-            <div class="flex items-center gap-3">
+            <div v-if="flagged"
+                 class="absolute top-2.5 right-2.5">
+                <MaturityBadge :maturity="maturity" />
+            </div>
+            <div class="flex items-center gap-3"
+                 :class="{ 'pr-16': flagged }">
                 <div class="size-[38px] shrink-0 rounded-lg border border-default flex items-center justify-center">
                     <UIcon :name="icon"
                            class="size-5" />
                 </div>
                 <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</span>
-                        <MaturityBadge :maturity="maturity" />
-                    </div>
+                    <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
                     <div v-if="caption"
                          class="font-mono text-[11px] uppercase tracking-[0.04em] text-dimmed mt-0.5 truncate">
                         {{ caption }}
@@ -80,6 +85,7 @@ withDefaults(defineProps<{
     </UCard>
 
     <UCard v-else
+           class="relative"
            :class="interactive
                ? 'cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5'
                : 'bg-(--ui-bg-band)'"
@@ -87,26 +93,30 @@ withDefaults(defineProps<{
                root: 'rounded-lg shadow-xs',
                body: 'p-3.5 px-4 sm:p-3.5 sm:px-4',
            }">
+        <div v-if="flagged"
+             class="absolute top-1.5 right-1.5">
+            <MaturityBadge :maturity="maturity" />
+        </div>
         <div class="flex items-center gap-3">
             <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
                 <UIcon :name="icon"
                        class="size-6" />
             </div>
             <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 min-w-0">
-                    <span class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</span>
-                    <MaturityBadge :maturity="maturity" />
-                </div>
+                <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
                 <div v-if="caption"
                      class="font-mono text-[11px] uppercase tracking-[0.05em] text-dimmed mt-0.5 truncate">
                     {{ caption }}
                 </div>
             </div>
-            <slot name="trailing">
-                <UIcon v-if="interactive"
-                       name="i-lucide-plus"
-                       class="size-3.5 text-primary shrink-0" />
-            </slot>
+            <div class="shrink-0 flex"
+                 :class="{ 'self-end': flagged }">
+                <slot name="trailing">
+                    <UIcon v-if="interactive"
+                           name="i-lucide-plus"
+                           class="size-3.5 text-primary shrink-0" />
+                </slot>
+            </div>
         </div>
     </UCard>
 </template>
