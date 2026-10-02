@@ -79,11 +79,10 @@ function outcome(attempt: RunAttempt): string {
                 type="multiple"
                 :items="sections"
                 :ui="{
-                    root: 'flex h-full min-h-0 w-full flex-col',
-                    item: 'flex min-h-0 flex-col',
-                    header: 'shrink-0',
-                    trigger: 'rounded-none bg-muted px-4 py-2.5 text-[13px] font-semibold',
-                    content: 'flex min-h-0 flex-col border-t border-default',
+                    root: 'flex w-full flex-col gap-3',
+                    item: 'overflow-hidden rounded-lg border-0 bg-default ring ring-default',
+                    trigger: 'px-4 py-3 text-sm font-semibold',
+                    content: 'flex flex-col',
                 }">
         <template #trailing="{ item, ui }">
             <span class="ms-auto text-xs font-normal text-muted tabular-nums">{{ item.count }}</span>
@@ -97,7 +96,7 @@ function outcome(attempt: RunAttempt): string {
                       value-key="value"
                       size="sm"
                       :ui="{
-                          root: 'min-h-0 rounded-none ring-0',
+                          root: 'rounded-none bg-transparent ring-0',
                           content: 'max-h-none divide-y-0 pb-2',
                           group: 'px-2 pb-0 pt-1',
                           item: 'items-center data-[state=checked]:text-primary data-[state=checked]:before:bg-primary/10',
@@ -109,25 +108,25 @@ function outcome(attempt: RunAttempt): string {
                     <template v-if="item.header">
                         <span class="m-1 size-[7px] shrink-0 rounded-full"
                               :class="bucketsByKey.get(item.bucket)?.colorClass" />
-                        <span class="flex-1 truncate text-[11px] font-semibold uppercase tracking-[.05em]"
+                        <span class="flex-1 truncate text-xs font-semibold uppercase tracking-[.05em]"
                               :class="statusFilter === item.bucket ? 'text-primary' : 'text-dimmed'">{{ item.label }}</span>
-                        <span class="text-[11px] font-semibold tabular-nums"
+                        <span class="text-xs font-semibold tabular-nums"
                               :class="statusFilter === item.bucket ? 'text-primary' : 'text-dimmed'">{{ bucketsByKey.get(item.bucket)?.count }}</span>
                     </template>
                     <span v-else
                           class="flex min-w-0 flex-1 items-center gap-1.5 transition-opacity"
                           :class="statusFilter && statusFilter !== item.bucket ? 'opacity-45' : ''">
                         <UIcon :name="item.icon"
-                               :class="ui.itemLeadingIcon({ class: 'size-[13px]' })" />
+                               :class="ui.itemLeadingIcon({ class: 'size-3.5' })" />
                         <span class="min-w-0 flex-1 truncate font-mono">{{ item.label }}</span>
-                        <span class="shrink-0 font-mono text-[11px] text-dimmed">{{ durations.get(item.value) }}</span>
+                        <span class="shrink-0 font-mono text-xs text-dimmed">{{ durations.get(item.value) }}</span>
                     </span>
                 </template>
             </UListbox>
         </template>
 
         <template #attempts>
-            <div class="min-h-0 overflow-y-auto">
+            <div>
                 <UButton v-for="attempt in attempts"
                          :key="attempt.run.id"
                          :to="`/executions/runs/${attempt.run.id}`"
@@ -137,19 +136,19 @@ function outcome(attempt: RunAttempt): string {
                          :active="attempt.run.id === currentRunId"
                          active-color="primary"
                          active-variant="soft"
-                         class="flex-col items-stretch gap-[7px] rounded-none px-4 py-[9px] text-left">
+                         class="flex-col items-stretch gap-2 rounded-none px-4 py-2 text-left">
                     <span class="flex items-center gap-2">
                         <span class="size-2 shrink-0 rounded-full"
                               :class="runStatusDotClass(attempt.run.status)" />
-                        <span class="text-[13px] font-semibold">Attempt {{ attempt.run.attempt }}</span>
-                        <span class="font-mono text-[11.5px] font-normal text-dimmed">{{ attempt.run.id.substring(0, 8) }}</span>
+                        <span class="text-sm font-semibold">Attempt {{ attempt.run.attempt }}</span>
+                        <span class="font-mono text-xs font-normal text-dimmed">{{ attempt.run.id.substring(0, 8) }}</span>
                         <span class="ms-auto text-xs font-normal text-muted tabular-nums">{{ attempt.stats.duration ?? '—' }}</span>
                     </span>
                     <UProgressGroup :items="progressSegments(attempt.stats)"
                                     :max="widest"
                                     size="sm"
                                     :ui="{ base: 'h-1.5' }" />
-                    <span class="truncate text-[11.5px] font-normal text-dimmed">{{ outcome(attempt) }}</span>
+                    <span class="truncate text-xs font-normal text-dimmed">{{ outcome(attempt) }}</span>
                 </UButton>
             </div>
         </template>

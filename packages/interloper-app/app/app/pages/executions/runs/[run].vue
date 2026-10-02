@@ -94,22 +94,25 @@ const markerTime = computed(() => {
 })
 const highlightedAsset = computed(() => hoveredAsset.value ?? eventInFocus.value?.component_id ?? null)
 
+// Panes clip overflow, so each keeps a 1px inset for its card's ring.
 const railItems: SplitterItem[] = [
-    { slot: 'rail', sizeUnit: 'px', defaultSize: 268, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden' },
+    { slot: 'rail', sizeUnit: 'px', defaultSize: 268, minSize: 200, maxSize: 480, collapsible: true, collapsedSize: 0, class: 'overflow-hidden p-px' },
     { slot: 'main', class: 'min-w-0' },
 ]
 const panelItems: SplitterItem[] = [
-    { slot: 'timeline', defaultSize: 40, minSize: 15, class: 'flex-col overflow-hidden' },
-    { slot: 'events', defaultSize: 60, minSize: 20, class: 'flex-col overflow-hidden' },
+    { slot: 'timeline', defaultSize: 40, minSize: 15, class: 'flex-col overflow-hidden p-px' },
+    { slot: 'events', defaultSize: 60, minSize: 20, class: 'flex-col overflow-hidden p-px' },
 ]
-/** The handles are the panels' dividing borders, lit while hovered or dragged. */
-const handleClass = 'bg-(--ui-border) transition-colors data-[state=hover]:bg-primary data-[state=drag]:bg-primary'
+/** The handles are the 12px gaps between the cards, with a line lit while hovered or dragged. */
+const HANDLE_LINE = 'relative bg-transparent before:absolute before:bg-transparent before:transition-colors data-[state=hover]:before:bg-accented data-[state=drag]:before:bg-accented'
+const PANELS_HANDLE_CLASS = `${HANDLE_LINE} h-3 before:inset-x-0 before:top-1/2 before:h-px`
 
 type SplitterPanelHandle = { collapse: () => void, expand: () => void, isCollapsed: boolean }
 const railSplitter = useTemplateRef<{ panelsRef: SplitterPanelHandle[] }>('railSplitter')
 const railPanel = computed(() => railSplitter.value?.panelsRef[0])
 /** Read off the panel: a collapse restored from the saved layout emits no event. */
 const railCollapsed = computed(() => railPanel.value?.isCollapsed ?? false)
+const railHandleClass = computed(() => `${HANDLE_LINE} before:inset-y-0 before:left-1/2 before:w-px ${railCollapsed.value ? 'w-0' : 'w-3'}`)
 
 function toggleRail() {
     if (railCollapsed.value) railPanel.value?.expand()
@@ -178,8 +181,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <UDashboardPanel id="run"
-                     :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0' }">
+    <UDashboardPanel id="run">
         <template #header>
             <AppNavbar>
                 <template #title>
@@ -215,29 +217,32 @@ onUnmounted(() => {
                               :error="fetchError"
                               back-to="/executions/runs"
                               resource-label="run">
-                <div class="flex min-h-0 flex-1 flex-col">
-                    <template v-if="run">
+                <div class="flex min-h-0 flex-1 flex-col gap-3">
+                    <UCard v-if="run"
+                           :ui="{ body: 'flex flex-col gap-4' }">
                         <ExecutionsRunMetaStrip :run="run"
                                                 :duration="stats.duration" />
                         <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
-                                                class="shrink-0 border-b border-default px-4 py-3"
                                                 :stats="stats" />
-                    </template>
+                    </UCard>
 
                     <USplitter id="run-rail"
                                ref="railSplitter"
                                auto-save-id="run-rail"
                                :items="railItems"
-                               :ui="{ root: 'min-h-0 flex-1', handle: `w-px ${handleClass}` }">
+                               :ui="{ root: 'min-h-0 flex-1', handle: railHandleClass }">
                         <template #rail="{ collapsed }">
-                            <ExecutionsRunRail v-if="!collapsed"
-                                               v-model:status-filter="statusFilter"
-                                               v-model:selected="selectedAsset"
-                                               v-model:hovered="hoveredAsset"
-                                               :rows="assetRows"
-                                               :buckets="stats.buckets"
-                                               :attempts="attempts"
-                                               :current-run-id="runId" />
+                            <UCard v-if="!collapsed"
+                                   class="h-full w-full min-w-0"
+                                   :ui="{ root: 'flex flex-col', body: 'min-h-0 flex-1 overflow-y-auto p-3 sm:p-3' }">
+                                <ExecutionsRunRail v-model:status-filter="statusFilter"
+                                                   v-model:selected="selectedAsset"
+                                                   v-model:hovered="hoveredAsset"
+                                                   :rows="assetRows"
+                                                   :buckets="stats.buckets"
+                                                   :attempts="attempts"
+                                                   :current-run-id="runId" />
+                            </UCard>
                         </template>
 
                         <template #main>
@@ -245,24 +250,25 @@ onUnmounted(() => {
                                        orientation="vertical"
                                        auto-save-id="run-panels"
                                        :items="panelItems"
-                                       :ui="{ root: 'min-h-0 min-w-0 flex-1', handle: `h-px ${handleClass}` }">
+                                       :ui="{ root: 'min-h-0 min-w-0 flex-1', handle: PANELS_HANDLE_CLASS }">
                                 <template #timeline>
-                                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
-                                        <UButton :icon="railCollapsed ? appConfig.ui.icons.panelOpen : appConfig.ui.icons.panelClose"
-                                                 :aria-label="railCollapsed ? 'Show panel' : 'Hide panel'"
-                                                 color="neutral"
-                                                 variant="ghost"
-                                                 size="sm"
-                                                 class="-ml-1.5"
-                                                 @click="toggleRail" />
-                                        <UTabs v-model="view"
-                                               :items="viewTabs"
-                                               variant="pill"
-                                               size="xs"
-                                               :content="false" />
-                                    </div>
-
-                                    <div class="flex min-h-0 flex-1 flex-col">
+                                    <UCard :ui="CANVAS_CARD_UI">
+                                        <template #header>
+                                            <div class="flex items-center gap-2">
+                                                <UButton :icon="railCollapsed ? appConfig.ui.icons.panelOpen : appConfig.ui.icons.panelClose"
+                                                         :aria-label="railCollapsed ? 'Show panel' : 'Hide panel'"
+                                                         color="neutral"
+                                                         variant="ghost"
+                                                         size="sm"
+                                                         class="-ml-1.5"
+                                                         @click="toggleRail" />
+                                                <UTabs v-model="view"
+                                                       :items="viewTabs"
+                                                       variant="pill"
+                                                       size="xs"
+                                                       :content="false" />
+                                            </div>
+                                        </template>
                                         <div v-if="run?.status === 'queued'"
                                              class="flex h-full items-center justify-center text-muted">
                                             <span class="text-sm">Run is currently queued...</span>
@@ -277,27 +283,29 @@ onUnmounted(() => {
                                         <ExecutionsRunGraph v-else
                                                             v-model:selected-asset="selectedAsset"
                                                             :run-id="runId" />
-                                    </div>
+                                    </UCard>
                                 </template>
 
                                 <template #events>
-                                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
-                                        <UTabs v-model="eventCategory"
-                                               :items="eventTabs"
-                                               variant="pill"
-                                               size="xs"
-                                               :content="false" />
-                                        <span v-if="!eventsStore.loading"
-                                              class="ml-auto text-sm text-muted">{{ eventCaption }}</span>
-                                    </div>
-                                    <div class="flex-1 min-h-0 px-4">
+                                    <UCard :ui="{ ...FILL_CARD_UI, header: 'shrink-0' }">
+                                        <template #header>
+                                            <div class="flex items-center gap-2">
+                                                <UTabs v-model="eventCategory"
+                                                       :items="eventTabs"
+                                                       variant="pill"
+                                                       size="xs"
+                                                       :content="false" />
+                                                <span v-if="!eventsStore.loading"
+                                                      class="ml-auto text-sm text-muted">{{ eventCaption }}</span>
+                                            </div>
+                                        </template>
                                         <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
                                                                :events="eventsStore.events"
                                                                :loading="eventsStore.loading"
                                                                :loading-more="eventsStore.loadingMore"
                                                                :has-more="eventsStore.hasMore"
                                                                :load-more="eventsStore.loadMore" />
-                                    </div>
+                                    </UCard>
                                 </template>
                             </USplitter>
                         </template>
