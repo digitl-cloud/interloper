@@ -13,6 +13,7 @@ from interloper_assets.campaign_manager_360 import constants
     name="Campaign Manager 360",
     icon="icon:cm360",
     tags=["Advertising"],
+    maturity="beta",
 )
 class CampaignManager360Connection(il.Connection):
     """Campaign Manager 360 API connection with service account auth."""

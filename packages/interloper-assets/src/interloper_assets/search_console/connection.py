@@ -13,6 +13,7 @@ from interloper_assets.search_console import constants
     name="Search Console",
     icon="devicon:google",
     tags=["SEO"],
+    maturity="beta",
 )
 class SearchConsoleConnection(il.Connection):
     """Google Search Console API connection with service account auth."""

@@ -30,6 +30,7 @@ _BASE_URL = f"https://googleads.googleapis.com/{API_VERSION}"
             "developer_token": "developer_token",
         },
     ),
+    maturity="beta",
 )
 class GoogleAdsConnection(il.RefreshTokenOAuthConnection):
     """Google Ads API connection using the Google Ads Python client library."""

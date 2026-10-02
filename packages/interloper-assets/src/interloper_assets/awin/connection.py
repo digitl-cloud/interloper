@@ -10,6 +10,7 @@ from interloper_assets.awin.constants import BASE_URL
     name="Awin",
     icon="icon:awin",
     tags=["Affiliate"],
+    maturity="beta",
 )
 class AwinConnection(il.Connection):
     """Awin affiliate network API connection with bearer token auth."""

@@ -10,6 +10,7 @@ from interloper_assets.usercentrics import constants
     name="Usercentrics",
     icon="fluent:connector-24-filled",
     tags=["Analytics"],
+    maturity="beta",
 )
 class UsercentricsConnection(il.Connection):
     """Usercentrics API connection with API key auth."""

@@ -61,6 +61,7 @@ async def _paginate(client: il.AsyncRESTClient, path: str, params: dict[str, Any
     tags=["Social Media"],
     icon="logos:facebook",
     normalizer=DataFrameNormalizer(flatten_max_level=1),
+    maturity="beta",
 )
 class FacebookInsights(il.Source):
     """Facebook Page and Post Insights integration."""

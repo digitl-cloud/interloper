@@ -13,6 +13,7 @@ from interloper_assets.display_video_360 import constants
     name="Display & Video 360",
     icon="icon:dv360",
     tags=["Advertising"],
+    maturity="beta",
 )
 class DisplayVideo360Connection(il.Connection):
     """Display & Video 360 API connection using Google service account credentials."""

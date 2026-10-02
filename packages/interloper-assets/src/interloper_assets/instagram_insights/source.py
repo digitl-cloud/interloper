@@ -46,6 +46,7 @@ async def _paginate(client: il.AsyncRESTClient, path: str, params: dict[str, Any
     tags=["Social Media"],
     icon="skill-icons:instagram",
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class InstagramInsights(il.Source):
     """Instagram Business and Creator account insights integration."""

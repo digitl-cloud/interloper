@@ -57,6 +57,7 @@ class _Transaction:
     name="Microsoft Fabric Warehouse",
     icon="icon:fabric",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class FabricWarehouseDestination(DatabaseDestination):
     """Microsoft Fabric Warehouse destination.

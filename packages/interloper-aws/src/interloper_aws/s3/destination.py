@@ -18,6 +18,7 @@ from interloper_aws.connection import AWSConnection
     name="Amazon S3",
     icon="icon:s3",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class S3Destination(ObjectStoreDestination):
     """Amazon S3 destination.

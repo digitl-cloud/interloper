@@ -17,6 +17,7 @@ _Row = dict[str, Any]
     tags=["Advertising"],
     icon="devicon:google",
     normalizer=DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True),
+    maturity="beta",
 )
 class SearchAds360(il.Source):
     """Search Ads 360 advertising platform integration."""

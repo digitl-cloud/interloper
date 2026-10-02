@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
     tags=["Advertising"],
     icon="icon:teads",
     normalizer=DataFrameNormalizer(replace_empty_strings=True),
+    maturity="beta",
 )
 class Teads(il.Source):
     """Teads advertising platform integration."""

@@ -17,6 +17,7 @@ _SYSTEM_SCHEMAS = ("information_schema", "pg_catalog")
     name="DuckDB",
     icon="icon:duckdb",
     tags=["Database"],
+    maturity="alpha",
 )
 class DuckDBConnection(Connection):
     """Connection resource opening a DuckDB database.

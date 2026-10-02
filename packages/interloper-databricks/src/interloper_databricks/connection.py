@@ -56,6 +56,7 @@ class _TokenAuth(httpx2.Auth):
     name="Databricks",
     icon="icon:databricks",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class DatabricksConnection(Connection):
     """Connection resource holding Databricks workspace credentials.

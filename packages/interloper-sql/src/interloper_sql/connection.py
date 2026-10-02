@@ -16,6 +16,7 @@ from sqlalchemy.engine import Engine
     name="SQL database",
     icon="icon:sql",
     tags=["Database"],
+    maturity="alpha",
 )
 class SQLConnection(Connection):
     """Connection resource holding the URL of a SQL database.

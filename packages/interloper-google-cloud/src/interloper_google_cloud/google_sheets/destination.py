@@ -164,6 +164,7 @@ class _SheetsAPI:
     name="Google Sheets",
     icon="icon:google-sheets",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class GoogleSheetsDestination(DatabaseDestination):
     """Google Sheets destination.

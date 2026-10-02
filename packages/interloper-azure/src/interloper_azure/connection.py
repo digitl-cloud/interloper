@@ -55,6 +55,7 @@ class _CredentialAuth(httpx2.Auth):
     name="Microsoft Azure",
     icon="icon:azure",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class AzureConnection(Connection):
     """Connection resource holding a Microsoft Entra service principal.

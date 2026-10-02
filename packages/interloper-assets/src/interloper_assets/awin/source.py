@@ -109,6 +109,7 @@ async def get_advertiser_reports_by_publisher(
     tags=["Affiliate"],
     icon="icon:awin",
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class Awin(il.Source):
     """Awin affiliate network integration for transaction and publisher reporting."""

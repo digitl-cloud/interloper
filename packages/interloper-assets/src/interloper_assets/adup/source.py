@@ -38,6 +38,7 @@ async def get_report(client: il.AsyncRESTClient, report_type: str, start_date: d
     tags=["Advertising"],
     icon="icon:adup",
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class Adup(il.Source):
     """Adup advertising platform integration."""

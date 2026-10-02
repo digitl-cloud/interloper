@@ -17,6 +17,7 @@ from snowflake.connector import SnowflakeConnection as Session
     name="Snowflake",
     icon="icon:snowflake",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class SnowflakeConnection(Connection):
     """Connection resource holding Snowflake credentials.

@@ -74,6 +74,7 @@ class _ServiceAccountAuth(il.OAuth2Auth):
     name="Search Ads 360",
     icon="devicon:google",
     tags=["Advertising"],
+    maturity="beta",
 )
 class SearchAds360Connection(il.Connection):
     """Search Ads 360 Reporting API connection using Google service account credentials.

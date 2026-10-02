@@ -50,6 +50,7 @@ class _Transaction:
     name="DuckDB",
     icon="icon:duckdb",
     tags=["Database"],
+    maturity="alpha",
 )
 class DuckDBDestination(DatabaseDestination):
     """DuckDB destination.

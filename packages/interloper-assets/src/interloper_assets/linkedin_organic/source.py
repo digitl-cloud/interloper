@@ -76,6 +76,7 @@ def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]
         epoch_columns=["time_range_start", "time_range_end"],
     ),
     icon="devicon:linkedin",
+    maturity="beta",
 )
 class LinkedinOrganic(il.Source):
     """LinkedIn Organization page organic analytics integration."""
