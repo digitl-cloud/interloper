@@ -78,6 +78,7 @@ _ENTITY_NORMALIZER = PinterestEntityNormalizer(
     tags=["Advertising"],
     icon="logos:pinterest",
     normalizer=_REPORT_NORMALIZER,
+    maturity="beta",
 )
 class PinterestAds(il.Source):
     """Pinterest Ads advertising platform integration."""

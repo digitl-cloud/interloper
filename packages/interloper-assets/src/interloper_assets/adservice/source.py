@@ -53,6 +53,7 @@ async def get_report(
     icon="carbon:analytics",
     # Adservice returns snake_case fields already; the normalizer coerces to a frame.
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class Adservice(il.Source):
     """Adservice advertising platform integration."""

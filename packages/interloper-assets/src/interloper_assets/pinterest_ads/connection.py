@@ -32,6 +32,7 @@ class PinterestRefreshTokenAuth(il.OAuth2RefreshTokenAuth):
     icon="logos:pinterest",
     tags=["Advertising"],
     oauth=il.OAuthConfig("pinterest", scope="ads:read"),
+    maturity="beta",
 )
 class PinterestAdsConnection(il.RefreshTokenOAuthConnection):
     """Pinterest Ads API connection with OAuth2 refresh token auth."""

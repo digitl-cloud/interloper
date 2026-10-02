@@ -14,6 +14,7 @@ from interloper_assets.facebook_insights import constants
         "facebook",
         scope="pages_show_list,pages_read_engagement,pages_read_user_content,read_insights",
     ),
+    maturity="beta",
 )
 class FacebookInsightsConnection(il.RefreshTokenOAuthConnection):
     """Facebook Insights API connection with OAuth2 refresh token auth.

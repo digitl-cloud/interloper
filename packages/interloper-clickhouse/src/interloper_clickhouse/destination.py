@@ -41,6 +41,7 @@ _STAGING_SETTINGS = {"max_partitions_per_insert_block": 0}
     name="ClickHouse",
     icon="icon:clickhouse",
     tags=["Database"],
+    maturity="alpha",
 )
 class ClickHouseDestination(DatabaseDestination):
     """ClickHouse destination.

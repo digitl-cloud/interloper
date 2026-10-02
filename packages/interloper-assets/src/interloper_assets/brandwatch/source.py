@@ -125,6 +125,7 @@ def _reshape(insights: dict[str, list], channel_id: str, fallback_date: dt.date)
     tags=["Social Media"],
     icon="fluent:connector-24-filled",
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class Brandwatch(il.Source):
     """Brandwatch (Falcon.io) social media analytics integration."""

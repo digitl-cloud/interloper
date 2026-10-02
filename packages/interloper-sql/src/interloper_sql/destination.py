@@ -33,6 +33,7 @@ _BATCH_SIZE = 1000
     name="SQL database",
     icon="icon:sql",
     tags=["Database"],
+    maturity="alpha",
 )
 class SQLDestination(DatabaseDestination):
     """SQL database destination.

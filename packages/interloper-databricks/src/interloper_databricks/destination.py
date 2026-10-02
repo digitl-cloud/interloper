@@ -99,6 +99,7 @@ class _Staged:
     name="Databricks",
     icon="icon:databricks",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class DatabricksDestination(DatabaseDestination):
     """Databricks destination writing Delta tables in Unity Catalog through a SQL warehouse.

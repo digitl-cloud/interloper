@@ -10,6 +10,7 @@ from interloper_assets.adup import constants
     name="Adup",
     icon="icon:adup",
     tags=["Advertising"],
+    maturity="beta",
 )
 class AdupConnection(il.Connection):
     """Adup API connection with OAuth2 client credentials."""

@@ -10,6 +10,7 @@ from interloper_assets.brandwatch import constants
     name="Brandwatch",
     icon="fluent:connector-24-filled",
     tags=["Social Media"],
+    maturity="beta",
 )
 class BrandwatchConnection(il.Connection):
     """Brandwatch (Falcon.io) Measure API connection with API-key auth."""

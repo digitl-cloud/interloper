@@ -19,6 +19,7 @@ _SYSTEM_DATABASES = ("INFORMATION_SCHEMA", "information_schema", "system")
     name="ClickHouse",
     icon="icon:clickhouse",
     tags=["Database"],
+    maturity="alpha",
 )
 class ClickHouseConnection(Connection):
     """Connection resource holding the address of a ClickHouse server and a user's credentials.

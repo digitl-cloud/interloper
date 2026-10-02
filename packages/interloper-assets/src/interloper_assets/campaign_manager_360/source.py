@@ -173,6 +173,7 @@ def _list_remarketing_lists(service: Any, profile_id: str, advertiser_id: str) -
     tags=["Advertising"],
     icon="icon:cm360",
     normalizer=CampaignManager360Normalizer(snake_case_digits=True, flatten_max_level=2),
+    maturity="beta",
 )
 class CampaignManager360(il.Source):
     """Campaign Manager 360 advertising platform integration."""

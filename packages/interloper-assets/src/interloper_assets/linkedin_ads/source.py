@@ -95,6 +95,7 @@ def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]
         epoch_columns=["run_schedule_start", "run_schedule_end"],
     ),
     icon="devicon:linkedin",
+    maturity="beta",
 )
 class LinkedinAds(il.Source):
     """LinkedIn Ads advertising platform integration."""

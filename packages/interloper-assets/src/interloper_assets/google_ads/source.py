@@ -15,6 +15,7 @@ _Row = dict[str, Any]
     tags=["Advertising"],
     icon="logos:google-ads",
     normalizer=DataFrameNormalizer(flatten_max_level=3, drop_na_columns=True),
+    maturity="beta",
 )
 class GoogleAds(il.Source):
     """Google Ads advertising platform integration."""

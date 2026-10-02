@@ -10,6 +10,7 @@ from interloper_assets.teads import constants
     name="Teads",
     icon="icon:teads",
     tags=["Advertising"],
+    maturity="beta",
 )
 class TeadsConnection(il.Connection):
     """Teads API connection with API key auth."""

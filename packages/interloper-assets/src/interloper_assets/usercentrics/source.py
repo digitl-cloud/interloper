@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
     tags=["Privacy & Consent"],
     icon="fluent:connector-24-filled",
     normalizer=DataFrameNormalizer(replace_empty_strings=True),
+    maturity="beta",
 )
 class Usercentrics(il.Source):
     """Usercentrics consent management analytics integration."""

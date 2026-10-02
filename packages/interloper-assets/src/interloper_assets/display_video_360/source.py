@@ -164,6 +164,7 @@ def _list_audiences(dv_client: Any, scope: dict[str, str]) -> list[_Record]:
     # Partner objects nest config two levels deep (dataAccessConfig.sdfConfig.*);
     # digit splitting maps dv360ToCm... -> dv_360_to_cm_... onto the schema fields.
     normalizer=DisplayVideo360Normalizer(snake_case_digits=True, flatten_max_level=2),
+    maturity="beta",
 )
 class DisplayVideo360(il.Source):
     """Display & Video 360 advertising platform integration."""

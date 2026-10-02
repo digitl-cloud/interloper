@@ -65,6 +65,7 @@ class _Staged:
     name="Snowflake",
     icon="icon:snowflake",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class SnowflakeDestination(DatabaseDestination):
     """Snowflake destination.

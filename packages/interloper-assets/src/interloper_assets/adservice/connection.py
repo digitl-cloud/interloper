@@ -9,6 +9,7 @@ from pydantic_settings import SettingsConfigDict
     name="Adservice",
     icon="carbon:analytics",
     tags=["Advertising"],
+    maturity="beta",
 )
 class AdserviceConnection(il.Connection):
     """Adservice API connection with API key auth."""

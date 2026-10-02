@@ -14,6 +14,7 @@ from interloper_assets.linkedin_organic import constants
         "linkedin",
         scope="r_organization_social,rw_organization_admin,r_organization_social_feed",
     ),
+    maturity="beta",
 )
 class LinkedinOrganicConnection(il.RefreshTokenOAuthConnection):
     """LinkedIn Organic API connection with OAuth2 refresh token auth."""

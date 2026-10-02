@@ -16,6 +16,7 @@ from pydantic_settings import SettingsConfigDict
     name="AWS",
     icon="icon:aws",
     tags=["Cloud"],
+    maturity="alpha",
 )
 class AWSConnection(Connection):
     """Connection resource holding AWS credentials.

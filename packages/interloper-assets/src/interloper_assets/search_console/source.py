@@ -15,6 +15,7 @@ _Record = dict[str, Any]
     tags=["SEO"],
     icon="devicon:google",
     normalizer=DataFrameNormalizer(),
+    maturity="beta",
 )
 class SearchConsole(il.Source):
     """Google Search Console integration for search analytics data."""

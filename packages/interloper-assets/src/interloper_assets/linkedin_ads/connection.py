@@ -11,6 +11,7 @@ from interloper_assets.linkedin_ads import constants
     icon="devicon:linkedin",
     tags=["Advertising"],
     oauth=il.OAuthConfig("linkedin", scope="r_ads,r_ads_reporting"),
+    maturity="beta",
 )
 class LinkedinAdsConnection(il.RefreshTokenOAuthConnection):
     """LinkedIn Ads API connection with OAuth2 refresh token auth."""
