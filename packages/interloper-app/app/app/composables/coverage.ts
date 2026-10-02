@@ -20,7 +20,7 @@ export const CELL = {
 /** Status index order: a day's cell takes the colour at its `cellStatus`. */
 export const CELL_ORDER = ['empty', 'failedLow', 'failed', 'partialLow', 'partial', 'covered'] as const
 
-/** What a day's jobs delivered, as an index into `CELL_ORDER`. */
+/** What a day's sources delivered, as an index into `CELL_ORDER`. */
 export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5 {
     if (!day) return 0
     if (day.failed > 0) return day.failed / day.expected >= 0.5 ? 2 : 1
@@ -29,16 +29,16 @@ export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5
     return ratio >= 0.6 ? 4 : 3
 }
 
-/** Sum the coverage rows of the selected jobs per date, and phrase the window's summary. */
+/** Sum the coverage rows of the selected sources per date, and phrase the window's summary. */
 export function useCoverageCalendar(
     coverage: MaybeRefOrGetter<Coverage | null>,
-    jobFilter: MaybeRefOrGetter<string>,
+    sourceFilter: MaybeRefOrGetter<string>,
 ) {
     const byDate = computed(() => {
         const map = new Map<string, DayAggregate>()
-        const filter = toValue(jobFilter)
+        const filter = toValue(sourceFilter)
         for (const day of toValue(coverage)?.days ?? []) {
-            if (day.expected <= 0 || (filter !== 'all' && day.job_id !== filter)) continue
+            if (day.expected <= 0 || (filter !== 'all' && day.source_id !== filter)) continue
             const agg = map.get(day.date) ?? { expected: 0, covered: 0, failed: 0 }
             agg.expected += day.expected
             agg.covered += day.covered

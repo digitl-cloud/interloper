@@ -12,13 +12,13 @@ const overviewStore = useOverviewStore()
 const { coverage, coverageMonths, coverageLoading, coverageError } = storeToRefs(overviewStore)
 const colorMode = useColorMode()
 
-const jobFilter = ref('all')
+const sourceFilter = ref('all')
 const selected = ref<string | null>(null)
-const { byDate, summary } = useCoverageCalendar(coverage, jobFilter)
+const { byDate, summary } = useCoverageCalendar(coverage, sourceFilter)
 
-const jobOptions = computed(() => [
-    { label: 'All jobs', value: 'all' },
-    ...(coverage.value?.jobs ?? []).map(j => ({ label: j.name, value: j.id })),
+const sourceOptions = computed(() => [
+    { label: 'All sources', value: 'all' },
+    ...(coverage.value?.sources ?? []).map(s => ({ label: s.name, value: s.id })),
 ])
 const windowItems = ([3, 6, 12] as CoverageMonths[]).map(m => ({ label: `${m}m`, value: String(m) }))
 const activeWindow = computed({
@@ -142,7 +142,7 @@ function onClick(params: any) {
 }
 
 watch(coverage, (value) => {
-    if (jobFilter.value !== 'all' && !value?.jobs.some(j => j.id === jobFilter.value)) jobFilter.value = 'all'
+    if (sourceFilter.value !== 'all' && !value?.sources.some(s => s.id === sourceFilter.value)) sourceFilter.value = 'all'
 })
 
 watch(coverage, (value) => {
@@ -156,8 +156,8 @@ watch(coverage, (value) => {
     <OverviewSection title="Partition coverage"
                      :meta="summary">
         <template #actions>
-            <USelect v-model="jobFilter"
-                     :items="jobOptions"
+            <USelect v-model="sourceFilter"
+                     :items="sourceOptions"
                      size="xs"
                      class="w-44" />
             <UTabs v-model="activeWindow"
@@ -197,13 +197,13 @@ watch(coverage, (value) => {
                     <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-warning" />Partially covered</span>
                     <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-error" />Failed</span>
                     <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-elevated ring-1 ring-inset ring-default" />Not expected</span>
-                    <span class="ml-auto">Click a day to see it per job</span>
+                    <span class="ml-auto">Click a day to see it per source</span>
                 </div>
             </div>
             <OverviewCoverageDayDetail v-if="coverage && selected"
                                        :date="selected"
                                        :coverage="coverage"
-                                       :job-filter="jobFilter" />
+                                       :source-filter="sourceFilter" />
         </div>
     </OverviewSection>
 </template>

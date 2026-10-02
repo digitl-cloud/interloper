@@ -88,24 +88,60 @@ Rows stay what `useRunTimelineRows` produces today: jobs, ad-hoc asset runs, con
 
 ### 4. Partition coverage
 
-A calendar heatmap (ECharts `calendar` + `heatmap`), keyed by **partition date**, with a job
-filter ("All jobs" or one job) and a 3, 6 or 12 month window (default 6). Cell size shrinks as
-the window grows, following the design (22, 15, 11 px).
+A calendar heatmap (ECharts `calendar` + `heatmap`), keyed by **partition date**, with a source
+filter ("All sources" or one group) and a 3, 6 or 12 month window (default 3). Cell size shrinks
+as the window grows, following the design (22, 15, 11 px).
 
-Per job, per day:
+Coverage is a property of an asset's data, not of what triggered a run: it is counted per asset
+and partition from runs of **any** target (job, source, asset, backfill), so a manual asset re-run
+heals a day and a source with no job still shows its history.
 
-- **Assets counted**: those the job executed at least once in the window.
-- **Days counted**: from the job's first attempted partition in the window to the last day of the
-  last period that closed before today (yesterday for a daily or hourly job, the end of last month
-  for a monthly one), or to its last attempted partition when later (the open period counts once
-  attempted). A disabled job stops at its last attempted partition.
-- **Granularity**: an hourly partition counts toward its day (24 per asset per day; today, the
-  hours elapsed since midnight UTC, at least one, or the hours attempted when more); a monthly or
-  yearly partition counts toward every day it spans, up to today.
-- **expected** = asset-partitions for the day; **covered** = those with a successful execution in
-  any run; **failed** = attempted, never succeeded; **missing** = the rest.
+- **Assets counted**: the organisation's asset rows whose catalog definition is partitioned
+  (`AssetDefinition.partitioning`). An asset whose definition no longer resolves (drift) is left
+  out.
+- **Group**: an owned asset counts toward its parent source; a standalone asset is its own group.
+  A group is named by its row's `name`, else its `key`, and has kind `source` or `asset`.
+- **Evidence**: an asset-partition is **covered** once any execution succeeded, **failed** when an
+  execution failed and none succeeded. One attempted but only in flight (queued, running) or
+  canceled is neither, and reads as missing.
+- **Expected range per asset**, in the asset's own granularity, then rolled onto days:
+  - start: the declared `partitioning.start` when set, else the first day of the earliest
+    attempted partition (all-time, not only the window);
+  - end: the last day of the latest attempted partition (all-time). When the asset is
+    **scheduled** (an enabled job targets it or its parent source), enabled, and under an enabled
+    parent source (a standalone asset is its own parent here), the end is pushed
+    to the last period closed before today if that is later: yesterday for a daily asset, the end
+    of last month or year for a monthly or yearly one, the hours elapsed today for an hourly one;
+  - clipped to the window and to today. No evidence and no declared start: nothing expected. An
+    unscheduled or disabled asset, or one under a disabled source, expects nothing past its last
+    evidence. Days in the range with
+    nothing attempted are missing.
+- **Granularity**: an hourly partition counts toward its day (24 slots per asset; on the day of a
+  declared start, only the hours from that start; today, only the hours elapsed since midnight
+  UTC; at least one); a day partition counts once; a monthly or yearly
+  partition counts toward every day it spans, up to today. A day's expected count is raised to
+  the partitions attempted on it when more.
+- Per day, an asset contributes **expected** slots, **covered**, **failed** and the greatest
+  failed run id; these are summed per group and day, keeping the greatest failed run id.
+  **missing** = expected minus covered minus failed.
 
-Cell colour for a day (summed over the filtered jobs), matching the design:
+`GET /overview/coverage?since=YYYY-MM-DD&until=YYYY-MM-DD` answers:
+
+```json
+{
+  "since": "2026-07-01",
+  "until": "2026-10-02",
+  "sources": [{"id": "uuid", "name": "Shop", "kind": "source"}],
+  "days": [
+    {"date": "2026-09-29", "source_id": "uuid", "expected": 5, "covered": 0, "failed": 5, "failed_run_id": "uuid-or-null"}
+  ]
+}
+```
+
+`sources` lists every group with at least one day, ordered by name; `days` holds one entry per
+group and day with anything expected, ordered by group then date.
+
+Cell colour for a day (summed over the filtered groups), matching the design:
 
 - nothing expected: neutral with an inset border ("Not expected")
 - any failed: red, stronger with the failed share
@@ -114,10 +150,13 @@ Cell colour for a day (summed over the filtered jobs), matching the design:
 
 Summary line: "{covered %} of {expected} partitions · {n} days with gaps · {n} with failures".
 
-Clicking a day opens the detail panel under the calendar: per job a covered/failed bar and a
-count, then one action: "Complete", "Open run" (a sample failed run of that job and day), or, for
-editors when there are gaps without failures, "Backfill", which opens `RunModal` preset to that
-job and day.
+Clicking a day opens the detail panel under the calendar, one row per group with a kind icon
+(source, or standalone asset), its covered/failed bar and its count. Rows with problems come
+first, ordered by failed (descending), then missing (descending), then name; at most 5 problem
+rows show, and the rest fold behind a note ("N more with gaps · M complete") with "Show all" /
+"Show less". Each row carries one action: "Open run" (a sample failed run of that group and day),
+"Run" (editors, when there are gaps without failures: opens `RunModal` on that group, on that day
+for a daily group; a non-daily group's modal opens on its own default period), or "Complete".
 
 ### 5. Coming up / Just happened
 
@@ -174,9 +213,15 @@ the page:
   route), the attention list the failed stacks completed in that window, and "Just happened" the
   latest completed stacks, most recently completed first.
 - `events.coverage_rows(org_id, since, until)`: the org-wide sibling of `partition_coverage`:
-  one row per job, partition, asset with whether it ever succeeded, whether any execution
-  failed, plus a failed run id. An attempted asset-partition that neither succeeded nor failed
-  (still in flight, or canceled) stays missing rather than failed.
+  one row per asset and partition overlapping the window, from runs of any target, with whether
+  it ever succeeded, whether any execution failed, and the greatest failed run id. An attempted
+  asset-partition that neither succeeded nor failed (still in flight, or canceled) stays missing
+  rather than failed.
+- `events.partition_bounds(org_id)`: per asset, the first day of its earliest and the last day of
+  its latest attempted partition, all-time, from runs of any target, in one grouped query.
+- `components.asset_partitionings(org_id)`: each partitioned asset row's `TimePartitionConfig`
+  (granularity, declared start) from its catalog definition, an owned asset resolving through
+  its parent source; drifted rows are skipped.
 - `events.latest_by_component(org_id, event_types=, since=)`: the latest `hook_fired` /
   `hook_failed` event per hook, bounded to the last 30 days.
 - `components.job_partition_granularities(job_ids)`: each job's target granularity in one read.
