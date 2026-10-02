@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v0.99.0 (2026-10-02)
+
+### Bug Fixes
+
+- **core**: Keep a class-body key when a decorator sets field defaults
+  ([`1ae5ec4`](https://github.com/digitl-cloud/interloper/commit/1ae5ec48a1cce1e86d9a23a2a7e49f8564f462b0))
+
+### Features
+
+- **app**: Pin the maturity badge to the card's top-right corner
+  ([`bfa5b1d`](https://github.com/digitl-cloud/interloper/commit/bfa5b1db47a7952a359e74801fb781c2516a9317))
+
+- **app**: Put the run page on cards and make the overview KPI tiles links
+  ([`4a9c35a`](https://github.com/digitl-cloud/interloper/commit/4a9c35ac0798b157a234bb29044767d55ac50327))
+
+- **app**: Restyle to one dashboard skeleton on default Nuxt UI components
+  ([`2c1df37`](https://github.com/digitl-cloud/interloper/commit/2c1df379336e8e85950d62a6259a8e904754ae03))
+
+- **core**: Validate every class-level setting where it is written
+  ([`c107e54`](https://github.com/digitl-cloud/interloper/commit/c107e54e0a3068e0c7617e0f3bebfbb00360899c))
+
+
 ## v0.98.0 (2026-10-02)
 
 ### Features
