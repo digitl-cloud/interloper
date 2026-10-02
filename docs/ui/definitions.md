@@ -136,8 +136,8 @@ user holding an account id from the warehouse or the vendor finds the source by 
 
 A kind with a `state_model` publishes `state_schema`. List pages add one column per property:
 jobs show `next_run_at` and `last_run_at`, connections show `next_renewal_at`, `last_renewed_at`
-and `last_renewal_error`, hooks show `last_fired_at`. Properties flagged `x-hidden` are plumbing
-and stay out of the table.
+and `last_renewal_error`, hooks show `last_fired_at` and `last_error`. Properties flagged
+`x-hidden` are plumbing and stay out of the table.
 
 ## Actions the definition advertises
 

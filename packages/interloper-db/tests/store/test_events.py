@@ -16,7 +16,7 @@ from sqlmodel import Session
 from interloper_db import engine as engine_module
 from interloper_db.models import Event, Execution, Run
 from interloper_db.store import Store
-from interloper_db.store.events import EventStore, PartitionBounds
+from interloper_db.store.events import EventStore
 
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 _OTHER_RUN_ID = uuid4()
@@ -756,22 +756,18 @@ def _asset_execution(run_id: UUID, asset_id: UUID, status: str) -> None:
 
 @pytest.mark.usefixtures("run_tables")
 class TestCoverageRows:
-    """Org-wide coverage: every asset's partitions overlapping a day window, from runs of any target."""
+    """Org-wide coverage: every asset's time partitions, all-time, from runs of any target."""
 
-    def test_every_granularity_overlapping_the_window_is_read(self, store: Store) -> None:
+    def test_every_time_granularity_of_every_period_is_read(self, store: Store) -> None:
         job, asset = uuid4(), uuid4()
-        day = _run(job_id=job, partition_key="2026-07-02")
-        hour = _run(job_id=job, partition_key="2026-07-01T13")
-        month = _run(job_id=job, partition_key="2026-06")
-        year = _run(job_id=job, partition_key="2026")
-        outside_day = _run(job_id=job, partition_key="2026-07-03")
-        outside_month = _run(job_id=job, partition_key="2026-05")
-        for run in (day, hour, month, year, outside_day, outside_month):
-            _asset_execution(run, asset, "success")
+        keys = ["2026-07-02", "2026-07-01T13", "2026-06", "2026", "2024-01-05", "2019"]
+        for key in keys:
+            _asset_execution(_run(job_id=job, partition_key=key), asset, "success")
+        _asset_execution(_run(job_id=job, partition_key="eu"), asset, "success")
 
-        rows = store.events.coverage_rows(_ORG_ID, dt.date(2026, 6, 30), dt.date(2026, 7, 2))
+        rows = store.events.coverage_rows(_ORG_ID)
 
-        assert sorted(r.partition_key for r in rows) == ["2026", "2026-06", "2026-07-01T13", "2026-07-02"]
+        assert sorted(r.partition_key for r in rows) == sorted(keys)
         assert all(r.asset_id == asset and r.succeeded for r in rows)
 
     def test_runs_of_every_target_fold_into_one_row_per_asset_and_partition(self, store: Store) -> None:
@@ -783,7 +779,7 @@ class TestCoverageRows:
         _asset_execution(by_the_asset, asset, "success")
         _asset_execution(by_a_deleted_target, asset, "failed")
 
-        [row] = store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 1))
+        [row] = store.events.coverage_rows(_ORG_ID)
 
         assert (row.asset_id, row.partition_key, row.succeeded, row.failed) == (asset, "2026-07-01", True, True)
         assert row.failed_run_id == max(by_job, by_a_deleted_target)
@@ -797,9 +793,7 @@ class TestCoverageRows:
         _asset_execution(healed, asset, "success")
         _asset_execution(still_failed, asset, "failed")
 
-        rows = {
-            r.partition_key: r for r in store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 2))
-        }
+        rows = {r.partition_key: r for r in store.events.coverage_rows(_ORG_ID)}
 
         assert rows["2026-07-01"].succeeded and rows["2026-07-01"].failed_run_id == failed
         assert not rows["2026-07-02"].succeeded and rows["2026-07-02"].failed_run_id == still_failed
@@ -810,9 +804,7 @@ class TestCoverageRows:
         _asset_execution(_run(job_id=job, partition_key="2026-07-02"), asset, "running")
         _asset_execution(_run(job_id=job, partition_key="2026-07-03"), asset, "canceled")
 
-        rows = {
-            r.partition_key: r for r in store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 3))
-        }
+        rows = {r.partition_key: r for r in store.events.coverage_rows(_ORG_ID)}
 
         assert {key: (row.succeeded, row.failed) for key, row in rows.items()} == {
             "2026-07-01": (False, True),
@@ -825,118 +817,4 @@ class TestCoverageRows:
         _asset_execution(_run(job_id=uuid4(), partition_key=None), asset, "success")
         _asset_execution(_run(org_id=uuid4(), job_id=uuid4(), partition_key="2026-07-01"), asset, "success")
 
-        assert store.events.coverage_rows(_ORG_ID, dt.date(2026, 7, 1), dt.date(2026, 7, 2)) == []
-
-
-@pytest.mark.usefixtures("run_tables")
-class TestPartitionBounds:
-    """Per asset, the days its attempted partitions span, all-time and from runs of any target."""
-
-    def test_the_span_runs_from_the_earliest_start_to_the_latest_end(self, store: Store) -> None:
-        asset, other = uuid4(), uuid4()
-        _asset_execution(_run(job_id=uuid4(), partition_key="2024-02-03"), asset, "failed")
-        _asset_execution(_run(job_id=asset, partition_key="2026-07-10"), asset, "running")
-        _asset_execution(_run(job_id=None, partition_key="2026-07-01"), asset, "success")
-        _asset_execution(_run(job_id=None, partition_key="2026-07-01T05"), other, "success")
-
-        bounds = store.events.partition_bounds(_ORG_ID)
-
-        assert bounds == {
-            asset: PartitionBounds(first=dt.date(2024, 2, 3), last=dt.date(2026, 7, 10)),
-            other: PartitionBounds(first=dt.date(2026, 7, 1), last=dt.date(2026, 7, 1)),
-        }
-
-    def test_a_coarser_key_that_ends_later_sets_the_last_day(self, store: Store) -> None:
-        asset = uuid4()
-        _asset_execution(_run(partition_key="2026-08-15"), asset, "success")
-        _asset_execution(_run(partition_key="2026-08"), asset, "success")
-        _asset_execution(_run(partition_key="2026-07-31T23"), asset, "success")
-
-        assert store.events.partition_bounds(_ORG_ID)[asset] == PartitionBounds(
-            first=dt.date(2026, 7, 31), last=dt.date(2026, 8, 31)
-        )
-
-    def test_unpartitioned_runs_and_other_orgs_stay_out(self, store: Store) -> None:
-        asset = uuid4()
-        _asset_execution(_run(partition_key=None), asset, "success")
-        _asset_execution(_run(org_id=uuid4(), partition_key="2026-07-01"), asset, "success")
-
-        assert store.events.partition_bounds(_ORG_ID) == {}
-
-
-class TestPartitionBoundsFromKeys:
-    """Keys of any granularity span whole days."""
-
-    def test_hourly_monthly_and_yearly_keys_span_their_days(self) -> None:
-        assert PartitionBounds.from_keys(["2026-08-12T23"]) == (dt.date(2026, 8, 12), dt.date(2026, 8, 12))
-        assert PartitionBounds.from_keys(["2026-02"]) == (dt.date(2026, 2, 1), dt.date(2026, 2, 28))
-        assert PartitionBounds.from_keys(["2025", "2026-03-04"]) == (dt.date(2025, 1, 1), dt.date(2026, 3, 4))
-
-    def test_no_keys_is_an_error(self) -> None:
-        with pytest.raises(ValueError, match="at least one key"):
-            PartitionBounds.from_keys([])
-
-
-class TestLatestByComponent:
-    """One event per component: its newest of the given types, other types and orgs dropped."""
-
-    def test_the_newest_event_of_the_types_is_kept(self, store: Store) -> None:
-        hook_a, hook_b, hook_c = uuid4(), uuid4(), uuid4()
-        low_id, high_id = UUID(int=1), UUID(int=2)
-        _seed(
-            [
-                Event(id=uuid4(), org_id=_ORG_ID, component_id=None, event_type="hook_fired", timestamp=_BASE_TS),
-                Event(id=low_id, org_id=_ORG_ID, component_id=hook_c, event_type="hook_fired", timestamp=_BASE_TS),
-                Event(id=high_id, org_id=_ORG_ID, component_id=hook_c, event_type="hook_failed", timestamp=_BASE_TS),
-                Event(id=uuid4(), org_id=_ORG_ID, component_id=hook_a, event_type="hook_failed", timestamp=_BASE_TS),
-                Event(
-                    id=uuid4(),
-                    org_id=_ORG_ID,
-                    component_id=hook_a,
-                    event_type="hook_fired",
-                    timestamp=_BASE_TS + timedelta(minutes=1),
-                ),
-                Event(
-                    id=uuid4(),
-                    org_id=_ORG_ID,
-                    component_id=hook_a,
-                    event_type="log",
-                    timestamp=_BASE_TS + timedelta(minutes=2),
-                ),
-                Event(id=uuid4(), org_id=_ORG_ID, component_id=hook_b, event_type="hook_failed", timestamp=_BASE_TS),
-                Event(id=uuid4(), org_id=uuid4(), component_id=uuid4(), event_type="hook_failed", timestamp=_BASE_TS),
-            ]
-        )
-
-        rows = store.events.latest_by_component(_ORG_ID, event_types=["hook_fired", "hook_failed"])
-
-        assert {(e.component_id, e.event_type) for e in rows} == {
-            (hook_a, "hook_fired"),
-            (hook_b, "hook_failed"),
-            (hook_c, "hook_failed"),
-        }
-        assert {e.id for e in rows if e.component_id == hook_c} == {high_id}
-        assert store.events.latest_by_component(uuid4(), event_types=["hook_fired"]) == []
-
-    def test_since_bounds_the_read(self, store: Store) -> None:
-        recent_hook, stale_hook = uuid4(), uuid4()
-        _seed(
-            [
-                Event(
-                    id=uuid4(),
-                    org_id=_ORG_ID,
-                    component_id=recent_hook,
-                    event_type="hook_fired",
-                    timestamp=_BASE_TS + timedelta(days=1),
-                ),
-                Event(
-                    id=uuid4(), org_id=_ORG_ID, component_id=stale_hook, event_type="hook_failed", timestamp=_BASE_TS
-                ),
-            ]
-        )
-
-        rows = store.events.latest_by_component(
-            _ORG_ID, event_types=["hook_fired", "hook_failed"], since=_BASE_TS + timedelta(hours=1)
-        )
-
-        assert [e.component_id for e in rows] == [recent_hook]
+        assert store.events.coverage_rows(_ORG_ID) == []

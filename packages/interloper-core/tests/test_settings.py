@@ -1,8 +1,9 @@
 """Tests for runtime settings."""
 
 import pytest
+from pydantic import ValidationError
 
-from interloper.settings import AgentSettings, AppSettings, AuthSettings, TelemetrySettings
+from interloper.settings import AgentSettings, AppSettings, AuthSettings, PostgresSettings, TelemetrySettings
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +16,24 @@ def _no_ambient_yaml(tmp_path, monkeypatch: pytest.MonkeyPatch):
     overrides the env vars under test.
     """
     monkeypatch.chdir(tmp_path)
+
+
+def test_postgres_statement_timeout_defaults_to_unset():
+    """No statement timeout unless configured, so existing deployments keep their behaviour."""
+    assert PostgresSettings().statement_timeout is None
+
+
+def test_postgres_statement_timeout_env_override(monkeypatch: pytest.MonkeyPatch):
+    """INTERLOPER_POSTGRES_STATEMENT_TIMEOUT reaches the nested postgres settings, in seconds."""
+    monkeypatch.setenv("INTERLOPER_POSTGRES_STATEMENT_TIMEOUT", "2.5")
+
+    assert AppSettings().postgres.statement_timeout == 2.5
+
+
+def test_postgres_statement_timeout_must_be_positive():
+    """Zero would disable the cap in Postgres, so it is rejected instead of silently meaning 'off'."""
+    with pytest.raises(ValidationError):
+        PostgresSettings(statement_timeout=0)
 
 
 def test_agent_settings_defaults():

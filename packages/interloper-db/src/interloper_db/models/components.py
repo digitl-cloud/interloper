@@ -142,6 +142,18 @@ class Component(SQLModel, table=True):
             return None
         return assume_utc(datetime.fromisoformat(value))
 
+    def state_text(self, key: str) -> str | None:
+        """Read a text value out of the row's machine-owned state.
+
+        Args:
+            key: The state key holding the text.
+
+        Returns:
+            The stored text, or ``None`` when the key is absent or empty.
+        """
+        value = (self.state or {}).get(key)
+        return str(value) if value else None
+
     @property
     def enabled(self) -> bool:
         """Whether the row's config leaves it enabled, which is the default.

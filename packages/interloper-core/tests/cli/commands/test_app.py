@@ -39,7 +39,13 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     Returns:
         Recorded bootstrap calls and the kwargs ``Services`` was built with.
     """
-    recorded: dict[str, Any] = {"ensure_database": [], "init_engine": [], "create_all": [], "services": []}
+    recorded: dict[str, Any] = {
+        "ensure_database": [],
+        "init_engine": [],
+        "statement_timeout": [],
+        "create_all": [],
+        "services": [],
+    }
 
     class FakeServices:
         def __init__(self, **kwargs: Any) -> None:
@@ -49,7 +55,12 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             recorded["ran"] = True
 
     monkeypatch.setattr(interloper_db, "ensure_database", lambda dsn: recorded["ensure_database"].append(dsn))
-    monkeypatch.setattr(interloper_db, "init_engine", lambda dsn: recorded["init_engine"].append(dsn))
+
+    def fake_init_engine(dsn: str, statement_timeout: float | None = None) -> None:
+        recorded["init_engine"].append(dsn)
+        recorded["statement_timeout"].append(statement_timeout)
+
+    monkeypatch.setattr(interloper_db, "init_engine", fake_init_engine)
     monkeypatch.setattr(interloper_db, "create_all", lambda *a: recorded["create_all"].append(a))
     monkeypatch.setattr(Catalog, "from_settings", classmethod(lambda cls: Catalog()))
     monkeypatch.setattr(interloper_db.Store, "from_settings", classmethod(lambda cls, catalog: object()))
@@ -117,6 +128,16 @@ class TestRegister:
 
 class TestCmdApp:
     """``interloper app``."""
+
+    def test_the_configured_statement_timeout_reaches_the_engine(
+        self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("INTERLOPER_POSTGRES_STATEMENT_TIMEOUT", "12.5")
+        _activate(api=True)
+
+        app_command._cmd_app(_parse("app"))
+
+        assert wiring["statement_timeout"] == [12.5]
 
     def test_no_enabled_service_is_a_clean_error(self, capsys: pytest.CaptureFixture[str]) -> None:
         _activate(api=False, cron=False, worker=False, reaper=False)

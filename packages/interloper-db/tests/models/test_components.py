@@ -121,6 +121,25 @@ class TestStateDatetime:
         assert row.state_datetime("last_run_at") is None
 
 
+class TestStateText:
+    """State text reads back as stored, absent or empty as None."""
+
+    def test_a_stamped_value_round_trips(self):
+        row = Component(org_id=_ORG, kind="hook", key="webhook_hook")
+        row.stamp_state(last_error="no route")
+
+        assert row.state_text("last_error") == "no route"
+
+    def test_a_cleared_or_absent_key_reads_none(self):
+        row = Component(org_id=_ORG, kind="hook", key="webhook_hook")
+        row.stamp_state(last_error=None)
+
+        assert row.state_text("last_error") is None
+        assert row.state_text("last_run_id") is None
+        empty = Component(org_id=_ORG, kind="hook", key="webhook_hook", state={"last_error": ""})
+        assert empty.state_text("last_error") is None
+
+
 class TestEnabled:
     """A row is enabled unless its config says otherwise."""
 

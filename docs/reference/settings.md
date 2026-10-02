@@ -61,7 +61,7 @@ and `interloper-mcp`.
 
 | Section | Prefix | Fields |
 |---------|--------|--------|
-| `postgres` | `INTERLOPER_POSTGRES_` | `host`, `port`, `user`, `password`, `database`; `dsn` property |
+| `postgres` | `INTERLOPER_POSTGRES_` | `host`, `port`, `user`, `password`, `database`, `statement_timeout`; `dsn` property |
 | `auth` | `INTERLOPER_AUTH_` | `google_client_id`, `google_client_secret`, `google_redirect_uri`, `cookie_secure`, `session_expiry_days`, `super_admin_emails`, `allowed_domains` |
 | `server` | `INTERLOPER_SERVER_` | `enabled`, `host`, `port` |
 | `cron` | `INTERLOPER_CRON_` | `enabled`, `reconcile_interval`, `max_execution_delay`, `batch_size` |
@@ -73,6 +73,11 @@ and `interloper-mcp`.
 | `agent` | `INTERLOPER_AGENT_` | `enabled`, `model` |
 | `mcp` | `INTERLOPER_MCP_` | `host`, `port`, `external_url`, `token`, `org_id` |
 | `quota` | `INTERLOPER_QUOTA_` | `max_sources`, `max_assets_per_source`, `max_successful_runs_per_month`, `max_backfill_partitions` |
+
+`postgres.statement_timeout` (`INTERLOPER_POSTGRES_STATEMENT_TIMEOUT`) is a number of seconds, unset by
+default. When set, `interloper-db` sends it as the libpq `statement_timeout` connection option, so the
+server cancels any statement of the process that runs longer. Unset leaves the server's own setting
+untouched; SQLite ignores it.
 
 ## YAML example
 

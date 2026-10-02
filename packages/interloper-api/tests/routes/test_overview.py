@@ -816,6 +816,23 @@ class TestComponents:
         assert rows["hook"]["total"] == 0
         assert [r["kind"] for r in rows.values()] == ["source", "asset", "destination", "connection", "job", "hook"]
 
+    def test_a_hook_fails_while_its_recent_last_firing_failed(
+        self, client: TestClient, store: Store, member: SimpleNamespace
+    ):
+        def hook(key: str, fired_at: dt.datetime, error: str | None) -> None:
+            created = store.components.create(
+                member.org_id, kind="hook", key="webhook_hook", name=key, config={"url": "https://example.test/x"}
+            )
+            store.components.stamp_state(created.id, last_fired_at=fired_at, last_error=error)
+
+        hook("failing", NOW - dt.timedelta(days=29), "no route")
+        hook("recovered", NOW - dt.timedelta(hours=1), None)
+        hook("stale", NOW - dt.timedelta(days=31), "no route")
+
+        rows = {r["kind"]: r for r in _overview(client)["components"]}
+
+        assert rows["hook"] == {"kind": "hook", "total": 3, "healthy": 2, "failing": 1, "attention": 0, "disabled": 0}
+
 
 class TestAuth:
     """The overview is for members holding at least the viewer role, and reads their organisation alone."""
@@ -876,7 +893,7 @@ class TestAuth:
         assert body["jobs"] == {"enabled": 0, "failing": 0}
         assert body["attention"] == [] and body["upcoming"] == [] and body["recent"] == []
         assert all(row["total"] == 0 for row in body["components"])
-        assert coverage["sources"] == [] and coverage["days"] == []
+        assert coverage["sources"] == []
 
 
 class TestCoverage:
@@ -923,16 +940,46 @@ class TestCoverage:
         """
         return client.get("/overview/coverage", params={"since": since, "until": until, "now": NOW.isoformat()}).json()
 
-    def _counts(self, body: dict[str, Any]) -> list[tuple[str, int, int, int]]:
-        """Reduce a response's days to their date and counts.
+    def _days(self, body: dict[str, Any]) -> list[dict[str, Any]]:
+        """Unroll each source's arrays into its days with anything expected.
 
         Args:
             body: The coverage response body.
 
         Returns:
-            One ``(date, expected, covered, failed)`` tuple per day, in response order.
+            One entry per source and day with ``expected > 0``, by source in
+            response order then date, carrying the source id, the date, the
+            counts and the day's failed run id or ``None``.
         """
-        return [(day["date"], day["expected"], day["covered"], day["failed"]) for day in body["days"]]
+        days = []
+        for source in body["sources"]:
+            start = dt.date.fromisoformat(source["start"])
+            for i, expected in enumerate(source["expected"]):
+                if not expected:
+                    continue
+                days.append(
+                    {
+                        "source_id": source["id"],
+                        "date": (start + dt.timedelta(days=i)).isoformat(),
+                        "expected": expected,
+                        "covered": source["covered"][i],
+                        "failed": source["failed"][i],
+                        "failed_run_id": source["failed_run_ids"].get(str(i)),
+                    }
+                )
+        return days
+
+    def _counts(self, body: dict[str, Any]) -> list[tuple[str, int, int, int]]:
+        """Reduce a response's expected days to their date and counts.
+
+        Args:
+            body: The coverage response body.
+
+        Returns:
+            One ``(date, expected, covered, failed)`` tuple per day with
+            anything expected, by source then date.
+        """
+        return [(day["date"], day["expected"], day["covered"], day["failed"]) for day in self._days(body)]
 
     def test_a_scheduled_source_runs_from_its_first_attempt_to_yesterday(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -944,20 +991,23 @@ class TestCoverage:
         failed = self._partition_run(store, member, job, asset, "2026-08-11", "failed")
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
-        days = {day["date"]: day for day in body["days"]}
 
-        assert body["sources"] == [{"id": str(source.id), "name": "shop", "kind": "source"}]
-        assert sorted(days) == ["2026-08-10", "2026-08-11", "2026-08-12"]
-        assert days["2026-08-10"] == {
-            "date": "2026-08-10",
-            "source_id": str(source.id),
-            "expected": 1,
-            "covered": 1,
-            "failed": 0,
-            "failed_run_id": None,
+        assert body == {
+            "since": "2026-08-01",
+            "until": "2026-08-13",
+            "sources": [
+                {
+                    "id": str(source.id),
+                    "name": "shop",
+                    "kind": "source",
+                    "start": "2026-08-10",
+                    "expected": [1, 1, 1],
+                    "covered": [1, 0, 0],
+                    "failed": [0, 1, 0],
+                    "failed_run_ids": {"1": str(failed.id)},
+                }
+            ],
         }
-        assert days["2026-08-11"]["failed"] == 1 and days["2026-08-11"]["failed_run_id"] == str(failed.id)
-        assert (days["2026-08-12"]["expected"], days["2026-08-12"]["covered"]) == (1, 0)
 
     def test_an_ad_hoc_asset_run_heals_a_day_a_job_run_failed(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -970,14 +1020,16 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-12", "2026-08-12")
 
-        assert body["days"] == [
+        assert body["sources"] == [
             {
-                "date": "2026-08-12",
-                "source_id": str(source.id),
-                "expected": 1,
-                "covered": 1,
-                "failed": 0,
-                "failed_run_id": None,
+                "id": str(source.id),
+                "name": "shop",
+                "kind": "source",
+                "start": "2026-08-12",
+                "expected": [1],
+                "covered": [1],
+                "failed": [0],
+                "failed_run_ids": {},
             }
         ]
 
@@ -997,6 +1049,21 @@ class TestCoverage:
             ("2026-08-07", 1, 0, 0),
             ("2026-08-08", 1, 0, 1),
         ]
+
+    def test_a_day_nothing_is_expected_inside_a_source_span_is_a_zero(
+        self, client: TestClient, store: Store, member: SimpleNamespace
+    ):
+        source = store.components.create(member.org_id, kind="source", key=Warehouse.key, name="warehouse")
+        stock = next(child for child in source.children if child.key == "stock")
+        shipments = next(child for child in source.children if child.key == "shipments")
+        self._partition_run(store, member, source, stock, "2026-08-02", "success")
+        failed = self._partition_run(store, member, source, shipments, "2026-08-05", "failed")
+
+        [row] = self._coverage(client, "2026-08-01", "2026-08-13")["sources"]
+
+        assert row["start"] == "2026-08-02"
+        assert (row["expected"], row["covered"], row["failed"]) == ([1, 0, 0, 1], [1, 0, 0, 0], [0, 0, 0, 1])
+        assert row["failed_run_ids"] == {"3": str(failed.id)}
 
     def test_attempts_before_the_window_still_open_the_span(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -1030,7 +1097,9 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
 
-        assert body["sources"] == [{"id": str(shop.id), "name": "shop", "kind": "source"}]
+        assert [(source["id"], source["name"], source["kind"]) for source in body["sources"]] == [
+            (str(shop.id), "shop", "source")
+        ]
         assert self._counts(body) == [("2026-08-05", 1, 1, 0)]
 
     def test_a_disabled_asset_stops_at_its_last_evidence(
@@ -1064,8 +1133,10 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
 
-        assert body["sources"] == [{"id": str(asset.id), "name": "visits", "kind": "asset"}]
-        assert [(day["source_id"], day["date"]) for day in body["days"]] == [(str(asset.id), "2026-08-12")]
+        assert [(source["id"], source["name"], source["kind"]) for source in body["sources"]] == [
+            (str(asset.id), "visits", "asset")
+        ]
+        assert [(day["source_id"], day["date"]) for day in self._days(body)] == [(str(asset.id), "2026-08-12")]
 
     def test_a_day_sums_each_asset_of_a_source(self, client: TestClient, store: Store, member: SimpleNamespace):
         source = store.components.create(member.org_id, kind="source", key=Warehouse.key, name="warehouse")
@@ -1085,13 +1156,11 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-12", "2026-08-12")
 
-        [day] = body["days"]
+        [day] = self._days(body)
         assert (day["expected"], day["covered"], day["failed"]) == (2, 1, 1)
         assert day["failed_run_id"] == str(run.id)
 
-    def test_sources_list_by_name_and_days_by_source_then_date(
-        self, client: TestClient, store: Store, member: SimpleNamespace
-    ):
+    def test_sources_list_by_name_each_with_its_days(self, client: TestClient, store: Store, member: SimpleNamespace):
         later = store.components.create(member.org_id, kind="source", key=Shop.key, name="zeta")
         earlier = store.components.create(
             member.org_id, kind="source", key=Shop.key, name="alpha", config={"dataset": "eu"}
@@ -1103,7 +1172,7 @@ class TestCoverage:
         body = self._coverage(client, "2026-08-01", "2026-08-13")
 
         assert [source["name"] for source in body["sources"]] == ["alpha", "zeta"]
-        assert [(day["source_id"], day["date"]) for day in body["days"]] == [
+        assert [(day["source_id"], day["date"]) for day in self._days(body)] == [
             (str(earlier.id), "2026-08-11"),
             (str(earlier.id), "2026-08-12"),
             (str(later.id), "2026-08-11"),
@@ -1131,7 +1200,7 @@ class TestCoverage:
         self._partition_run(store, member, ledger, ledger.children[0], "2026-07", "success")
 
         body = self._coverage(client, "2026-07-30", "2026-08-13")
-        days = {(day["source_id"], day["date"]): day for day in body["days"]}
+        days = {(day["source_id"], day["date"]): day for day in self._days(body)}
 
         hour_day = days[(str(clicks.id), "2026-08-12")]
         assert (hour_day["expected"], hour_day["covered"], hour_day["failed"]) == (24, 1, 1)
@@ -1183,7 +1252,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-01", "2026-08-31")
 
-        assert [day["date"] for day in body["days"]] == [f"2026-08-{day:02d}" for day in range(1, 14)]
+        assert [day["date"] for day in self._days(body)] == [f"2026-08-{day:02d}" for day in range(1, 14)]
 
     def test_a_yearly_key_covers_its_days_and_the_open_year_is_not_expected(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -1194,7 +1263,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2025-12-30", "2026-01-02")
 
-        assert [(day["date"], day["covered"]) for day in body["days"]] == [("2025-12-30", 1), ("2025-12-31", 1)]
+        assert [(day["date"], day["covered"]) for day in self._days(body)] == [("2025-12-30", 1), ("2025-12-31", 1)]
 
     def test_the_failed_run_kept_for_a_day_does_not_depend_on_row_order(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -1207,7 +1276,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-12", "2026-08-12")
 
-        assert body["days"][0]["failed_run_id"] == str(max(run.id for run in runs))
+        assert self._days(body)[0]["failed_run_id"] == str(max(run.id for run in runs))
 
     def test_a_drifted_asset_is_left_out(self, client: TestClient, store: Store, member: SimpleNamespace):
         source = store.components.create(member.org_id, kind="source", key=Shop.key, name="shop")
@@ -1220,7 +1289,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
 
-        assert body["sources"] == [] and body["days"] == []
+        assert body["sources"] == []
 
     def test_another_organisations_data_never_appears(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -1245,7 +1314,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
 
-        assert body["sources"] == [] and body["days"] == []
+        assert body["sources"] == []
 
     def test_a_twelve_month_window_as_the_client_sends_it_is_accepted(self, client: TestClient):
         response = client.get("/overview/coverage", params={"since": "2025-09-01", "until": "2026-09-30"})
@@ -1272,3 +1341,17 @@ class TestCoverage:
         response = client.get("/overview/coverage", params={"since": "2026-08-13", "until": "2026-08-12"})
 
         assert response.status_code == 422
+
+
+class TestPartitionSpan:
+    """Keys of any granularity span whole days."""
+
+    def test_hourly_monthly_and_yearly_keys_span_their_days(self):
+        assert overview_module.PartitionSpan.from_key("2026-08-12T23") == (dt.date(2026, 8, 12), dt.date(2026, 8, 12))
+        assert overview_module.PartitionSpan.from_key("2026-02") == (dt.date(2026, 2, 1), dt.date(2026, 2, 28))
+        assert overview_module.PartitionSpan.from_key("2025") == (dt.date(2025, 1, 1), dt.date(2025, 12, 31))
+
+    def test_spans_enclose_from_the_earliest_first_to_the_latest_last_day(self):
+        spans = [overview_module.PartitionSpan.from_key(key) for key in ("2026-08-15", "2026-08", "2026-07-31T23")]
+
+        assert overview_module.PartitionSpan.from_spans(spans) == (dt.date(2026, 7, 31), dt.date(2026, 8, 31))

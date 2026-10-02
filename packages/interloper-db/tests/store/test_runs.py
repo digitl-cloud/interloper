@@ -479,6 +479,25 @@ class TestStackNativeListing:
         assert [run.id for run in attempts] == [successor.id, first.id]
         assert store.runs.count(_ORG_ID, root_run_id=first.root_run_id) == 2
 
+    def test_a_branched_stack_reads_as_its_highest_attempt(self, store: Store) -> None:
+        # Two concurrent retries of one attempt branch the stack; the branch
+        # nobody retried further is not the stack's latest attempt.
+        first = store.runs.create(_ORG_ID)
+        with Session(store.engine) as session:
+            branches = [
+                Run(org_id=_ORG_ID, status="failed", retry_of=first.id, root_run_id=first.id, attempt=2)
+                for _ in range(2)
+            ]
+            session.add_all(branches)
+            session.flush()
+            head = Run(org_id=_ORG_ID, status="success", retry_of=branches[0].id, root_run_id=first.id, attempt=3)
+            session.add(head)
+            session.commit()
+            head_id = head.id
+
+        assert [run.id for run in store.runs.list_all(_ORG_ID)] == [head_id]
+        assert store.runs.count(_ORG_ID) == 1
+
     def test_unretried_runs_are_unaffected(self, store: Store) -> None:
         first = store.runs.create(_ORG_ID)
         second = store.runs.create(_ORG_ID)

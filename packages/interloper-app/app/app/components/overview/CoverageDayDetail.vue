@@ -16,20 +16,21 @@ const editor = useCanEdit()
 const expanded = ref(false)
 watch(() => props.date, () => { expanded.value = false })
 
-const rows = computed(() => {
-    const sources = new Map(props.coverage.sources.map(s => [s.id, s]))
-    return props.coverage.days
-        .filter(d => d.date === props.date && (props.sourceFilter === 'all' || d.source_id === props.sourceFilter))
-        .map(d => ({
+const rows = computed(() => props.coverage.sources
+    .filter(s => props.sourceFilter === 'all' || s.id === props.sourceFilter)
+    .flatMap((s) => {
+        const d = sourceDay(s, props.date)
+        if (!d) return []
+        return [{
             ...d,
-            name: sources.get(d.source_id)?.name ?? d.source_id.slice(0, 8),
-            kind: sources.get(d.source_id)?.kind ?? 'source',
+            name: s.name,
+            kind: s.kind,
             okPct: Math.round((100 * d.covered) / Math.max(1, d.expected)),
             failPct: Math.round((100 * d.failed) / Math.max(1, d.expected)),
             gap: d.covered + d.failed < d.expected,
             missing: d.expected - d.covered - d.failed,
-        }))
-})
+        }]
+    }))
 
 const problems = computed(() => rows.value
     .filter(r => r.failed || r.gap)

@@ -46,6 +46,28 @@ export interface Overview {
     components: KindInventory[]
 }
 
+/**
+ * A calendar group and its days: index `i` of each array is the day `start + i`, from the group's first to its last
+ * expected day in the window. A day inside that run with nothing expected is a zero.
+ */
+export interface CoverageSource {
+    id: string
+    name: string
+    kind: 'source' | 'asset'
+    start: string
+    expected: number[]
+    covered: number[]
+    failed: number[]
+    failed_run_ids: Record<string, string>
+}
+
+export interface Coverage {
+    since: string
+    until: string
+    sources: CoverageSource[]
+}
+
+/** One source's partitions on one day, unrolled from its arrays. */
 export interface CoverageDay {
     date: string
     source_id: string
@@ -53,13 +75,6 @@ export interface CoverageDay {
     covered: number
     failed: number
     failed_run_id: string | null
-}
-
-export interface Coverage {
-    since: string
-    until: string
-    sources: { id: string, name: string, kind: 'source' | 'asset' }[]
-    days: CoverageDay[]
 }
 
 export type CoverageMonths = 3 | 6 | 12

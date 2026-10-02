@@ -27,7 +27,11 @@ PREFIX = "INTERLOPER_"
 
 
 class PostgresSettings(BaseSettings):
-    """PostgreSQL connection settings."""
+    """PostgreSQL connection settings.
+
+    ``statement_timeout`` caps every statement of the process engine, in seconds.
+    ``None`` (the default) leaves the server's own setting untouched.
+    """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}POSTGRES_")
 
@@ -36,6 +40,7 @@ class PostgresSettings(BaseSettings):
     user: str = ""
     password: str = ""
     database: str = "interloper"
+    statement_timeout: float | None = Field(default=None, gt=0)
 
     @property
     def dsn(self) -> str:
