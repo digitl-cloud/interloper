@@ -131,15 +131,20 @@ heals a day and a source with no job still shows its history.
 {
   "since": "2026-07-01",
   "until": "2026-10-02",
-  "sources": [{"id": "uuid", "name": "Shop", "kind": "source"}],
-  "days": [
-    {"date": "2026-09-29", "source_id": "uuid", "expected": 5, "covered": 0, "failed": 5, "failed_run_id": "uuid-or-null"}
+  "sources": [
+    {
+      "id": "uuid", "name": "Shop", "kind": "source", "start": "2026-09-28",
+      "expected": [5, 5, 0, 5], "covered": [5, 0, 0, 5], "failed": [0, 5, 0, 0],
+      "failed_run_ids": {"1": "uuid"}
+    }
   ]
 }
 ```
 
-`sources` lists every group with at least one day, ordered by name; `days` holds one entry per
-group and day with anything expected, ordered by group then date.
+`sources` lists every group with anything expected in the window, ordered by name. Each group's
+arrays are dense over its own span: index `i` is the day `start + i`, from the group's first to
+its last expected day inside the window, a day with nothing expected inside the span being zeros.
+`failed_run_ids` maps a day offset to that day's greatest failed run id.
 
 Cell colour for a day (summed over the filtered groups), matching the design:
 
@@ -178,7 +183,8 @@ Each component gets exactly one state, first match wins:
 
 1. **disabled**: its config has `enabled: false`
 2. **failing**: asset whose latest execution failed; source with a failing asset; failing job;
-   hook whose latest hook event is `hook_failed`
+   hook whose last firing, within the last 30 days, failed (`state.last_error`, stamped by the
+   scheduler on each firing and cleared by a success)
 3. **needs attention**: drift; connection needing re-authorisation
 4. **healthy**: everything else
 
@@ -212,18 +218,16 @@ the page:
   Runs tile reads every attempt completed in the last 24h (bucketed by completion hour in the
   route), the attention list the failed stacks completed in that window, and "Just happened" the
   latest completed stacks, most recently completed first.
-- `events.coverage_rows(org_id, since, until)`: the org-wide sibling of `partition_coverage`:
-  one row per asset and partition overlapping the window, from runs of any target, with whether
-  it ever succeeded, whether any execution failed, and the greatest failed run id. An attempted
-  asset-partition that neither succeeded nor failed (still in flight, or canceled) stays missing
-  rather than failed.
-- `events.partition_bounds(org_id)`: per asset, the first day of its earliest and the last day of
-  its latest attempted partition, all-time, from runs of any target, in one grouped query.
+- `events.coverage_rows(org_id)`: the org-wide sibling of `partition_coverage`: one row per asset
+  and partition, all-time, from runs of any target, with whether it ever succeeded, whether any
+  execution failed, and the greatest failed run id. An attempted asset-partition that neither
+  succeeded nor failed (still in flight, or canceled) stays missing rather than failed. It is the
+  coverage endpoint's only read of the `executions` view: the route derives each asset's
+  attempted bounds and the window's rows from it, since any read of the view scans the
+  organisation's whole history.
 - `components.asset_partitionings(org_id)`: each partitioned asset row's `TimePartitionConfig`
   (granularity, declared start) from its catalog definition, an owned asset resolving through
   its parent source; drifted rows are skipped.
-- `events.latest_by_component(org_id, event_types=, since=)`: the latest `hook_fired` /
-  `hook_failed` event per hook, bounded to the last 30 days.
 - `components.job_partition_granularities(job_ids)`: each job's target granularity in one read.
 
 **API** (`interloper-api`), new `routes/overview.py`, viewer role:

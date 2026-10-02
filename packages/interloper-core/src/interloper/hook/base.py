@@ -45,10 +45,16 @@ class HookContext(BaseModel):
 
 
 class HookState(BaseModel):
-    """Machine-owned hook state (see ``Component.state_model``)."""
+    """Machine-owned hook state (see ``Component.state_model``).
+
+    Stamped by the operator on every firing: ``last_error`` carries the latest
+    firing's error and a successful firing clears it, so the state alone tells
+    whether a hook is failing.
+    """
 
     last_fired_at: str | None = None
     last_run_id: str | None = None
+    last_error: str | None = None
 
 
 class Hook(Component):

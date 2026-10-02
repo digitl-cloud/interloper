@@ -1145,17 +1145,7 @@ class ComponentStore:
             ValueError: If the targets disagree on granularity — scheduling a
                 window would be wrong for some of them, so fail closed.
         """
-        granularities: set[TimeGranularity] = set()
-        targets = session.exec(
-            select(ComponentRelation).where(ComponentRelation.src_id == job_id, ComponentRelation.name == "targets")
-        ).all()
-        for relation in targets:
-            target = session.get(Component, relation.dst_id)
-            if target is None:
-                continue
-            for partitioning in self._target_partitionings(session, target):
-                if (granularity := partitioning.get("granularity")) is not None:
-                    granularities.add(TimeGranularity(granularity))
+        granularities = self._job_target_granularities(session, [job_id]).get(job_id, set())
         if len(granularities) > 1:
             names = ", ".join(sorted(g.value for g in granularities))
             raise ValueError(f"Job targets disagree on partition granularity ({names})")
@@ -1175,13 +1165,54 @@ class ComponentStore:
             Each job's granularity by id, ``None`` when no partitioned target
             resolves or the targets disagree.
         """
-        granularities: dict[UUID, TimeGranularity | None] = {}
+        if not job_ids:
+            return {}
         with session_scope(self._engine) as session:
-            for job_id in job_ids:
-                try:
-                    granularities[job_id] = self.job_partition_granularity(session, job_id)
-                except ValueError:
-                    granularities[job_id] = None
+            granularities = self._job_target_granularities(session, job_ids)
+        return {
+            job_id: next(iter(shared)) if len(shared := granularities.get(job_id, set())) == 1 else None
+            for job_id in job_ids
+        }
+
+    def _job_target_granularities(self, session: Session, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
+        """The granularities each job's partitioned targets declare, in three queries.
+
+        The jobs' target relations, the target rows and the owned targets'
+        parent rows are each read in one query, whatever the number of jobs.
+
+        Args:
+            session: Open session to resolve the targets in.
+            job_ids: UUIDs of the job components.
+
+        Returns:
+            Per job with at least one target relation, the distinct
+            granularities its targets resolve to; a target row that no longer
+            exists contributes nothing.
+        """
+        relations = session.exec(
+            select(ComponentRelation).where(
+                col(ComponentRelation.src_id).in_(job_ids), ComponentRelation.name == "targets"
+            )
+        ).all()
+        targets = {
+            row.id: row
+            for row in session.exec(
+                select(Component).where(col(Component.id).in_({relation.dst_id for relation in relations}))
+            ).all()
+        }
+        parent_ids = {row.parent_id for row in targets.values() if row.parent_id is not None}
+        parent_keys = dict(
+            session.exec(select(col(Component.id), col(Component.key)).where(col(Component.id).in_(parent_ids))).all()
+        )
+        granularities: dict[UUID, set[TimeGranularity]] = {}
+        for relation in relations:
+            shared = granularities.setdefault(relation.src_id, set())
+            if (target := targets.get(relation.dst_id)) is None:
+                continue
+            parent_key = parent_keys.get(target.parent_id) if target.parent_id is not None else None
+            for partitioning in self._target_partitionings(target, parent_key):
+                if (granularity := partitioning.get("granularity")) is not None:
+                    shared.add(TimeGranularity(granularity))
         return granularities
 
     def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
@@ -1226,12 +1257,13 @@ class ComponentStore:
             )
         return partitionings
 
-    def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
+    def _target_partitionings(self, target: Component, parent_key: str | None) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
         Args:
-            session: Open session used to fetch an owned asset's parent.
             target: The job target row (a source or an asset).
+            parent_key: The catalog key of an owned asset's parent source,
+                ``None`` for any other target.
 
         Returns:
             One dict per partitioned asset the target resolves to; empty when
@@ -1244,7 +1276,7 @@ class ComponentStore:
                 return []
             return [asset.partitioning for asset in definition.assets if asset.partitioning is not None]
         if target.kind == "asset":
-            definition = self._catalog.get(target.key, parent_key=target.parent_key(session))
+            definition = self._catalog.get(target.key, parent_key=parent_key)
             partitioning = definition.partitioning if isinstance(definition, il.AssetDefinition) else None
             return [partitioning] if partitioning is not None else []
         return []

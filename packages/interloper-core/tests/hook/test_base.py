@@ -70,7 +70,7 @@ class TestDefinition:
         assert il.KINDS["source"].state_model is None
 
     def test_definition_describes_state(self):
-        assert set(il.Hook.definition().state_schema["properties"]) == {"last_fired_at", "last_run_id"}
+        assert set(il.Hook.definition().state_schema["properties"]) == {"last_fired_at", "last_run_id", "last_error"}
         assert set(il.Job.definition().state_schema["properties"]) == {
             "next_run_at",
             "last_run_at",

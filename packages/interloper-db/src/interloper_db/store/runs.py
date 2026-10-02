@@ -11,8 +11,8 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
-from sqlalchemy import Engine, func
-from sqlalchemy.orm import joinedload
+from sqlalchemy import Engine, exists, func
+from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Backfill, Component, Event, Run
@@ -244,7 +244,7 @@ class RunStore:
                 partition_to=partition_to,
             )
             if root_run_id is None and not all_attempts:
-                filters.append(self._latest_attempt_only(org_id))
+                filters.append(self._latest_attempt_only())
             statement = (
                 select(Run)
                 .where(*filters)
@@ -315,7 +315,7 @@ class RunStore:
                 partition_to=partition_to,
             )
             if root_run_id is None and not all_attempts:
-                filters.append(self._latest_attempt_only(org_id))
+                filters.append(self._latest_attempt_only())
             return session.exec(select(func.count()).select_from(Run).where(*filters)).one()
 
     def complete(self, run_id: UUID, *, success: bool) -> Run:
@@ -808,35 +808,30 @@ class RunStore:
         return filters
 
     @staticmethod
-    def _latest_attempt_only(org_id: UUID) -> Any:
+    def _latest_attempt_only() -> Any:
         """Keep only each stack's latest attempt.
 
-        Scoped to the organisation alone on purpose: every attempt of a stack
-        shares its target, its backfill and its org, so no other filter can
-        change which attempt is the latest. Narrowing by the caller's filters
-        instead would answer a different question, such as "the latest *failed*
-        attempt" rather than "the stacks whose latest attempt failed".
+        An attempt is its stack's latest when no attempt of the same stack
+        carries a higher number: a per-row probe of ``ix_runs_root_run_id``
+        for a narrow listing, one anti-join over the organisation's runs for a
+        wide one, and never an aggregate the planner has to estimate. Keyed on
+        the attempt number rather than on ``retry_of``, so a stack two
+        concurrent retries branched still reads as its highest attempts.
 
-        Expressed as a grouped join rather than ``DISTINCT ON`` so it runs on
-        SQLite as well as Postgres.
-
-        Args:
-            org_id: Organisation whose stacks are reduced.
+        The probe matches the organisation, which keeps it inside the tenant,
+        but none of the caller's other filters on purpose: every attempt of a
+        stack shares its org and its target, and narrowing the probe would
+        answer "the latest *failed* attempt" rather than "the stacks whose
+        latest attempt failed".
 
         Returns:
             A filter expression selecting the latest attempt of each stack.
         """
-        latest = (
-            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
-            .where(Run.org_id == org_id)
-            .group_by(col(Run.root_run_id))
-            .subquery()
-        )
-        return col(Run.id).in_(
-            select(col(Run.id)).join(
-                latest,
-                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
-            )
+        later = aliased(Run)
+        return ~exists().where(
+            col(later.org_id) == col(Run.org_id),
+            col(later.root_run_id) == col(Run.root_run_id),
+            col(later.attempt) > col(Run.attempt),
         )
 
     @staticmethod

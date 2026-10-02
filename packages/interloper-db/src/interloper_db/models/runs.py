@@ -11,6 +11,12 @@ from sqlmodel import Field as SQLField
 from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_column
 from interloper_db.models.components import Component
 
+_OPERATION_EVENTS = (
+    "component_id IS NOT NULL AND event_type IN ('operation_queued', 'operation_skipped', 'operation_started', "
+    "'operation_completed', 'operation_failed', 'operation_canceled', 'operation_retried')"
+)
+"""The events the ``executions`` view derives operation executions from."""
+
 
 class Backfill(SQLModel, table=True):
     """A backfill spanning a date range with multiple runs.
@@ -204,6 +210,15 @@ class Event(SQLModel, table=True):
             "timestamp",
             postgresql_where=text("error IS NOT NULL"),
             sqlite_where=text("error IS NOT NULL"),
+        ),
+        # The rows the ``executions`` view ranks, in its windows' partition order.
+        Index(
+            "ix_events_executions",
+            "org_id",
+            "run_id",
+            "component_id",
+            postgresql_where=text(_OPERATION_EVENTS),
+            sqlite_where=text(_OPERATION_EVENTS),
         ),
     )
 

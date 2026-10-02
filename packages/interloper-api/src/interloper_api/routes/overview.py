@@ -16,15 +16,15 @@ from __future__ import annotations
 import datetime as dt
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
-from interloper.partitioning.time import TimeGranularity, TimePartitionConfig, TimePartitionWindow
+from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
 from interloper.utils.time import assume_utc
 from interloper_db import Backfill, Component, ComponentStatus
 from interloper_db.models import Run
-from interloper_db.store.events import CoverageRow, ErrorGroup, PartitionBounds
+from interloper_db.store.events import CoverageRow, ErrorGroup
 from pydantic import BaseModel
 
 from interloper_api.dependencies import OrgIdDep, StoreDep, ViewerDep
@@ -37,7 +37,7 @@ OVERDUE_AFTER = dt.timedelta(minutes=15)
 # Verdicts only: a step-level failure (dest_write_failed and the like) repeats its operation's own verdict.
 FAILURE_EVENT_TYPES = ("operation_failed", "run_failed")
 INVENTORY_KINDS = ("source", "asset", "destination", "connection", "job", "hook")
-HOOK_EVENTS_LOOKBACK = dt.timedelta(days=30)
+HOOK_FAILURE_HORIZON = dt.timedelta(days=30)
 RECENT_LIMIT = 5
 MAX_COVERAGE_SPAN_DAYS = 400
 TERMINAL_STATUSES = frozenset({"success", "failed", "canceled"})
@@ -243,15 +243,14 @@ class AttentionItem(BaseModel):
         """
         items = []
         for connection in connections:
-            error = (connection.state or {}).get("last_renewal_error")
-            if not error:
+            if not (error := connection.state_text("last_renewal_error")):
                 continue
             items.append(
                 cls(
                     kind="connection",
                     severity="error",
                     title=f"{connection.name or connection.key} connection needs re-authorisation",
-                    target=str(error).splitlines()[0],
+                    target=error.splitlines()[0],
                     since=connection.state_datetime("last_renewed_at"),
                     component_id=connection.id,
                     component_kind="connection",
@@ -450,7 +449,7 @@ class KindInventory(BaseModel):
 
         Args:
             statuses: Every component row with its read status.
-            failing_ids: Components whose latest execution, attempt or hook event failed.
+            failing_ids: Components whose latest execution, attempt or hook firing failed.
             attention_ids: Components needing attention for a reason other than drift.
 
         Returns:
@@ -496,6 +495,47 @@ class OverviewResponse(BaseModel):
     components: list[KindInventory]
 
 
+class PartitionSpan(NamedTuple):
+    """The days one partition key covers, of any granularity.
+
+    Attributes:
+        first: The first day of the partition.
+        last: The last day of the partition, inclusive.
+    """
+
+    first: dt.date
+    last: dt.date
+
+    @classmethod
+    def from_key(cls, key: str) -> PartitionSpan:
+        """Parse a time partition key into the days it covers.
+
+        Args:
+            key: A time partition key of any granularity.
+
+        Returns:
+            The days it covers; an hourly key covers its one day.
+        """
+        start, end = TimePartition.from_key(key).bounds
+        # An hourly partition's bounds are datetimes (a datetime is also a date), and it never crosses midnight.
+        if isinstance(start, dt.datetime):
+            return cls(first=start.date(), last=start.date())
+        return cls(first=start, last=end - dt.timedelta(days=1))
+
+    @classmethod
+    def from_spans(cls, spans: list[PartitionSpan]) -> PartitionSpan:
+        """Span the days of several partitions, from the earliest first day to the latest last day.
+
+        Args:
+            spans: The partitions' spans, at least one; they may overlap or
+                leave gaps, which the result covers.
+
+        Returns:
+            The enclosing span.
+        """
+        return cls(first=min(span.first for span in spans), last=max(span.last for span in spans))
+
+
 @dataclass(frozen=True)
 class AssetCoverage:
     """One partitioned asset's evidence, and what the calendar expects of it.
@@ -505,36 +545,37 @@ class AssetCoverage:
         group: The row the asset counts toward on the calendar: its parent
             source, or the asset itself when standalone.
         partitioning: The asset's partitioning, from its catalog definition.
+        scheduled: Whether an enabled job targets the asset or its parent source.
+        evidence: Its coverage rows, all-time, each with the days its key covers.
         bounds: The days its attempted partitions span, all-time, or ``None``
             when it was never attempted.
-        scheduled: Whether an enabled job targets the asset or its parent source.
-        rows: Its coverage rows for the window.
     """
 
     asset: Component
     group: Component
     partitioning: TimePartitionConfig
-    bounds: PartitionBounds | None
     scheduled: bool
-    rows: list[CoverageRow]
+    evidence: list[tuple[PartitionSpan, CoverageRow]]
+    bounds: PartitionSpan | None
 
     @classmethod
     def from_components(
         cls,
         components: list[Component],
         partitionings: dict[UUID, TimePartitionConfig],
-        bounds: dict[UUID, PartitionBounds],
         rows: list[CoverageRow],
     ) -> list[AssetCoverage]:
-        """Pair each partitioned asset row with its group, partitioning, bounds and evidence.
+        """Pair each partitioned asset row with its group, partitioning and evidence.
+
+        Each distinct partition key is parsed once, however many assets
+        executed it.
 
         Args:
             components: The organisation's source, asset and job rows, with
                 their outgoing relations loaded.
             partitionings: Each partitioned asset's partitioning by id; an
                 asset absent from it (unpartitioned, drifted) is left out.
-            bounds: Each attempted asset's all-time bounds by id.
-            rows: The store's coverage rows for the window, from runs of any target.
+            rows: The store's all-time coverage rows, from runs of any target.
 
         Returns:
             One entry per partitioned asset, in the order of *components*.
@@ -550,6 +591,7 @@ class AssetCoverage:
         rows_by_asset: dict[UUID, list[CoverageRow]] = defaultdict(list)
         for row in rows:
             rows_by_asset[row.asset_id].append(row)
+        spans: dict[str, PartitionSpan] = {}
         coverages = []
         for asset in components:
             if asset.kind != "asset" or asset.id not in partitionings:
@@ -557,14 +599,21 @@ class AssetCoverage:
             group = by_id.get(asset.parent_id) if asset.parent_id else asset
             if group is None:
                 continue
+            evidence = []
+            for row in rows_by_asset[asset.id]:
+                span = spans.get(row.partition_key)
+                if span is None:
+                    span = spans[row.partition_key] = PartitionSpan.from_key(row.partition_key)
+                evidence.append((span, row))
+            bounds = PartitionSpan.from_spans([span for span, _ in evidence]) if evidence else None
             coverages.append(
                 cls(
                     asset=asset,
                     group=group,
                     partitioning=partitionings[asset.id],
-                    bounds=bounds.get(asset.id),
                     scheduled=asset.id in targeted or asset.parent_id in targeted,
-                    rows=rows_by_asset[asset.id],
+                    evidence=evidence,
+                    bounds=bounds,
                 )
             )
         return coverages
@@ -605,73 +654,71 @@ class AssetCoverage:
             return None
         return first, last
 
-    def slots(self, day: dt.date, now: dt.datetime) -> int:
-        """How many partitions the asset owes on one day of its span.
+    def slots(self, first: dt.date, length: int, now: dt.datetime) -> list[int]:
+        """How many partitions the asset owes on each day of a run of days.
 
-        An hourly asset owes the hours of the day from its declared start, when
+        An hourly asset owes the hours of a day from its declared start, when
         the start falls on that day, to *now*'s hour, when the day is today
         (the hours elapsed since midnight UTC), else to midnight: 24 on a
         full day, at least one. Any other asset owes one slot a day.
 
         Args:
-            day: A day of the asset's expected span.
+            first: The first day of the run, inside the asset's expected span.
+            length: How many consecutive days the run holds.
             now: The reference instant, aware UTC.
 
         Returns:
-            The slots owed, before raising to the partitions attempted that day.
+            The slots owed per day, index ``i`` being day ``first + i``,
+            before raising to the partitions attempted that day.
         """
         if self.partitioning.granularity is not TimeGranularity.HOUR:
-            return 1
+            return [1] * length
         start = self.partitioning.start
-        first_hour = start.hour if isinstance(start, dt.datetime) and start.date() == day else 0
-        end_hour = now.hour if day == now.date() else 24
-        return max(1, end_hour - first_hour)
+        partial_days = {now.date(), start.date()} if isinstance(start, dt.datetime) else {now.date()}
+        slots = [24] * length
+        for day in partial_days:
+            index = (day - first).days
+            if 0 <= index < length:
+                first_hour = start.hour if isinstance(start, dt.datetime) and start.date() == day else 0
+                end_hour = now.hour if day == now.date() else 24
+                slots[index] = max(1, end_hour - first_hour)
+        return slots
 
 
-class CoverageDay(BaseModel):
-    """One group's asset-partitions on one day: expected, covered, failed."""
+@dataclass
+class DayCounts:
+    """Asset-partitions per day over a run of consecutive days, as parallel arrays.
 
-    date: dt.date
-    source_id: UUID
-    expected: int
-    covered: int
-    failed: int
-    failed_run_id: UUID | None = None
+    Index ``i`` of every array, and key ``i`` of :attr:`failed_run_ids`, is
+    the day ``start + i``.
 
-    @classmethod
-    def from_assets(
-        cls, assets: list[AssetCoverage], since: dt.date, until: dt.date, now: dt.datetime
-    ) -> list[CoverageDay]:
-        """Roll every asset's days onto its group, summing per group and day.
+    Attributes:
+        start: The first day of the run.
+        expected: The asset-partitions owed each day.
+        covered: Those covered each day.
+        failed: Those failed each day.
+        failed_run_ids: The greatest failed run id per day offset, for the
+            days with a failed run.
+    """
 
-        Args:
-            assets: The partitioned assets with their evidence.
-            since: First day of the window.
-            until: Last day of the window, inclusive.
-            now: The reference instant, aware UTC.
-
-        Returns:
-            One entry per group and day with anything expected, by group id then day.
-        """
-        merged: dict[tuple[UUID, dt.date], CoverageDay] = {}
-        for asset in assets:
-            for day in cls.from_asset(asset, since, until, now):
-                slot = (day.source_id, day.date)
-                merged[slot] = merged[slot]._plus(day) if slot in merged else day
-        return [merged[slot] for slot in sorted(merged)]
+    start: dt.date
+    expected: list[int]
+    covered: list[int]
+    failed: list[int]
+    failed_run_ids: dict[int, UUID]
 
     @classmethod
-    def from_asset(cls, asset: AssetCoverage, since: dt.date, until: dt.date, now: dt.datetime) -> list[CoverageDay]:
+    def from_asset(cls, asset: AssetCoverage, since: dt.date, until: dt.date, now: dt.datetime) -> DayCounts | None:
         """Roll one asset's partitions onto the days of its expected span, clipped to the window and today.
 
         Each day owes the asset's :meth:`AssetCoverage.slots`, raised to the
-        partitions attempted on it when more. A
-        monthly or yearly key counts toward every day it spans. A partition
-        is covered once any execution succeeded, failed when one failed and
-        none succeeded; one attempted but still in flight, or canceled, is
-        neither, so it reads as missing, as does a day with nothing attempted.
-        The failed run kept for a day is the greatest id among its failed
-        runs, so the pick does not depend on row order.
+        partitions attempted on it when more. A monthly or yearly key counts
+        toward every day it spans. A partition is covered once any execution
+        succeeded, failed when one failed and none succeeded; one attempted
+        but still in flight, or canceled, is neither, so it reads as missing,
+        as does a day with nothing attempted. The failed run kept for a day
+        is the greatest id among its failed runs, so the pick does not depend
+        on row order.
 
         Args:
             asset: The asset with its evidence.
@@ -680,92 +727,80 @@ class CoverageDay(BaseModel):
             now: The reference instant, aware UTC.
 
         Returns:
-            One entry per day owed, oldest first, each carrying the asset's group id.
+            The asset's days, or ``None`` when it owes none in the window.
         """
-        today = now.date()
         span = asset.expected_span(now)
         if span is None:
-            return []
-        first, last = max(span[0], since), min(span[1], until, today)
+            return None
+        first, last = max(span[0], since), min(span[1], until, now.date())
         if first > last:
-            return []
-
-        attempted: dict[dt.date, set[str]] = defaultdict(set)
-        covered: dict[dt.date, set[str]] = defaultdict(set)
-        failed: dict[dt.date, set[str]] = defaultdict(set)
-        failed_run: dict[dt.date, UUID] = {}
-        for row in asset.rows:
-            for day in cls._days_of(row.partition_key, first, last):
-                attempted[day].add(row.partition_key)
+            return None
+        length = (last - first).days + 1
+        attempted, covered, failed = [0] * length, [0] * length, [0] * length
+        failed_run_ids: dict[int, UUID] = {}
+        for key_span, row in asset.evidence:
+            if key_span.last < first or key_span.first > last:
+                continue
+            for i in range((max(key_span.first, first) - first).days, (min(key_span.last, last) - first).days + 1):
+                attempted[i] += 1
                 if row.succeeded:
-                    covered[day].add(row.partition_key)
+                    covered[i] += 1
                 elif row.failed:
-                    failed[day].add(row.partition_key)
+                    failed[i] += 1
                     if row.failed_run_id is not None:
-                        failed_run[day] = max(failed_run.get(day, row.failed_run_id), row.failed_run_id)
-
-        return [
-            cls(
-                date=day,
-                source_id=asset.group.id,
-                expected=max(asset.slots(day, now), len(attempted[day])),
-                covered=len(covered[day]),
-                failed=len(failed[day]),
-                failed_run_id=failed_run.get(day),
-            )
-            for day in (first + dt.timedelta(days=i) for i in range((last - first).days + 1))
-        ]
+                        failed_run_ids[i] = max(failed_run_ids.get(i, row.failed_run_id), row.failed_run_id)
+        expected = [max(owed, count) for owed, count in zip(asset.slots(first, length, now), attempted)]
+        return cls(start=first, expected=expected, covered=covered, failed=failed, failed_run_ids=failed_run_ids)
 
     @classmethod
-    def _days_of(cls, key: str, since: dt.date, until: dt.date) -> list[dt.date]:
-        """List the days a partition key spans, clipped to a range of days.
+    def from_parts(cls, parts: list[DayCounts]) -> DayCounts:
+        """Sum runs of days onto one run spanning them all, keeping the greatest failed run id per day.
 
         Args:
-            key: A partition key of any granularity.
-            since: First day of the range.
-            until: Last day of the range, inclusive.
+            parts: The runs to sum, at least one; they may start on different
+                days and leave gaps between them, which read as zeros.
 
         Returns:
-            The spanned days inside the range, oldest first; empty when the
-            partition lies outside it.
+            The summed run, from the earliest start to the latest end.
         """
-        span = PartitionBounds.from_keys([key])
-        first, last = max(span.first, since), min(span.last, until)
-        return [first + dt.timedelta(days=i) for i in range((last - first).days + 1)]
-
-    def _plus(self, other: CoverageDay) -> CoverageDay:
-        """Sum this day with another of the same group and date.
-
-        Args:
-            other: The other entry.
-
-        Returns:
-            The summed entry, keeping the greater failed run id.
-        """
-        failed_runs = [run_id for run_id in (self.failed_run_id, other.failed_run_id) if run_id is not None]
-        return self.model_copy(
-            update={
-                "expected": self.expected + other.expected,
-                "covered": self.covered + other.covered,
-                "failed": self.failed + other.failed,
-                "failed_run_id": max(failed_runs, default=None),
-            }
-        )
+        start = min(part.start for part in parts)
+        length = max((part.start - start).days + len(part.expected) for part in parts)
+        merged = cls(start=start, expected=[0] * length, covered=[0] * length, failed=[0] * length, failed_run_ids={})
+        for part in parts:
+            offset = (part.start - start).days
+            for i, (expected, covered, failed) in enumerate(zip(part.expected, part.covered, part.failed)):
+                merged.expected[offset + i] += expected
+                merged.covered[offset + i] += covered
+                merged.failed[offset + i] += failed
+            for i, run_id in part.failed_run_ids.items():
+                merged.failed_run_ids[offset + i] = max(merged.failed_run_ids.get(offset + i, run_id), run_id)
+        return merged
 
 
 class CoverageSource(BaseModel):
-    """A calendar group: a source with its assets, or a standalone asset."""
+    """A calendar group, a source with its assets or a standalone asset, with its days.
+
+    The arrays run from :attr:`start` to the group's last expected day in the
+    window: index ``i`` is the day ``start + i``, and a day inside that run
+    with nothing expected is a zero in every array.
+    """
 
     id: UUID
     name: str
     kind: Literal["source", "asset"]
+    start: dt.date
+    expected: list[int]
+    covered: list[int]
+    failed: list[int]
+    failed_run_ids: dict[int, UUID]
 
     @classmethod
-    def from_component(cls, component: Component) -> CoverageSource:
-        """Name a group after its row.
+    def from_days(cls, component: Component, days: DayCounts) -> CoverageSource:
+        """Name a group after its row and attach its days.
 
         Args:
             component: The source row, or the standalone asset row.
+            days: The group's days, summed over its assets.
 
         Returns:
             The group, named by the row's name or else its key.
@@ -774,6 +809,11 @@ class CoverageSource(BaseModel):
             id=component.id,
             name=component.name or component.key,
             kind="source" if component.kind == "source" else "asset",
+            start=days.start,
+            expected=days.expected,
+            covered=days.covered,
+            failed=days.failed,
+            failed_run_ids=days.failed_run_ids,
         )
 
 
@@ -783,13 +823,12 @@ class CoverageResponse(BaseModel):
     since: dt.date
     until: dt.date
     sources: list[CoverageSource]
-    days: list[CoverageDay]
 
     @classmethod
     def from_assets(
         cls, assets: list[AssetCoverage], since: dt.date, until: dt.date, now: dt.datetime
     ) -> CoverageResponse:
-        """Build the calendar's data, listing only the groups with a day in the window.
+        """Build the calendar's data, listing only the groups with a day expected in the window.
 
         Args:
             assets: The partitioned assets with their evidence.
@@ -798,18 +837,21 @@ class CoverageResponse(BaseModel):
             now: The reference instant, aware UTC.
 
         Returns:
-            The window, its groups by name, and their days by group (in that
-            order) then date.
+            The window and its groups by name, each with its days summed over its assets.
         """
-        days = CoverageDay.from_assets(assets, since, until, now)
-        groups = {asset.group.id: asset.group for asset in assets}
-        sources = sorted(
-            (CoverageSource.from_component(groups[group_id]) for group_id in {day.source_id for day in days}),
-            key=lambda source: (source.name, str(source.id)),
-        )
-        rank = {source.id: i for i, source in enumerate(sources)}
-        days.sort(key=lambda day: (rank[day.source_id], day.date))
-        return cls(since=since, until=until, sources=sources, days=days)
+        groups: dict[UUID, Component] = {}
+        parts: dict[UUID, list[DayCounts]] = defaultdict(list)
+        for asset in assets:
+            days = DayCounts.from_asset(asset, since, until, now)
+            if days is not None:
+                groups[asset.group.id] = asset.group
+                parts[asset.group.id].append(days)
+        sources = [
+            CoverageSource.from_days(groups[group_id], DayCounts.from_parts(group_parts))
+            for group_id, group_parts in parts.items()
+        ]
+        sources.sort(key=lambda source: (source.name, str(source.id)))
+        return cls(since=since, until=until, sources=sources)
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -858,9 +900,6 @@ def get_overview(
     )
     granularities = store.components.job_partition_granularities([job.id for job in enabled_jobs])
     groups, _ = store.events.error_groups(org_id, event_types=FAILURE_EVENT_TYPES, since=day_ago, until=now)
-    hook_events = store.events.latest_by_component(
-        org_id, event_types=("hook_fired", "hook_failed"), since=now - HOOK_EVENTS_LOOKBACK
-    )
 
     # derive failing ids
     failing_jobs = {job.id for job in enabled_jobs if (run := latest_by_job.get(job.id)) and run.status == "failed"}
@@ -874,7 +913,14 @@ def get_overview(
         for component in components
         if component.kind == "asset" and component.id in failing_assets and component.parent_id
     }
-    failing_hooks = {event.component_id for event in hook_events if event.event_type == "hook_failed"}
+    failing_hooks = {
+        hook.id
+        for hook in components
+        if hook.kind == "hook"
+        and hook.state_text("last_error")
+        and (fired_at := hook.state_datetime("last_fired_at"))
+        and fired_at >= now - HOOK_FAILURE_HORIZON
+    }
     failing_ids = {i for i in (*failing_jobs, *failing_assets, *failing_sources, *failing_hooks) if i is not None}
 
     # build sections
@@ -946,7 +992,6 @@ def get_coverage(
     assets = AssetCoverage.from_components(
         store.components.list_all(org_id, kinds=["source", "asset", "job"]),
         store.components.asset_partitionings(org_id),
-        store.events.partition_bounds(org_id),
-        store.events.coverage_rows(org_id, since, until),
+        store.events.coverage_rows(org_id),
     )
     return CoverageResponse.from_assets(assets, since, until, now)

@@ -13,15 +13,15 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, NamedTuple
 from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
-from interloper.partitioning import TimeGranularity, TimePartition
-from sqlalchemy import Engine, String, and_, case, cast, or_
+from interloper.partitioning import TimeGranularity
+from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased
@@ -97,12 +97,11 @@ class PartitionExecution(NamedTuple):
 
 
 class CoverageRow(NamedTuple):
-    """Whether one asset ever succeeded or failed for one partition, from runs of any target.
+    """Whether one asset ever succeeded or failed for one time partition, from runs of any target.
 
     Attributes:
         asset_id: The asset.
         partition_key: The partition, in its own granularity's key format.
-        asset_key: The asset's key.
         succeeded: Whether any execution of the asset for that partition succeeded.
         failed: Whether any execution of the asset for that partition failed,
             whether or not another one succeeded; an asset attempted but
@@ -113,50 +112,9 @@ class CoverageRow(NamedTuple):
 
     asset_id: UUID
     partition_key: str
-    asset_key: str | None
     succeeded: bool
     failed: bool
     failed_run_id: UUID | None
-
-
-class PartitionBounds(NamedTuple):
-    """The days spanned by an asset's partitions, from the first day of the earliest to the last of the latest.
-
-    Attributes:
-        first: The first day of the partition that starts earliest.
-        last: The last day of the partition that ends latest.
-    """
-
-    first: dt.date
-    last: dt.date
-
-    @classmethod
-    def from_keys(cls, keys: Iterable[str]) -> PartitionBounds:
-        """Span the days of partition keys of any granularity.
-
-        Args:
-            keys: Time partition keys, at least one; granularities may mix.
-
-        Returns:
-            The first day any of them starts on and the last day any of them
-            covers, inclusive.
-
-        Raises:
-            ValueError: If *keys* is empty, or one of them is no time partition key.
-        """
-        firsts, lasts = [], []
-        for key in keys:
-            start, end = TimePartition.from_key(key).bounds
-            # An hourly partition's bounds are datetimes (a datetime is also a date), and it never crosses midnight.
-            if isinstance(start, dt.datetime):
-                firsts.append(start.date())
-                lasts.append(start.date())
-            else:
-                firsts.append(start)
-                lasts.append(end - dt.timedelta(days=1))
-        if not firsts:
-            raise ValueError("Partition bounds need at least one key")
-        return cls(first=min(firsts), last=max(lasts))
 
 
 class EventStore:
@@ -431,7 +389,12 @@ class EventStore:
                 func.max(case((col(Execution.status) == "success", 1), else_=0)),
             )
             .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(Run.org_id == org_id, Run.component_id == job_id, *partition_key_range(start_key, end_key))
+            .where(
+                Execution.org_id == org_id,
+                Run.org_id == org_id,
+                Run.component_id == job_id,
+                *partition_key_range(start_key, end_key),
+            )
             .group_by(col(Run.partition_key), col(Execution.component_id))
         )
         with session_scope(self._engine) as session:
@@ -441,78 +404,23 @@ class EventStore:
                 if partition_key is not None
             ]
 
-    def coverage_rows(self, org_id: UUID, since: dt.date, until: dt.date) -> list[CoverageRow]:
-        """Per asset and partition, whether it ever succeeded or failed, over a window of days.
+    def coverage_rows(self, org_id: UUID) -> list[CoverageRow]:
+        """Per asset and time partition, all-time, whether it ever succeeded or failed.
 
         Runs of every target count (a job, a source, the asset itself, a
         backfill, a deleted target): coverage is a property of the asset's
-        data, not of what triggered it. Every granularity is read: a key
-        counts when its period overlaps the window, so an hourly key inside a
-        day and a monthly key spanning it both list. The caller rolls them
-        onto days.
-
-        Args:
-            org_id: Organisation UUID.
-            since: First day of the window.
-            until: Last day of the window, inclusive.
-
-        Returns:
-            One row per asset and partition that executed at least once.
-        """
-        end_of_until = datetime(until.year, until.month, until.day, 23)
-        ranges = [
-            partition_key_range(
-                granularity.format(granularity.truncate(since)),
-                granularity.format(end_of_until if granularity is TimeGranularity.HOUR else until),
-            )
-            for granularity in TimeGranularity
-            if granularity.key_format is not None
-        ]
-        # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
-        failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Run.id), String))))
-        statement = (
-            sa_select(
-                col(Execution.component_id),
-                col(Run.partition_key),
-                func.max(col(Execution.component_key)),
-                func.max(case((col(Execution.status) == "success", 1), else_=0)),
-                failed_run,
-            )
-            .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(
-                col(Run.org_id) == org_id,
-                col(Run.partition_key).is_not(None),
-                or_(*(and_(*bounds) for bounds in ranges)),
-            )
-            .group_by(col(Execution.component_id), col(Run.partition_key))
-        )
-        with session_scope(self._engine) as session:
-            return [
-                CoverageRow(
-                    asset_id,
-                    key,
-                    asset_key,
-                    succeeded=bool(succeeded),
-                    failed=failed is not None,
-                    failed_run_id=UUID(failed) if failed else None,
-                )
-                for asset_id, key, asset_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
-            ]
-
-    def partition_bounds(self, org_id: UUID) -> dict[UUID, PartitionBounds]:
-        """The days spanned by each asset's attempted partitions, all-time, from runs of any target.
-
-        An execution in any status counts as an attempt. Keys are grouped by
-        length as well as asset because keys of different granularities do
-        not order by their periods' ends as strings (``2026-08`` ends after
-        ``2026-08-15``), while keys of one granularity do.
+        data, not of what triggered it. Keys of every time granularity are
+        read, and of every period: the caller derives both each asset's
+        attempted span and a window's days from these rows, because any read
+        of the executions view scans the organisation's operation events
+        whole, so one all-time read costs less than a bounds read plus a
+        windowed one.
 
         Args:
             org_id: Organisation UUID.
 
         Returns:
-            Each asset's bounds by id; an asset never attempted for a time
-            partition is absent.
+            One row per asset and time partition key that executed at least once.
         """
         key = col(Run.partition_key)
         key_lengths = [
@@ -520,17 +428,33 @@ class EventStore:
             for granularity in TimeGranularity
             if granularity.key_format is not None
         ]
+        # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
+        failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Run.id), String))))
+        # The asset id comes back as text and is parsed once per asset: a UUID per row costs more than the roll-up.
+        asset = cast(col(Execution.component_id), String)
         statement = (
-            sa_select(col(Execution.component_id), func.min(key), func.max(key))
+            sa_select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
             .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(col(Run.org_id) == org_id, key.is_not(None), func.length(key).in_(key_lengths))
-            .group_by(col(Execution.component_id), func.length(key))
+            .where(
+                col(Execution.org_id) == org_id,
+                col(Run.org_id) == org_id,
+                key.is_not(None),
+                func.length(key).in_(key_lengths),
+            )
+            .group_by(col(Execution.component_id), key)
         )
-        keys: dict[UUID, list[str]] = {}
+        asset_ids: dict[str, UUID] = {}
         with session_scope(self._engine) as session:
-            for asset_id, first_key, last_key in session.execute(statement).all():  # ty: ignore[deprecated]
-                keys.setdefault(asset_id, []).extend((first_key, last_key))
-        return {asset_id: PartitionBounds.from_keys(asset_keys) for asset_id, asset_keys in keys.items()}
+            return [
+                CoverageRow(
+                    asset_ids.get(asset_text) or asset_ids.setdefault(asset_text, UUID(asset_text)),
+                    partition_key,
+                    succeeded=bool(succeeded),
+                    failed=failed is not None,
+                    failed_run_id=UUID(failed) if failed else None,
+                )
+                for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
+            ]
 
     def latest_executions(self, org_id: UUID) -> list[Execution]:
         """The most recent execution of every asset in an organisation.
@@ -552,43 +476,6 @@ class EventStore:
         with session_scope(self._engine) as session:
             statement = select(latest).where(ranked.c.rank == 1)
             return list(session.exec(statement).all())
-
-    def latest_by_component(
-        self, org_id: UUID, *, event_types: Sequence[str], since: datetime | None = None
-    ) -> list[Event]:
-        """The newest event of the given types per component.
-
-        No index serves this read, so callers bound it with *since*.
-
-        Args:
-            org_id: Organisation UUID.
-            event_types: The event types that count; others are ignored.
-            since: Keep events at or after this instant; ``None`` reads the
-                whole history.
-
-        Returns:
-            One event per component that has at least one in the window,
-            newest by timestamp.
-        """
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=col(Event.component_id),
-                order_by=(col(Event.timestamp).desc(), col(Event.id).desc()),
-            )
-            .label("rank")
-        )
-        filters: list[Any] = [
-            Event.org_id == org_id,
-            col(Event.component_id).is_not(None),
-            col(Event.event_type).in_(event_types),
-        ]
-        if since is not None:
-            filters.append(col(Event.timestamp) >= since)
-        ranked = select(Event, rank).where(*filters).subquery()
-        latest = aliased(Event, ranked)
-        with session_scope(self._engine) as session:
-            return list(session.exec(select(latest).where(ranked.c.rank == 1)).all())
 
     # -- Internals -------------------------------------------------------------
 

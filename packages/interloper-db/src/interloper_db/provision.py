@@ -69,6 +69,8 @@ def create_all(engine: Engine | None = None) -> None:
     # Stable arbitrary bigint — only this provisioning routine uses it.
     PROVISION_LOCK_KEY = 0x1A7E_5C8E_A7E1_5C8E
     with eng.connect() as lock_conn:
+        # Waiting out a sibling's migrations must not trip the engine's statement timeout.
+        lock_conn.execute(text("SET statement_timeout = 0"))
         lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY})
         try:
             # View-backed read models (info["is_view"]) are Alembic's to create.

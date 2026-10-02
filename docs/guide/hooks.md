@@ -86,8 +86,9 @@ does, declaring its own `targets` relation on the subclass; the base hook only o
 hook classes join the [catalog](catalog.md) through the `interloper.components` entry point like
 any component.
 
-`HookState` (`last_fired_at`, `last_run_id`) is the hook's machine-owned state, stamped by the
-operator on every firing.
+`HookState` (`last_fired_at`, `last_run_id`, `last_error`) is the hook's machine-owned state,
+stamped by the operator on every firing; `last_error` holds the latest firing's error and a
+successful firing clears it.
 
 ## Backfills
 

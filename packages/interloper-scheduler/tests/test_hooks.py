@@ -247,6 +247,56 @@ class TestHookEvaluation:
             assert events[0].error is not None and "no route" in events[0].error
             hook_row = session.exec(select(Component).where(Component.kind == "hook")).one()
             assert (hook_row.state or {}).get("last_run_id") == str(run.id)
+            assert "no route" in (hook_row.state or {}).get("last_error", "")
+
+    def test_a_failure_without_a_message_is_still_a_failure(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        import httpx2
+
+        def boom(*args: Any, **kwargs: Any) -> None:
+            raise TimeoutError
+
+        monkeypatch.setattr(httpx2, "post", boom)
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_failed"], "url": "https://example.test/x"},
+            relations={"watches": [source.id]},
+        )
+        _terminal_run(store, source.id, status="failed")
+
+        _sweep(store)
+
+        with Session(engine_module.get_engine()) as session:
+            assert [e.event_type for e in session.exec(select(EventRow)).all()] == ["hook_failed"]
+            hook_row = session.exec(select(Component).where(Component.kind == "hook")).one()
+            assert (hook_row.state or {}).get("last_error") == "TimeoutError"
+
+    def test_success_clears_last_error(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        import httpx2
+
+        def boom(*args: Any, **kwargs: Any) -> None:
+            raise httpx2.ConnectError("no route")
+
+        monkeypatch.setattr(httpx2, "post", boom)
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
+            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            config={"events": ["run_completed"], "url": "https://example.test/x"},
+            relations={"watches": [source.id]},
+        )
+        _terminal_run(store, source.id)
+        _sweep(store)
+        _capture_posts(monkeypatch)
+        run = _terminal_run(store, source.id)
+
+        _sweep(store)
+
+        with Session(engine_module.get_engine()) as session:
+            hook_row = session.exec(select(Component).where(Component.kind == "hook")).one()
+            assert hook_row.state is not None
+            assert hook_row.state["last_run_id"] == str(run.id)
+            assert "last_error" in hook_row.state
+            assert hook_row.state["last_error"] is None
 
     def test_self_targeting_trigger_is_refused(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")

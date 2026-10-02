@@ -399,7 +399,7 @@ class HookController(Controller):
             hook.fire(context)
             logger.info("Hook '%s' fired for %s (%s)", hook_row.name, subject, context.event_type)
         except Exception as e:
-            error = str(e)
+            error = str(e) or type(e).__name__
             logger.exception("Hook '%s' failed for %s", hook_row.name, subject)
 
         outcome = il.EventType.HOOK_FAILED if error else il.EventType.HOOK_FIRED
@@ -422,6 +422,7 @@ class HookController(Controller):
 
         hook_row.stamp_state(
             last_fired_at=dt.datetime.now(dt.timezone.utc),
+            last_error=error,
             **({"last_run_id": str(run_id)} if run_id else {}),
         )
 

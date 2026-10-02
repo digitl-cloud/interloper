@@ -130,7 +130,7 @@ def _cmd_app(args: argparse.Namespace) -> None:
 
     dsn = settings.postgres.dsn
     ensure_database(dsn)
-    init_engine(dsn)
+    init_engine(dsn, statement_timeout=settings.postgres.statement_timeout)
 
     if not skip_create_tables:
         # Dev convenience: idempotent CREATE TABLE on every startup. Concurrent

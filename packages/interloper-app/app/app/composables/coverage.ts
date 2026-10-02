@@ -1,5 +1,5 @@
 import type { MaybeRefOrGetter } from 'vue'
-import type { Coverage } from '~/types/overview'
+import type { Coverage, CoverageDay, CoverageSource } from '~/types/overview'
 
 export interface DayAggregate {
     expected: number
@@ -29,7 +29,29 @@ export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5
     return ratio >= 0.6 ? 4 : 3
 }
 
-/** Sum the coverage rows of the selected sources per date, and phrase the window's summary. */
+const DAY_MS = 86_400_000
+
+/** An ISO date as epoch milliseconds at midnight UTC. */
+function epochDay(date: string): number {
+    return Date.parse(`${date}T00:00:00Z`)
+}
+
+/** A source's day on one date, unrolled from its arrays; `null` when nothing is expected of it then. */
+export function sourceDay(source: CoverageSource, date: string): CoverageDay | null {
+    const i = Math.round((epochDay(date) - epochDay(source.start)) / DAY_MS)
+    const expected = source.expected[i] ?? 0
+    if (expected <= 0) return null
+    return {
+        date,
+        source_id: source.id,
+        expected,
+        covered: source.covered[i] ?? 0,
+        failed: source.failed[i] ?? 0,
+        failed_run_id: source.failed_run_ids[String(i)] ?? null,
+    }
+}
+
+/** Sum the days of the selected sources per date, and phrase the window's summary. */
 export function useCoverageCalendar(
     coverage: MaybeRefOrGetter<Coverage | null>,
     sourceFilter: MaybeRefOrGetter<string>,
@@ -37,13 +59,18 @@ export function useCoverageCalendar(
     const byDate = computed(() => {
         const map = new Map<string, DayAggregate>()
         const filter = toValue(sourceFilter)
-        for (const day of toValue(coverage)?.days ?? []) {
-            if (day.expected <= 0 || (filter !== 'all' && day.source_id !== filter)) continue
-            const agg = map.get(day.date) ?? { expected: 0, covered: 0, failed: 0 }
-            agg.expected += day.expected
-            agg.covered += day.covered
-            agg.failed += day.failed
-            map.set(day.date, agg)
+        for (const source of toValue(coverage)?.sources ?? []) {
+            if (filter !== 'all' && source.id !== filter) continue
+            const start = epochDay(source.start)
+            source.expected.forEach((expected, i) => {
+                if (expected <= 0) return
+                const date = new Date(start + i * DAY_MS).toISOString().slice(0, 10)
+                const agg = map.get(date) ?? { expected: 0, covered: 0, failed: 0 }
+                agg.expected += expected
+                agg.covered += source.covered[i] ?? 0
+                agg.failed += source.failed[i] ?? 0
+                map.set(date, agg)
+            })
         }
         return map
     })

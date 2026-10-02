@@ -22,7 +22,7 @@ from interloper.errors import (
 from interloper.partitioning.time import TimeGranularity
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlmodel import Session, select
 
 from interloper_db.models import Component
@@ -1368,6 +1368,35 @@ class TestJobPartitionGranularities:
         granularities = store.components.job_partition_granularities([daily_job.id, plain_job.id, mixed_job.id])
 
         assert granularities == {daily_job.id: TimeGranularity.DAY, plain_job.id: None, mixed_job.id: None}
+
+    def test_the_query_count_does_not_grow_with_jobs_or_targets(self, component_db: Engine):
+        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
+        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
+        jobs = []
+        for i in range(3):
+            source = store.components.create(
+                _ORG, kind="source", key="demo_source", children=["a", "b"], config={"dataset": f"demo_{i}"}
+            )
+            asset_ids = [child.id for child in source.children]
+            jobs.append(store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": asset_ids}))
+        jobs.append(store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [monthly.id]}))
+        statements: list[str] = []
+        event.listen(component_db, "before_cursor_execute", lambda *args: statements.append(args[2]))
+
+        granularities = store.components.job_partition_granularities([job.id for job in jobs])
+
+        assert granularities == {
+            **{job.id: TimeGranularity.DAY for job in jobs[:3]},
+            jobs[3].id: TimeGranularity.MONTH,
+        }
+        assert len(statements) == 3
+
+    def test_no_jobs_reads_nothing(self, component_db: Engine):
+        statements: list[str] = []
+        event.listen(component_db, "before_cursor_execute", lambda *args: statements.append(args[2]))
+
+        assert Store(catalog=il.Catalog(components={})).components.job_partition_granularities([]) == {}
+        assert statements == []
 
 
 class TestAssetPartitionings:
