@@ -210,6 +210,7 @@ The [documentation](https://docs.interloper.dev) has a page per concept, an exte
 | [`interloper-google-cloud`](packages/interloper-google-cloud) | Google Cloud connection, BigQuery and GCS destinations |
 | [`interloper-duckdb`](packages/interloper-duckdb) | DuckDB connection and DuckDB / MotherDuck destination |
 | [`interloper-aws`](packages/interloper-aws) | AWS connection and S3 destination |
+| [`interloper-azure`](packages/interloper-azure) | Microsoft Azure connection and Microsoft Fabric Warehouse destination |
 | [`interloper-slack`](packages/interloper-slack) | Slack connection and notification hook |
 | [`interloper-sql`](packages/interloper-sql) | SQL connection and a SQLAlchemy-backed destination (PostgreSQL, MySQL, SQL Server, ...) |
 | [`interloper-snowflake`](packages/interloper-snowflake) | Snowflake connection and destination |

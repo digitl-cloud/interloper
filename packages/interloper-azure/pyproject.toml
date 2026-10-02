@@ -1,0 +1,42 @@
+# ###############
+# PROJECT / UV
+# ###############
+[project]
+name = "interloper-azure"
+version = "0.96.0"
+description = "Interloper Microsoft Azure integration: Entra connection and Microsoft Fabric Warehouse destination"
+readme = "README.md"
+authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "interloper-core",
+    "azure-identity>=1.19",
+    "mssql-python>=1.15",
+]
+
+[project.entry-points."interloper.components"]
+azure = "interloper_azure"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+interloper-core = { workspace = true }
+
+# ###############
+# RUFF
+# ###############
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+preview = true
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

@@ -22,6 +22,7 @@ jobs:
             app
             assets
             aws
+            azure
             chart
             ci
             clickhouse

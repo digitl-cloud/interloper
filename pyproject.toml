@@ -14,6 +14,7 @@ dependencies = [
     "interloper-app",
     "interloper-assets",
     "interloper-aws",
+    "interloper-azure",
     "interloper-clickhouse",
     "interloper-core",
     "interloper-databricks",
@@ -59,6 +60,7 @@ interloper-scheduler = { workspace = true }
 interloper-google-cloud = { workspace = true }
 interloper-duckdb = { workspace = true }
 interloper-aws = { workspace = true }
+interloper-azure = { workspace = true }
 interloper-clickhouse = { workspace = true }
 interloper-agent = { workspace = true }
 interloper-app = { workspace = true }
@@ -181,6 +183,7 @@ version_toml = [
     "packages/interloper-google-cloud/pyproject.toml:project.version",
     "packages/interloper-duckdb/pyproject.toml:project.version",
     "packages/interloper-aws/pyproject.toml:project.version",
+    "packages/interloper-azure/pyproject.toml:project.version",
     "packages/interloper-clickhouse/pyproject.toml:project.version",
     "packages/interloper-docker/pyproject.toml:project.version",
     "packages/interloper-k8s/pyproject.toml:project.version",

@@ -45,7 +45,7 @@
 # can reach them (an ARG is only in scope where it is redeclared).
 #
 #   CORE_EXTRAS       comma-separated interloper-core extras
-#                     (default: aws,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql).
+#                     (default: aws,azure,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql).
 #                     Each extra maps to --package interloper-{name}.
 #   ASSETS_EXTRAS     comma-separated interloper-assets extras (default: bing,facebook,google)
 #                     Each extra maps to --extra {name} on interloper-assets.
@@ -66,7 +66,7 @@
 #
 # ================================================================
 
-ARG CORE_EXTRAS=aws,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql
+ARG CORE_EXTRAS=aws,azure,clickhouse,databricks,duckdb,google-cloud,slack,snowflake,sql
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
@@ -105,6 +105,7 @@ COPY packages/interloper-snowflake/pyproject.toml   packages/interloper-snowflak
 COPY packages/interloper-aws/pyproject.toml         packages/interloper-aws/pyproject.toml
 COPY packages/interloper-clickhouse/pyproject.toml  packages/interloper-clickhouse/pyproject.toml
 COPY packages/interloper-databricks/pyproject.toml  packages/interloper-databricks/pyproject.toml
+COPY packages/interloper-azure/pyproject.toml       packages/interloper-azure/pyproject.toml
 
 
 # ── Python runtime base ───────────────────────────────────────
