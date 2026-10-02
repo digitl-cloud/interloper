@@ -7,11 +7,93 @@ import atexit
 import inspect
 import threading
 from collections.abc import Coroutine, Iterable
+from types import TracebackType
 from typing import Any, TypeVar
 
 from opentelemetry import context as otel_context
+from typing_extensions import Self
 
 _T = TypeVar("_T")
+
+
+# -- Thread primitives ---------------------------------------------------------
+
+
+class RLock:
+    """A re-entrant lock that copies and pickles as a fresh, unheld lock.
+
+    A drop-in for ``threading.RLock`` on models that get deep-copied, as a
+    destination does with the source it is bound to: a bare lock cannot be
+    copied. A copy never shares the original's lock, so it starts unheld.
+    """
+
+    def __init__(self) -> None:
+        """Create the underlying lock."""
+        self._lock = threading.RLock()
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        """Acquire the lock, re-entrantly for the thread already holding it.
+
+        Args:
+            blocking: Whether to wait for the lock when another thread holds it.
+            timeout: Seconds to wait at most when blocking; ``-1`` waits forever.
+
+        Returns:
+            Whether the lock was acquired.
+        """
+        return self._lock.acquire(blocking, timeout)
+
+    def release(self) -> None:
+        """Release one level of the lock held by the calling thread."""
+        self._lock.release()
+
+    def __enter__(self) -> Self:
+        """Acquire the lock, waiting for it if needed.
+
+        Returns:
+            The lock.
+        """
+        self._lock.acquire()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Release the lock.
+
+        Args:
+            exc_type: The exception type, if the block raised; unused.
+            exc: The exception, if the block raised; unused.
+            tb: The traceback, if the block raised; unused.
+        """
+        self._lock.release()
+
+    def __reduce__(self) -> tuple[type[RLock], tuple[()]]:
+        """Reduce to a fresh lock, which ``copy`` and ``pickle`` both rebuild.
+
+        Returns:
+            The class and its empty constructor arguments.
+        """
+        return type(self), ()
+
+
+class ThreadLocal(threading.local):
+    """Per-thread attributes that copy and pickle as a fresh, empty namespace.
+
+    A drop-in for ``threading.local`` on models that get deep-copied: a bare
+    one cannot be copied, and a copy has no claim on the original's threads.
+    """
+
+    def __reduce__(self) -> tuple[type[ThreadLocal], tuple[()]]:
+        """Reduce to a fresh namespace, which ``copy`` and ``pickle`` both rebuild.
+
+        Returns:
+            The class and its empty constructor arguments.
+        """
+        return type(self), ()
 
 
 # -- Sync bridge ---------------------------------------------------------------
