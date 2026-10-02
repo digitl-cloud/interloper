@@ -65,7 +65,7 @@ Every component class describes itself through `definition()`:
 |-------|---------|
 | `kind`, `key`, `path` | Identity and import path. |
 | `name`, `icon`, `description`, `tags` | Display metadata; the description is the docstring. |
-| `maturity` | `alpha`, `beta` or `stable` (the default); see [Maturity](#maturity). |
+| `maturity` | `deprecated`, `alpha`, `beta` or `stable` (the default); see [Maturity](#maturity). |
 | `config_schema` | JSON Schema of the user-facing [configuration fields](fields.md). |
 | `state_schema` | JSON Schema of the machine-owned state model, when the kind has one. |
 | `relations` | Every declared relation by name, with its `kind`, `key`, `many`, `optional` and `on_delete`. |
@@ -88,14 +88,16 @@ class WarehouseDestination(il.Destination): ...
 | `alpha` | Early work, not yet proven against a live service. Behaviour, configuration and output may still change. |
 | `beta` | Works and is being proven in use. Changes are still possible. |
 | `stable` | Relied on. The default for a component that declares nothing. |
+| `deprecated` | Still works but is being phased out; avoid it for new setups. It will be removed in a future release. |
 
 The value is `il.Maturity` or its string, set through the decorator or as a class attribute
 (`maturity = "alpha"`); anything else is a `TypeError` where it is written. It is
-informational: a component behaves the same at every level, and the app shows an Alpha or Beta
-badge wherever the component is offered or listed.
+informational: a component behaves the same at every level, and the app shows a Deprecated, Alpha
+or Beta badge wherever the component is offered or listed.
 
 An asset's definition carries the less mature of its own and its source's maturity, so an alpha
 source makes every one of its assets alpha, while a stable source can still hold a beta asset.
+`deprecated` counts as the least mature: a deprecated source deprecates all its assets.
 
 ## Resolving keys
 

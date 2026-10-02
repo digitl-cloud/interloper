@@ -13,12 +13,17 @@ class Maturity(str, Enum):
     and never changes what the component does. ``ALPHA`` is early work whose
     behaviour, configuration and output may still change and that has not
     been proven against a live service; ``BETA`` works and is being proven,
-    with changes still possible; ``STABLE``, the default, is relied on.
+    with changes still possible; ``STABLE``, the default, is relied on;
+    ``DEPRECATED`` still works but is being phased out, so new setups should
+    avoid it.
 
     A composite, such as an asset inside its source, shows the
-    :meth:`least` mature of its parts.
+    :meth:`least` mature of its parts, ``DEPRECATED`` counting as the least:
+    a deprecated source deprecates its assets, and a deprecated asset stays
+    deprecated whatever its source.
     """
 
+    DEPRECATED = "deprecated"
     ALPHA = "alpha"
     BETA = "beta"
     STABLE = "stable"
@@ -28,7 +33,7 @@ class Maturity(str, Enum):
         """Coerce a declared value to a member.
 
         Args:
-            value: A member, or its string value (``"alpha"``, ``"beta"``, ``"stable"``).
+            value: A member, or its string value (``"deprecated"``, ``"alpha"``, ``"beta"``, ``"stable"``).
 
         Returns:
             The matching member.
@@ -52,4 +57,4 @@ class Maturity(str, Enum):
         Returns:
             The least mature one.
         """
-        return next(member for member in (cls.ALPHA, cls.BETA, cls.STABLE) if member in values)
+        return next(member for member in (cls.DEPRECATED, cls.ALPHA, cls.BETA, cls.STABLE) if member in values)

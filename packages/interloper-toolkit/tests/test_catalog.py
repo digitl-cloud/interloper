@@ -36,7 +36,7 @@ class TestCatalog:
         result = catalog_tools.list_definitions(ctx, "source")
         assert isinstance(result, DefinitionList)
         assert result.definitions
-        assert {entry.maturity for entry in result.definitions} <= {"alpha", "beta", "stable"}
+        assert {entry.maturity for entry in result.definitions} <= {"deprecated", "alpha", "beta", "stable"}
 
     def test_unknown_definition_is_a_structured_error(self, ctx: ToolkitContext):
         result = catalog_tools.get_definition(ctx, "nope")

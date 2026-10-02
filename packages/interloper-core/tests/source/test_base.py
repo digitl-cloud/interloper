@@ -400,6 +400,15 @@ class TestDefinition:
         assert defn.maturity is il.Maturity.BETA
         assert {a.key: a.maturity for a in defn.assets} == {"plain": il.Maturity.BETA, "early": il.Maturity.ALPHA}
 
+    def test_a_deprecated_source_deprecates_its_assets(self):
+        @il.source(maturity="deprecated")
+        class FakeDeprecatedSource(il.Source):
+            @il.asset(maturity="alpha")
+            def early(self) -> list:
+                return []
+
+        assert FakeDeprecatedSource.definition().assets[0].maturity is il.Maturity.DEPRECATED
+
     def test_a_stable_source_keeps_each_assets_own_maturity(self):
         @il.source
         class FakeStableSource(il.Source):

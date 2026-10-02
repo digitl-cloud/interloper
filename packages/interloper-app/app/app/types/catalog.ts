@@ -18,7 +18,7 @@ export interface RelationDefinition {
     name: string
 }
 
-export type Maturity = 'alpha' | 'beta' | 'stable'
+export type Maturity = 'deprecated' | 'alpha' | 'beta' | 'stable'
 
 export interface ComponentDefinition {
     kind: string
