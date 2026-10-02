@@ -15,6 +15,7 @@ own README. All are versioned and released together.
 | `interloper-core[sql]` | Pulls in `interloper-sql`. |
 | `interloper-core[snowflake]` | Pulls in `interloper-snowflake`. |
 | `interloper-core[clickhouse]` | Pulls in `interloper-clickhouse`. |
+| `interloper-core[databricks]` | Pulls in `interloper-databricks`. |
 
 ## Framework extensions
 
@@ -28,6 +29,7 @@ own README. All are versioned and released together.
 | `interloper-sql` | `SQLConnection`, `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
 | `interloper-snowflake` | `SnowflakeConnection`, `SnowflakeDestination` (a `DatabaseDestination` with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet `COPY INTO`). | `interloper.components` |
 | `interloper-clickhouse` | `ClickHouseConnection`, `ClickHouseDestination` (a `DatabaseDestination` writing `MergeTree` tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and `REPLACE PARTITION`; self-hosted servers and ClickHouse Cloud). | `interloper.components` |
+| `interloper-databricks` | `DatabricksConnection` (an OAuth service principal or a personal access token), `DatabricksDestination` (a `DatabaseDestination` writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic `INSERT ... REPLACE WHERE`). | `interloper.components` |
 | `interloper-assets` | Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the `demo` source. | `interloper.components` |
 | `interloper-docker` | `DockerRunner`: each operation runs in a container, events stream back to the host. | `interloper.runners`: `docker`; `interloper.launchers`: `docker` |
 | `interloper-k8s` | `KubernetesRunner`: each operation runs as a Kubernetes Job. | `interloper.runners`: `kubernetes`; `interloper.launchers`: `kubernetes` |

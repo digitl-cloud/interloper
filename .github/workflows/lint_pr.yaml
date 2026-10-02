@@ -26,6 +26,7 @@ jobs:
             ci
             clickhouse
             core
+            databricks
             db
             deps
             docker
