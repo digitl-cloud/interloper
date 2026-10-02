@@ -2167,8 +2167,9 @@ any component, so credentials ride a connection:</p>
 does, declaring its own <code>targets</code> relation on the subclass; the base hook only observes. Custom
 hook classes join the <a href="../catalog/">catalog</a> through the <code>interloper.components</code> entry point like
 any component.</p>
-<p><code>HookState</code> (<code>last_fired_at</code>, <code>last_run_id</code>) is the hook's machine-owned state, stamped by the
-operator on every firing.</p>
+<p><code>HookState</code> (<code>last_fired_at</code>, <code>last_run_id</code>, <code>last_error</code>) is the hook's machine-owned state,
+stamped by the operator on every firing; <code>last_error</code> holds the latest firing's error and a
+successful firing clears it.</p>
 <h2 id="backfills">Backfills<a class="headerlink" href="#backfills" title="Permanent link">&para;</a></h2>
 <p>A backfill has a verdict of its own: <code>backfill_completed</code> once every partition's latest attempt
 succeeded, <code>backfill_failed</code> once the batch closed with a failed partition left. Every firing of a

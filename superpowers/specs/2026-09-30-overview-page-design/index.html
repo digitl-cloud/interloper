@@ -2035,14 +2035,19 @@ heals a day and a source with no job still shows its history.</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"since"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-01"</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">"until"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-02"</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">"sources"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Shop"</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"source"</span><span class="p">}],</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">"days"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="p">{</span><span class="nt">"date"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-09-29"</span><span class="p">,</span><span class="w"> </span><span class="nt">"source_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">,</span><span class="w"> </span><span class="nt">"expected"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nt">"covered"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">"failed"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nt">"failed_run_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid-or-null"</span><span class="p">}</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="p">]</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">"sources"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">      </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Shop"</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"source"</span><span class="p">,</span><span class="w"> </span><span class="nt">"start"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-09-28"</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">      </span><span class="nt">"expected"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">],</span><span class="w"> </span><span class="nt">"covered"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">],</span><span class="w"> </span><span class="nt">"failed"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">],</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="nt">"failed_run_ids"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"1"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">}</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><code>sources</code> lists every group with at least one day, ordered by name; <code>days</code> holds one entry per
-group and day with anything expected, ordered by group then date.</p>
+<p><code>sources</code> lists every group with anything expected in the window, ordered by name. Each group's
+arrays are dense over its own span: index <code>i</code> is the day <code>start + i</code>, from the group's first to
+its last expected day inside the window, a day with nothing expected inside the span being zeros.
+<code>failed_run_ids</code> maps a day offset to that day's greatest failed run id.</p>
 <p>Cell colour for a day (summed over the filtered groups), matching the design:</p>
 <ul>
 <li>nothing expected: neutral with an inset border ("Not expected")</li>
@@ -2076,7 +2081,8 @@ its kind's page.</p>
 <ol>
 <li><strong>disabled</strong>: its config has <code>enabled: false</code></li>
 <li><strong>failing</strong>: asset whose latest execution failed; source with a failing asset; failing job;
-   hook whose latest hook event is <code>hook_failed</code></li>
+   hook whose last firing, within the last 30 days, failed (<code>state.last_error</code>, stamped by the
+   scheduler on each firing and cleared by a success)</li>
 <li><strong>needs attention</strong>: drift; connection needing re-authorisation</li>
 <li><strong>healthy</strong>: everything else</li>
 </ol>
@@ -2104,18 +2110,16 @@ the page:</p>
   Runs tile reads every attempt completed in the last 24h (bucketed by completion hour in the
   route), the attention list the failed stacks completed in that window, and "Just happened" the
   latest completed stacks, most recently completed first.</li>
-<li><code>events.coverage_rows(org_id, since, until)</code>: the org-wide sibling of <code>partition_coverage</code>:
-  one row per asset and partition overlapping the window, from runs of any target, with whether
-  it ever succeeded, whether any execution failed, and the greatest failed run id. An attempted
-  asset-partition that neither succeeded nor failed (still in flight, or canceled) stays missing
-  rather than failed.</li>
-<li><code>events.partition_bounds(org_id)</code>: per asset, the first day of its earliest and the last day of
-  its latest attempted partition, all-time, from runs of any target, in one grouped query.</li>
+<li><code>events.coverage_rows(org_id)</code>: the org-wide sibling of <code>partition_coverage</code>: one row per asset
+  and partition, all-time, from runs of any target, with whether it ever succeeded, whether any
+  execution failed, and the greatest failed run id. An attempted asset-partition that neither
+  succeeded nor failed (still in flight, or canceled) stays missing rather than failed. It is the
+  coverage endpoint's only read of the <code>executions</code> view: the route derives each asset's
+  attempted bounds and the window's rows from it, since any read of the view scans the
+  organisation's whole history.</li>
 <li><code>components.asset_partitionings(org_id)</code>: each partitioned asset row's <code>TimePartitionConfig</code>
   (granularity, declared start) from its catalog definition, an owned asset resolving through
   its parent source; drifted rows are skipped.</li>
-<li><code>events.latest_by_component(org_id, event_types=, since=)</code>: the latest <code>hook_fired</code> /
-  <code>hook_failed</code> event per hook, bounded to the last 30 days.</li>
 <li><code>components.job_partition_granularities(job_ids)</code>: each job's target granularity in one read.</li>
 </ul>
 <p><strong>API</strong> (<code>interloper-api</code>), new <code>routes/overview.py</code>, viewer role:</p>

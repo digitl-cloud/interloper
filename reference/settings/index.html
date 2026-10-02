@@ -2172,7 +2172,7 @@ and <code>interloper-mcp</code>.</p>
 <tr>
 <td><code>postgres</code></td>
 <td><code>INTERLOPER_POSTGRES_</code></td>
-<td><code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>database</code>; <code>dsn</code> property</td>
+<td><code>host</code>, <code>port</code>, <code>user</code>, <code>password</code>, <code>database</code>, <code>statement_timeout</code>; <code>dsn</code> property</td>
 </tr>
 <tr>
 <td><code>auth</code></td>
@@ -2231,6 +2231,10 @@ and <code>interloper-mcp</code>.</p>
 </tr>
 </tbody>
 </table>
+<p><code>postgres.statement_timeout</code> (<code>INTERLOPER_POSTGRES_STATEMENT_TIMEOUT</code>) is a number of seconds, unset by
+default. When set, <code>interloper-db</code> sends it as the libpq <code>statement_timeout</code> connection option, so the
+server cancels any statement of the process that runs longer. Unset leaves the server's own setting
+untouched; SQLite ignores it.</p>
 <h2 id="yaml-example">YAML example<a class="headerlink" href="#yaml-example" title="Permanent link">&para;</a></h2>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># interloper.yaml</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">runner</span><span class="p">:</span>
