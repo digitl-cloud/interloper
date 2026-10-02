@@ -48,7 +48,7 @@ export interface Overview {
 
 export interface CoverageDay {
     date: string
-    job_id: string
+    source_id: string
     expected: number
     covered: number
     failed: number
@@ -58,7 +58,7 @@ export interface CoverageDay {
 export interface Coverage {
     since: string
     until: string
-    jobs: { id: string, name: string }[]
+    sources: { id: string, name: string, kind: 'source' | 'asset' }[]
     days: CoverageDay[]
 }
 

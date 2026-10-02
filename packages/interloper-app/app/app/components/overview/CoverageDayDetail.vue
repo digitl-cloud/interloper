@@ -5,21 +5,54 @@ import type { Coverage, CoverageDay } from '~/types/overview'
 const props = defineProps<{
     date: string
     coverage: Coverage
-    jobFilter: string
+    sourceFilter: string
 }>()
+
+/** Problem rows shown before the rest folds behind "Show all". */
+const PROBLEM_CAP = 5
 
 const componentsStore = useComponentsStore()
 const editor = useCanEdit()
+const expanded = ref(false)
+watch(() => props.date, () => { expanded.value = false })
 
-const rows = computed(() => props.coverage.days
-    .filter(d => d.date === props.date && (props.jobFilter === 'all' || d.job_id === props.jobFilter))
-    .map(d => ({
-        ...d,
-        name: props.coverage.jobs.find(j => j.id === d.job_id)?.name ?? d.job_id.slice(0, 8),
-        okPct: Math.round((100 * d.covered) / Math.max(1, d.expected)),
-        failPct: Math.round((100 * d.failed) / Math.max(1, d.expected)),
-        gap: d.covered + d.failed < d.expected,
-    })))
+const rows = computed(() => {
+    const sources = new Map(props.coverage.sources.map(s => [s.id, s]))
+    return props.coverage.days
+        .filter(d => d.date === props.date && (props.sourceFilter === 'all' || d.source_id === props.sourceFilter))
+        .map(d => ({
+            ...d,
+            name: sources.get(d.source_id)?.name ?? d.source_id.slice(0, 8),
+            kind: sources.get(d.source_id)?.kind ?? 'source',
+            okPct: Math.round((100 * d.covered) / Math.max(1, d.expected)),
+            failPct: Math.round((100 * d.failed) / Math.max(1, d.expected)),
+            gap: d.covered + d.failed < d.expected,
+            missing: d.expected - d.covered - d.failed,
+        }))
+})
+
+const problems = computed(() => rows.value
+    .filter(r => r.failed || r.gap)
+    .sort((a, b) => b.failed - a.failed || b.missing - a.missing || a.name.localeCompare(b.name)))
+const complete = computed(() => rows.value
+    .filter(r => !r.failed && !r.gap)
+    .sort((a, b) => a.name.localeCompare(b.name)))
+
+const visible = computed(() => {
+    if (expanded.value) return [...problems.value, ...complete.value]
+    return problems.value.length ? problems.value.slice(0, PROBLEM_CAP) : complete.value.slice(0, PROBLEM_CAP)
+})
+const hiddenProblems = computed(() => Math.max(0, problems.value.length - PROBLEM_CAP))
+const hiddenComplete = computed(() => problems.value.length
+    ? complete.value.length
+    : Math.max(0, complete.value.length - PROBLEM_CAP))
+const foldable = computed(() => hiddenProblems.value > 0 || hiddenComplete.value > 0)
+const foldedNote = computed(() => {
+    const parts: string[] = []
+    if (hiddenProblems.value) parts.push(`${hiddenProblems.value} more with gaps`)
+    if (hiddenComplete.value) parts.push(`${hiddenComplete.value} complete`)
+    return parts.join(' · ')
+})
 
 const summary = computed(() => {
     const expected = rows.value.reduce((n, r) => n + r.expected, 0)
@@ -36,13 +69,13 @@ const label = computed(() => new Date(`${props.date}T00:00:00Z`).toLocaleDateStr
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
 }))
 
-const backfillJob = ref<ComponentRecord | null>(null)
-const backfillOpen = ref(false)
-function backfill(row: CoverageDay) {
-    const job = componentsStore.byId(row.job_id)
-    if (!job) return
-    backfillJob.value = job
-    backfillOpen.value = true
+const runTarget = ref<ComponentRecord | null>(null)
+const runOpen = ref(false)
+function run(row: CoverageDay) {
+    const target = componentsStore.byId(row.source_id)
+    if (!target) return
+    runTarget.value = target
+    runOpen.value = true
 }
 </script>
 
@@ -54,9 +87,13 @@ function backfill(row: CoverageDay) {
         </div>
         <div v-if="rows.length"
              class="grid grid-cols-[minmax(160px,220px)_minmax(0,1fr)_72px_auto] items-center gap-x-4 gap-y-2">
-            <template v-for="row in rows"
-                      :key="row.job_id">
-                <span class="truncate font-mono text-xs text-highlighted">{{ row.name }}</span>
+            <template v-for="row in visible"
+                      :key="row.source_id">
+                <span class="flex min-w-0 items-center gap-1.5">
+                    <UIcon :name="row.kind === 'asset' ? 'i-lucide-box' : 'i-lucide-plug'"
+                           class="size-3.5 shrink-0 text-dimmed" />
+                    <span class="truncate font-mono text-xs text-highlighted">{{ row.name }}</span>
+                </span>
                 <div class="flex h-2 overflow-hidden rounded-full bg-accented">
                     <div class="bg-success"
                          :style="{ width: `${row.okPct}%` }" />
@@ -66,12 +103,12 @@ function backfill(row: CoverageDay) {
                 <span class="whitespace-nowrap text-xs tabular-nums text-muted">{{ row.covered }} / {{ row.expected }}</span>
                 <div class="flex min-w-[92px] justify-end">
                     <UButton v-if="editor && row.gap && !row.failed"
-                             icon="i-lucide-history"
-                             label="Backfill"
+                             icon="i-lucide-play"
+                             label="Run"
                              size="xs"
                              color="neutral"
                              variant="outline"
-                             @click="backfill(row)" />
+                             @click="run(row)" />
                     <ULink v-else-if="row.failed && row.failed_run_id"
                            :to="`/executions/runs/${row.failed_run_id}`"
                            class="inline-flex items-center gap-1 text-xs text-error hover:underline">Open run<UIcon name="i-lucide-arrow-right"
@@ -82,9 +119,19 @@ function backfill(row: CoverageDay) {
                 </div>
             </template>
         </div>
-        <ExecutionsRunModal v-if="backfillJob"
-                            v-model:open="backfillOpen"
-                            :target="backfillJob"
+        <div v-if="rows.length && foldable"
+             class="mt-2.5 flex items-center gap-2 text-xs text-muted">
+            <span v-if="!expanded">{{ foldedNote }}</span>
+            <UButton :label="expanded ? 'Show less' : 'Show all'"
+                     size="xs"
+                     color="neutral"
+                     variant="link"
+                     class="p-0"
+                     @click="expanded = !expanded" />
+        </div>
+        <ExecutionsRunModal v-if="runTarget"
+                            v-model:open="runOpen"
+                            :target="runTarget"
                             :initial-range="{ start: date, end: date }" />
     </div>
 </template>

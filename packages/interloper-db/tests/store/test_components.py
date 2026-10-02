@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from collections.abc import Callable
 from typing import ClassVar
@@ -19,7 +20,7 @@ from interloper.errors import (
     NotFoundError,
 )
 from interloper.partitioning.time import TimeGranularity
-from interloper_assets.demo.source import DemoMonthlySource, DemoSource
+from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session, select
@@ -167,6 +168,19 @@ class DiscriminatedSource(il.Source):
 
         def data(self, context: il.ExecutionContext) -> list[dict]:
             return []
+
+
+@il.source
+class StartedSource(il.Source):
+    """Source whose hourly asset declares where its partitions start."""
+
+    @il.asset(
+        partitioning=il.TimePartitionConfig(
+            column="date", granularity=il.TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15, 6, 30)
+        )
+    )
+    def clicks(self) -> list[dict]:
+        return []
 
 
 @pytest.fixture
@@ -1354,6 +1368,46 @@ class TestJobPartitionGranularities:
         granularities = store.components.job_partition_granularities([daily_job.id, plain_job.id, mixed_job.id])
 
         assert granularities == {daily_job.id: TimeGranularity.DAY, plain_job.id: None, mixed_job.id: None}
+
+
+class TestAssetPartitionings:
+    """Every partitioned asset row of an organisation resolves its catalog partitioning in one read."""
+
+    def test_owned_and_standalone_assets_resolve_their_partitioning(self, component_db: Engine):
+        store = Store(
+            catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, StartedSource, WireUpSource, demo_asset])
+        )
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
+        started = store.components.create(_ORG, kind="source", key="started_source")
+        store.components.create(_ORG, kind="source", key="wire_up_source")
+        standalone = store.components.create(_ORG, kind="asset", key="demo_asset")
+        store.components.create(uuid4(), kind="source", key="demo_source")
+
+        partitionings = store.components.asset_partitionings(_ORG)
+
+        day = il.TimePartitionConfig(column="date")
+        assert partitionings == {
+            **{child.id: day for child in daily.children},
+            _child(monthly, "monthly").id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
+            _child(started, "clicks").id: il.TimePartitionConfig(
+                column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15, 6)
+            ),
+            standalone.id: day,
+        }
+        assert partitionings[standalone.id].granularity is TimeGranularity.DAY
+
+    def test_a_drifted_asset_is_skipped(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, demo_asset]))
+        daily = writer.components.create(_ORG, kind="source", key="demo_source")
+        writer.components.create(_ORG, kind="source", key="demo_monthly_source")
+        with Session(component_db) as session:
+            # A key the source does not declare must not fall back to the standalone asset of that key.
+            session.add(Component(org_id=_ORG, kind="asset", key="demo_asset", parent_id=daily.id))
+            session.commit()
+        reader = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
+
+        assert set(reader.components.asset_partitionings(_ORG)) == {child.id for child in daily.children}
 
 
 class TestCheckJobTargets:

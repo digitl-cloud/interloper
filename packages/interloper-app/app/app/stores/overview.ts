@@ -16,7 +16,7 @@ export const useOverviewStore = defineStore('overview', () => {
 
     const overview = ref<Overview | null>(null)
     const coverage = ref<Coverage | null>(null)
-    const coverageMonths = ref<CoverageMonths>(6)
+    const coverageMonths = ref<CoverageMonths>(3)
     const loading = ref(false)
     const coverageLoading = ref(false)
     const error = ref<Error | null>(null)

@@ -1184,6 +1184,48 @@ class ComponentStore:
                     granularities[job_id] = None
         return granularities
 
+    def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
+        """Resolve the partitioning of every partitioned asset row of an organisation, in one session.
+
+        Partitioning lives on the catalog definition, never on the row: an
+        owned asset resolves through its parent source's definition, a
+        standalone one by its own key. A row whose definition does not
+        resolve the way the row is owned (a drifted key, a disabled or
+        missing source) is skipped, as is an unpartitioned asset.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            Each partitioned asset's time partition config by row id, its
+            ``granularity`` a :class:`TimeGranularity` and its ``start`` the
+            declared period start, or ``None``.
+        """
+        with session_scope(self._engine) as session:
+            rows = session.exec(
+                select(Component).where(Component.org_id == org_id, col(Component.kind).in_(("source", "asset")))
+            ).all()
+            keys = {row.id: row.key for row in rows}
+            assets = [
+                (row.id, row.key, keys.get(row.parent_id) if row.parent_id else None)
+                for row in rows
+                if row.kind == "asset"
+            ]
+        partitionings: dict[UUID, il.TimePartitionConfig] = {}
+        for asset_id, key, parent_key in assets:
+            definition = self._catalog.get(key, parent_key=parent_key)
+            if not isinstance(definition, il.AssetDefinition) or (definition.source_key or None) != parent_key:
+                continue
+            if (partitioning := definition.partitioning) is None:
+                continue
+            partitionings[asset_id] = il.TimePartitionConfig(
+                column=partitioning["column"],
+                allow_window=partitioning.get("allow_window", False),
+                granularity=TimeGranularity(partitioning.get("granularity", TimeGranularity.DAY)),
+                start=partitioning.get("start"),
+            )
+        return partitionings
+
     def _target_partitionings(self, session: Session, target: Component) -> list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
