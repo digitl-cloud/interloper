@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Alpha / beta badge for a component definition, with what the level means
+ * Deprecated / alpha / beta badge for a component definition, with what the level means
  * in a tooltip. Renders nothing for a stable (or unknown) maturity, so call
  * sites pass the definition's value without checking it themselves.
  */
@@ -11,6 +11,11 @@ const props = defineProps<{
 }>()
 
 const LEVELS = {
+    deprecated: {
+        label: 'Deprecated',
+        color: 'error',
+        description: 'Being phased out: it still works, but avoid it for new setups. It will be removed in a future release.',
+    },
     alpha: {
         label: 'Alpha',
         color: 'warning',
@@ -24,7 +29,7 @@ const LEVELS = {
 } as const
 
 const level = computed(() =>
-    props.maturity === 'alpha' || props.maturity === 'beta' ? LEVELS[props.maturity] : null,
+    props.maturity && props.maturity !== 'stable' && props.maturity in LEVELS ? LEVELS[props.maturity] : null,
 )
 </script>
 
