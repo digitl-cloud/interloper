@@ -114,14 +114,12 @@ class Component(Serializable):
     # -- Construction ----------------------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind``, check ``maturity`` and collect the class's relations.
+        """Auto-derive ``kind`` and collect the class's relations.
 
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation comes from :class:`Serializable`.) A ``maturity``
-        declared in the class body is coerced here, so an unknown value fails
-        where it is written; the decorator coerces its own argument.
+        (``key`` derivation comes from :class:`Serializable`.)
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
@@ -129,8 +127,6 @@ class Component(Serializable):
         super().__init_subclass__(**kwargs)
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
-        if "maturity" in cls.__dict__:
-            cls.maturity = Maturity.of(cls.__dict__["maturity"])
         cls._collect()
 
     @classmethod

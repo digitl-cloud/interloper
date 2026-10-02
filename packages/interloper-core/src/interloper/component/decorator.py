@@ -27,7 +27,6 @@ from collections.abc import Callable
 from typing import Any, ClassVar, TypeVar, get_origin
 
 from interloper.component.base import Component
-from interloper.component.maturity import Maturity
 from interloper.component.relation import Relation
 
 ComponentT = TypeVar("ComponentT", bound=Component)
@@ -76,8 +75,6 @@ def decorate(
     """
     declaring = target if isinstance(target, type) and issubclass(target, anchor) else anchor
     classvars, fields = _route(declaring, overrides)
-    if "maturity" in classvars:
-        classvars["maturity"] = Maturity.of(classvars["maturity"])
     declared = _relations(declaring, relations or {})
     return build(target, classvars=classvars, fields=fields, relations=declared)
 

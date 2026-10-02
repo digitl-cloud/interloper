@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
 
 
 class Maturity(str, Enum):
@@ -27,25 +26,6 @@ class Maturity(str, Enum):
     ALPHA = "alpha"
     BETA = "beta"
     STABLE = "stable"
-
-    @classmethod
-    def of(cls, value: Any) -> Maturity:
-        """Coerce a declared value to a member.
-
-        Args:
-            value: A member, or its string value (``"deprecated"``, ``"alpha"``, ``"beta"``, ``"stable"``).
-
-        Returns:
-            The matching member.
-
-        Raises:
-            TypeError: If the value names no member.
-        """
-        try:
-            return cls(value)
-        except ValueError:
-            allowed = ", ".join(repr(member.value) for member in cls)
-            raise TypeError(f"Unknown maturity {value!r}; expected one of {allowed}.") from None
 
     @classmethod
     def least(cls, *values: Maturity) -> Maturity:
