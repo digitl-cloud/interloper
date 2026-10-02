@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tempfile
-import threading
 import uuid
 import warnings
 from collections.abc import Iterator, Sequence
@@ -20,6 +19,7 @@ from interloper.errors import ConfigError, DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField
 from interloper.schema import FieldSpec
+from interloper.utils.concurrency import RLock, ThreadLocal
 from interloper.utils.data import is_empty
 from pydantic import PrivateAttr
 from snowflake.connector import SnowflakeConnection as Session
@@ -98,8 +98,8 @@ class SnowflakeDestination(DatabaseDestination):
     default_dataset: str | None = InputField(default=None, description="Default schema for assets without a dataset")
 
     _stages: set[str] = PrivateAttr(default_factory=set)
-    _lock: Any = PrivateAttr(default_factory=threading.RLock)
-    _local: threading.local = PrivateAttr(default_factory=threading.local)
+    _lock: RLock = PrivateAttr(default_factory=RLock)
+    _local: ThreadLocal = PrivateAttr(default_factory=ThreadLocal)
 
     @cached_property
     def client(self) -> Session:

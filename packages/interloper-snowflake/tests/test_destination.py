@@ -180,6 +180,36 @@ class TestSession:
         assert session.sql.count(f"CREATE TEMPORARY STAGE IF NOT EXISTS {STAGE}") == 1
 
 
+@il.source
+class _Source(il.Source):
+    @il.asset
+    def items(self) -> list:
+        return []
+
+
+class TestCopy:
+    def test_deep_copy_gets_its_own_lock_and_thread_state(self, session):
+        destination = _destination()
+        copied = destination.model_copy(deep=True)
+
+        assert copied._lock is not destination._lock
+        assert copied._local is not destination._local
+        copied.write(_ctx(ads_stats(), schema=_DaySchema), [DAY])
+        assert "COMMIT" in session.sql
+
+    def test_source_bound_to_the_destination_copies(self):
+        destination = _destination()
+        source = _Source(destinations=[destination])
+
+        copied = source(dataset="marts")
+
+        [copied_destination] = copied.destinations
+        assert copied.dataset == "marts"
+        assert isinstance(copied_destination, SnowflakeDestination)
+        assert copied_destination is not destination
+        assert copied_destination._lock is not destination._lock
+
+
 class TestStaging:
     def test_put_uploads_the_aligned_frame(self, session):
         _destination().write(_ctx(ads_stats(), schema=_DaySchema), [{"cost": 1.5, "day": datetime.date(2024, 1, 1)}])

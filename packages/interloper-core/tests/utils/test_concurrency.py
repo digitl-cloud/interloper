@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import pickle
 import threading
 
 import pytest
 
-from interloper.utils.concurrency import bounded_gather, invoke, run
+from interloper.utils.concurrency import RLock, ThreadLocal, bounded_gather, invoke, run
 
 
 class TestBoundedGather:
@@ -154,3 +156,82 @@ class TestRunTelemetryContext:
             return 1
 
         assert run(noop()) == 1
+
+
+def _held_elsewhere(lock: RLock) -> bool:
+    """Report whether another thread fails to take ``lock`` without waiting.
+
+    Args:
+        lock: The lock to probe.
+
+    Returns:
+        ``True`` when the lock is held by some other thread.
+    """
+    acquired: list[bool] = []
+
+    def probe() -> None:
+        acquired.append(lock.acquire(blocking=False))
+        if acquired[0]:
+            lock.release()
+
+    thread = threading.Thread(target=probe)
+    thread.start()
+    thread.join()
+    return not acquired[0]
+
+
+class TestRLock:
+    """A re-entrant lock that copies and pickles as a fresh one."""
+
+    def test_is_reentrant(self):
+        lock = RLock()
+        with lock, lock:
+            assert _held_elsewhere(lock)
+        assert not _held_elsewhere(lock)
+
+    def test_excludes_other_threads(self):
+        lock = RLock()
+        assert lock.acquire()
+        assert _held_elsewhere(lock)
+        lock.release()
+        assert not _held_elsewhere(lock)
+
+    @pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy, lambda lock: pickle.loads(pickle.dumps(lock))])
+    def test_copy_is_a_fresh_unheld_lock(self, clone):
+        lock = RLock()
+        with lock:
+            cloned = clone(lock)
+            assert isinstance(cloned, RLock)
+            assert cloned._lock is not lock._lock
+            assert not _held_elsewhere(cloned)
+
+    def test_deep_copy_inside_a_container(self):
+        lock = RLock()
+        state = {"lock": lock, "items": [1]}
+        cloned = copy.deepcopy(state)
+        assert cloned["lock"] is not lock
+        assert cloned["items"] == [1]
+
+
+class TestThreadLocal:
+    """Per-thread attributes that copy and pickle as a fresh namespace."""
+
+    def test_attributes_are_per_thread(self):
+        local = ThreadLocal()
+        local.value = 1
+        seen: list[bool] = []
+        thread = threading.Thread(target=lambda: seen.append(hasattr(local, "value")))
+        thread.start()
+        thread.join()
+        assert seen == [False]
+        assert local.value == 1
+
+    @pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy, lambda local: pickle.loads(pickle.dumps(local))])
+    def test_copy_is_a_fresh_empty_namespace(self, clone):
+        local = ThreadLocal()
+        local.value = 1
+        cloned = clone(local)
+        assert isinstance(cloned, ThreadLocal)
+        assert cloned is not local
+        assert not hasattr(cloned, "value")
+        assert local.value == 1
