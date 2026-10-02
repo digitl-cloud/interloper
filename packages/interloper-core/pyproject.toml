@@ -25,6 +25,7 @@ google-cloud = ["interloper-google-cloud"]
 slack = ["interloper-slack"]
 sql = ["interloper-sql"]
 snowflake = ["interloper-snowflake"]
+databricks = ["interloper-databricks"]
 # Instruments only what core itself depends on (httpx2); FastAPI and
 # SQLAlchemy instrumentation ship with interloper-api[otel] / interloper-db[otel].
 otel = [
@@ -45,6 +46,7 @@ interloper-google-cloud = { workspace = true }
 interloper-slack = { workspace = true }
 interloper-sql = { workspace = true }
 interloper-snowflake = { workspace = true }
+interloper-databricks = { workspace = true }
 
 
 [project.entry-points."interloper.kinds"]

@@ -214,6 +214,7 @@ The [documentation](https://docs.interloper.dev) has a page per concept, an exte
 | [`interloper-sql`](packages/interloper-sql) | SQL connection and a SQLAlchemy-backed destination (PostgreSQL, MySQL, SQL Server, ...) |
 | [`interloper-snowflake`](packages/interloper-snowflake) | Snowflake connection and destination |
 | [`interloper-clickhouse`](packages/interloper-clickhouse) | ClickHouse connection and destination (self-hosted and ClickHouse Cloud) |
+| [`interloper-databricks`](packages/interloper-databricks) | Databricks connection and Delta / Unity Catalog destination |
 | [`interloper-assets`](packages/interloper-assets) | Ready-made sources for advertising, analytics and commerce platforms |
 | [`interloper-docker`](packages/interloper-docker) | Docker runner and launcher |
 | [`interloper-k8s`](packages/interloper-k8s) | Kubernetes runner and launcher |
