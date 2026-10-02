@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { RunStats, RunStatusBucket } from '~/composables/runStats'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     stats: RunStats
-}>()
+    /** What the total counts, e.g. "assets" or "runs". */
+    noun?: string
+}>(), { noun: 'assets' })
 
-/** Active status bucket key (e.g. "failed"); filters the assets, the timeline and the events. */
+/** Active status bucket key (e.g. "failed"); the host filters what it shows by it. */
 const statusFilter = defineModel<string | null>('statusFilter', { default: null })
 
 const legend = computed(() => props.stats.buckets.filter(b => b.core || b.count > 0))
@@ -18,11 +20,11 @@ function toggle(bucket: RunStatusBucket) {
 </script>
 
 <template>
-    <div class="flex shrink-0 flex-col gap-2.5 border-b border-default px-4 py-3">
+    <div class="flex flex-col gap-2.5">
         <div class="flex items-center gap-3.5">
-            <div class="flex shrink-0 items-baseline gap-[5px]">
-                <span class="text-[15px] font-semibold tabular-nums">{{ stats.total }}</span>
-                <span class="text-[12.5px] text-muted">assets</span>
+            <div class="flex shrink-0 items-baseline gap-1">
+                <span class="text-base font-semibold tabular-nums">{{ stats.total }}</span>
+                <span class="text-xs text-muted">{{ noun }}</span>
             </div>
             <UProgressGroup :items="progressSegments(stats)"
                             :max="stats.total"

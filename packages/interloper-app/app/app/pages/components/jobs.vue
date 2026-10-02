@@ -4,13 +4,12 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord, RelationRef } from '~/types/component'
 import { jobCron, jobEnabled, jobTimezone, relationRefs } from '~/types/component'
 
-definePageMeta({ title: 'Components', fullBleed: true })
-
 const USwitch = resolveComponent('USwitch')
 const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
+const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
@@ -171,15 +170,21 @@ const enabled = ref<boolean | null>(null)
 </script>
 
 <template>
-    <div>
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New job"
-                     @click="handleCreate" />
-        </NavActions>
-        <NavComponentsHub>
+    <UDashboardPanel id="jobs">
+        <template #header>
+            <AppNavbar title="Components" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="views"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <DriftBanner kind="job" />
             <DataTable :columns="columns"
+                       fill
                        :data="jobs"
                        :filter="row => enabled === null || jobEnabled(row) === enabled"
                        :loading="componentsStore.loading"
@@ -194,6 +199,12 @@ const enabled = ref<boolean | null>(null)
                     <EnabledFilter v-model="enabled" />
                 </template>
 
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New job"
+                             @click="handleCreate" />
+                </template>
+
                 <template #empty>
                     <EmptyState icon="i-lucide-calendar-clock"
                                 title="No jobs yet"
@@ -205,37 +216,37 @@ const enabled = ref<boolean | null>(null)
                     </EmptyState>
                 </template>
             </DataTable>
-        </NavComponentsHub>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      :default-title="editingJob ? 'Edit Job' : 'New Job'"
-                      description="Configure job"
-                      :stepper="stepperRef">
-            <WizardDefinitionStepper v-if="drawerOpen"
-                                     :key="editingJob?.id ?? 'new'"
-                                     ref="stepperRef"
-                                     kind="job"
-                                     definition-key="cron_job"
-                                     noun="Job"
-                                     :component="editingJob"
-                                     :relation-steps="[{ name: 'targets', standaloneAssetsOnly: true }]"
-                                     @created="handleSaved"
-                                     @updated="handleSaved">
-                <template #section-partitioning="{ keys, schema, componentKey, relations, extra, configData }">
-                    <JobsWindowSection v-model:config="extra.config"
-                                       v-model:valid="extra.valid"
-                                       :keys="keys"
-                                       :schema="schema"
-                                       :component-key="componentKey"
-                                       :target-ids="relations.targets ?? []"
-                                       :job="editingJob"
-                                       :timezone="typeof configData.timezone === 'string' ? configData.timezone : undefined" />
-                </template>
-            </WizardDefinitionStepper>
-        </WizardDrawer>
+            <WizardDrawer v-model:open="drawerOpen"
+                          :default-title="editingJob ? 'Edit Job' : 'New Job'"
+                          description="Configure job"
+                          :stepper="stepperRef">
+                <WizardDefinitionStepper v-if="drawerOpen"
+                                         :key="editingJob?.id ?? 'new'"
+                                         ref="stepperRef"
+                                         kind="job"
+                                         definition-key="cron_job"
+                                         noun="Job"
+                                         :component="editingJob"
+                                         :relation-steps="[{ name: 'targets', standaloneAssetsOnly: true }]"
+                                         @created="handleSaved"
+                                         @updated="handleSaved">
+                    <template #section-partitioning="{ keys, schema, componentKey, relations, extra, configData }">
+                        <JobsWindowSection v-model:config="extra.config"
+                                           v-model:valid="extra.valid"
+                                           :keys="keys"
+                                           :schema="schema"
+                                           :component-key="componentKey"
+                                           :target-ids="relations.targets ?? []"
+                                           :job="editingJob"
+                                           :timezone="typeof configData.timezone === 'string' ? configData.timezone : undefined" />
+                    </template>
+                </WizardDefinitionStepper>
+            </WizardDrawer>
 
-        <ExecutionsRunModal v-if="runModalJob"
-                  v-model:open="runModalOpen"
-                  :target="runModalJob" />
-    </div>
+            <ExecutionsRunModal v-if="runModalJob"
+                              v-model:open="runModalOpen"
+                              :target="runModalJob" />
+        </template>
+    </UDashboardPanel>
 </template>

@@ -7,13 +7,13 @@ export const CHART_STATUS_COLORS: Record<string, { light: string, dark: string }
     failed: { light: '#e5484d', dark: '#ea686c' }, // red-500 / red-400
     running: { light: '#2d7df6', dark: '#5c9ef8' }, // blue-500 / blue-400
     canceled: { light: '#e69e2e', dark: '#e9ac46' }, // amber-500 / amber-400
-    default: { light: '#d4d4d8', dark: '#71717a' }, // gray-300 / gray-500
+    default: { light: '#d4d4d4', dark: '#737373' }, // gray-300 / gray-500
 }
 
 export const CHART_AXIS_COLORS = {
-    axis: { light: '#52525b', dark: '#71717a' }, // gray-600 / gray-500
-    grid: { light: '#e4e4e7', dark: '#3f3f46' }, // gray-200 / gray-700
+    axis: { light: '#525252', dark: '#737373' }, // gray-600 / gray-500
+    grid: { light: '#e5e5e5', dark: '#404040' }, // gray-200 / gray-700
     bar: { light: '#2d7df6', dark: '#5c9ef8' }, // blue-500 / blue-400
-    surface: { light: '#ffffff', dark: '#18181b' }, // --ui-bg
-    ink: { light: '#09090b', dark: '#fafafa' }, // gray-950 / gray-50
+    surface: { light: '#ffffff', dark: '#1c1c1c' }, // --ui-bg
+    ink: { light: '#0a0a0a', dark: '#fafafa' }, // gray-950 / gray-50
 }

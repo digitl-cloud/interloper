@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
+import { StatusPill } from '#components'
 import type { Run } from '~/types/run'
 
 const props = defineProps<{ runs: Run[] }>()
@@ -21,29 +24,53 @@ const rows = computed(() => props.runs.map((run) => {
         at: at ? `${formatShortDay(at)} ${formatClockTime(at)}` : '',
     }
 }))
+
+type Row = (typeof rows.value)[number]
+
+const columns: TableColumn<Row>[] = [
+    {
+        id: 'target',
+        header: 'Target',
+        cell: ({ row }) => h('span', { class: 'flex min-w-0 items-center gap-3' }, [
+            h('span', { class: ['size-2 shrink-0 rounded-full', DOT[row.original.color]] }),
+            h('span', { class: 'truncate font-mono text-xs text-highlighted' },
+                row.original.run.component_name ?? row.original.run.component_key ?? 'Deleted target'),
+        ]),
+    },
+    {
+        id: 'status',
+        header: 'Status',
+        cell: ({ row }) => h(StatusPill, { label: row.original.run.status, color: row.original.color, dot: false, class: 'capitalize' }),
+    },
+    {
+        id: 'when',
+        header: 'When',
+        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.rel),
+    },
+    {
+        id: 'at',
+        header: 'Time',
+        meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-dimmed' } },
+        cell: ({ row }) => row.original.at,
+    },
+]
 </script>
 
 <template>
-    <OverviewSection title="Just happened"
-                     link-label="All executions"
-                     link-to="/executions/runs">
-        <div class="overflow-hidden rounded-lg border border-default divide-y divide-default">
-            <NuxtLink v-for="row in rows"
-                      :key="row.run.id"
-                      :to="`/executions/runs/${row.run.id}`"
-                      class="flex items-center gap-3 px-4 py-[11px] text-highlighted transition-colors hover:bg-muted">
-                <span class="size-2 shrink-0 rounded-full"
-                      :class="DOT[row.color]" />
-                <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{{ row.run.component_name ?? row.run.component_key ?? 'Deleted target' }}</span>
-                <StatusPill :label="row.run.status"
-                            :color="row.color"
-                            :dot="false"
-                            class="w-16 justify-center capitalize" />
-                <span class="whitespace-nowrap text-[13px] font-semibold">{{ row.rel }}</span>
-                <span class="w-[132px] shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-dimmed">{{ row.at }}</span>
-            </NuxtLink>
-            <div v-if="!runs.length"
-                 class="px-4 py-5 text-sm text-muted">No runs yet.</div>
-        </div>
-    </OverviewSection>
+    <UCard>
+        <template #header>
+            <CardHeader title="Just happened">
+                <UButton label="All executions"
+                         to="/executions/runs"
+                         color="neutral"
+                         variant="outline"
+                         size="sm" />
+            </CardHeader>
+        </template>
+        <UTable :data="rows"
+                :columns="columns"
+                empty="No runs yet."
+                :ui="{ tr: 'cursor-pointer' }"
+                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.run.id}`)" />
+    </UCard>
 </template>

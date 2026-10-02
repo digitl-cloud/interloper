@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
+import { UButton, UIcon, ULink } from '#components'
 import type { ComponentRecord } from '~/types/component'
 import type { Coverage, CoverageDay } from '~/types/overview'
 
@@ -70,6 +73,51 @@ const label = computed(() => new Date(`${props.date}T00:00:00Z`).toLocaleDateStr
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
 }))
 
+type Row = (typeof rows.value)[number]
+
+const columns: TableColumn<Row>[] = [
+    {
+        id: 'source',
+        header: 'Source',
+        cell: ({ row }) => h('span', { class: 'flex min-w-0 items-center gap-1.5' }, [
+            h(UIcon, { name: row.original.kind === 'asset' ? 'i-lucide-box' : 'i-lucide-plug', class: 'size-3.5 shrink-0 text-dimmed' }),
+            h('span', { class: 'truncate font-mono text-xs text-highlighted' }, row.original.name),
+        ]),
+    },
+    {
+        id: 'coverage',
+        header: 'Coverage',
+        meta: { class: { td: 'w-full' } },
+        cell: ({ row }) => h('div', { class: 'flex h-2 overflow-hidden rounded-full bg-accented' }, [
+            h('div', { class: 'bg-success', style: { width: `${row.original.okPct}%` } }),
+            h('div', { class: 'bg-error', style: { width: `${row.original.failPct}%` } }),
+        ]),
+    },
+    {
+        id: 'partitions',
+        header: 'Partitions',
+        meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-muted' } },
+        cell: ({ row }) => `${row.original.covered} / ${row.original.expected}`,
+    },
+    {
+        id: 'action',
+        header: '',
+        meta: { class: { td: 'text-right' } },
+        cell: ({ row }) => {
+            const r = row.original
+            if (editor.value && r.gap && !r.failed)
+                return h(UButton, { icon: 'i-lucide-play', label: 'Run', size: 'xs', color: 'neutral', variant: 'outline', onClick: () => run(r) })
+            if (r.failed && r.failed_run_id)
+                return h(ULink, { to: `/executions/runs/${r.failed_run_id}`, class: 'inline-flex items-center gap-1 text-xs text-error hover:underline' },
+                    () => ['Open run', h(UIcon, { name: 'i-lucide-arrow-right', class: 'size-3' })])
+            if (!r.gap && !r.failed)
+                return h('span', { class: 'inline-flex items-center gap-1 text-xs text-success' },
+                    [h(UIcon, { name: 'i-lucide-check', class: 'size-3' }), 'Complete'])
+            return null
+        },
+    },
+]
+
 const runTarget = ref<ComponentRecord | null>(null)
 const runOpen = ref(false)
 function run(row: CoverageDay) {
@@ -81,45 +129,14 @@ function run(row: CoverageDay) {
 </script>
 
 <template>
-    <div class="border-t border-default bg-muted px-5 pb-4 pt-3.5">
+    <div class="mt-5">
         <div class="mb-2.5 flex flex-wrap items-baseline gap-2.5">
-            <span class="text-[13.5px] font-semibold text-highlighted">{{ label }}</span>
-            <span class="text-[12.5px] text-muted">{{ summary }}</span>
+            <span class="text-sm font-semibold text-highlighted">{{ label }}</span>
+            <span class="text-xs text-muted">{{ summary }}</span>
         </div>
-        <div v-if="rows.length"
-             class="grid grid-cols-[minmax(160px,220px)_minmax(0,1fr)_72px_auto] items-center gap-x-4 gap-y-2">
-            <template v-for="row in visible"
-                      :key="row.source_id">
-                <span class="flex min-w-0 items-center gap-1.5">
-                    <UIcon :name="row.kind === 'asset' ? 'i-lucide-box' : 'i-lucide-plug'"
-                           class="size-3.5 shrink-0 text-dimmed" />
-                    <span class="truncate font-mono text-xs text-highlighted">{{ row.name }}</span>
-                </span>
-                <div class="flex h-2 overflow-hidden rounded-full bg-accented">
-                    <div class="bg-success"
-                         :style="{ width: `${row.okPct}%` }" />
-                    <div class="bg-error"
-                         :style="{ width: `${row.failPct}%` }" />
-                </div>
-                <span class="whitespace-nowrap text-xs tabular-nums text-muted">{{ row.covered }} / {{ row.expected }}</span>
-                <div class="flex min-w-[92px] justify-end">
-                    <UButton v-if="editor && row.gap && !row.failed"
-                             icon="i-lucide-play"
-                             label="Run"
-                             size="xs"
-                             color="neutral"
-                             variant="outline"
-                             @click="run(row)" />
-                    <ULink v-else-if="row.failed && row.failed_run_id"
-                           :to="`/executions/runs/${row.failed_run_id}`"
-                           class="inline-flex items-center gap-1 text-xs text-error hover:underline">Open run<UIcon name="i-lucide-arrow-right"
-                                                                                                                       class="size-3" /></ULink>
-                    <span v-else-if="!row.gap && !row.failed"
-                          class="inline-flex items-center gap-1 text-xs text-success"><UIcon name="i-lucide-check"
-                                                                                               class="size-3" />Complete</span>
-                </div>
-            </template>
-        </div>
+        <UTable v-if="rows.length"
+                :data="visible"
+                :columns="columns" />
         <div v-if="rows.length && foldable"
              class="mt-2.5 flex items-center gap-2 text-xs text-muted">
             <span v-if="!expanded">{{ foldedNote }}</span>

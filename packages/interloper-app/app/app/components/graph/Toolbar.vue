@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Graph canvas toolbar: status filter pills on the left with the group-by
- * tabs beside them.
+ * Graph canvas toolbar: status filter pills on the left, the group-by tabs
+ * on the right, followed by the page's `actions` slot.
  */
 const groupBy = defineModel<GroupBy>('groupBy', { default: 'type' })
 
@@ -31,13 +31,12 @@ const filterItems = computed(() => FILTERS
 </script>
 
 <template>
-    <div class="flex shrink-0 items-center gap-2 border-b border-default px-4 py-2">
-        <!-- Status filter -->
-        <span class="text-xs text-muted">Status</span>
+    <div class="flex shrink-0 flex-wrap items-center gap-3">
+        <span class="text-sm text-muted">Status</span>
         <UTabs v-model="statusFilter"
                :items="filterItems"
                variant="pill"
-               size="xs"
+               size="sm"
                :content="false">
             <template #leading="{ item }">
                 <span v-if="(item as any).dot"
@@ -45,13 +44,14 @@ const filterItems = computed(() => FILTERS
                       :class="statusDotClass((item as any).dot)" />
             </template>
         </UTabs>
-
-        <!-- Group by -->
-        <span class="text-xs text-muted">Group by</span>
+        <span class="ms-4 text-sm text-muted">Group by</span>
         <UTabs v-model="groupBy"
                :items="GROUP_OPTIONS"
                variant="pill"
-               size="xs"
+               size="sm"
                :content="false" />
+        <div class="ml-auto flex items-center gap-2">
+            <slot name="actions" />
+        </div>
     </div>
 </template>

@@ -212,7 +212,7 @@ const contextMenuItems = computed<ContextMenuItem[][]>(() => {
                 <div class="text-xs">{{ destinationBadge.label }}</div>
             </GraphCornerBadge>
 
-            <div class="graph-asset graph-raise graph-stack-floor overflow-hidden rounded-xl border bg-default"
+            <div class="graph-asset graph-raise graph-stack-floor overflow-hidden rounded-xl border bg-[var(--graph-node-bg)]"
                  :class="frameClass">
                 <div class="flex h-10 items-center gap-[9px] border-b border-[var(--graph-head-line)] bg-elevated px-3.5">
                     <span v-if="standalone"

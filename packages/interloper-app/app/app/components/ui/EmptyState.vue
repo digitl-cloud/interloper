@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Design empty-state hero: gradient card with an accent icon tile. */
+/** Empty-state hero: a plain card with an accent icon tile, title, description and actions. */
 defineProps<{
     icon: string
     title: string
@@ -8,18 +8,19 @@ defineProps<{
 </script>
 
 <template>
-    <div class="w-full border border-default rounded-lg px-8 py-[42px] text-center bg-gradient-to-b from-gray-50 to-gray-100 dark:from-transparent dark:to-(--ui-bg-muted)">
-        <div class="size-[58px] mx-auto rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+    <UCard class="w-full"
+           :ui="{ body: 'px-8 py-10 sm:px-8 sm:py-10 text-center' }">
+        <div class="size-14 mx-auto rounded-lg bg-primary/10 text-primary flex items-center justify-center">
             <UIcon :name="icon"
                    class="size-7" />
         </div>
-        <h2 class="text-[22px] font-bold tracking-[-0.02em] text-highlighted mt-4">
+        <h2 class="text-2xl font-semibold text-highlighted mt-4">
             {{ title }}
         </h2>
         <p v-if="description"
-           class="text-[15px] text-muted leading-relaxed max-w-[560px] mx-auto mt-3">
+           class="text-base text-muted leading-relaxed max-w-xl mx-auto mt-3">
             {{ description }}
         </p>
         <slot />
-    </div>
+    </UCard>
 </template>

@@ -24,9 +24,7 @@ const props = defineProps<{
 
 const orgStore = useOrganisationStore()
 
-const mismatch = computed(() =>
-    !!props.orgId && !!orgStore.organisation && props.orgId !== orgStore.organisation.id,
-)
+const { mismatch } = useOrgGate(() => props.orgId)
 const notFound = computed(() => (props.error as { statusCode?: number } | null)?.statusCode === 404)
 
 const owningOrg = ref<Organisation | null>(null)

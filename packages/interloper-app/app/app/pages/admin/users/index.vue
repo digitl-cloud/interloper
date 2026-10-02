@@ -4,7 +4,6 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { AdminUser } from '~/types/admin'
 
 definePageMeta({
-    title: 'Users',
     layout: 'admin',
     middleware: 'super-admin',
 })
@@ -141,21 +140,27 @@ onMounted(loadData)
 </script>
 
 <template>
-    <div class="mx-auto flex w-full max-w-[1040px] flex-col flex-1 min-h-0">
-        <DataTable :columns="columns"
-                   :data="filteredRows"
-                   :loading="loading"
-                   :row-actions="rowActions"
-                   no-actions
-                   no-row-click
-                   search-placeholder="Search users...">
-            <template #toolbar>
-                <USelect v-model="orgFilter"
-                         :items="orgOptions"
-                         value-key="value"
-                         icon="i-lucide-building-2"
-                         class="w-52" />
-            </template>
-        </DataTable>
-    </div>
+    <UDashboardPanel id="admin-users">
+        <template #header>
+            <AppNavbar title="Users" />
+        </template>
+        <template #body>
+            <DataTable :columns="columns"
+                       fill
+                       :data="filteredRows"
+                       :loading="loading"
+                       :row-actions="rowActions"
+                       no-actions
+                       no-row-click
+                       search-placeholder="Search users...">
+                <template #filters>
+                    <USelect v-model="orgFilter"
+                             :items="orgOptions"
+                             value-key="value"
+                             icon="i-lucide-building-2"
+                             class="w-52" />
+                </template>
+            </DataTable>
+        </template>
+    </UDashboardPanel>
 </template>

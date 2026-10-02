@@ -2,21 +2,11 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
-const appVersion = useRuntimeConfig().public.version
 
-/** Design page header rendered by the layout, declared via definePageMeta({ pageHeader }). */
-interface PageHeaderMeta {
-    title: string
-    description?: string
-    eyebrow?: string
-}
-const pageHeader = computed(() => route.meta.pageHeader as PageHeaderMeta | undefined)
-
-const pageTitle = computed(() => pageHeader.value?.title ?? (route.meta.title as string | undefined))
-
-const items = computed<NavigationMenuItem[]>(() => {
+/** Authentication lights up only while the collapsed sidebar hides its views; otherwise its active view does. */
+function navItems(collapsed: boolean): NavigationMenuItem[] {
     const onAuth = route.path.startsWith('/settings/authentication')
-    const tab = (route.query.tab as string) || 'signin'
+    const tab = route.query.tab
     return [
         {
             label: 'Profile',
@@ -29,12 +19,12 @@ const items = computed<NavigationMenuItem[]>(() => {
             icon: 'i-lucide-shield-check',
             // Collapsed by default, but never hide the active child.
             defaultOpen: onAuth,
-            active: onAuth,
+            active: onAuth && collapsed,
             children: [
                 {
                     label: 'Sign in',
                     to: { path: '/settings/authentication', query: { tab: 'signin' } },
-                    active: onAuth && tab === 'signin',
+                    active: onAuth && tab !== 'tokens',
                 },
                 {
                     label: 'Personal Access Tokens',
@@ -44,7 +34,7 @@ const items = computed<NavigationMenuItem[]>(() => {
             ],
         },
     ]
-})
+}
 </script>
 
 <template>
@@ -66,7 +56,7 @@ const items = computed<NavigationMenuItem[]>(() => {
                         class="eyebrow w-full justify-center py-2"
                         label="User Settings" />
                 <UNavigationMenu :collapsed="collapsed"
-                                 :items="items"
+                                 :items="navItems(collapsed)"
                                  color="neutral"
                                  orientation="vertical" />
             </template>
@@ -82,38 +72,10 @@ const items = computed<NavigationMenuItem[]>(() => {
                              :square="collapsed"
                              @click="navigateTo('/')" />
                     <NavUser :collapsed="collapsed" />
-                    <span v-if="!collapsed && appVersion"
-                          class="px-2.5 text-[10px] text-dimmed">
-                        v{{ appVersion }}
-                    </span>
                 </div>
             </template>
         </UDashboardSidebar>
 
-        <UDashboardPanel
-                         :ui="{ body: '!p-0 !gap-0 overflow-hidden [&>*]:flex-1 [&>*]:flex [&>*]:flex-col [&>*]:min-h-0' }">
-            <template #header>
-                <UDashboardNavbar :title="pageTitle"
-                                  :ui="{ root: 'sm:px-4', title: 'text-[15px]' }">
-                    <template #leading>
-                        <UDashboardSidebarCollapse />
-                    </template>
-                    <template #right>
-                        <div id="navbar-right"
-                             class="flex items-center gap-2" />
-                    </template>
-                </UDashboardNavbar>
-            </template>
-            <template #body>
-                <!-- Full-bleed pages (tabbed views) manage their own frame. -->
-                <slot v-if="route.meta.fullBleed" />
-                <div v-else
-                     class="flex-1 min-h-0 w-full overflow-y-auto">
-                    <div class="p-6 w-full h-full flex flex-col">
-                        <slot />
-                    </div>
-                </div>
-            </template>
-        </UDashboardPanel>
+        <slot />
     </UDashboardGroup>
 </template>

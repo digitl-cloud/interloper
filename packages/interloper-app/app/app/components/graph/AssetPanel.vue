@@ -17,7 +17,6 @@ const emit = defineEmits<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const toast = useToast()
 const { apiFetch } = useApi()
 const { statusBadge } = useDrift()
 const { getWarnings } = useAssetWarnings()
@@ -204,31 +203,6 @@ function historyTooltip(run: Run): string {
     return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
 }
 
-// ── Run now ─────────────────────────────────────────────────────
-
-const runsStore = useRunsStore()
-const runModalOpen = ref(false)
-const runSubmitting = ref(false)
-
-/** Partitioned assets prompt for a partition date; the rest run immediately. */
-async function runNow() {
-    if (isPartitioned.value) {
-        runModalOpen.value = true
-        return
-    }
-    runSubmitting.value = true
-    try {
-        const runId = await runsStore.createRun(props.asset.id)
-        toast.add({ title: `Run queued (${runId.slice(0, 8)})`, color: 'success' })
-    }
-    catch (e) {
-        toast.add(errorToast(e, 'Failed to queue run'))
-    }
-    finally {
-        runSubmitting.value = false
-    }
-}
-
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
 const dependencyRows = computed(() => {
     const reqs = props.assetDefn ? requiredUpstreams(props.assetDefn) : {}
@@ -245,15 +219,14 @@ const dependencyRows = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-col h-full">
-        <!-- Header -->
-        <div class="shrink-0 border-l border-default px-5 py-5">
+    <UCard :ui="{ root: 'flex flex-col', header: 'shrink-0', body: 'flex-1 min-h-0 overflow-auto px-4 pb-4 sm:px-6 sm:pb-6' }">
+        <template #header>
             <div class="flex items-center gap-3">
                 <div class="flex items-center justify-center size-10 rounded-lg bg-elevated shrink-0">
                     <UIcon :name="sourceIcon"
                            class="size-5" />
                 </div>
-                <div class="min-w-0 mr-4">
+                <div class="min-w-0 flex-1">
                     <h2 class="text-base font-semibold truncate leading-tight">
                         {{ assetDefn?.name ?? asset.key }}
                     </h2>
@@ -261,14 +234,6 @@ const dependencyRows = computed(() => {
                         {{ sourceDefn?.name ?? source.key }}
                     </p>
                 </div>
-                <UButton class="shrink-0 ml-auto"
-                         icon="i-lucide-play"
-                         label="Materialize"
-                         color="neutral"
-                         variant="outline"
-                         size="xs"
-                         :loading="runSubmitting"
-                         @click="runNow" />
                 <UButton class="shrink-0"
                          icon="i-lucide-x"
                          color="neutral"
@@ -303,13 +268,13 @@ const dependencyRows = computed(() => {
                     </ul>
                 </template>
             </UAlert>
-        </div>
+        </template>
 
-        <div class="flex-1 min-h-0 border-l border-t border-default overflow-auto">
+        <!-- pt-px keeps the first section's ring inside the scroll box, which clips overflow -->
+        <div class="flex flex-col gap-4 pt-px">
             <!-- Drift notice — this asset no longer resolves against the catalog.
                  UAlert is w-full, so pad a wrapper rather than margin the alert. -->
-            <div v-if="driftBadge"
-                 class="px-5 pt-5">
+            <div v-if="driftBadge">
                 <UAlert :color="driftBadge.color"
                         :icon="driftBadge.icon"
                         variant="subtle"
@@ -321,15 +286,15 @@ const dependencyRows = computed(() => {
 
             <!-- Description -->
             <UCollapsible default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Description</span>
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-4 pb-4">
                         <p v-if="assetDefn?.description"
                            class="text-sm">
                             {{ assetDefn.description }}
@@ -344,15 +309,15 @@ const dependencyRows = computed(() => {
 
             <!-- Materialization -->
             <UCollapsible default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Materialization</span>
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4 flex flex-col gap-2">
+                    <div class="px-4 pb-4 flex flex-col gap-2">
                         <!-- Latest materialization -->
                         <div class="flex items-center gap-4 rounded-md bg-muted p-4">
                             <UIcon :name="materialization.icon"
@@ -384,8 +349,8 @@ const dependencyRows = computed(() => {
 
             <!-- Destinations -->
             <UCollapsible default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Destinations</span>
@@ -397,7 +362,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-4 pb-4">
                         <div v-if="destinations.length"
                              class="flex flex-col gap-2">
                             <div v-for="dest in destinations"
@@ -422,8 +387,8 @@ const dependencyRows = computed(() => {
             <!-- Partitions -->
             <UCollapsible v-if="isPartitioned"
                           default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Partitions</span>
@@ -435,7 +400,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-4 pb-4">
                         <!-- Loading -->
                         <div v-if="partitionLoading"
                              class="flex items-center justify-center py-6">
@@ -473,8 +438,8 @@ const dependencyRows = computed(() => {
             <!-- Dependencies -->
             <UCollapsible v-if="dependencyRows.length"
                           default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Upstream dependencies</span>
@@ -485,7 +450,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4 flex flex-col gap-1.5">
+                    <div class="px-4 pb-4 flex flex-col gap-1.5">
                         <div v-for="dep in dependencyRows"
                              :key="dep.param"
                              class="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2">
@@ -508,8 +473,8 @@ const dependencyRows = computed(() => {
             <!-- Schema -->
             <UCollapsible v-if="schemaFields.length"
                           default-open
-                          class="border-b border-default">
-                <button class="flex items-center gap-2 w-full px-5 py-4.5 group cursor-pointer">
+                          class="rounded-lg bg-default ring ring-default">
+                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
                     <UIcon name="i-lucide-chevron-right"
                            class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
                     <span class="text-xs font-semibold text-muted uppercase tracking-wide">Schema</span>
@@ -520,7 +485,7 @@ const dependencyRows = computed(() => {
                 </button>
 
                 <template #content>
-                    <div class="px-5 pb-4">
+                    <div class="px-4 pb-4">
                         <div class="bg-muted rounded-md p-2 overflow-x-auto">
                             <table class="w-full text-sm">
                                 <thead>
@@ -549,9 +514,5 @@ const dependencyRows = computed(() => {
                 </template>
             </UCollapsible>
         </div>
-
-        <ExecutionsRunModal v-model:open="runModalOpen"
-                  :target="asset"
-                  :partitioned="isPartitioned" />
-    </div>
+    </UCard>
 </template>

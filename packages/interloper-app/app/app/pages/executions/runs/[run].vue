@@ -6,7 +6,7 @@ import type { EventCategory } from '~/utils/events'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
-definePageMeta({ title: 'Run', orgSwitchTarget: '/executions/runs', fullBleed: true, customNavbar: true })
+definePageMeta({ orgSwitchTarget: '/executions/runs' })
 
 const route = useRoute()
 const runId = route.params.run!.toString()
@@ -116,12 +116,14 @@ function toggleRail() {
     else railPanel.value?.collapse()
 }
 
+const { mismatch } = useOrgGate(() => run.value?.org_id)
+
 const retrying = ref(false)
 
 // A retry continues the stack from its latest attempt, so only that attempt
 // offers one; an attempt whose stack has not loaded yet is treated as latest.
 const retryable = computed(() => {
-    if (run.value?.status !== 'failed') return false
+    if (mismatch.value || run.value?.status !== 'failed') return false
     const latest = attempts.value.at(-1)?.run
     return !latest || latest.id === run.value.id
 })
@@ -176,122 +178,132 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <OrganizationGate :org-id="run?.org_id"
-             :error="fetchError"
-             back-to="/executions/runs"
-             resource-label="run">
-        <NavTitle>
-            <ULink to="/executions/runs"
-                   class="text-[15px] font-medium text-muted hover:text-highlighted">Runs</ULink>
-            <span class="text-[15px] text-dimmed">/</span>
-            <span class="truncate font-mono text-[15px] font-semibold">{{ runId }}</span>
-            <StatusPill v-if="run"
-                        :label="statusLabel(run.status)"
-                        :color="statusPillColor(run.status)"
-                        :spinner="run.status === 'running' || run.status === 'dispatched'" />
-        </NavTitle>
-        <NavActions v-if="retryable">
-            <UButton label="Retry failed"
-                     icon="i-lucide-rotate-ccw"
-                     color="neutral"
-                     variant="ghost"
-                     size="sm"
-                     :loading="retrying"
-                     @click="onRetry('failed')" />
-            <UButton label="Retry all"
-                     icon="i-lucide-refresh-cw"
-                     color="neutral"
-                     variant="ghost"
-                     size="sm"
-                     :loading="retrying"
-                     @click="onRetry('all')" />
-        </NavActions>
-        <div class="flex h-full min-h-0 flex-col">
-            <template v-if="run">
-                <ExecutionsRunMetaStrip :run="run"
-                                        :duration="stats.duration" />
-                <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
-                                        :stats="stats" />
-            </template>
-
-            <USplitter id="run-rail"
-                       ref="railSplitter"
-                       auto-save-id="run-rail"
-                       :items="railItems"
-                       :ui="{ root: 'min-h-0 flex-1', handle: `w-px ${handleClass}` }">
-                <template #rail="{ collapsed }">
-                    <ExecutionsRunRail v-if="!collapsed"
-                                       v-model:status-filter="statusFilter"
-                                       v-model:selected="selectedAsset"
-                                       v-model:hovered="hoveredAsset"
-                                       :rows="assetRows"
-                                       :buckets="stats.buckets"
-                                       :attempts="attempts"
-                                       :current-run-id="runId" />
+    <UDashboardPanel id="run"
+                     :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0' }">
+        <template #header>
+            <AppNavbar>
+                <template #title>
+                    <ULink to="/executions/runs"
+                           class="text-base font-medium text-muted hover:text-highlighted">Runs</ULink>
+                    <span class="text-base text-dimmed">/</span>
+                    <span class="truncate font-mono text-base font-semibold">{{ runId }}</span>
+                    <StatusPill v-if="run && !mismatch"
+                                :label="statusLabel(run.status)"
+                                :color="statusPillColor(run.status)"
+                                :spinner="run.status === 'running' || run.status === 'dispatched'" />
                 </template>
+            </AppNavbar>
+            <UDashboardToolbar v-if="retryable">
+                <template #right>
+                    <UButton label="Retry failed"
+                             icon="i-lucide-rotate-ccw"
+                             color="neutral"
+                             variant="ghost"
+                             :loading="retrying"
+                             @click="onRetry('failed')" />
+                    <UButton label="Retry all"
+                             icon="i-lucide-refresh-cw"
+                             color="neutral"
+                             variant="ghost"
+                             :loading="retrying"
+                             @click="onRetry('all')" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
+            <OrganizationGate :org-id="run?.org_id"
+                              :error="fetchError"
+                              back-to="/executions/runs"
+                              resource-label="run">
+                <div class="flex min-h-0 flex-1 flex-col">
+                    <template v-if="run">
+                        <ExecutionsRunMetaStrip :run="run"
+                                                :duration="stats.duration" />
+                        <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
+                                                class="shrink-0 border-b border-default px-4 py-3"
+                                                :stats="stats" />
+                    </template>
 
-                <template #main>
-                    <USplitter id="run-panels"
-                               orientation="vertical"
-                               auto-save-id="run-panels"
-                               :items="panelItems"
-                               :ui="{ root: 'min-h-0 min-w-0 flex-1', handle: `h-px ${handleClass}` }">
-                        <template #timeline>
-                            <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
-                                <UButton :icon="railCollapsed ? appConfig.ui.icons.panelOpen : appConfig.ui.icons.panelClose"
-                                         :aria-label="railCollapsed ? 'Show panel' : 'Hide panel'"
-                                         color="neutral"
-                                         variant="ghost"
-                                         size="sm"
-                                         class="-ml-1.5"
-                                         @click="toggleRail" />
-                                <UTabs v-model="view"
-                                       :items="viewTabs"
-                                       variant="pill"
-                                       size="xs"
-                                       :content="false" />
-                            </div>
-
-                            <div class="flex min-h-0 flex-1 flex-col">
-                                <div v-if="run?.status === 'queued'"
-                                     class="flex h-full items-center justify-center text-muted">
-                                    <span class="text-sm">Run is currently queued...</span>
-                                </div>
-                                <ChartExecutionTimeline v-else-if="view === 'timeline'"
-                                                        v-model:selected-id="selectedAsset"
-                                                        :rows="timelineRows"
-                                                        :min-bar-ratio="0.05"
-                                                        :marker-time="markerTime"
-                                                        :highlighted-id="highlightedAsset"
-                                                        empty-message="No asset executions yet" />
-                                <ExecutionsRunGraph v-else
-                                                    v-model:selected-asset="selectedAsset"
-                                                    :run-id="runId" />
-                            </div>
+                    <USplitter id="run-rail"
+                               ref="railSplitter"
+                               auto-save-id="run-rail"
+                               :items="railItems"
+                               :ui="{ root: 'min-h-0 flex-1', handle: `w-px ${handleClass}` }">
+                        <template #rail="{ collapsed }">
+                            <ExecutionsRunRail v-if="!collapsed"
+                                               v-model:status-filter="statusFilter"
+                                               v-model:selected="selectedAsset"
+                                               v-model:hovered="hoveredAsset"
+                                               :rows="assetRows"
+                                               :buckets="stats.buckets"
+                                               :attempts="attempts"
+                                               :current-run-id="runId" />
                         </template>
 
-                        <template #events>
-                            <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
-                                <UTabs v-model="eventCategory"
-                                       :items="eventTabs"
-                                       variant="pill"
-                                       size="xs"
-                                       :content="false" />
-                                <span v-if="!eventsStore.loading"
-                                      class="ml-auto text-[13.5px] text-muted">{{ eventCaption }}</span>
-                            </div>
-                            <div class="flex-1 min-h-0 px-4">
-                                <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
-                                                       :events="eventsStore.events"
-                                                       :loading="eventsStore.loading"
-                                                       :loading-more="eventsStore.loadingMore"
-                                                       :has-more="eventsStore.hasMore"
-                                                       :load-more="eventsStore.loadMore" />
-                            </div>
+                        <template #main>
+                            <USplitter id="run-panels"
+                                       orientation="vertical"
+                                       auto-save-id="run-panels"
+                                       :items="panelItems"
+                                       :ui="{ root: 'min-h-0 min-w-0 flex-1', handle: `h-px ${handleClass}` }">
+                                <template #timeline>
+                                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+                                        <UButton :icon="railCollapsed ? appConfig.ui.icons.panelOpen : appConfig.ui.icons.panelClose"
+                                                 :aria-label="railCollapsed ? 'Show panel' : 'Hide panel'"
+                                                 color="neutral"
+                                                 variant="ghost"
+                                                 size="sm"
+                                                 class="-ml-1.5"
+                                                 @click="toggleRail" />
+                                        <UTabs v-model="view"
+                                               :items="viewTabs"
+                                               variant="pill"
+                                               size="xs"
+                                               :content="false" />
+                                    </div>
+
+                                    <div class="flex min-h-0 flex-1 flex-col">
+                                        <div v-if="run?.status === 'queued'"
+                                             class="flex h-full items-center justify-center text-muted">
+                                            <span class="text-sm">Run is currently queued...</span>
+                                        </div>
+                                        <ChartExecutionTimeline v-else-if="view === 'timeline'"
+                                                                v-model:selected-id="selectedAsset"
+                                                                :rows="timelineRows"
+                                                                :min-bar-ratio="0.05"
+                                                                :marker-time="markerTime"
+                                                                :highlighted-id="highlightedAsset"
+                                                                empty-message="No asset executions yet" />
+                                        <ExecutionsRunGraph v-else
+                                                            v-model:selected-asset="selectedAsset"
+                                                            :run-id="runId" />
+                                    </div>
+                                </template>
+
+                                <template #events>
+                                    <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0">
+                                        <UTabs v-model="eventCategory"
+                                               :items="eventTabs"
+                                               variant="pill"
+                                               size="xs"
+                                               :content="false" />
+                                        <span v-if="!eventsStore.loading"
+                                              class="ml-auto text-sm text-muted">{{ eventCaption }}</span>
+                                    </div>
+                                    <div class="flex-1 min-h-0 px-4">
+                                        <ExecutionsEventsTable v-model:event-in-focus="eventInFocus"
+                                                               :events="eventsStore.events"
+                                                               :loading="eventsStore.loading"
+                                                               :loading-more="eventsStore.loadingMore"
+                                                               :has-more="eventsStore.hasMore"
+                                                               :load-more="eventsStore.loadMore" />
+                                    </div>
+                                </template>
+                            </USplitter>
                         </template>
                     </USplitter>
-                </template>
-            </USplitter>
-        </div>
-    </OrganizationGate>
+                </div>
+            </OrganizationGate>
+        </template>
+    </UDashboardPanel>
 </template>

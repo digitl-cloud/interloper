@@ -7,6 +7,7 @@ defineProps<{
 
 const userStore = useUserStore()
 const colorMode = useColorMode()
+const appVersion = useRuntimeConfig().public.version
 
 function toggleColorMode() {
     colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
@@ -59,6 +60,8 @@ const items = computed<DropdownMenuItem[][]>(() => {
             onSelect: () => userStore.signOut(),
         }],
     )
+
+    if (appVersion) groups.push([{ label: `Interloper v${appVersion}`, type: 'label' }])
 
     return groups
 })

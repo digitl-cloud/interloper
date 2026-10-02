@@ -130,18 +130,15 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <DataTable :columns="columns"
-                   :data="members"
-                   :loading="loading"
-                   :row-actions="isAdmin ? getRowMenuItems : undefined"
-                   no-actions
-                   no-row-click
-                   bordered
-                   search-placeholder="Search members...">
-            <template #toolbar>
-                <slot name="toolbar" />
-            </template>
-        </DataTable>
-    </div>
+    <DataTable :columns="columns"
+               :data="members"
+               :loading="loading"
+               :row-actions="isAdmin ? getRowMenuItems : undefined"
+               no-actions
+               no-row-click
+               search-placeholder="Search members...">
+        <template #actions>
+            <slot name="actions" />
+        </template>
+    </DataTable>
 </template>

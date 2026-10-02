@@ -30,7 +30,7 @@ const CORNER = {
 } as const
 
 const DISC = {
-    neutral: 'graph-corner-badge border-[var(--graph-card-line)] bg-default',
+    neutral: 'graph-corner-badge border-[var(--graph-card-line)] bg-[var(--graph-node-bg)]',
     warning: 'border-[color-mix(in_srgb,var(--ui-warning)_50%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-warning)_15%,var(--ui-bg))]',
     error: 'border-[color-mix(in_srgb,var(--ui-error)_50%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-error)_15%,var(--ui-bg))]',
     primary: 'border-[color-mix(in_srgb,var(--ui-primary)_50%,var(--ui-bg))] bg-[color-mix(in_srgb,var(--ui-primary)_15%,var(--ui-bg))]',

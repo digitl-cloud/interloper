@@ -77,20 +77,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <OverviewSection title="Timeline"
-                     :meta="`${timezone} · ${rangeLabel}`"
-                     link-label="All executions"
-                     link-to="/executions/runs">
-        <template #actions>
-            <span class="text-xs text-dimmed">Window</span>
-            <UTabs v-model="activeSpan"
-                   :items="spanItems"
-                   variant="pill"
-                   size="xs"
-                   :content="false" />
+    <UCard>
+        <template #header>
+            <CardHeader title="Timeline"
+                        :description="`${timezone} · ${rangeLabel}`">
+                <span class="text-sm text-muted">Window</span>
+                <UTabs v-model="activeSpan"
+                       :items="spanItems"
+                       variant="pill"
+                       size="xs"
+                       :content="false" />
+                <UButton label="All executions"
+                         to="/executions/runs"
+                         color="neutral"
+                         variant="outline"
+                         size="sm" />
+            </CardHeader>
         </template>
-        <div class="overflow-hidden rounded-lg border border-default"
-             :style="{ height: `${height}px` }">
+        <div :style="{ height: `${height}px` }">
             <ChartExecutionTimeline :rows="rows"
                                     :range-start="rangeStart"
                                     :range-end="rangeEnd"
@@ -103,12 +107,12 @@ onUnmounted(() => {
                                     :empty-message="loading ? 'Loading…' : 'No runs in this window'"
                                     @bar-click="onBarClick" />
         </div>
-        <div class="mt-2.5 flex items-center gap-4 text-[11.5px] text-dimmed">
+        <div class="mt-2.5 flex items-center gap-4 text-xs text-dimmed">
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-success" />Success</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-error" />Failed</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-primary" />Running</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-accented" />Queued</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] border-[1.5px] border-dashed border-dimmed" />Scheduled</span>
         </div>
-    </OverviewSection>
+    </UCard>
 </template>

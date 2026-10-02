@@ -1,3 +1,5 @@
+import type { InjectionKey } from 'vue'
+
 const DEFAULT_WIDTH = 400
 const MIN_WIDTH = 320
 const MAX_WIDTH = 720
@@ -43,3 +45,6 @@ export function useAgentPanel() {
 
     return { open, width, dragging, startResize, resetWidth }
 }
+
+/** Provided by the layout that mounts the agent panel, so navbars only offer the toggle where it works. */
+export const AGENT_PANEL_HOST: InjectionKey<boolean> = Symbol('agent-panel-host')

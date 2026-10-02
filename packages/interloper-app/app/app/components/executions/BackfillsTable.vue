@@ -99,19 +99,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0 gap-2">
-        <div class="flex items-center gap-3">
-            <UInput v-model="search"
-                    placeholder="Search backfills by target..."
-                    icon="i-lucide-search"
-                    class="max-w-sm" />
-            <UCheckbox v-model="showSinglePartition"
-                       label="Show single partition"
-                       class="ml-auto" />
-            <StatusFilter v-model="status"
-                          :statuses="BACKFILL_STATUSES" />
-        </div>
-
+    <div class="flex flex-col flex-1 min-h-0">
         <div v-if="!loading && backfills.length === 0"
              class="w-full max-w-[1040px] mx-auto">
             <EmptyState icon="i-lucide-history"
@@ -124,7 +112,21 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
             </EmptyState>
         </div>
 
-        <template v-else>
+        <UCard v-else
+               :ui="FILL_CARD_UI">
+            <template #header>
+                <div class="flex flex-wrap items-center gap-3">
+                    <UInput v-model="search"
+                            placeholder="Search backfills by target..."
+                            icon="i-lucide-search"
+                            class="max-w-sm" />
+                    <StatusFilter v-model="status"
+                                  :statuses="BACKFILL_STATUSES" />
+                    <UCheckbox v-model="showSinglePartition"
+                               label="Show single partition" />
+                </div>
+            </template>
+
             <UTable v-model:pagination="pagination"
                     v-model:sorting="sorting"
                     :data="shown"
@@ -136,13 +138,14 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     :ui="{ tr: 'cursor-pointer' }"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
 
-            <TableFooter class="shrink-0"
-                         :page="pagination.pageIndex + 1"
-                         :total="shown.length"
-                         :page-size="PAGE_SIZE"
-                         @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
-                {{ shown.length }} backfill(s) total.
-            </TableFooter>
-        </template>
+            <template #footer>
+                <TableFooter :page="pagination.pageIndex + 1"
+                             :total="shown.length"
+                             :page-size="PAGE_SIZE"
+                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
+                    {{ shown.length }} backfill(s) total.
+                </TableFooter>
+            </template>
+        </UCard>
     </div>
 </template>

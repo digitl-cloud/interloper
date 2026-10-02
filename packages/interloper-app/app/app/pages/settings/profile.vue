@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ title: 'Profile', layout: 'settings' })
+definePageMeta({ layout: 'settings' })
 
 const userStore = useUserStore()
 const toast = useToast()
@@ -53,78 +53,81 @@ async function save() {
 </script>
 
 <template>
-    <div class="mx-auto w-full max-w-[720px]">
-        <div class="mb-3 flex items-center gap-2">
-            <UIcon name="i-lucide-user"
-                   class="size-4 text-muted" />
-            <div class="text-[15px] font-semibold text-highlighted">Account</div>
-        </div>
+    <UDashboardPanel id="profile">
+        <template #header>
+            <AppNavbar title="Profile" />
+        </template>
+        <template #body>
+            <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-6">
+                <section class="flex flex-col gap-3">
+                    <CardHeader title="Account" />
+                    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                        <div class="divide-y divide-default">
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-4 sm:px-6">
+                                <div class="min-w-0 flex-1 basis-60">
+                                    <div class="text-sm font-medium text-highlighted">User ID</div>
+                                </div>
+                                <UInput :model-value="userStore.user?.id"
+                                        readonly
+                                        class="min-w-0 max-w-70 flex-1 basis-60"
+                                        :ui="{ base: 'font-mono text-sm text-muted' }" />
+                            </div>
 
-        <div class="divide-y divide-default rounded-lg border border-default bg-elevated/25">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2.5 px-4 py-3.5">
-                <div class="min-w-0 flex-1 basis-60">
-                    <div class="text-sm font-medium text-highlighted">User ID</div>
+                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-4 sm:px-6">
+                                <div class="min-w-0 flex-1 basis-60">
+                                    <div class="text-sm font-medium text-highlighted">Name</div>
+                                    <div class="mt-0.5 text-sm leading-normal text-muted">
+                                        Shown to other members of your organisations.
+                                    </div>
+                                </div>
+                                <UInput v-model="name"
+                                        placeholder="Your name"
+                                        class="min-w-0 max-w-70 flex-1 basis-60" />
+                            </div>
+
+                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-4 sm:px-6">
+                                <div class="min-w-0 flex-1 basis-60">
+                                    <div class="text-sm font-medium text-highlighted">Email</div>
+                                    <div class="mt-0.5 text-sm leading-normal text-muted">
+                                        Used for sign-in and notifications. Managed by your Google account.
+                                    </div>
+                                </div>
+                                <UInput :model-value="userStore.user?.email"
+                                        readonly
+                                        class="min-w-0 max-w-70 flex-1 basis-60"
+                                        :ui="{ base: 'text-muted' }" />
+                            </div>
+                        </div>
+                    </UCard>
+                </section>
+
+                <section class="flex flex-col gap-3">
+                    <CardHeader title="Time settings"
+                                description="Set your local time zone." />
+                    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                        <div class="divide-y divide-default">
+                            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-4 sm:px-6">
+                                <div class="min-w-0 flex-1 basis-60">
+                                    <div class="text-sm font-medium text-highlighted">Time zone</div>
+                                    <div class="mt-0.5 text-sm leading-normal text-muted">
+                                        Used to display run times and schedules.
+                                    </div>
+                                </div>
+                                <TimezoneSelect v-model="timezone"
+                                                class="min-w-0 max-w-70 flex-1 basis-60" />
+                            </div>
+                        </div>
+                    </UCard>
+                </section>
+
+                <div class="flex items-center gap-3">
+                    <div class="min-w-0 flex-1 text-sm text-muted">{{ statusText }}</div>
+                    <UButton label="Save changes"
+                             :disabled="!canSave"
+                             :loading="saving"
+                             @click="save" />
                 </div>
-                <UInput :model-value="userStore.user?.id"
-                        readonly
-                        class="min-w-0 flex-1 basis-60 max-w-[280px]"
-                        :ui="{ base: 'font-mono text-[13px] text-muted' }" />
             </div>
-
-            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-3.5">
-                <div class="min-w-0 flex-1 basis-60">
-                    <div class="text-sm font-medium text-highlighted">Name</div>
-                    <div class="mt-0.5 text-[13px] leading-normal text-muted">
-                        Shown to other members of your organisations.
-                    </div>
-                </div>
-                <UInput v-model="name"
-                        placeholder="Your name"
-                        class="min-w-0 flex-1 basis-60 max-w-[280px]" />
-            </div>
-
-            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-3.5">
-                <div class="min-w-0 flex-1 basis-60">
-                    <div class="text-sm font-medium text-highlighted">Email</div>
-                    <div class="mt-0.5 text-[13px] leading-normal text-muted">
-                        Used for sign-in and notifications. Managed by your Google account.
-                    </div>
-                </div>
-                <UInput :model-value="userStore.user?.email"
-                        readonly
-                        class="min-w-0 flex-1 basis-60 max-w-[280px]"
-                        :ui="{ base: 'text-muted' }" />
-            </div>
-        </div>
-
-        <div class="mb-3 mt-8 flex items-center gap-2">
-            <UIcon name="i-lucide-clock"
-                   class="size-4 text-muted" />
-            <div class="min-w-0">
-                <div class="text-[15px] font-semibold text-highlighted">Time settings</div>
-                <div class="mt-0.5 text-[13.5px] leading-normal text-muted">Set your local time zone.</div>
-            </div>
-        </div>
-
-        <div class="rounded-lg border border-default bg-elevated/25">
-            <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 px-4 py-3.5">
-                <div class="min-w-0 flex-1 basis-60">
-                    <div class="text-sm font-medium text-highlighted">Time zone</div>
-                    <div class="mt-0.5 text-[13px] leading-normal text-muted">
-                        Used to display run times and schedules.
-                    </div>
-                </div>
-                <TimezoneSelect v-model="timezone"
-                                class="min-w-0 flex-1 basis-60 max-w-[280px]" />
-            </div>
-        </div>
-
-        <div class="mt-6 flex items-center gap-3">
-            <div class="min-w-0 flex-1 text-[13px] text-muted">{{ statusText }}</div>
-            <UButton label="Save changes"
-                     :disabled="!canSave"
-                     :loading="saving"
-                     @click="save" />
-        </div>
-    </div>
+        </template>
+    </UDashboardPanel>
 </template>

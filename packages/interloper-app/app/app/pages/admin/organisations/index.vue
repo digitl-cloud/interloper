@@ -4,7 +4,6 @@ import type { TableColumn } from '@nuxt/ui'
 import type { AdminOrganisation, AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 
 definePageMeta({
-    title: 'Organisations',
     layout: 'admin',
     middleware: 'super-admin',
 })
@@ -126,7 +125,7 @@ const columns: TableColumn<AdminOrganisation>[] = [
             if (!peak) return dash()
             return h('div', { class: 'flex flex-col gap-0.5' }, [
                 h('div', { class: 'w-32' }, h(AdminUsageMeter, { used: peak.used, limit: peak.limit })),
-                h('span', { class: 'text-[11.5px] text-dimmed whitespace-nowrap' },
+                h('span', { class: 'text-xs text-dimmed whitespace-nowrap' },
                     `${peak.label} ${peak.used.toLocaleString()} / ${peak.limit.toLocaleString()}`),
             ])
         },
@@ -138,15 +137,9 @@ const columns: TableColumn<AdminOrganisation>[] = [
             const usage = usageByOrg.value.get(row.original.id)
             if (row.original.deleted_at || !usage) return dash()
             const drift = usage.successful_runs !== usage.recomputed_successful_runs
-            const badge = drift
+            return drift
                 ? h(UBadge, { label: 'Drift', color: 'warning', variant: 'subtle', icon: 'i-lucide-triangle-alert' })
                 : h(UBadge, { label: 'In sync', color: 'success', variant: 'subtle', icon: 'i-lucide-check' })
-            if (!drift) return badge
-            return h('div', { class: 'flex flex-col gap-0.5 items-start' }, [
-                badge,
-                h('span', { class: 'text-[11.5px] text-dimmed whitespace-nowrap' },
-                    `runs table: ${usage.recomputed_successful_runs.toLocaleString()}`),
-            ])
         },
     },
     {
@@ -160,39 +153,46 @@ onMounted(loadData)
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0 gap-3">
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New organisation"
-                     @click="openCreate" />
-        </NavActions>
-        <DataTable :columns="columns"
-                   :data="rows"
-                   :loading="loading"
-                   no-actions
-                   search-placeholder="Search organisations..."
-                   @edit="openOrg"/>
+    <UDashboardPanel id="admin-organisations">
+        <template #header>
+            <AppNavbar title="Organisations" />
+        </template>
+        <template #body>
+            <DataTable :columns="columns"
+                       fill
+                       :data="rows"
+                       :loading="loading"
+                       no-actions
+                       search-placeholder="Search organisations..."
+                       @edit="openOrg">
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New organisation"
+                             @click="openCreate" />
+                </template>
+            </DataTable>
 
-        <UModal v-model:open="createOpen"
-                title="New organisation"
-                :ui="{ footer: 'justify-end' }">
-            <template #body>
-                <UInput v-model="createName"
-                        placeholder="Organisation name"
-                        autofocus
-                        class="w-full"
-                        @keydown.enter="submitCreate" />
-            </template>
-            <template #footer>
-                <UButton label="Cancel"
-                         color="neutral"
-                         variant="outline"
-                         @click="createOpen = false" />
-                <UButton label="Create"
-                         :disabled="!createName.trim() || creating"
-                         :loading="creating"
-                         @click="submitCreate" />
-            </template>
-        </UModal>
-    </div>
+            <UModal v-model:open="createOpen"
+                    title="New organisation"
+                    :ui="{ footer: 'justify-end' }">
+                <template #body>
+                    <UInput v-model="createName"
+                            placeholder="Organisation name"
+                            autofocus
+                            class="w-full"
+                            @keydown.enter="submitCreate" />
+                </template>
+                <template #footer>
+                    <UButton label="Cancel"
+                             color="neutral"
+                             variant="outline"
+                             @click="createOpen = false" />
+                    <UButton label="Create"
+                             :disabled="!createName.trim() || creating"
+                             :loading="creating"
+                             @click="submitCreate" />
+                </template>
+            </UModal>
+        </template>
+    </UDashboardPanel>
 </template>

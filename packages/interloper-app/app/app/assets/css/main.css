@@ -17,18 +17,18 @@
     --color-blue-950: #102344;
     /* dark surfaces: header, terminal blocks */
     --color-navy: #0b2a42;
-    /* neutrals: Tailwind zinc — 50 app/sidebar bg · 100 controls/hover · 200 lines · 950 ink */
+    /* neutrals: Tailwind neutral (pure greys) */
     --color-gray-50: #fafafa;
-    --color-gray-100: #f4f4f5;
-    --color-gray-200: #e4e4e7;
-    --color-gray-300: #d4d4d8;
-    --color-gray-400: #a1a1aa;
-    --color-gray-500: #71717a;
-    --color-gray-600: #52525b;
-    --color-gray-700: #3f3f46;
-    --color-gray-800: #27272a;
-    --color-gray-900: #18181b;
-    --color-gray-950: #09090b;
+    --color-gray-100: #f5f5f5;
+    --color-gray-200: #e5e5e5;
+    --color-gray-300: #d4d4d4;
+    --color-gray-400: #a3a3a3;
+    --color-gray-500: #737373;
+    --color-gray-600: #525252;
+    --color-gray-700: #404040;
+    --color-gray-800: #262626;
+    --color-gray-900: #171717;
+    --color-gray-950: #0a0a0a;
     /* status: success #1FA463 · error #E5484D · warning #E69E2E (50 = design tints) */
     --color-green-50: #edf9f2;
     --color-green-100: #d8f2e4;
@@ -73,22 +73,20 @@
 }
 
 :root {
-    /* text: ink #09090b · ink2 #52525b · ink3 #71717a */
+    /* text: ink #0a0a0a · ink2 #525252 · ink3 #737373 */
     --ui-text-dimmed: var(--color-gray-500);
     --ui-text-muted: var(--color-gray-600);
     --ui-text-toned: var(--color-gray-700);
     --ui-text: var(--color-gray-950);
     --ui-text-highlighted: var(--color-gray-950);
     --ui-text-inverted: #ffffff;
-    /* surfaces: white content/cards/header · sidebar (muted) #FAFAFA */
+    /* surfaces: sidebar and cards share one tone, the panel sits lighter */
     --ui-bg: #ffffff;
-    /* contrasted band: table headers, info strips, chart rulers */
-    --ui-bg-band: var(--color-gray-50);
     --ui-bg-muted: var(--color-gray-50);
     --ui-bg-elevated: var(--color-gray-100);
     --ui-bg-accented: var(--color-gray-200);
     --ui-bg-inverted: var(--color-gray-950);
-    /* borders: one line color everywhere (#E4E4E7) */
+    /* borders: one line color everywhere (#e5e5e5) */
     --ui-border: var(--color-gray-200);
     --ui-border-muted: var(--color-gray-200);
     --ui-border-accented: var(--color-gray-200);
@@ -96,14 +94,16 @@
     /* Nuxt UI default: 6px controls, 8px cards */
     --ui-radius: 0.25rem;
     /* graph canvas: dependency edges read darker than card borders */
+    /* the canvas and nested cards take the container tone, parent cards the panel tone */
     --graph-canvas: var(--ui-bg-muted);
-    --graph-dot: #dcdce1;
+    --graph-dot: #dcdcdc;
     --graph-edge: #8fbbf7;
     --graph-edge-dim: color-mix(in srgb, #8fbbf7 30%, transparent);
+    --graph-node-bg: var(--ui-bg);
     --graph-card-line: var(--ui-border);
-    --graph-nested-bg: #f7f7f9;
-    --graph-nested-line: #e9e9ee;
-    --graph-head-line: #ebebef;
+    --graph-nested-bg: var(--ui-bg-muted);
+    --graph-nested-line: #e9e9e9;
+    --graph-head-line: #ebebeb;
     --id-chip-text: #1b5fbf;
     --graph-model: #6c5ce7;
     --graph-card-shadow: 0 2px 8px rgb(11 42 66 / 0.07);
@@ -131,7 +131,7 @@
 
 .dark {
     --scrollbar-thumb: var(--color-gray-700);
-    --scrollbar-thumb-hover: #4a4a50;
+    --scrollbar-thumb-hover: #4a4a4a;
 }
 
 * {
@@ -167,17 +167,15 @@
 }
 
 .dark {
-    /* dark surfaces stay bespoke: the design's gray scale is light-oriented,
-       so these are ink-family (#1d1d1f) tones rather than scale slots */
     --ui-text-dimmed: var(--color-gray-500);
     --ui-text-muted: var(--color-gray-400);
     --ui-text-toned: var(--color-gray-300);
-    --ui-text: var(--color-gray-200);
+    --ui-text: var(--color-gray-100);
     --ui-text-highlighted: #ffffff;
     --ui-text-inverted: var(--color-gray-950);
-    --ui-bg: var(--color-gray-900);
-    --ui-bg-band: #1f1f22;
-    --ui-bg-muted: #1f1f22;
+    /* surfaces: sidebar and cards share one tone, the panel sits lighter */
+    --ui-bg: #1c1c1c;
+    --ui-bg-muted: var(--color-gray-900);
     --ui-bg-elevated: var(--color-gray-800);
     --ui-bg-accented: var(--color-gray-700);
     --ui-bg-inverted: #ffffff;
@@ -186,12 +184,10 @@
     --ui-border-accented: var(--color-gray-700);
     --ui-border-inverted: #ffffff;
     --ui-radius: 0.25rem;
-    --graph-canvas: var(--ui-bg);
     --graph-dot: var(--color-gray-800);
     --graph-edge: color-mix(in srgb, var(--ui-primary) 55%, var(--color-gray-950));
     --graph-edge-dim: color-mix(in srgb, var(--ui-primary) 18%, var(--color-gray-950));
     --graph-card-line: var(--color-gray-700);
-    --graph-nested-bg: var(--ui-bg-muted);
     --graph-nested-line: var(--color-gray-700);
     --graph-head-line: var(--color-gray-700);
     --id-chip-text: color-mix(in srgb, var(--ui-primary) 70%, white);

@@ -5,8 +5,6 @@ import type { ComponentRecord } from '~/types/component'
 import { RESOURCE_KINDS } from '~/types/catalog'
 
 definePageMeta({
-    title: 'Components',
-    fullBleed: true,
     // A dynamic root route would otherwise swallow every unknown URL.
     validate: route => RESOURCE_KINDS.map(kindSlug).includes(route.params.kind as string),
 })
@@ -18,6 +16,7 @@ const UTooltip = resolveComponent('UTooltip')
 const route = useRoute()
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const views = useComponentViews()
 const { statusBadge } = useDrift()
 
 const kind = computed(() => kindFromSlug(route.params.kind as string))
@@ -204,15 +203,21 @@ const typeKey = ref<string | null>(null)
 </script>
 
 <template>
-    <div>
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     :label="`New ${kind}`"
-                     @click="handleCreate" />
-        </NavActions>
-        <NavComponentsHub>
+    <UDashboardPanel id="kind">
+        <template #header>
+            <AppNavbar title="Components" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="views"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <DriftBanner :kind="kind" />
             <DataTable :columns="columns"
+                       fill
                        :data="resources"
                        :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
@@ -227,6 +232,12 @@ const typeKey = ref<string | null>(null)
                     <TypeFilter v-model="typeKey"
                                 :components="resources" />
                 </template>
+
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             :label="`New ${kind}`"
+                             @click="handleCreate" />
+                </template>
                 <template #empty>
                     <EmptyState :icon="KIND_ICONS[kind] ?? 'i-lucide-box'"
                                 :title="`No ${pageTitle.toLowerCase()} yet`"
@@ -238,7 +249,7 @@ const typeKey = ref<string | null>(null)
                     </EmptyState>
 
                     <div class="mt-9 mb-3.5">
-                        <h2 class="text-lg font-bold tracking-[-0.015em] text-highlighted">
+                        <h2 class="text-lg font-semibold text-highlighted">
                             {{ emptyCopy.catalogTitle }}
                         </h2>
                         <p class="text-sm text-muted mt-1.5">{{ emptyCopy.catalogDesc }}</p>
@@ -255,10 +266,10 @@ const typeKey = ref<string | null>(null)
                     </div>
 
                     <div v-if="kind === 'connection'"
-                         class="flex items-center gap-3 border border-default rounded-lg px-5 py-4 bg-(--ui-bg-band) mt-6">
+                         class="flex items-center gap-3 border border-default rounded-lg px-5 py-4 bg-elevated/50 mt-6">
                         <UIcon name="i-lucide-info"
                                class="size-5 text-primary shrink-0" />
-                        <div class="flex-1 text-[13.5px] text-toned leading-normal">
+                        <div class="flex-1 text-sm text-toned leading-normal">
                             You can also create a connection inline while adding a source — whichever you reach first.
                             Ready to connect data?
                             <NuxtLink :to="kindPath('source')"
@@ -267,25 +278,25 @@ const typeKey = ref<string | null>(null)
                     </div>
                 </template>
             </DataTable>
-        </NavComponentsHub>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      modal
-                      :default-title="`New ${kind}`"
-                      :description="`${editingResource ? 'Edit' : 'Configure a new'} ${kind}`"
-                      :stepper="stepperRef">
-            <WizardDefinitionStepper v-if="drawerOpen"
-                                     :key="editingResource?.id ?? 'new'"
-                                     ref="stepperRef"
-                                     :kind="kind"
-                                     :noun="kindLabel"
-                                     :component="editingResource"
-                                     :initial-type-key="presetTypeKey"
-                                     :initial-name="presetName"
-                                     :definitions="definitions"
-                                     :credentials-label="kind === 'connection' ? 'Credentials' : undefined"
-                                     @created="handleSaved"
-                                     @updated="handleSaved" />
-        </WizardDrawer>
-    </div>
+            <WizardDrawer v-model:open="drawerOpen"
+                          modal
+                          :default-title="`New ${kind}`"
+                          :description="`${editingResource ? 'Edit' : 'Configure a new'} ${kind}`"
+                          :stepper="stepperRef">
+                <WizardDefinitionStepper v-if="drawerOpen"
+                                         :key="editingResource?.id ?? 'new'"
+                                         ref="stepperRef"
+                                         :kind="kind"
+                                         :noun="kindLabel"
+                                         :component="editingResource"
+                                         :initial-type-key="presetTypeKey"
+                                         :initial-name="presetName"
+                                         :definitions="definitions"
+                                         :credentials-label="kind === 'connection' ? 'Credentials' : undefined"
+                                         @created="handleSaved"
+                                         @updated="handleSaved" />
+            </WizardDrawer>
+        </template>
+    </UDashboardPanel>
 </template>

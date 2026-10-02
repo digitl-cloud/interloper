@@ -47,28 +47,29 @@ function when(item: AttentionItem): string {
 </script>
 
 <template>
-    <OverviewSection title="Needs attention"
-                     :meta="items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined">
+    <UCard title="Needs attention"
+           :description="items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined"
+           :ui="{ body: 'p-0 sm:p-0' }">
         <div v-if="items.length"
-             class="overflow-hidden rounded-lg border border-default divide-y divide-default">
+             class="divide-y divide-default border-t border-default">
             <div v-for="item in items"
                  :key="`${item.kind}:${item.run_id ?? item.component_id ?? ''}:${item.title}`"
-                 class="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-muted">
-                <span class="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full"
+                 class="flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-elevated/50 sm:px-6">
+                <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-full"
                       :class="item.severity === 'error' ? 'bg-error/10 text-error' : 'bg-warning/15 text-warning'">
                     <UIcon :name="KIND_META[item.kind].rowIcon"
-                           class="size-[15px]" />
+                           class="size-4" />
                 </span>
                 <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div class="text-[13.5px] font-medium leading-snug text-highlighted">{{ item.title }}</div>
+                    <div class="text-sm font-medium leading-snug text-highlighted">{{ item.title }}</div>
                     <div class="flex flex-wrap items-center gap-2 text-xs text-dimmed">
                         <span class="inline-flex items-center gap-1.5 text-muted">
                             <UIcon :name="KIND_META[item.kind].icon"
-                                   class="size-[13px]" />{{ KIND_META[item.kind].label }}
+                                   class="size-3.5" />{{ KIND_META[item.kind].label }}
                         </span>
                         <template v-if="item.target">
                             <span>·</span>
-                            <span class="font-mono text-[11.5px]">{{ item.target }}</span>
+                            <span class="font-mono text-xs">{{ item.target }}</span>
                         </template>
                         <template v-if="when(item)">
                             <span>·</span>
@@ -91,15 +92,15 @@ function when(item: AttentionItem): string {
             </div>
         </div>
         <div v-else
-             class="flex items-center gap-3.5 rounded-lg border border-default bg-muted px-5 py-[22px]">
-            <span class="inline-flex size-[34px] shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+             class="flex items-center gap-3.5 p-4 sm:p-6">
+            <span class="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
                 <UIcon name="i-lucide-check"
                        class="size-4" />
             </span>
             <div class="flex flex-col gap-0.5">
                 <div class="text-sm font-semibold text-highlighted">All clear</div>
-                <div class="text-[13px] text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt)) }}.</div>
+                <div class="text-sm text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt)) }}.</div>
             </div>
         </div>
-    </OverviewSection>
+    </UCard>
 </template>

@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn, TabsItem, DropdownMenuItem } from '@nuxt/ui'
+import type { TableColumn, NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { PersonalAccessToken } from '~/types/token'
 
-definePageMeta({ title: 'Authentication', layout: 'settings', fullBleed: true })
+definePageMeta({ layout: 'settings' })
 
 const UBadge = resolveComponent('UBadge')
 
@@ -18,10 +18,8 @@ const tokens = ref<PersonalAccessToken[]>([])
 const loading = ref(false)
 const createOpen = ref(false)
 
-const activeTab = computed({
-    get: () => (route.query.tab as string) || 'signin',
-    set: (value: string) => router.push({ query: { ...route.query, tab: value } }),
-})
+// Anything but ?tab=tokens, unknown values included, is the sign-in pane.
+const activeTab = computed(() => route.query.tab === 'tokens' ? 'tokens' : 'signin')
 
 onMounted(() => {
     if (!route.query.tab) {
@@ -30,13 +28,14 @@ onMounted(() => {
     loadTokens()
 })
 
-const items = computed<TabsItem[]>(() => [
-    { label: 'Sign in', value: 'signin', icon: 'i-lucide-log-in' },
+const tabs = computed<NavigationMenuItem[]>(() => [
+    { label: 'Sign in', icon: 'i-lucide-log-in', to: { query: { tab: 'signin' } }, active: activeTab.value === 'signin' },
     {
         label: 'Personal Access Tokens',
-        value: 'tokens',
         icon: 'i-lucide-key',
         badge: loading.value ? undefined : tokens.value.length,
+        to: { query: { tab: 'tokens' } },
+        active: activeTab.value === 'tokens',
     },
 ])
 
@@ -149,54 +148,54 @@ const columns: TableColumn<PersonalAccessToken>[] = [
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <PageTabs v-model="activeTab"
-                  :items="items">
-            <template #signin>
-                <div class="mx-auto w-full max-w-[720px]">
-                    <div class="mb-3 flex items-center gap-2">
-                        <UIcon name="i-lucide-log-in"
-                               class="size-4 text-muted" />
-                        <div class="text-[15px] font-semibold text-highlighted">Sign in methods</div>
+    <UDashboardPanel id="authentication">
+        <template #header>
+            <AppNavbar title="Authentication" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="tabs"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
+            <UCard v-if="activeTab === 'signin'"
+                   title="Sign in"
+                   class="mx-auto w-full max-w-3xl">
+                <div class="flex items-center gap-3">
+                    <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-elevated">
+                        <UIcon name="i-devicon-google"
+                               class="size-3.5" />
                     </div>
-                    <div class="rounded-lg border border-default bg-elevated/25">
-                        <div class="flex items-center gap-3 px-4 py-3.5">
-                            <div class="flex size-7 shrink-0 items-center justify-center rounded-md bg-elevated">
-                                <UIcon name="i-devicon-google"
-                                       class="size-3.5" />
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <div class="text-sm font-medium text-highlighted">Google</div>
-                                <div class="mt-0.5 text-[13px] text-muted">{{ userStore.user?.email }}</div>
-                            </div>
-                            <UBadge label="Connected"
-                                    color="success"
-                                    variant="subtle"
-                                    class="shrink-0" />
-                        </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-medium text-highlighted">Google</div>
+                        <div class="mt-0.5 text-sm text-muted">{{ userStore.user?.email }}</div>
                     </div>
+                    <UBadge label="Connected"
+                            color="success"
+                            variant="subtle"
+                            class="shrink-0" />
                 </div>
-            </template>
+            </UCard>
 
-            <template #tokens>
-                <DataTable :columns="columns"
-                           :data="tokens"
-                           :loading="loading"
-                           :row-actions="rowActions"
-                           bordered
-                           no-actions
-                           no-row-click
-                           search-placeholder="Search tokens...">
-                    <template #toolbar>
-                        <UButton icon="i-lucide-plus"
-                                 label="New token"
-                                 @click="createOpen = true" />
-                    </template>
-                </DataTable>
-            </template>
-        </PageTabs>
+            <DataTable v-else
+                       :columns="columns"
+                       :data="tokens"
+                       :loading="loading"
+                       :row-actions="rowActions"
+                       no-actions
+                       no-row-click
+                       search-placeholder="Search tokens...">
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New token"
+                             @click="createOpen = true" />
+                </template>
+            </DataTable>
 
-        <SettingsTokenCreateModal v-model:open="createOpen"
-                                  @created="loadTokens" />
-    </div>
+            <SettingsTokenCreateModal v-model:open="createOpen"
+                                      @created="loadTokens" />
+        </template>
+    </UDashboardPanel>
 </template>

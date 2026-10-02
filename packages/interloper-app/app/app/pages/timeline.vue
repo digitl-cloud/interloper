@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { TimelineBar } from '~/types/timeline'
 
-definePageMeta({ title: 'Timeline', fullBleed: true })
-
 /** Width of the row-label gutter: a target's name, plus the badge for its kind. */
 const LABEL_WIDTH = 280
 
@@ -15,7 +13,14 @@ const catalogStore = useCatalogStore()
 
 const { runs, span, rangeStart, rangeEnd, loading, total, truncated } = storeToRefs(timelineStore)
 
-const rows = useRunTimelineRows(runs)
+/** Active status bucket from the breakdown bar; narrows the bars to that status. */
+const statusFilter = ref<string | null>(null)
+const stats = computed(() => runStats(null, executionCounts(runs.value)))
+const shownRuns = computed(() => statusFilter.value
+    ? runs.value.filter(run => statusesForKey(statusFilter.value!).includes(run.status))
+    : runs.value)
+
+const rows = useRunTimelineRows(shownRuns)
 const selectedId = ref<string | null>(null)
 
 const spanItems = TIMELINE_SPANS.map(s => ({ label: s.label, value: String(s.value) }))
@@ -49,39 +54,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <div class="flex shrink-0 items-center gap-2 border-b border-default px-4 py-2">
-            <span class="text-xs text-muted">Window</span>
-            <UTabs v-model="activeSpan"
-                   :items="spanItems"
-                   variant="pill"
-                   size="xs"
-                   :content="false" />
-
-        </div>
-
-        <NavActions>
-            <UBadge v-if="truncated"
-                    color="warning"
-                    variant="subtle"
-                    icon="i-lucide-triangle-alert"
-                    :title="`Only the ${runCount} most recent of ${total} runs in this window are shown — narrow the window to see them all.`">
-                Showing {{ runCount }} of {{ total }}
-            </UBadge>
-            <span v-else
-                  class="text-xs text-muted">{{ runCount }} run(s)</span>
-            <UButton icon="i-lucide-refresh-cw"
-                     color="neutral"
-                     variant="outline"
-                     size="sm"
-                     :loading="loading"
-                     aria-label="Refresh"
-                     @click="timelineStore.fetch()" />
-        </NavActions>
-
-        <div class="flex flex-1 min-h-0 flex-col">
+    <UDashboardPanel id="timeline">
+        <template #header>
+            <AppNavbar title="Timeline" />
+        </template>
+        <template #body>
             <div v-if="!loading && !rows.length"
-                 class="w-full max-w-[1040px] mx-auto p-4">
+                 class="w-full max-w-[1040px] mx-auto">
                 <EmptyState icon="i-lucide-gantt-chart"
                             title="Nothing scheduled yet"
                             description="The timeline lays every job's runs out on a wall-clock axis, so you can see what ran when, what overlapped, and what took longer than it should.">
@@ -92,18 +71,49 @@ onUnmounted(() => {
                 </EmptyState>
             </div>
 
-            <div v-else
-                 class="flex flex-1 min-h-0 flex-col overflow-hidden">
-                <ChartExecutionTimeline v-model:selected-id="selectedId"
-                                        :rows="rows"
-                                        :range-start="rangeStart"
-                                        :range-end="rangeEnd"
-                                        axis="clock"
-                                        :label-width="LABEL_WIDTH"
-                                        label-title="Target"
-                                        empty-message="No runs in this window"
-                                        @bar-click="onBarClick" />
-            </div>
-        </div>
-    </div>
+            <template v-else>
+                <UCard>
+                    <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
+                                            :stats="stats"
+                                            noun="runs" />
+                </UCard>
+                <UCard :ui="CANVAS_CARD_UI">
+                    <template #header>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="text-sm text-muted">Window</span>
+                            <UTabs v-model="activeSpan"
+                                   :items="spanItems"
+                                   variant="pill"
+                                   size="xs"
+                                   :content="false" />
+                            <div class="ml-auto flex items-center gap-2">
+                                <UBadge v-if="truncated"
+                                        color="warning"
+                                        variant="subtle"
+                                        icon="i-lucide-triangle-alert"
+                                        :title="`Only the ${runCount} most recent of ${total} runs in this window are shown. Narrow the window to see them all.`">
+                                    Showing {{ runCount }} of {{ total }}
+                                </UBadge>
+                                <UButton icon="i-lucide-refresh-cw"
+                                         color="neutral"
+                                         variant="outline"
+                                         :loading="loading"
+                                         aria-label="Refresh"
+                                         @click="timelineStore.fetch()" />
+                            </div>
+                        </div>
+                    </template>
+                    <ChartExecutionTimeline v-model:selected-id="selectedId"
+                                            :rows="rows"
+                                            :range-start="rangeStart"
+                                            :range-end="rangeEnd"
+                                            axis="clock"
+                                            :label-width="LABEL_WIDTH"
+                                            label-title="Target"
+                                            empty-message="No runs in this window"
+                                            @bar-click="onBarClick" />
+                </UCard>
+            </template>
+        </template>
+    </UDashboardPanel>
 </template>

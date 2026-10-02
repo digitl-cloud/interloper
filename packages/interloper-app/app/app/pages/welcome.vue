@@ -1,6 +1,5 @@
 <script setup lang="ts">
 definePageMeta({
-    title: 'Welcome',
     layout: false,
 })
 
