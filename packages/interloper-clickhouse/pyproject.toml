@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-clickhouse"
-version = "0.96.0"
+version = "0.97.0"
 description = "Interloper ClickHouse integration: connection and destination"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

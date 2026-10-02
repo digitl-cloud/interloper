@@ -2,6 +2,49 @@
 
 <!-- version list -->
 
+## v0.97.0 (2026-10-02)
+
+### Bug Fixes
+
+- **app**: Keep only the ClickHouse mark in its icon
+  ([`7445f38`](https://github.com/digitl-cloud/interloper/commit/7445f38bf6b58e22914ee32bad85cc833e7091d3))
+
+- **app**: Replace hand-drawn destination icons with the brands' official logos
+  ([`62877a6`](https://github.com/digitl-cloud/interloper/commit/62877a6a1e81f5efcc2f0e2b713786b340175b7c))
+
+- **app**: Use the chosen Google Sheets, AWS, ClickHouse and S3 logos
+  ([`fffa014`](https://github.com/digitl-cloud/interloper/commit/fffa014e3c556804e25529cf6f12d74c25688539))
+
+- **app**: Use the ClickHouse badge and put every icon on one canvas
+  ([`47751fc`](https://github.com/digitl-cloud/interloper/commit/47751fc28473bd52daed0b4e5d2bfe999b4d9ed1))
+
+- **app**: Use the official Azure and Fabric icons
+  ([`bba0941`](https://github.com/digitl-cloud/interloper/commit/bba094185a6aed39e3e6994f73027993f06fdc84))
+
+- **snowflake**: Make the destination deep-copyable
+  ([`0ff5be0`](https://github.com/digitl-cloud/interloper/commit/0ff5be01e79ec68cb883e2123e27154527d9c762))
+
+### Features
+
+- Count overview coverage per asset and group it by source
+  ([`c3d7d05`](https://github.com/digitl-cloud/interloper/commit/c3d7d05030b4f05291e333afe3d7b02a2074f72f))
+
+- Overview landing page
+  ([`7b49b2f`](https://github.com/digitl-cloud/interloper/commit/7b49b2fae7485e6bcbd504b1c4690695551703ef))
+
+- **azure**: Add the Microsoft Fabric Warehouse destination
+  ([`b4198fe`](https://github.com/digitl-cloud/interloper/commit/b4198fed78ff38a773efc26184516675d69f3c4a))
+
+- **clickhouse**: Add the ClickHouse destination
+  ([`f098bee`](https://github.com/digitl-cloud/interloper/commit/f098bee342ce88d780140fc66e37e380d2016241))
+
+- **databricks**: Add the Databricks destination
+  ([`9fdce46`](https://github.com/digitl-cloud/interloper/commit/9fdce46c74a8a8c08a9388bbdf6d6ecb7485491d))
+
+- **docker**: Ship the Fabric driver's system libraries in the executing images
+  ([`c762940`](https://github.com/digitl-cloud/interloper/commit/c7629406e49e23e4220ad9c9b056a0fed3478b51))
+
+
 ## v0.96.0 (2026-10-02)
 
 ### Bug Fixes
