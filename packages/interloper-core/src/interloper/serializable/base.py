@@ -515,15 +515,22 @@ class Serializable(BaseModel):
     internal_fields: ClassVar[frozenset[str]] = frozenset()
 
     # -- Construction ----------------------------------------------------------
-    def __init_subclass__(cls, **kwargs: Any) -> None:
+    def __init_subclass__(cls, *, rebuild: bool = False, **kwargs: Any) -> None:
         """Auto-derive ``key`` as the snake_cased class name unless declared.
 
+        A class :meth:`build_class` builds over an existing declaration (to
+        apply a decorator's field defaults) is that same declaration, not a
+        new one: it keeps the key it inherits, so a key declared in the class
+        body survives the decorator.
+
         Args:
+            rebuild: Whether the class rebuilds an existing declaration rather
+                than declaring a new one; set only by :meth:`build_class`.
             **kwargs: Class-creation keyword arguments, forwarded untouched to
                 ``super().__init_subclass__``.
         """
         super().__init_subclass__(**kwargs)
-        if "key" not in cls.__dict__:
+        if not rebuild and "key" not in cls.__dict__:
             cls.key = to_snake_case(cls.__name__)
 
     @classmethod
@@ -647,6 +654,7 @@ class Serializable(BaseModel):
                     decorated.__name__,
                     __base__=result_cls,
                     __module__=decorated.__module__,
+                    __cls_kwargs__={"rebuild": True},
                     **field_definitions,
                 )
                 result_cls.__qualname__ = decorated.__qualname__
