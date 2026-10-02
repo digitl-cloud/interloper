@@ -2,6 +2,44 @@
 
 <!-- version list -->
 
+## v0.96.0 (2026-10-02)
+
+### Bug Fixes
+
+- **app**: Paginate the backfill page's runs
+  ([`cd5ba22`](https://github.com/digitl-cloud/interloper/commit/cd5ba22dcd6c60c37742e10796474e9067b5713b))
+
+- **assets**: Request only finalized Search Console data
+  ([`dd9aad3`](https://github.com/digitl-cloud/interloper/commit/dd9aad3a136d2d103b2417536de1e32b5802a77b))
+
+- **google-cloud**: Name the Google Sheets icon so the app can resolve it
+  ([`33e3ed6`](https://github.com/digitl-cloud/interloper/commit/33e3ed6e528a4e9b073831bbcc3d19cad9ace79b))
+
+### Features
+
+- **api**: Sort the runs listing on a chosen field
+  ([`71b190c`](https://github.com/digitl-cloud/interloper/commit/71b190c3a9da7eb2c2883d45ff7070c1fe0d217c))
+
+- **scheduler**: Quota-check job firings like any backfill
+  ([`5d31cbf`](https://github.com/digitl-cloud/interloper/commit/5d31cbf89b49e8aa73dc3753ab208848412ffbb5))
+
+### Performance Improvements
+
+- **app**: Virtualize the collection table
+  ([`a45d533`](https://github.com/digitl-cloud/interloper/commit/a45d5337bd53ddd2b116f9cf9b2508b4ab9def0d))
+
+### Refactoring
+
+- **db**: Admit components and runs through the quota store
+  ([`97684ab`](https://github.com/digitl-cloud/interloper/commit/97684ab518c4a212317eaa9fce2ff5404323a3bf))
+
+- **db**: Drop QuotaStore.run_status
+  ([`9c10418`](https://github.com/digitl-cloud/interloper/commit/9c1041891a37a8e5b70f70b6d9fbe59f99e66c19))
+
+- **db**: Drop the save-time job lookback check
+  ([`1af9316`](https://github.com/digitl-cloud/interloper/commit/1af9316ce0c97cdc6d3963d15263219bcebce8b2))
+
+
 ## v0.95.0 (2026-10-01)
 
 ### Chores
