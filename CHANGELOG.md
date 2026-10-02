@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v0.98.0 (2026-10-02)
+
+### Features
+
+- Add a deprecated maturity level
+  ([`8785c0c`](https://github.com/digitl-cloud/interloper/commit/8785c0ce8595fd848fecc8fa9bc16a52a8971eab))
+
+- Make the overview fast for large organisations
+  ([`1be35ff`](https://github.com/digitl-cloud/interloper/commit/1be35ffbcfc122c0dd335c2fcc79ccf946bd0603))
+
+- Mark components as alpha or beta and badge them in the app
+  ([`de894c5`](https://github.com/digitl-cloud/interloper/commit/de894c5505e5e39672d4c82a3e77e6c93a326663))
+
+- Mark the recent destinations alpha and the sources not used in production beta
+  ([`e677d38`](https://github.com/digitl-cloud/interloper/commit/e677d38a2c2b64b01106a68403b1aa45d1e04ab1))
+
+### Refactoring
+
+- Validate maturity through the definition, not at declaration
+  ([`2f3edfc`](https://github.com/digitl-cloud/interloper/commit/2f3edfcf3af0c98b0372fa86b96aeb0801e08f33))
+
+
 ## v0.97.0 (2026-10-02)
 
 ### Bug Fixes
