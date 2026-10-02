@@ -98,7 +98,11 @@ Neutrals are Tailwind `neutral` (pure greys, sampled from the reference screensh
   Its sections (description, materialization, destinations, …) are inner cards in the panel tone
   (`bg-default` + line ring) on the card's container tone, and their item tiles drop back to the
   container tone: the two tones alternate at every level.
-- **Split pages** (collection, agent chat, run detail) zero the body padding
+- **Run detail**: a summary card (meta line + `ExecutionsRunStatusBar`), then the resizable,
+  collapsible rail card (Attempts / Assets as two-tone inner section cards) beside a vertical split
+  of the timeline/graph canvas card (rail toggle + view tabs in its header) and the events card
+  (category tabs + count in its header). The splitter handles are the 12px gaps between cards.
+- **Split pages** (collection, agent chat) zero the body padding
   (`:ui="{ body: 'p-0 sm:p-0' }"`, plus the gap where the body stacks) so their splitters run
   edge to edge; any card sits inside its own padded pane.
 - **Removed**: `NavActions`, `PageFrame`, `PageNav`, `PageTabs`, `PanelCard`, `OverviewSection`,
