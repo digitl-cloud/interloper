@@ -223,12 +223,11 @@ class TestDefinition:
 
         assert FakeBetaChild.definition().maturity is il.Maturity.BETA
 
-    def test_an_unknown_maturity_fails_when_the_definition_is_built(self):
-        class FakeTypoComponent(Component):
-            maturity = "gamma"
+    def test_an_unknown_maturity_fails_where_it_is_written(self):
+        with pytest.raises(TypeError, match=r"FakeTypoComponent\.maturity: Input should be"):
 
-        with pytest.raises(ValidationError, match="maturity"):
-            FakeTypoComponent.definition()
+            class FakeTypoComponent(Component):
+                maturity = "gamma"
 
     def test_definition_description_from_docstring(self):
         class FakeDocumentedComponent(Component):
@@ -306,6 +305,45 @@ class Peer(il.Source):
     """Source whose ``peers`` relation declares no key, so it would accept itself."""
 
     peers: list[il.Source] = il.Relation("source", many=True, optional=True)
+
+
+class TestValidateClassvars:
+    """A class's own settings are checked against their declared ClassVar types."""
+
+    def test_valid_settings_pass_and_are_kept_as_declared(self):
+        class FakeSettings(Component):
+            icon = "carbon:data"
+            maturity = "beta"
+
+        assert FakeSettings.maturity == "beta"
+        assert type(FakeSettings.maturity) is str
+
+    def test_a_wrong_type_raises_naming_the_class_and_setting(self):
+        with pytest.raises(TypeError, match=r"FakeWrongIcon\.icon: Input should be a valid string"):
+
+            class FakeWrongIcon(Component):
+                icon = 1
+
+    def test_a_setting_redeclared_as_a_field_is_not_validated(self):
+        class FakeShadowing(Component):
+            icon: int = 1
+
+        assert FakeShadowing.model_fields["icon"].default == 1
+
+    def test_inherited_values_are_not_revalidated(self):
+        class FakeParent(Component):
+            maturity = "alpha"
+
+        class FakeChild(FakeParent):
+            pass
+
+        assert FakeChild.maturity == "alpha"
+
+    def test_settings_lists_every_public_classvar_with_its_type(self):
+        settings = Component._classvars()
+        assert settings["icon"] is str
+        assert settings["maturity"] is il.Maturity
+        assert "kind" not in settings and "relations" not in settings
 
 
 class TestCollect:

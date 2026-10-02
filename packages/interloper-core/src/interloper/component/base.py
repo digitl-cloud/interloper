@@ -9,12 +9,13 @@ single per-kind authority every kind-level question reads from.
 
 from __future__ import annotations
 
+import inspect
 import sys
 import uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
 from typing_extensions import Self
 
 from interloper.component.maturity import Maturity
@@ -22,6 +23,7 @@ from interloper.component.relation import ComponentIdentity, Relation, unwrap_op
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
+from interloper.utils.annotations import classvar_type, is_classvar, type_adapter
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
@@ -52,6 +54,11 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
 
 
 KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
+
+# ClassVars carrying the framework's own machinery: never a decorator setting,
+# whatever their annotation says. `relations` has its own channel, the rest are
+# collected, not declared.
+_RESERVED_CLASSVARS = frozenset({"kind", "relations", "internal_fields", "asset_types", "model_config"})
 
 
 # -- Definitions ---------------------------------------------------------------
@@ -114,12 +121,14 @@ class Component(Serializable):
     # -- Construction ----------------------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-derive ``kind`` and collect the class's relations.
+        """Auto-derive ``kind``, collect the class's relations and validate its settings.
 
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation comes from :class:`Serializable`.)
+        (``key`` derivation comes from :class:`Serializable`.) The settings
+        the class body declares are checked against their types here, so a
+        wrong one fails where it is written.
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
@@ -128,6 +137,7 @@ class Component(Serializable):
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
         cls._collect()
+        cls._validate_classvars()
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -625,6 +635,50 @@ class Component(Serializable):
         )
 
     # -- Internals -------------------------------------------------------------
+
+    @classmethod
+    def _classvars(cls) -> dict[str, Any]:
+        """The public ClassVars this class can be given, name to declared type.
+
+        Every name some class in the MRO annotates ``ClassVar``, neither
+        private nor reserved: what a decorator may set, and what
+        :meth:`_validate_classvars` checks. The type comes from the most
+        derived annotation; it is ``None`` when that annotation is a bare or
+        unresolvable ``ClassVar``, or redeclares the name as a field, and such
+        a name is not validated.
+
+        Returns:
+            Each settable name to its declared type, or ``None``.
+        """
+        declared: dict[str, Any] = {}
+        for base in reversed(cls.__mro__):
+            for name, hint in inspect.get_annotations(base).items():
+                if name.startswith("_") or name in _RESERVED_CLASSVARS:
+                    continue
+                if is_classvar(hint):
+                    declared[name] = classvar_type(hint, base)
+                elif name in declared:
+                    declared[name] = None
+        return declared
+
+    @classmethod
+    def _validate_classvars(cls) -> None:
+        """Check every setting this class defines itself against its declared type.
+
+        Values are checked, never rewritten: the class keeps what was
+        declared, and readers that need a coerced form (a definition, say)
+        convert it themselves.
+
+        Raises:
+            TypeError: If a setting's value does not match its declared type.
+        """
+        for name, declared in cls._classvars().items():
+            if declared is None or name not in cls.__dict__:
+                continue
+            try:
+                type_adapter(declared).validate_python(cls.__dict__[name])
+            except ValidationError as error:
+                raise TypeError(f"{cls.__name__}.{name}: {error.errors()[0]['msg']}") from None
 
     @classmethod
     def _collect(cls) -> None:
