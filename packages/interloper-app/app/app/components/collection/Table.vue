@@ -206,20 +206,23 @@ function onRowClick(row: any) {
 </script>
 
 <template>
-    <div class="w-full flex flex-col gap-4 flex-1 min-h-0">
-        <div class="flex items-center gap-3">
-            <UInput v-model="globalFilter"
-                    placeholder="Search collection..."
-                    icon="i-lucide-search"
-                    class="max-w-sm" />
-            <UButton variant="ghost"
-                     color="neutral"
-                     size="xs"
-                     :icon="allExpanded ? 'i-lucide-chevrons-down-up' : 'i-lucide-chevrons-up-down'"
-                     :label="allExpanded ? 'Collapse all' : 'Expand all'"
-                     class="ml-auto"
-                     @click="toggleAllExpanded" />
-        </div>
+    <UCard :ui="FILL_CARD_UI">
+        <template #header>
+            <div class="flex flex-wrap items-center gap-3">
+                <UInput v-model="globalFilter"
+                        placeholder="Search collection..."
+                        icon="i-lucide-search"
+                        class="max-w-sm" />
+                <UButton variant="ghost"
+                         color="neutral"
+                         size="sm"
+                         :icon="allExpanded ? 'i-lucide-chevrons-down-up' : 'i-lucide-chevrons-up-down'"
+                         :label="allExpanded ? 'Collapse all' : 'Expand all'"
+                         class="ml-auto"
+                         @click="toggleAllExpanded" />
+                <slot name="actions" />
+            </div>
+        </template>
 
         <UTable v-model:expanded="expanded"
                 :data="filteredData"
@@ -560,9 +563,11 @@ function onRowClick(row: any) {
             <div class="hidden" />
         </UDropdownMenu>
 
-        <TableFooter class="shrink-0">
-            {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
-            {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
-        </TableFooter>
-    </div>
+        <template #footer>
+            <TableFooter>
+                {{ sources.length }} {{ sources.length === 1 ? 'source' : 'sources' }},
+                {{ assetCount }} {{ assetCount === 1 ? 'asset' : 'assets' }}
+            </TableFooter>
+        </template>
+    </UCard>
 </template>

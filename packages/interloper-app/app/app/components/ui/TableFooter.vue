@@ -1,9 +1,5 @@
 <script setup lang="ts">
-/**
- * Table caption + pagination bar (caption text via the default slot), ruled
- * off from the rows above. The right padding keeps the pager clear of the
- * layout's floating launcher, which publishes its width as --launcher-inset.
- */
+/** Table caption (default slot) and pager, for a table card's #footer. */
 withDefaults(defineProps<{
     page?: number
     total?: number
@@ -14,7 +10,7 @@ const emit = defineEmits<{ 'update:page': [page: number] }>()
 </script>
 
 <template>
-    <div class="flex items-center justify-between border-t border-default pt-4 pr-[var(--launcher-inset,0px)] text-[13px] text-dimmed">
+    <div class="flex items-center justify-between gap-3 text-sm text-muted">
         <span><slot /></span>
         <UPagination v-if="total > pageSize"
                      :page="page"

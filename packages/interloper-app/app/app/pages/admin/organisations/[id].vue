@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { TabsItem } from '@nuxt/ui'
+import { h } from 'vue'
+import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
+import { UBadge } from '#components'
 import type { AdminActivityEntry, AdminOrganisation, AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 import type { Organisation, OrgMember } from '~/types/organisation'
 
-definePageMeta({ title: 'Manage organisation', layout: 'admin', middleware: 'super-admin', customNavbar: true, fullBleed: true })
+definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
 const route = useRoute()
 const orgId = computed(() => route.params.id as string)
@@ -73,12 +75,28 @@ async function loadData() {
 
 // -- Tabs -----------------------------------------------------------------------
 
-const tab = ref('members')
-const tabItems = computed<TabsItem[]>(() => [
-    { label: `Members (${rows.value.length})`, icon: 'i-lucide-users', value: 'members' },
-    { label: 'Usage & quotas', icon: 'i-lucide-gauge', value: 'usage' },
-    { label: 'Activity', icon: 'i-lucide-activity', value: 'activity' },
-    { label: 'Settings', icon: 'i-lucide-sliders-horizontal', value: 'settings' },
+const TAB_VALUES = ['usage', 'members', 'activity', 'settings']
+/** The `?tab=` view; a missing or unknown value opens the first tab. */
+const tab = computed(() => {
+    const value = route.query.tab as string
+    return TAB_VALUES.includes(value) ? value : 'usage'
+})
+const tabs = computed<NavigationMenuItem[]>(() => [
+    { label: 'Usage & quotas', icon: 'i-lucide-gauge', to: { query: { tab: 'usage' } }, active: tab.value === 'usage' },
+    {
+        label: 'Members',
+        icon: 'i-lucide-users',
+        badge: loading.value ? undefined : rows.value.length,
+        to: { query: { tab: 'members' } },
+        active: tab.value === 'members',
+    },
+    { label: 'Activity', icon: 'i-lucide-activity', to: { query: { tab: 'activity' } }, active: tab.value === 'activity' },
+    {
+        label: 'Settings',
+        icon: 'i-lucide-sliders-horizontal',
+        to: { query: { tab: 'settings' } },
+        active: tab.value === 'settings',
+    },
 ])
 
 // -- Members --------------------------------------------------------------------
@@ -193,6 +211,32 @@ const limitRows = computed(() => {
     })
 })
 
+const limitColumns: TableColumn<(typeof limitRows.value)[number]>[] = [
+    {
+        accessorKey: 'label',
+        header: 'Limit',
+        meta: { class: { td: 'whitespace-nowrap font-medium text-highlighted' } },
+    },
+    {
+        accessorKey: 'value',
+        header: 'Value',
+        meta: { class: { td: 'w-full' } },
+        cell: ({ row }) => h('span', [
+            h('span', { class: 'font-mono text-sm font-medium text-highlighted' }, row.original.value),
+            h('span', { class: 'ml-2 text-xs text-dimmed' }, row.original.note),
+        ]),
+    },
+    {
+        accessorKey: 'overridden',
+        header: 'Source',
+        cell: ({ row }) => h(UBadge, {
+            label: row.original.overridden ? 'Override' : 'Inherited',
+            color: row.original.overridden ? 'info' : 'neutral',
+            size: 'sm',
+        }),
+    },
+]
+
 /** Day-of-period progress for the usage strip (quota counters reset monthly). */
 const periodElapsed = computed(() => {
     if (!quotas.value) return null
@@ -280,234 +324,203 @@ watch(orgId, loadData)
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <NavTitle>
-            <ULink to="/admin/organisations"
-                   class="text-[15px] font-medium text-muted hover:text-highlighted">Organisations</ULink>
-            <span class="text-[15px] text-dimmed">/</span>
-            <span class="truncate text-[15px] font-semibold">{{ org?.name ?? '…' }}</span>
-        </NavTitle>
-        <NavActions v-if="isMember">
-            <UButton icon="i-lucide-external-link"
-                     label="Open workspace"
-                     color="neutral"
-                     variant="outline"
-                     size="sm"
-                     @click="openWorkspace" />
-        </NavActions>
-
-        <!-- Tab strip flush under the navbar, rule across the full panel. -->
-        <UTabs v-model="tab"
-               :items="tabItems"
-               :content="false"
-               variant="link"
-               class="shrink-0"
-               :ui="{ list: 'px-6' }" />
-
-        <div class="flex-1 min-h-0 overflow-y-auto">
-            <div class="mx-auto w-full max-w-[1040px] px-6 py-8">
-
-                <div v-if="tab === 'members'"
-                     class="flex flex-col min-h-0">
-                    <OrganizationMembersTable :members="rows"
-                                              :loading="loading"
-                                              is-admin
-                                              @remove-member="removeMember"
-                                              @cancel-invite="cancelInvite"
-                                              @resend-invite="resendInvite">
-                        <template #toolbar>
-                            <UButton v-if="!loading && !isMember"
-                                     icon="i-lucide-log-in"
-                                     label="Join"
-                                     variant="outline"
-                                     @click="joinOrganisation" />
-                            <UButton icon="i-lucide-user-plus"
-                                     label="Invite"
-                                     @click="inviteOpen = true" />
-                        </template>
-                    </OrganizationMembersTable>
-
-                    <OrganizationInviteModal v-model:open="inviteOpen"
-                                             :endpoint="inviteEndpoint"
-                                             @invited="loadData" />
-                </div>
-
-                <div v-else-if="tab === 'usage'"
-                     class="flex flex-col gap-7">
-                    <!-- Usage strip: fused stat cells over a period-elapsed bar. -->
-                    <div class="overflow-hidden rounded-lg border border-default bg-(--ui-border)">
-                        <div class="grid grid-cols-2 xl:grid-cols-4 gap-px">
-                            <div v-for="tile in usageTiles"
-                                 :key="tile.label"
-                                 class="flex flex-col gap-2.5 bg-muted p-4">
-                                <div class="text-xs uppercase tracking-wider text-dimmed">{{ tile.label }}</div>
-                                <div class="flex items-baseline gap-2 min-w-0">
-                                    <span class="text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</span>
-                                    <span class="truncate text-[12.5px] text-muted">{{ tile.sub }}</span>
-                                </div>
-                                <AdminUsageMeter v-if="tile.limit != null"
-                                                 :used="tile.used"
-                                                 :limit="tile.limit"
-                                                 :show-label="false" />
+    <UDashboardPanel id="admin-organisation">
+        <template #header>
+            <AppNavbar>
+                <template #title>
+                    <ULink to="/admin/organisations"
+                           class="text-base font-medium text-muted hover:text-highlighted">Organisations</ULink>
+                    <span class="text-base text-dimmed">/</span>
+                    <span class="truncate text-base font-semibold">{{ org?.name ?? '…' }}</span>
+                </template>
+            </AppNavbar>
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="tabs"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+                <template #right>
+                    <UButton v-if="isMember"
+                             icon="i-lucide-external-link"
+                             label="Open workspace"
+                             color="neutral"
+                             variant="outline"
+                             @click="openWorkspace" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
+            <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 sm:gap-6">
+                <template v-if="tab === 'usage'">
+                    <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
+                        <UCard v-for="tile in usageTiles"
+                               :key="tile.label"
+                               :ui="{ body: 'flex flex-col gap-3' }">
+                            <div class="text-sm text-muted">{{ tile.label }}</div>
+                            <div class="flex min-w-0 items-baseline gap-2">
+                                <span class="text-3xl font-semibold tabular-nums text-highlighted">{{ tile.value }}</span>
+                                <span class="truncate text-sm text-muted">{{ tile.sub }}</span>
                             </div>
-                        </div>
-                        <div v-if="periodElapsed"
-                             class="border-t border-default bg-default px-4 py-3.5">
-                            <div class="flex items-baseline gap-2">
-                                <span class="flex-1 truncate text-[13.5px] font-medium">Period elapsed · {{ periodLabel }}</span>
-                                <span class="whitespace-nowrap text-[12.5px] text-muted">{{ periodElapsed.label }}</span>
-                                <span class="whitespace-nowrap text-[12.5px] font-semibold text-primary">{{ periodElapsed.pct }}%</span>
-                            </div>
-                            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-accented">
-                                <div class="h-full rounded-full bg-primary"
-                                     :style="{ width: periodElapsed.pct + '%' }" />
-                            </div>
-                        </div>
+                            <AdminUsageMeter v-if="tile.limit != null"
+                                             :used="tile.used"
+                                             :limit="tile.limit"
+                                             :show-label="false" />
+                        </UCard>
                     </div>
 
-                    <PanelCard v-if="quotaRow"
-                             title="Ledger"
-                             :description="ledgerInSync
-                                 ? 'The runs counter and a recount from the runs table agree.'
-                                 : 'The runs counter and a recount from the runs table disagree — inspect recent runs.'">
-                        <div class="flex items-start gap-3 px-4 py-3">
-                            <span class="w-56 shrink-0 text-sm text-muted">Status</span>
-                            <UBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
-                                    :color="ledgerInSync ? 'success' : 'warning'"
-                                    :icon="ledgerInSync ? 'i-lucide-check' : 'i-lucide-triangle-alert'" />
+                    <UCard v-if="periodElapsed">
+                        <div class="flex items-baseline gap-2">
+                            <span class="flex-1 truncate text-sm font-medium text-highlighted">Period elapsed · {{ periodLabel }}</span>
+                            <span class="whitespace-nowrap text-xs text-muted">{{ periodElapsed.label }}</span>
+                            <span class="whitespace-nowrap text-xs font-semibold text-primary">{{ periodElapsed.pct }}%</span>
                         </div>
-                        <div class="flex items-start gap-3 px-4 py-3">
-                            <span class="w-56 shrink-0 text-sm text-muted">Counter</span>
-                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.successful_runs.toLocaleString() }}</span>
+                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-accented">
+                            <div class="h-full rounded-full bg-primary"
+                                 :style="{ width: periodElapsed.pct + '%' }" />
                         </div>
-                        <div class="flex items-start gap-3 px-4 py-3">
-                            <span class="w-56 shrink-0 text-sm text-muted">Runs table</span>
-                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.recomputed_successful_runs.toLocaleString() }}</span>
-                        </div>
-                        <div class="flex items-start gap-3 px-4 py-3">
-                            <span class="w-56 shrink-0 text-sm text-muted">Reserved</span>
-                            <span class="font-mono text-[13px] font-medium">{{ quotaRow.reserved_runs.toLocaleString() }}</span>
-                        </div>
-                    </PanelCard>
+                    </UCard>
 
-                    <section>
-                        <div class="mb-3 flex items-center gap-2.5">
-                            <div class="min-w-0">
-                                <div class="text-[15px] font-semibold text-highlighted">Limits</div>
+                    <section v-if="quotaRow"
+                             class="flex flex-col gap-3">
+                        <CardHeader title="Ledger"
+                                    :description="ledgerInSync
+                                        ? 'The runs counter and a recount from the runs table agree.'
+                                        : 'The runs counter and a recount from the runs table disagree — inspect recent runs.'" />
+                        <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                            <div class="divide-y divide-default">
+                                <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+                                    <span class="w-56 shrink-0 text-sm text-muted">Status</span>
+                                    <UBadge :label="ledgerInSync ? 'In sync' : 'Drift'"
+                                            :color="ledgerInSync ? 'success' : 'warning'"
+                                            :icon="ledgerInSync ? 'i-lucide-check' : 'i-lucide-triangle-alert'" />
+                                </div>
+                                <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+                                    <span class="w-56 shrink-0 text-sm text-muted">Counter</span>
+                                    <span class="font-mono text-sm font-medium">{{ quotaRow.successful_runs.toLocaleString() }}</span>
+                                </div>
+                                <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+                                    <span class="w-56 shrink-0 text-sm text-muted">Runs table</span>
+                                    <span class="font-mono text-sm font-medium">{{ quotaRow.recomputed_successful_runs.toLocaleString() }}</span>
+                                </div>
+                                <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
+                                    <span class="w-56 shrink-0 text-sm text-muted">Reserved</span>
+                                    <span class="font-mono text-sm font-medium">{{ quotaRow.reserved_runs.toLocaleString() }}</span>
+                                </div>
                             </div>
-                            <span class="ml-auto text-xs text-dimmed">Current period: {{ periodLabel }}</span>
+                        </UCard>
+                    </section>
+
+                    <section class="flex flex-col gap-3">
+                        <CardHeader title="Limits"
+                                    :description="`Current period: ${periodLabel}`">
                             <UButton icon="i-lucide-pencil"
                                      label="Edit limits"
                                      color="neutral"
                                      variant="outline"
                                      size="sm"
                                      @click="editOpen = true" />
-                        </div>
-                        <div class="overflow-hidden rounded-lg border border-default">
-                            <div class="flex items-center gap-4 border-b border-default bg-muted px-4 py-3 text-sm font-semibold text-highlighted">
-                                <span class="w-56 shrink-0">Limit</span>
-                                <span class="flex-1">Value</span>
-                                <span class="w-24">Source</span>
-                            </div>
-                            <div v-for="row in limitRows"
-                                 :key="row.key"
-                                 class="flex items-center gap-4 border-b border-default px-4 py-3 last:border-b-0">
-                                <span class="w-56 shrink-0 text-sm font-medium">{{ row.label }}</span>
-                                <span class="flex-1 min-w-0">
-                                    <span class="font-mono text-[13px] font-medium">{{ row.value }}</span>
-                                    <span class="ml-2 text-xs text-dimmed">{{ row.note }}</span>
-                                </span>
-                                <span class="w-24">
-                                    <UBadge :label="row.overridden ? 'Override' : 'Inherited'"
-                                            :color="row.overridden ? 'info' : 'neutral'"
-                                            size="sm" />
-                                </span>
-                            </div>
-                        </div>
+                        </CardHeader>
+                        <UCard>
+                            <UTable :data="limitRows"
+                                    :columns="limitColumns" />
+                        </UCard>
                     </section>
-                </div>
+                </template>
 
-                <PanelCard v-else-if="tab === 'activity'"
-                         title="Activity"
-                         description="Derived from membership, invitation, quota and run records">
-                    <div v-if="activity.length === 0"
-                         class="px-4 py-6 text-sm text-muted">
-                        Nothing recorded yet.
-                    </div>
-                    <div v-for="entry in activity"
-                         :key="entry.kind + entry.when"
-                         class="flex items-start gap-3 px-4 py-3">
-                        <span class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
-                            <UIcon :name="ACTIVITY_ICONS[entry.kind] ?? 'i-lucide-circle'"
-                                   class="size-3.5" />
-                        </span>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-[13.5px] leading-snug">{{ entry.title }}</div>
-                            <div class="mt-0.5 text-xs text-dimmed">
-                                <template v-if="entry.detail">{{ entry.detail }} · </template>{{ timeSince(new Date(entry.when)) }} ago
+                <section v-else-if="tab === 'activity'"
+                         class="flex flex-col gap-3">
+                    <CardHeader title="Activity"
+                                description="Derived from membership, invitation, quota and run records" />
+                    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                        <div class="divide-y divide-default">
+                            <div v-if="activity.length === 0"
+                                 class="px-4 py-5 text-sm text-muted sm:px-6">
+                                Nothing recorded yet.
                             </div>
-                        </div>
-                    </div>
-                </PanelCard>
-
-                <div v-else-if="tab === 'settings'"
-                     class="flex flex-col gap-8">
-                    <PanelCard title="General"
-                             description="Naming and your own access to this organisation.">
-                        <div class="flex items-center gap-4 px-4 py-3.5">
-                            <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium">Organisation name</div>
-                                <div class="mt-0.5 text-[13px] text-dimmed">Members see this name everywhere in the app.</div>
-                            </div>
-                            <UInput v-model="renameValue"
-                                    class="w-60 max-w-[50%]"
-                                    @keydown.enter="submitRename" />
-                            <UButton label="Save"
-                                     :disabled="!renameValue.trim() || renameValue.trim() === org?.name || renaming"
-                                     :loading="renaming"
-                                     @click="submitRename" />
-                        </div>
-                        <div class="flex items-center gap-4 px-4 py-3.5">
-                            <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium">Your membership</div>
-                                <div class="mt-0.5 text-[13px] text-dimmed">
-                                    <template v-if="isMember">You are an active member, so you can open this workspace directly.</template>
-                                    <template v-else>You are not a member of this organisation. Join it to open its workspace.</template>
+                            <div v-for="entry in activity"
+                                 :key="entry.kind + entry.when"
+                                 class="flex items-start gap-3 px-4 py-3 sm:px-6">
+                                <span class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
+                                    <UIcon :name="ACTIVITY_ICONS[entry.kind] ?? 'i-lucide-circle'"
+                                           class="size-3.5" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm leading-snug">{{ entry.title }}</div>
+                                    <div class="mt-0.5 text-xs text-dimmed">
+                                        <template v-if="entry.detail">{{ entry.detail }} · </template>{{ timeSince(new Date(entry.when)) }} ago
+                                    </div>
                                 </div>
                             </div>
-                            <UButton v-if="isMember"
-                                     icon="i-lucide-log-in"
-                                     label="Open workspace"
-                                     color="neutral"
-                                     variant="outline"
-                                     @click="openWorkspace" />
-                            <UButton v-else
-                                     icon="i-lucide-log-in"
-                                     label="Join"
-                                     color="neutral"
-                                     variant="outline"
-                                     @click="joinOrganisation" />
                         </div>
-                    </PanelCard>
+                    </UCard>
+                </section>
 
-                    <PanelCard tone="danger"
-                             icon="i-lucide-octagon-alert"
-                             icon-class="text-error"
-                             title="Danger zone"
-                             description="Irreversible actions. Proceed only if you are certain.">
-                        <div class="flex items-center gap-4 px-4 py-3.5">
-                            <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium">Delete organisation</div>
-                                <div class="mt-0.5 text-[13px] text-dimmed">
-                                    Permanently deletes {{ org?.name ?? 'this organisation' }} with all its members,
-                                    invitations, components and execution history.
+                <template v-else-if="tab === 'settings'">
+                    <section class="flex flex-col gap-3">
+                        <CardHeader title="General"
+                                    description="Naming and your own access to this organisation." />
+                        <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                            <div class="divide-y divide-default">
+                                <div class="flex items-center gap-4 px-4 py-4 sm:px-6">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-medium text-highlighted">Organisation name</div>
+                                        <div class="mt-0.5 text-sm text-muted">Members see this name everywhere in the app.</div>
+                                    </div>
+                                    <UInput v-model="renameValue"
+                                            class="w-60 max-w-[50%]"
+                                            @keydown.enter="submitRename" />
+                                    <UButton label="Save"
+                                             :disabled="!renameValue.trim() || renameValue.trim() === org?.name || renaming"
+                                             :loading="renaming"
+                                             @click="submitRename" />
+                                </div>
+                                <div class="flex items-center gap-4 px-4 py-4 sm:px-6">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-medium text-highlighted">Your membership</div>
+                                        <div class="mt-0.5 text-sm text-muted">
+                                            <template v-if="isMember">You are an active member, so you can open this workspace directly.</template>
+                                            <template v-else>You are not a member of this organisation. Join it to open its workspace.</template>
+                                        </div>
+                                    </div>
+                                    <UButton v-if="isMember"
+                                             icon="i-lucide-log-in"
+                                             label="Open workspace"
+                                             color="neutral"
+                                             variant="outline"
+                                             @click="openWorkspace" />
+                                    <UButton v-else
+                                             icon="i-lucide-log-in"
+                                             label="Join"
+                                             color="neutral"
+                                             variant="outline"
+                                             @click="joinOrganisation" />
                                 </div>
                             </div>
-                            <UButton label="Delete this organisation"
-                                     color="error"
-                                     @click="deleteOpen = true" />
-                        </div>
-                    </PanelCard>
+                        </UCard>
+                    </section>
+
+                    <section class="flex flex-col gap-3">
+                        <CardHeader description="Irreversible actions. Proceed only if you are certain.">
+                            <template #title>
+                                <span class="text-error">Danger zone</span>
+                            </template>
+                        </CardHeader>
+                        <UCard :ui="{ root: 'ring-error/40', body: 'p-0 sm:p-0' }">
+                            <div class="flex items-center gap-4 px-4 py-4 sm:px-6">
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm font-medium text-highlighted">Delete organisation</div>
+                                    <div class="mt-0.5 text-sm text-muted">
+                                        Permanently deletes {{ org?.name ?? 'this organisation' }} with all its members,
+                                        invitations, components and execution history.
+                                    </div>
+                                </div>
+                                <UButton label="Delete this organisation"
+                                         color="error"
+                                         @click="deleteOpen = true" />
+                            </div>
+                        </UCard>
+                    </section>
 
                     <UModal v-model:open="deleteOpen"
                             :title="`Delete ${org?.name ?? 'organisation'}?`"
@@ -534,16 +547,39 @@ watch(orgId, loadData)
                             </div>
                         </template>
                     </UModal>
-                </div>
+                </template>
 
+                <template v-else>
+                    <OrganizationMembersTable :members="rows"
+                                              :loading="loading"
+                                              is-admin
+                                              @remove-member="removeMember"
+                                              @cancel-invite="cancelInvite"
+                                              @resend-invite="resendInvite">
+                        <template #actions>
+                            <UButton v-if="!loading && !isMember"
+                                     icon="i-lucide-log-in"
+                                     label="Join"
+                                     variant="outline"
+                                     @click="joinOrganisation" />
+                            <UButton icon="i-lucide-user-plus"
+                                     label="Invite"
+                                     @click="inviteOpen = true" />
+                        </template>
+                    </OrganizationMembersTable>
+
+                    <OrganizationInviteModal v-model:open="inviteOpen"
+                                             :endpoint="inviteEndpoint"
+                                             @invited="loadData" />
+                </template>
             </div>
-        </div>
 
-        <AdminQuotaDrawer v-model:open="editOpen"
-                          :org-id="orgId"
-                          :org-name="org?.name ?? ''"
-                          :limits="quotaRow?.limits ?? null"
-                          :fields="quotas?.fields ?? []"
-                          @saved="reloadQuotas" />
-    </div>
+            <AdminQuotaDrawer v-model:open="editOpen"
+                              :org-id="orgId"
+                              :org-name="org?.name ?? ''"
+                              :limits="quotaRow?.limits ?? null"
+                              :fields="quotas?.fields ?? []"
+                              @saved="reloadQuotas" />
+        </template>
+    </UDashboardPanel>
 </template>

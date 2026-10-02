@@ -196,32 +196,8 @@ function onPageChange(page: number) {
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0 gap-2">
-        <div class="flex items-center gap-3">
-            <UInput v-model="search"
-                    placeholder="Search runs by target..."
-                    icon="i-lucide-search"
-                    class="max-w-sm" />
-            <div class="ml-auto flex items-center gap-2">
-                <KindFilter v-model="kind"
-                            :components="componentsStore.all" />
-                <TypeFilter v-model="type"
-                            :components="typeChoices" />
-                <StatusFilter v-model="status"
-                              :statuses="RUN_STATUSES" />
-            </div>
-        </div>
-
-        <div v-if="!loading && runs.length === 0 && filtered"
-             class="flex flex-col items-center gap-3 py-16 text-sm text-muted">
-            No runs match these filters.
-            <UButton variant="ghost"
-                     icon="i-lucide-x"
-                     label="Clear filters"
-                     @click="clearFilters" />
-        </div>
-
-        <div v-else-if="!loading && runs.length === 0"
+    <div class="flex flex-col flex-1 min-h-0">
+        <div v-if="!loading && runs.length === 0 && !filtered"
              class="w-full max-w-[1040px] mx-auto">
             <EmptyState icon="i-lucide-activity"
                         title="No executions yet"
@@ -233,8 +209,33 @@ function onPageChange(page: number) {
             </EmptyState>
         </div>
 
-        <template v-else>
-            <UTable v-model:expanded="expanded"
+        <UCard v-else
+               :ui="FILL_CARD_UI">
+            <template #header>
+                <div class="flex flex-wrap items-center gap-3">
+                    <UInput v-model="search"
+                            placeholder="Search runs by target..."
+                            icon="i-lucide-search"
+                            class="max-w-sm" />
+                    <KindFilter v-model="kind"
+                                :components="componentsStore.all" />
+                    <TypeFilter v-model="type"
+                                :components="typeChoices" />
+                    <StatusFilter v-model="status"
+                                  :statuses="RUN_STATUSES" />
+                </div>
+            </template>
+
+            <div v-if="!loading && runs.length === 0"
+                 class="flex flex-col items-center gap-3 py-16 text-sm text-muted">
+                No runs match these filters.
+                <UButton variant="ghost"
+                         icon="i-lucide-x"
+                         label="Clear filters"
+                         @click="clearFilters" />
+            </div>
+            <UTable v-else
+                    v-model:expanded="expanded"
                     :data="rows"
                     :columns="columns"
                     :get-row-id="getRowId"
@@ -247,13 +248,14 @@ function onPageChange(page: number) {
                     :ui="tableUi"
                     @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
 
-            <TableFooter class="shrink-0"
-                         :page="pageIndex + 1"
-                         :total="total"
-                         :page-size="pageSize"
-                         @update:page="onPageChange">
-                {{ total }} run(s) total.
-            </TableFooter>
-        </template>
+            <template #footer>
+                <TableFooter :page="pageIndex + 1"
+                             :total="total"
+                             :page-size="pageSize"
+                             @update:page="onPageChange">
+                    {{ total }} run(s) total.
+                </TableFooter>
+            </template>
+        </UCard>
     </div>
 </template>

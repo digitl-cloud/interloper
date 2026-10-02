@@ -44,7 +44,7 @@ const jobs = computed(() => {
 </script>
 
 <template>
-    <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
         <OverviewHealthTile label="Runs · last 24h"
                             to="/executions/runs"
                             :headline="overview.runs.total">
@@ -67,7 +67,7 @@ const jobs = computed(() => {
                              :style="{ height: `${bar.ok}px` }" />
                     </div>
                 </div>
-                <div class="flex justify-between text-[10.5px] text-dimmed"><span>24h ago</span><span>now</span></div>
+                <div class="flex justify-between text-xs text-dimmed"><span>24h ago</span><span>now</span></div>
             </template>
         </OverviewHealthTile>
 
@@ -82,7 +82,7 @@ const jobs = computed(() => {
                     <div class="bg-(--ui-text-dimmed)/40"
                          :style="{ width: `${activity.queuedPct}%` }" />
                 </div>
-                <div class="flex justify-between text-[10.5px] text-dimmed">
+                <div class="flex justify-between text-xs text-dimmed">
                     <span>{{ activity.running }} running · {{ activity.queued }} queued</span>
                     <span v-if="activity.longest">longest {{ activity.longest }}</span>
                 </div>
@@ -98,7 +98,7 @@ const jobs = computed(() => {
                     <div class="bg-primary"
                          :style="{ width: `${backfillPct}%` }" />
                 </div>
-                <div class="flex justify-between text-[10.5px] text-dimmed">
+                <div class="flex justify-between text-xs text-dimmed">
                     <span>combined progress</span>
                     <span class="font-semibold text-primary">{{ backfillPct }}%</span>
                 </div>
@@ -118,7 +118,7 @@ const jobs = computed(() => {
                     <div class="bg-success"
                          :style="{ width: `${jobs.healthyPct}%` }" />
                 </div>
-                <div class="flex justify-between text-[10.5px] text-dimmed">
+                <div class="flex justify-between text-xs text-dimmed">
                     <span>{{ jobs.failing ? `${jobs.failing} failing` : 'none failing' }}</span>
                     <span>{{ jobs.healthy }} healthy</span>
                 </div>

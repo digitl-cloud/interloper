@@ -10,7 +10,7 @@ const emit = defineEmits<{ action: [] }>()
 </script>
 
 <template>
-    <div class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-accented bg-(--ui-bg-band) px-6 py-8">
+    <div class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-accented bg-elevated/50 px-6 py-8">
         <div class="size-10 rounded-lg border border-default bg-default flex items-center justify-center">
             <UIcon :name="icon"
                    class="size-6" />

@@ -1,6 +1,4 @@
 <script setup lang="ts">
-definePageMeta({ title: 'Accept Invitation', fullBleed: true })
-
 const route = useRoute()
 const { apiFetch } = useApi()
 const userStore = useUserStore()
@@ -41,16 +39,31 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="flex items-center justify-center min-h-screen">
-        <div v-if="status === 'loading'" class="text-center">
-            <UIcon name="i-lucide-loader-2" class="size-8 animate-spin text-primary" />
-            <p class="mt-4 text-muted">Accepting invitation...</p>
-        </div>
-        <div v-else-if="status === 'error'" class="text-center space-y-4">
-            <UIcon name="i-lucide-circle-x" class="size-12 text-error" />
-            <p class="text-lg font-medium">Unable to accept invitation</p>
-            <p class="text-muted">{{ errorMessage }}</p>
-            <UButton label="Go Home" to="/" />
-        </div>
-    </div>
+    <UDashboardPanel id="invite">
+        <template #body>
+            <div class="flex flex-1 items-center justify-center">
+                <div v-if="status === 'loading'"
+                     class="text-center">
+                    <UIcon name="i-lucide-loader-2"
+                           class="size-8 animate-spin text-primary" />
+                    <p class="mt-4 text-muted">
+                        Accepting invitation...
+                    </p>
+                </div>
+                <div v-else-if="status === 'error'"
+                     class="text-center space-y-4">
+                    <UIcon name="i-lucide-circle-x"
+                           class="size-12 text-error" />
+                    <p class="text-lg font-medium">
+                        Unable to accept invitation
+                    </p>
+                    <p class="text-muted">
+                        {{ errorMessage }}
+                    </p>
+                    <UButton label="Go Home"
+                             to="/" />
+                </div>
+            </div>
+        </template>
+    </UDashboardPanel>
 </template>

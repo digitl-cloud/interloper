@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
+import { UIcon } from '#components'
 import type { UpcomingRun } from '~/types/overview'
 
 const props = defineProps<{ items: UpcomingRun[] }>()
@@ -15,26 +18,48 @@ const rows = computed(() => props.items.slice(0, LIMIT).map((item) => {
         at: `${formatShortDay(at)} ${formatClockTime(at)}`,
     }
 }))
+
+type Row = (typeof rows.value)[number]
+
+const columns: TableColumn<Row>[] = [
+    {
+        id: 'job',
+        header: 'Job',
+        cell: ({ row }) => h('span', { class: 'flex min-w-0 items-center gap-3' }, [
+            h(UIcon, { name: 'i-lucide-calendar-clock', class: 'size-4 shrink-0 text-dimmed' }),
+            h('span', { class: 'truncate font-mono text-xs text-highlighted' }, row.original.job_name),
+        ]),
+    },
+    {
+        id: 'next',
+        header: 'Next run',
+        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.rel),
+    },
+    {
+        id: 'at',
+        header: 'Scheduled',
+        meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-dimmed' } },
+        cell: ({ row }) => row.original.at,
+    },
+]
 </script>
 
 <template>
-    <OverviewSection title="Coming up"
-                     :meta="timezone"
-                     link-label="All jobs"
-                     :link-to="kindPath('job')">
-        <div class="overflow-hidden rounded-lg border border-default divide-y divide-default">
-            <NuxtLink v-for="row in rows"
-                      :key="row.job_id"
-                      :to="kindPath('job')"
-                      class="flex items-center gap-3 px-4 py-[11px] text-highlighted transition-colors hover:bg-muted">
-                <UIcon name="i-lucide-calendar-clock"
-                       class="size-4 shrink-0 text-dimmed" />
-                <span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{{ row.job_name }}</span>
-                <span class="whitespace-nowrap text-[13px] font-semibold">{{ row.rel }}</span>
-                <span class="w-[132px] shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-dimmed">{{ row.at }}</span>
-            </NuxtLink>
-            <div v-if="!rows.length"
-                 class="px-4 py-5 text-sm text-muted">Nothing scheduled.</div>
-        </div>
-    </OverviewSection>
+    <UCard>
+        <template #header>
+            <CardHeader title="Coming up"
+                        :description="timezone">
+                <UButton label="All jobs"
+                         :to="kindPath('job')"
+                         color="neutral"
+                         variant="outline"
+                         size="sm" />
+            </CardHeader>
+        </template>
+        <UTable :data="rows"
+                :columns="columns"
+                empty="Nothing scheduled."
+                :ui="{ tr: 'cursor-pointer' }"
+                @select="() => navigateTo(kindPath('job'))" />
+    </UCard>
 </template>

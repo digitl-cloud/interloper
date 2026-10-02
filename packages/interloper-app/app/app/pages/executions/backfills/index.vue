@@ -1,11 +1,17 @@
-<script setup lang="ts">
-definePageMeta({ title: 'Executions', fullBleed: true })
-</script>
-
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <NavExecutionsHub>
+    <UDashboardPanel id="backfills">
+        <template #header>
+            <AppNavbar title="Executions" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="EXECUTION_VIEWS"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <ExecutionsBackfillsTable />
-        </NavExecutionsHub>
-    </div>
+        </template>
+    </UDashboardPanel>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Design health tile: uppercase label, big tabular number with inline detail, footer visual pinned to the bottom. */
+/** Overview KPI tile: label, headline number with inline detail, footer visual pinned to the bottom. */
 defineProps<{
     label: string
     to: string
@@ -9,16 +9,17 @@ defineProps<{
 </script>
 
 <template>
-    <NuxtLink :to="to"
-              class="flex min-h-[132px] min-w-0 flex-col gap-3 rounded-lg border border-default bg-muted px-[18px] py-4 text-highlighted transition-colors hover:border-accented hover:bg-elevated">
-        <div class="text-xs font-medium uppercase tracking-[.04em] text-dimmed">{{ label }}</div>
+    <UCard :as="resolveComponent('NuxtLink')"
+           :to="to"
+           :ui="{ body: 'flex h-full min-h-32 flex-col gap-3' }">
+        <div class="text-sm text-muted">{{ label }}</div>
         <div class="flex items-baseline gap-2">
-            <span class="text-[28px] font-semibold tracking-[-.02em] tabular-nums"
+            <span class="text-3xl font-semibold tabular-nums text-highlighted"
                   :class="headlineClass">{{ headline }}</span>
-            <span class="text-[12.5px] text-muted"><slot name="detail" /></span>
+            <span class="text-sm text-muted"><slot name="detail" /></span>
         </div>
         <div class="mt-auto flex flex-col gap-1.5">
             <slot name="footer" />
         </div>
-    </NuxtLink>
+    </UCard>
 </template>

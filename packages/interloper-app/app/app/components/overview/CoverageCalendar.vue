@@ -153,57 +153,50 @@ watch(coverage, (value) => {
 </script>
 
 <template>
-    <OverviewSection title="Partition coverage"
-                     :meta="summary">
-        <template #actions>
-            <USelect v-model="sourceFilter"
-                     :items="sourceOptions"
-                     size="xs"
-                     class="w-44" />
-            <UTabs v-model="activeWindow"
-                   :items="windowItems"
-                   variant="pill"
-                   size="xs"
-                   :content="false" />
+    <UCard>
+        <template #header>
+            <CardHeader title="Partition coverage"
+                        :description="summary">
+                <USelect v-model="sourceFilter"
+                         :items="sourceOptions"
+                         size="sm"
+                         class="w-44" />
+                <UTabs v-model="activeWindow"
+                       :items="windowItems"
+                       variant="pill"
+                       size="xs"
+                       :content="false" />
+            </CardHeader>
         </template>
-        <div class="overflow-hidden rounded-lg border border-default">
-            <div ref="frame"
-                 class="overflow-x-auto px-5 pt-3 pb-3">
-                <UAlert v-if="coverageError"
-                        color="error"
-                        icon="i-lucide-triangle-alert"
-                        title="Couldn't load coverage"
-                        :description="errorDetail(coverageError) ?? GENERIC_ERROR"
-                        :actions="[{
-                            label: 'Try again',
-                            icon: 'i-lucide-refresh-cw',
-                            color: 'neutral',
-                            variant: 'outline',
-                            onClick: () => overviewStore.fetchCoverage(),
-                        }]"
-                        class="mb-3.5" />
-                <VChart v-if="coverage"
-                        :option="option"
-                        class="mx-auto"
-                        :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
-                        autoresize
-                        @click="onClick" />
-                <div v-else
-                     class="flex h-[140px] items-center justify-center text-sm text-muted">
-                    {{ coverageLoading ? 'Loading coverage…' : coverageError ? 'Coverage unavailable' : 'No coverage yet' }}
-                </div>
-                <div class="mt-3 flex items-center gap-4 text-[11.5px] text-dimmed">
-                    <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-success" />Covered</span>
-                    <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-warning" />Partially covered</span>
-                    <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-error" />Failed</span>
-                    <span class="inline-flex items-center gap-1.5"><span class="size-[11px] rounded-sm bg-elevated ring-1 ring-inset ring-default" />Not expected</span>
-                    <span class="ml-auto">Click a day to see it per source</span>
-                </div>
+        <div ref="frame"
+             class="overflow-x-auto">
+            <UAlert v-if="coverageError"
+                    color="error"
+                    icon="i-lucide-triangle-alert"
+                    title="Couldn't load coverage"
+                    :description="errorDetail(coverageError) ?? GENERIC_ERROR"
+                    :actions="[{
+                        label: 'Try again',
+                        icon: 'i-lucide-refresh-cw',
+                        color: 'neutral',
+                        variant: 'outline',
+                        onClick: () => overviewStore.fetchCoverage(),
+                    }]"
+                    class="mb-3.5" />
+            <VChart v-if="coverage"
+                    :option="option"
+                    class="mx-auto"
+                    :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
+                    autoresize
+                    @click="onClick" />
+            <div v-else
+                 class="flex h-[140px] items-center justify-center text-sm text-muted">
+                {{ coverageLoading ? 'Loading coverage…' : coverageError ? 'Coverage unavailable' : 'No coverage yet' }}
             </div>
-            <OverviewCoverageDayDetail v-if="coverage && selected"
-                                       :date="selected"
-                                       :coverage="coverage"
-                                       :source-filter="sourceFilter" />
         </div>
-    </OverviewSection>
+        <OverviewCoverageDayDetail v-if="coverage && selected"
+                                   :date="selected"
+                                   :coverage="coverage"
+                                   :source-filter="sourceFilter" />
+    </UCard>
 </template>

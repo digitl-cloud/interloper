@@ -25,21 +25,39 @@ export default defineAppConfig({
       }
     },
     card: {
+      // Section cards: container tone, no rules between header, body and
+      // footer. CardHeader reads `title` / `description` from here so a card
+      // with controls reads the same as one using the title props.
+      slots: {
+        // overflow-hidden zeroes a flex item's auto min-height, so without this
+        // cards squash to fit a page body instead of letting it scroll.
+        root: 'shrink-0',
+        title: 'text-highlighted font-semibold',
+        description: 'mt-1 text-muted text-sm',
+        body: '[[data-slot=header]+&]:pt-0 sm:[[data-slot=header]+&]:pt-0',
+        footer: '[[data-slot=body]+&]:pt-0'
+      },
+      variants: {
+        variant: {
+          outline: {
+            root: 'bg-muted ring ring-default divide-y-0'
+          }
+        }
+      },
       defaultVariants: {
         variant: 'outline'
       }
     },
-    // Surface hierarchy from the Claude Design project: white content/cards,
-    // sidebar bg-muted (#F7F7F8).
     dashboardSidebar: {
       slots: {
-        root: 'bg-muted'
+        root: 'bg-muted',
+        // The mobile slideover renders through `content`, not `root`.
+        content: 'bg-muted'
       }
     },
     navigationMenu: {
-      // Design sidebar: section labels lighter than entries; 8px item padding.
       slots: {
-        label: 'text-dimmed'
+        label: 'text-highlighted'
       },
       variants: {
         orientation: {
@@ -47,7 +65,28 @@ export default defineAppConfig({
             link: 'py-2'
           }
         }
-      }
+      },
+      // Sidebar entries read bright. The active pill keeps Nuxt UI's bg-elevated,
+      // ringed so it still shows on the near-identical light sidebar tone.
+      compoundVariants: [
+        {
+          orientation: 'vertical',
+          active: false,
+          class: {
+            link: 'text-default',
+            linkLeadingIcon: 'text-default'
+          }
+        },
+        {
+          orientation: 'vertical',
+          variant: 'pill',
+          active: true,
+          highlight: false,
+          class: {
+            link: 'before:ring before:ring-default'
+          }
+        }
+      ]
     },
     input: {
       defaultVariants: {
@@ -86,14 +125,31 @@ export default defineAppConfig({
       }
     },
     table: {
+      // Borderless tables: rows sit on the card tone, divided by the line
+      // color, and the first and last columns align with the card's padding.
+      // Sticky headers take the card tone so rows scrolling beneath don't
+      // show through.
       slots: {
-        // Unframed tables: the first column sits flush with the table edge,
-        // aligned with the toolbar and caption around it.
-        th: 'first:pl-0',
-        td: 'first:pl-0'
+        separator: 'bg-(--ui-border)',
+        th: 'py-3 first:ps-0 last:pe-0',
+        td: 'py-3 first:ps-0 last:pe-0'
+      },
+      variants: {
+        sticky: {
+          true: {
+            thead: 'bg-muted'
+          },
+          header: {
+            thead: 'bg-muted'
+          }
+        }
       }
     },
     alert: {
+      slots: {
+        // Same as card: overflow-hidden would let a flex column squash it.
+        root: 'shrink-0'
+      },
       defaultVariants: {
         variant: 'soft'
       }
@@ -126,8 +182,8 @@ export default defineAppConfig({
         label: 'eyebrow text-dimmed'
       }
     },
-    // Design segmented control: pill tabs get a white active pill with dark
-    // text on the grey track (theme default is a solid primary pill).
+    // Segmented control: the active pill takes the panel tone on the grey track
+    // (theme default is a solid primary pill).
     tabs: {
       compoundVariants: [
         {

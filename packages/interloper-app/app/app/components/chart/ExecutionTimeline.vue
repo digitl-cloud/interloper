@@ -567,7 +567,7 @@ watch(axisMax, () => {
                  :style="{ marginInline: PLOT_GUTTER + 'px' }">
                 <div v-for="t in rulerTicks"
                      :key="t.value"
-                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-[12.5px] font-medium text-muted"
+                     class="absolute top-0 flex h-full items-center whitespace-nowrap text-xs font-medium text-muted"
                      :style="{
                          left: `min(${t.percent}%, calc(100% - 1px))`,
                          transform: t.percent <= 1 ? 'translateX(0)' : t.percent >= 96 ? 'translateX(-100%)' : 'translateX(-50%)',
@@ -600,7 +600,7 @@ watch(axisMax, () => {
              :style="{ height: totalHeight + 'px', minHeight: `calc(100% - ${AXIS_HEIGHT}px)` }">
             <!-- Label gutter -->
             <div v-if="labelWidth"
-                 class="absolute inset-y-0 left-0 z-20 border-r border-default bg-default"
+                 class="absolute inset-y-0 left-0 z-20 border-r border-default bg-muted"
                  :style="{ width: labelWidth + 'px' }">
                 <div v-for="{ row, index } in visibleRows"
                      :key="`label-${row.id ?? row.name}`"
@@ -634,7 +634,7 @@ watch(axisMax, () => {
                 <!-- Gridlines -->
                 <div v-for="t in ticks"
                      :key="`grid-${t.value}`"
-                     class="absolute top-0 bottom-0 w-px bg-elevated"
+                     class="absolute top-0 bottom-0 w-px bg-(--ui-border)/50"
                      :style="{ left: `${t.percent}%` }" />
 
                 <!-- Bars (virtualized: only rows intersecting the viewport are rendered) -->
@@ -663,7 +663,7 @@ watch(axisMax, () => {
                          class="absolute flex items-center gap-1.5 overflow-hidden rounded-md cursor-pointer transition-opacity"
                          :class="[
                              labelWidth ? '' : 'px-2',
-                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : '',
+                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : 'border-b-[3px] bg-elevated',
                          ]"
                          :style="{
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
@@ -671,15 +671,15 @@ watch(axisMax, () => {
                              width: `${layout.geometry.width}%`,
                              minWidth: '6px',
                              height: BAR_HEIGHT + 'px',
-                             backgroundColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
+                             borderBottomColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
                              opacity: rowOpacity(row.id) * 0.96,
                          }"
                          :title="barTooltip(row, layout)"
                          @click.stop="onBarClick(layout, row)">
                         <template v-if="!labelWidth">
                             <UIcon :name="row.icon"
-                                   class="size-3.5 shrink-0 text-white" />
-                            <span class="truncate text-xs font-bold text-white">{{ row.name }}</span>
+                                   class="size-3.5 shrink-0 text-muted" />
+                            <span class="truncate text-xs font-semibold text-highlighted">{{ row.name }}</span>
                         </template>
                     </div>
                 </template>

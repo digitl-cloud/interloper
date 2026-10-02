@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
+import { UIcon } from '#components'
 import type { KindInventory } from '~/types/overview'
 
 const props = defineProps<{ rows: KindInventory[] }>()
@@ -36,42 +39,60 @@ const summary = computed(() => {
     const problems = props.rows.reduce((n, r) => n + r.failing + r.attention, 0)
     return `${total} in the collection · ${problems} need attention`
 })
+
+const columns: TableColumn<(typeof table.value)[number]>[] = [
+    {
+        id: 'kind',
+        header: 'Kind',
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-2.5 font-medium text-highlighted' }, [
+            h(UIcon, { name: row.original.meta.icon, class: 'size-4 shrink-0 text-dimmed' }),
+            row.original.meta.label,
+        ]),
+    },
+    {
+        accessorKey: 'total',
+        header: 'Count',
+        meta: { class: { th: 'text-right', td: 'text-right font-semibold tabular-nums text-highlighted' } },
+    },
+    {
+        id: 'state',
+        header: 'State',
+        meta: { class: { td: 'w-full' } },
+        cell: ({ row }) => h('div', { class: 'flex h-2 gap-0.5 overflow-hidden rounded-full bg-accented' },
+            row.original.segments.map(s => h('div', { key: s.key, class: s.class, style: { width: `${s.pct}%` }, title: s.title }))),
+    },
+    {
+        id: 'issues',
+        header: 'Issues',
+        meta: { class: { th: 'text-right', td: 'text-right text-xs' } },
+        cell: ({ row }) => h('span', { class: row.original.issuesClass }, row.original.issues),
+    },
+]
 </script>
 
 <template>
-    <OverviewSection title="Components"
-                     :meta="summary"
-                     link-label="Open collection"
-                     link-to="/collection">
-        <div class="overflow-hidden rounded-lg border border-default">
-            <div class="grid grid-cols-[minmax(130px,180px)_44px_minmax(0,1fr)_230px] items-center gap-x-5 border-b border-default bg-muted px-[18px] py-[9px] text-[11px] font-semibold uppercase tracking-[.06em] text-dimmed">
-                <span>Kind</span><span class="text-right">Count</span><span>State</span><span class="text-right">Issues</span>
-            </div>
-            <NuxtLink v-for="row in table"
-                      :key="row.kind"
-                      :to="row.meta.to"
-                      class="grid h-11 grid-cols-[minmax(130px,180px)_44px_minmax(0,1fr)_230px] items-center gap-x-5 border-b border-muted px-[18px] text-highlighted transition-colors hover:bg-muted">
-                <span class="flex min-w-0 items-center gap-2.5 text-[13.5px] font-medium">
-                    <UIcon :name="row.meta.icon"
-                           class="size-4 shrink-0 text-dimmed" />{{ row.meta.label }}
-                </span>
-                <span class="text-right text-sm font-semibold tabular-nums">{{ row.total }}</span>
-                <div class="flex h-[9px] gap-0.5 overflow-hidden rounded-full bg-accented">
-                    <div v-for="segment in row.segments"
-                         :key="segment.key"
-                         :class="segment.class"
-                         :style="{ width: `${segment.pct}%` }"
-                         :title="segment.title" />
-                </div>
-                <span class="text-right text-xs leading-snug"
-                      :class="row.issuesClass">{{ row.issues }}</span>
-            </NuxtLink>
-            <div class="flex items-center gap-4 bg-muted px-[18px] py-2.5 text-[11.5px] text-dimmed">
+    <UCard>
+        <template #header>
+            <CardHeader title="Components"
+                        :description="summary">
+                <UButton label="Open collection"
+                         to="/collection"
+                         color="neutral"
+                         variant="outline"
+                         size="sm" />
+            </CardHeader>
+        </template>
+        <UTable :data="table"
+                :columns="columns"
+                :ui="{ tr: 'cursor-pointer' }"
+                @select="(_e: Event, row: any) => navigateTo(row.original.meta.to)" />
+        <template #footer>
+            <div class="flex items-center gap-4 text-xs text-muted">
                 <span v-for="state in STATES"
                       :key="state.key"
-                      class="inline-flex items-center gap-1.5"><span class="size-[9px] rounded-sm"
+                      class="inline-flex items-center gap-1.5"><span class="size-2 rounded-sm"
                                                                      :class="state.class" />{{ state.legend }}</span>
             </div>
-        </div>
-    </OverviewSection>
+        </template>
+    </UCard>
 </template>

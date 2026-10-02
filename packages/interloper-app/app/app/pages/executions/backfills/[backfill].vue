@@ -6,7 +6,7 @@ import type { Backfill } from '~/types/backfill'
 
 // orgSwitchTarget: this page is bespoke to one org's backfill — switching org
 // from the nav lands on the backfills list instead.
-definePageMeta({ title: 'Backfill', orgSwitchTarget: '/executions/backfills', customNavbar: true })
+definePageMeta({ orgSwitchTarget: '/executions/backfills' })
 
 const PAGE_SIZE = 50
 
@@ -62,7 +62,11 @@ watch(sorting, () => {
     reloadRuns()
 })
 
-const cancellable = computed(() => backfill.value != null && ['running', 'queued'].includes(backfill.value.status))
+const { mismatch } = useOrgGate(() => backfill.value?.org_id)
+
+const cancellable = computed(() =>
+    !mismatch.value && backfill.value != null && ['running', 'queued'].includes(backfill.value.status),
+)
 const cancelling = ref(false)
 
 async function onCancel() {
@@ -144,73 +148,85 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
 </script>
 
 <template>
-    <OrganizationGate :org-id="backfill?.org_id"
-             :error="fetchError"
-             back-to="/executions/backfills"
-             resource-label="backfill">
-        <div class="flex flex-col flex-1 min-h-0 gap-2">
-            <NavTitle>
-                <ULink to="/executions/backfills"
-                       class="text-[15px] font-medium text-muted hover:text-highlighted">Backfills</ULink>
-                <span class="text-[15px] text-dimmed">/</span>
-                <span class="truncate font-mono text-[15px] font-semibold">{{ backfillId.substring(0, 8) }}</span>
-                <StatusPill v-if="backfill"
-                            :label="statusLabel(backfill.status)"
-                            :color="statusPillColor(backfill.status)" />
-            </NavTitle>
-            <NavActions v-if="cancellable">
-                <UButton color="error"
-                         variant="subtle"
-                         size="sm"
-                         icon="i-lucide-ban"
-                         :loading="cancelling"
-                         @click="onCancel">
-                    Cancel
-                </UButton>
-            </NavActions>
+    <UDashboardPanel id="backfill">
+        <template #header>
+            <AppNavbar>
+                <template #title>
+                    <ULink to="/executions/backfills"
+                           class="text-base font-medium text-muted hover:text-highlighted">Backfills</ULink>
+                    <span class="text-base text-dimmed">/</span>
+                    <span class="truncate font-mono text-base font-semibold">{{ backfillId.substring(0, 8) }}</span>
+                    <StatusPill v-if="backfill && !mismatch"
+                                :label="statusLabel(backfill.status)"
+                                :color="statusPillColor(backfill.status)" />
+                </template>
+            </AppNavbar>
+            <UDashboardToolbar v-if="cancellable">
+                <template #right>
+                    <UButton color="error"
+                             variant="subtle"
+                             icon="i-lucide-ban"
+                             :loading="cancelling"
+                             @click="onCancel">
+                        Cancel
+                    </UButton>
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
+            <OrganizationGate :org-id="backfill?.org_id"
+                              :error="fetchError"
+                              back-to="/executions/backfills"
+                              resource-label="backfill">
+                <div class="flex flex-1 min-h-0 flex-col gap-4">
+                    <UCard v-if="backfill"
+                           title="Backfill">
+                        <div class="flex flex-wrap items-center gap-4 text-sm text-muted">
+                            <div class="flex items-center gap-1.5">
+                                <UIcon name="i-lucide-briefcase"
+                                       class="size-4" />
+                                <span>{{ backfillTargetName }}</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <UIcon name="i-lucide-calendar-range"
+                                       class="size-4" />
+                                <span>{{ backfill.start_key }} → {{ backfill.end_key }}</span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <UIcon name="i-lucide-layers"
+                                       class="size-4" />
+                                <span>{{ backfill.partitions }} partitions</span>
+                            </div>
+                            <div v-if="backfill.fail_fast"
+                                 class="flex items-center gap-1.5">
+                                <UIcon name="i-lucide-zap"
+                                       class="size-4" />
+                                <span>Fail fast</span>
+                            </div>
+                        </div>
+                    </UCard>
 
-        <div v-if="backfill"
-             class="flex items-center gap-4 mb-2 text-sm text-muted">
-            <div class="flex items-center gap-1.5">
-                <UIcon name="i-lucide-briefcase"
-                       class="size-4" />
-                <span>{{ backfillTargetName }}</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <UIcon name="i-lucide-calendar-range"
-                       class="size-4" />
-                <span>{{ backfill.start_key }} → {{ backfill.end_key }}</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <UIcon name="i-lucide-layers"
-                       class="size-4" />
-                <span>{{ backfill.partitions }} partitions</span>
-            </div>
-            <div v-if="backfill.fail_fast"
-                 class="flex items-center gap-1.5">
-                <UIcon name="i-lucide-zap"
-                       class="size-4" />
-                <span>Fail fast</span>
-            </div>
-        </div>
-
-        <UTable v-model:sorting="sorting"
-                :data="backfillRuns"
-                :columns="columns"
-                :loading="runsLoading"
-                :sorting-options="sortingOptions"
-                sticky
-                :ui="{ tr: 'cursor-pointer' }"
-                class="flex-1 min-h-0"
-                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
-
-        <TableFooter class="shrink-0"
-                     :page="runsPage + 1"
-                     :total="runsTotal"
-                     :page-size="PAGE_SIZE"
-                     @update:page="onPageChange">
-            {{ runsTotal }} run(s) total.
-        </TableFooter>
-        </div>
-    </OrganizationGate>
+                    <UCard :ui="FILL_CARD_UI">
+                        <UTable v-model:sorting="sorting"
+                                :data="backfillRuns"
+                                :columns="columns"
+                                :loading="runsLoading"
+                                :sorting-options="sortingOptions"
+                                sticky
+                                :ui="{ tr: 'cursor-pointer' }"
+                                class="flex-1 min-h-0"
+                                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+                        <template #footer>
+                            <TableFooter :page="runsPage + 1"
+                                         :total="runsTotal"
+                                         :page-size="PAGE_SIZE"
+                                         @update:page="onPageChange">
+                                {{ runsTotal }} run(s) total.
+                            </TableFooter>
+                        </template>
+                    </UCard>
+                </div>
+            </OrganizationGate>
+        </template>
+    </UDashboardPanel>
 </template>

@@ -19,7 +19,7 @@ defineProps<{ text: string }>()
         </button>
 
         <template #content>
-            <div class="mt-2 rounded-lg border border-default bg-(--ui-bg-band) px-3 py-2.5 text-[13px] text-toned">
+            <div class="mt-2 rounded-lg border border-default bg-elevated/50 px-3 py-2.5 text-[13px] text-toned">
                 <Markdown :value="text"
                           class="*:first:mt-0 *:last:mb-0" />
             </div>

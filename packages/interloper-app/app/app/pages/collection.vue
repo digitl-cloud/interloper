@@ -3,8 +3,6 @@ import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { ComponentRecord } from '~/types/component'
 import type { AssetDefinition } from '~/types/catalog'
 
-definePageMeta({ title: 'Collection', fullBleed: true })
-
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const runsStore = useRunsStore()
@@ -21,9 +19,8 @@ const {
 } = useWizardDrawer<ComponentRecord>()
 
 // ── Asset panel ────────────────────────────────────────────────
-const panelOpen = ref(false)
-const closing = ref(false)
-const panelVisible = computed(() => panelOpen.value || closing.value)
+const assetPane = useSlidingPane('collection-asset-pane-size')
+const { pane: assetPaneRef, group: assetGroupRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
 const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
 const selectedSource = ref<ComponentRecord | undefined>()
@@ -45,17 +42,11 @@ function onViewAsset(assetId: string, sourceId: string) {
     selectedSource.value = source
     selectedAsset.value = asset
     selectedAssetDefn.value = getAssetDefinition(asset.key)
-    panelOpen.value = true
-    closing.value = false
+    assetPane.show()
 }
 
 function onPanelClose() {
-    closing.value = true
-    panelOpen.value = false
-}
-
-function onCloseAnimationEnd() {
-    closing.value = false
+    assetPane.hide()
 }
 
 // ── Data fetching ──────────────────────────────────────────────
@@ -83,83 +74,75 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
 </script>
 
 <template>
-    <div class="flex flex-col min-h-0 flex-1">
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New source"
-                     @click="onCreateSource" />
-        </NavActions>
-        <div v-if="showEmpty"
-             class="flex-1 min-h-0 overflow-y-auto">
-            <div class="p-4 w-full max-w-[1040px] mx-auto">
-                <SourcesEmptyState @create="onCreateSource"
-                                   @create-type="onCreateSourceFromCatalog" />
-            </div>
-        </div>
-
-        <SplitterGroup v-else
-                       direction="horizontal"
-                       auto-save-id="collection-panels"
-                       class="flex-1 min-h-0">
-            <SplitterPanel :default-size="panelVisible ? 70 : 100"
-                           :min-size="30"
-                           class="flex flex-col min-h-0 overflow-y-auto">
-                <div class="p-4 flex flex-col min-h-0 flex-1">
-                    <DriftBanner />
-                    <CollectionTable @edit-source="onEditSource"
-                                     @view-asset="onViewAsset" />
+    <UDashboardPanel id="collection"
+                     :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0' }">
+        <template #header>
+            <AppNavbar title="Collection" />
+        </template>
+        <template #body>
+            <div v-if="showEmpty"
+                 class="flex-1 min-h-0 overflow-y-auto">
+                <div class="p-4 sm:p-6 w-full max-w-[1040px] mx-auto">
+                    <SourcesEmptyState @create="onCreateSource"
+                                       @create-type="onCreateSourceFromCatalog" />
                 </div>
-            </SplitterPanel>
+            </div>
 
-            <template v-if="panelVisible">
-                <SplitterResizeHandle
-                    class="relative flex items-center justify-center rounded-lg data-[state=hover]:bg-accented data-[state=drag]:bg-accented transition-colors" />
-
-                <SplitterPanel :default-size="30"
-                               :min-size="15"
-                               class="relative overflow-hidden">
-                    <GraphAssetPanel v-if="selectedAsset && selectedSource"
-                                     :class="['absolute inset-0', closing ? 'animate-slide-right' : 'animate-slide-left']"
-                                     :asset="selectedAsset"
-                                     :asset-defn="selectedAssetDefn"
-                                     :source="selectedSource"
-                                     @close="onPanelClose"
-                                     @animationend="closing && onCloseAnimationEnd()" />
+            <SplitterGroup v-else
+                           ref="assetGroupRef"
+                           direction="horizontal"
+                           class="flex-1 min-h-0"
+                           @layout="onAssetPaneLayout">
+                <SplitterPanel :default-size="100"
+                               :min-size="30"
+                               class="flex flex-col min-h-0 overflow-y-auto">
+                    <div class="flex flex-col gap-4 p-4 sm:p-6 min-h-0 flex-1 transition-[padding] duration-200"
+                         :class="panelOpen && 'pe-px sm:pe-px'">
+                        <DriftBanner />
+                        <CollectionTable @edit-source="onEditSource"
+                                         @view-asset="onViewAsset">
+                            <template #actions>
+                                <UButton icon="i-lucide-plus"
+                                         label="New source"
+                                         @click="onCreateSource" />
+                            </template>
+                        </CollectionTable>
+                    </div>
                 </SplitterPanel>
-            </template>
-        </SplitterGroup>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      default-title="New Source"
-                      description="Configure source"
-                      :stepper="sourceStepperRef">
-            <SourcesWizard v-if="drawerOpen"
-                            :key="editingSource?.id ?? 'new'"
-                            ref="sourceStepperRef"
-                            :source="editingSource"
-                            :initial-type-key="presetTypeKey"
-                            @created="handleSaved"
-                            @updated="handleSaved" />
-        </WizardDrawer>
-    </div>
+                <SplitterResizeHandle class="group flex justify-center transition-[width] duration-200"
+                                      :class="panelOpen ? 'w-3' : 'w-0'"
+                                      :disabled="!panelOpen || panelAnimating">
+                    <div class="h-full w-px transition-colors group-data-[state=hover]:bg-accented group-data-[state=drag]:bg-accented" />
+                </SplitterResizeHandle>
+
+                <SplitterPanel ref="assetPaneRef"
+                               :default-size="0"
+                               class="relative overflow-hidden">
+                    <div v-if="panelMounted && selectedAsset && selectedSource"
+                         class="absolute inset-y-0 right-0 py-4 pe-4 ps-px sm:py-6 sm:pe-6"
+                         :style="assetPaneContentStyle">
+                        <GraphAssetPanel class="h-full"
+                                         :asset="selectedAsset"
+                                         :asset-defn="selectedAssetDefn"
+                                         :source="selectedSource"
+                                         @close="onPanelClose" />
+                    </div>
+                </SplitterPanel>
+            </SplitterGroup>
+
+            <WizardDrawer v-model:open="drawerOpen"
+                          default-title="New Source"
+                          description="Configure source"
+                          :stepper="sourceStepperRef">
+                <SourcesWizard v-if="drawerOpen"
+                                :key="editingSource?.id ?? 'new'"
+                                ref="sourceStepperRef"
+                                :source="editingSource"
+                                :initial-type-key="presetTypeKey"
+                                @created="handleSaved"
+                                @updated="handleSaved" />
+            </WizardDrawer>
+        </template>
+    </UDashboardPanel>
 </template>
-
-<style scoped>
-@keyframes slide-left {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
-}
-
-@keyframes slide-right {
-    from { transform: translateX(0); }
-    to { transform: translateX(100%); }
-}
-
-.animate-slide-left {
-    animation: slide-left 0.20s ease-out;
-}
-
-.animate-slide-right {
-    animation: slide-right 0.20s ease-out forwards;
-}
-</style>

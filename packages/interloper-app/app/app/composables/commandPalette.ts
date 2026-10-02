@@ -51,15 +51,6 @@ export function useCommandPalette() {
         }
     })
 
-    defineShortcuts({
-        meta_k: {
-            usingInput: true,
-            handler: () => {
-                open.value = !open.value
-            },
-        },
-    })
-
     const groups = computed<CommandPaletteGroup[]>(() => {
         const close = () => {
             open.value = false

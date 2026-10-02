@@ -23,12 +23,11 @@ const props = defineProps<{
     /** When true, rows are read-only: no pointer cursor, since clicking one leads nowhere. */
     noRowClick?: boolean
     /**
-     * Design "bordered" table: an outer rounded frame replaces the floating
-     * header band (detail/settings pages) and the table flows with the page.
-     * List pages keep the band, fill the panel and pin the footer to its
-     * bottom, the rows scrolling under the sticky header.
+     * Single-table page: the card fills the panel, its header row sticks and
+     * the pager stays pinned while rows scroll. Otherwise the card flows with
+     * the page.
      */
-    bordered?: boolean
+    fill?: boolean
     /**
      * Impact preview for deleting the given ids (e.g.
      * `componentsStore.deleteImpact`). `blocking` referrers disable the
@@ -171,8 +170,8 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
 </script>
 
 <template>
-    <div class="w-full flex flex-col gap-2"
-         :class="!bordered && 'flex-1 min-h-0'">
+    <div class="w-full flex flex-col gap-4"
+         :class="fill && 'flex-1 min-h-0'">
         <UAlert v-if="error"
                 color="error"
                 icon="i-lucide-triangle-alert"
@@ -186,59 +185,71 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     onClick: () => emit('retry'),
                 }]" />
 
-        <div v-if="showTable"
-             class="flex items-center gap-3">
-            <UInput v-model="globalFilter"
-                    :placeholder="searchPlaceholder ?? 'Search...'"
-                    icon="i-lucide-search"
-                    class="max-w-sm"
-                    @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
-
-            <div class="ml-auto flex items-center gap-2">
-                <slot name="filters" />
-                <slot name="toolbar" />
-
-                <UButton v-if="selectedCount > 0"
-                         color="error"
-                         icon="i-lucide-trash-2"
-                         :label="`Delete (${selectedCount})`"
-                         @click="requestBulkDelete" />
-            </div>
-        </div>
-
         <div v-if="showEmpty"
              class="w-full max-w-[1040px] mx-auto">
             <slot name="empty" />
         </div>
 
-        <UTable v-if="showTable"
-                ref="table"
-                v-model:pagination="pagination"
-                :data="rows"
-                :columns="columnsWithActions"
-                :loading="loading"
-                :global-filter="globalFilter"
-                :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-                sticky
-                :ui="{
-                    tr: noRowClick ? '' : 'cursor-pointer',
-                    td: bordered ? 'py-2.5 first:pl-4' : 'py-2.5',
-                    ...(bordered && { thead: '[&>tr]:bg-muted', th: 'first:pl-4' }),
-                }"
-                :class="bordered ? 'rounded-lg border border-default' : 'flex-1 min-h-0'"
-                @select="(_e: Event, row: any) => emit('edit', row.original)"
-                @contextmenu="onRowContextMenu">
-            <template #actions-cell="{ row }">
-                <div class="flex justify-end">
-                    <UDropdownMenu :items="buildRowActions(row.original)">
-                        <UButton icon="i-lucide-ellipsis-vertical"
-                                 color="neutral"
-                                 variant="ghost"
-                                 size="sm" />
-                    </UDropdownMenu>
+        <UCard v-if="showTable"
+               :ui="fill ? FILL_CARD_UI : undefined">
+            <template #header>
+                <div class="flex flex-wrap items-center gap-3">
+                    <UInput v-model="globalFilter"
+                            :placeholder="searchPlaceholder ?? 'Search...'"
+                            icon="i-lucide-search"
+                            class="max-w-sm"
+                            @update:model-value="tableRef?.tableApi?.setGlobalFilter($event)" />
+                    <slot name="filters" />
+
+                    <div class="ml-auto flex items-center gap-2">
+                        <UButton v-if="selectedCount > 0"
+                                 color="error"
+                                 icon="i-lucide-trash-2"
+                                 :label="`Delete (${selectedCount})`"
+                                 @click="requestBulkDelete" />
+                        <slot name="actions" />
+                    </div>
                 </div>
             </template>
-        </UTable>
+
+            <UTable ref="table"
+                    v-model:pagination="pagination"
+                    :data="rows"
+                    :columns="columnsWithActions"
+                    :loading="loading"
+                    :global-filter="globalFilter"
+                    :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+                    :sticky="fill"
+                    :ui="{ tr: noRowClick ? '' : 'cursor-pointer' }"
+                    :class="fill && 'flex-1 min-h-0'"
+                    @select="(_e: Event, row: any) => emit('edit', row.original)"
+                    @contextmenu="onRowContextMenu">
+                <template #actions-cell="{ row }">
+                    <div class="flex justify-end">
+                        <UDropdownMenu :items="buildRowActions(row.original)">
+                            <UButton icon="i-lucide-ellipsis-vertical"
+                                     color="neutral"
+                                     variant="ghost"
+                                     size="sm" />
+                        </UDropdownMenu>
+                    </div>
+                </template>
+            </UTable>
+
+            <template #footer>
+                <TableFooter :page="pagination.pageIndex + 1"
+                             :total="totalCount"
+                             :page-size="PAGE_SIZE"
+                             @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
+                    <template v-if="selectedCount > 0">
+                        {{ selectedCount }} of {{ totalCount }} row(s) selected.
+                    </template>
+                    <template v-else>
+                        {{ totalCount }} row(s) total.
+                    </template>
+                </TableFooter>
+            </template>
+        </UCard>
 
         <!-- Right-click context menu -->
         <UDropdownMenu v-model:open="ctxMenuOpen"
@@ -247,19 +258,5 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                        :content="{ reference: ctxMenuVirtual, side: 'bottom', align: 'start', sideOffset: 4 }">
             <div class="hidden" />
         </UDropdownMenu>
-
-        <TableFooter v-if="showTable"
-                     class="shrink-0"
-                     :page="pagination.pageIndex + 1"
-                     :total="totalCount"
-                     :page-size="PAGE_SIZE"
-                     @update:page="(p: number) => pagination = { ...pagination, pageIndex: p - 1 }">
-            <template v-if="selectedCount > 0">
-                {{ selectedCount }} of {{ totalCount }} row(s) selected.
-            </template>
-            <template v-else>
-                {{ totalCount }} row(s) total.
-            </template>
-        </TableFooter>
     </div>
 </template>

@@ -14,7 +14,7 @@ export const CELL = {
     partialLow: { light: '#f9dca0', dark: '#8a6a2a' },
     failed: { light: '#e5484d', dark: '#ea686c' },
     failedLow: { light: '#f4a5a8', dark: '#a04448' },
-    empty: { light: '#f4f4f5', dark: '#27272a' },
+    empty: { light: '#f5f5f5', dark: '#262626' },
 }
 
 /** Status index order: a day's cell takes the colour at its `cellStatus`. */

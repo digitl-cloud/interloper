@@ -4,12 +4,11 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ComponentRecord, RelationRef } from '~/types/component'
 import { hookEnabled, hookEvents, relationRefs } from '~/types/component'
 
-definePageMeta({ title: 'Components', fullBleed: true })
-
 const UBadge = resolveComponent('UBadge')
 const EntityBadge = resolveComponent('EntityBadge')
 
 const componentsStore = useComponentsStore()
+const views = useComponentViews()
 const { statusBadge } = useDrift()
 const catalogStore = useCatalogStore()
 const toast = useToast()
@@ -98,15 +97,21 @@ function matchesFilters(hook: ComponentRecord): boolean {
 </script>
 
 <template>
-    <div>
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New hook"
-                     @click="handleCreate" />
-        </NavActions>
-        <NavComponentsHub>
+    <UDashboardPanel id="hooks">
+        <template #header>
+            <AppNavbar title="Components" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="views"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <DriftBanner kind="hook" />
             <DataTable :columns="columns"
+                       fill
                        :data="hooks"
                        :filter="matchesFilters"
                        :loading="componentsStore.loading"
@@ -122,6 +127,12 @@ function matchesFilters(hook: ComponentRecord): boolean {
                     <EnabledFilter v-model="enabled" />
                 </template>
 
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New hook"
+                             @click="handleCreate" />
+                </template>
+
                 <template #empty>
                     <EmptyState icon="i-carbon-lightning"
                                 title="No hooks yet"
@@ -133,31 +144,31 @@ function matchesFilters(hook: ComponentRecord): boolean {
                     </EmptyState>
                 </template>
             </DataTable>
-        </NavComponentsHub>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      :default-title="editingHook ? 'Edit Hook' : 'New Hook'"
-                      description="Configure hook"
-                      :stepper="stepperRef">
-            <WizardDefinitionStepper v-if="drawerOpen"
-                                     :key="editingHook?.id ?? 'new'"
-                                     ref="stepperRef"
-                                     kind="hook"
-                                     noun="Hook"
-                                     :component="editingHook"
-                                     :relation-steps="[
-                                         {
-                                             name: 'watches',
-                                             description: 'Components this hook observes — it fires when one of their runs matches the selected events.',
-                                         },
-                                         {
-                                             name: 'targets',
-                                             required: false,
-                                             description: 'Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only notify.',
-                                         },
-                                     ]"
-                                     @created="handleSaved"
-                                     @updated="handleSaved" />
-        </WizardDrawer>
-    </div>
+            <WizardDrawer v-model:open="drawerOpen"
+                          :default-title="editingHook ? 'Edit Hook' : 'New Hook'"
+                          description="Configure hook"
+                          :stepper="stepperRef">
+                <WizardDefinitionStepper v-if="drawerOpen"
+                                         :key="editingHook?.id ?? 'new'"
+                                         ref="stepperRef"
+                                         kind="hook"
+                                         noun="Hook"
+                                         :component="editingHook"
+                                         :relation-steps="[
+                                             {
+                                                 name: 'watches',
+                                                 description: 'Components this hook observes — it fires when one of their runs matches the selected events.',
+                                             },
+                                             {
+                                                 name: 'targets',
+                                                 required: false,
+                                                 description: 'Components a trigger-style hook runs when it fires. Optional — leave empty for hooks that only notify.',
+                                             },
+                                         ]"
+                                         @created="handleSaved"
+                                         @updated="handleSaved" />
+            </WizardDrawer>
+        </template>
+    </UDashboardPanel>
 </template>

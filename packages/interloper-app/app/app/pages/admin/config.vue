@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AdminConfig } from '~/types/admin'
 
-definePageMeta({ title: 'Instance configuration', layout: 'admin', middleware: 'super-admin' })
+definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
 const adminStore = useAdminStore()
 
@@ -36,7 +36,6 @@ interface ConfigRow {
 
 interface ConfigSection {
     title: string
-    icon: string
     rows: ConfigRow[]
 }
 
@@ -175,78 +174,87 @@ const sections = computed<ConfigSection[]>(() => {
     ]
 
     return [
-        { title: 'Deployment', icon: 'i-lucide-hard-drive', rows: deploymentRows },
-        { title: 'Authentication', icon: 'i-lucide-key-round', rows: authRows },
-        { title: 'Services', icon: 'i-lucide-cog', rows: serviceRows },
-        { title: 'Data', icon: 'i-lucide-database', rows: dataRows },
+        { title: 'Deployment', rows: deploymentRows },
+        { title: 'Authentication', rows: authRows },
+        { title: 'Services', rows: serviceRows },
+        { title: 'Data', rows: dataRows },
     ]
 })
 </script>
 
 <template>
-    <div class="mx-auto flex w-full max-w-[1040px] flex-col gap-3">
-        <p class="mb-3 max-w-[660px] text-[14.5px] leading-relaxed text-muted">
-            How this deployment is wired — read-only, sourced from the running instance.
-            Secrets are redacted; dimmed values are class defaults.
-        </p>
-        <div v-if="loading"
-             class="flex items-center justify-center py-16">
-            <UIcon name="i-lucide-loader-circle"
-                   class="size-5 animate-spin text-dimmed" />
-        </div>
+    <UDashboardPanel id="admin-config">
+        <template #header>
+            <AppNavbar title="Instance configuration" />
+        </template>
+        <template #body>
+            <div class="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-6">
+                <p class="text-sm leading-relaxed text-muted">
+                    How this deployment is wired — read-only, sourced from the running instance.
+                    Secrets are redacted; dimmed values are class defaults.
+                </p>
+                <div v-if="loading"
+                     class="flex items-center justify-center py-16">
+                    <UIcon name="i-lucide-loader-circle"
+                           class="size-5 animate-spin text-dimmed" />
+                </div>
 
-        <UAlert v-else-if="!config"
-                color="error"
-                icon="i-lucide-alert-circle"
-                title="Instance configuration unavailable" />
+                <UAlert v-else-if="!config"
+                        color="error"
+                        icon="i-lucide-alert-circle"
+                        title="Instance configuration unavailable" />
 
-        <div v-else
-             class="flex flex-col gap-4">
-            <PanelCard v-for="section in sections"
-                     :key="section.title"
-                     :title="section.title"
-                     :icon="section.icon"
-                     class="mb-4">
-                <div v-for="row in section.rows"
-                     :key="row.label"
-                     class="flex items-start gap-4 px-4 py-3 text-sm">
-                        <span class="w-56 shrink-0 pt-px text-muted">{{ row.label }}</span>
-                        <div class="min-w-0 flex-1">
-                            <div v-if="row.pill || row.badges || row.value"
-                                 class="flex flex-wrap items-center gap-1.5">
-                                <UBadge v-if="row.pill"
-                                        :color="row.pill.color">
-                                    {{ row.pill.label }}
-                                </UBadge>
-                                <UBadge v-for="badge in row.badges"
-                                        :key="badge"
-                                        color="neutral">
-                                    {{ badge }}
-                                </UBadge>
-                                <span v-if="row.value"
-                                      class="min-w-0 break-all font-medium"
-                                      :class="row.mono && 'font-mono text-[13px]'">{{ row.value }}</span>
+                <template v-else>
+                    <section v-for="section in sections"
+                             :key="section.title"
+                             class="flex flex-col gap-3">
+                        <CardHeader :title="section.title" />
+                        <UCard :ui="{ body: 'p-0 sm:p-0' }">
+                            <div class="divide-y divide-default">
+                                <div v-for="row in section.rows"
+                                     :key="row.label"
+                                     class="flex items-start gap-4 px-4 py-3 text-sm sm:px-6">
+                                    <span class="w-56 shrink-0 pt-px text-muted">{{ row.label }}</span>
+                                    <div class="min-w-0 flex-1">
+                                        <div v-if="row.pill || row.badges || row.value"
+                                             class="flex flex-wrap items-center gap-1.5">
+                                            <UBadge v-if="row.pill"
+                                                    :color="row.pill.color">
+                                                {{ row.pill.label }}
+                                            </UBadge>
+                                            <UBadge v-for="badge in row.badges"
+                                                    :key="badge"
+                                                    color="neutral">
+                                                {{ badge }}
+                                            </UBadge>
+                                            <span v-if="row.value"
+                                                  class="min-w-0 break-all font-medium"
+                                                  :class="row.mono && 'font-mono text-sm'">{{ row.value }}</span>
+                                        </div>
+                                        <div v-if="row.attrs?.length"
+                                             class="flex flex-wrap gap-1.5"
+                                             :class="(row.pill || row.badges || row.value) && 'mt-1.5'">
+                                            <span v-for="attr in row.attrs"
+                                                  :key="attr.key"
+                                                  class="whitespace-nowrap rounded-md px-1.5 py-0.5 font-mono text-xs"
+                                                  :class="attr.dim ? 'bg-elevated/50 text-dimmed' : 'bg-elevated'"
+                                                  :title="attr.dim ? 'Class default (not configured)' : undefined">
+                                                <span class="text-muted">{{ attr.key }}=</span>{{ attr.value }}
+                                            </span>
+                                        </div>
+                                        <div v-if="row.lines"
+                                             class="mt-1 flex flex-col gap-y-1">
+                                            <span v-for="line in row.lines"
+                                                  :key="line"
+                                                  class="break-all font-mono text-xs">{{ line }}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div v-if="row.attrs?.length"
-                                 class="flex flex-wrap gap-1.5"
-                                 :class="(row.pill || row.badges || row.value) && 'mt-1.5'">
-                                <span v-for="attr in row.attrs"
-                                      :key="attr.key"
-                                      class="whitespace-nowrap rounded-md px-1.5 py-0.5 font-mono text-xs"
-                                      :class="attr.dim ? 'bg-elevated/50 text-dimmed' : 'bg-elevated'"
-                                      :title="attr.dim ? 'Class default (not configured)' : undefined">
-                                    <span class="text-muted">{{ attr.key }}=</span>{{ attr.value }}
-                                </span>
-                            </div>
-                            <div v-if="row.lines"
-                                 class="flex flex-col gap-y-1 mt-1">
-                                <span v-for="line in row.lines"
-                                      :key="line"
-                                      class="break-all font-mono text-xs">{{ line }}</span>
-                            </div>
-                        </div>
-                    </div>
-            </PanelCard>
-        </div>
-    </div>
+                        </UCard>
+                    </section>
+                </template>
+            </div>
+        </template>
+    </UDashboardPanel>
 </template>

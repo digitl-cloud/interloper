@@ -68,7 +68,7 @@ const flagged = computed(() => showsMaturity(props.maturity))
                 <div class="flex items-center gap-2 min-w-0">
                     <span v-for="chip in chips"
                           :key="chip.label"
-                          class="inline-flex items-center gap-1.5 border border-default rounded-md px-2 py-1 text-xs font-medium text-muted bg-(--ui-bg-band) truncate">
+                          class="inline-flex items-center gap-1.5 border border-default rounded-md px-2 py-1 text-xs font-medium text-muted bg-elevated/50 truncate">
                         <UIcon v-if="chip.icon"
                                :name="chip.icon"
                                class="size-3 shrink-0" />
@@ -88,7 +88,7 @@ const flagged = computed(() => showsMaturity(props.maturity))
            class="relative"
            :class="interactive
                ? 'cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5'
-               : 'bg-(--ui-bg-band)'"
+               : 'bg-elevated/50'"
            :ui="{
                root: 'rounded-lg shadow-xs',
                body: 'p-3.5 px-4 sm:p-3.5 sm:px-4',

@@ -4,8 +4,6 @@ import type { ComponentRecord } from '~/types/component'
 import type { DependencyPair } from '~/composables/graph'
 import { qualifiedKey } from '~/types/catalog'
 
-definePageMeta({ title: 'Graph', fullBleed: true })
-
 const sourceStepperRef = ref<any>(null)
 
 const {
@@ -53,9 +51,8 @@ function handleSaved() {
     sourceDrawerOpen.value = false
 }
 
-const panelOpen = ref(false)
-const closing = ref(false)
-const panelVisible = computed(() => panelOpen.value || closing.value)
+const assetPane = useSlidingPane('graph-asset-pane-size')
+const { pane: assetPaneRef, group: assetGroupRef, opened: panelOpen, mounted: panelMounted, animating: panelAnimating, contentStyle: assetPaneContentStyle, onLayout: onAssetPaneLayout } = assetPane
 const selectedAsset = ref<ComponentRecord | undefined>()
 const selectedAssetDefn = ref<AssetDefinition | undefined>()
 const selectedSource = ref<ComponentRecord | undefined>()
@@ -66,8 +63,7 @@ function onAssetClick(asset: ComponentRecord, assetDefn: AssetDefinition | undef
     selectedAsset.value = asset
     selectedAssetDefn.value = assetDefn
     selectedSource.value = source
-    panelOpen.value = true
-    closing.value = false
+    assetPane.show()
 }
 
 // Deep link (command palette): /graph?select=<assetId> opens the asset panel
@@ -86,12 +82,7 @@ watchEffect(() => {
 })
 
 function onPanelClose() {
-    closing.value = true
-    panelOpen.value = false
-}
-
-function onCloseAnimationEnd() {
-    closing.value = false
+    assetPane.hide()
 }
 
 async function onDeleteSource(sourceId: string) {
@@ -143,92 +134,76 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
 </script>
 
 <template>
-    <div class="flex flex-col flex-1 min-h-0">
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New source"
-                     @click="onCreateSource" />
-        </NavActions>
-        <GraphToolbar v-model:group-by="groupBy"
-                      v-model:status-filter="statusFilter"
-                      :counts="statusCounts" />
-        <SplitterGroup direction="horizontal"
-                       auto-save-id="graph-panels"
-                       class="flex-1 min-h-0">
-            <SplitterPanel :default-size="panelVisible ? 70 : 100"
-                           :min-size="30"
-                           class="flex">
-                <GraphAssetGraph :group-by="groupBy"
-                                 :status-filter="statusFilter"
-                                 :show-new-source-button="false"
-                                 :selected-id="panelOpen ? selectedAsset?.id : null"
-                                 @add-source="onCreateSource"
-                                 @edit-source="onEditSource"
-                                 @asset-click="onAssetClick"
-                                 @delete-source="onDeleteSource"
-                                 @create-dependencies="onCreateDependencies"
-                                 @delete-dependency="onDeleteDependency"
-                                 @pane-click="panelOpen && onPanelClose()" />
-            </SplitterPanel>
-
-            <template v-if="panelVisible">
-                <SplitterResizeHandle
-                                      class="relative flex items-center justify-center rounded-lg data-[state=hover]:bg-accented data-[state=drag]:bg-accented transition-colors" />
-
-                <SplitterPanel :default-size="30"
-                               :min-size="15"
-                               class="relative overflow-hidden">
-                    <GraphAssetPanel v-if="selectedAsset && selectedSource"
-                                     :class="['absolute inset-0', closing ? 'animate-slide-right' : 'animate-slide-left']"
-                                     :asset="selectedAsset"
-                                     :asset-defn="selectedAssetDefn"
-                                     :source="selectedSource"
-                                     @close="onPanelClose"
-                                     @animationend="closing && onCloseAnimationEnd()" />
+    <UDashboardPanel id="graph">
+        <template #header>
+            <AppNavbar title="Graph" />
+        </template>
+        <template #body>
+            <GraphToolbar v-model:group-by="groupBy"
+                          v-model:status-filter="statusFilter"
+                          :counts="statusCounts">
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New source"
+                             @click="onCreateSource" />
+                </template>
+            </GraphToolbar>
+            <SplitterGroup ref="assetGroupRef"
+                           direction="horizontal"
+                           class="flex-1 min-h-0"
+                           @layout="onAssetPaneLayout">
+                <!-- p-px keeps the cards' outer rings inside the panes, which clip overflow -->
+                <SplitterPanel :default-size="100"
+                               :min-size="30"
+                               class="flex p-px">
+                    <UCard class="w-full"
+                           :ui="CANVAS_CARD_UI">
+                        <GraphAssetGraph :group-by="groupBy"
+                                         :status-filter="statusFilter"
+                                         :show-new-source-button="false"
+                                         :selected-id="panelOpen ? selectedAsset?.id : null"
+                                         @add-source="onCreateSource"
+                                         @edit-source="onEditSource"
+                                         @asset-click="onAssetClick"
+                                         @delete-source="onDeleteSource"
+                                         @create-dependencies="onCreateDependencies"
+                                         @delete-dependency="onDeleteDependency"
+                                         @pane-click="panelOpen && onPanelClose()" />
+                    </UCard>
                 </SplitterPanel>
-            </template>
-        </SplitterGroup>
 
-        <WizardDrawer v-model:open="sourceDrawerOpen"
-                      default-title="New Source"
-                      description="Configure source"
-                      :stepper="sourceStepperRef">
-            <SourcesWizard v-if="sourceDrawerOpen"
-                            :key="editingSource?.id ?? 'new'"
-                            ref="sourceStepperRef"
-                            :source="editingSource"
-                            @created="handleSaved"
-                            @updated="handleSaved" />
-        </WizardDrawer>
-    </div>
+                <SplitterResizeHandle class="group flex justify-center transition-[width] duration-200"
+                                      :class="panelOpen ? 'w-3' : 'w-0'"
+                                      :disabled="!panelOpen || panelAnimating">
+                    <div class="h-full w-px transition-colors group-data-[state=hover]:bg-accented group-data-[state=drag]:bg-accented" />
+                </SplitterResizeHandle>
+
+                <SplitterPanel ref="assetPaneRef"
+                               :default-size="0"
+                               class="relative overflow-hidden">
+                    <div v-if="panelMounted && selectedAsset && selectedSource"
+                         class="absolute inset-y-0 right-0 p-px"
+                         :style="assetPaneContentStyle">
+                        <GraphAssetPanel class="h-full"
+                                         :asset="selectedAsset"
+                                         :asset-defn="selectedAssetDefn"
+                                         :source="selectedSource"
+                                         @close="onPanelClose" />
+                    </div>
+                </SplitterPanel>
+            </SplitterGroup>
+
+            <WizardDrawer v-model:open="sourceDrawerOpen"
+                          default-title="New Source"
+                          description="Configure source"
+                          :stepper="sourceStepperRef">
+                <SourcesWizard v-if="sourceDrawerOpen"
+                                :key="editingSource?.id ?? 'new'"
+                                ref="sourceStepperRef"
+                                :source="editingSource"
+                                @created="handleSaved"
+                                @updated="handleSaved" />
+            </WizardDrawer>
+        </template>
+    </UDashboardPanel>
 </template>
-
-<style scoped>
-@keyframes slide-left {
-    from {
-        transform: translateX(100%);
-    }
-
-    to {
-        transform: translateX(0);
-    }
-}
-
-@keyframes slide-right {
-    from {
-        transform: translateX(0);
-    }
-
-    to {
-        transform: translateX(100%);
-    }
-}
-
-.animate-slide-left {
-    animation: slide-left 0.20s ease-out;
-}
-
-.animate-slide-right {
-    animation: slide-right 0.20s ease-out forwards;
-}
-</style>

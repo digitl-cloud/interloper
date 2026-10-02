@@ -4,12 +4,11 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ComponentRecord, RelationRef } from '~/types/component'
 import { relationRefs } from '~/types/component'
 
-definePageMeta({ title: 'Components', fullBleed: true })
-
 const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const views = useComponentViews()
 const { statusBadge } = useDrift()
 
 const destinations = computed(() => componentsStore.byKind('destination'))
@@ -75,15 +74,21 @@ const typeKey = ref<string | null>(null)
 </script>
 
 <template>
-    <div>
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New destination"
-                     @click="handleCreate" />
-        </NavActions>
-        <NavComponentsHub>
+    <UDashboardPanel id="destinations">
+        <template #header>
+            <AppNavbar title="Components" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="views"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <DriftBanner kind="destination" />
             <DataTable :columns="columns"
+                       fill
                        :data="destinations"
                        :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
@@ -98,6 +103,12 @@ const typeKey = ref<string | null>(null)
                                 :components="destinations" />
                 </template>
 
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New destination"
+                             @click="handleCreate" />
+                </template>
+
                 <template #empty>
                     <EmptyState icon="i-lucide-hard-drive"
                                 title="No destinations yet"
@@ -109,7 +120,7 @@ const typeKey = ref<string | null>(null)
                     </EmptyState>
 
                     <div class="mt-9 mb-3.5">
-                        <h2 class="text-lg font-bold tracking-[-0.015em] text-highlighted">
+                        <h2 class="text-lg font-semibold text-highlighted">
                             Destinations Catalog
                         </h2>
                         <p class="text-sm text-muted mt-1.5">
@@ -130,23 +141,23 @@ const typeKey = ref<string | null>(null)
                     </div>
                 </template>
             </DataTable>
-        </NavComponentsHub>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      default-title="New Destination"
-                      description="Configure destination"
-                      :stepper="stepperRef">
-            <WizardDefinitionStepper v-if="drawerOpen"
-                                     :key="editingDestination?.id ?? 'new'"
-                                     ref="stepperRef"
-                                     kind="destination"
-                                     noun="Destination"
-                                     :component="editingDestination"
-                                     :initial-type-key="presetTypeKey"
-                                     :definitions="catalogStore.destinationDefinitions"
-                                     name-optional
-                                     @created="handleSaved"
-                                     @updated="handleSaved" />
-        </WizardDrawer>
-    </div>
+            <WizardDrawer v-model:open="drawerOpen"
+                          default-title="New Destination"
+                          description="Configure destination"
+                          :stepper="stepperRef">
+                <WizardDefinitionStepper v-if="drawerOpen"
+                                         :key="editingDestination?.id ?? 'new'"
+                                         ref="stepperRef"
+                                         kind="destination"
+                                         noun="Destination"
+                                         :component="editingDestination"
+                                         :initial-type-key="presetTypeKey"
+                                         :definitions="catalogStore.destinationDefinitions"
+                                         name-optional
+                                         @created="handleSaved"
+                                         @updated="handleSaved" />
+            </WizardDrawer>
+        </template>
+    </UDashboardPanel>
 </template>

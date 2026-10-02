@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import type { TableColumn } from '@nuxt/ui'
 import type { AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
 
 definePageMeta({
-    title: 'Overview',
     layout: 'admin',
     middleware: 'super-admin',
 })
@@ -53,7 +54,6 @@ const tiles = computed(() => {
     const runs = (quotas.value?.organisations ?? []).reduce((sum, row) => sum + row.successful_runs, 0)
     return [
         {
-            icon: 'i-lucide-building-2',
             label: 'Organisations',
             value: String(orgs.value.length),
             sub: deletedOrgs.value.length
@@ -61,20 +61,17 @@ const tiles = computed(() => {
                 : 'All active',
         },
         {
-            icon: 'i-lucide-users',
             label: 'Users',
             value: String(users.value.length),
             sub: `${superAdmins} super admin${superAdmins === 1 ? '' : 's'}`
                 + (orphans ? ` · ${orphans} with no org` : ''),
         },
         {
-            icon: 'i-lucide-plug',
             label: 'Sources',
             value: sources.toLocaleString(),
             sub: 'Across all organisations',
         },
         {
-            icon: 'i-lucide-check-circle',
             label: 'Successful runs',
             value: runs.toLocaleString(),
             sub: 'This quota period',
@@ -196,6 +193,34 @@ function pctTone(pct: number): string {
     return 'text-success'
 }
 
+const topOrgColumns: TableColumn<(typeof topOrgs.value)[number]>[] = [
+    {
+        accessorKey: 'name',
+        header: 'Organisation',
+        meta: { class: { td: 'w-full' } },
+        cell: ({ row }) => h('span', { class: 'flex items-center gap-2.5' }, [
+            h('span', { class: 'h-5 w-1 shrink-0 rounded', style: { background: row.original.tint } }),
+            h('span', { class: 'truncate font-medium text-highlighted' }, row.original.name),
+        ]),
+    },
+    {
+        accessorKey: 'runs',
+        header: 'Runs',
+        meta: { class: { th: 'text-right', td: 'text-right tabular-nums text-highlighted' } },
+        cell: ({ row }) => row.original.runs.toLocaleString(),
+    },
+    {
+        accessorKey: 'sources',
+        header: 'Sources',
+        meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } },
+    },
+    {
+        accessorKey: 'members',
+        header: 'Members',
+        meta: { class: { th: 'text-right', td: 'text-right tabular-nums' } },
+    },
+]
+
 // -- Recent activity --------------------------------------------------------------
 
 const activity = computed(() => {
@@ -223,142 +248,129 @@ const activity = computed(() => {
 </script>
 
 <template>
-    <div v-if="loading"
-         class="flex items-center justify-center py-16">
-        <UIcon name="i-lucide-loader-circle"
-               class="size-5 animate-spin text-dimmed" />
-    </div>
-
-    <div v-else
-         class="flex flex-col gap-7">
-        <div class="grid grid-cols-2 xl:grid-cols-4 gap-px overflow-hidden rounded-lg border border-default bg-(--ui-border)">
-            <div v-for="tile in tiles"
-                 :key="tile.label"
-                 class="flex flex-col gap-2.5 bg-muted p-4">
-                <span class="flex size-[34px] items-center justify-center rounded-full bg-primary/10 text-primary ring-1 ring-inset ring-primary/25">
-                    <UIcon :name="tile.icon"
-                           class="size-4" />
-                </span>
-                <div class="text-xs uppercase tracking-wider text-dimmed">{{ tile.label }}</div>
-                <div class="flex items-baseline gap-2 min-w-0">
-                    <span class="text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</span>
-                    <span class="truncate text-[12.5px] text-muted">{{ tile.sub }}</span>
-                </div>
+    <UDashboardPanel id="admin">
+        <template #header>
+            <AppNavbar title="Overview" />
+        </template>
+        <template #body>
+            <div v-if="loading"
+                 class="flex items-center justify-center py-16">
+                <UIcon name="i-lucide-loader-circle"
+                       class="size-5 animate-spin text-dimmed" />
             </div>
-        </div>
 
-        <div class="grid lg:grid-cols-2 gap-5 items-start">
-            <PanelCard title="Needs attention"
-                     icon="i-lucide-alert-triangle"
-                     icon-class="text-warning"
-                     :badge="attention.length">
-                <div v-if="attention.length === 0"
-                     class="flex items-center gap-2.5 px-4 py-6 text-sm text-muted">
-                    <UIcon name="i-lucide-check-circle"
-                           class="size-4 text-success" />
-                    All clear — nothing needs attention.
-                </div>
-                <div v-for="item in attention"
-                     :key="item.title"
-                     class="flex items-start gap-3 px-4 py-3">
-                    <span class="flex size-6.5 shrink-0 items-center justify-center rounded-lg mt-0.5"
-                          :class="ATTENTION_TILE[item.tone]">
-                        <UIcon :name="item.icon"
-                               class="size-3.5" />
-                    </span>
-                    <div class="flex-1 min-w-0">
-                        <div class="text-[13.5px] font-semibold">{{ item.title }}</div>
-                        <div class="text-xs text-muted leading-normal mt-0.5">{{ item.detail }}</div>
-                    </div>
-                    <NuxtLink :to="item.to"
-                              class="shrink-0 text-xs font-semibold text-primary mt-0.5 whitespace-nowrap">
-                        {{ item.action }} →
-                    </NuxtLink>
-                </div>
-            </PanelCard>
-
-            <PanelCard title="Quota pressure"
-                     icon="i-lucide-gauge"
-                     link-label="All organisations"
-                     link-to="/admin/organisations">
-                <div v-if="pressure.length === 0"
-                     class="px-4 py-6 text-sm text-muted">
-                    No run limits configured — usage is unmetered pressure-wise.
-                </div>
-                <div v-else
-                     class="px-4 pb-3.5 pt-1">
-                    <div v-for="entry in pressure"
-                         :key="entry.id"
-                         class="py-2.5">
-                        <div class="flex items-baseline gap-2">
-                            <span class="flex-1 min-w-0 truncate text-[13px] font-semibold">{{ entry.name }}</span>
-                            <span class="font-mono text-[11.5px] text-muted">
-                                {{ entry.used.toLocaleString() }} / {{ entry.limit.toLocaleString() }}
-                            </span>
+            <template v-else>
+                <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
+                    <UCard v-for="tile in tiles"
+                           :key="tile.label"
+                           :ui="{ body: 'flex flex-col gap-3' }">
+                        <div class="text-sm text-muted">{{ tile.label }}</div>
+                        <div class="flex min-w-0 items-baseline gap-2">
+                            <span class="text-3xl font-semibold tabular-nums text-highlighted">{{ tile.value }}</span>
+                            <span class="truncate text-sm text-muted">{{ tile.sub }}</span>
                         </div>
-                        <AdminUsageMeter :used="entry.used"
-                                         :limit="entry.limit"
-                                         class="mt-1.5" />
-                        <div class="text-[11.5px] text-dimmed mt-1">{{ entry.note }}</div>
-                    </div>
+                    </UCard>
                 </div>
-            </PanelCard>
-        </div>
 
-        <div class="grid lg:grid-cols-2 gap-5 items-start">
-            <section>
-                <div class="mb-3 flex items-center gap-2.5">
-                    <UIcon name="i-lucide-trending-up"
-                           class="size-4 text-muted" />
-                    <span class="text-[15px] font-semibold text-highlighted">Top organisations by usage</span>
-                    <span class="ml-auto text-xs text-dimmed">{{ periodLabel }}</span>
-                </div>
-                <div class="overflow-hidden rounded-lg border border-default divide-y divide-default">
-                <div class="flex items-center gap-3 bg-muted px-4 py-3 text-sm font-semibold text-highlighted">
-                    <span class="flex-1 min-w-0">Organisation</span>
-                    <span class="w-16 text-right shrink-0">Runs</span>
-                    <span class="w-14 text-right shrink-0">Sources</span>
-                    <span class="w-14 text-right shrink-0">Members</span>
-                </div>
-                <div v-if="topOrgs.length === 0"
-                     class="px-4 py-6 text-sm text-muted">
-                    No usage recorded this period.
-                </div>
-                <NuxtLink v-for="org in topOrgs"
-                          :key="org.id"
-                          :to="`/admin/organisations/${org.id}`"
-                          class="flex items-center gap-3 bg-default px-4 py-3 text-[13px] hover:bg-muted">
-                    <span class="flex-1 min-w-0 flex items-center gap-2.5">
-                        <span class="w-[5px] h-[22px] rounded shrink-0"
-                              :style="{ background: org.tint }" />
-                        <span class="font-semibold truncate">{{ org.name }}</span>
-                    </span>
-                    <span class="w-16 text-right tabular-nums shrink-0">{{ org.runs.toLocaleString() }}</span>
-                    <span class="w-14 text-right tabular-nums text-muted shrink-0">{{ org.sources }}</span>
-                    <span class="w-14 text-right tabular-nums text-muted shrink-0">{{ org.members }}</span>
-                </NuxtLink>
-                </div>
-            </section>
+                <div class="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
+                    <UCard title="Needs attention"
+                           :description="`${attention.length} item${attention.length === 1 ? '' : 's'}`"
+                           :ui="{ body: 'p-0 sm:p-0' }">
+                        <div class="divide-y divide-default border-t border-default">
+                            <div v-if="attention.length === 0"
+                                 class="flex items-center gap-2.5 px-4 py-5 text-sm text-muted sm:px-6">
+                                <UIcon name="i-lucide-check-circle"
+                                       class="size-4 text-success" />
+                                All clear — nothing needs attention.
+                            </div>
+                            <div v-for="item in attention"
+                                 :key="item.title"
+                                 class="flex items-center gap-3.5 px-4 py-3 sm:px-6">
+                                <span class="flex size-8 shrink-0 items-center justify-center rounded-full"
+                                      :class="ATTENTION_TILE[item.tone]">
+                                    <UIcon :name="item.icon"
+                                           class="size-4" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm font-medium leading-snug text-highlighted">{{ item.title }}</div>
+                                    <div class="mt-0.5 text-xs leading-normal text-muted">{{ item.detail }}</div>
+                                </div>
+                                <UButton :label="item.action"
+                                         :to="item.to"
+                                         color="neutral"
+                                         variant="outline"
+                                         size="sm"
+                                         class="shrink-0" />
+                            </div>
+                        </div>
+                    </UCard>
 
-            <PanelCard title="Recent activity"
-                     icon="i-lucide-activity">
-                <div v-if="activity.length === 0"
-                     class="px-4 py-6 text-sm text-muted">
-                    Nothing yet.
+                    <UCard>
+                        <template #header>
+                            <CardHeader title="Quota pressure">
+                                <UButton label="All organisations"
+                                         to="/admin/organisations"
+                                         color="neutral"
+                                         variant="outline"
+                                         size="sm" />
+                            </CardHeader>
+                        </template>
+                        <div v-if="pressure.length === 0"
+                             class="text-sm text-muted">
+                            No run limits configured — usage is unmetered pressure-wise.
+                        </div>
+                        <div v-else
+                             class="flex flex-col gap-4">
+                            <div v-for="entry in pressure"
+                                 :key="entry.id">
+                                <div class="flex items-baseline gap-2">
+                                    <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ entry.name }}</span>
+                                    <span class="font-mono text-xs text-muted">
+                                        {{ entry.used.toLocaleString() }} / {{ entry.limit.toLocaleString() }}
+                                    </span>
+                                </div>
+                                <AdminUsageMeter :used="entry.used"
+                                                 :limit="entry.limit"
+                                                 class="mt-1.5" />
+                                <div class="mt-1 text-xs text-dimmed">{{ entry.note }}</div>
+                            </div>
+                        </div>
+                    </UCard>
                 </div>
-                <div v-for="entry in activity"
-                     :key="entry.when + entry.text"
-                     class="flex items-start gap-3 px-4 py-2.5">
-                    <span class="flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted mt-0.5">
-                        <UIcon :name="entry.icon"
-                               class="size-3.5" />
-                    </span>
-                    <div class="flex-1 min-w-0">
-                        <div class="text-[13px] leading-snug">{{ entry.text }}</div>
-                        <div class="text-[11.5px] text-dimmed mt-0.5">{{ entry.who }} · {{ entry.whenLabel }}</div>
-                    </div>
+
+                <div class="grid items-start gap-4 sm:gap-6 lg:grid-cols-2">
+                    <UCard title="Top organisations by usage"
+                           :description="periodLabel">
+                        <UTable :data="topOrgs"
+                                :columns="topOrgColumns"
+                                empty="No usage recorded this period."
+                                :ui="{ tr: 'cursor-pointer' }"
+                                @select="(_e: Event, row: any) => navigateTo(`/admin/organisations/${row.original.id}`)" />
+                    </UCard>
+
+                    <UCard title="Recent activity"
+                           :ui="{ body: 'p-0 sm:p-0' }">
+                        <div class="divide-y divide-default border-t border-default">
+                            <div v-if="activity.length === 0"
+                                 class="px-4 py-5 text-sm text-muted sm:px-6">
+                                Nothing yet.
+                            </div>
+                            <div v-for="entry in activity"
+                                 :key="entry.when + entry.text"
+                                 class="flex items-start gap-3 px-4 py-3 sm:px-6">
+                                <span class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
+                                    <UIcon :name="entry.icon"
+                                           class="size-3.5" />
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-sm leading-snug">{{ entry.text }}</div>
+                                    <div class="mt-0.5 text-xs text-dimmed">{{ entry.who }} · {{ entry.whenLabel }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </UCard>
                 </div>
-            </PanelCard>
-        </div>
-    </div>
+            </template>
+        </template>
+    </UDashboardPanel>
 </template>

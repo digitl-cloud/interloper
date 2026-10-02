@@ -70,23 +70,21 @@ async function handleCleanup() {
 </script>
 
 <template>
-    <div v-if="visible"
-         class="mb-4">
-        <UAlert color="error"
-                variant="subtle"
-                orientation="horizontal"
-                icon="i-lucide-unplug"
-                title="Catalog drift detected"
-                :description="`${driftSummary} no longer ${driftCount === 1 ? 'exists' : 'exist'} in the catalog`">
-            <template #actions>
-                <UButton color="error"
-                         variant="solid"
-                         size="xs"
-                         icon="i-lucide-trash-2"
-                         label="Clean up"
-                         :loading="cleaningUp"
-                         @click="handleCleanup" />
-            </template>
-        </UAlert>
-    </div>
+    <UAlert v-if="visible"
+            color="error"
+            variant="subtle"
+            orientation="horizontal"
+            icon="i-lucide-unplug"
+            title="Catalog drift detected"
+            :description="`${driftSummary} no longer ${driftCount === 1 ? 'exists' : 'exist'} in the catalog`">
+        <template #actions>
+            <UButton color="error"
+                     variant="solid"
+                     size="xs"
+                     icon="i-lucide-trash-2"
+                     label="Clean up"
+                     :loading="cleaningUp"
+                     @click="handleCleanup" />
+        </template>
+    </UAlert>
 </template>

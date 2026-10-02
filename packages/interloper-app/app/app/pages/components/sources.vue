@@ -4,12 +4,11 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { ComponentRecord } from '~/types/component'
 import { relationRefs } from '~/types/component'
 
-definePageMeta({ title: 'Components', fullBleed: true })
-
 const EntityBadge = resolveComponent('EntityBadge')
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
+const views = useComponentViews()
 const { statusBadge, sourceDrift } = useDrift()
 
 const sources = computed(() => componentsStore.byKind('source'))
@@ -126,15 +125,21 @@ const typeKey = ref<string | null>(null)
 </script>
 
 <template>
-    <div>
-        <NavActions>
-            <UButton icon="i-lucide-plus"
-                     label="New source"
-                     @click="handleCreate" />
-        </NavActions>
-        <NavComponentsHub>
+    <UDashboardPanel id="sources">
+        <template #header>
+            <AppNavbar title="Components" />
+            <UDashboardToolbar>
+                <template #left>
+                    <UNavigationMenu :items="views"
+                                     highlight
+                                     class="-mx-1 flex-1" />
+                </template>
+            </UDashboardToolbar>
+        </template>
+        <template #body>
             <DriftBanner />
             <DataTable :columns="columns"
+                       fill
                        :data="sources"
                        :filter="row => typeKey === null || row.key === typeKey"
                        :loading="componentsStore.loading"
@@ -150,29 +155,35 @@ const typeKey = ref<string | null>(null)
                                 :components="sources" />
                 </template>
 
+                <template #actions>
+                    <UButton icon="i-lucide-plus"
+                             label="New source"
+                             @click="handleCreate" />
+                </template>
+
                 <template #empty>
                     <SourcesEmptyState @create="handleCreate"
                                        @create-type="handleCreateFromCatalog" />
                 </template>
             </DataTable>
-        </NavComponentsHub>
 
-        <WizardDrawer v-model:open="drawerOpen"
-                      default-title="New Source"
-                      description="Configure a new source"
-                      :stepper="stepperRef">
-            <SourcesWizard v-if="drawerOpen"
-                            :key="editingSource?.id ?? 'new'"
-                            ref="stepperRef"
-                            :source="editingSource"
-                            :initial-type-key="presetTypeKey"
-                            @created="handleSaved"
-                            @updated="handleSaved" />
-        </WizardDrawer>
+            <WizardDrawer v-model:open="drawerOpen"
+                          default-title="New Source"
+                          description="Configure a new source"
+                          :stepper="stepperRef">
+                <SourcesWizard v-if="drawerOpen"
+                                :key="editingSource?.id ?? 'new'"
+                                ref="stepperRef"
+                                :source="editingSource"
+                                :initial-type-key="presetTypeKey"
+                                @created="handleSaved"
+                                @updated="handleSaved" />
+            </WizardDrawer>
 
-        <ExecutionsRunModal v-if="runModalSource"
-                  v-model:open="runModalOpen"
-                  :target="runModalSource"
-                  partitioned />
-    </div>
+            <ExecutionsRunModal v-if="runModalSource"
+                              v-model:open="runModalOpen"
+                              :target="runModalSource"
+                              partitioned />
+        </template>
+    </UDashboardPanel>
 </template>

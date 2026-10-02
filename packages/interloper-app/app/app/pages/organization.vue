@@ -1,16 +1,6 @@
 <script setup lang="ts">
 import type { OrgMember } from '~/types/organisation'
 
-definePageMeta({
-    title: 'Organization',
-    pageHeader: {
-        eyebrow: 'Workspace',
-        title: 'Members',
-        description: 'Invite your team to your workspace and give everyone the right level of access. '
-            + 'Roles control who can build pipelines, who can only read data, and who can manage the workspace.',
-    },
-})
-
 interface Invitation {
     id: string
     email: string
@@ -134,45 +124,45 @@ const ROLE_CARDS = [
 </script>
 
 <template>
-    <div>
-        <OrganizationMembersTable :members="rows"
-                                  :loading="loading"
-                                  :is-admin="isAdmin"
-                                  @remove-member="removeMember"
-                                  @cancel-invite="cancelInvite"
-                                  @resend-invite="resendInvite">
-            <template v-if="isAdmin" #toolbar>
-                <UButton icon="i-lucide-user-plus"
-                         label="Invite"
-                         @click="inviteOpen = true" />
-            </template>
-        </OrganizationMembersTable>
+    <UDashboardPanel id="organization">
+        <template #header>
+            <AppNavbar title="Organization" />
+        </template>
+        <template #body>
+            <OrganizationMembersTable :members="rows"
+                                      :loading="loading"
+                                      :is-admin="isAdmin"
+                                      @remove-member="removeMember"
+                                      @cancel-invite="cancelInvite"
+                                      @resend-invite="resendInvite">
+                <template v-if="isAdmin" #actions>
+                    <UButton icon="i-lucide-user-plus"
+                             label="Invite"
+                             @click="inviteOpen = true" />
+                </template>
+            </OrganizationMembersTable>
 
-        <div class="mt-11 mb-3.5">
-            <div class="eyebrow text-primary">
-                Access levels
-            </div>
-            <h2 class="text-[19px] font-bold tracking-[-0.015em] text-highlighted mt-2">
-                What each role can do
-            </h2>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="role in ROLE_CARDS"
-                 :key="role.name"
-                 class="border border-default rounded-lg p-[18px] bg-default">
-                <div class="flex items-center gap-2.5">
-                    <div class="size-[34px] rounded-lg flex items-center justify-center"
-                         :class="role.tile">
-                        <UIcon :name="role.icon"
-                               class="size-[18px]" />
+            <UCard title="Access levels"
+                   description="What each role can do in this workspace.">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div v-for="role in ROLE_CARDS"
+                         :key="role.name"
+                         class="rounded-lg bg-default p-4 ring ring-default">
+                        <div class="flex items-center gap-2.5">
+                            <div class="flex size-8 items-center justify-center rounded-lg"
+                                 :class="role.tile">
+                                <UIcon :name="role.icon"
+                                       class="size-4" />
+                            </div>
+                            <div class="text-base font-semibold text-highlighted">{{ role.name }}</div>
+                        </div>
+                        <p class="mt-2.5 text-sm leading-normal text-muted">{{ role.desc }}</p>
                     </div>
-                    <div class="text-[15px] font-bold text-highlighted">{{ role.name }}</div>
                 </div>
-                <p class="text-[13px] text-muted leading-normal mt-2.5">{{ role.desc }}</p>
-            </div>
-        </div>
+            </UCard>
 
-        <OrganizationInviteModal v-model:open="inviteOpen"
-                                 @invited="loadData" />
-    </div>
+            <OrganizationInviteModal v-model:open="inviteOpen"
+                                     @invited="loadData" />
+        </template>
+    </UDashboardPanel>
 </template>

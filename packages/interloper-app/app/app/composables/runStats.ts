@@ -55,10 +55,10 @@ export interface RunStats {
     duration: string | null
 }
 
-/** How many of a run's asset executions are in each status. */
-export function executionCounts(executions: Execution[]): Record<string, number> {
+/** How many items (a run's asset executions, or runs) are in each status. */
+export function executionCounts(items: { status: string }[]): Record<string, number> {
     const counts: Record<string, number> = {}
-    for (const ex of executions) counts[ex.status] = (counts[ex.status] ?? 0) + 1
+    for (const item of items) counts[item.status] = (counts[item.status] ?? 0) + 1
     return counts
 }
 

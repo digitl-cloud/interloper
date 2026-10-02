@@ -78,11 +78,7 @@ onMounted(() => {
                 </template>
             </UDashboardSidebar>
 
-            <UDashboardPanel :ui="{ body: '!p-0 !gap-0 overflow-hidden' }">
-                <template #body>
-                    <slot />
-                </template>
-            </UDashboardPanel>
+            <slot />
         </UDashboardGroup>
     </div>
 </template>

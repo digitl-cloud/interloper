@@ -131,7 +131,7 @@ const frameClass = computed(() => [
     collapsed.value && props.layers === 0 && 'graph-stack-floor',
     props.nested
         ? 'rounded-[14px] border border-[var(--graph-nested-line)] bg-[var(--graph-nested-bg)]'
-        : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-default', props.selected && 'outline-2 outline-primary outline-offset-4'],
+        : ['graph-card rounded-2xl border border-[var(--graph-card-line)] bg-[var(--graph-node-bg)]', props.selected && 'outline-2 outline-primary outline-offset-4'],
 ])
 </script>
 
@@ -191,7 +191,7 @@ const frameClass = computed(() => [
                     <div class="flex shrink-0 items-center"
                          :class="nested ? 'h-16 gap-2.5 px-5' : 'h-[84px] gap-3.5 px-5'">
                         <div class="flex shrink-0 items-center justify-center"
-                             :class="nested ? 'size-7 rounded-lg bg-default' : 'size-9 rounded-[10px] bg-elevated'">
+                             :class="nested ? 'size-7 rounded-lg bg-[var(--graph-node-bg)]' : 'size-9 rounded-[10px] bg-elevated'">
                             <UIcon :name="icon"
                                    :class="nested ? 'size-4' : 'size-5'" />
                         </div>

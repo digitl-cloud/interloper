@@ -6,7 +6,7 @@ export interface NavPage {
     keywords?: string[]
 }
 
-/** A sidebar destination; a hub also carries its routed views, shown as its strip and as its submenu. */
+/** A sidebar destination; a hub also carries its routed views, shown in its page toolbar and as its sidebar submenu. */
 export interface NavDestination extends NavPage {
     views?: NavPage[]
 }
@@ -37,7 +37,7 @@ export function kindPath(kind: string): string {
     return `/components/${kindSlug(kind)}`
 }
 
-/** Views of the Executions hub, in strip order. */
+/** Views of the Executions hub, in toolbar order. */
 export const EXECUTION_VIEWS: NavPage[] = [
     { label: 'Runs', icon: 'i-lucide-activity', to: '/executions/runs', keywords: ['executions', 'history'] },
     { label: 'Backfills', icon: 'i-lucide-history', to: '/executions/backfills', keywords: ['executions'] },
@@ -62,8 +62,8 @@ export function useComponentViews() {
 
 /**
  * Single source of truth for the app's main pages: the sidebar renders the
- * destinations with each hub's views as a submenu, each hub renders those
- * views as a strip, and the command palette flattens both — so none of
+ * destinations with each hub's views as a submenu, each hub page renders those
+ * views in its toolbar, and the command palette flattens both — so none of
  * them can drift apart.
  */
 export function useNavDestinations() {

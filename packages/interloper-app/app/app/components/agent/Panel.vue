@@ -79,7 +79,7 @@ const SUGGESTIONS = [
 </script>
 
 <template>
-    <aside class="fixed top-0 right-0 h-full z-40 bg-default border-l border-default flex flex-col min-h-0 transition-transform duration-300"
+    <aside class="fixed top-0 right-0 h-full z-40 bg-muted border-l border-default flex flex-col min-h-0 transition-transform duration-300"
            :class="open ? 'translate-x-0' : 'translate-x-full'"
            :style="{ width: `${width}px` }">
         <UDashboardResizeHandle class="absolute left-0 inset-y-0 z-10 w-1 -ml-px transition-colors hover:bg-primary/30"
@@ -174,7 +174,7 @@ const SUGGESTIONS = [
                     <button v-for="suggestion in SUGGESTIONS"
                             :key="suggestion"
                             type="button"
-                            class="flex items-center gap-2 text-left px-3 py-2.5 border border-default rounded-lg bg-(--ui-bg-band) text-[13px] text-toned cursor-pointer transition hover:border-primary/40"
+                            class="flex items-center gap-2 text-left px-3 py-2.5 border border-default rounded-lg bg-default text-[13px] text-toned cursor-pointer transition hover:border-primary/40"
                             @click="submit(suggestion)">
                         <UIcon name="i-lucide-arrow-up-right"
                                class="size-3.5 text-dimmed shrink-0" />

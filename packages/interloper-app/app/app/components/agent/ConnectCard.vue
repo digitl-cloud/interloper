@@ -149,7 +149,7 @@ async function submit() {
         <!-- Created: locked summary -->
         <div v-else-if="createdName"
              class="flex items-center gap-2.5">
-            <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
+            <div class="size-8 shrink-0 rounded-md border border-default bg-elevated/50 flex items-center justify-center">
                 <UIcon :name="componentIcon(request.connection_key)"
                        class="size-4.5" />
             </div>
@@ -165,7 +165,7 @@ async function submit() {
         <div v-else
              class="flex flex-col gap-3">
             <div class="flex items-center gap-2.5">
-                <div class="size-8 shrink-0 rounded-md border border-default bg-(--ui-bg-band) flex items-center justify-center">
+                <div class="size-8 shrink-0 rounded-md border border-default bg-elevated/50 flex items-center justify-center">
                     <UIcon :name="componentIcon(request.connection_key)"
                            class="size-4.5" />
                 </div>
