@@ -339,6 +339,39 @@ class TestBuildClass:
         src = DecoratedSource(id="s", normalizer=override)
         assert src.normalizer is override
 
+    def test_a_class_body_key_survives_decorator_field_defaults(self):
+        # The field defaults build a new class over the declaration; it must
+        # not re-derive the key from the class name.
+        @il.source(dataset="raw")
+        class FakeExplicitKeySource(il.Source):
+            key = "explicit_key"
+
+        assert FakeExplicitKeySource.key == "explicit_key"
+        assert FakeExplicitKeySource().dataset == "raw"
+
+    def test_a_decorator_key_wins_over_the_class_body_key(self):
+        @il.source(key="decorator_key", dataset="raw")
+        class FakeTwoKeySource(il.Source):
+            key = "body_key"
+
+        assert FakeTwoKeySource.key == "decorator_key"
+
+    def test_without_a_declared_key_the_name_is_derived(self):
+        @il.source(dataset="raw")
+        class FakeUnkeyedSource(il.Source):
+            pass
+
+        assert FakeUnkeyedSource.key == "fake_unkeyed_source"
+
+    def test_a_genuine_subclass_still_derives_its_own_key(self):
+        class FakeKeyedSource(il.Source):
+            key = "keyed"
+
+        class FakeChildSource(FakeKeyedSource):
+            pass
+
+        assert FakeChildSource.key == "fake_child_source"
+
 
 # -- Spec.dump_value -----------------------------------------------------------
 
