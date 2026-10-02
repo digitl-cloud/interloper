@@ -148,6 +148,9 @@
         <loc>https://docs.interloper.dev/superpowers/plans/2026-09-29-backfill-concurrency/</loc>
       </url>
       <url>
+        <loc>https://docs.interloper.dev/superpowers/plans/2026-09-30-overview-page/</loc>
+      </url>
+      <url>
         <loc>https://docs.interloper.dev/superpowers/specs/2026-09-04-downstream-assets-design/</loc>
       </url>
       <url>
@@ -167,6 +170,9 @@
       </url>
       <url>
         <loc>https://docs.interloper.dev/superpowers/specs/2026-09-29-backfill-hook-events-design/</loc>
+      </url>
+      <url>
+        <loc>https://docs.interloper.dev/superpowers/specs/2026-09-30-overview-page-design/</loc>
       </url>
       <url>
         <loc>https://docs.interloper.dev/superpowers/specs/2026-09-30-pydantic-ai-agent-design/</loc>
