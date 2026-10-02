@@ -2116,6 +2116,10 @@ already extends that anchor:</p>
 unknown one is a <code>TypeError</code> at decoration listing them. Names carrying the framework's own
 machinery (<code>kind</code>, <code>relations</code>, <code>internal_fields</code>, <code>asset_types</code>, <code>model_config</code>, anything private)
 and the per-instance <code>id</code> are never routable.</p>
+<p>Every ClassVar value is checked against the type its annotation declares (<code>tags</code> against
+<code>list[str]</code>, <code>maturity</code> against <code>il.Maturity</code>, ...), whether the decorator passes it or the class
+body sets it, so a wrong one is a <code>TypeError</code> naming the class and the setting, raised where it is
+written. Values are checked, not converted: the class keeps what was declared.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">key</span><span class="o">=</span><span class="s2">"ads_stats"</span><span class="p">,</span>                                          <span class="c1"># a ClassVar of il.Asset</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Report"</span><span class="p">],</span>

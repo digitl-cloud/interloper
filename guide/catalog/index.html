@@ -2158,9 +2158,8 @@ what UIs render forms and pickers from.</p>
 </tr>
 </tbody>
 </table>
-<p>The value is set through the decorator, as <code>il.Maturity</code> or its string, or as a class attribute
-(<code>maturity = il.Maturity.ALPHA</code>). The component's definition validates it, so an unknown value
-fails when the catalog is built. It is
+<p>The value is <code>il.Maturity</code> or its string, set through the decorator or as a class attribute
+(<code>maturity = "alpha"</code>); anything else is a <code>TypeError</code> where it is written. It is
 informational: a component behaves the same at every level, and the app shows a Deprecated, Alpha
 or Beta badge wherever the component is offered or listed.</p>
 <p>An asset's definition carries the less mature of its own and its source's maturity, so an alpha
