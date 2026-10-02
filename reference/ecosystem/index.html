@@ -2013,6 +2013,10 @@ own README. All are versioned and released together.</p>
 <td>Pulls in <code>interloper-aws</code>.</td>
 </tr>
 <tr>
+<td><code>interloper-core[azure]</code></td>
+<td>Pulls in <code>interloper-azure</code>.</td>
+</tr>
+<tr>
 <td><code>interloper-core[google-cloud]</code></td>
 <td>Pulls in <code>interloper-google-cloud</code>.</td>
 </tr>
@@ -2070,6 +2074,11 @@ own README. All are versioned and released together.</p>
 <tr>
 <td><code>interloper-aws</code></td>
 <td><code>AWSConnection</code> (an access key pair, or boto3's default credential chain), <code>S3Destination</code> (an <code>ObjectStoreDestination</code> over Amazon S3: hive-partitioned Parquet, JSONL or CSV).</td>
+<td><code>interloper.components</code></td>
+</tr>
+<tr>
+<td><code>interloper-azure</code></td>
+<td><code>AzureConnection</code> (a Microsoft Entra service principal), <code>FabricWarehouseDestination</code> (a <code>DatabaseDestination</code> over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts).</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>
