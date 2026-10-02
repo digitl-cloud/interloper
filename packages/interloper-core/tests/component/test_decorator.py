@@ -50,6 +50,20 @@ class TestOverrideChannel:
 
         assert FakeAlphaDestination.definition().maturity is il.Maturity.ALPHA
 
+    def test_an_unknown_maturity_override_raises_at_decoration(self):
+        with pytest.raises(TypeError, match=r"rows\.maturity: Input should be"):
+
+            @il.asset(maturity="gamma")
+            def rows() -> list[dict[str, Any]]:
+                return []
+
+    def test_a_classvar_override_on_a_subclass_is_validated_too(self):
+        with pytest.raises(TypeError, match=r"FakeTaggedDestination\.tags: Input should be a valid list"):
+
+            @il.destination(tags="Cloud")
+            class FakeTaggedDestination(il.MemoryDestination):
+                pass
+
     def test_a_field_override_becomes_the_field_default(self):
         @il.asset(dataset="raw")
         def rows() -> list[dict[str, Any]]:

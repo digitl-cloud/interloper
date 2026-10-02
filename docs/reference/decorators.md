@@ -20,6 +20,11 @@ unknown one is a `TypeError` at decoration listing them. Names carrying the fram
 machinery (`kind`, `relations`, `internal_fields`, `asset_types`, `model_config`, anything private)
 and the per-instance `id` are never routable.
 
+Every ClassVar value is checked against the type its annotation declares (`tags` against
+`list[str]`, `maturity` against `il.Maturity`, ...), whether the decorator passes it or the class
+body sets it, so a wrong one is a `TypeError` naming the class and the setting, raised where it is
+written. Values are checked, not converted: the class keeps what was declared.
+
 ```py
 @il.asset(
     key="ads_stats",                                          # a ClassVar of il.Asset

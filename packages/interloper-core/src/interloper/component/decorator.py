@@ -22,19 +22,13 @@ else:
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
-from typing import Any, ClassVar, TypeVar, get_origin
+from typing import Any, TypeVar
 
 from interloper.component.base import Component
 from interloper.component.relation import Relation
 
 ComponentT = TypeVar("ComponentT", bound=Component)
-
-# Names carrying the framework's own machinery: never routable, whatever their
-# annotation says. `relations` has its own channel, the rest are collected, not
-# declared.
-_RESERVED = frozenset({"kind", "relations", "internal_fields", "asset_types", "model_config"})
 
 # The identity field is per-instance, so it is a constructor argument and never
 # a class-level default.
@@ -76,7 +70,9 @@ def decorate(
     declaring = target if isinstance(target, type) and issubclass(target, anchor) else anchor
     classvars, fields = _route(declaring, overrides)
     declared = _relations(declaring, relations or {})
-    return build(target, classvars=classvars, fields=fields, relations=declared)
+    built = build(target, classvars=classvars, fields=fields, relations=declared)
+    built._validate_classvars()
+    return built
 
 
 def declare(cls: type[ComponentT], relations: dict[str, Relation]) -> type[ComponentT]:
@@ -125,7 +121,7 @@ def _route(anchor: type[Component], overrides: dict[str, Any]) -> tuple[dict[str
     Raises:
         TypeError: If a name is both a ClassVar and a field, or neither.
     """
-    classvar_names = _classvar_names(anchor)
+    classvar_names = set(anchor._classvars())
     field_names = {name for name in anchor.model_fields if name != _IDENTITY_FIELD}
 
     classvars: dict[str, Any] = {}
@@ -149,47 +145,6 @@ def _route(anchor: type[Component], overrides: dict[str, Any]) -> tuple[dict[str
             accepted = sorted(classvar_names | field_names)
             raise TypeError(f"{anchor.__name__} does not accept '{name}'; accepted: {accepted}")
     return classvars, fields
-
-
-def _classvar_names(anchor: type[Component]) -> set[str]:
-    """The public, non-reserved ClassVar names anywhere in the anchor's MRO.
-
-    Args:
-        anchor: The class whose MRO is walked.
-
-    Returns:
-        Every name the MRO annotates ``ClassVar`` that a decorator may write.
-    """
-    names: set[str] = set()
-    for base in anchor.__mro__:
-        for name, hint in inspect.get_annotations(base).items():
-            if name.startswith("_") or name in _RESERVED:
-                continue
-            if _is_classvar(hint):
-                names.add(name)
-    return names
-
-
-def _is_classvar(hint: Any) -> bool:
-    """Whether an annotation, evaluated or still a string, is a ``ClassVar``.
-
-    Both forms occur: the framework's own modules import
-    ``annotations`` from ``__future__``, so their annotations are strings,
-    while a class built by :meth:`~interloper.serializable.base.Serializable.build_class`
-    carries a bare ``ClassVar`` object for each stamped name.
-
-    Args:
-        hint: The annotation as written.
-
-    Returns:
-        True when the annotation is ``ClassVar``, subscripted or bare, however
-        the ``typing`` module it comes from is spelled.
-    """
-    if hint is ClassVar or get_origin(hint) is ClassVar:
-        return True
-    if isinstance(hint, str):
-        return hint.partition("[")[0].rpartition(".")[2].strip() == "ClassVar"
-    return False
 
 
 def _relations(anchor: type[Component], relations: dict[str, Any]) -> dict[str, Relation]:
