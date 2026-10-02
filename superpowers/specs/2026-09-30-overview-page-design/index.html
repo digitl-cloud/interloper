@@ -1995,23 +1995,55 @@ from the existing <code>run_counts</code>.</p>
 </ul>
 <p>Rows stay what <code>useRunTimelineRows</code> produces today: jobs, ad-hoc asset runs, connection renewals.</p>
 <h3 id="4-partition-coverage">4. Partition coverage<a class="headerlink" href="#4-partition-coverage" title="Permanent link">&para;</a></h3>
-<p>A calendar heatmap (ECharts <code>calendar</code> + <code>heatmap</code>), keyed by <strong>partition date</strong>, with a job
-filter ("All jobs" or one job) and a 3, 6 or 12 month window (default 6). Cell size shrinks as
-the window grows, following the design (22, 15, 11 px).</p>
-<p>Per job, per day:</p>
+<p>A calendar heatmap (ECharts <code>calendar</code> + <code>heatmap</code>), keyed by <strong>partition date</strong>, with a source
+filter ("All sources" or one group) and a 3, 6 or 12 month window (default 3). Cell size shrinks
+as the window grows, following the design (22, 15, 11 px).</p>
+<p>Coverage is a property of an asset's data, not of what triggered a run: it is counted per asset
+and partition from runs of <strong>any</strong> target (job, source, asset, backfill), so a manual asset re-run
+heals a day and a source with no job still shows its history.</p>
 <ul>
-<li><strong>Assets counted</strong>: those the job executed at least once in the window.</li>
-<li><strong>Days counted</strong>: from the job's first attempted partition in the window to the last day of the
-  last period that closed before today (yesterday for a daily or hourly job, the end of last month
-  for a monthly one), or to its last attempted partition when later (the open period counts once
-  attempted). A disabled job stops at its last attempted partition.</li>
-<li><strong>Granularity</strong>: an hourly partition counts toward its day (24 per asset per day; today, the
-  hours elapsed since midnight UTC, at least one, or the hours attempted when more); a monthly or
-  yearly partition counts toward every day it spans, up to today.</li>
-<li><strong>expected</strong> = asset-partitions for the day; <strong>covered</strong> = those with a successful execution in
-  any run; <strong>failed</strong> = attempted, never succeeded; <strong>missing</strong> = the rest.</li>
+<li><strong>Assets counted</strong>: the organisation's asset rows whose catalog definition is partitioned
+  (<code>AssetDefinition.partitioning</code>). An asset whose definition no longer resolves (drift) is left
+  out.</li>
+<li><strong>Group</strong>: an owned asset counts toward its parent source; a standalone asset is its own group.
+  A group is named by its row's <code>name</code>, else its <code>key</code>, and has kind <code>source</code> or <code>asset</code>.</li>
+<li><strong>Evidence</strong>: an asset-partition is <strong>covered</strong> once any execution succeeded, <strong>failed</strong> when an
+  execution failed and none succeeded. One attempted but only in flight (queued, running) or
+  canceled is neither, and reads as missing.</li>
+<li><strong>Expected range per asset</strong>, in the asset's own granularity, then rolled onto days:</li>
+<li>start: the declared <code>partitioning.start</code> when set, else the first day of the earliest
+    attempted partition (all-time, not only the window);</li>
+<li>end: the last day of the latest attempted partition (all-time). When the asset is
+    <strong>scheduled</strong> (an enabled job targets it or its parent source), enabled, and under an enabled
+    parent source (a standalone asset is its own parent here), the end is pushed
+    to the last period closed before today if that is later: yesterday for a daily asset, the end
+    of last month or year for a monthly or yearly one, the hours elapsed today for an hourly one;</li>
+<li>clipped to the window and to today. No evidence and no declared start: nothing expected. An
+    unscheduled or disabled asset, or one under a disabled source, expects nothing past its last
+    evidence. Days in the range with
+    nothing attempted are missing.</li>
+<li><strong>Granularity</strong>: an hourly partition counts toward its day (24 slots per asset; on the day of a
+  declared start, only the hours from that start; today, only the hours elapsed since midnight
+  UTC; at least one); a day partition counts once; a monthly or yearly
+  partition counts toward every day it spans, up to today. A day's expected count is raised to
+  the partitions attempted on it when more.</li>
+<li>Per day, an asset contributes <strong>expected</strong> slots, <strong>covered</strong>, <strong>failed</strong> and the greatest
+  failed run id; these are summed per group and day, keeping the greatest failed run id.
+  <strong>missing</strong> = expected minus covered minus failed.</li>
 </ul>
-<p>Cell colour for a day (summed over the filtered jobs), matching the design:</p>
+<p><code>GET /overview/coverage?since=YYYY-MM-DD&amp;until=YYYY-MM-DD</code> answers:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"since"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-07-01"</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">"until"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-02"</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">"sources"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Shop"</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"source"</span><span class="p">}],</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">"days"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span><span class="p">{</span><span class="nt">"date"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-09-29"</span><span class="p">,</span><span class="w"> </span><span class="nt">"source_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="p">,</span><span class="w"> </span><span class="nt">"expected"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nt">"covered"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="nt">"failed"</span><span class="p">:</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="nt">"failed_run_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid-or-null"</span><span class="p">}</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>sources</code> lists every group with at least one day, ordered by name; <code>days</code> holds one entry per
+group and day with anything expected, ordered by group then date.</p>
+<p>Cell colour for a day (summed over the filtered groups), matching the design:</p>
 <ul>
 <li>nothing expected: neutral with an inset border ("Not expected")</li>
 <li>any failed: red, stronger with the failed share</li>
@@ -2019,10 +2051,13 @@ the window grows, following the design (22, 15, 11 px).</p>
 <li>covered at least 60%: amber; below: light amber</li>
 </ul>
 <p>Summary line: "{covered %} of {expected} partitions · {n} days with gaps · {n} with failures".</p>
-<p>Clicking a day opens the detail panel under the calendar: per job a covered/failed bar and a
-count, then one action: "Complete", "Open run" (a sample failed run of that job and day), or, for
-editors when there are gaps without failures, "Backfill", which opens <code>RunModal</code> preset to that
-job and day.</p>
+<p>Clicking a day opens the detail panel under the calendar, one row per group with a kind icon
+(source, or standalone asset), its covered/failed bar and its count. Rows with problems come
+first, ordered by failed (descending), then missing (descending), then name; at most 5 problem
+rows show, and the rest fold behind a note ("N more with gaps · M complete") with "Show all" /
+"Show less". Each row carries one action: "Open run" (a sample failed run of that group and day),
+"Run" (editors, when there are gaps without failures: opens <code>RunModal</code> on that group, on that day
+for a daily group; a non-daily group's modal opens on its own default period), or "Complete".</p>
 <h3 id="5-coming-up-just-happened">5. Coming up / Just happened<a class="headerlink" href="#5-coming-up-just-happened" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Coming up</strong>: enabled jobs ordered by their next firing (<code>state.next_run_at</code>, first 4), each
@@ -2052,11 +2087,11 @@ or healthy.</p>
 <p>The cut is the one the codebase already makes: <code>interloper-db</code> owns what the data says,
 <code>interloper-api</code> owns what it means for the reader. No new package, no new dependency, no new
 edge in the dependency graph.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>interloper-core        framework, partitioning (TimePartitionWindow)
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>interloper-db          store: rows and aggregate reads      -&gt; core
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>interloper-api         HTTP: composes rows into the page    -&gt; core, db
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>interloper-toolkit     agent/MCP analysis                    -&gt; core, db   (untouched)
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>interloper-scheduler   cron                                  -&gt; core, db   (untouched)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper-core        framework, partitioning (TimePartitionWindow)
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper-db          store: rows and aggregate reads      -&gt; core
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>interloper-api         HTTP: composes rows into the page    -&gt; core, db
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>interloper-toolkit     agent/MCP analysis                    -&gt; core, db   (untouched)
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>interloper-scheduler   cron                                  -&gt; core, db   (untouched)
 </span></code></pre></div>
 <p><strong>Store</strong> (<code>interloper-db</code>), aggregate reads next to their siblings (<code>error_groups</code>,
 <code>partition_coverage</code>, <code>latest_executions</code>), each returning typed rows that know nothing about
@@ -2070,9 +2105,15 @@ the page:</p>
   route), the attention list the failed stacks completed in that window, and "Just happened" the
   latest completed stacks, most recently completed first.</li>
 <li><code>events.coverage_rows(org_id, since, until)</code>: the org-wide sibling of <code>partition_coverage</code>:
-  one row per job, partition, asset with whether it ever succeeded, whether any execution
-  failed, plus a failed run id. An attempted asset-partition that neither succeeded nor failed
-  (still in flight, or canceled) stays missing rather than failed.</li>
+  one row per asset and partition overlapping the window, from runs of any target, with whether
+  it ever succeeded, whether any execution failed, and the greatest failed run id. An attempted
+  asset-partition that neither succeeded nor failed (still in flight, or canceled) stays missing
+  rather than failed.</li>
+<li><code>events.partition_bounds(org_id)</code>: per asset, the first day of its earliest and the last day of
+  its latest attempted partition, all-time, from runs of any target, in one grouped query.</li>
+<li><code>components.asset_partitionings(org_id)</code>: each partitioned asset row's <code>TimePartitionConfig</code>
+  (granularity, declared start) from its catalog definition, an owned asset resolving through
+  its parent source; drifted rows are skipped.</li>
 <li><code>events.latest_by_component(org_id, event_types=, since=)</code>: the latest <code>hook_fired</code> /
   <code>hook_failed</code> event per hook, bounded to the last 30 days.</li>
 <li><code>components.job_partition_granularities(job_ids)</code>: each job's target granularity in one read.</li>
