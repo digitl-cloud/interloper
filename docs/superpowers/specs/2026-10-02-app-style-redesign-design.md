@@ -87,8 +87,9 @@ Neutrals are Tailwind `neutral` (pure greys, sampled from the reference screensh
 - **Form pages** (profile, admin config) cap their column at `max-w-3xl`, centered.
 - **Timeline**: a card with the window's run breakdown by status (`ExecutionsRunStatusBar`, shared
   with run detail; its chips filter the bars), then a full-height canvas card (`CANVAS_CARD_UI`,
-  `utils/card.ts`) whose header carries the window controls. Run bars are neutral raised blocks with a
-  status-coloured bottom edge.
+  `utils/card.ts`) whose header carries the window controls. Run bars keep their solid status fill:
+  neutral blocks with a status edge broke down on dense lanes (adjacent runs chained into pills,
+  short runs shrank to grey capsules).
 - **Graph**: a row on the page body (`GraphToolbar`: status and group-by pill tabs left, main
   action right; no toolbar strip) above a header-less full-height canvas card. The asset side
   panel (`GraphAssetPanel`) is its own card, 12px from its neighbour across a thin resize handle,
