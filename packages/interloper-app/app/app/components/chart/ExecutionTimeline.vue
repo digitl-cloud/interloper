@@ -663,7 +663,7 @@ watch(axisMax, () => {
                          class="absolute flex items-center gap-1.5 overflow-hidden rounded-md cursor-pointer transition-opacity"
                          :class="[
                              labelWidth ? '' : 'px-2',
-                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : 'border-b-[3px] bg-elevated',
+                             layout.bar.status === 'scheduled' ? 'border-[1.5px] border-dashed border-dimmed bg-default' : '',
                          ]"
                          :style="{
                              top: index * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2 + 'px',
@@ -671,15 +671,15 @@ watch(axisMax, () => {
                              width: `${layout.geometry.width}%`,
                              minWidth: '6px',
                              height: BAR_HEIGHT + 'px',
-                             borderBottomColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
+                             backgroundColor: layout.bar.status === 'scheduled' ? undefined : getStatusColor(layout.bar.status),
                              opacity: rowOpacity(row.id) * 0.96,
                          }"
                          :title="barTooltip(row, layout)"
                          @click.stop="onBarClick(layout, row)">
                         <template v-if="!labelWidth">
                             <UIcon :name="row.icon"
-                                   class="size-3.5 shrink-0 text-muted" />
-                            <span class="truncate text-xs font-semibold text-highlighted">{{ row.name }}</span>
+                                   class="size-3.5 shrink-0 text-white" />
+                            <span class="truncate text-xs font-bold text-white">{{ row.name }}</span>
                         </template>
                     </div>
                 </template>
