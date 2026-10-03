@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.100.0 (2026-10-03)
+
+### Bug Fixes
+
+- **app**: Restore solid status-coloured timeline bars
+  ([`fd3e232`](https://github.com/digitl-cloud/interloper/commit/fd3e23201a805123fc628dcc4deca784bfd1ac2b))
+
+- **db**: Count only billable runs when reconciling the usage ledger
+  ([`32998f9`](https://github.com/digitl-cloud/interloper/commit/32998f94b0bc5a7d583266146c88a8d4ecf036b1))
+
+### Features
+
+- **app**: Restyle the wizard drawers on the two-tone card surfaces
+  ([`65f8dae`](https://github.com/digitl-cloud/interloper/commit/65f8dae1dda66a3d9cd62ebce21fbb049ca15a46))
+
+
 ## v0.99.0 (2026-10-02)
 
 ### Bug Fixes
