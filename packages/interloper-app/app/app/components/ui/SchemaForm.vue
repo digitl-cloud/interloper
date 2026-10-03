@@ -694,7 +694,7 @@ defineExpose({ setErrors })
             <template v-else>
                 <div v-for="(block, blockIndex) in section.blocks"
                      :key="blockIndex"
-                     :class="block.signIn ? 'flex flex-col gap-4 rounded-md border border-default p-4' : 'contents'">
+                     :class="block.signIn ? 'flex flex-col gap-4 rounded-lg bg-muted p-4 ring ring-default' : 'contents'">
                     <UTabs v-if="block.signIn"
                            v-model="activeTab"
                            :items="oauthTabs"
@@ -835,7 +835,7 @@ defineExpose({ setErrors })
                                      :model-value="data[field.key] != null"
                                      @update:model-value="(on: boolean) => data[field.key] = on ? {} : null" />
                             <div v-if="data[field.key] != null"
-                                 class="rounded-md border border-default p-4">
+                                 class="rounded-lg bg-muted p-4 ring ring-default">
                                 <SchemaForm v-model:data="data[field.key]"
                                             v-model:is-valid="nestedValid[field.key]"
                                             :schema="nestedSchemas[field.key]!"

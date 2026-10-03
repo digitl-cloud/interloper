@@ -53,8 +53,6 @@ const groups = computed(() => {
         <UInput v-model="search"
                 placeholder="Search..."
                 icon="i-lucide-search"
-                variant="subtle"
-                :ui="{ base: 'bg-muted' }"
                 class="w-full" />
 
         <div v-if="filtered.length === 0"
@@ -72,13 +70,11 @@ const groups = computed(() => {
                     <SelectionCard v-for="defn in items"
                                    :key="defn.key"
                                    :selected="selectedKey === defn.key"
-                                   class="relative flex flex-col items-center gap-2.5 px-3.5 py-[18px]"
+                                   class="relative flex flex-col items-center gap-2.5 px-3.5 py-4"
                                    @select="selectedKey = defn.key">
-                        <div class="size-11 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
-                            <UIcon :name="componentIcon(defn.key)"
-                                   class="size-[26px]" />
-                        </div>
-                        <span class="text-[13.5px] font-semibold text-highlighted text-center leading-tight line-clamp-2">{{ defn.name }}</span>
+                        <UIcon :name="componentIcon(defn.key)"
+                               class="size-7 shrink-0" />
+                        <span class="text-sm font-semibold text-highlighted text-center leading-tight line-clamp-2">{{ defn.name }}</span>
                         <div v-if="showsMaturity(defn.maturity)"
                              class="absolute top-2 right-2">
                             <MaturityBadge :maturity="defn.maturity" />

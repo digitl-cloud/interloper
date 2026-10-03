@@ -44,14 +44,12 @@ const flagged = computed(() => showsMaturity(props.maturity))
             </div>
             <div class="flex items-center gap-3"
                  :class="{ 'pr-16': flagged }">
-                <div class="size-[38px] shrink-0 rounded-lg border border-default flex items-center justify-center">
-                    <UIcon :name="icon"
-                           class="size-5" />
-                </div>
+                <UIcon :name="icon"
+                       class="size-6 shrink-0" />
                 <div class="flex-1 min-w-0">
-                    <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
+                    <div class="text-sm font-semibold text-highlighted truncate">{{ title }}</div>
                     <div v-if="caption"
-                         class="font-mono text-[11px] uppercase tracking-[0.04em] text-dimmed mt-0.5 truncate">
+                         class="font-mono text-xs uppercase tracking-[0.04em] text-dimmed mt-0.5 truncate">
                         {{ caption }}
                     </div>
                 </div>
@@ -59,7 +57,7 @@ const flagged = computed(() => showsMaturity(props.maturity))
         </template>
 
         <p v-if="description"
-           class="text-[13px] text-muted leading-normal line-clamp-2">
+           class="text-sm text-muted leading-normal line-clamp-2">
             {{ description }}
         </p>
 
@@ -75,7 +73,7 @@ const flagged = computed(() => showsMaturity(props.maturity))
                         {{ chip.label }}
                     </span>
                 </div>
-                <span class="flex items-center gap-1.5 text-primary text-[13px] font-semibold shrink-0">
+                <span class="flex items-center gap-1.5 text-primary text-sm font-semibold shrink-0">
                     Set up
                     <UIcon name="i-lucide-arrow-right"
                            class="size-3" />
@@ -88,7 +86,7 @@ const flagged = computed(() => showsMaturity(props.maturity))
            class="relative"
            :class="interactive
                ? 'cursor-pointer transition hover:ring-primary/40 hover:shadow-md hover:-translate-y-0.5'
-               : 'bg-elevated/50'"
+               : ''"
            :ui="{
                root: 'rounded-lg shadow-xs',
                body: 'p-3.5 px-4 sm:p-3.5 sm:px-4',
@@ -98,14 +96,12 @@ const flagged = computed(() => showsMaturity(props.maturity))
             <MaturityBadge :maturity="maturity" />
         </div>
         <div class="flex items-center gap-3">
-            <div class="size-10 shrink-0 rounded-lg border border-default bg-default flex items-center justify-center">
-                <UIcon :name="icon"
-                       class="size-6" />
-            </div>
+            <UIcon :name="icon"
+                   class="size-6 shrink-0" />
             <div class="flex-1 min-w-0">
-                <div class="text-[14.5px] font-semibold text-highlighted truncate">{{ title }}</div>
+                <div class="text-sm font-semibold text-highlighted truncate">{{ title }}</div>
                 <div v-if="caption"
-                     class="font-mono text-[11px] uppercase tracking-[0.05em] text-dimmed mt-0.5 truncate">
+                     class="font-mono text-xs uppercase tracking-[0.05em] text-dimmed mt-0.5 truncate">
                     {{ caption }}
                 </div>
             </div>

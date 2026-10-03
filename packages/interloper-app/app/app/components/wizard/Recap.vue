@@ -6,15 +6,15 @@ defineProps<{
 </script>
 
 <template>
-    <div class="border border-default rounded-lg px-3.5 py-1 bg-default">
+    <div class="rounded-lg bg-muted px-3.5 py-1 ring ring-default">
         <div v-for="(row, i) in rows"
              :key="row.label"
              class="flex items-center gap-2.5 py-2.5"
              :class="i < rows.length - 1 ? 'border-b border-default' : ''">
             <UIcon :name="row.icon"
                    class="size-4 text-dimmed shrink-0" />
-            <span class="flex-1 text-[13px] text-muted">{{ row.label }}</span>
-            <span class="text-[13px] font-semibold text-highlighted text-right max-w-[60%] truncate">{{ row.value }}</span>
+            <span class="flex-1 text-sm text-muted">{{ row.label }}</span>
+            <span class="text-sm font-semibold text-highlighted text-right max-w-[60%] truncate">{{ row.value }}</span>
         </div>
     </div>
 </template>
