@@ -1956,8 +1956,9 @@ wherever our bespoke chrome only re-implements them.</p>
 <li><strong>Form pages</strong> (profile, admin config) cap their column at <code>max-w-3xl</code>, centered.</li>
 <li><strong>Timeline</strong>: a card with the window's run breakdown by status (<code>ExecutionsRunStatusBar</code>, shared
   with run detail; its chips filter the bars), then a full-height canvas card (<code>CANVAS_CARD_UI</code>,
-  <code>utils/card.ts</code>) whose header carries the window controls. Run bars are neutral raised blocks with a
-  status-coloured bottom edge.</li>
+  <code>utils/card.ts</code>) whose header carries the window controls. Run bars keep their solid status fill:
+  neutral blocks with a status edge broke down on dense lanes (adjacent runs chained into pills,
+  short runs shrank to grey capsules).</li>
 <li><strong>Graph</strong>: a row on the page body (<code>GraphToolbar</code>: status and group-by pill tabs left, main
   action right; no toolbar strip) above a header-less full-height canvas card. The asset side
   panel (<code>GraphAssetPanel</code>) is its own card, 12px from its neighbour across a thin resize handle,
