@@ -41,9 +41,9 @@ withDefaults(defineProps<{
         <template #body>
             <UButton icon="i-lucide-x"
                      color="neutral"
-                     variant="soft"
+                     variant="ghost"
                      size="md"
-                     class="absolute top-[22px] right-[26px] rounded-md text-muted"
+                     class="absolute top-[22px] right-[26px] text-muted"
                      aria-label="Close"
                      @click="open = false" />
             <slot />

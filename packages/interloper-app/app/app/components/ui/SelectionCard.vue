@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Wizard "pick an option" card: bordered card that shows the accent
- * border + tint when selected. Content comes from the default slot.
+ * Wizard "pick an option" tile: a container-tone card on the drawer's panel
+ * tone, with the accent ring + tint when selected. Content comes from the
+ * default slot.
  */
 withDefaults(defineProps<{
     selected?: boolean
@@ -15,10 +16,10 @@ const emit = defineEmits<{ select: [] }>()
 <template>
     <component :is="as"
                :type="as === 'button' ? 'button' : undefined"
-               class="rounded-lg border-2 text-left cursor-pointer transition"
+               class="rounded-lg text-left cursor-pointer transition"
                :class="selected
-                   ? 'border-primary bg-primary/5'
-                   : 'border-default bg-default hover:border-primary/40'"
+                   ? 'ring-2 ring-primary bg-primary/5'
+                   : 'ring ring-default bg-muted hover:ring-primary/40'"
                @click="emit('select')">
         <slot />
     </component>

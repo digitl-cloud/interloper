@@ -188,7 +188,7 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
 
 <template>
     <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
             <UTabs v-if="tagTabs.length > 2"
                    v-model="tagFilter"
                    :items="tagTabs"
@@ -198,8 +198,7 @@ function setDep(assetKey: string, dep: AssetDep, value: string | string[]) {
             <UInput v-model="search"
                     placeholder="Search assets..."
                     icon="i-lucide-search"
-                    size="sm"
-                    class="w-56" />
+                    class="min-w-0 flex-1" />
         </div>
 
         <div class="flex items-center justify-between">
