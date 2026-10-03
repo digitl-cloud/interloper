@@ -324,9 +324,10 @@ class QuotaStore:
             return {org_id: count for org_id, count in rows}
 
     def count_successful_runs_by_org(self, period_start: dt.date) -> dict[UUID, int]:
-        """Recompute the ledger's truth: successful runs completed in the period.
+        """Recompute the ledger's truth: successful billable runs completed in the period.
 
         Counts on ``completed_at`` — the nearest column to the charge moment.
+        Non-billable runs are left out, as settlement never charges them.
         Reconciliation compares this against ``usage.used``.
 
         Args:
@@ -334,15 +335,20 @@ class QuotaStore:
                 following month bounds the window.
 
         Returns:
-            The successful-run count keyed by org id; organisations with none
-            are absent.
+            The successful billable-run count keyed by org id; organisations
+            with none are absent.
         """
         with session_scope(self._engine) as session:
             lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
             upper = datetime.combine(add_months(period_start, 1), dt.time.min, tzinfo=timezone.utc)
             rows = session.exec(
                 select(Run.org_id, func.count())
-                .where(Run.status == "success", col(Run.completed_at) >= lower, col(Run.completed_at) < upper)
+                .where(
+                    Run.status == "success",
+                    col(Run.billable).is_(True),
+                    col(Run.completed_at) >= lower,
+                    col(Run.completed_at) < upper,
+                )
                 .group_by(Run.org_id)  # ty: ignore[invalid-argument-type]
             ).all()
             return dict(rows)

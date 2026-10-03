@@ -71,6 +71,7 @@ class TestQuotaReads:
             session.add(Run(id=uuid4(), org_id=org_id, status="success", completed_at=inside))
             session.add(Run(id=uuid4(), org_id=org_id, status="success", completed_at=outside))
             session.add(Run(id=uuid4(), org_id=org_id, status="failed", completed_at=inside))
+            session.add(Run(id=uuid4(), org_id=org_id, status="success", completed_at=inside, billable=False))
             session.commit()
         assert store.quotas.count_successful_runs_by_org(period) == {org_id: 1}
 
@@ -268,6 +269,11 @@ class TestReconcileUsage:
 
     def test_in_sync_reports_nothing(self, store: Store, make_run: RunFactory):
         run = make_run()
+        store.runs.complete(run.id, success=True)
+        assert store.quotas.reconcile_usage() == []
+
+    def test_a_successful_non_billable_run_is_not_drift(self, store: Store, make_run: RunFactory):
+        run = make_run(billable=False)
         store.runs.complete(run.id, success=True)
         assert store.quotas.reconcile_usage() == []
 
