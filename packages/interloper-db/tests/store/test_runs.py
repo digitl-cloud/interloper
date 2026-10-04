@@ -922,6 +922,30 @@ class TestRetryValidation:
         with pytest.raises(ValueError, match="latest attempt 2 is 'success'"):
             store.runs.retry(first.id)
 
+    def test_a_head_superseded_while_its_lock_was_awaited_is_refused(self, store: Store):
+        # SQLite has no row locks, so the rival retry is written right after
+        # the locked read of the head, where a concurrent commit would land.
+        first = store.runs.create(_ORG_ID)
+        store.runs.complete(first.id, success=False)
+
+        rivals: list[Run] = []
+
+        def commit_a_rival_retry(orm_execute_state: Any) -> Any:
+            if rivals or not orm_execute_state.execution_options.get("populate_existing"):
+                return None
+            locked_read = orm_execute_state.invoke_statement().freeze()
+            rivals.append(Run(org_id=_ORG_ID, status="queued", retry_of=first.id, root_run_id=first.id, attempt=2))
+            orm_execute_state.session.add(rivals[0])
+            return locked_read()
+
+        event.listen(Session, "do_orm_execute", commit_a_rival_retry)
+        try:
+            with pytest.raises(ValueError, match="stack was retried concurrently"):
+                store.runs.retry(first.id)
+        finally:
+            event.remove(Session, "do_orm_execute", commit_a_rival_retry)
+        assert rivals
+
     def test_the_failed_scope_is_accepted(self, store: Store):
         run = store.runs.create(_ORG_ID)
         store.runs.complete(run.id, success=False)
