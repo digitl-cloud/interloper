@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -26,15 +27,7 @@ import httpx2
 from fastapi import APIRouter, HTTPException, Query
 from interloper.component import KINDS
 from interloper.connection.base import Connection
-from interloper.errors import (
-    CatalogKeyError,
-    ComponentDriftError,
-    ConfigError,
-    ConnectionCheckError,
-    DataNotFoundError,
-    InUseError,
-    NotFoundError,
-)
+from interloper.errors import ComponentDriftError, ConnectionCheckError, DataNotFoundError
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
@@ -179,8 +172,8 @@ class ComponentResponse(BaseModel):
     parent_id: UUID | None = None
     relations: dict[str, list[RelationRef]] = {}
     children: list[ComponentResponse] = []
-    created_at: str | None = None
-    updated_at: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @classmethod
     def from_row(cls, 
@@ -243,8 +236,8 @@ class ComponentResponse(BaseModel):
             ]
             if with_children
             else [],
-            created_at=str(row.created_at) if row.created_at else None,
-            updated_at=str(row.updated_at) if row.updated_at else None,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
         )
 
 
@@ -385,17 +378,10 @@ def get_delete_impact(
 
     Returns:
         The blocking and detaching referrers.
-
-    Raises:
-        HTTPException: 404 when any of the ids is unknown.
     """
     for one in component_id:
         load_authorized(store.components.get, one, user, store, label="Component")
-    try:
-        impact = store.components.delete_impact(component_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    return DeleteImpactResponse.from_impact(impact)
+    return DeleteImpactResponse.from_impact(store.components.delete_impact(component_id))
 
 
 @router.post("/", status_code=201)
@@ -416,26 +402,17 @@ def create_component(
 
     Returns:
         The created component, with its config decoded.
-
-    Raises:
-        HTTPException: 400 for an invalid config or an unknown catalog key,
-            404 when a relation points at a component that does not exist.
     """
-    try:
-        row = store.components.create(
-            org_id,
-            kind=body.kind,
-            key=body.key,
-            name=body.name,
-            config=body.config,
-            encrypted=body.encrypted,
-            children=body.children,
-            relations=_bindings(body.relations),
-        )
-    except (ConfigError, CatalogKeyError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    row = store.components.create(
+        org_id,
+        kind=body.kind,
+        key=body.key,
+        name=body.name,
+        config=body.config,
+        encrypted=body.encrypted,
+        children=body.children,
+        relations=_bindings(body.relations),
+    )
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
@@ -476,29 +453,16 @@ def update_component(
 
     Returns:
         The updated component, with its config decoded.
-
-    Raises:
-        HTTPException: 400 for an invalid config or an unknown catalog key,
-            404 when a relation points at a component that does not exist,
-            409 when the update would break a binding another component
-            depends on.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
-    try:
-        row = store.components.update(
-            component_id,
-            name=body.name,
-            config=body.config,
-            encrypted=body.encrypted,
-            children=body.children,
-            relations=_bindings(body.relations),
-        )
-    except (ConfigError, CatalogKeyError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except InUseError as e:
-        raise HTTPException(status_code=409, detail={"message": str(e), "used_by": e.referrers})
+    row = store.components.update(
+        component_id,
+        name=body.name,
+        config=body.config,
+        encrypted=body.encrypted,
+        children=body.children,
+        relations=_bindings(body.relations),
+    )
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
@@ -517,20 +481,9 @@ def delete_component(
 
     Returns:
         A ``{"status": "deleted"}`` acknowledgement.
-
-    Raises:
-        HTTPException: 404 if the component is already gone, 409 while other
-            components are bound to it, 400 if the store refuses the delete.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
-    try:
-        store.components.delete(component_id)
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except InUseError as e:
-        raise HTTPException(status_code=409, detail={"message": str(e), "used_by": e.referrers})
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    store.components.delete(component_id)
     return {"status": "deleted"}
 
 
@@ -556,8 +509,7 @@ def add_relation(
         The created relation row.
 
     Raises:
-        HTTPException: 404 when the target is missing or belongs to another
-            organisation, 400 when the relation is not allowed on this kind.
+        HTTPException: 404 when the target belongs to another organisation.
     """
     source = load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     destination_row = load_authorized(
@@ -565,12 +517,7 @@ def add_relation(
     )
     if destination_row.org_id != source.org_id:
         raise HTTPException(status_code=404, detail=f"Component {body.dst_id} not found")
-    try:
-        relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
-    except ConfigError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
     return RelationResponse(
         src_id=relation.src_id,
         name=relation.name,
@@ -598,15 +545,9 @@ def remove_relation(
         dst_id: The target component's UUID.
         user: The authenticated user.
         store: The Store instance.
-
-    Raises:
-        HTTPException: 400 for a required dependency name.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
-    try:
-        store.relations.remove(component_id, name=name, dst_id=dst_id)
-    except ConfigError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    store.relations.remove(component_id, name=name, dst_id=dst_id)
 
 
 # -- Partition endpoint --------------------------------------------------------
@@ -636,7 +577,7 @@ def get_partition_row_counts(
     load_authorized(store.components.get, component_id, user, store, label="Component")
     try:
         il_asset = store.components.load(component_id)
-    except (NotFoundError, ComponentDriftError) as e:
+    except ComponentDriftError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     partitioning = getattr(il_asset, "partitioning", None)
@@ -705,7 +646,7 @@ class ResolveRequest(BaseModel):
 async def resolve_fetch_field(
     body: ResolveRequest,
     catalog: CatalogDep,
-    _user: ViewerDep,
+    _user: EditorDep,
 ) -> list[dict[str, Any]]:
     """Resolve the options for a ``FetchField(provider=...)`` field.
 
@@ -723,7 +664,7 @@ async def resolve_fetch_field(
         body: The component key, the field name, and the per-relation
             credentials the form currently holds.
         catalog: The Catalog instance.
-        _user: The authenticated user (viewer gate).
+        _user: The authenticated user (editor gate).
 
     Returns:
         The field's options, as the provider returned them.
@@ -848,7 +789,7 @@ class CheckResponse(BaseModel):
 async def check_connection(
     body: CheckRequest,
     catalog: CatalogDep,
-    _user: ViewerDep,
+    _user: EditorDep,
 ) -> CheckResponse:
     """Check a connection's candidate config, statically and (when supported) live.
 
@@ -863,7 +804,7 @@ async def check_connection(
     Args:
         body: The connection key and the candidate config to check.
         catalog: The Catalog instance.
-        _user: The authenticated user (viewer gate).
+        _user: The authenticated user (editor gate).
 
     Returns:
         The check outcome; a failed check is still a 200 with ``ok: false``.

@@ -1,13 +1,17 @@
-"""Organisation routes — CRUD, membership, and invitation management."""
+"""Organisation routes — CRUD, membership, and invitation management.
+
+The member and invitation models here are the API's one shape for both, shared
+with the super-admin surface in :mod:`interloper_api.routes.admin`.
+"""
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, HTTPException, Request
+from interloper_db import Profile, Role
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
@@ -16,10 +20,9 @@ from interloper_api.dependencies import (
     OrgIdDep,
     StoreDep,
     ViewerDep,
+    get_smtp_config,
 )
 from interloper_api.notifications import InvitationEmail
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/organisations", tags=["organisations"])
 
@@ -50,12 +53,25 @@ class MemberResponse(BaseModel):
     avatar_url: str | None = None
     role: str
 
+    @classmethod
+    def from_profile(cls, profile: Profile, role: str) -> MemberResponse:
+        """Describe a profile as a member holding *role*.
+
+        Args:
+            profile: The member's profile.
+            role: The role the membership grants.
+
+        Returns:
+            The response model.
+        """
+        return cls(id=profile.id, email=profile.email, name=profile.name, avatar_url=profile.avatar_url, role=role)
+
 
 class InviteRequest(BaseModel):
     """Request body for inviting a user."""
 
     email: str
-    role: str = "viewer"
+    role: Role = Role.VIEWER
 
 
 class InvitationResponse(BaseModel):
@@ -66,52 +82,6 @@ class InvitationResponse(BaseModel):
     role: str
     created_at: datetime | None = None
     expires_at: datetime
-
-
-# -- Helpers -------------------------------------------------------------------
-
-
-def _get_smtp_config() -> Any | None:
-    """Return the SMTP config if available, without raising.
-
-    Returns:
-        The configured SMTP settings, or None when email is not set up.
-    """
-    from interloper_api.dependencies import get_smtp_config
-
-    return get_smtp_config()
-
-
-def _send_invitation_email(
-    request: Request,
-    smtp_config: Any,
-    invitation: Any,
-    org_name: str,
-    inviter_name: str,
-) -> None:
-    """Send the invitation email, logging errors without failing the request.
-
-    Args:
-        request: The FastAPI request (for building the invite URL).
-        smtp_config: SmtpConfig instance.
-        invitation: Invitation row with .token and .email.
-        org_name: Organisation name.
-        inviter_name: Inviter display name.
-    """
-    token = invitation.token
-    email = invitation.email
-    base_url = str(request.base_url).rstrip("/")
-    invite_url = f"{base_url}/invite/{token}"
-
-    try:
-        InvitationEmail(
-            org_name=org_name,
-            inviter_name=inviter_name,
-            invite_url=invite_url,
-            logo_url=f"{base_url}/logo-email.png",
-        ).send(smtp_config, email)
-    except Exception:
-        logger.exception("Failed to send invitation email to %s", email)
 
 
 # -- Organisation CRUD ---------------------------------------------------------
@@ -181,17 +151,7 @@ def list_members(
     Returns:
         Every member of the organisation with the role they hold in it.
     """
-    members = store.organisations.list_members(org_id)
-    return [
-        MemberResponse(
-            id=profile.id,
-            email=profile.email,
-            name=profile.name,
-            avatar_url=profile.avatar_url,
-            role=role,
-        )
-        for profile, role in members
-    ]
+    return [MemberResponse.from_profile(profile, role) for profile, role in store.organisations.list_members(org_id)]
 
 
 @router.delete("/members/{user_id}")
@@ -242,16 +202,9 @@ def list_invitations(
     Returns:
         The invitations that are still outstanding for the organisation.
     """
-    invitations = store.organisations.list_invitations(org_id)
     return [
-        InvitationResponse(
-            id=inv.id,
-            email=inv.email,
-            role=inv.role,
-            created_at=inv.created_at,
-            expires_at=inv.expires_at,
-        )
-        for inv in invitations
+        InvitationResponse.model_validate(invitation, from_attributes=True)
+        for invitation in store.organisations.list_invitations(org_id)
     ]
 
 
@@ -284,22 +237,10 @@ def invite_member(
         role=body.role,
         invited_by=user.id,
     )
-
-    smtp_config = _get_smtp_config()
-    if smtp_config and smtp_config.enabled:
-        inviter_name = user.name or user.email
-        org_name = store.organisations.get(org_id).name
-        _send_invitation_email(request, smtp_config, invitation, org_name, inviter_name)
-    else:
-        logger.warning("SMTP not configured; invitation email to %s not sent", invitation.email)
-
-    return InvitationResponse(
-        id=invitation.id,
-        email=invitation.email,
-        role=invitation.role,
-        created_at=invitation.created_at,
-        expires_at=invitation.expires_at,
-    )
+    InvitationEmail.from_invitation(
+        invitation, org_name=store.organisations.get(org_id).name, inviter=user, base_url=str(request.base_url)
+    ).deliver(get_smtp_config(), invitation.email)
+    return InvitationResponse.model_validate(invitation, from_attributes=True)
 
 
 @router.delete("/invitations/{invitation_id}")
@@ -319,17 +260,8 @@ def cancel_invitation(
 
     Returns:
         A status acknowledgement.
-
-    Raises:
-        HTTPException: 404 when the invitation does not exist or belongs to
-            another organisation.
     """
-    # The org-scoping guard: the id must belong to this organisation.
-    invitations = store.organisations.list_invitations(org_id)
-    if not any(inv.id == invitation_id for inv in invitations):
-        raise HTTPException(status_code=404, detail="Invitation not found")
-    store.organisations.delete_invitation(invitation_id)
-
+    store.organisations.delete_invitation(invitation_id, org_id=org_id)
     return {"status": "ok"}
 
 
@@ -355,30 +287,16 @@ def resend_invitation(
 
     Returns:
         A status acknowledgement.
-
-    Raises:
-        HTTPException: 404 when the invitation does not exist or belongs to
-            another organisation.
     """
-    invitations = store.organisations.list_invitations(org_id)
-    target = next((inv for inv in invitations if inv.id == invitation_id), None)
-    if not target:
-        raise HTTPException(status_code=404, detail="Invitation not found")
-
-    store.organisations.delete_invitation(invitation_id)
-    new_invitation = store.organisations.create_invitation(
+    previous = store.organisations.get_invitation(invitation_id, org_id=org_id)
+    store.organisations.delete_invitation(invitation_id, org_id=org_id)
+    invitation = store.organisations.create_invitation(
         org_id=org_id,
-        email=target.email,
-        role=target.role,
+        email=previous.email,
+        role=previous.role,
         invited_by=user.id,
     )
-
-    smtp_config = _get_smtp_config()
-    if smtp_config and smtp_config.enabled:
-        inviter_name = user.name or user.email
-        org_name = store.organisations.get(org_id).name
-        _send_invitation_email(request, smtp_config, new_invitation, org_name, inviter_name)
-    else:
-        logger.warning("SMTP not configured; invitation email to %s not sent", new_invitation.email)
-
+    InvitationEmail.from_invitation(
+        invitation, org_name=store.organisations.get(org_id).name, inviter=user, base_url=str(request.base_url)
+    ).deliver(get_smtp_config(), invitation.email)
     return {"status": "ok"}

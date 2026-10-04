@@ -25,7 +25,7 @@ from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.source import FacebookAds
 from interloper_db import Component, ComponentReading, ComponentStatus, DeleteImpact, Store
 
-from interloper_api import app as app_module
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import (
     get_catalog,
     get_current_user,
@@ -47,8 +47,9 @@ class UncheckableConnection(il.Connection):
 
 def _client(catalog: il.Catalog) -> TestClient:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(components_module.router)
-    app.dependency_overrides[require_viewer] = lambda: None
+    app.dependency_overrides[require_editor] = lambda: None
     app.dependency_overrides[get_catalog] = lambda: catalog
     return TestClient(app)
 
@@ -214,6 +215,7 @@ class TestDelete:
                 )
 
         app = FastAPI()
+        install_error_handlers(app)
         app.include_router(components_module.router)
         app.dependency_overrides[get_store] = lambda: FakeStore()
         app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
@@ -346,14 +348,11 @@ class TestUnreadablePayload:
     def test_the_app_handler_renders_a_hydration_failure_as_a_conflict(self):
         """Paths that cannot degrade (hydration for a run) still surface the reason."""
         app = FastAPI()
+        install_error_handlers(app)
 
         @app.get("/boom")
         async def _boom() -> None:
             raise HydrationError("Connection 'criteo' (abc) cannot be hydrated: its stored config does not decrypt")
-
-        @app.exception_handler(HydrationError)  # mirrors create_app's handler
-        async def _hydration_handler(_request, exc: HydrationError):
-            return await app_module._hydration_failed(_request, exc)
 
         resp = TestClient(app, raise_server_exceptions=False).get("/boom")
 
@@ -531,6 +530,7 @@ def crud_client(crud_store: CrudStore) -> TestClient:
     """
     user = SimpleNamespace(id=_USER_ID, email="ada@example.com", is_super_admin=False)
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(components_module.router)
     app.dependency_overrides[get_store] = lambda: crud_store
     app.dependency_overrides[get_org_id] = lambda: _ORG_ID
@@ -819,7 +819,7 @@ class TestDeleteComponentStatuses:
         ("error", "expected"),
         [
             (NotFoundError("already gone"), 404),
-            (ValueError("store refused"), 400),
+            (ConfigError("Cannot delete a source-owned asset directly"), 400),
         ],
     )
     def test_store_errors_map_to_statuses(

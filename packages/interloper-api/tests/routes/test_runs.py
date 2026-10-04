@@ -15,8 +15,9 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, ConflictError, NotFoundError
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import runs as runs_module
 from interloper_api.routes.runs import MAX_EVENTS_PAGE_SIZE
@@ -53,7 +54,7 @@ class FakeStore:
         self.list_calls: list[dict[str, object]] = []
         self.count_calls: list[dict[str, object]] = []
         self.raise_not_found = False
-        self.raise_value_error: str | None = None
+        self.raise_conflict: str | None = None
         #: Role the fake user holds in the run's org. None = not a member.
         self.role: str | None = "editor"
         #: Org owning every run this store returns.
@@ -86,13 +87,14 @@ class FakeStore:
 
     def _retry_run(self, run_id: UUID, *, scope: str = "all"):
         self.retry_calls.append((run_id, scope))
-        if self.raise_value_error is not None:
-            raise ValueError(self.raise_value_error)
+        if self.raise_conflict is not None:
+            raise ConflictError(self.raise_conflict)
         return SimpleNamespace(id=uuid4())
 
 
 def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
@@ -147,7 +149,7 @@ def test_retry_missing_run_returns_404(store: FakeStore) -> None:
 
 
 def test_retry_non_failed_run_returns_409(store: FakeStore) -> None:
-    store.raise_value_error = "Run is not failed"
+    store.raise_conflict = "Run is not failed"
     resp = _client(store).post(f"/runs/{uuid4()}/retry")
     assert resp.status_code == 409
     assert "not failed" in resp.json()["detail"]
@@ -358,7 +360,7 @@ def test_list_runs_rejects_an_unknown_sort(store: FakeStore) -> None:
     """The store refuses a field outside its whitelist; the route reports it as a 400."""
 
     def list_all(org_id, **kwargs):
-        raise ValueError("Cannot sort runs by 'org_id'")
+        raise ConfigError("Cannot sort runs by 'org_id'")
 
     store.runs.list_all = list_all
 
@@ -372,10 +374,10 @@ def test_list_runs_rejects_an_unknown_sort(store: FakeStore) -> None:
 
 
 def test_create_run_rejects_an_invalid_partition(store: FakeStore) -> None:
-    """A store-level ``ValueError`` (bad key, unpartitioned target) is a 400."""
+    """A store-level ``ConfigError`` (bad key, unpartitioned target) is a 400."""
 
     def create(org_id, **kwargs):
-        raise ValueError("partition key '2026-13-01' is not a date")
+        raise ConfigError("partition key '2026-13-01' is not a date")
 
     store.components.get = lambda cid, kind=None: SimpleNamespace(id=cid, org_id=_ORG_ID)
     store.runs.create = create
@@ -533,6 +535,7 @@ class EventsStore:
 
 def _events_client(store: EventsStore) -> TestClient:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())

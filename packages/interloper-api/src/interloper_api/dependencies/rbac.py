@@ -8,12 +8,10 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException
 from interloper.errors import NotFoundError
-from interloper_db import Profile, Store
+from interloper_db import Profile, Role, Store
 
 from interloper_api.dependencies.auth import get_current_user, get_org_id
 from interloper_api.dependencies.state import get_store
-
-_ROLE_RANK = {"viewer": 0, "editor": 1, "admin": 2}
 
 
 def authorize_org_member(
@@ -46,7 +44,7 @@ def authorize_org_member(
     role = store.organisations.member_role(user.id, org_id)
     if role is None:
         raise HTTPException(status_code=404, detail=detail)
-    if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
+    if not Role.at_least(role, minimum):
         raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
 
 
@@ -112,7 +110,7 @@ def _check_role(
     role = store.organisations.member_role(user.id, org_id)
     if role is None:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
-    if _ROLE_RANK.get(role, -1) < _ROLE_RANK[minimum]:
+    if not Role.at_least(role, minimum):
         raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
     return user
 

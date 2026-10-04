@@ -22,7 +22,11 @@ class InterloperError(Exception):
 
 
 class ConfigError(InterloperError, ValueError):
-    """A configuration value is missing, has the wrong type, or cannot be resolved."""
+    """A configuration value is missing, has the wrong type, or cannot be resolved.
+
+    The store raises it for any caller-supplied value it rejects (an unknown
+    sort field, a role outside the vocabulary); the API answers HTTP 400.
+    """
 
 
 class SpecError(ConfigError):
@@ -130,14 +134,31 @@ class AuthenticationError(InterloperError, ValueError):
 class NotFoundError(InterloperError, KeyError):
     """A database record was not found.
 
-    Raised by the store layer; API routes catch it and return HTTP 404.
+    Raised by the store layer; the API answers HTTP 404.
+    """
+
+    def __str__(self) -> str:
+        """The message as raised, without the quotes ``KeyError`` adds.
+
+        Returns:
+            The first argument as text, or an empty string when there is none.
+        """
+        return str(self.args[0]) if self.args else ""
+
+
+class ConflictError(InterloperError, ValueError):
+    """A record's current state does not allow the requested operation.
+
+    Raised by the store layer for a request that was well-formed but arrived
+    at the wrong moment (a run already terminal, a stack whose latest attempt
+    did not fail); the API answers HTTP 409.
     """
 
 
-class InUseError(InterloperError):
+class InUseError(ConflictError):
     """A record cannot be deleted because other records still reference it.
 
-    Raised by the store layer; API routes catch it and return HTTP 409.
+    Raised by the store layer; the API answers HTTP 409 with the referrers.
     ``referrers`` carries the referencing records as ``{id, kind, key, name}``
     mappings so callers can build structured error payloads.
     """

@@ -8,10 +8,18 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import ComponentDriftError, HydrationError, NotFoundError, QuotaExceededError
+from interloper.errors import (
+    CatalogKeyError,
+    ComponentDriftError,
+    ConfigError,
+    ConflictError,
+    HydrationError,
+    InUseError,
+    NotFoundError,
+    QuotaExceededError,
+)
 
-from interloper_api import app as app_module
-from interloper_api.app import create_app
+from interloper_api.app import create_app, install_error_handlers
 from interloper_api.dependencies import get_features, get_store
 
 
@@ -39,7 +47,7 @@ class TestErrorHandlers:
 
     @staticmethod
     def _client(raise_error: Exception) -> TestClient:
-        """Mount one route that raises, behind the app's handler table.
+        """Mount one route that raises, behind the app's error handlers.
 
         Args:
             raise_error: The exception the probe route raises.
@@ -48,8 +56,7 @@ class TestErrorHandlers:
             A client for the probe app.
         """
         app = FastAPI()
-        for error_type, handler in app_module._ERROR_HANDLERS.items():
-            app.add_exception_handler(error_type, handler)
+        install_error_handlers(app)
 
         @app.get("/probe")
         def probe() -> dict[str, str]:
@@ -61,9 +68,7 @@ class TestErrorHandlers:
         response = self._client(NotFoundError("Run 1 not found")).get("/probe")
 
         assert response.status_code == 404
-        # NotFoundError subclasses KeyError, so str() wraps the message in
-        # quotes — the detail carries them through to the client.
-        assert response.json() == {"detail": "'Run 1 not found'"}
+        assert response.json() == {"detail": "Run 1 not found"}
 
     def test_catalog_drift_is_a_409(self) -> None:
         # A drifted component stays broken until the user resolves it, so it
@@ -78,6 +83,30 @@ class TestErrorHandlers:
 
         assert response.status_code == 409
         assert response.json() == {"detail": "cannot decrypt payload"}
+
+    @pytest.mark.parametrize("error", [ConfigError("bad sort"), CatalogKeyError("bad sort")])
+    def test_a_rejected_value_is_a_400(self, error: Exception) -> None:
+        response = self._client(error).get("/probe")
+
+        assert response.status_code == 400
+        assert response.json() == {"detail": "bad sort"}
+
+    def test_a_state_conflict_is_a_409(self) -> None:
+        response = self._client(ConflictError("Run 1 is already success")).get("/probe")
+
+        assert response.status_code == 409
+        assert response.json() == {"detail": "Run 1 is already success"}
+
+    def test_a_refused_deletion_is_a_409_naming_its_referrers(self) -> None:
+        referrers: list[dict[str, str | None]] = [{"id": "1", "kind": "job", "key": "daily", "name": "Daily"}]
+
+        response = self._client(InUseError("in use by Daily", referrers=referrers)).get("/probe")
+
+        assert response.status_code == 409
+        assert response.json() == {"detail": {"message": "in use by Daily", "used_by": referrers}}
+
+    def test_an_unmapped_value_error_stays_a_500(self) -> None:
+        assert self._client(ValueError("a bug")).get("/probe").status_code == 500
 
     def test_a_quota_refusal_is_a_429_with_its_numbers(self) -> None:
         error = QuotaExceededError("Too many sources", quota="max_sources", limit=10, used=10)

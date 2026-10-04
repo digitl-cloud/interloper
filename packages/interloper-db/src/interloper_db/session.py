@@ -51,7 +51,7 @@ def transaction(engine: Engine) -> Iterator[Session]:
 
         with store.transaction():
             source = store.components.create(...)
-            store.relations.add(source.id, type="destination", dst_id=...)
+            store.relations.add(source.id, name="destination", dst_id=...)
 
     Nesting is a no-op: an inner block joins the outer one, so the outermost
     block alone decides commit or rollback.

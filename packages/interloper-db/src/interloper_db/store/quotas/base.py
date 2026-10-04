@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from interloper.errors import ConfigError
 from interloper.utils import add_months
 from sqlalchemy import Engine, func
 from sqlalchemy import select as sa_select
@@ -133,13 +134,13 @@ class QuotaStore:
             The organisation's overrides after the update.
 
         Raises:
-            ValueError: On an unknown quota key or a negative value.
+            ConfigError: On an unknown quota key or a negative value.
         """
         with session_scope(self._engine) as session:
             if unknown := {key for key in limits if key not in QUOTAS}:
-                raise ValueError(f"Unknown quota limit(s): {sorted(unknown)}")
+                raise ConfigError(f"Unknown quota limit(s): {sorted(unknown)}")
             if negative := {key for key, value in limits.items() if value is not None and value < 0}:
-                raise ValueError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
+                raise ConfigError(f"Quota limit(s) must be >= 0: {sorted(negative)}")
             table = Quota.__table__  # ty: ignore[unresolved-attribute]
             for key, value in limits.items():
                 statement = (

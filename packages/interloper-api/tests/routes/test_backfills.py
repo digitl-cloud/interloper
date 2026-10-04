@@ -12,8 +12,9 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, ConflictError, NotFoundError, QuotaExceededError
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import backfills as backfills_module
 
@@ -44,7 +45,7 @@ class FakeStore:
     def __init__(self) -> None:
         self.cancel_calls: list[UUID] = []
         self.raise_not_found = False
-        self.raise_value_error: str | None = None
+        self.raise_conflict: str | None = None
         #: Role the fake user holds in the backfill's org. None = not a member.
         self.role: str | None = "editor"
         self.organisations = SimpleNamespace(member_role=self._member_role)
@@ -65,13 +66,14 @@ class FakeStore:
 
     def _cancel_backfill(self, backfill_id: UUID):
         self.cancel_calls.append(backfill_id)
-        if self.raise_value_error is not None:
-            raise ValueError(self.raise_value_error)
+        if self.raise_conflict is not None:
+            raise ConflictError(self.raise_conflict)
         return _fake_backfill(backfill_id, status="canceled")
 
 
 def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(backfills_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
@@ -106,6 +108,15 @@ def test_cancel_returns_the_canceled_backfill(store: FakeStore) -> None:
     assert store.cancel_calls == [backfill_id]
 
 
+def test_cancel_reports_the_partitions_per_status(store: FakeStore) -> None:
+    backfill_id = uuid4()
+    store.runs.count_backfill_runs = lambda backfill_ids: {backfill_id: {"success": 2, "canceled": 1}}
+
+    resp = _client(store).post(f"/backfills/{backfill_id}/cancel")
+
+    assert resp.json()["run_counts"] == {"success": 2, "canceled": 1}
+
+
 def test_cancel_missing_backfill_returns_404(store: FakeStore) -> None:
     store.raise_not_found = True
     resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
@@ -114,7 +125,7 @@ def test_cancel_missing_backfill_returns_404(store: FakeStore) -> None:
 
 
 def test_cancel_terminal_backfill_returns_409(store: FakeStore) -> None:
-    store.raise_value_error = "Backfill is already canceled"
+    store.raise_conflict = "Backfill is already canceled"
     resp = _client(store).post(f"/backfills/{uuid4()}/cancel")
     assert resp.status_code == 409
     assert "already canceled" in resp.json()["detail"]
@@ -135,8 +146,6 @@ def test_cancel_returns_404_for_non_member(store: FakeStore) -> None:
 
 
 def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
-    from interloper.errors import QuotaExceededError
-
     def _raise(org_id, **kwargs):
         raise QuotaExceededError(
             "Backfill spans 31 partitions, exceeding the limit of 30",
@@ -147,19 +156,8 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
 
     store.components.get = lambda component_id, kind=None: _fake_backfill(component_id)
     store.runs.create_backfill = _raise
-    app = _app(store)
 
-    @app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
-    async def _quota_handler(_request, exc: QuotaExceededError):
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse(
-            status_code=429,
-            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
-        )
-
-    client = TestClient(app)
-    resp = client.post(
+    resp = _client(store).post(
         "/backfills/",
         json={"component_id": str(uuid4()), "start_key": "2026-01-01", "end_key": "2026-01-31"},
     )
@@ -182,6 +180,7 @@ def _list_client(store: FakeStore) -> TestClient:
     from interloper_api.dependencies import get_org_id, require_viewer
 
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(backfills_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
@@ -273,12 +272,12 @@ def test_get_backfill_of_another_org_returns_404(store: FakeStore) -> None:
 
 
 def test_create_backfill_rejects_an_invalid_span(store: FakeStore) -> None:
-    """A store-level ``ValueError`` (bad keys, unpartitioned target) is a 400."""
+    """A store-level ``ConfigError`` (bad keys, unpartitioned target) is a 400."""
     component_id = uuid4()
     store.components.get = lambda cid, kind=None: SimpleNamespace(id=cid, org_id=_ORG_ID)
 
     def create_backfill(org_id, **kwargs):
-        raise ValueError("end_key precedes start_key")
+        raise ConfigError("end_key precedes start_key")
 
     store.runs.create_backfill = create_backfill
 

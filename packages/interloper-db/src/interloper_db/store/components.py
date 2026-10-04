@@ -377,7 +377,7 @@ class ComponentStore:
             NotFoundError: If the component is not found.
             InUseError: If other components hold blocking relations into this
                 one or its children — those must be unbound or deleted first.
-            ValueError: If the component is source-owned (delete or update
+            ConfigError: If the component is source-owned (delete or update
                 the parent source instead).
         """
         with session_scope(self._engine) as session:
@@ -385,7 +385,7 @@ class ComponentStore:
             if not db_component:
                 raise NotFoundError(f"Component {component_id} not found")
             if db_component.parent_id is not None:
-                raise ValueError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
+                raise ConfigError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
             if referrers := self._blocking_referrers(session, db_component):
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
@@ -578,7 +578,7 @@ class ComponentStore:
                 raise NotFoundError(f"Component {component_id} not found")
             owned_asset = db_component.kind == "asset" and db_component.parent_id is not None
             if not owned_asset:
-                status = self.status(db_component)
+                status = self.read(db_component).status
                 if status is not ComponentStatus.OK:
                     subject = f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id})"
                     # Different failures, different remedies, so different
@@ -715,21 +715,6 @@ class ComponentStore:
             discriminator=self._discriminator_of(db_component, config),
         )
 
-    def status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
-        """Usability status of a component row: catalog key, then payload.
-
-        Args:
-            db_component: The row to resolve.
-            parent_key: The owner's key when the caller already knows it.
-                Defaults to ``None``, which reads it from the database.
-
-        Returns:
-            ``OK``, ``DISABLED`` or ``MISSING`` for the row's catalog key, or
-            ``UNREADABLE`` when the key resolves but its payload does not
-            decode.
-        """
-        return self.read(db_component, parent_key=parent_key).status
-
     def _key_status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
         """Catalog status of a row's key, an owned row resolving through its owner.
 
@@ -798,26 +783,6 @@ class ComponentStore:
         if il.KINDS[db_component.kind].sensitive:
             return self._hydrator.decode_data(db_component)
         return dict(db_component.config or {})
-
-    def public_config(self, db_component: Component) -> dict[str, Any]:
-        """The disclosable subset of a component's config payload.
-
-        Some config fields are operational metadata rather than credentials
-        (a connection's ``auto_renew``): their field declarations mark
-        themselves disclosable with ``x-public`` in the config schema, and
-        surfaces that keep a secret payload undisclosed (list responses)
-        show exactly that subset. A key that no longer resolves in the
-        catalog discloses nothing.
-
-        Args:
-            db_component: The row to read the payload from.
-
-        Returns:
-            The disclosed fields — empty when the schema marks none public,
-            the row's key has drifted out of the catalog, or the payload
-            cannot be read.
-        """
-        return self.read(db_component).public_config
 
     def merge_config(self, component_id: UUID, fields: dict[str, Any]) -> Component:
         """Merge fields into a component's stored config payload.
@@ -912,19 +877,6 @@ class ComponentStore:
                 )
             raw = self._encrypt(raw)
         return raw, should_encrypt
-
-    def discriminator(self, db_component: Component) -> str | None:
-        """The value of the component's discriminator field, read off its stored config.
-
-        Args:
-            db_component: The row to read the payload from.
-
-        Returns:
-            The discriminator value as a string, or ``None`` when the class
-            declares none, the value is blank, or the key or payload can't be
-            read.
-        """
-        return self.read(db_component).discriminator
 
     def _resolve_class(self, db_component: Component) -> type[il.Component] | None:
         """The component class a row's ``key`` and ``kind`` select in this catalog.
@@ -1142,13 +1094,13 @@ class ComponentStore:
             resolves (the caller decides the fallback).
 
         Raises:
-            ValueError: If the targets disagree on granularity — scheduling a
+            ConfigError: If the targets disagree on granularity — scheduling a
                 window would be wrong for some of them, so fail closed.
         """
         granularities = self._job_target_granularities(session, [job_id]).get(job_id, set())
         if len(granularities) > 1:
             names = ", ".join(sorted(g.value for g in granularities))
-            raise ValueError(f"Job targets disagree on partition granularity ({names})")
+            raise ConfigError(f"Job targets disagree on partition granularity ({names})")
         return next(iter(granularities), None)
 
     def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, TimeGranularity | None]:
@@ -1300,7 +1252,7 @@ class ComponentStore:
             target = session.get(Component, relation.dst_id)
             if target is None:
                 continue  # defensive: FKs make this unreachable
-            status = self.status(target)
+            status = self.read(target).status
             if status is not ComponentStatus.OK:
                 raise ComponentDriftError(
                     f"Job '{db_job.name}' ({db_job.id}) cannot be hydrated: target "

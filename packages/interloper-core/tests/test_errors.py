@@ -3,7 +3,7 @@
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from interloper.errors import InUseError, QuotaExceededError, format_exception
+from interloper.errors import ConflictError, InUseError, NotFoundError, QuotaExceededError, format_exception
 
 
 def test_format_exception_prefixes_type_name():
@@ -37,6 +37,28 @@ def test_format_exception_validation_error_omits_input_values():
     assert "app_secret: Field required" in message
     assert "s3cret-value" not in message
     assert "\n" not in message
+
+
+class TestNotFoundError:
+    """A missing record, reported in the words it was raised with."""
+
+    def test_the_message_is_not_quoted_like_a_key_error(self):
+        assert str(NotFoundError("Run 1 not found")) == "Run 1 not found"
+
+    def test_it_still_catches_as_a_key_error(self):
+        with pytest.raises(KeyError):
+            raise NotFoundError("Run 1 not found")
+
+
+class TestConflictError:
+    """A request that is well-formed but refused by the record's current state."""
+
+    def test_a_refused_deletion_is_a_conflict(self):
+        assert issubclass(InUseError, ConflictError)
+
+    def test_it_still_catches_as_a_value_error(self):
+        with pytest.raises(ValueError, match="already success"):
+            raise ConflictError("Run 1 is already success")
 
 
 class TestInUseError:
