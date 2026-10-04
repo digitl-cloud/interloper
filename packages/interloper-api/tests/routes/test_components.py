@@ -1216,6 +1216,24 @@ class TestResolveEdgeCases:
         assert "Relation 'connection' not found" in response.json()["detail"]
         assert "not declared from a component class" in response.json()["detail"]
 
+    def test_credentials_that_cannot_build_the_resource_are_a_400_without_their_values(
+        self, source_catalog: il.Catalog
+    ) -> None:
+        response = _client(source_catalog).post(
+            "/components/resolve",
+            json={
+                "component_key": "facebook_ads",
+                "field": "account_id",
+                "deps": {"connection": {"access_token": ["s3cret-value"]}},
+            },
+        )
+
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert detail.startswith("Cannot resolve 'account_id' from the 'connection' credentials given: ValidationError")
+        assert "access_token" in detail
+        assert "s3cret-value" not in detail
+
     def test_a_provider_failure_is_mapped_not_raised(
         self, source_catalog: il.Catalog, mock_graph
     ) -> None:

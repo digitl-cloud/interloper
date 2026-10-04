@@ -27,7 +27,7 @@ import httpx2
 from fastapi import APIRouter, HTTPException, Query
 from interloper.component import KINDS
 from interloper.connection.base import Connection
-from interloper.errors import ComponentDriftError, ConnectionCheckError, DataNotFoundError
+from interloper.errors import ComponentDriftError, ConnectionCheckError, DataNotFoundError, format_exception
 from interloper.resource.fields import is_fetch_field_provider
 from interloper.utils.concurrency import invoke
 from interloper.utils.imports import import_from_path
@@ -671,8 +671,9 @@ async def resolve_fetch_field(
 
     Raises:
         HTTPException: 404 for an unknown component key, 400 when the field is
-            not a provider-backed FetchField or names an unknown or
-            undeclared relation, 403 when the target method is not a fetch
+            not a provider-backed FetchField, names an unknown or undeclared
+            relation, or the credentials the form holds cannot build that
+            relation's resource, 403 when the target method is not a fetch
             provider.
     """
     defn = catalog.get(body.component_key)
@@ -701,7 +702,14 @@ async def resolve_fetch_field(
     # carry extra markers (e.g. an internal id) that the model would reject.
     raw = body.deps.get(name, {})
     creds = {k: v for k, v in raw.items() if k in resource_cls.model_fields}
-    resource = resource_cls(**creds)
+    try:
+        resource = resource_cls(**creds)
+    except ValidationError as error:
+        # format_exception, never str(error): pydantic echoes the input values, which are credentials.
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve '{body.field}' from the '{name}' credentials given: {format_exception(error)}",
+        )
 
     fn = getattr(resource, method, None)
     if not is_fetch_field_provider(fn):
