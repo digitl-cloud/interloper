@@ -320,11 +320,11 @@ class HookController(Controller):
             "component_name": target.name or target.key,
             "component_key": target.key,
             "partitions": backfill.partitions,
-            "counts": self._store.runs.count_backfill_runs([backfill.id]).get(backfill.id, {}),
+            "counts": self._store.backfills.run_counts([backfill.id]).get(backfill.id, {}),
         }
         if event_type == "backfill_failed":
             metadata["failed_partitions"] = [
-                [partition_key, error] for partition_key, error in self._store.runs.failed_partitions(backfill.id)
+                [partition_key, error] for partition_key, error in self._store.backfills.failed_partitions(backfill.id)
             ]
         return metadata
 
@@ -456,7 +456,7 @@ class HookController(Controller):
         self._refuse_reentry(session, component_id, watched_ids)
         target = session.get(Component, UUID(component_id))
         concurrency = (target.config or {}).get("concurrency", 1) if target and target.kind == "job" else 1
-        self._store.runs.create_backfill(
+        self._store.backfills.create(
             backfill.org_id,
             component_id=UUID(component_id),
             start_key=backfill.start_key,

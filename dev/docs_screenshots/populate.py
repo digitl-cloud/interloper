@@ -20,7 +20,7 @@ from interloper.settings import AppSettings
 from interloper_db import init_engine
 from interloper_db.engine import get_engine
 from interloper_db.models import Organisation, Profile
-from interloper_db.store import Store
+from interloper_db.store import BackfillQuery, ComponentQuery, Store
 from sqlmodel import Session, select
 
 HERE = Path(__file__).parent
@@ -38,7 +38,8 @@ def main() -> None:
         profile = session.exec(select(Profile).where(Profile.email == DEV_USER_EMAIL)).one()
         org_id, user_id = org.id, profile.id
 
-    components = {c.name: c for c in store.components.list_all(org_id) if c.name}
+    query = ComponentQuery(roots_only=False, limit=None)
+    components = {c.name: c for c in store.components.list(org_id, query).items if c.name}
 
     def ensure(kind: str, key: str, name: str, **kwargs):  # noqa: ANN202
         if name not in components:
@@ -95,14 +96,14 @@ def main() -> None:
         relations={"watch": [(daily_job.id, "")], "target": [(monthly_job.id, "")]},
     )
 
-    if not store.runs.list_backfills(org_id):
-        store.runs.create_backfill(
+    if not store.backfills.list(org_id, BackfillQuery(limit=None)).items:
+        store.backfills.create(
             org_id, component_id=demo.id, start_key="2026-08-25", end_key="2026-09-01", concurrency=3
         )
-        store.runs.create_backfill(
+        store.backfills.create(
             org_id, component_id=flaky.id, start_key="2026-08-28", end_key="2026-09-01", concurrency=2
         )
-        store.runs.create_backfill(
+        store.backfills.create(
             org_id, component_id=monthly.id, start_key="2026-05", end_key="2026-08", concurrency=2
         )
         store.runs.create(org_id, component_id=daily_job.id, partition_key="2026-09-02")
@@ -111,7 +112,7 @@ def main() -> None:
         print("runs queued; waiting for the worker")
         _wait_and_backdate(settings.postgres.dsn)
 
-    (HERE / "session_token").write_text(store.auth.create_session(user_id, org_id))
+    (HERE / "session_token").write_text(store.sessions.create(user_id, org_id))
     print("session minted")
 
 

@@ -33,7 +33,7 @@ export interface DeleteImpact {
     detaching: UsedByRef[]
 }
 
-/** A standalone relation row from `GET /components/relations`. */
+/** A standalone relation row from `GET /relations`. */
 export interface Relation {
     src_id: string
     name: string

@@ -64,6 +64,20 @@ def _statuses(store: Store) -> dict[UUID, str]:
         return {run.id: run.status for run in session.exec(select(Run)).all() if run.id}
 
 
+def _job(store: Store) -> UUID:
+    """Create a job component for a backfill to target.
+
+    Args:
+        store: The store to create the job through.
+
+    Returns:
+        The job's id.
+    """
+    job_id = store.components.create(_ORG, kind="job", key="queue_job", name="J", config={}).id
+    assert job_id is not None
+    return job_id
+
+
 def test_tick_drains_the_queue(store: Store) -> None:
     first = store.runs.create(_ORG)
     second = store.runs.create(_ORG)
@@ -132,8 +146,9 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     concurrency slot (promoting the pending sibling), and the backfill
     finalizes instead of sitting on "running" forever.
     """
-    backfill = store.runs.create_backfill(
+    backfill = store.backfills.create(
         _ORG,
+        component_id=_job(store),
         start_key="2026-01-01",
         end_key="2026-01-02",
         concurrency=1,
@@ -141,7 +156,7 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     QueueController(launcher=_FakeLauncher(fail=True), store=store)._tick()
 
     assert set(_statuses(store).values()) == {"failed"}
-    refreshed = store.runs.get_backfill(backfill.id)
+    refreshed = store.backfills.get(backfill.id)
     assert refreshed.status == "failed"
     assert refreshed.completed_at is not None
 
@@ -219,8 +234,9 @@ def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
 
 
 def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> None:
-    backfill = store.runs.create_backfill(
+    backfill = store.backfills.create(
         _ORG,
+        component_id=_job(store),
         start_key="2026-01-01",
         end_key="2026-01-03",
         concurrency=1,
@@ -232,7 +248,7 @@ def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> N
 
     assert launcher.launched == []
     assert set(_statuses(store).values()) == {"canceled"}
-    refreshed = store.runs.get_backfill(backfill.id)
+    refreshed = store.backfills.get(backfill.id)
     assert refreshed.status == "canceled"
     assert refreshed.completed_at is not None
 

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from interloper_db.models import Component
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, Store
 
 from interloper_toolkit import ToolkitContext, sources
 from interloper_toolkit.models import ToolError
@@ -61,7 +61,7 @@ class TestCreateSource:
             ctx, "shop_source", "Shop", {}, str(mine.id), destination_ids=[str(their_bq.id)]
         )
         assert by_dest.status == "error"
-        assert store.components.count(ctx.org_id, kinds=["source"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["source"])).total == 0
 
     def test_a_viewer_is_refused(self, ctx: ToolkitContext, store: Store):
         connection = _connection(store, ctx.org_id)
@@ -71,7 +71,7 @@ class TestCreateSource:
         )
 
         assert isinstance(result, ToolError)
-        assert store.components.count(ctx.org_id, kinds=["source"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["source"])).total == 0
 
 
 class TestCreateSources:

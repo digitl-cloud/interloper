@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from interloper_db import BackfillQuery, ComponentQuery, EventQuery, ExecutionQuery, RunQuery
+
 from interloper_toolkit.authz import requires_role
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.errors import classify
@@ -86,9 +88,10 @@ def list_jobs(ctx: ToolkitContext, limit: int = 50, offset: int = 0) -> JobList 
     last_run_at, and next_run_at, plus the total number of jobs.
     """
     try:
-        jobs = ctx.store.components.list_all(ctx.org_id, kinds=["job"], limit=limit, offset=offset)
-        total = ctx.store.components.count(ctx.org_id, kinds=["job"])
-        return JobList(count=len(jobs), total=total, jobs=jobs)
+        jobs = ctx.store.components.list(
+            ctx.org_id, ComponentQuery(kind=["job"], roots_only=False, limit=limit, offset=offset)
+        )
+        return JobList(count=len(jobs.items), total=jobs.total, jobs=jobs.items)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -104,7 +107,7 @@ def get_job_health(ctx: ToolkitContext, component_id: str) -> JobHealth | ToolEr
     try:
         jid = UUID(component_id)
         job = ctx.store.components.get(jid, kind="job", org_id=ctx.org_id)
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, limit=20)
+        runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=jid, limit=20)).items
 
         total = len(runs)
         success = sum(1 for r in runs if r.status == "success")
@@ -194,9 +197,8 @@ def list_recent_runs(
     """
     try:
         jid = UUID(component_id) if component_id else None
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, status=status, limit=limit, offset=offset)
-        total = ctx.store.runs.count(ctx.org_id, component_id=jid, status=status)
-        return RunList(count=len(runs), total=total, runs=runs)
+        runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=jid, status=status, limit=limit, offset=offset))
+        return RunList(count=len(runs.items), total=runs.total, runs=runs.items)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -254,7 +256,7 @@ def get_run_detail(ctx: ToolkitContext, run_id: str) -> RunDetail | ToolError:
     try:
         rid = UUID(run_id)
         run = ctx.store.runs.get(rid, org_id=ctx.org_id)
-        executions = ctx.store.events.list_executions(rid)
+        executions = ctx.store.executions.list(ctx.org_id, ExecutionQuery(limit=None), run_id=rid).items
 
         return RunDetail(run=run, executions=executions)
     except Exception as e:
@@ -287,16 +289,16 @@ def list_run_events(
     try:
         rid = UUID(run_id)
         ctx.store.runs.get(rid, org_id=ctx.org_id)
-        filters: dict[str, Any] = {
-            "run_id": rid,
-            "component_ids": [UUID(component_id)] if component_id else None,
-            "event_types": event_types,
-            "has_error": errors_only,
-        }
-        events = ctx.store.events.list_all(**filters, limit=limit, offset=offset)
-        total = ctx.store.events.count(**filters)
-        records = [EventRecord(**e.model_dump(exclude={"org_id", "traceback"})) for e in events]
-        return EventList(run_id=run_id, count=len(records), total=total, events=records)
+        query = EventQuery(
+            component_id=[UUID(component_id)] if component_id else None,
+            event_type=event_types,
+            has_error=errors_only,
+            limit=limit,
+            offset=offset,
+        )
+        events = ctx.store.events.list(ctx.org_id, query, run_id=rid)
+        records = [EventRecord(**e.model_dump(exclude={"org_id", "traceback"})) for e in events.items]
+        return EventList(run_id=run_id, count=len(records), total=events.total, events=records)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -337,13 +339,12 @@ def list_failures(ctx: ToolkitContext, limit: int = 20, offset: int = 0) -> Fail
     failed runs.
     """
     try:
-        failed_runs = ctx.store.runs.list_all(ctx.org_id, status="failed", limit=limit, offset=offset)
-        total = ctx.store.runs.count(ctx.org_id, status="failed")
+        failed_runs = ctx.store.runs.list(ctx.org_id, RunQuery(status="failed", limit=limit, offset=offset))
 
+        query = EventQuery(event_type=list(FAILURE_EVENT_TYPES), has_error=True, limit=_ERRORS_PER_FAILURE)
         results = []
-        for run in failed_runs:
-            filters: dict[str, Any] = {"run_id": run.id, "event_types": FAILURE_EVENT_TYPES, "has_error": True}
-            events = ctx.store.events.list_all(**filters, limit=_ERRORS_PER_FAILURE)
+        for run in failed_runs.items:
+            events = ctx.store.events.list(ctx.org_id, query, run_id=run.id)
             errors = [
                 RunErrorEvent(
                     event_id=e.id,
@@ -351,12 +352,11 @@ def list_failures(ctx: ToolkitContext, limit: int = 20, offset: int = 0) -> Fail
                     error=clip(e.error, _ERROR_TEXT_LIMIT) or "",
                     timestamp=e.timestamp,
                 )
-                for e in events
+                for e in events.items
             ]
-            error_count = ctx.store.events.count(**filters)
-            results.append(RunFailure(run=run, error_count=error_count, errors=errors))
+            results.append(RunFailure(run=run, error_count=events.total, errors=errors))
 
-        return FailureList(count=len(results), total=total, failures=results)
+        return FailureList(count=len(results), total=failed_runs.total, failures=results)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -440,7 +440,8 @@ def error_breakdown(
             group.first_seen = min(group.first_seen, row.first_seen)
             group.last_seen = max(group.last_seen, row.last_seen)
 
-        job_names = {j.id: j.name for j in ctx.store.components.list_all(ctx.org_id, kinds=["job"])}
+        jobs = ctx.store.components.list(ctx.org_id, ComponentQuery(kind=["job"], roots_only=False, limit=None))
+        job_names = {j.id: j.name for j in jobs.items}
         groups = sorted(merged.values(), key=lambda g: (-g.failed_attempts, g.last_seen))
         page = [
             ErrorGroupRow(
@@ -488,9 +489,9 @@ def list_backfills(
     partition progress, plus the total number matching the filter.
     """
     try:
-        backfills = ctx.store.runs.list_backfills(ctx.org_id, active_only=active_only, limit=limit, offset=offset)
-        total = ctx.store.runs.count_backfills(ctx.org_id, active_only=active_only)
-        return BackfillList(count=len(backfills), total=total, backfills=backfills)
+        query = BackfillQuery(status=["queued", "running"] if active_only else None, limit=limit, offset=offset)
+        backfills = ctx.store.backfills.list(ctx.org_id, query)
+        return BackfillList(count=len(backfills.items), total=backfills.total, backfills=backfills.items)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -517,7 +518,7 @@ def trigger_backfill(
     """
     try:
         target = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
-        backfill = ctx.store.runs.create_backfill(
+        backfill = ctx.store.backfills.create(
             ctx.org_id,
             component_id=target.id,
             start_key=start_key,
@@ -543,9 +544,11 @@ def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled |
     """
     try:
         bid = UUID(backfill_id)
-        ctx.store.runs.get_backfill(bid, org_id=ctx.org_id)
-        backfill = ctx.store.runs.cancel_backfill(bid)
-        canceled = ctx.store.runs.count(ctx.org_id, backfill_id=bid, status="canceled", all_attempts=True)
+        ctx.store.backfills.get(bid, org_id=ctx.org_id)
+        backfill = ctx.store.backfills.cancel(bid)
+        canceled = ctx.store.runs.list(
+            ctx.org_id, RunQuery(backfill_id=bid, status="canceled", all_attempts=True, limit=1)
+        ).total
         return BackfillCanceled(
             message=f"Backfill canceled, {canceled} run(s) will not execute", backfill=backfill, runs_canceled=canceled
         )
@@ -570,9 +573,9 @@ def backfill_timeline(
     """
     try:
         bid = UUID(backfill_id)
-        backfill = ctx.store.runs.get_backfill(bid, org_id=ctx.org_id)
-        total = ctx.store.runs.count(ctx.org_id, backfill_id=bid, all_attempts=True)
-        runs = ctx.store.runs.list_all(ctx.org_id, backfill_id=bid, all_attempts=True, limit=total)
+        backfill = ctx.store.backfills.get(bid, org_id=ctx.org_id)
+        runs = ctx.store.runs.list(ctx.org_id, RunQuery(backfill_id=bid, all_attempts=True, limit=None)).items
+        total = len(runs)
         runs.sort(key=lambda r: (r.started_at is None, r.started_at or r.created_at or datetime.min))
 
         started = [r for r in runs if r.started_at is not None]

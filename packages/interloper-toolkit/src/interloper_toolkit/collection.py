@@ -31,6 +31,7 @@ from interloper.errors import (
 from interloper.oauth import OAuthAppCredentials
 from interloper.settings import AppSettings
 from interloper.utils.concurrency import invoke
+from interloper_db import ComponentQuery
 from pydantic import ValidationError
 
 from interloper_toolkit.authz import requires_role
@@ -81,7 +82,8 @@ def list_components(
     try:
         if kind is None:
             counts: dict[str, int] = {}
-            for c in ctx.store.components.list_all(ctx.org_id, q=q):
+            everything = ctx.store.components.list(ctx.org_id, ComponentQuery(q=q, roots_only=False, limit=None))
+            for c in everything.items:
                 counts[c.kind] = counts.get(c.kind, 0) + 1
             return ComponentCounts(
                 component_counts=counts,
@@ -91,8 +93,10 @@ def list_components(
             return ToolError(error=f"Unknown kind '{kind}'", valid_values=sorted(KINDS.keys()))
 
         results = []
-        total = ctx.store.components.count(ctx.org_id, kinds=[kind], q=q)
-        for c in ctx.store.components.list_all(ctx.org_id, kinds=[kind], q=q, limit=limit, offset=offset):
+        components = ctx.store.components.list(
+            ctx.org_id, ComponentQuery(kind=[kind], q=q, roots_only=False, limit=limit, offset=offset)
+        )
+        for c in components.items:
             entry = ComponentSummary(
                 id=str(c.id),
                 key=c.key,
@@ -107,7 +111,7 @@ def list_components(
                 entry.asset_count = len(c.children)
             results.append(entry)
 
-        return ComponentList(kind=kind, count=len(results), total=total, components=results)
+        return ComponentList(kind=kind, count=len(results), total=components.total, components=results)
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -238,7 +242,7 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
     """
     try:
         src = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
-        ctx.store.relations.remove(src.id, name=name, dst_id=UUID(dst_id))
+        ctx.store.relations.delete(src.id, name=name, dst_id=UUID(dst_id))
     except (ConfigError, NotFoundError, ValueError) as e:
         return ToolError(error=str(e))
     return UnbindResult(src_id=component_id, name=name, dst_id=dst_id)
@@ -298,7 +302,9 @@ def request_connection_setup(
         if not force_new:
             existing = [
                 ComponentRef(id=c.id, kind=c.kind, key=c.key, name=c.name)
-                for c in ctx.store.components.list_all(ctx.org_id, kinds=["connection"])
+                for c in ctx.store.components.list(
+                    ctx.org_id, ComponentQuery(kind=["connection"], roots_only=False, limit=None)
+                ).items
                 if c.key == connection_key
             ]
             if existing:

@@ -1,7 +1,7 @@
 import type { Execution } from '~/types/execution'
 
 export const useExecutionsStore = defineStore('executions', () => {
-    const { apiFetch } = useApi()
+    const { fetchAll } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -53,7 +53,7 @@ export const useExecutionsStore = defineStore('executions', () => {
      **********************/
     async function _refetch(id: string) {
         try {
-            executions.value = await apiFetch<Execution[]>(`/runs/${id}/executions`)
+            executions.value = await fetchAll<Execution>(`/runs/${id}/executions`)
         }
         catch {
             // Silently ignore — the initial fetch already set the error state
@@ -68,7 +68,7 @@ export const useExecutionsStore = defineStore('executions', () => {
         loading.value = true
         error.value = null
         try {
-            executions.value = await apiFetch<Execution[]>(`/runs/${id}/executions`)
+            executions.value = await fetchAll<Execution>(`/runs/${id}/executions`)
         }
         catch (e) {
             error.value = e as Error
@@ -80,7 +80,7 @@ export const useExecutionsStore = defineStore('executions', () => {
 
     async function fetchLatest() {
         try {
-            latest.value = await apiFetch<Execution[]>('/runs/executions/latest')
+            latest.value = await fetchAll<Execution>('/executions', { latest: 'true' })
             latestLoaded.value = true
         }
         catch (e) {

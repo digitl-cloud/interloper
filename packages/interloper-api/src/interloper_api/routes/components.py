@@ -1,9 +1,9 @@
-"""Components API: one surface for every component operation.
+"""Components API: one surface for every stored component, of every kind.
 
 A generic CRUD for persisted instances of every component kind, plus the
-type-level operations that execute a component class against a candidate,
-unsaved config — resolving a FetchField's options (``/resolve``) and
-checking a connection (``/check``).
+edges a component holds. Operations on a component *class* (resolving a
+FetchField's options, checking a connection) are catalog routes, addressed
+by catalog key (:mod:`interloper_api.routes.catalog`).
 
 The response shape is kind-agnostic — identity, drift ``status``, ``config``
 (decoded for secret kinds on detail responses; the schema's ``x-public``
@@ -17,25 +17,18 @@ come from the catalog (``/catalog``), not from this router.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 from uuid import UUID
 
-import httpx2
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.component import KINDS
-from interloper.connection.base import Connection
-from interloper.errors import ComponentDriftError, ConnectionCheckError, DataNotFoundError, format_exception
-from interloper.resource.fields import is_fetch_field_provider
-from interloper.utils.concurrency import invoke
-from interloper.utils.imports import import_from_path
-from interloper_db import Component, ComponentStatus, DeleteImpact, Store
-from pydantic import BaseModel, Field, ValidationError
+from interloper.errors import ComponentDriftError, DataNotFoundError
+from interloper_db import Component, ComponentQuery, ComponentStatus, DeleteImpact, Page, Store
+from pydantic import BaseModel
 
 from interloper_api.dependencies import (
-    CatalogDep,
     CurrentUserDep,
     EditorDep,
     OrgIdDep,
@@ -43,6 +36,7 @@ from interloper_api.dependencies import (
     ViewerDep,
     load_authorized,
 )
+from interloper_api.routes.relations import RelationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -75,20 +69,6 @@ class RelationRef(BaseModel):
     dst_kind: str
     dst_key: str
     dst_name: str | None = None
-
-
-class RelationResponse(BaseModel):
-    """An org-wide relation row (graph edges, dependency lists).
-
-    ``src_kind`` rides along so the app's graph and upstream views can filter
-    asset-to-asset rows without a second lookup.
-    """
-
-    src_id: UUID
-    name: str
-    dst_id: UUID
-    src_kind: str
-    dst_kind: str
 
 
 class UsedByRef(BaseModel):
@@ -299,64 +279,31 @@ def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, lis
 # -- Component endpoints -------------------------------------------------------
 
 
-@router.get("/")
+@router.get("")
 def list_components(
     user: ViewerDep,
     org_id: OrgIdDep,
     store: StoreDep,
-    kind: Annotated[list[str] | None, Query()] = None,
-) -> list[ComponentResponse]:
-    """List the organisation's root components, optionally filtered by kind(s).
+    query: Annotated[ComponentQuery, Query()],
+) -> Page[ComponentResponse]:
+    """List the organisation's root components, optionally filtered by kind(s) and text.
 
     An owned component (a source's asset) rides under its owner's
     ``children`` rather than listing on its own, so ``kind=asset`` yields the
     standalone assets alone.
 
     Args:
-        kind: The root kinds to keep; None lists every kind.
         user: The authenticated user.
         org_id: The active organisation UUID.
         store: The Store instance.
+        query: The kinds, text and window to read.
 
     Returns:
-        The organisation's root components, secret configs withheld.
+        The page of components, secret configs withheld.
     """
-    rows = store.components.list_roots(org_id, kinds=kind)
-    return [ComponentResponse.from_row(row, store, include_config=False) for row in rows]
-
-
-@router.get("/relations")
-def list_relations(
-    user: ViewerDep,
-    org_id: OrgIdDep,
-    store: StoreDep,
-    name: str | None = None,
-    src_kind: str | None = None,
-    dst_kind: str | None = None,
-) -> list[RelationResponse]:
-    """List the organisation's component relations, optionally filtered.
-
-    Args:
-        name: The relation name to keep; None lists every name.
-        src_kind: The source kind to keep; None lists every kind.
-        dst_kind: The destination kind to keep; None lists every kind.
-        user: The authenticated user.
-        org_id: The active organisation UUID.
-        store: The Store instance.
-
-    Returns:
-        The organisation's relation rows.
-    """
-    return [
-        RelationResponse(
-            src_id=relation.src_id,
-            name=relation.name,
-            dst_id=relation.dst_id,
-            src_kind=relation.src_kind,
-            dst_kind=relation.dst_kind,
-        )
-        for relation in store.relations.list_all(org_id, name=name, src_kind=src_kind, dst_kind=dst_kind)
-    ]
+    return store.components.list(org_id, query).map(
+        lambda row: ComponentResponse.from_row(row, store, include_config=False)
+    )
 
 
 @router.get("/delete-impact")
@@ -384,7 +331,7 @@ def get_delete_impact(
     return DeleteImpactResponse.from_impact(store.components.delete_impact(component_id))
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 def create_component(
     body: ComponentCreateRequest,
     user: EditorDep,
@@ -466,12 +413,12 @@ def update_component(
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
-@router.delete("/{component_id}")
+@router.delete("/{component_id}", status_code=204)
 def delete_component(
     component_id: UUID,
     user: CurrentUserDep,
     store: StoreDep,
-) -> dict[str, str]:
+) -> Response:
     """Delete a component. Refused (409) while other components are bound to it.
 
     Args:
@@ -480,11 +427,11 @@ def delete_component(
         store: The Store instance.
 
     Returns:
-        A ``{"status": "deleted"}`` acknowledgement.
+        An empty 204 response.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
     store.components.delete(component_id)
-    return {"status": "deleted"}
+    return Response(status_code=204)
 
 
 # -- Relation endpoints --------------------------------------------------------
@@ -518,13 +465,7 @@ def add_relation(
     if destination_row.org_id != source.org_id:
         raise HTTPException(status_code=404, detail=f"Component {body.dst_id} not found")
     relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
-    return RelationResponse(
-        src_id=relation.src_id,
-        name=relation.name,
-        dst_id=relation.dst_id,
-        src_kind=relation.src_kind,
-        dst_kind=relation.dst_kind,
-    )
+    return RelationResponse.from_relation(relation)
 
 
 @router.delete("/{component_id}/relations/{name}/{dst_id}", status_code=204)
@@ -547,7 +488,7 @@ def remove_relation(
         store: The Store instance.
     """
     load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
-    store.relations.remove(component_id, name=name, dst_id=dst_id)
+    store.relations.delete(component_id, name=name, dst_id=dst_id)
 
 
 # -- Partition endpoint --------------------------------------------------------
@@ -598,256 +539,3 @@ def get_partition_row_counts(
         partition_column=partitioning.column,
         counts=[PartitionRowCountItem(partition=str(k), row_count=v) for k, v in sorted(counts.items())],
     )
-
-
-# -- Field resolution ----------------------------------------------------------
-
-
-def handle_error(error: Exception, context: str) -> None:
-    """Map external API errors to appropriate HTTP responses.
-
-    Args:
-        error: The exception raised while calling the external API.
-        context: What was being attempted, phrased as a gerund clause for the
-            detail message (e.g. ``"resolving facebook.ads_stats"``).
-
-    Raises:
-        HTTPException: Always — *error* re-raised as-is when it already is
-            one, otherwise the status mapped from it, or 500 by default.
-    """
-    logger.error("Error %s: %s", context, error)
-
-    if isinstance(error, httpx2.HTTPStatusError):
-        status = error.response.status_code
-        if status in (401, 403):
-            raise HTTPException(status_code=status, detail=f"Authorization failed while {context}.")
-        if status == 404:
-            raise HTTPException(status_code=404, detail=f"Resource not found while {context}.")
-
-    if isinstance(error, HTTPException):
-        raise error
-
-    raise HTTPException(status_code=500, detail=f"Failed {context}.")
-
-
-class ResolveRequest(BaseModel):
-    """A request to resolve one provider-backed FetchField's options.
-
-    ``deps`` carries the credentials the form already holds, keyed by relation
-    name (e.g. ``{"connection": {"access_token": ...}}``).
-    """
-
-    component_key: str
-    field: str
-    deps: dict[str, dict[str, Any]] = {}
-
-
-@router.post("/resolve")
-async def resolve_fetch_field(
-    body: ResolveRequest,
-    catalog: CatalogDep,
-    _user: EditorDep,
-) -> list[dict[str, Any]]:
-    """Resolve the options for a ``FetchField(provider=...)`` field.
-
-    One endpoint resolves any field declared with
-    ``FetchField(provider="<name>.<method>")`` - there are no hand-written
-    per-provider routes. The component definition comes from the catalog
-    (authoritative - the provider reference comes from the server's schema,
-    never the client), the resource named by the relation is instantiated
-    from the credentials the form already holds, and the
-    ``@fetch_field_provider`` method ``<method>`` is called on it. That
-    marker is the allowlist: only methods opted in that way may be invoked,
-    so the browser cannot call arbitrary attributes.
-
-    Args:
-        body: The component key, the field name, and the per-relation
-            credentials the form currently holds.
-        catalog: The Catalog instance.
-        _user: The authenticated user (editor gate).
-
-    Returns:
-        The field's options, as the provider returned them.
-
-    Raises:
-        HTTPException: 404 for an unknown component key, 400 when the field is
-            not a provider-backed FetchField, names an unknown or undeclared
-            relation, or the credentials the form holds cannot build that
-            relation's resource, 403 when the target method is not a fetch
-            provider.
-    """
-    defn = catalog.get(body.component_key)
-    if defn is None:
-        raise HTTPException(status_code=404, detail=f"Unknown component '{body.component_key}'")
-
-    prop = getattr(defn, "config_schema", {}).get("properties", {}).get(body.field, {})
-    provider = prop.get("x-fetch", {}).get("provider")
-    if not provider:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Field '{body.field}' on '{body.component_key}' is not a provider-backed FetchField",
-        )
-    name, _, method = str(provider).partition(".")
-
-    component_cls = import_from_path(defn.path)
-    relation = component_cls.relations.get(name)
-    resource_cls = relation.target if relation else None
-    if resource_cls is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Relation '{name}' not found on '{body.component_key}' or not declared from a component class",
-        )
-
-    # Only pass through fields the resource actually declares - the form may
-    # carry extra markers (e.g. an internal id) that the model would reject.
-    raw = body.deps.get(name, {})
-    creds = {k: v for k, v in raw.items() if k in resource_cls.model_fields}
-    try:
-        resource = resource_cls(**creds)
-    except ValidationError as error:
-        # format_exception, never str(error): pydantic echoes the input values, which are credentials.
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot resolve '{body.field}' from the '{name}' credentials given: {format_exception(error)}",
-        )
-
-    fn = getattr(resource, method, None)
-    if not is_fetch_field_provider(fn):
-        # Should never happen — validated at catalog build — but guard anyway.
-        raise HTTPException(status_code=403, detail=f"'{provider}' is not a fetch provider")
-    assert fn is not None  # narrowed by the is_fetch_field_provider guard above
-
-    try:
-        result = await invoke(fn)
-    except Exception as exception:  # noqa: BLE001 — every provider failure is mapped to a response
-        handle_error(exception, f"resolving {body.component_key}.{body.field}")
-        return []
-    return list(result or [])
-
-
-# -- Connection check ----------------------------------------------------------
-
-
-# Upper bound on a live check — the wizard must never hang on a dead host.
-CHECK_TIMEOUT = 15.0
-
-
-class FieldError(BaseModel):
-    """One static-validation error, addressed to a config field."""
-
-    field: str
-    message: str
-
-
-class CheckRequest(BaseModel):
-    """A request to check one connection's candidate config."""
-
-    component_key: str
-    config: dict[str, Any] = {}
-
-
-class CheckResponse(BaseModel):
-    """The outcome of a connection check.
-
-    ``live`` distinguishes a full check from a static-only one (the class
-    implements no ``check()`` hook). ``category`` classifies failures so the
-    UI can hint at a fix: bad ``config`` values, rejected ``auth``,
-    unreachable ``network``, or an uncategorised ``error``.
-    """
-
-    ok: bool
-    live: bool
-    message: str | None = None
-    category: Literal["config", "auth", "network", "error"] | None = None
-    errors: list[FieldError] = Field(default_factory=list)
-
-    @classmethod
-    def from_failure(cls, exception: Exception, key: str) -> CheckResponse:
-        """Map a live-check exception to its response.
-
-        Full details are logged server-side only — provider errors may carry
-        URLs with tokens.
-
-        Args:
-            exception: The exception the live check raised.
-            key: The connection's catalog key, for the log line.
-
-        Returns:
-            The categorised failure response.
-        """
-        logger.error("Connection check failed for '%s': %s", key, exception)
-
-        if isinstance(exception, ConnectionCheckError):
-            return cls(ok=False, live=True, category="error", message=str(exception))
-        if isinstance(exception, httpx2.HTTPStatusError):
-            status = exception.response.status_code
-            if status in (401, 403):
-                return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
-            return cls(
-                ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
-            )
-        if isinstance(exception, (TimeoutError, httpx2.TimeoutException)):
-            return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
-        if isinstance(exception, httpx2.TransportError):
-            return cls(ok=False, live=True, category="network", message="The provider could not be reached.")
-        return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
-
-
-@router.post("/check")
-async def check_connection(
-    body: CheckRequest,
-    catalog: CatalogDep,
-    _user: EditorDep,
-) -> CheckResponse:
-    """Check a connection's candidate config, statically and (when supported) live.
-
-    The static tier instantiates the connection class from the config the
-    form holds — pydantic validation surfaces per-field errors. The live
-    tier calls the class's ``check()`` hook (when implemented), a
-    lightweight authenticated call against the provider. A failed check is
-    this endpoint's *expected* output, so failures are reported as
-    ``ok: false`` in a 200 response, never as HTTP errors; only an unknown
-    component key is a 404.
-
-    Args:
-        body: The connection key and the candidate config to check.
-        catalog: The Catalog instance.
-        _user: The authenticated user (editor gate).
-
-    Returns:
-        The check outcome; a failed check is still a 200 with ``ok: false``.
-
-    Raises:
-        HTTPException: 404 for an unknown connection key.
-    """
-    defn = catalog.get(body.component_key)
-    if defn is None or defn.kind != "connection":
-        raise HTTPException(status_code=404, detail=f"Unknown connection '{body.component_key}'")
-
-    connection_cls = import_from_path(defn.path)
-    assert issubclass(connection_cls, Connection)  # guaranteed by the kind check above
-
-    # Only pass through fields the connection actually declares — the form may
-    # carry extra markers (e.g. an internal id) that the model would reject.
-    config = {k: v for k, v in body.config.items() if k in connection_cls.model_fields}
-    try:
-        connection = connection_cls(**config)
-    except ValidationError as exception:
-        errors = [
-            FieldError(field=".".join(str(loc) for loc in e["loc"]), message=e["msg"])
-            for e in exception.errors()
-        ]
-        return CheckResponse(
-            ok=False, live=False, category="config", message="The configuration is invalid.", errors=errors
-        )
-
-    if not connection_cls.checkable():
-        return CheckResponse(ok=True, live=False)
-
-    try:
-        ok = bool(await asyncio.wait_for(invoke(connection.check), timeout=CHECK_TIMEOUT))
-    except Exception as exception:  # noqa: BLE001 — a failed check is a result, never a raise
-        return CheckResponse.from_failure(exception, body.component_key)
-    if not ok:
-        return CheckResponse(ok=False, live=True, category="error", message="The connection check failed.")
-    return CheckResponse(ok=True, live=True)

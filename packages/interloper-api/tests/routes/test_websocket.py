@@ -18,6 +18,7 @@ from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 from typing_extensions import Self
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import state as state_module
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.routes.websocket import ConnectionManager
@@ -358,15 +359,15 @@ class TestRealtimeLifespan:
 
 
 class FakeStore:
-    """Stand-in exposing only ``auth.resolve_session``."""
+    """Stand-in exposing only ``sessions.resolve``."""
 
     def __init__(self, session: tuple[Any, Any] | None) -> None:
         """Set up the fake.
 
         Args:
-            session: What ``resolve_session`` returns; ``None`` means unknown.
+            session: What ``sessions.resolve`` returns; ``None`` means unknown.
         """
-        self.auth = SimpleNamespace(resolve_session=lambda token: session)
+        self.sessions = SimpleNamespace(resolve=lambda token: session)
 
 
 @pytest.fixture
@@ -386,6 +387,7 @@ def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
     def build(session: tuple[Any, Any] | None) -> TestClient:
         monkeypatch.setattr(state_module, "_store", FakeStore(session))
         app = FastAPI()
+        install_error_handlers(app)
         app.include_router(websocket_module.router)
         return TestClient(app)
 

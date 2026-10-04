@@ -1,7 +1,7 @@
 import type { ComponentRecord, ComponentInput, DeleteImpact, Relation, RelationInput } from '~/types/component'
 
 export const useComponentsStore = defineStore('components', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, fetchAll: fetchPages } = useApi()
     const toast = useToast()
 
     /**********************
@@ -67,7 +67,7 @@ export const useComponentsStore = defineStore('components', () => {
         try {
             const params = new URLSearchParams()
             for (const kind of kinds ?? []) params.append('kind', kind)
-            const fetched = await apiFetch<ComponentRecord[]>(`/components/${kinds?.length ? `?${params}` : ''}`)
+            const fetched = await fetchPages<ComponentRecord>('/components', params)
             if (kinds?.length) {
                 const kindSet = new Set(kinds)
                 components.value = [...components.value.filter(c => !kindSet.has(c.kind)), ...fetched]
@@ -92,7 +92,7 @@ export const useComponentsStore = defineStore('components', () => {
     }
 
     async function create(input: ComponentInput): Promise<ComponentRecord> {
-        const component = await apiFetch<ComponentRecord>('/components/', {
+        const component = await apiFetch<ComponentRecord>('/components', {
             method: 'POST',
             body: input,
         })
@@ -125,9 +125,8 @@ export const useComponentsStore = defineStore('components', () => {
      * rejection would otherwise surface nowhere but the console.
      */
     async function fetchRelations(name?: string) {
-        const query = name ? `?name=${name}` : ''
         try {
-            const fetched = await apiFetch<Relation[]>(`/components/relations${query}`)
+            const fetched = await fetchPages<Relation>('/relations', name ? { name } : undefined)
             if (name) relations.value = [...relations.value.filter(r => r.name !== name), ...fetched]
             else relations.value = fetched
         }

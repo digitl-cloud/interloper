@@ -12,15 +12,20 @@ from sqlmodel import Session
 
 from interloper_db.engine import engine_from_settings, get_engine
 from interloper_db.session import transaction
-from interloper_db.store.auth import AuthStore
+from interloper_db.store.backfills import BackfillStore
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.conversations import ConversationStore
 from interloper_db.store.events import EventStore
+from interloper_db.store.executions import ExecutionStore
 from interloper_db.store.hydration import Hydrator
+from interloper_db.store.invitations import InvitationStore
+from interloper_db.store.members import MemberStore
 from interloper_db.store.organisations import OrganisationStore
-from interloper_db.store.quotas import QuotaStore
+from interloper_db.store.profiles import ProfileStore
+from interloper_db.store.quotas import QuotaStore, UsageStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
+from interloper_db.store.sessions import SessionStore
 from interloper_db.store.tokens import TokenStore
 
 logger = logging.getLogger(__name__)
@@ -31,21 +36,27 @@ class Store:
 
     Bridges catalog definitions and database rows to hydrate and persist
     interloper components. The store owns the engine, the catalog and the
-    session policy; each area of the schema is a facet reached through it —
-    ``store.components``, ``store.runs``, ``store.auth`` and so on. Hydration
+    session policy; each entity is a facet reached through it —
+    ``store.components``, ``store.runs``, ``store.members`` and so on. Hydration
     is delegated to a :class:`~interloper_db.store.hydration.Hydrator` that
     builds ``Spec`` trees, which :meth:`ComponentStore.load` reconstructs.
 
     Attributes:
-        auth: Profiles and the sessions authenticating them.
-        organisations: Organisations, their members and their invitations.
+        profiles: Who a person is.
+        sessions: The login sessions proving it.
+        organisations: The tenants.
+        members: Who belongs to an organisation, with which role.
+        invitations: Memberships not yet accepted.
         tokens: Personal access tokens.
         conversations: A member's conversations with the agent.
-        relations: The vocabulary-checked edges between components.
         components: Component CRUD, hydration and catalog status, for every kind.
-        events: Run events and the asset executions derived from them.
-        runs: Runs and backfills.
-        quotas: Limit resolution, enforcement gates and the usage ledger.
+        relations: The vocabulary-checked edges between components.
+        runs: Runs, their attempts and their completion.
+        backfills: Batches of runs over a partition range.
+        events: What happened during a run.
+        executions: Each operation's verdict in a run, derived from its events.
+        quotas: Limit resolution and the enforcement gates.
+        usage: The usage ledger and the counts it is reconciled against.
     """
 
     def __init__(
@@ -76,14 +87,20 @@ class Store:
 
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
-        self.auth = AuthStore(self._engine)
+        self.profiles = ProfileStore(self._engine)
+        self.sessions = SessionStore(self._engine)
         self.organisations = OrganisationStore(self._engine)
-        self.tokens = TokenStore(self._engine, self.organisations)
+        self.members = MemberStore(self._engine)
+        self.invitations = InvitationStore(self._engine)
+        self.tokens = TokenStore(self._engine, self.members)
         self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
+        self.usage = UsageStore(self._engine)
+        self.backfills = BackfillStore(self._engine, self.quotas)
+        self.runs = RunStore(self._engine, self.quotas, self.backfills)
         self.events = EventStore(self._engine)
-        self.runs = RunStore(self._engine, self.quotas)
+        self.executions = ExecutionStore(self._engine)
         self.components = ComponentStore(
             self._engine, catalog, self._hydrator, encrypt, self.quotas, self.relations
         )

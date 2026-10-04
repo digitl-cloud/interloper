@@ -12,12 +12,14 @@ import httpx2
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from interloper.errors import NotFoundError
-from interloper_db import Organisation, Store
+from interloper_db import Organisation, Profile, Store
+from interloper_db.models import AuthSession
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
     AuthConfigDep,
     CurrentUserDep,
+    SessionContextDep,
     StoreDep,
     get_features,
 )
@@ -57,7 +59,7 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
         return True
     if email.rsplit("@", 1)[-1] in allowed_domains:
         return True
-    return store.organisations.has_pending_invitation(email)
+    return store.invitations.has_pending(email)
 
 
 # -- Login & session -----------------------------------------------------------
@@ -76,6 +78,39 @@ class AuthUserResponse(BaseModel):
     organisation: OrganisationResponse | None = None
     last_organisation_id: UUID | None = None
     features: dict[str, bool] = {}
+
+    @classmethod
+    def from_session(cls, profile: Profile, session_row: AuthSession, store: Store) -> AuthUserResponse:
+        """Describe the caller in the organisation their session is working in.
+
+        A session outliving its organisation still resolves: the caller is
+        authenticated, just no longer scoped anywhere, and reads as a viewer.
+
+        Args:
+            profile: The caller's profile.
+            session_row: The caller's login session.
+            store: The Store instance the organisation and role are read through.
+
+        Returns:
+            The response model, carrying the enabled feature flags.
+        """
+        organisation: Organisation | None = None
+        if session_row.organisation_id:
+            with suppress(NotFoundError):
+                organisation = store.organisations.get(session_row.organisation_id)
+        role = (store.members.role(organisation.id, profile.id) if organisation else None) or "viewer"
+        return cls(
+            id=profile.id,
+            email=profile.email,
+            name=profile.name,
+            avatar_url=profile.avatar_url,
+            timezone=profile.timezone,
+            role=role,
+            is_super_admin=profile.is_super_admin,
+            organisation=OrganisationResponse.from_organisation(organisation) if organisation else None,
+            last_organisation_id=profile.last_organisation_id,
+            features=get_features(),
+        )
 
 
 @router.get("/google")
@@ -186,10 +221,10 @@ def google_callback(
 
     # Gate signup only: existing profiles always sign in, a first login must
     # pass the allowlist before a profile is created.
-    if not store.auth.get_profile_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
+    if not store.profiles.get_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
         return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
-    profile = store.auth.upsert_profile(
+    profile = store.profiles.upsert(
         google_id=google_id,
         email=email,
         name=name,
@@ -199,10 +234,10 @@ def google_callback(
     # Bootstrap super-admins from settings. Promote-only: removing an email from
     # the list never demotes an existing super-admin.
     if not profile.is_super_admin and email.lower() in auth_config.super_admin_emails:
-        profile = store.auth.set_super_admin(profile.id)
+        profile = store.profiles.set_super_admin(profile.id, value=True)
 
     # Create session (no org context — frontend resolves org after login)
-    token = store.auth.create_session(user_id=profile.id)
+    token = store.sessions.create(profile.id)
 
     redirect_url = state if state and state.startswith("/") else "/"
     response = RedirectResponse(url=redirect_url, status_code=302)
@@ -218,84 +253,40 @@ def google_callback(
     return response
 
 
-@router.post("/logout")
-def logout(
-    response: Response,
-    user: CurrentUserDep,
-    store: StoreDep,
-) -> dict[str, str]:
-    """Delete all sessions for the current user and clear the cookie.
+@router.post("/logout", status_code=204)
+def logout(user: CurrentUserDep, store: StoreDep) -> Response:
+    """End every session of the current user and clear the cookie.
 
     Every session is dropped, not just this one: a logout is expected to end
     the user's other browsers too.
 
     Args:
-        response: The outgoing response, used to clear the session cookie.
         user: The authenticated caller.
         store: The database store.
 
     Returns:
-        A status acknowledgement.
+        An empty 204 response clearing the session cookie.
     """
-    store.auth.delete_user_sessions(user.id)
+    store.sessions.delete_all(user.id)
+    response = Response(status_code=204)
     response.delete_cookie("session_token", path="/")
-    return {"status": "ok"}
+    return response
 
 
 @router.get("/me")
-def get_me(
-    store: StoreDep,
-    session_token: Annotated[str | None, Cookie()] = None,
-) -> AuthUserResponse:
+def get_me(context: SessionContextDep, store: StoreDep) -> AuthUserResponse:
     """Return the current user and their active organisation (if any).
 
     Args:
+        context: The caller and their session.
         store: The database store.
-        session_token: The session cookie, absent when the caller is not
-            logged in.
 
     Returns:
         The caller's profile, their role in the active organisation (``viewer``
         when there is none), and the enabled feature flags.
-
-    Raises:
-        HTTPException: 401 when the session cookie is missing, unknown, or
-            expired.
     """
-    if not session_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    result = store.auth.resolve_session(session_token)
-    if not result:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-
-    profile, session_row = result
-    org: Organisation | None = None
-    role = "viewer"
-
-    if session_row.organisation_id:
-        # A session outliving its organisation still resolves: the caller is
-        # authenticated, just no longer scoped anywhere.
-        with suppress(NotFoundError):
-            org = store.organisations.get(session_row.organisation_id)
-
-    if org and profile.id:
-        user_role = store.organisations.member_role(profile.id, org.id)
-        if user_role:
-            role = user_role
-
-    return AuthUserResponse(
-        id=profile.id,
-        email=profile.email,
-        name=profile.name,
-        avatar_url=profile.avatar_url,
-        timezone=profile.timezone,
-        role=role,
-        is_super_admin=profile.is_super_admin,
-        organisation=OrganisationResponse.model_validate(org, from_attributes=True) if org else None,
-        last_organisation_id=profile.last_organisation_id,
-        features=get_features(),
-    )
+    profile, session_row = context
+    return AuthUserResponse.from_session(profile, session_row, store)
 
 
 # -- Profile -------------------------------------------------------------------
@@ -312,31 +303,17 @@ class UpdateMeRequest(BaseModel):
     timezone: str | None = None
 
 
-class ProfileResponse(BaseModel):
-    """The caller's own profile, as returned by profile updates."""
-
-    id: UUID
-    email: str
-    name: str | None = None
-    avatar_url: str | None = None
-    timezone: str | None = None
-
-
 @router.patch("/me")
-def update_me(
-    body: UpdateMeRequest,
-    user: CurrentUserDep,
-    store: StoreDep,
-) -> ProfileResponse:
+def update_me(body: UpdateMeRequest, context: SessionContextDep, store: StoreDep) -> AuthUserResponse:
     """Update the current user's profile (display name, timezone).
 
     Args:
         body: The fields to change; omitted fields stay untouched.
-        user: The authenticated caller.
+        context: The caller and their session.
         store: The database store.
 
     Returns:
-        The profile as it stands after the update.
+        The caller as :func:`get_me` describes them, after the update.
 
     Raises:
         HTTPException: 422 when the timezone is not a known IANA zone name.
@@ -346,9 +323,9 @@ def update_me(
             ZoneInfo(body.timezone)
         except (KeyError, ValueError):
             raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
-
-    profile = store.auth.update_profile(user.id, name=body.name, timezone=body.timezone)
-    return ProfileResponse.model_validate(profile, from_attributes=True)
+    profile, session_row = context
+    profile = store.profiles.update(profile.id, name=body.name, timezone=body.timezone)
+    return AuthUserResponse.from_session(profile, session_row, store)
 
 
 # -- Organisation context ------------------------------------------------------
@@ -360,13 +337,13 @@ class SwitchOrgRequest(BaseModel):
     organisation_id: UUID
 
 
-@router.post("/switch-org")
+@router.post("/switch-org", status_code=204)
 def switch_org(
     body: SwitchOrgRequest,
     user: CurrentUserDep,
     store: StoreDep,
     session_token: Annotated[str | None, Cookie()] = None,
-) -> dict[str, str]:
+) -> Response:
     """Switch the session's active organisation. User must be a member.
 
     Args:
@@ -377,18 +354,16 @@ def switch_org(
             the session, so without it there is nothing to record.
 
     Returns:
-        A status acknowledgement.
+        An empty 204 response.
 
     Raises:
         HTTPException: 403 when the caller is not a member of the organisation.
     """
-    role = store.organisations.member_role(user.id, body.organisation_id)
-    if not role:
+    if not store.members.role(body.organisation_id, user.id):
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
-
     if session_token:
-        store.auth.set_session_org(session_token, body.organisation_id, user_id=user.id)
-    return {"status": "ok"}
+        store.sessions.switch_org(session_token, body.organisation_id, user.id)
+    return Response(status_code=204)
 
 
 class AcceptInviteRequest(BaseModel):
@@ -403,7 +378,7 @@ def accept_invite(
     user: CurrentUserDep,
     store: StoreDep,
     session_token: Annotated[str | None, Cookie()] = None,
-) -> dict[str, str]:
+) -> OrganisationResponse:
     """Accept an organisation invitation using its token.
 
     Args:
@@ -414,17 +389,15 @@ def accept_invite(
             also becomes the session's active one.
 
     Returns:
-        A status acknowledgement.
+        The organisation joined.
 
     Raises:
         HTTPException: 400 when the invitation is unknown, already redeemed, or
             expired.
     """
-    org = store.organisations.accept_invitation(body.token, user.id)
-    if not org:
+    organisation = store.invitations.accept(body.token, user.id)
+    if not organisation:
         raise HTTPException(status_code=400, detail="Invalid or expired invitation")
-
     if session_token:
-        store.auth.set_session_org(session_token, org.id, user_id=user.id)
-
-    return {"status": "ok"}
+        store.sessions.switch_org(session_token, organisation.id, user.id)
+    return OrganisationResponse.from_organisation(organisation)

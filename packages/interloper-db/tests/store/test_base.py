@@ -207,14 +207,29 @@ class TestEngineProperty:
 class TestFacets:
     """Every documented facet is wired at construction."""
 
-    @pytest.mark.parametrize(
-        "facet",
-        ["auth", "organisations", "tokens", "relations", "quotas", "events", "runs", "components"],
+    FACETS = (
+        "profiles",
+        "sessions",
+        "organisations",
+        "members",
+        "invitations",
+        "tokens",
+        "conversations",
+        "components",
+        "relations",
+        "runs",
+        "backfills",
+        "events",
+        "executions",
+        "quotas",
+        "usage",
     )
+
+    @pytest.mark.parametrize("facet", FACETS)
     def test_the_facet_is_present(self, store: Store, facet: str) -> None:
         assert getattr(store, facet) is not None
 
     def test_every_facet_shares_the_stores_engine(self, store: Store, component_db: Engine) -> None:
         # Otherwise a facet would read a different database than its siblings.
-        for facet in ("auth", "organisations", "relations", "events", "runs", "components"):
+        for facet in self.FACETS:
             assert getattr(store, facet)._engine is component_db

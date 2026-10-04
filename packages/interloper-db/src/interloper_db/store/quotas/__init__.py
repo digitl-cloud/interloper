@@ -8,6 +8,8 @@ Three layers, each independent of the one above it:
   registered key, owning how its usage is measured and compared.
 - :mod:`.base` — :class:`QuotaStore` (``store.quotas``): resolves the effective
   limit for an organisation and runs the gates.
+- :mod:`.usage` — :class:`UsageStore` (``store.usage``): reads the ledger and
+  the live counts it is reconciled against.
 """
 
 from interloper_db.store.quotas.base import QuotaStore
@@ -23,6 +25,7 @@ from interloper_db.store.quotas.definitions import (
     QuotaDefinition,
 )
 from interloper_db.store.quotas.metering import METRIC_SUCCESSFUL_RUNS, METRICS, UsageLedger
+from interloper_db.store.quotas.usage import UsageDrift, UsageQuery, UsageStore
 
 __all__ = [
     "METRICS",
@@ -37,5 +40,8 @@ __all__ = [
     "ConsumptionQuota",
     "QuotaDefinition",
     "QuotaStore",
+    "UsageDrift",
     "UsageLedger",
+    "UsageQuery",
+    "UsageStore",
 ]

@@ -1,27 +1,23 @@
-"""Organisation persistence: the tenant, who belongs to it, and who is invited.
+"""Organisation persistence: the tenant every other facet scopes to.
 
-An organisation is the tenancy boundary every other facet scopes to, so this
-one owns three tables rather than one: the org itself, the memberships that
-carry a profile's role in it, and the invitations that are memberships not yet
-accepted. Authentication (who a person is) is :mod:`~interloper_db.store.auth`;
-this facet answers what they may do, and where.
+Who belongs to an organisation is :mod:`~interloper_db.store.members`, who is
+invited is :mod:`~interloper_db.store.invitations`.
 
-Deleting an organisation reaches past those three tables into every facet that
+Deleting an organisation reaches past its own row into every facet that
 scopes to it. That is the tenant purge, not a hidden coupling: it is bulk
 statements, ordered children-first, and no other method here crosses over.
 """
 
 from __future__ import annotations
 
-import secrets
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from interloper.utils import assume_utc
-from sqlalchemy import Engine, delete, func, update
-from sqlmodel import Session, col, select
+from sqlalchemy import Engine, delete, update
+from sqlmodel import Session, col, func, select
 
 from interloper_db.models import (
     AuthSession,
@@ -37,12 +33,41 @@ from interloper_db.models import (
     UserOrganisation,
 )
 from interloper_db.session import commit, session_scope
+from interloper_db.store.page import Page, PageQuery
 
-INVITATION_EXPIRY_DAYS = 7
+
+class OrganisationQuery(PageQuery):
+    """Which organisations a listing reads.
+
+    Attributes:
+        user_id: Keep the organisations this profile is a member of; ``None``
+            keeps every organisation.
+        include_deleted: Keep soft-deleted organisations too.
+    """
+
+    user_id: UUID | None = None
+    include_deleted: bool = False
+
+
+@dataclass(frozen=True)
+class ActivityEntry:
+    """One event in an organisation's derived activity feed.
+
+    Attributes:
+        kind: What happened (``org_created``, ``member_joined``, …).
+        when: When it happened, aware UTC.
+        subject: Who or what it happened to, when the kind names one.
+        extra: A detail the kind carries (a role, an inviter), or ``None``.
+    """
+
+    kind: str
+    when: datetime
+    subject: str | None = None
+    extra: str | None = None
 
 
 class OrganisationStore:
-    """Store methods for organisations, their members, and their invitations."""
+    """Store methods for organisations."""
 
     def __init__(self, engine: Engine) -> None:
         """Bind the facet to what it works through.
@@ -52,16 +77,45 @@ class OrganisationStore:
         """
         self._engine = engine
 
-    # -- Organisations ---------------------------------------------------------
+    def get(self, org_id: UUID) -> Organisation:
+        """Get an organisation by ID; soft-deleted organisations read as missing.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            The organisation row.
+        """
+        with session_scope(self._engine) as session:
+            return self._get_live(session, org_id)
+
+    def list(self, query: OrganisationQuery) -> Page[Organisation]:
+        """List organisations, oldest first.
+
+        Args:
+            query: Whose organisations, whether soft-deleted ones count, and
+                the window to read.
+
+        Returns:
+            The page of organisations.
+        """
+        statement = select(Organisation).order_by(col(Organisation.created_at), col(Organisation.id))
+        if query.user_id is not None:
+            members = select(UserOrganisation.organisation_id).where(UserOrganisation.user_id == query.user_id)
+            statement = statement.where(col(Organisation.id).in_(members))
+        if not query.include_deleted:
+            statement = statement.where(col(Organisation.deleted_at).is_(None))
+        with session_scope(self._engine) as session:
+            return Page.read(session, statement, query)
 
     def create(self, name: str, creator_id: UUID | None = None) -> Organisation:
         """Create an organisation, optionally making the creator an admin.
 
         Args:
             name: Organisation name.
-            creator_id: Profile UUID of the creating user. When provided, the
-                user is added as an ``admin`` member. Pass ``None`` (e.g. for
-                super-admin provisioning) to create an org with no members.
+            creator_id: Profile UUID of the creating user, who becomes an
+                ``admin`` member; ``None`` (super-admin provisioning) creates
+                an organisation with no members.
 
         Returns:
             The created Organisation row.
@@ -70,18 +124,15 @@ class OrganisationStore:
             db_organisation = Organisation(name=name)
             session.add(db_organisation)
             session.flush()
-
             if creator_id is not None:
-                session.add(UserOrganisation(
-                    user_id=creator_id,
-                    organisation_id=db_organisation.id,
-                    role=Role.ADMIN.value,
-                ))
+                session.add(
+                    UserOrganisation(user_id=creator_id, organisation_id=db_organisation.id, role=Role.ADMIN.value)
+                )
             commit(session)
             session.refresh(db_organisation)
             return db_organisation
 
-    def update(self, org_id: UUID, name: str) -> Organisation:
+    def update(self, org_id: UUID, *, name: str) -> Organisation:
         """Rename an organisation.
 
         Args:
@@ -90,36 +141,14 @@ class OrganisationStore:
 
         Returns:
             The updated Organisation.
-
-        Raises:
-            NotFoundError: If the organisation is not found or deleted.
         """
         with session_scope(self._engine) as session:
-            db_organisation = session.get(Organisation, org_id)
-            if not db_organisation or db_organisation.deleted_at is not None:
-                raise NotFoundError(f"Organisation {org_id} not found")
+            db_organisation = self._get_live(session, org_id)
             db_organisation.name = name
             session.add(db_organisation)
             commit(session)
+            session.refresh(db_organisation)
             return db_organisation
-
-    def list_all(self) -> list[tuple[Organisation, int]]:
-        """List every organisation with its member count (super-admin only).
-
-        Returns:
-            List of ``(Organisation, member_count)`` tuples.
-        """
-        with session_scope(self._engine) as session:
-            organisations = session.exec(select(Organisation)).all()
-            counts = dict(
-                session.exec(
-                    select(
-                        UserOrganisation.organisation_id,
-                        func.count(UserOrganisation.user_id),  # ty: ignore[invalid-argument-type]
-                    ).group_by(UserOrganisation.organisation_id)  # ty: ignore[invalid-argument-type]
-                ).all()
-            )
-            return [(org, counts.get(org.id, 0)) for org in organisations]
 
     def delete(self, org_id: UUID) -> None:
         """Soft-delete an organisation: purge its payload, keep the ledger.
@@ -137,53 +166,25 @@ class OrganisationStore:
 
         Args:
             org_id: Organisation UUID.
-
-        Raises:
-            NotFoundError: If the organisation is not found or already deleted.
         """
         with session_scope(self._engine) as session:
-            db_organisation = session.get(Organisation, org_id)
-            if not db_organisation or db_organisation.deleted_at is not None:
-                raise NotFoundError(f"Organisation {org_id} not found")
-
-            # ty misreads SQLModel column comparisons in DML where() as plain bools.
-            statements = (
-                delete(ComponentRelation).where(ComponentRelation.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(Component).where(Component.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(Quota).where(Quota.org_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(Invitation).where(Invitation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
-                delete(UserOrganisation).where(UserOrganisation.organisation_id == org_id),  # ty: ignore[invalid-argument-type]
-                update(AuthSession).where(AuthSession.organisation_id == org_id).values(organisation_id=None),  # ty: ignore[invalid-argument-type]
-                update(Profile).where(Profile.last_organisation_id == org_id).values(last_organisation_id=None),  # ty: ignore[invalid-argument-type]
-            )
-            connection = session.connection()
-            for statement in statements:
-                connection.execute(statement)
-
+            db_organisation = self._get_live(session, org_id)
+            for statement in (
+                delete(ComponentRelation).where(col(ComponentRelation.org_id) == org_id),
+                delete(Component).where(col(Component.org_id) == org_id),
+                delete(PersonalAccessToken).where(col(PersonalAccessToken.organisation_id) == org_id),
+                delete(Quota).where(col(Quota.org_id) == org_id),
+                delete(Invitation).where(col(Invitation.organisation_id) == org_id),
+                delete(UserOrganisation).where(col(UserOrganisation.organisation_id) == org_id),
+                update(AuthSession).where(col(AuthSession.organisation_id) == org_id).values(organisation_id=None),
+                update(Profile).where(col(Profile.last_organisation_id) == org_id).values(last_organisation_id=None),
+            ):
+                session.connection().execute(statement)
             db_organisation.deleted_at = datetime.now(timezone.utc)
             session.add(db_organisation)
             commit(session)
 
-    def get(self, org_id: UUID) -> Organisation:
-        """Get an organisation by ID; soft-deleted orgs read as missing.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            The organisation row.
-
-        Raises:
-            NotFoundError: If no live organisation carries that id.
-        """
-        with session_scope(self._engine) as session:
-            organisation = session.get(Organisation, org_id)
-            if not organisation or organisation.deleted_at is not None:
-                raise NotFoundError(f"Organisation {org_id} not found")
-            return organisation
-
-    def list_activity(self, org_id: UUID, *, limit: int = 20) -> list[dict[str, Any]]:
+    def activity(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
         """A derived activity feed for one organisation, newest first.
 
         Composed purely from existing records — the organisation row,
@@ -193,73 +194,60 @@ class OrganisationStore:
         history) are not reconstructible and deliberately absent.
 
         Args:
-            org_id: Organisation UUID.
-            limit: Maximum entries to return (default 20), applied after the
-                newest-first sort so the most recent activity always survives.
+            org_id: Organisation UUID; a soft-deleted organisation still has
+                its feed, ending in its deletion.
+            query: The window to read.
 
         Returns:
-            Entries as ``{kind, when, subject, extra}`` dicts, ``when``
-            always an aware UTC datetime.
+            The page of entries, ``when`` always an aware UTC datetime.
 
         Raises:
             NotFoundError: If the organisation is not found.
         """
-
-        def as_utc(value: Any) -> datetime:
-            if isinstance(value, str):  # SQLite aggregates come back as text
-                value = datetime.fromisoformat(value)
-            return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
-
-        entries: list[dict[str, Any]] = []
+        entries: list[ActivityEntry] = []
         with session_scope(self._engine) as session:
             organisation = session.get(Organisation, org_id)
             if not organisation:
                 raise NotFoundError(f"Organisation {org_id} not found")
             if organisation.created_at:
-                entries.append({"kind": "org_created", "when": organisation.created_at, "subject": None, "extra": None})
+                entries.append(ActivityEntry("org_created", organisation.created_at))
             if organisation.deleted_at:
-                entries.append({"kind": "org_deleted", "when": organisation.deleted_at, "subject": None, "extra": None})
+                entries.append(ActivityEntry("org_deleted", organisation.deleted_at))
 
             memberships = session.exec(
-                select(UserOrganisation, Profile)
-                .where(UserOrganisation.organisation_id == org_id, col(Profile.id) == UserOrganisation.user_id)
+                select(UserOrganisation, Profile).where(
+                    UserOrganisation.organisation_id == org_id, col(Profile.id) == UserOrganisation.user_id
+                )
             ).all()
             for membership, profile in memberships:
                 if membership.created_at:
-                    entries.append({
-                        "kind": "member_joined",
-                        "when": membership.created_at,
-                        "subject": profile.name or profile.email,
-                        "extra": membership.role,
-                    })
+                    subject = profile.name or profile.email
+                    entries.append(ActivityEntry("member_joined", membership.created_at, subject, membership.role))
 
             invitations = session.exec(select(Invitation).where(Invitation.organisation_id == org_id)).all()
-            inviter_ids = [invitation.invited_by for invitation in invitations]
+            inviter_ids = {invitation.invited_by for invitation in invitations}
             inviters = {
                 profile.id: profile
                 for profile in session.exec(select(Profile).where(col(Profile.id).in_(inviter_ids))).all()
-            } if inviter_ids else {}
+            }
             for invitation in invitations:
                 if invitation.created_at:
                     inviter = inviters.get(invitation.invited_by)
-                    entries.append({
-                        "kind": "invitation_sent",
-                        "when": invitation.created_at,
-                        "subject": invitation.email,
-                        "extra": (inviter.name or inviter.email) if inviter else None,
-                    })
+                    entries.append(
+                        ActivityEntry(
+                            "invitation_sent",
+                            invitation.created_at,
+                            invitation.email,
+                            (inviter.name or inviter.email) if inviter else None,
+                        )
+                    )
 
             sources = session.exec(
                 select(Component).where(col(Component.org_id) == org_id, col(Component.kind) == "source")
             ).all()
             for source in sources:
                 if source.created_at:
-                    entries.append({
-                        "kind": "source_added",
-                        "when": source.created_at,
-                        "subject": source.name or source.key,
-                        "extra": None,
-                    })
+                    entries.append(ActivityEntry("source_added", source.created_at, source.name or source.key))
 
             # func.date() buckets per calendar day on both Postgres and SQLite.
             day = func.date(col(Run.completed_at)).label("day")
@@ -269,297 +257,47 @@ class OrganisationStore:
                 .group_by(day)
             ).all()
             for _day, count, latest in run_days:
-                entries.append({"kind": "runs_completed", "when": latest, "subject": str(count), "extra": None})
+                if latest is not None:
+                    entries.append(ActivityEntry("runs_completed", latest, str(count)))
 
-        for entry in entries:
-            entry["when"] = as_utc(entry["when"])
-        entries.sort(key=lambda entry: entry["when"], reverse=True)
-        return entries[:limit]
+        normalized = [
+            ActivityEntry(entry.kind, self._as_utc(entry.when), entry.subject, entry.extra) for entry in entries
+        ]
+        normalized.sort(key=lambda entry: entry.when, reverse=True)
+        return Page.window(normalized, query)
 
-    def list_for_user(self, user_id: UUID) -> list[Organisation]:
-        """List all organisations a user belongs to.
-
-        Args:
-            user_id: Profile UUID.
-
-        Returns:
-            List of Organisation rows.
-        """
-        with session_scope(self._engine) as session:
-            memberships = session.exec(
-                select(UserOrganisation).where(UserOrganisation.user_id == user_id)
-            ).all()
-            organisation_ids = [membership.organisation_id for membership in memberships]
-            if not organisation_ids:
-                return []
-            organisations = session.exec(
-                select(Organisation).where(Organisation.id.in_(organisation_ids))  # ty: ignore[unresolved-attribute]
-            ).all()
-            return list(organisations)
-
-    # -- Members ---------------------------------------------------------------
-
-    def member_role(self, user_id: UUID, org_id: UUID) -> str | None:
-        """Get a user's role in an organisation.
-
-        Args:
-            user_id: Profile UUID.
-            org_id: Organisation UUID.
-
-        Returns:
-            The role string or None if not a member.
-        """
-        with session_scope(self._engine) as session:
-            membership = self._get_membership(session, user_id, org_id)
-            return membership.role if membership else None
-
-    def list_members(self, org_id: UUID) -> list[tuple[Profile, str]]:
-        """List all members of an organisation with their roles.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            List of ``(Profile, role)`` tuples.
-        """
-        with session_scope(self._engine) as session:
-            memberships = session.exec(
-                select(UserOrganisation).where(UserOrganisation.organisation_id == org_id)
-            ).all()
-            results: list[tuple[Profile, str]] = []
-            for membership in memberships:
-                db_profile = session.get(Profile, membership.user_id)
-                if db_profile:
-                    results.append((db_profile, membership.role))
-            return results
-
-    def add_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
-        """Add a user to an organisation directly, without an invitation.
-
-        Args:
-            org_id: Organisation UUID.
-            user_id: Profile UUID to add.
-            role: Role to assign, one of :class:`Role`; any other name is a
-                ``ConfigError``.
-
-        Returns:
-            True if added, False if the user is already a member (an
-            idempotency signal, not a missing target).
-        """
-        role = Role.parse(role).value
-        with session_scope(self._engine) as session:
-            if self._get_membership(session, user_id, org_id):
-                return False
-            session.add(UserOrganisation(
-                user_id=user_id,
-                organisation_id=org_id,
-                role=role,
-            ))
-            commit(session)
-            return True
-
-    def update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
-        """Update a member's role within an organisation.
-
-        Args:
-            org_id: Organisation UUID.
-            user_id: Profile UUID of the member.
-            role: New role to assign, one of :class:`Role`; any other name is
-                a ``ConfigError``.
-
-        Raises:
-            NotFoundError: If the user is not a member.
-        """
-        role = Role.parse(role).value
-        with session_scope(self._engine) as session:
-            membership = self._get_membership(session, user_id, org_id)
-            if not membership:
-                raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
-            membership.role = role
-            session.add(membership)
-            commit(session)
-
-    def remove_member(self, org_id: UUID, user_id: UUID) -> None:
-        """Remove a member from an organisation.
-
-        Args:
-            org_id: Organisation UUID.
-            user_id: Profile UUID to remove.
-
-        Raises:
-            NotFoundError: If the user is not a member.
-        """
-        with session_scope(self._engine) as session:
-            membership = self._get_membership(session, user_id, org_id)
-            if not membership:
-                raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
-            session.delete(membership)
-            commit(session)
-
-    # -- Invitations -----------------------------------------------------------
-
-    def create_invitation(
-        self,
-        org_id: UUID,
-        email: str,
-        role: str,
-        invited_by: UUID,
-    ) -> Invitation:
-        """Create an invitation for a user to join an organisation.
-
-        Args:
-            org_id: Organisation UUID.
-            email: Email to invite.
-            role: Role to assign on acceptance, one of :class:`Role`; any other
-                name is a ``ConfigError``.
-            invited_by: Profile UUID of the inviter.
-
-        Returns:
-            The created Invitation row.
-        """
-        role = Role.parse(role).value
-        token = secrets.token_urlsafe(32)
-
-        with session_scope(self._engine) as session:
-            db_invitation = Invitation(
-                organisation_id=org_id,
-                email=email,
-                role=role,
-                token=token,
-                invited_by=invited_by,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=INVITATION_EXPIRY_DAYS),
-            )
-            session.add(db_invitation)
-            commit(session)
-            session.refresh(db_invitation)
-            return db_invitation
-
-    def list_invitations(self, org_id: UUID) -> list[Invitation]:
-        """List pending invitations for an organisation.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            List of Invitation rows.
-        """
-        with session_scope(self._engine) as session:
-            db_invitations = session.exec(
-                select(Invitation).where(Invitation.organisation_id == org_id)
-            ).all()
-            return list(db_invitations)
-
-    def get_invitation(self, invitation_id: UUID, *, org_id: UUID) -> Invitation:
-        """Get one of an organisation's invitations by ID.
-
-        Args:
-            invitation_id: Invitation UUID.
-            org_id: Organisation the invitation must belong to; a mismatch
-                reads as missing, so an id cannot be probed across tenants.
-
-        Returns:
-            The Invitation row.
-        """
-        with session_scope(self._engine) as session:
-            return self._get_invitation(session, invitation_id, org_id)
-
-    def delete_invitation(self, invitation_id: UUID, *, org_id: UUID) -> None:
-        """Delete one of an organisation's invitations.
-
-        Args:
-            invitation_id: Invitation UUID.
-            org_id: Organisation the invitation must belong to; a mismatch
-                reads as missing.
-        """
-        with session_scope(self._engine) as session:
-            session.delete(self._get_invitation(session, invitation_id, org_id))
-            commit(session)
-
-    def has_pending_invitation(self, email: str) -> bool:
-        """Check whether a non-expired invitation exists for an email.
-
-        Args:
-            email: Email address, matched case-insensitively.
-
-        Returns:
-            True when at least one pending invitation has not expired.
-        """
-        now = datetime.now(timezone.utc)
-        with session_scope(self._engine) as session:
-            db_invitations = session.exec(
-                select(Invitation).where(func.lower(Invitation.email) == email.lower())
-            ).all()
-            return any(assume_utc(invitation.expires_at) > now for invitation in db_invitations)
-
-    def accept_invitation(self, token: str, user_id: UUID) -> Organisation | None:
-        """Accept an invitation: add user to org and delete the invitation.
-
-        Args:
-            token: The invitation token.
-            user_id: Profile UUID of the accepting user.
-
-        Returns:
-            The Organisation joined, or None if invalid/expired.
-        """
-        with session_scope(self._engine) as session:
-            db_invitation = session.exec(
-                select(Invitation).where(Invitation.token == token)
-            ).first()
-            if not db_invitation:
-                return None
-
-            if assume_utc(db_invitation.expires_at) < datetime.now(timezone.utc):
-                session.delete(db_invitation)
-                commit(session)
-                return None
-
-            if not self._get_membership(session, user_id, db_invitation.organisation_id):
-                session.add(UserOrganisation(
-                    user_id=user_id,
-                    organisation_id=db_invitation.organisation_id,
-                    role=db_invitation.role,
-                ))
-
-            db_organisation = session.get(Organisation, db_invitation.organisation_id)
-            session.delete(db_invitation)
-            commit(session)
-            return db_organisation
+    # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def _get_membership(session: Session, user_id: UUID, org_id: UUID) -> UserOrganisation | None:
-        """Fetch a user's membership row in an organisation.
+    def _get_live(session: Session, org_id: UUID) -> Organisation:
+        """Fetch an organisation that has not been soft-deleted.
 
         Args:
-            session: Active database session.
-            user_id: Profile UUID of the candidate member.
-            org_id: Organisation UUID to look the membership up in.
+            session: Open session to read through.
+            org_id: Organisation UUID.
 
         Returns:
-            The membership, or ``None`` when the user is not a member.
-        """
-        return session.exec(
-            select(UserOrganisation).where(
-                UserOrganisation.user_id == user_id,
-                UserOrganisation.organisation_id == org_id,
-            )
-        ).first()
-
-    @staticmethod
-    def _get_invitation(session: Session, invitation_id: UUID, org_id: UUID) -> Invitation:
-        """Fetch an invitation row, scoped to its organisation.
-
-        Args:
-            session: Active database session.
-            invitation_id: Invitation UUID.
-            org_id: Organisation the invitation must belong to.
-
-        Returns:
-            The Invitation row.
+            The organisation row.
 
         Raises:
-            NotFoundError: If no invitation carries that id in that organisation.
+            NotFoundError: If no live organisation carries that id.
         """
-        db_invitation = session.get(Invitation, invitation_id)
-        if not db_invitation or db_invitation.organisation_id != org_id:
-            raise NotFoundError(f"Invitation {invitation_id} not found")
-        return db_invitation
+        organisation = session.get(Organisation, org_id)
+        if not organisation or organisation.deleted_at is not None:
+            raise NotFoundError(f"Organisation {org_id} not found")
+        return organisation
+
+    @staticmethod
+    def _as_utc(value: Any) -> datetime:
+        """An activity timestamp as an aware UTC datetime.
+
+        Args:
+            value: The stored timestamp; SQLite aggregates come back as text,
+                and SQLite columns as naive datetimes.
+
+        Returns:
+            The aware datetime.
+        """
+        if isinstance(value, str):
+            value = datetime.fromisoformat(value)
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value

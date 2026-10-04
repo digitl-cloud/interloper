@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from interloper_api.app import install_error_handlers
 from interloper_api.routes import health as health_module
 
 
 def test_the_liveness_probe_reports_ok() -> None:
     """Container and load-balancer probes get a body, not just a status."""
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(health_module.router)
 
     response = TestClient(app).get("/health")
@@ -22,6 +24,7 @@ def test_the_liveness_probe_reports_ok() -> None:
 def test_it_needs_no_authentication() -> None:
     """The probe runs before any session exists, so it must not be gated."""
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(health_module.router)
 
     # No dependency overrides installed at all.

@@ -1,7 +1,8 @@
 """Tests for ``interloper_api.routes.runs``.
 
 Covers the retry endpoint, org-membership scoping, run creation, the
-execution listing, and the event-pagination contract. A lightweight fake
+listing's query and page contract, the execution listing, and the
+event-pagination contract. A lightweight fake
 store stands in for persistence so these stay pure unit tests, matching the
 style of ``test_admin.py``.
 """
@@ -15,12 +16,12 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.errors import ConfigError, ConflictError, NotFoundError, QuotaExceededError
+from interloper_db import EventQuery, ExecutionQuery, Page, RunQuery
 
 from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import runs as runs_module
-from interloper_api.routes.runs import MAX_EVENTS_PAGE_SIZE
 
 _ORG_ID = uuid4()
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
@@ -51,45 +52,50 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.retry_calls: list[tuple[UUID, str]] = []
-        self.list_calls: list[dict[str, object]] = []
-        self.count_calls: list[dict[str, object]] = []
+        self.list_calls: list[tuple[UUID, RunQuery]] = []
+        self.execution_calls: list[tuple[UUID, ExecutionQuery, UUID | None]] = []
         self.raise_not_found = False
         self.raise_conflict: str | None = None
-        #: Role the fake user holds in the run's org. None = not a member.
+        self.listed_runs: list[SimpleNamespace] = []
+        self.execution_rows: list[SimpleNamespace] = []
         self.role: str | None = "editor"
-        #: Org owning every run this store returns.
         self.run_org_id: UUID = _ORG_ID
-        self.organisations = SimpleNamespace(member_role=self._member_role)
+        self.members = SimpleNamespace(role=self._member_role)
         self.runs = SimpleNamespace(
             get=self._get_run,
-            list_all=self._list_runs,
-            count=self._count_runs,
+            list=self._list_runs,
             retry=self._retry_run,
         )
         self.components = SimpleNamespace()
-        self.events = SimpleNamespace(count_executions=lambda run_ids: {})
+        self.executions = SimpleNamespace(counts=lambda run_ids: {}, list=self._list_executions)
 
     def _get_run(self, run_id: UUID):
         if self.raise_not_found:
             raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
-    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
         return self.role
 
-    def _list_runs(self, org_id: UUID, **kwargs):
-        self.list_calls.append(kwargs)
-        return []
+    def _list_runs(self, org_id: UUID, query: RunQuery) -> Page:
+        self.list_calls.append((org_id, query))
+        return Page.window(self.listed_runs, query)
 
-    def _count_runs(self, org_id: UUID, **kwargs):
-        self.count_calls.append(kwargs)
-        return 0
+    def _list_executions(self, org_id: UUID, query: ExecutionQuery, *, run_id: UUID | None = None) -> Page:
+        self.execution_calls.append((org_id, query, run_id))
+        return Page.window(self.execution_rows, query)
 
     def _retry_run(self, run_id: UUID, *, scope: str = "all"):
         self.retry_calls.append((run_id, scope))
         if self.raise_conflict is not None:
             raise ConflictError(self.raise_conflict)
-        return SimpleNamespace(id=uuid4())
+        retried = _fake_run(uuid4())
+        retried.status = "queued"
+        retried.retry_of = run_id
+        retried.root_run_id = run_id
+        retried.attempt = 2
+        retried.retry_scope = scope
+        return retried
 
 
 def _app(store: FakeStore) -> FastAPI:
@@ -124,16 +130,28 @@ def store() -> FakeStore:
 def test_retry_defaults_to_all_scope(store: FakeStore) -> None:
     run_id = uuid4()
     resp = _client(store).post(f"/runs/{run_id}/retry")
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     assert resp.json()["status"] == "queued"
     assert store.retry_calls == [(run_id, "all")]
+
+
+def test_retry_returns_the_queued_attempt(store: FakeStore) -> None:
+    run_id = uuid4()
+
+    body = _client(store).post(f"/runs/{run_id}/retry").json()
+
+    assert body["id"] != str(run_id)
+    assert body["retry_of"] == str(run_id)
+    assert body["root_run_id"] == str(run_id)
+    assert body["attempt"] == 2
 
 
 def test_retry_passes_failed_scope(store: FakeStore) -> None:
     run_id = uuid4()
     resp = _client(store).post(f"/runs/{run_id}/retry", json={"scope": "failed"})
-    assert resp.status_code == 200
+    assert resp.status_code == 201
     assert store.retry_calls[0][1] == "failed"
+    assert resp.json()["retry_scope"] == "failed"
 
 
 def test_retry_rejects_unknown_scope(store: FakeStore) -> None:
@@ -160,6 +178,21 @@ def test_retry_requires_editor_in_owning_org(store: FakeStore) -> None:
     resp = _client(store).post(f"/runs/{uuid4()}/retry")
     assert resp.status_code == 403
     assert store.retry_calls == []
+
+
+def test_retry_a_missing_run_is_a_404(store: FakeStore) -> None:
+    """A run that vanished between the load and the retry is a 404, not a 500."""
+    run_id = uuid4()
+
+    def retry(rid, scope):
+        raise NotFoundError(f"Run {rid} not found")
+
+    store.runs.retry = retry
+
+    response = _client(store).post(f"/runs/{run_id}/retry", json={"scope": "all"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Run {run_id} not found"
 
 
 # -- Org-membership scoping ---------------------------------------------------
@@ -199,8 +232,9 @@ def test_run_events_return_404_for_non_member(store: FakeStore) -> None:
 
 def test_executions_return_404_for_non_member(store: FakeStore) -> None:
     store.role = None
-    resp = _client(store).get(f"/runs/{uuid4()}/asset-executions")
+    resp = _client(store).get(f"/runs/{uuid4()}/executions")
     assert resp.status_code == 404
+    assert store.execution_calls == []
 
 
 # -- Quota ---------------------------------------------------------------------
@@ -208,52 +242,23 @@ def test_executions_return_404_for_non_member(store: FakeStore) -> None:
 
 def test_quota_exceeded_maps_to_429(store: FakeStore) -> None:
     """The app-level handler turns QuotaExceededError into a structured 429."""
-    from interloper.errors import QuotaExceededError
 
     def _raise(org_id, **kwargs):
         raise QuotaExceededError("quota exhausted (3/3)", quota="max_successful_runs_per_month", limit=3, used=3)
 
     store.components.get = lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID, kind="job")
     store.runs.create = _raise
-    app = _app(store)
 
-    @app.exception_handler(QuotaExceededError)  # mirrors create_app's handler
-    async def _quota_handler(_request, exc: QuotaExceededError):
-        from fastapi.responses import JSONResponse
+    resp = _client(store).post("/runs", json={"component_id": str(uuid4())})
 
-        return JSONResponse(
-            status_code=429,
-            content={"detail": {"message": str(exc), "quota": exc.quota, "limit": exc.limit, "used": exc.used}},
-        )
-
-    client = TestClient(app)
-    resp = client.post("/runs/", json={"component_id": str(uuid4())})
     assert resp.status_code == 429
     detail = resp.json()["detail"]
+    assert detail["message"] == "quota exhausted (3/3)"
     assert detail["quota"] == "max_successful_runs_per_month"
     assert (detail["limit"], detail["used"]) == (3, 3)
 
 
 # -- Listing -------------------------------------------------------------------
-
-
-def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
-    """A timeline view asks for one window; both the listing and its count honour it."""
-    app = _app(store)
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-
-    client = TestClient(app)
-    resp = client.get("/runs/", params={"after": "2026-02-04T00:00:00Z", "before": "2026-02-05T00:00:00Z"})
-
-    assert resp.status_code == 200
-    assert resp.headers["X-Total-Count"] == "0"
-    window = (
-        dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
-        dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
-    )
-    assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == window
-    assert (store.count_calls[0]["after"], store.count_calls[0]["before"]) == window
 
 
 def _viewer_client(store: FakeStore) -> TestClient:
@@ -271,22 +276,107 @@ def _viewer_client(store: FakeStore) -> TestClient:
     return TestClient(app)
 
 
-def test_list_runs_forwards_the_stack_filter(store: FakeStore) -> None:
-    """Asking for one stack narrows both the listing and its count."""
-    root = uuid4()
-    resp = _viewer_client(store).get("/runs/", params={"root_run_id": str(root)})
+def test_list_runs_is_a_page(store: FakeStore) -> None:
+    store.listed_runs = [_fake_run(uuid4()), _fake_run(uuid4())]
+
+    resp = _viewer_client(store).get("/runs")
 
     assert resp.status_code == 200
-    assert store.list_calls[0]["root_run_id"] == root
-    assert store.count_calls[0]["root_run_id"] == root
+    body = resp.json()
+    assert body["total"] == 2
+    assert [row["id"] for row in body["items"]] == [str(run.id) for run in store.listed_runs]
+    assert "X-Total-Count" not in resp.headers
+
+
+def test_list_runs_forwards_the_time_window(store: FakeStore) -> None:
+    """A timeline view asks for one window."""
+    resp = _viewer_client(store).get(
+        "/runs", params={"after": "2026-02-04T00:00:00Z", "before": "2026-02-05T00:00:00Z"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"items": [], "total": 0}
+    ((org_id, query),) = store.list_calls
+    assert org_id == _ORG_ID
+    assert (query.after, query.before) == (
+        dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
+        dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
+    )
+
+
+def test_list_runs_forwards_every_query_field(store: FakeStore) -> None:
+    component_id, backfill_id, root_run_id = uuid4(), uuid4(), uuid4()
+    params = {
+        "component_id": str(component_id),
+        "backfill_id": str(backfill_id),
+        "root_run_id": str(root_run_id),
+        "status": "failed",
+        "after": "2026-02-04T00:00:00Z",
+        "before": "2026-02-05T00:00:00Z",
+        "completed_after": "2026-02-04T06:00:00Z",
+        "completed_before": "2026-02-04T18:00:00Z",
+        "q": "swaro",
+        "component_kind": "job",
+        "component_key": "facebook_ads",
+        "all_attempts": "true",
+        "sort": "-partition_key",
+        "limit": "25",
+        "offset": "75",
+    }
+
+    resp = _viewer_client(store).get("/runs", params=params)
+
+    assert resp.status_code == 200
+    ((_, query),) = store.list_calls
+    assert query == RunQuery(
+        component_id=component_id,
+        backfill_id=backfill_id,
+        root_run_id=root_run_id,
+        status="failed",
+        after=dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
+        before=dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
+        completed_after=dt.datetime(2026, 2, 4, 6, tzinfo=dt.timezone.utc),
+        completed_before=dt.datetime(2026, 2, 4, 18, tzinfo=dt.timezone.utc),
+        q="swaro",
+        component_kind="job",
+        component_key="facebook_ads",
+        all_attempts=True,
+        sort="-partition_key",
+        limit=25,
+        offset=75,
+    )
+    assert set(params) == set(RunQuery.model_fields)
 
 
 def test_list_runs_defaults_to_one_row_per_stack(store: FakeStore) -> None:
-    """Without the filter the store is asked for stacks, not attempts."""
-    resp = _viewer_client(store).get("/runs/")
+    """Without filters the store is asked for stacks, not attempts, in the default window."""
+    resp = _viewer_client(store).get("/runs")
 
     assert resp.status_code == 200
-    assert store.list_calls[0]["root_run_id"] is None
+    ((_, query),) = store.list_calls
+    assert query == RunQuery()
+    assert query.root_run_id is None
+    assert query.all_attempts is False
+    assert (query.after, query.before) == (None, None)
+    assert (query.limit, query.offset) == (50, 0)
+
+
+def test_list_runs_rejects_an_unknown_sort(store: FakeStore) -> None:
+    resp = _viewer_client(store).get("/runs", params={"sort": "org_id"})
+
+    assert resp.status_code == 422
+    assert store.list_calls == []
+
+
+@pytest.mark.parametrize("params", [{"limit": 501}, {"limit": 0}, {"offset": -1}])
+def test_list_runs_rejects_a_window_out_of_bounds(store: FakeStore, params: dict[str, int]) -> None:
+    assert _viewer_client(store).get("/runs", params=params).status_code == 422
+    assert store.list_calls == []
+
+
+def test_list_runs_accepts_the_largest_page(store: FakeStore) -> None:
+    assert _viewer_client(store).get("/runs", params={"limit": 500}).status_code == 200
+    assert store.list_calls[0][1].limit == 500
 
 
 def test_a_run_response_carries_its_stack(store: FakeStore) -> None:
@@ -304,70 +394,26 @@ def test_list_runs_carries_each_attempts_execution_counts(store: FakeStore) -> N
     counted, pending = uuid4(), uuid4()
     asked: list[list[UUID]] = []
 
-    def count_executions(run_ids: list[UUID]) -> dict[UUID, dict[str, int]]:
+    def counts(run_ids: list[UUID]) -> dict[UUID, dict[str, int]]:
         asked.append(list(run_ids))
         return {counted: {"success": 2, "failed": 1}}
 
-    store.runs.list_all = lambda org_id, **kwargs: [_fake_run(counted), _fake_run(pending)]
-    store.events = SimpleNamespace(count_executions=count_executions)
+    store.listed_runs = [_fake_run(counted), _fake_run(pending)]
+    store.executions.counts = counts
 
-    resp = _viewer_client(store).get("/runs/")
+    resp = _viewer_client(store).get("/runs")
 
     assert resp.status_code == 200
-    assert [row["execution_counts"] for row in resp.json()] == [{"success": 2, "failed": 1}, {}]
+    assert [row["execution_counts"] for row in resp.json()["items"]] == [{"success": 2, "failed": 1}, {}]
     assert asked == [[counted, pending]]
 
 
 def test_get_run_carries_its_execution_counts(store: FakeStore) -> None:
-    store.events = SimpleNamespace(count_executions=lambda run_ids: {run_ids[0]: {"running": 3}})
+    store.executions.counts = lambda run_ids: {run_ids[0]: {"running": 3}}
 
     resp = _client(store).get(f"/runs/{_RUN_ID}")
 
     assert resp.json()["execution_counts"] == {"running": 3}
-
-
-def test_list_runs_forwards_the_target_filters(store: FakeStore) -> None:
-    """The target's kind, type and a name search narrow both the listing and its count."""
-    app = _app(store)
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-
-    client = TestClient(app)
-    filters = {"q": "swaro", "component_kind": "job", "component_key": "facebook_ads"}
-    resp = client.get("/runs/", params=filters)
-
-    assert resp.status_code == 200
-    assert {key: store.list_calls[0][key] for key in filters} == filters
-    assert {key: store.count_calls[0][key] for key in filters} == filters
-
-
-def test_list_runs_without_window_passes_none(store: FakeStore) -> None:
-    app = _app(store)
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-
-    client = TestClient(app)
-    assert client.get("/runs/").status_code == 200
-    assert (store.list_calls[0]["after"], store.list_calls[0]["before"]) == (None, None)
-
-
-def test_list_runs_forwards_the_sort(store: FakeStore) -> None:
-    assert _viewer_client(store).get("/runs/", params={"sort": "-partition_key"}).status_code == 200
-    assert store.list_calls[0]["sort"] == "-partition_key"
-
-
-def test_list_runs_rejects_an_unknown_sort(store: FakeStore) -> None:
-    """The store refuses a field outside its whitelist; the route reports it as a 400."""
-
-    def list_all(org_id, **kwargs):
-        raise ConfigError("Cannot sort runs by 'org_id'")
-
-    store.runs.list_all = list_all
-
-    resp = _viewer_client(store).get("/runs/", params={"sort": "org_id"})
-
-    assert resp.status_code == 400
-    assert "org_id" in resp.json()["detail"]
 
 
 # -- Create / executions --------------------------------------------------------
@@ -383,145 +429,81 @@ def test_create_run_rejects_an_invalid_partition(store: FakeStore) -> None:
     store.runs.create = create
 
     response = _client(store).post(
-        "/runs/", json={"component_id": str(uuid4()), "partition_key": "2026-13-01"}
+        "/runs", json={"component_id": str(uuid4()), "partition_key": "2026-13-01"}
     )
 
     assert response.status_code == 400
     assert "2026-13-01" in response.json()["detail"]
 
 
-def test_list_executions_returns_the_runs_operations(store: FakeStore) -> None:
-    """``GET /runs/{id}/executions`` reports one row per operation execution."""
-    run_id = uuid4()
-    component_id = uuid4()
-    store.events = SimpleNamespace(
-        list_executions=lambda rid: [
-            SimpleNamespace(
-                run_id=run_id,
-                org_id=_ORG_ID,
-                component_id=component_id,
-                component_key="demo.a",
-                status="completed",
-                error=None,
-                started_at=None,
-                completed_at=None,
-                created_at=None,
-            )
-        ]
-    )
-
-    response = _client(store).get(f"/runs/{run_id}/executions")
-
-    assert response.status_code == 200
-    assert [row["component_key"] for row in response.json()] == ["demo.a"]
-
-
-def test_latest_executions_report_the_orgs_newest_per_asset(store: FakeStore) -> None:
-    """``GET /runs/executions/latest`` lists the latest execution of every asset in the org."""
-    seen: list[UUID] = []
-
-    def latest_executions(org_id: UUID):
-        seen.append(org_id)
-        return [
-            SimpleNamespace(
-                run_id=uuid4(),
-                org_id=org_id,
-                component_id=uuid4(),
-                component_key="demo.a",
-                status="success",
-                started_at=None,
-                completed_at=None,
-                created_at=None,
-            )
-        ]
-
-    store.events = SimpleNamespace(latest_executions=latest_executions)
-    app = _app(store)
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-
-    response = TestClient(app).get("/runs/executions/latest")
-
-    assert response.status_code == 200
-    assert [row["component_key"] for row in response.json()] == ["demo.a"]
-    assert seen == [_ORG_ID]
-
-
-def test_retry_a_missing_run_is_a_404(store: FakeStore) -> None:
-    """A run that vanished between the load and the retry is a 404, not a 500."""
-    run_id = uuid4()
-
-    def retry(rid, scope):
-        raise NotFoundError(f"Run {rid} not found")
-
-    store.runs.retry = retry
-
-    response = _client(store).post(f"/runs/{run_id}/retry", json={"scope": "all"})
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == f"Run {run_id} not found"
-
-
 def test_create_run_returns_the_queued_run(store: FakeStore) -> None:
     """A successful create echoes the stored run back."""
     run_id = uuid4()
+    component_id = uuid4()
+    created: list[tuple[UUID, dict]] = []
+
+    def create(org_id, **kwargs):
+        created.append((org_id, kwargs))
+        return _fake_run(run_id)
+
     store.components.get = lambda cid, kind=None: SimpleNamespace(id=cid, org_id=_ORG_ID)
-    store.runs.create = lambda org_id, **kwargs: _fake_run(run_id)
+    store.runs.create = create
 
-    response = _client(store).post("/runs/", json={"component_id": str(uuid4())})
+    response = _client(store).post("/runs", json={"component_id": str(component_id), "partition_key": "2026-01-01"})
 
-    assert response.status_code in (200, 201)
+    assert response.status_code == 201
     assert response.json()["id"] == str(run_id)
+    assert created == [(_ORG_ID, {"component_id": component_id, "partition_key": "2026-01-01"})]
+
+
+def test_list_executions_returns_the_runs_operations(store: FakeStore) -> None:
+    """``GET /runs/{id}/executions`` reports one row per operation execution."""
+    run_id = uuid4()
+    store.execution_rows = [
+        SimpleNamespace(
+            run_id=run_id,
+            org_id=_ORG_ID,
+            component_id=uuid4(),
+            component_key="demo.a",
+            status="completed",
+            error=None,
+            started_at=None,
+            completed_at=None,
+            created_at=None,
+        )
+    ]
+
+    response = _client(store).get(f"/runs/{run_id}/executions", params={"limit": 10, "offset": 0})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["component_key"] for row in body["items"]] == ["demo.a"]
+    assert body["total"] == 1
+    ((org_id, query, listed_run_id),) = store.execution_calls
+    assert org_id == _ORG_ID
+    assert listed_run_id == run_id
+    assert query == ExecutionQuery(limit=10, offset=0)
 
 
 # -- Event pagination -----------------------------------------------------------
 
 
 class EventsStore:
-    """Records the pagination args it was called with and returns fakes."""
+    """Records the queries it was called with and returns fakes."""
 
     def __init__(self, total: int = 777) -> None:
         self.total = total
-        self.list_calls: list[tuple] = []
-        self.count_calls: list[tuple] = []
-        self.organisations = SimpleNamespace(member_role=self._member_role)
-        self.runs = SimpleNamespace(get=self._get_run)
-        self.events = SimpleNamespace(
-            count=self._count_events,
-            list_all=self._list_events,
-        )
+        self.list_calls: list[tuple[UUID, EventQuery, UUID | None]] = []
+        self.members = SimpleNamespace(role=lambda org_id, user_id: "viewer")
+        self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(id=run_id, org_id=_ORG_ID))
+        self.events = SimpleNamespace(list=self._list_events)
 
-    def _get_run(self, run_id: UUID):
-        return SimpleNamespace(id=run_id, org_id=_ORG_ID)
-
-    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
-        return "viewer"
-
-    def _count_events(
-        self,
-        *,
-        run_id: UUID | None = None,
-        org_id: UUID | None = None,
-        component_ids: list[UUID] | None = None,
-        event_types: list[str] | None = None,
-    ) -> int:
-        self.count_calls.append((component_ids, event_types))
-        return self.total
-
-    def _list_events(
-        self,
-        *,
-        run_id: UUID | None = None,
-        org_id: UUID | None = None,
-        component_ids: list[UUID] | None = None,
-        event_types: list[str] | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list:
-        self.list_calls.append((run_id, limit, offset, component_ids, event_types))
+    def _list_events(self, org_id: UUID, query: EventQuery, *, run_id: UUID | None = None) -> Page:
+        self.list_calls.append((org_id, query, run_id))
         # Return as many fake events as the page would hold, capped at the total.
-        n = max(0, min(limit, self.total - offset))
-        return [
+        assert query.limit is not None
+        n = max(0, min(query.limit, self.total - query.offset))
+        events = [
             runs_module.Event(
                 id=uuid4(),
                 org_id=_ORG_ID,
@@ -531,6 +513,7 @@ class EventsStore:
             )
             for _ in range(n)
         ]
+        return Page(items=events, total=self.total)
 
 
 def _events_client(store: EventsStore) -> TestClient:
@@ -547,31 +530,42 @@ def events_store() -> EventsStore:
     return EventsStore()
 
 
-def test_returns_total_count_header(events_store: EventsStore) -> None:
+def test_returns_the_total_in_the_page(events_store: EventsStore) -> None:
     resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events")
     assert resp.status_code == 200
-    assert resp.headers["X-Total-Count"] == "777"
+    body = resp.json()
+    assert body["total"] == 777
+    assert len(body["items"]) == 50
+    assert "X-Total-Count" not in resp.headers
+
+
+def test_reads_the_runs_org_and_the_run(events_store: EventsStore) -> None:
+    _events_client(events_store).get(f"/runs/{_RUN_ID}/events")
+    ((org_id, query, run_id),) = events_store.list_calls
+    assert (org_id, run_id) == (_ORG_ID, _RUN_ID)
+    assert query == EventQuery()
 
 
 def test_forwards_limit_and_offset(events_store: EventsStore) -> None:
     resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?limit=100&offset=200")
     assert resp.status_code == 200
-    assert events_store.list_calls[-1] == (_RUN_ID, 100, 200, None, None)
+    query = events_store.list_calls[-1][1]
+    assert (query.limit, query.offset, query.component_id, query.event_type) == (100, 200, None, None)
 
 
-def test_limit_is_clamped_to_max_page_size(events_store: EventsStore) -> None:
-    _events_client(events_store).get(f"/runs/{_RUN_ID}/events?limit=1000000")
-    assert events_store.list_calls[-1][1] == MAX_EVENTS_PAGE_SIZE
+@pytest.mark.parametrize("params", ["limit=1000000", "limit=501", "limit=0", "offset=-5"])
+def test_a_window_out_of_bounds_is_a_422(events_store: EventsStore, params: str) -> None:
+    resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?{params}")
+    assert resp.status_code == 422
+    assert events_store.list_calls == []
 
 
-def test_forwards_component_filter_to_list_and_count(events_store: EventsStore) -> None:
+def test_forwards_component_filter(events_store: EventsStore) -> None:
     component_id = uuid4()
     resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?component_id={component_id}")
     assert resp.status_code == 200
     # A single component_id arrives as a one-element list.
-    assert events_store.list_calls[-1] == (_RUN_ID, 100, 0, [component_id], None)
-    # X-Total-Count must reflect the same filter the listing used.
-    assert events_store.count_calls[-1] == ([component_id], None)
+    assert events_store.list_calls[-1][1].component_id == [component_id]
 
 
 def test_forwards_multiple_component_filters(events_store: EventsStore) -> None:
@@ -579,16 +573,18 @@ def test_forwards_multiple_component_filters(events_store: EventsStore) -> None:
     resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?component_id={a}&component_id={b}")
     assert resp.status_code == 200
     # Repeated component_id params filter the listing to the whole set (e.g. one status).
-    assert events_store.list_calls[-1] == (_RUN_ID, 100, 0, [a, b], None)
-    assert events_store.count_calls[-1] == ([a, b], None)
+    assert events_store.list_calls[-1][1].component_id == [a, b]
 
 
-def test_forwards_event_type_filter_to_list_and_count(events_store: EventsStore) -> None:
-    resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?event_type=log&event_type=asset_failed")
+def test_forwards_event_type_and_error_filters(events_store: EventsStore) -> None:
+    resp = _events_client(events_store).get(
+        f"/runs/{_RUN_ID}/events?event_type=log&event_type=asset_failed&has_error=true"
+    )
     assert resp.status_code == 200
     # Repeated event_type params filter to that set (e.g. a "Logs"/"Errors" tab).
-    assert events_store.list_calls[-1] == (_RUN_ID, 100, 0, None, ["log", "asset_failed"])
-    assert events_store.count_calls[-1] == (None, ["log", "asset_failed"])
+    query = events_store.list_calls[-1][1]
+    assert query.event_type == ["log", "asset_failed"]
+    assert query.has_error is True
 
 
 def test_invalid_component_filter_is_rejected(events_store: EventsStore) -> None:
@@ -596,16 +592,9 @@ def test_invalid_component_filter_is_rejected(events_store: EventsStore) -> None
     assert resp.status_code == 422
 
 
-def test_limit_and_offset_are_clamped_to_lower_bounds(events_store: EventsStore) -> None:
-    _events_client(events_store).get(f"/runs/{_RUN_ID}/events?limit=0&offset=-5")
-    _, limit, offset, _, _ = events_store.list_calls[-1]
-    assert limit == 1
-    assert offset == 0
-
-
 def test_tail_page_reaches_terminal_events(events_store: EventsStore) -> None:
     # Paging to the final offset returns the outcome events that sort last.
     resp = _events_client(events_store).get(f"/runs/{_RUN_ID}/events?limit=100&offset=700")
-    body = resp.json()
-    assert len(body) == 77
-    assert all(e["event_type"] == "asset_completed" for e in body)
+    items = resp.json()["items"]
+    assert len(items) == 77
+    assert all(e["event_type"] == "asset_completed" for e in items)

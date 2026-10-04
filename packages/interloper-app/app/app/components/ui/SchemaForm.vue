@@ -34,7 +34,7 @@ import type { FormError, TabsItem } from '@nuxt/ui'
 import cronstrue from 'cronstrue'
 
 interface FetchMeta {
-    /** `<relation>.<method>` resolved via `/components/resolve`. */
+    /** `<relation>.<method>` resolved via `/catalog/{key}/resolve`. */
     provider: string
     label_key: string
     value_key: string
@@ -79,7 +79,7 @@ const props = defineProps<{
     /**
      * Catalog key of the component this schema belongs to (e.g. the source key).
      * Required for provider-backed `x-fetch` fields, which resolve via
-     * `/components/resolve` using this key.
+     * `/catalog/{key}/resolve` using this key.
      */
     componentKey?: string
     /** Fields to exclude from the form (e.g. 'id'). */
@@ -283,9 +283,9 @@ async function fetchOptions(fieldKey: string, meta: FetchMeta) {
 
     updateFetchState(fieldKey, { loading: true, error: null })
     try {
-        const result = await apiFetch<Record<string, unknown>[]>('/components/resolve', {
+        const result = await apiFetch<Record<string, unknown>[]>(`/catalog/${props.componentKey}/resolve`, {
             method: 'POST',
-            body: { component_key: props.componentKey, field: fieldKey, deps },
+            body: { field: fieldKey, deps },
         })
         const items = Array.isArray(result) ? result : []
         updateFetchState(fieldKey, {

@@ -101,7 +101,7 @@ def member(store: Store) -> SimpleNamespace:
     Returns:
         The profile and organisation ids the routes resolve.
     """
-    profile = store.auth.upsert_profile(google_id="g-1", email="ada@example.com", name="Ada")
+    profile = store.profiles.upsert(google_id="g-1", email="ada@example.com", name="Ada")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
 
@@ -143,13 +143,14 @@ class TestConversationLifecycle:
         deleted = client.delete(f"/agent/conversations/{created.json()['id']}")
 
         assert created.status_code == 201
-        assert [row["id"] for row in listed.json()] == [created.json()["id"]]
+        assert listed.json()["total"] == 1
+        assert [row["id"] for row in listed.json()["items"]] == [created.json()["id"]]
         assert detail.json()["messages"] == []
         assert deleted.status_code == 204
-        assert client.get("/agent/conversations").json() == []
+        assert client.get("/agent/conversations").json() == {"items": [], "total": 0}
 
     def test_another_members_conversation_is_not_found(self, store: Store, member: SimpleNamespace):
-        other = store.auth.upsert_profile(google_id="g-2", email="bob@example.com", name="Bob")
+        other = store.profiles.upsert(google_id="g-2", email="bob@example.com", name="Bob")
         theirs = store.conversations.create(member.org_id, other.id)
         client = _client(store, member, _echo_agent())
 
@@ -170,7 +171,7 @@ class TestHistory:
             ModelResponse(parts=[TextPart("Any time.")]),
         ]
         conversation = store.conversations.create(member.org_id, member.id)
-        store.conversations.save(conversation.id, ModelMessagesTypeAdapter.dump_python(history, mode="json"))
+        store.conversations.update(conversation.id, messages=ModelMessagesTypeAdapter.dump_python(history, mode="json"))
         client = _client(store, member, _echo_agent())
 
         messages = client.get(f"/agent/conversations/{conversation.id}").json()["messages"]
@@ -188,7 +189,7 @@ class TestHistory:
             ModelResponse(parts=[TextPart("Any time.")]),
         ]
         conversation = store.conversations.create(member.org_id, member.id)
-        store.conversations.save(conversation.id, ModelMessagesTypeAdapter.dump_python(history, mode="json"))
+        store.conversations.update(conversation.id, messages=ModelMessagesTypeAdapter.dump_python(history, mode="json"))
         client = _client(store, member, _echo_agent())
 
         detail = client.get(f"/agent/conversations/{conversation.id}").json()

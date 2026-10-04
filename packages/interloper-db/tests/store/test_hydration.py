@@ -21,7 +21,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.hydration import Hydrator
 
 _ORG = uuid4()
@@ -277,7 +277,7 @@ class TestSourceRoundTrip:
         assert db_source.kind == "source"
         assert sorted(child.key for child in db_source.children) == ["a", "b", "c", "d", "e"]
 
-        deps = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        deps = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
         by_child: dict[str, set[tuple[str, str]]] = {}
         children_by_id = {child.id: child.key for child in db_source.children}
         for relation in deps:
@@ -324,7 +324,7 @@ class TestSourceRoundTrip:
         refreshed = store.components.get(db_source.id, kind="source")
         assert sorted(child.key for child in refreshed.children) == ["a", "b"]
         # e (and its dependency relations) are gone; b keeps its dep on a.
-        remaining = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        remaining = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
         assert [relation.name for relation in remaining] == ["a"]
 
 
@@ -440,7 +440,8 @@ class TestJobRoundTrip:
         assert db_job.state is None
         assert [relation.dst_id for relation in db_job.out_relations] == [db_source.id]
 
-        assert [job.id for job in store.components.list_all(_ORG, kinds=["job"])] == [db_job.id]
+        jobs = store.components.list(_ORG, ComponentQuery(kind=["job"], roots_only=False, limit=None)).items
+        assert [job.id for job in jobs] == [db_job.id]
 
     def test_load_hydrates_targets(self, store: Store):
         db_source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")

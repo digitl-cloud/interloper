@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.oauth import PROVIDERS, OAuthAppCredentials
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import oauth as oauth_module
 
@@ -41,6 +42,7 @@ def _configure(monkeypatch: pytest.MonkeyPatch, provider: str, **vals: str) -> N
 
 def _client() -> TestClient:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(oauth_module.router)
     # Stand in for an authenticated user; auth itself is covered separately.
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
@@ -117,6 +119,7 @@ def test_exchange_requires_authentication(monkeypatch: pytest.MonkeyPatch) -> No
     # be reachable anonymously (it spends the in-house OAuth credentials).
     _configure(monkeypatch, "amazon", client_id="id", client_secret="secret", redirect_uri="uri")
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(oauth_module.router)
     app.dependency_overrides[get_store] = lambda: SimpleNamespace()
     resp = TestClient(app).post("/oauth/amazon", json={"code": "x"})

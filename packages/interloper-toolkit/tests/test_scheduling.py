@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Run
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, RunQuery, Store
 from sqlmodel import Session, select
 
 from interloper_toolkit import ToolkitContext, scheduling
@@ -79,6 +79,20 @@ def _event(org_id: Any, run_id: Any, event_type: str, second: int, **fields: Any
         + datetime.timedelta(seconds=second),
         **fields,
     )
+
+
+def _job_id(org_id: Any) -> Any:
+    """A bare job in *org_id*, the target a backfill needs.
+
+    Returns:
+        The job id.
+    """
+    job = Component(org_id=org_id, kind="job", key="backfilled")
+    job_id = job.id
+    with Session(engine_module.get_engine()) as session:
+        session.add(job)
+        session.commit()
+    return job_id
 
 
 def _failed_run_with_many_events(org_id: Any, *, early: int = 150, error: str = "HTTPStatusError: 429") -> Any:
@@ -197,12 +211,13 @@ class TestRunEvents:
 class TestListingTotals:
     def test_list_jobs_and_runs_and_backfills_page_with_totals(self, ctx: ToolkitContext, store: Store):
         jobs = [Component(org_id=ctx.org_id, kind="job", key=f"job_{i}") for i in range(3)]
-        runs = [Run(id=uuid4(), org_id=ctx.org_id, component_id=jobs[0].id, status="success") for _ in range(4)]
+        job_id = jobs[0].id
+        runs = [Run(id=uuid4(), org_id=ctx.org_id, component_id=job_id, status="success") for _ in range(4)]
         with Session(engine_module.get_engine()) as session:
             session.add_all([*jobs, *runs])
             session.commit()
         for _ in range(2):
-            store.runs.create_backfill(ctx.org_id, start_key="2026-07-01", end_key="2026-07-01")
+            store.backfills.create(ctx.org_id, component_id=job_id, start_key="2026-07-01", end_key="2026-07-01")
 
         job_page = scheduling.list_jobs(ctx, limit=2, offset=2)
         run_page = scheduling.list_recent_runs(ctx, limit=3)
@@ -281,7 +296,9 @@ class TestErrorBreakdown:
 
 class TestBackfillTimeline:
     def test_observed_concurrency_and_timing(self, ctx: ToolkitContext, store: Store):
-        backfill = store.runs.create_backfill(ctx.org_id, start_key="2026-07-01", end_key="2026-07-03", concurrency=1)
+        backfill = store.backfills.create(
+            ctx.org_id, component_id=_job_id(ctx.org_id), start_key="2026-07-01", end_key="2026-07-03", concurrency=1
+        )
         t0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.timezone.utc)
         with Session(engine_module.get_engine()) as session:
             row = session.get(Backfill, backfill.id)
@@ -310,7 +327,10 @@ class TestBackfillTimeline:
         assert result.attempts[1].queue_wait_s == 60.0
 
     def test_another_orgs_backfill_is_not_found(self, ctx: ToolkitContext, store: Store):
-        backfill = store.runs.create_backfill(uuid4(), start_key="2026-07-01", end_key="2026-07-01")
+        theirs = uuid4()
+        backfill = store.backfills.create(
+            theirs, component_id=_job_id(theirs), start_key="2026-07-01", end_key="2026-07-01"
+        )
 
         assert scheduling.backfill_timeline(ctx, str(backfill.id)).status == "error"
 
@@ -334,7 +354,7 @@ class TestWrites:
 
     def test_toggles_a_job_and_an_asset(self, ctx: ToolkitContext, store: Store):
         job = self._job(ctx, store)
-        asset = next(c for c in store.components.list_all(ctx.org_id, kinds=["asset"]))
+        asset = store.components.list(ctx.org_id, ComponentQuery(kind=["asset"], roots_only=False)).items[0]
 
         off = scheduling.toggle_job(ctx, str(job.id), False)
         asset_off = scheduling.toggle_asset(ctx, str(asset.id), False)
@@ -355,7 +375,7 @@ class TestWrites:
         assert backfill.status == "success"
         assert run.run.partition_key == "2026-07-01"
         assert (backfill.backfill.partitions, backfill.backfill.concurrency) == (3, 2)
-        assert store.runs.count(ctx.org_id, component_id=job.id) == 4
+        assert store.runs.list(ctx.org_id, RunQuery(component_id=job.id)).total == 4
 
     @pytest.mark.parametrize(
         "write",
@@ -371,7 +391,7 @@ class TestWrites:
 
         assert isinstance(write(dataclasses.replace(ctx, role="viewer"), str(job.id)), ToolError)
         assert write(ctx, str(theirs.id)).status == "error"
-        assert store.runs.count(ctx.org_id) == 0
+        assert store.runs.list(ctx.org_id, RunQuery()).total == 0
 
     def test_retries_a_failed_run_as_the_next_attempt(self, ctx: ToolkitContext, store: Store):
         job = self._job(ctx, store)
@@ -389,7 +409,9 @@ class TestWrites:
         assert scheduling.retry_run(ctx, str(failed.id), scope="sometimes").status == "error"
 
     def test_cancels_a_backfills_undispatched_runs(self, ctx: ToolkitContext, store: Store):
-        backfill = store.runs.create_backfill(ctx.org_id, start_key="2026-07-01", end_key="2026-07-03", concurrency=1)
+        backfill = store.backfills.create(
+            ctx.org_id, component_id=_job_id(ctx.org_id), start_key="2026-07-01", end_key="2026-07-03", concurrency=1
+        )
 
         result = scheduling.cancel_backfill(ctx, str(backfill.id))
         again = scheduling.cancel_backfill(ctx, str(backfill.id))
@@ -404,11 +426,13 @@ class TestWrites:
         theirs = uuid4()
         run = store.runs.create(theirs)
         store.runs.complete(run.id, success=False)
-        backfill = store.runs.create_backfill(theirs, start_key="2026-07-01", end_key="2026-07-01")
+        backfill = store.backfills.create(
+            theirs, component_id=_job_id(theirs), start_key="2026-07-01", end_key="2026-07-01"
+        )
 
         assert isinstance(scheduling.retry_run(viewer, str(run.id)), ToolError)
         assert isinstance(scheduling.cancel_backfill(viewer, str(backfill.id)), ToolError)
         assert scheduling.retry_run(ctx, str(run.id)).status == "error"
         assert scheduling.cancel_backfill(ctx, str(backfill.id)).status == "error"
-        assert store.runs.count(theirs, all_attempts=True) == 2
-        assert store.runs.get_backfill(backfill.id).status == "running"
+        assert store.runs.list(theirs, RunQuery(all_attempts=True)).total == 2
+        assert store.backfills.get(backfill.id).status == "running"

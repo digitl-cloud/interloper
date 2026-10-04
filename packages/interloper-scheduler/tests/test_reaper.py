@@ -13,7 +13,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
-from interloper_db.store.events import EventStore
+from interloper_db.store import EventStore, UsageDrift
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -214,8 +214,8 @@ class TestReconcileUsage:
     def test_drift_is_warned_about(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        drift = {"org_id": _ORG, "period_start": dt.date(2026, 6, 1), "ledger": 5, "recomputed": 7}
-        monkeypatch.setattr(store.quotas, "reconcile_usage", lambda: [drift])
+        drift = UsageDrift(org_id=_ORG, period_start=dt.date(2026, 6, 1), ledger=5, recomputed=7)
+        monkeypatch.setattr(store.usage, "reconcile", lambda: [drift])
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
 
         with caplog.at_level("WARNING", logger="interloper_scheduler.reaper"):
@@ -228,7 +228,7 @@ class TestReconcileUsage:
     def test_no_drift_warns_nothing(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.setattr(store.quotas, "reconcile_usage", list)
+        monkeypatch.setattr(store.usage, "reconcile", list)
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
 
         with caplog.at_level("WARNING", logger="interloper_scheduler.reaper"):
@@ -240,10 +240,10 @@ class TestReconcileUsage:
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         # Housekeeping must never take the reaper down.
-        def broken() -> list[dict[str, Any]]:
+        def broken() -> list[UsageDrift]:
             raise RuntimeError("query failed")
 
-        monkeypatch.setattr(store.quotas, "reconcile_usage", broken)
+        monkeypatch.setattr(store.usage, "reconcile", broken)
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
 
         with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):

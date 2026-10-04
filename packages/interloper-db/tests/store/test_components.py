@@ -26,7 +26,7 @@ from sqlalchemy import Engine, create_engine, event
 from sqlmodel import Session, select
 
 from interloper_db.models import Component
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentStore
 from interloper_db.store.status import ComponentStatus
 
@@ -228,7 +228,7 @@ class TestCrud:
         row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={"token": "s3cret"})
         assert row.config is None
         assert row.encrypted is True
-        assert store.components.decode_config(row) == {"token": "s3cret"}
+        assert store.components.read(row).config == {"token": "s3cret"}
 
     def test_secret_kinds_fail_closed_without_cipher(self, store: Store):
         with pytest.raises(ConfigError):
@@ -305,27 +305,34 @@ class TestCrud:
         store.relations.add(job.id, name="targets", dst_id=asset.id)
 
         store.components.delete(job.id)
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
     def test_list_filters_org_and_kinds(self, store: Store):
         store.components.create(_ORG, kind="destination", key="mine")
         store.components.create(_ORG, kind="asset", key="other_kind")
         store.components.create(uuid4(), kind="destination", key="other_org")
 
-        rows = store.components.list_all(_ORG, kinds=["destination"])
+        rows = store.components.list(_ORG, ComponentQuery(kind=["destination"], roots_only=False, limit=None)).items
         assert [row.key for row in rows] == ["mine"]
-        assert {row.key for row in store.components.list_all(_ORG)} == {"mine", "other_kind"}
+        everything = store.components.list(_ORG, ComponentQuery(roots_only=False, limit=None)).items
+        assert {row.key for row in everything} == {"mine", "other_kind"}
 
     def test_list_searches_name_and_key_and_pages(self, store: Store):
         store.components.create(_ORG, kind="destination", key="bq_raw", name="Raw warehouse")
         store.components.create(_ORG, kind="destination", key="bq_clean", name="Clean")
         store.components.create(_ORG, kind="destination", key="gcs", name="Lake")
 
-        assert {row.key for row in store.components.list_all(_ORG, q="BQ")} == {"bq_raw", "bq_clean"}
-        assert [row.key for row in store.components.list_all(_ORG, q="warehouse")] == ["bq_raw"]
-        assert len(store.components.list_all(_ORG, limit=2, offset=1)) == 2
-        assert store.components.count(_ORG, kinds=["destination"], q="bq") == 2
-        assert store.components.count(uuid4()) == 0
+        def keys(query: ComponentQuery) -> list[str]:
+            return [row.key for row in store.components.list(_ORG, query).items]
+
+        assert set(keys(ComponentQuery(q="BQ", roots_only=False, limit=None))) == {"bq_raw", "bq_clean"}
+        assert keys(ComponentQuery(q="warehouse", roots_only=False, limit=None)) == ["bq_raw"]
+        assert len(keys(ComponentQuery(roots_only=False, limit=2, offset=1))) == 2
+        query = ComponentQuery(kind=["destination"], q="bq", roots_only=False, limit=1)
+        page = store.components.list(_ORG, query)
+        assert len(page.items) == 1
+        assert page.total == 2
+        assert store.components.list(uuid4(), ComponentQuery(roots_only=False)).total == 0
 
     def test_get_component_checks_kind(self, store: Store):
         dest = store.components.create(_ORG, kind="destination", key="dest")
@@ -344,11 +351,18 @@ class TestCrud:
             store.components.get(missing, org_id=_ORG)
         assert str(foreign.value).replace(str(dest.id), "<id>") == str(absent.value).replace(str(missing), "<id>")
 
-    def test_list_roots_nests_owned_components(self, store: Store, connection: Component):
+    def test_list_roots_nests_owned_components(self, store: Store, connection: Component, component_db: Engine):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
         store.components.create(uuid4(), kind="connection", key="wire_connection", config={}, encrypted=False)
+        # SQLite stamps whole seconds; set the clock apart so the order is the store's, not a tie-break.
+        with Session(component_db) as session:
+            row = session.get(Component, connection.id)
+            assert row is not None
+            row.created_at = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+            session.add(row)
+            session.commit()
 
-        roots = store.components.list_roots(_ORG)
+        roots = store.components.list(_ORG, ComponentQuery(limit=None)).items
 
         assert [row.id for row in roots] == [connection.id, source.id]
         nested = next(row for row in roots if row.id == source.id)
@@ -357,9 +371,35 @@ class TestCrud:
     def test_list_roots_filters_root_kinds(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_up_source")
 
-        assert [row.id for row in store.components.list_roots(_ORG, kinds=["connection"])] == [connection.id]
+        connections = store.components.list(_ORG, ComponentQuery(kind=["connection"], limit=None)).items
+        assert [row.id for row in connections] == [connection.id]
         # Owned assets are not roots: a kind filter never surfaces them.
-        assert store.components.list_roots(_ORG, kinds=["asset"]) == []
+        assert store.components.list(_ORG, ComponentQuery(kind=["asset"], limit=None)).items == []
+
+    def test_roots_only_decides_whether_owned_rows_list_on_their_own(self, store: Store, connection: Component):
+        source = store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        roots = store.components.list(_ORG, ComponentQuery(limit=None))
+        every_row = store.components.list(_ORG, ComponentQuery(roots_only=False, limit=None))
+
+        assert {row.id for row in roots.items} == {connection.id, source.id}
+        assert roots.total == 2
+        assert {row.key for row in every_row.items} == {"wire_connection", "wire_up_source", "rows", "totals"}
+        assert every_row.total == 4
+        owned = store.components.list(_ORG, ComponentQuery(kind=["asset"], roots_only=False, limit=None))
+        assert {row.key for row in owned.items} == {"rows", "totals"}
+        assert all(row.parent_id == source.id for row in owned.items)
+
+    def test_a_window_reports_the_whole_count(self, store: Store, connection: Component):
+        store.components.create(_ORG, kind="source", key="wire_up_source")
+
+        roots = store.components.list(_ORG, ComponentQuery(limit=1))
+        every_row = store.components.list(_ORG, ComponentQuery(roots_only=False, limit=1, offset=3))
+
+        assert len(roots.items) == 1
+        assert roots.total == 2
+        assert len(every_row.items) == 1
+        assert every_row.total == 4
 
     def test_relations_carry_their_target(self, store: Store, connection: Component):
         source = store.components.create(
@@ -426,7 +466,7 @@ class TestDeleteInUseGuard:
 
         store.components.delete(asset.id)
         assert store.components.get(job.id).id == job.id
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
     def test_hook_watches_detach(self, store: Store):
         asset = store.components.create(_ORG, kind="asset", key="guard_upstream")
@@ -434,7 +474,7 @@ class TestDeleteInUseGuard:
 
         store.components.delete(asset.id)
         assert store.components.get(hook.id).id == hook.id
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
     def test_blocking_relation_wins_over_detaching(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
@@ -463,7 +503,8 @@ class TestDeleteInUseGuard:
 
     def test_intra_subtree_relations_do_not_block(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
-        assert store.relations.list_all(_ORG, name="rows") != []  # the source's own sibling edge
+        # the source's own sibling edge
+        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items != []
 
         store.components.delete(source.id)
         with pytest.raises(NotFoundError):
@@ -490,7 +531,7 @@ class TestUpstreamDeleteSemantics:
         store.components.delete(upstream.id)
 
         assert store.components.get(detaching.id).id == detaching.id
-        assert store.relations.list_all(_ORG, name="up") == []
+        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
 
     def test_an_optional_relation_keeping_the_default_policy_blocks(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream", name="Up")
@@ -575,20 +616,21 @@ class TestIntraSourceWiring:
     def test_create_source_binds_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
 
-        rows = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        rows = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
         assert {(row.name, row.dst_id) for row in rows} == {("rows", _child(source, "rows").id)}
 
     def test_full_dag_wired_on_create(self, demo_store: Store):
         demo_store.components.create(_ORG, kind="source", key="demo_source")
-        edges = demo_store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        edges = demo_store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
         assert len(edges) == 6  # b,c,d -> a and e -> b,c,d
 
     def test_children_enabled_later_get_inbound_edges(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
-        assert [row.name for row in demo_store.relations.list_all(_ORG)] == ["b"]  # only e -> b
+        edges = demo_store.relations.list(_ORG, RelationQuery(limit=None)).items
+        assert [row.name for row in edges] == ["b"]  # only e -> b
 
         updated = demo_store.components.update(source.id, children=["a", "b", "e"])
-        edges = demo_store.relations.list_all(_ORG)
+        edges = demo_store.relations.list(_ORG, RelationQuery(limit=None)).items
         by_name = {row.name: (row.src_id, row.dst_id) for row in edges}
         assert set(by_name) == {"a", "b"}
         assert by_name["a"] == (_child(updated, "b").id, _child(updated, "a").id)
@@ -597,7 +639,7 @@ class TestIntraSourceWiring:
         source = demo_store.components.create(_ORG, kind="source", key="demo_source")
         demo_store.components.update(source.id, name="renamed")
         demo_store.components.update(source.id, children=["a", "b", "c", "d", "e"])
-        assert len(demo_store.relations.list_all(_ORG)) == 6
+        assert len(demo_store.relations.list(_ORG, RelationQuery(limit=None)).items) == 6
 
     def test_update_without_children_leaves_child_set_untouched(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key="demo_source", children=["b", "e"])
@@ -618,7 +660,7 @@ class TestChildRemovalGuard:
         with pytest.raises(InUseError) as excinfo:
             store.components.update(up.id, children=[])
         assert [r["id"] for r in excinfo.value.referrers] == [str(down.id)]
-        assert store.relations.list_all(_ORG, name="rows") != []
+        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items != []
 
     def test_removing_child_with_detaching_external_upstream_detaches(self, store: Store):
         up = store.components.create(_ORG, kind="source", key="wire_up_source")
@@ -627,14 +669,14 @@ class TestChildRemovalGuard:
 
         updated = store.components.update(up.id, children=[])
         assert updated.children == []
-        assert store.relations.list_all(_ORG, name="rows") == []
+        assert store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items == []
 
     def test_intra_source_reshape_not_blocked(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
         updated = store.components.update(source.id, children=["a"])
         assert [child.key for child in updated.children] == ["a"]
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
 
 class TestSourceCollisionGuard:
@@ -1046,7 +1088,7 @@ class TestConfigWriteBack:
 
         assert updated.encrypted is True
         assert updated.config is None
-        assert store.components.decode_config(updated) == {"token": "new", "region": "eu"}
+        assert store.components.read(updated).config == {"token": "new", "region": "eu"}
 
     def test_merge_preserves_plaintext_opt_in(self, store: Store):
         row = store.components.create(_ORG, kind="connection", key="conn", name="C", config={}, encrypted=False)
@@ -1054,7 +1096,7 @@ class TestConfigWriteBack:
         updated = store.components.merge_config(row.id, {"token": "new"})
 
         assert updated.encrypted is False
-        assert store.components.decode_config(updated) == {"token": "new"}
+        assert store.components.read(updated).config == {"token": "new"}
 
     def test_merge_missing_component(self, store: Store):
         with pytest.raises(NotFoundError):

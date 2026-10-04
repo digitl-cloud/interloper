@@ -6,6 +6,7 @@ pure unit tests; the DAG itself runs for real through an ``AsyncRunner``.
 
 from __future__ import annotations
 
+import builtins
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -122,23 +123,23 @@ def test_execute_roots_a_trace_without_any_dispatch_span(
 # -- Retry skip logic ----------------------------------------------------------
 
 
-class _FakeEventStore:
+class _FakeExecutionStore:
     """Returns canned executions per run_id."""
 
-    def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
+    def __init__(self, executions: dict[UUID, builtins.list[dict[str, Any]]]) -> None:
         self._executions = executions
 
-    def list_executions(self, run_id: UUID) -> list[SimpleNamespace]:
-        return [SimpleNamespace(**row) for row in self._executions.get(run_id, [])]
+    def list(self, org_id: UUID, query: Any, *, run_id: UUID) -> SimpleNamespace:
+        return SimpleNamespace(items=[SimpleNamespace(**row) for row in self._executions.get(run_id, [])])
 
 
 class _RetryStore:
-    """Presents the ``events`` facet the executor's retry walk reaches for."""
+    """Presents the ``executions`` facet the executor's retry walk reaches for."""
 
     engine = None  # the fake Session ignores it
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
-        self.events = _FakeEventStore(executions)
+        self.executions = _FakeExecutionStore(executions)
 
 
 class _LineageSession:
@@ -172,7 +173,7 @@ def test_succeeded_operations_are_reported(monkeypatch: pytest.MonkeyPatch) -> N
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
     # succeeded → skipped; failed → re-runs
-    assert executor._prior_successes(parent_id) == {id_a}
+    assert executor._prior_successes(uuid4(), parent_id) == {id_a}
 
 
 def test_statuses_match_by_component_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,7 +194,7 @@ def test_statuses_match_by_component_id_not_key(monkeypatch: pytest.MonkeyPatch)
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
-    assert executor._prior_successes(parent_id) == {id_a}
+    assert executor._prior_successes(uuid4(), parent_id) == {id_a}
 
 
 def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,7 +217,7 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
-    assert executor._prior_successes(mid_id) == {id_a}
+    assert executor._prior_successes(uuid4(), mid_id) == {id_a}
 
 
 def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -238,7 +239,7 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
-    assert executor._prior_successes(mid_id) == {id_a}
+    assert executor._prior_successes(uuid4(), mid_id) == {id_a}
 
 
 class _RecordingStore:
@@ -270,8 +271,8 @@ class _RecordingStore:
         self.runs = SimpleNamespace(complete=self._complete)
         self.events = SimpleNamespace(
             save=lambda event, org_id, run_id: self.saved_events.append(event),
-            list_executions=lambda _run_id: [],
         )
+        self.executions = SimpleNamespace(list=lambda org_id, query, run_id: SimpleNamespace(items=[]))
 
     def _complete(self, run_id: UUID, success: bool) -> None:
         if self._complete_raises:
@@ -534,7 +535,7 @@ class TestRetrySkipsPriorSuccesses:
         monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
         store = _RecordingStore(target)
         executor = _executor(store)
-        monkeypatch.setattr(executor, "_prior_successes", lambda _retry_of: {component_id})
+        monkeypatch.setattr(executor, "_prior_successes", lambda _org_id, _retry_of: {component_id})
 
         assert executor.execute(run.id) is True
         assert target.enabled is False
@@ -559,7 +560,9 @@ class TestRetrySkipsPriorSuccesses:
         store = _RecordingStore(target)
         executor = _executor(store)
         monkeypatch.setattr(
-            executor, "_prior_successes", lambda _retry_of: pytest.fail("scope 'all' must not consult the lineage")
+            executor,
+            "_prior_successes",
+            lambda _org_id, _retry_of: pytest.fail("scope 'all' must not consult the lineage"),
         )
 
         assert executor.execute(run.id) is True

@@ -11,7 +11,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.store import Store
+from interloper_db.store import RelationQuery, Store
 
 _ORG = uuid4()
 
@@ -364,7 +364,7 @@ class TestAdd:
         second = store.relations.add(source.id, name="connection", dst_id=connection.id)
 
         assert (second.src_id, second.name, second.dst_id) == (first.src_id, first.name, first.dst_id)
-        assert len(store.relations.list_all(_ORG, name="connection")) == 1
+        assert len(store.relations.list(_ORG, RelationQuery(name="connection", limit=None)).items) == 1
 
     def test_stamps_the_denormalized_org_and_kinds(self, store: Store, connection: Component):
         source = store.components.create(
@@ -399,48 +399,65 @@ class TestRemove:
         required = store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
 
         with pytest.raises(ConfigError, match="non-optional"):
-            store.relations.remove(required.id, name="up", dst_id=upstream.id)
-        assert len(store.relations.list_all(_ORG, name="up")) == 1
+            store.relations.delete(required.id, name="up", dst_id=upstream.id)
+        assert len(store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items) == 1
 
     def test_last_row_of_an_optional_relation_detaches(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional", relations={"up": [upstream.id]})
 
-        store.relations.remove(optional.id, name="up", dst_id=upstream.id)
+        store.relations.delete(optional.id, name="up", dst_id=upstream.id)
 
-        assert store.relations.list_all(_ORG, name="up") == []
+        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
 
     def test_an_absent_row_is_a_no_op(self, store: Store):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         optional = store.components.create(_ORG, kind="asset", key="guard_optional")
 
-        store.relations.remove(optional.id, name="up", dst_id=upstream.id)
+        store.relations.delete(optional.id, name="up", dst_id=upstream.id)
 
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
 
-class TestListAll:
-    """``list_all`` filters by name and by either endpoint's kind."""
+class TestList:
+    """``list`` filters by name and by either endpoint's kind, and counts the whole match."""
 
     def test_filters_by_kinds(self, store: Store, connection: Component):
         upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
         store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        rows = store.relations.list_all(_ORG, src_kind="asset", dst_kind="asset")
+        rows = store.relations.list(_ORG, RelationQuery(src_kind="asset", dst_kind="asset", limit=None)).items
 
         assert {row.name for row in rows} == {"up"}
 
     def test_filters_by_name(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        assert len(store.relations.list_all(_ORG, name="connection")) == 1
-        assert store.relations.list_all(_ORG, name="up") == []
+        assert len(store.relations.list(_ORG, RelationQuery(name="connection", limit=None)).items) == 1
+        assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
 
     def test_is_scoped_to_the_organisation(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 
-        assert store.relations.list_all(uuid4()) == []
+        page = store.relations.list(uuid4(), RelationQuery(limit=None))
+
+        assert page.items == []
+        assert page.total == 0
+
+    def test_a_window_reports_the_whole_count(self, store: Store, connection: Component):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
+        store.components.create(_ORG, kind="asset", key="guard_optional", relations={"up": [upstream.id]})
+        store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
+
+        everything = store.relations.list(_ORG, RelationQuery(limit=1))
+        ups = store.relations.list(_ORG, RelationQuery(name="up", limit=1))
+
+        assert len(everything.items) == 1
+        assert everything.total == 3
+        assert len(ups.items) == 1
+        assert ups.total == 2
 
 
 class TestSyncRelations:
@@ -490,7 +507,7 @@ class TestSyncRelations:
 
         store.components.update(required.id, relations={"up": [second.id]})
 
-        (row,) = store.relations.list_all(_ORG, name="up")
+        (row,) = store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items
         assert row.dst_id == second.id
 
     def test_rejects_an_undeclared_name(self, store: Store, connection: Component):
@@ -572,13 +589,13 @@ class TestIntraSourceWiring:
     def test_creating_a_source_wires_its_sibling_relations(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="wire_up_source")
 
-        (row,) = store.relations.list_all(_ORG, name="rows")
+        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
         assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)
 
     def test_two_declared_keys_on_a_single_valued_relation_wire_one_edge(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="two_key_source")
 
-        (row,) = store.relations.list_all(_ORG, name="rows")
+        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
         sibling_key = TwoKeySource.sibling_bindings()["totals"]["rows"]
         assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, sibling_key).id)
 
@@ -586,10 +603,10 @@ class TestIntraSourceWiring:
         store.components.create(_ORG, kind="source", key="self_key_source")
 
         assert SelfKeySource.sibling_bindings() == {}
-        assert store.relations.list_all(_ORG) == []
+        assert store.relations.list(_ORG, RelationQuery(limit=None)).items == []
 
     def test_a_relation_mixing_bare_and_qualified_keys_wires_the_bare_one(self, store: Store):
         source = store.components.create(_ORG, kind="source", key="mixed_key_source")
 
-        (row,) = store.relations.list_all(_ORG, name="rows")
+        (row,) = store.relations.list(_ORG, RelationQuery(name="rows", limit=None)).items
         assert (row.src_id, row.dst_id) == (_child(source, "totals").id, _child(source, "rows").id)

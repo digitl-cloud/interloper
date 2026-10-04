@@ -1,7 +1,7 @@
-import type { Organisation } from '~/types/organisation'
+import type { Invitation, Member, Organisation, OrgMember } from '~/types/organisation'
 
 export const useOrganisationStore = defineStore('organisation', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, fetchAll } = useApi()
     const userStore = useUserStore()
 
     /**********************
@@ -31,7 +31,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
      * Actions
      **********************/
     async function fetchOrganisations(): Promise<Organisation[]> {
-        return apiFetch<Organisation[]>('/organisations')
+        return fetchAll<Organisation>('/organisations')
     }
 
     async function loadOrganisation() {
@@ -73,6 +73,69 @@ export const useOrganisationStore = defineStore('organisation', () => {
         channel?.postMessage({ orgId })
     }
 
+    async function renameOrganisation(orgId: string, name: string): Promise<Organisation> {
+        const renamed = await apiFetch<Organisation>(`/organisations/${orgId}`, {
+            method: 'PATCH',
+            body: { name },
+        })
+        if (organisation.value?.id === orgId) organisation.value = renamed
+        return renamed
+    }
+
+    /** Deletes the organisation and all its data; `name` must repeat the exact name. */
+    async function deleteOrganisation(orgId: string, name: string) {
+        await apiFetch(`/organisations/${orgId}`, {
+            method: 'DELETE',
+            body: { name },
+        })
+    }
+
+    /** An organisation's members, then its pending invitations when `withInvitations`, as table rows. */
+    async function fetchMemberRows(orgId: string, withInvitations: boolean): Promise<OrgMember[]> {
+        const [members, invitations] = await Promise.all([
+            fetchAll<Member>(`/organisations/${orgId}/members`),
+            withInvitations ? fetchAll<Invitation>(`/organisations/${orgId}/invitations`) : [],
+        ])
+        return [
+            ...members.map(m => ({ ...m, status: 'active' as const })),
+            ...invitations.map(i => ({ id: i.id, email: i.email, name: null, avatar_url: null, role: i.role, status: 'invited' as const })),
+        ]
+    }
+
+    /** Join an organisation directly (super-admins only). */
+    async function joinOrganisation(orgId: string, role: string = 'admin'): Promise<Member> {
+        return apiFetch<Member>(`/organisations/${orgId}/members`, {
+            method: 'POST',
+            body: { role },
+        })
+    }
+
+    async function updateMemberRole(orgId: string, userId: string, role: string): Promise<Member> {
+        return apiFetch<Member>(`/organisations/${orgId}/members/${userId}`, {
+            method: 'PATCH',
+            body: { role },
+        })
+    }
+
+    async function removeMember(orgId: string, userId: string) {
+        await apiFetch(`/organisations/${orgId}/members/${userId}`, { method: 'DELETE' })
+    }
+
+    async function inviteMember(orgId: string, email: string, role: string): Promise<Invitation> {
+        return apiFetch<Invitation>(`/organisations/${orgId}/invitations`, {
+            method: 'POST',
+            body: { email, role },
+        })
+    }
+
+    async function cancelInvitation(orgId: string, invitationId: string) {
+        await apiFetch(`/organisations/${orgId}/invitations/${invitationId}`, { method: 'DELETE' })
+    }
+
+    async function resendInvitation(orgId: string, invitationId: string): Promise<Invitation> {
+        return apiFetch<Invitation>(`/organisations/${orgId}/invitations/${invitationId}/resend`, { method: 'POST' })
+    }
+
     function findOrganisation(): Organisation | null {
         return organisation.value
     }
@@ -92,6 +155,15 @@ export const useOrganisationStore = defineStore('organisation', () => {
         loadOrganisation,
         createOrganisation,
         switchOrg,
+        renameOrganisation,
+        deleteOrganisation,
+        fetchMemberRows,
+        joinOrganisation,
+        updateMemberRole,
+        removeMember,
+        inviteMember,
+        cancelInvitation,
+        resendInvitation,
         requireOrganisation,
     }
 })

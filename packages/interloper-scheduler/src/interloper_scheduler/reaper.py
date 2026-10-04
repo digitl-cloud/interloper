@@ -101,17 +101,17 @@ class Reaper(Controller):
         persists across cycles is a bug in the charging path.
         """
         try:
-            drifts = self._store.quotas.reconcile_usage()
+            drifts = self._store.usage.reconcile()
         except Exception:
             logger.exception("Usage reconciliation failed")
             return
         for drift in drifts:
             logger.warning(
                 "Usage ledger drift for org %s (period %s): ledger=%d, runs table=%d",
-                drift["org_id"],
-                drift["period_start"],
-                drift["ledger"],
-                drift["recomputed"],
+                drift.org_id,
+                drift.period_start,
+                drift.ledger,
+                drift.recomputed,
             )
 
     def _reap(self) -> int:

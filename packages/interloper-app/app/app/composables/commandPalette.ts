@@ -1,4 +1,5 @@
 import type { CommandPaletteGroup, CommandPaletteItem } from '@nuxt/ui'
+import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 import type { Organisation } from '~/types/organisation'
 import type { AdminOrganisation } from '~/types/admin'
@@ -38,8 +39,8 @@ export function useCommandPalette() {
         if (!isOpen) return
         searchTerm.value = ''
         if (!componentsStore.loading) componentsStore.fetchAll()
-        apiFetch<Run[]>('/runs?limit=5').then((runs) => {
-            recentRuns.value = runs
+        apiFetch<Page<Run>>('/runs?limit=5').then((page) => {
+            recentRuns.value = page.items
         }).catch(() => {})
         orgStore.fetchOrganisations().then((orgs) => {
             userOrgs.value = orgs

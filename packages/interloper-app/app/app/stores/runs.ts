@@ -1,3 +1,4 @@
+import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 
 /** Target-side narrowing of the runs list; empty/null means no filter. */
@@ -15,7 +16,7 @@ export interface RunFilters {
 const NO_FILTERS: RunFilters = { q: '', kind: null, key: null, status: null }
 
 export const useRunsStore = defineStore('runs', () => {
-    const { apiFetch, apiFetchRaw } = useApi()
+    const { apiFetch, fetchAll } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -153,9 +154,9 @@ export const useRunsStore = defineStore('runs', () => {
             if (kind) params.set('component_kind', kind)
             if (key) params.set('component_key', key)
             if (status) params.set('status', status)
-            const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
-            runs.value = res._data ?? []
-            total.value = Number(res.headers.get('X-Total-Count') ?? runs.value.length)
+            const page = await apiFetch<Page<Run>>(`/runs?${params}`)
+            runs.value = page.items
+            total.value = page.total
         }
         catch (e) {
             error.value = e as Error
@@ -171,8 +172,7 @@ export const useRunsStore = defineStore('runs', () => {
 
     /** Every attempt of one stack, newest first. A listing only ever carries the latest. */
     async function fetchStack(rootRunId: string): Promise<Run[]> {
-        const params = new URLSearchParams({ root_run_id: rootRunId })
-        return apiFetch<Run[]>(`/runs?${params}`)
+        return fetchAll<Run>('/runs', { root_run_id: rootRunId })
     }
 
     /** Load a stack's attempts into `stacks` unless they are already there. */
@@ -191,11 +191,11 @@ export const useRunsStore = defineStore('runs', () => {
     }
 
     async function retryRun(id: string, scope: 'all' | 'failed'): Promise<string> {
-        const res = await apiFetch<{ run_id: string }>(`/runs/${id}/retry`, {
+        const run = await apiFetch<Run>(`/runs/${id}/retry`, {
             method: 'POST',
             body: { scope },
         })
-        return res.run_id
+        return run.id
     }
 
     async function goToPage(page: number) {

@@ -42,6 +42,24 @@ def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
     assert get_features() == {"agent": True}
 
 
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/relations"),
+        ("GET", "/api/executions"),
+        ("POST", "/api/catalog/facebook_ads/check"),
+        ("POST", "/api/catalog/facebook_ads/resolve"),
+        ("GET", "/api/organisations/00000000-0000-0000-0000-000000000000/members"),
+    ],
+)
+def test_the_reorganised_routes_are_mounted(fake_settings: SimpleNamespace, method: str, path: str):
+    app = create_app(settings=fake_settings)
+    app.dependency_overrides[get_store] = lambda: None
+
+    # 401 (not 404): the route is mounted and the auth guard answers first.
+    assert TestClient(app).request(method, path, json={}).status_code == 401
+
+
 class TestErrorHandlers:
     """Domain errors become the status the UI can act on, never an opaque 500."""
 

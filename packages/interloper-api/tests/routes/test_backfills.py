@@ -13,9 +13,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import ConfigError, ConflictError, NotFoundError, QuotaExceededError
+from interloper_db import BackfillQuery, Page
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import backfills as backfills_module
 
 _ORG_ID = uuid4()
@@ -44,24 +45,30 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.cancel_calls: list[UUID] = []
+        self.list_calls: list[tuple[UUID, BackfillQuery]] = []
+        self.listed_backfills: list[SimpleNamespace] = []
         self.raise_not_found = False
         self.raise_conflict: str | None = None
-        #: Role the fake user holds in the backfill's org. None = not a member.
         self.role: str | None = "editor"
-        self.organisations = SimpleNamespace(member_role=self._member_role)
-        self.runs = SimpleNamespace(
-            get_backfill=self._get_backfill,
-            cancel_backfill=self._cancel_backfill,
-            count_backfill_runs=lambda backfill_ids: {},
+        self.members = SimpleNamespace(role=self._member_role)
+        self.backfills = SimpleNamespace(
+            get=self._get_backfill,
+            cancel=self._cancel_backfill,
+            list=self._list_backfills,
+            run_counts=lambda backfill_ids: {},
         )
         self.components = SimpleNamespace()
+
+    def _list_backfills(self, org_id: UUID, query: BackfillQuery) -> Page:
+        self.list_calls.append((org_id, query))
+        return Page.window(self.listed_backfills, query)
 
     def _get_backfill(self, backfill_id: UUID):
         if self.raise_not_found:
             raise NotFoundError(f"Backfill {backfill_id} not found")
         return _fake_backfill(backfill_id)
 
-    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
+    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
         return self.role
 
     def _cancel_backfill(self, backfill_id: UUID):
@@ -110,7 +117,7 @@ def test_cancel_returns_the_canceled_backfill(store: FakeStore) -> None:
 
 def test_cancel_reports_the_partitions_per_status(store: FakeStore) -> None:
     backfill_id = uuid4()
-    store.runs.count_backfill_runs = lambda backfill_ids: {backfill_id: {"success": 2, "canceled": 1}}
+    store.backfills.run_counts = lambda backfill_ids: {backfill_id: {"success": 2, "canceled": 1}}
 
     resp = _client(store).post(f"/backfills/{backfill_id}/cancel")
 
@@ -155,10 +162,10 @@ def test_create_backfill_over_span_quota_returns_429(store: FakeStore) -> None:
         )
 
     store.components.get = lambda component_id, kind=None: _fake_backfill(component_id)
-    store.runs.create_backfill = _raise
+    store.backfills.create = _raise
 
     resp = _client(store).post(
-        "/backfills/",
+        "/backfills",
         json={"component_id": str(uuid4()), "start_key": "2026-01-01", "end_key": "2026-01-31"},
     )
     assert resp.status_code == 429
@@ -177,8 +184,6 @@ def _list_client(store: FakeStore) -> TestClient:
     Returns:
         A client for the probe app.
     """
-    from interloper_api.dependencies import get_org_id, require_viewer
-
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(backfills_module.router)
@@ -191,15 +196,18 @@ def _list_client(store: FakeStore) -> TestClient:
 
 def test_list_backfills_returns_the_orgs_backfills(store: FakeStore) -> None:
     """The default listing covers every backfill, terminal ones included."""
-    listed: list[UUID] = []
     backfill_id = uuid4()
-    store.runs.list_backfills = lambda org_id, active_only: listed.append(org_id) or [_fake_backfill(backfill_id)]
+    store.listed_backfills = [_fake_backfill(backfill_id)]
 
-    response = _list_client(store).get("/backfills/")
+    response = _list_client(store).get("/backfills")
 
     assert response.status_code == 200
-    assert [row["id"] for row in response.json()] == [str(backfill_id)]
-    assert listed == [_ORG_ID]
+    assert response.json()["total"] == 1
+    assert [row["id"] for row in response.json()["items"]] == [str(backfill_id)]
+    ((org_id, query),) = store.list_calls
+    assert org_id == _ORG_ID
+    assert query == BackfillQuery()
+    assert query.status is None
 
 
 def test_list_backfills_carries_each_ones_run_counts(store: FakeStore) -> None:
@@ -211,32 +219,47 @@ def test_list_backfills_carries_each_ones_run_counts(store: FakeStore) -> None:
         asked.append(list(backfill_ids))
         return {counted: {"success": 2, "queued": 1}}
 
-    store.runs.list_backfills = lambda org_id, active_only: [_fake_backfill(counted), _fake_backfill(empty)]
-    store.runs.count_backfill_runs = count_backfill_runs
+    store.listed_backfills = [_fake_backfill(counted), _fake_backfill(empty)]
+    store.backfills.run_counts = count_backfill_runs
 
-    response = _list_client(store).get("/backfills/")
+    response = _list_client(store).get("/backfills")
 
     assert response.status_code == 200
-    assert [row["run_counts"] for row in response.json()] == [{"success": 2, "queued": 1}, {}]
+    assert [row["run_counts"] for row in response.json()["items"]] == [{"success": 2, "queued": 1}, {}]
     assert asked == [[counted, empty]]
 
 
 def test_get_backfill_carries_its_run_counts(store: FakeStore) -> None:
-    store.runs.count_backfill_runs = lambda backfill_ids: {backfill_ids[0]: {"failed": 3}}
+    store.backfills.run_counts = lambda backfill_ids: {backfill_ids[0]: {"failed": 3}}
 
     response = _client(store).get(f"/backfills/{uuid4()}")
 
     assert response.json()["run_counts"] == {"failed": 3}
 
 
-def test_active_only_narrows_to_the_running_ones(store: FakeStore) -> None:
-    """``active_only`` narrows in the store query, not a client-side filter."""
-    active_id = uuid4()
-    store.runs.list_backfills = lambda org_id, active_only: [_fake_backfill(active_id if active_only else uuid4())]
+def test_the_status_filter_is_forwarded_to_the_store(store: FakeStore) -> None:
+    """``status=queued&status=running`` narrows in the store query, not a client-side filter."""
+    response = _list_client(store).get("/backfills?status=queued&status=running")
 
-    response = _list_client(store).get("/backfills/?active_only=true")
+    assert response.status_code == 200
+    ((_, query),) = store.list_calls
+    assert query.status == ["queued", "running"]
 
-    assert [row["id"] for row in response.json()] == [str(active_id)]
+
+def test_list_backfills_forwards_the_page_window(store: FakeStore) -> None:
+    store.listed_backfills = [_fake_backfill(uuid4()) for _ in range(3)]
+
+    body = _list_client(store).get("/backfills", params={"limit": 1, "offset": 1}).json()
+
+    ((_, query),) = store.list_calls
+    assert (query.limit, query.offset) == (1, 1)
+    assert [row["id"] for row in body["items"]] == [str(store.listed_backfills[1].id)]
+    assert body["total"] == 3
+
+
+def test_list_backfills_rejects_a_page_larger_than_the_cap(store: FakeStore) -> None:
+    assert _list_client(store).get("/backfills", params={"limit": 501}).status_code == 422
+    assert store.list_calls == []
 
 
 def test_get_backfill_returns_it(store: FakeStore) -> None:
@@ -279,10 +302,10 @@ def test_create_backfill_rejects_an_invalid_span(store: FakeStore) -> None:
     def create_backfill(org_id, **kwargs):
         raise ConfigError("end_key precedes start_key")
 
-    store.runs.create_backfill = create_backfill
+    store.backfills.create = create_backfill
 
     response = _client(store).post(
-        "/backfills/",
+        "/backfills",
         json={"component_id": str(component_id), "start_key": "2026-01-03", "end_key": "2026-01-01"},
     )
 
@@ -294,12 +317,31 @@ def test_create_backfill_returns_the_created_row(store: FakeStore) -> None:
     """A successful create echoes the stored backfill back."""
     backfill_id = uuid4()
     store.components.get = lambda cid, kind=None: SimpleNamespace(id=cid, org_id=_ORG_ID)
-    store.runs.create_backfill = lambda org_id, **kwargs: _fake_backfill(backfill_id)
+    created: list[tuple[UUID, dict]] = []
+
+    def create(org_id, **kwargs):
+        created.append((org_id, kwargs))
+        return _fake_backfill(backfill_id)
+
+    store.backfills.create = create
+    component_id = uuid4()
 
     response = _client(store).post(
-        "/backfills/",
-        json={"component_id": str(uuid4()), "start_key": "2026-01-01", "end_key": "2026-01-03"},
+        "/backfills",
+        json={"component_id": str(component_id), "start_key": "2026-01-01", "end_key": "2026-01-03"},
     )
 
     assert response.status_code == 201
     assert response.json()["id"] == str(backfill_id)
+    assert created == [
+        (
+            _ORG_ID,
+            {
+                "component_id": component_id,
+                "start_key": "2026-01-01",
+                "end_key": "2026-01-03",
+                "concurrency": 1,
+                "fail_fast": False,
+            },
+        )
+    ]

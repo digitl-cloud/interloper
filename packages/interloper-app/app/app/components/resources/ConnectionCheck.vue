@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Runs `POST /components/check` for a connection's candidate config and shows
+ * Runs `POST /catalog/{key}/check` for a connection's candidate config and shows
  * the outcome. Auto-runs on mount; with `manual`, renders a "Test connection"
  * button instead. A failed check is informative, never blocking — the parent
  * decides what to do with the emitted result.
@@ -50,9 +50,9 @@ async function run() {
     result.value = null
     emit('fieldErrors', [])
     try {
-        result.value = await apiFetch<CheckResult>('/components/check', {
+        result.value = await apiFetch<CheckResult>(`/catalog/${props.componentKey}/check`, {
             method: 'POST',
-            body: { component_key: props.componentKey, config: props.config },
+            body: { config: props.config },
         })
     }
     catch (e) {

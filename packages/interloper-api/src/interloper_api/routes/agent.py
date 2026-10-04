@@ -15,11 +15,12 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from interloper_agent import TURN_LIMITS, summary_of
+from interloper_db import Page, PageQuery
 from interloper_db.models import Conversation
 from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
@@ -147,19 +148,21 @@ def create_conversation(user: EditorDep, org_id: OrgIdDep, store: StoreDep) -> C
 
 
 @router.get("/conversations")
-def list_conversations(user: ViewerDep, org_id: OrgIdDep, store: StoreDep) -> list[ConversationResponse]:
+def list_conversations(
+    user: ViewerDep, org_id: OrgIdDep, store: StoreDep, query: Annotated[PageQuery, Query()]
+) -> Page[ConversationResponse]:
     """List the caller's conversations in the active organisation, newest first.
 
     Args:
         user: The authenticated user, required to hold at least the ``viewer`` role.
         org_id: The active organisation's UUID.
         store: The Store instance.
+        query: The window to read.
 
     Returns:
-        The conversations, as response models.
+        The page of conversations.
     """
-    rows = store.conversations.list_all(org_id, user.id)
-    return [ConversationResponse.from_conversation(row) for row in rows]
+    return store.conversations.list(org_id, user.id, query).map(ConversationResponse.from_conversation)
 
 
 @router.get("/conversations/{conversation_id}")
@@ -233,13 +236,13 @@ async def chat(
         store=store,
         catalog=catalog.dump(),
         org_id=org_id,
-        role=store.organisations.member_role(user.id, org_id) or "viewer",
+        role=store.members.role(org_id, user.id) or "viewer",
     )
 
     def save(result: AgentRunResult[Any]) -> None:
         messages = result.all_messages()
         history = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
-        store.conversations.save(conversation.id, history, title=_first_prompt(messages))
+        store.conversations.update(conversation.id, messages=history, title=_first_prompt(messages))
         usage = result.usage
         logger.info(
             "Agent turn on conversation %s: %d requests, %d input tokens, %d output tokens, %d messages stored",

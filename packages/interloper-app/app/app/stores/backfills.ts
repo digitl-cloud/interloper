@@ -1,7 +1,7 @@
 import type { Backfill } from '~/types/backfill'
 
 export const useBackfillsStore = defineStore('backfills', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, fetchAll } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -62,12 +62,11 @@ export const useBackfillsStore = defineStore('backfills', () => {
     /**********************
      * Actions
      **********************/
-    async function fetch(activeOnly = false) {
+    async function fetch() {
         loading.value = true
         error.value = null
         try {
-            const query = activeOnly ? '?active_only=true' : ''
-            backfills.value = await apiFetch<Backfill[]>(`/backfills${query}`)
+            backfills.value = await fetchAll<Backfill>('/backfills')
         }
         catch (e) {
             error.value = e as Error

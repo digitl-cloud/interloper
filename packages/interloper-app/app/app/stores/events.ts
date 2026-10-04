@@ -1,3 +1,4 @@
+import type { Page } from '~/composables/api'
 import type { EventType } from '~/types/event'
 
 export interface RunEvent {
@@ -20,7 +21,7 @@ export interface RunEvent {
 const EVENTS_PAGE_SIZE = 100
 
 export const useEventsStore = defineStore('events', () => {
-    const { apiFetchRaw } = useApi()
+    const { apiFetch } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -108,14 +109,13 @@ export const useEventsStore = defineStore('events', () => {
         })
         for (const cid of componentIds.value ?? []) params.append('component_id', cid)
         for (const et of eventTypes.value ?? []) params.append('event_type', et)
-        const res = await apiFetchRaw<RunEvent[]>(`/runs/${id}/events?${params}`)
+        const page = await apiFetch<Page<RunEvent>>(`/runs/${id}/events?${params}`)
         if (epoch !== fetchEpoch) return // state was reset while in flight
-        const page = res._data ?? []
-        total.value = Number(res.headers.get('X-Total-Count') ?? nextOffset.value + page.length)
+        total.value = page.total
         // A short/empty page means the server has nothing more; pin the offset
         // to the total so `hasMore` settles false and we never loop forever.
-        nextOffset.value = page.length < EVENTS_PAGE_SIZE ? total.value : nextOffset.value + page.length
-        _mergePage(page)
+        nextOffset.value = page.items.length < EVENTS_PAGE_SIZE ? total.value : nextOffset.value + page.items.length
+        _mergePage(page.items)
     }
 
     /**********************

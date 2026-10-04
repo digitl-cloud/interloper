@@ -7,25 +7,9 @@ import type {
     AdminUser,
 } from '~/types/admin'
 
-interface MemberResponse {
-    id: string
-    email: string
-    name: string | null
-    avatar_url: string | null
-    role: string
-}
-
-interface InvitationResponse {
-    id: string
-    email: string
-    role: string
-    created_at: string | null
-    expires_at: string
-}
-
 /** Cross-organisation management API, restricted to super-admins server-side. */
 export const useAdminStore = defineStore('admin', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, fetchAll } = useApi()
 
     function getConfig() {
         return apiFetch<AdminConfig>('/admin/config')
@@ -37,7 +21,7 @@ export const useAdminStore = defineStore('admin', () => {
 
     /** Derived activity feed for one organisation, newest first. */
     function getOrgActivity(orgId: string) {
-        return apiFetch<AdminActivityEntry[]>(`/admin/organisations/${orgId}/activity`)
+        return fetchAll<AdminActivityEntry>(`/admin/organisations/${orgId}/activity`)
     }
 
     /** Set an org's quota overrides; null clears a field (falls back to the default). */
@@ -49,7 +33,7 @@ export const useAdminStore = defineStore('admin', () => {
     }
 
     function listUsers() {
-        return apiFetch<AdminUser[]>('/admin/users')
+        return fetchAll<AdminUser>('/admin/users')
     }
 
     function deleteUser(userId: string) {
@@ -57,69 +41,13 @@ export const useAdminStore = defineStore('admin', () => {
     }
 
     function listOrganisations() {
-        return apiFetch<AdminOrganisation[]>('/admin/organisations')
+        return fetchAll<AdminOrganisation>('/admin/organisations')
     }
 
     function createOrganisation(name: string) {
         return apiFetch<AdminOrganisation>('/admin/organisations', {
             method: 'POST',
             body: { name },
-        })
-    }
-
-    function renameOrganisation(orgId: string, name: string) {
-        return apiFetch<AdminOrganisation>(`/admin/organisations/${orgId}`, {
-            method: 'PATCH',
-            body: { name },
-        })
-    }
-
-    /** Deletes the organisation and all its data; `name` must repeat the exact name. */
-    function deleteOrganisation(orgId: string, name: string) {
-        return apiFetch(`/admin/organisations/${orgId}`, {
-            method: 'DELETE',
-            body: { name },
-        })
-    }
-
-    function listMembers(orgId: string) {
-        return apiFetch<MemberResponse[]>(`/admin/organisations/${orgId}/members`)
-    }
-
-    function joinOrganisation(orgId: string, role: string = 'admin') {
-        return apiFetch<MemberResponse>(`/admin/organisations/${orgId}/members`, {
-            method: 'POST',
-            body: { role },
-        })
-    }
-
-    function updateMemberRole(orgId: string, userId: string, role: string) {
-        return apiFetch(`/admin/organisations/${orgId}/members/${userId}`, {
-            method: 'PATCH',
-            body: { role },
-        })
-    }
-
-    function removeMember(orgId: string, userId: string) {
-        return apiFetch(`/admin/organisations/${orgId}/members/${userId}`, {
-            method: 'DELETE',
-        })
-    }
-
-    function listInvitations(orgId: string) {
-        return apiFetch<InvitationResponse[]>(`/admin/organisations/${orgId}/invitations`)
-    }
-
-    function inviteMember(orgId: string, email: string, role: string) {
-        return apiFetch<InvitationResponse>(`/admin/organisations/${orgId}/invitations`, {
-            method: 'POST',
-            body: { email, role },
-        })
-    }
-
-    function cancelInvitation(orgId: string, invitationId: string) {
-        return apiFetch(`/admin/organisations/${orgId}/invitations/${invitationId}`, {
-            method: 'DELETE',
         })
     }
 
@@ -132,14 +60,5 @@ export const useAdminStore = defineStore('admin', () => {
         deleteUser,
         listOrganisations,
         createOrganisation,
-        renameOrganisation,
-        deleteOrganisation,
-        listMembers,
-        joinOrganisation,
-        updateMemberRole,
-        removeMember,
-        listInvitations,
-        inviteMember,
-        cancelInvitation,
     }
 })

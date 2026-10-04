@@ -19,6 +19,8 @@ foreign keys verify.
 
 from __future__ import annotations
 
+import builtins
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 import interloper as il
@@ -29,9 +31,24 @@ from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
+from interloper_db.store.page import Page, PageQuery
 
 # One relation binding: the destination component id.
 Binding = UUID
+
+
+class RelationQuery(PageQuery):
+    """Which of an organisation's relations a listing reads.
+
+    Attributes:
+        name: Keep relations filed under this name; ``None`` keeps every name.
+        src_kind: Keep relations whose source is of this kind.
+        dst_kind: Keep relations whose destination is of this kind.
+    """
+
+    name: str | None = None
+    src_kind: str | None = None
+    dst_kind: str | None = None
 
 
 class RelationStore:
@@ -49,43 +66,36 @@ class RelationStore:
 
     # -- Public API ------------------------------------------------------------
 
-    def list_all(
-        self,
-        org_id: UUID,
-        *,
-        name: str | None = None,
-        src_kind: str | None = None,
-        dst_kind: str | None = None,
-    ) -> list[ComponentRelation]:
-        """List an organisation's component relations, optionally filtered.
+    def list(self, org_id: UUID, query: RelationQuery) -> Page[ComponentRelation]:
+        """List an organisation's relations, optionally filtered.
 
         Args:
             org_id: Organisation whose relations are listed.
-            name: Relation name to restrict the listing to. None (the default)
-                lists every name.
-            src_kind: Kind the source component must have. None (the default)
-                accepts any kind.
-            dst_kind: Kind the destination component must have. None (the
-                default) accepts any kind.
+            query: Which relation name, source and destination kinds, and the
+                window to read.
 
         Returns:
-            The organisation's matching relation rows, in no guaranteed order.
+            The page of relation rows, in a stable order.
         """
+        statement = (
+            select(ComponentRelation)
+            .where(ComponentRelation.org_id == org_id)
+            .order_by(col(ComponentRelation.src_id), col(ComponentRelation.name), col(ComponentRelation.dst_id))
+        )
+        if query.name:
+            statement = statement.where(ComponentRelation.name == query.name)
+        if query.src_kind:
+            statement = statement.where(ComponentRelation.src_kind == query.src_kind)
+        if query.dst_kind:
+            statement = statement.where(ComponentRelation.dst_kind == query.dst_kind)
         with session_scope(self._engine) as session:
-            statement = select(ComponentRelation).where(ComponentRelation.org_id == org_id)
-            if name:
-                statement = statement.where(ComponentRelation.name == name)
-            if src_kind:
-                statement = statement.where(ComponentRelation.src_kind == src_kind)
-            if dst_kind:
-                statement = statement.where(ComponentRelation.dst_kind == dst_kind)
-            return list(session.exec(statement).all())
+            return Page.read(session, statement, query)
 
     def add(self, component_id: UUID, *, name: str, dst_id: UUID) -> ComponentRelation:
         """Bind one component to another under a declared relation name.
 
         A ``many`` name accumulates; a single-valued one repoints, so
-        rebinding it needs no :meth:`remove` first. Re-adding an edge that is
+        rebinding it needs no :meth:`delete` first. Re-adding an edge that is
         already there returns it untouched. An undeclared name, a missing or
         cross-org endpoint and a destination the declared relation refuses all
         propagate from the checks this delegates to (:meth:`_lock`,
@@ -115,7 +125,7 @@ class RelationStore:
             commit(session)
             return row
 
-    def remove(self, component_id: UUID, *, name: str, dst_id: UUID) -> None:
+    def delete(self, component_id: UUID, *, name: str, dst_id: UUID) -> None:
         """Detach one component from another under a declared relation name.
 
         Takes the source row's lock before reading the edges, so the
@@ -153,7 +163,7 @@ class RelationStore:
             session.delete(row)
             commit(session)
 
-    def bind_siblings(
+    def _bind_siblings(
         self,
         session: Session,
         source_cls: type[il.Source],
@@ -197,7 +207,9 @@ class RelationStore:
 
     # -- Internals -------------------------------------------------------------
 
-    def _sync_relations(self, session: Session, src: Component, bindings: dict[str, list[Binding]] | None) -> None:
+    def _sync_relations(
+        self, session: Session, src: Component, bindings: Mapping[str, Sequence[Binding]] | None
+    ) -> None:
         """Replace the relation names present in *bindings* (empty list clears).
 
         Takes the source row's lock, like every other write path, so two
@@ -409,7 +421,7 @@ class RelationStore:
         return src
 
     @staticmethod
-    def _rows(session: Session, src_id: UUID, name: str) -> list[ComponentRelation]:
+    def _rows(session: Session, src_id: UUID, name: str) -> builtins.list[ComponentRelation]:
         """The edges a component currently holds under one relation name.
 
         Args:

@@ -84,7 +84,7 @@ def seeded(store: Store) -> dict[str, Any]:
     Returns:
         The seeded ids and the raw token, keyed for the tests to read.
     """
-    profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
+    profile = store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     _, raw_token = store.tokens.create(profile.id, org.id, name="test")
 

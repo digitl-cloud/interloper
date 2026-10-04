@@ -619,7 +619,7 @@ class TestBackfillEvents:
         ).id
 
     def _backfill(self, store: Store, job: UUID, days: int = 3) -> Backfill:
-        return store.runs.create_backfill(
+        return store.backfills.create(
             _ORG, component_id=job, start_key="2026-09-01", end_key=f"2026-09-{days:02d}", concurrency=days
         )
 
@@ -734,7 +734,7 @@ class TestBackfillEvents:
         job = self._job()
         self._hook(store, job, "backfill_completed", "backfill_failed")
         backfill = self._backfill(store, job, days=2)
-        store.runs.cancel_backfill(backfill.id)
+        store.backfills.cancel(backfill.id)
 
         _sweep(store)
 
@@ -776,7 +776,7 @@ class TestSubjectUrl:
         payloads = _capture_posts(monkeypatch)
         job = store.components.create(_ORG, kind="job", key="cron_job", name="Nightly", config={"cron": "0 6 * * *"})
         self._watch(store, job.id, "backfill_completed")
-        backfill = store.runs.create_backfill(
+        backfill = store.backfills.create(
             _ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-02", concurrency=2
         )
         with Session(engine_module.get_engine()) as session:
@@ -846,7 +846,7 @@ class TestEvaluateGuards:
     def test_a_backfill_whose_target_vanished_is_skipped(self, store: Store):
         # Defensive: the foreign key makes this unreachable in practice.
         job = store.components.create(_ORG, kind="job", key="cron_job", name="J", config={"cron": "0 6 * * *"})
-        backfill = store.runs.create_backfill(_ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-01")
+        backfill = store.backfills.create(_ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-01")
         controller = HookController(store=store, poll_interval=999)
 
         with Session(engine_module.get_engine()) as session:

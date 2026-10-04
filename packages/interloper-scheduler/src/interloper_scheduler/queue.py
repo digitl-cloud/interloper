@@ -10,7 +10,7 @@ from interloper.telemetry import attributes
 from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
 from interloper_db.models import Backfill, Event, Run
-from interloper_db.store.runs import cancel_backfill_runs
+from interloper_db.store.backfills import cancel_backfill_runs
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 

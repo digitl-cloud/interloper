@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Organisation } from '~/types/organisation'
+
 const route = useRoute()
 const { apiFetch } = useApi()
 const userStore = useUserStore()
@@ -13,17 +15,11 @@ onMounted(async () => {
     // For new users, the callback creates an org-less session and redirects here.
     // For existing users, they're already authenticated and land here directly.
     try {
-        const result = await apiFetch<{ status: string }>('/auth/accept-invite', {
+        const joined = await apiFetch<Organisation>('/auth/accept-invite', {
             method: 'POST',
             body: { token: route.params.token },
         })
-
-        if (result.status === 'already_member') {
-            toast.add({ title: 'You are already a member of this organisation', color: 'info' })
-        }
-        else {
-            toast.add({ title: 'You have joined the organisation', color: 'success' })
-        }
+        toast.add({ title: `You have joined ${joined.name}`, color: 'success' })
 
         // Reload user and org data to pick up new org from session
         await userStore.fetchMe()

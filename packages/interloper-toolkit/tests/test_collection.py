@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from interloper.settings import AppSettings, ServerSettings
 from interloper_db.models import Component
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, RelationQuery, Store
 
 from interloper_toolkit import ToolkitContext, collection
 from interloper_toolkit.models import ComponentCounts, ComponentList, ToolError
@@ -53,7 +53,7 @@ class TestBindRelation:
         result = collection.unbind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "success"
-        assert store.relations.list_all(ctx.org_id, name="destinations") == []
+        assert store.relations.list(ctx.org_id, RelationQuery(name="destinations")).items == []
 
     def test_bind_relation_from_another_orgs_component_is_not_found(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
@@ -65,7 +65,7 @@ class TestBindRelation:
         result = collection.bind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "error"
-        assert store.relations.list_all(other_org, name="destinations") == []
+        assert store.relations.list(other_org, RelationQuery(name="destinations")).items == []
 
     def test_unbind_relation_from_another_orgs_component_is_not_found(
         self, ctx: ToolkitContext, store: Store, create_source: Callable[[UUID, str], Component]
@@ -78,7 +78,7 @@ class TestBindRelation:
         result = collection.unbind_relation(ctx, str(source.id), "destinations", str(bq.id))
 
         assert result.status == "error"
-        assert len(store.relations.list_all(other_org, name="destinations")) == 1
+        assert len(store.relations.list(other_org, RelationQuery(name="destinations")).items) == 1
 
 
 class TestListComponents:
@@ -87,12 +87,14 @@ class TestListComponents:
         store.components.create(ctx.org_id, kind="destination", key="bq", name="Clean warehouse")
         store.components.create(ctx.org_id, kind="destination", key="bq", name="Lake")
 
-        page = collection.list_components(ctx, kind="destination", q="warehouse", limit=1, offset=1)
+        first = collection.list_components(ctx, kind="destination", q="warehouse", limit=1)
+        second = collection.list_components(ctx, kind="destination", q="warehouse", limit=1, offset=1)
         counts = collection.list_components(ctx, q="lake")
 
-        assert isinstance(page, ComponentList)
-        assert (page.count, page.total) == (1, 2)
-        assert page.components[0].name == "Clean warehouse"
+        assert isinstance(first, ComponentList)
+        assert isinstance(second, ComponentList)
+        assert (first.count, first.total, second.count, second.total) == (1, 2, 1, 2)
+        assert {first.components[0].name, second.components[0].name} == {"Raw warehouse", "Clean warehouse"}
         assert isinstance(counts, ComponentCounts)
         assert counts.component_counts == {"destination": 1}
 
@@ -213,7 +215,7 @@ class TestConnections:
         assert result.status == "success"
         assert [c.name for c in result.created] == ["A", "B"]
         assert result.failed == []
-        assert store.components.count(ctx.org_id, kinds=["connection"]) == 2
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["connection"])).total == 2
         assert collection.create_connections(ctx, "demo_connection", []).status == "error"
 
     def test_create_connections_is_gated(self, ctx: ToolkitContext, store: Store):
@@ -222,7 +224,7 @@ class TestConnections:
         assert isinstance(
             collection.create_connections(viewer, "demo_connection", [{"name": "A", "config": {}}]), ToolError
         )
-        assert store.components.count(ctx.org_id, kinds=["connection"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["connection"])).total == 0
 
     async def test_check_connection_reports_a_type_without_a_live_check(self, ctx: ToolkitContext, store: Store):
         connection = store.components.create(

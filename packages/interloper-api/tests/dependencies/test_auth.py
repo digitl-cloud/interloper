@@ -28,13 +28,13 @@ _USER_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing only the ``auth`` and ``organisations`` facets these read."""
+    """Stand-in exposing only the ``sessions`` and ``organisations`` facets these read."""
 
     def __init__(self, *, session: tuple[Any, Any] | None = None, org: Any = None) -> None:
         """Set up the fake.
 
         Args:
-            session: What ``auth.resolve_session`` returns; ``None`` means the
+            session: What ``sessions.resolve`` returns; ``None`` means the
                 token is unknown or expired.
             org: What ``organisations.get`` returns.
         """
@@ -42,7 +42,7 @@ class FakeStore:
         self.requested_orgs: list[UUID] = []
         self._session = session
         self._org = org
-        self.auth = SimpleNamespace(resolve_session=self._resolve_session)
+        self.sessions = SimpleNamespace(resolve=self._resolve_session)
         self.organisations = SimpleNamespace(get=self._get_org)
 
     def _resolve_session(self, token: str) -> tuple[Any, Any] | None:

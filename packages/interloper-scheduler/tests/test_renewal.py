@@ -177,7 +177,8 @@ class TestRenewalRuns:
             assert db_run is not None and db_run.status == "success"
             db_conn = session.get(Component, conn_id)
             assert db_conn is not None
-            assert store.components.decode_config(db_conn)["token"] == "NEW"
+            config = store.components.read(db_conn).config
+            assert config is not None and config["token"] == "NEW"
         state = _state(store, conn_id)
         assert state["last_renewed_at"] is not None
         assert state["last_renewal_error"] is None
@@ -235,7 +236,7 @@ class TestAutoRenewDecode:
         def broken_decode(component: Any) -> dict[str, Any]:
             raise RuntimeError("cannot decrypt")
 
-        monkeypatch.setattr(store.components, "decode_config", broken_decode)
+        monkeypatch.setattr(store.components, "_decode_config", broken_decode)
 
         with Session(store.engine) as session:
             row = session.get(Component, component_id)

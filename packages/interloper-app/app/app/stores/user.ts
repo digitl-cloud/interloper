@@ -31,14 +31,8 @@ export const useUserStore = defineStore('user', () => {
     }
 
     async function updateProfile(patch: { name?: string, timezone?: string }) {
-        const updated = await apiFetch<Pick<User, 'id' | 'email' | 'name' | 'avatar_url' | 'timezone'>>(
-            '/auth/me',
-            { method: 'PATCH', body: patch },
-        )
-        if (user.value) {
-            user.value = { ...user.value, name: updated.name, timezone: updated.timezone }
-        }
-        setDisplayTimeZone(updated.timezone)
+        user.value = await apiFetch<User>('/auth/me', { method: 'PATCH', body: patch })
+        setDisplayTimeZone(user.value.timezone)
     }
 
     function signIn(redirect?: string) {

@@ -3,6 +3,7 @@ import type { JsonSchemaProperty } from '~/types/catalog'
 import { parseQualifiedKey, requiredUpstreams } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
+import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 
 const props = defineProps<{
@@ -155,7 +156,7 @@ async function fetchRecentRuns() {
         return
     }
     try {
-        recentRuns.value = await apiFetch<Run[]>(`/runs?component_id=${job.id}&limit=7`)
+        recentRuns.value = (await apiFetch<Page<Run>>(`/runs?component_id=${job.id}&limit=7`)).items
     }
     catch {
         recentRuns.value = []

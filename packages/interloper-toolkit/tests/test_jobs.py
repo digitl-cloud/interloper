@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from uuid import UUID, uuid4
 
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, Store
 
 from interloper_toolkit import ToolkitContext, jobs
 from interloper_toolkit.models import ToolError
@@ -36,7 +36,7 @@ class TestCreateJob:
 
         assert jobs.create_job(ctx, "Daily", "0 6 * * *", []).status == "error"
         assert jobs.create_job(ctx, "Daily", "0 6 * * *", [theirs]).status == "error"
-        assert store.components.count(ctx.org_id, kinds=["job"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["job"])).total == 0
 
     def test_a_viewer_is_refused(self, ctx: ToolkitContext, store: Store):
         source_id = _source(store, ctx.org_id)
@@ -44,4 +44,4 @@ class TestCreateJob:
         result = jobs.create_job(dataclasses.replace(ctx, role="viewer"), "Daily", "0 6 * * *", [source_id])
 
         assert isinstance(result, ToolError)
-        assert store.components.count(ctx.org_id, kinds=["job"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["job"])).total == 0

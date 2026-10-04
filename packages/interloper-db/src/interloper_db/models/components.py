@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
 import interloper as il
+from interloper.errors import ConfigError
 from interloper.utils.time import assume_utc
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlmodel import Column, LargeBinary, Relationship, Session, SQLModel, text
@@ -153,6 +154,24 @@ class Component(SQLModel, table=True):
         """
         value = (self.state or {}).get(key)
         return str(value) if value else None
+
+    def run_billable(self) -> bool:
+        """Whether runs targeting this component count against the run quota.
+
+        The kind must declare a workload (its anchor subclasses ``Workload``),
+        whose ``billable`` decides.
+
+        Returns:
+            The billability the kind's workload declares.
+
+        Raises:
+            ConfigError: If the kind's anchor declares no workload, so the
+                component cannot be run at all.
+        """
+        anchor = il.KINDS[self.kind]
+        if not issubclass(anchor, il.Workload):
+            raise ConfigError(f"Components of kind '{self.kind}' cannot be run")
+        return anchor.billable
 
     @property
     def enabled(self) -> bool:
