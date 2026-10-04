@@ -20,3 +20,4 @@ def clip(text: str | None, limit: int, *, tail: bool = False) -> str | None:
         return text
     marker = f"…[+{len(text) - limit} chars]"
     return marker + text[-limit:] if tail else text[:limit] + marker
+

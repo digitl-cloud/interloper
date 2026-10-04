@@ -115,7 +115,7 @@ async def test_list_recent_runs_returns_seeded_run(store: Store, catalog: il.Cat
 
 async def test_tool_errors_are_structured_not_raised(store: Store, catalog: il.Catalog, seeded: dict):
     async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
-        result = _result_dict(await client.call_tool("get_job_health", {"component_id": "not-a-uuid"}))
+        result = _result_dict(await client.call_tool("run_stats", {"component_id": "not-a-uuid"}))
 
     assert result["status"] == "error"
     assert "error" in result
@@ -128,5 +128,5 @@ async def test_tools_declare_output_schemas(store: Store, catalog: il.Catalog, s
     missing = [t.name for t in tools if not t.outputSchema]
     assert missing == []
     # Spot-check a computed shape made it into the schema.
-    job_health = next(t for t in tools if t.name == "get_job_health")
-    assert "JobHealthStats" in str(job_health.outputSchema)
+    job_health = next(t for t in tools if t.name == "job_health")
+    assert "JobHealthRow" in str(job_health.outputSchema)

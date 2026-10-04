@@ -31,7 +31,7 @@ Modules:
 - `sources` and `jobs`: creating sources, resolving their fields, creating jobs
 - `lineage`: dependency analysis, impact assessment, DAG traversal
 - `scheduling`: jobs, runs and backfills, monitoring and control
-- `analytics`: run statistics, partition coverage, data freshness
+- `analytics`: job health, run statistics, partition coverage
 - `tools`: the table above
 
 Depends only on `interloper-core` and `interloper-db`; no LLM-framework

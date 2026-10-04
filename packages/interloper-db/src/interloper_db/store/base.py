@@ -18,6 +18,7 @@ from interloper_db.store.conversations import ConversationStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.executions import ExecutionStore
 from interloper_db.store.hydration import Hydrator
+from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
 from interloper_db.store.organisations import OrganisationStore
@@ -55,6 +56,7 @@ class Store:
         backfills: Batches of runs over a partition range.
         events: What happened during a run.
         executions: Each operation's verdict in a run, derived from its events.
+        insights: Health, outcomes, failures and coverage, one definition each.
         quotas: Limit resolution and the enforcement gates.
         usage: The usage ledger and the counts it is reconciled against.
     """
@@ -103,6 +105,9 @@ class Store:
         self.executions = ExecutionStore(self._engine)
         self.components = ComponentStore(
             self._engine, catalog, self._hydrator, encrypt, self.quotas, self.relations
+        )
+        self.insights = InsightStore(
+            self._engine, catalog, self.components, self.runs, self.backfills, self.executions
         )
 
     @classmethod

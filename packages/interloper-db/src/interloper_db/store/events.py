@@ -11,21 +11,17 @@ and an oversized payload is replaced rather than allowed to bloat the row.
 
 from __future__ import annotations
 
-import builtins
 import json
-from collections.abc import Sequence
-from datetime import datetime
-from typing import Any, NamedTuple
+from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import NotFoundError
 from sqlalchemy import Engine
-from sqlalchemy import select as sa_select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlmodel import col, func, select
+from sqlmodel import col, select
 
-from interloper_db.models import Event, Run
+from interloper_db.models import Event
 from interloper_db.session import commit, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -51,31 +47,6 @@ Everything else spills into the ``data`` JSONB column. ``run_id`` and ``org_id``
 also arrive via run metadata, but the columns filled from
 :meth:`EventStore.save`'s own arguments are the authoritative ones.
 """
-
-
-class ErrorGroup(NamedTuple):
-    """Error events sharing one job, run, component, event type and error text.
-
-    Attributes:
-        job_id: The run's target, or ``None`` when it was deleted.
-        run_id: The run the events belong to.
-        component_key: The component the events concern (``None`` for a
-            run-level event).
-        event_type: The events' type.
-        error: The error text they share.
-        count: How many events the group holds.
-        first_seen: The earliest event's timestamp.
-        last_seen: The latest event's timestamp.
-    """
-
-    job_id: UUID | None
-    run_id: UUID
-    component_key: str | None
-    event_type: str
-    error: str
-    count: int
-    first_seen: datetime
-    last_seen: datetime
 
 
 class EventQuery(PageQuery):
@@ -191,81 +162,6 @@ class EventStore:
             if not db_event or (org_id is not None and db_event.org_id != org_id):
                 raise NotFoundError(f"Event {event_id} not found")
             return db_event
-
-    def error_groups(
-        self,
-        org_id: UUID,
-        *,
-        event_types: Sequence[str],
-        since: datetime | None = None,
-        until: datetime | None = None,
-        job_id: UUID | None = None,
-        backfill_id: UUID | None = None,
-        run_id: UUID | None = None,
-        max_rows: int = 20_000,
-    ) -> tuple[builtins.list[ErrorGroup], bool]:
-        """Group an organisation's error events by job, run, component, type and text.
-
-        Identical texts collapse here, in the database, so a caller classifying
-        errors reads each distinct text once per run rather than every event.
-        Largest groups come first, so a capped scan keeps the loudest errors.
-
-        Args:
-            org_id: Organisation UUID.
-            event_types: The event types to read; the caller picks the ones
-                that record each failure once.
-            since: Keep events at or after this instant.
-            until: Keep events before this instant.
-            job_id: Keep events of runs targeting this component.
-            backfill_id: Keep events of this backfill's runs.
-            run_id: Keep events of this run.
-            max_rows: Cap on the groups returned.
-
-        Returns:
-            The groups, and whether the cap cut any off.
-        """
-        filters: list[Any] = [
-            Event.org_id == org_id,
-            col(Event.error).is_not(None),
-            col(Event.event_type).in_(event_types),
-        ]
-        if since is not None:
-            filters.append(col(Event.timestamp) >= since)
-        if until is not None:
-            filters.append(col(Event.timestamp) < until)
-        if job_id is not None:
-            filters.append(Run.component_id == job_id)
-        if backfill_id is not None:
-            filters.append(Run.backfill_id == backfill_id)
-        if run_id is not None:
-            filters.append(Event.run_id == run_id)
-        count = func.count().label("count")
-        statement = (
-            sa_select(
-                col(Run.component_id),
-                col(Event.run_id),
-                col(Event.component_key),
-                col(Event.event_type),
-                col(Event.error),
-                count,
-                func.min(col(Event.timestamp)),
-                func.max(col(Event.timestamp)),
-            )
-            .join(Run, col(Run.id) == col(Event.run_id))
-            .where(*filters)
-            .group_by(
-                col(Run.component_id),
-                col(Event.run_id),
-                col(Event.component_key),
-                col(Event.event_type),
-                col(Event.error),
-            )
-            .order_by(count.desc(), func.max(col(Event.timestamp)).desc())
-            .limit(max_rows + 1)
-        )
-        with session_scope(self._engine) as session:
-            rows = [ErrorGroup(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
-        return rows[:max_rows], len(rows) > max_rows
 
     # -- Internals -------------------------------------------------------------
 

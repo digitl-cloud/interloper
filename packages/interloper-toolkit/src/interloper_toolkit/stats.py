@@ -1,10 +1,9 @@
-"""Pure helpers for the statistics tools: time windows, percentiles, concurrency."""
+"""Pure helpers for the statistics tools: time windows and concurrency."""
 
 from __future__ import annotations
 
 import datetime
-import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 
 
 def window(
@@ -27,23 +26,6 @@ def window(
     if start is None and default_days is not None:
         start = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=default_days)
     return start, _parse(until)
-
-
-def percentile(values: Sequence[float], q: float) -> float | None:
-    """The nearest-rank *q*-th percentile of *values*.
-
-    Args:
-        values: The sample; order does not matter.
-        q: Percentile in ``[0, 100]``.
-
-    Returns:
-        The sample value at that rank, or ``None`` for an empty sample.
-    """
-    if not values:
-        return None
-    ordered = sorted(values)
-    rank = max(1, math.ceil(q / 100 * len(ordered)))
-    return ordered[rank - 1]
 
 
 def max_concurrent(spans: Iterable[tuple[datetime.datetime, datetime.datetime | None]]) -> int:

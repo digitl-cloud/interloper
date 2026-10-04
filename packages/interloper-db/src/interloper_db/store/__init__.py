@@ -29,6 +29,7 @@ part it uses rather than on all of it:
 - ``store.backfills`` — batches of runs over a partition range
 - ``store.events`` — what happened during a run
 - ``store.executions`` — each operation's verdict in a run, derived from its events
+- ``store.insights`` — health, outcomes, failures and coverage, one definition each
 - ``store.quotas`` — per-org limits and the enforcement gates
 - ``store.usage`` — the usage ledger and the counts it is reconciled against
 
@@ -53,8 +54,9 @@ from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.base import Store
 from interloper_db.store.components import ComponentQuery, ComponentReading, ComponentStore, DeleteImpact
 from interloper_db.store.conversations import ConversationStore
-from interloper_db.store.events import ErrorGroup, EventQuery, EventStore
-from interloper_db.store.executions import CoverageRow, ExecutionQuery, ExecutionStore, PartitionExecution
+from interloper_db.store.events import EventQuery, EventStore
+from interloper_db.store.executions import ExecutionQuery, ExecutionStore
+from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
 from interloper_db.store.organisations import ActivityEntry, OrganisationQuery, OrganisationStore
@@ -74,20 +76,18 @@ __all__ = [
     "ComponentReading",
     "ComponentStore",
     "ConversationStore",
-    "CoverageRow",
     "DeleteImpact",
-    "ErrorGroup",
     "EventQuery",
     "EventStore",
     "ExecutionQuery",
     "ExecutionStore",
+    "InsightStore",
     "InvitationStore",
     "MemberStore",
     "OrganisationQuery",
     "OrganisationStore",
     "Page",
     "PageQuery",
-    "PartitionExecution",
     "ProfileStore",
     "QuotaStore",
     "RelationQuery",

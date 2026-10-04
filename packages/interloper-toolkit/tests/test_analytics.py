@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import datetime
+from collections.abc import Callable
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Component, Execution, Run
@@ -13,82 +14,29 @@ from sqlmodel import Session
 from interloper_toolkit import ToolkitContext, analytics
 
 
-class TestAnalytics:
-    def test_partition_coverage_reports_missing_dates(self, ctx: ToolkitContext):
-        job = Component(org_id=ctx.org_id, kind="job", key="daily")
-        job_id = job.id
+class TestJobHealth:
+    def test_failing_jobs_come_first_with_their_latest_run(self, ctx: ToolkitContext):
+        green = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="A green job")
+        red = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="B red job")
+        green_id, red_id = green.id, red.id
+        finished = datetime.datetime(2026, 7, 16, 12, tzinfo=datetime.timezone.utc)
         runs = [
-            Run(id=uuid4(), org_id=ctx.org_id, component_id=job_id, status="success", partition_key=date.isoformat())
-            for date in (datetime.date(2026, 7, 1), datetime.date(2026, 7, 3))
+            Run(id=uuid4(), org_id=ctx.org_id, component_id=green_id, status="success", completed_at=finished),
+            Run(id=uuid4(), org_id=ctx.org_id, component_id=red_id, status="failed", completed_at=finished),
         ]
         with Session(engine_module.get_engine()) as session:
-            session.add_all([job, *runs])
+            session.add_all([green, red, *runs])
             session.commit()
 
-        result = analytics.partition_coverage(ctx, str(job_id), "2026-07-01", "2026-07-03")
+        result = analytics.job_health(ctx)
 
         assert result.status == "success"
-        assert result.covered_days == 2
-        assert result.missing_dates == ["2026-07-02"]
-
-    def test_partition_coverage_of_another_orgs_job_is_not_found(self, ctx: ToolkitContext):
-        job = Component(org_id=uuid4(), kind="job", key="daily")
-        job_id = job.id
-        with Session(engine_module.get_engine()) as session:
-            session.add(job)
-            session.commit()
-
-        result = analytics.partition_coverage(ctx, str(job_id), "2026-07-01", "2026-07-03")
-
-        assert result.status == "error"
-
-    def test_partition_coverage_reads_past_a_thousand_runs(self, ctx: ToolkitContext):
-        job = Component(org_id=ctx.org_id, kind="job", key="daily")
-        job_id = job.id
-        first = datetime.date(2023, 1, 1)
-        runs = [
-            Run(
-                id=uuid4(),
-                org_id=ctx.org_id,
-                component_id=job_id,
-                status="success",
-                partition_key=(first + datetime.timedelta(days=i)).isoformat(),
-            )
-            for i in range(1_100)
+        assert (result.failing, result.overdue, result.total) == (1, 0, 2)
+        assert [(job.job_id, job.failing, job.latest_status) for job in result.jobs] == [
+            (red_id, True, "failed"),
+            (green_id, False, "success"),
         ]
-        with Session(engine_module.get_engine()) as session:
-            session.add_all([job, *runs])
-            session.commit()
-
-        result = analytics.partition_coverage(ctx, str(job_id), "2023-01-01", "2023-01-03")
-
-        assert result.status == "success"
-        assert result.missing_dates == []
-
-    def test_run_history_summary_counts_past_five_hundred_runs(self, ctx: ToolkitContext):
-        now = datetime.datetime.now(tz=datetime.timezone.utc)
-        runs = [
-            Run(
-                id=uuid4(),
-                org_id=ctx.org_id,
-                status="success" if i % 2 else "failed",
-                started_at=now - datetime.timedelta(hours=1),
-                completed_at=now - datetime.timedelta(minutes=30),
-            )
-            for i in range(600)
-        ]
-        month_ago = now - datetime.timedelta(days=30)
-        runs.append(Run(id=uuid4(), org_id=ctx.org_id, status="success", started_at=month_ago, completed_at=month_ago))
-        with Session(engine_module.get_engine()) as session:
-            session.add_all(runs)
-            session.commit()
-
-        result = analytics.run_history_summary(ctx, days=7)
-
-        assert result.status == "success"
-        assert result.total_runs == 600
-        assert result.by_status == {"success": 300, "failed": 300}
-        assert result.success_rate == 0.5
+        assert result.jobs[1].last_success_at == finished
 
 
 class TestRunStats:
@@ -114,6 +62,7 @@ class TestRunStats:
         stuck_first = run("failed", 3)
         stuck_second = run("failed", 4, retry_of=stuck_first.id, root_run_id=stuck_first.id, attempt=2)
         plain = run("success", 10)
+        last_success = plain.completed_at
         with Session(engine_module.get_engine()) as session:
             session.add_all([job, healed_first, stuck_first, plain])
             session.commit()
@@ -128,45 +77,53 @@ class TestRunStats:
         assert (stats.job_id, stats.job_name) == (job_id, "Daily")
         assert stats.stacks == {"success": 2, "failed": 1}
         assert stats.attempts == 5
-        assert (stats.stacks_retried, stats.healed, stats.still_failing) == (2, 1, 1)
-        assert (stats.duration_p50_s, stats.duration_p90_s, stats.duration_max_s) == (180.0, 600.0, 600.0)
+        assert (stats.retried, stats.healed, stats.still_failing) == (2, 1, 1)
+        durations = (stats.duration_p50_seconds, stats.duration_p90_seconds, stats.duration_max_seconds)
+        assert durations == (180.0, 600.0, 600.0)
+        assert stats.last_success_at == last_success
 
 
 class TestAssetCoverage:
-    def _seed(self, ctx: ToolkitContext) -> tuple[Any, Any, Any]:
-        job = Component(org_id=ctx.org_id, kind="job", key="daily")
-        job_id = job.id
-        ads, stats = uuid4(), uuid4()
+    def _seed(self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]) -> tuple[UUID, UUID, UUID]:
+        orders = create_source(ctx.org_id, "shop_source").children[0]
+        revenue = create_source(ctx.org_id, "finance_source").children[0]
+        job = ctx.store.components.create(
+            ctx.org_id, kind="job", key="cron_job", relations={"targets": [orders.id, revenue.id]}
+        )
         runs = {
-            key: Run(id=uuid4(), org_id=ctx.org_id, component_id=job_id, partition_key=key, status="failed")
+            key: Run(id=uuid4(), org_id=ctx.org_id, component_id=job.id, partition_key=key, status="failed")
             for key in ("2026-07-01", "2026-07-02", "2026-07-03")
         }
         outcomes = [
-            ("2026-07-01", ads, "ads", "success"),
-            ("2026-07-01", stats, "ads_stats", "failed"),
-            ("2026-07-02", ads, "ads", "success"),
-            ("2026-07-02", stats, "ads_stats", "success"),
-            ("2026-07-03", ads, "ads", "failed"),
+            ("2026-07-01", orders, "success"),
+            ("2026-07-01", revenue, "failed"),
+            ("2026-07-02", orders, "success"),
+            ("2026-07-02", revenue, "success"),
+            ("2026-07-03", orders, "failed"),
         ]
         executions = [
-            Execution(run_id=runs[key].id, component_id=asset, org_id=ctx.org_id, component_key=name, status=status)
-            for key, asset, name, status in outcomes
+            Execution(
+                run_id=runs[key].id, component_id=asset.id, org_id=ctx.org_id, component_key=asset.key, status=status
+            )
+            for key, asset, status in outcomes
         ]
         with Session(engine_module.get_engine()) as session:
-            session.add_all([job, *runs.values()])
+            session.add_all(runs.values())
             session.commit()
             session.add_all(executions)
             session.commit()
-        return job_id, ads, stats
+        return job.id, orders.id, revenue.id
 
-    def test_partial_runs_show_per_asset_coverage_and_the_rollup(self, ctx: ToolkitContext):
-        job_id, ads, stats = self._seed(ctx)
+    def test_partial_runs_show_per_asset_coverage_and_the_rollup(
+        self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
+    ):
+        job_id, orders, revenue = self._seed(ctx, create_source)
 
         result = analytics.asset_coverage(ctx, str(job_id), "2026-07-01", "2026-07-04")
 
         assert result.status == "success"
         assert (result.partitions, result.all_covered, result.partly_covered, result.none_covered) == (4, 1, 1, 2)
-        assert [a.asset_id for a in result.assets] == [stats, ads]
+        assert [a.asset_id for a in result.assets] == [revenue, orders]
         worst = result.assets[0]
         assert (worst.covered, worst.failed, worst.never_run) == (1, 1, 2)
         assert [(r.start_key, r.end_key) for r in worst.missing] == [
@@ -175,7 +132,9 @@ class TestAssetCoverage:
         ]
         assert [(r.start_key, r.end_key) for r in result.assets[1].missing] == [("2026-07-03", "2026-07-04")]
 
-    def test_mixed_granularities_are_refused(self, ctx: ToolkitContext):
-        job_id, _, _ = self._seed(ctx)
+    def test_mixed_granularities_are_refused(
+        self, ctx: ToolkitContext, create_source: Callable[[UUID, str], Component]
+    ):
+        job_id, _, _ = self._seed(ctx, create_source)
 
         assert analytics.asset_coverage(ctx, str(job_id), "2026-07", "2026-07-04").status == "error"

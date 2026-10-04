@@ -93,7 +93,7 @@ error_breakdown for an incident's shape. Decode cron to human-readable and
 show last_run_at / next_run_at. To create a cron job, first find its target
 sources with list_components (kind 'source'). Statistics: flag concerning
 trends and compare against recent history; coverage: list the gaps and the
-percentage; freshness: flag any job with no successful run in over 24 hours.
+percentage; job health: lead with failing and overdue jobs.
 
 Formatting:
 - Lead with a one-sentence answer, then the supporting data.
