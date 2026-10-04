@@ -67,7 +67,7 @@ const expandedOptions = { autoResetExpanded: false }
 
 // Fully expanded, a large collection mounts every row at once and freezes the
 // page. Nuxt UI sizes virtual rows by this estimate and never measures them,
-// so it must match the rendered row height.
+// so every cell stays on one line to hold rows at this height.
 const virtualize = { estimateSize: 61, overscan: 10 }
 
 const emit = defineEmits<{
@@ -272,10 +272,10 @@ function onRowClick(row: any) {
                              @click.stop="row.toggleExpanded()" />
                     <UIcon :name="sourceInfoById.get(row.original.sourceId)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
-                    <span class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span class="flex min-w-0 items-center gap-2">
                         <span class="truncate font-semibold">{{ sourceInfoById.get(row.original.sourceId)?.name }}</span>
                         <span v-if="sourceInfoById.get(row.original.sourceId)?.discriminator"
-                              class="id-chip max-w-full truncate sm:shrink-0">
+                              class="id-chip shrink-0">
                             {{ sourceInfoById.get(row.original.sourceId)!.discriminator }}
                         </span>
                     </span>
@@ -325,7 +325,7 @@ function onRowClick(row: any) {
             <!-- Tags (asset level only) -->
             <template #tags-cell="{ row }">
                 <div v-if="row.getIsGrouped() && row.depth === 2 && row.original.tags.length > 0"
-                     class="flex items-center justify-center gap-1 flex-wrap">
+                     class="flex items-center justify-center gap-1">
                     <UBadge v-for="tag in row.original.tags"
                             :key="tag"
                             color="neutral">
@@ -407,7 +407,7 @@ function onRowClick(row: any) {
             <!-- Destinations (source and asset level) -->
             <template #destinations-cell="{ row }">
                 <div v-if="row.getIsGrouped() && row.depth > 0"
-                     class="flex items-center justify-center gap-1.5 flex-wrap">
+                     class="flex items-center justify-center gap-1.5">
                     <span v-if="row.original.destinations.length === 0 && filterByCategory(row.depth === 1 ? (sourceInfoById.get(row.original.sourceId)?.warnings ?? []) : row.original.warnings, 'destination').length === 0"
                           class="text-dimmed">&mdash;</span>
                     <EntityBadge v-else-if="row.original.destinations.length > 0"
