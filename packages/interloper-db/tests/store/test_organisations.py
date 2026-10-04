@@ -180,6 +180,16 @@ class TestActivity:
         assert second.total == 4
         assert second.items == whole.items[1:3]
 
+    def test_a_deleted_organisation_keeps_its_feed_ending_in_the_deletion(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-gone", email="gone@example.com", name="Gone")
+        org = store.organisations.create(name="Gone", creator_id=admin.id)
+        store.organisations.delete(org.id)
+
+        entries = store.organisations.activity(org.id, PageQuery()).items
+
+        assert entries[0].kind == "org_deleted"
+        assert entries[0].when.tzinfo is not None
+
     def test_unknown_org_raises(self, store: Store):
         with pytest.raises(NotFoundError):
             store.organisations.activity(uuid4(), PageQuery())

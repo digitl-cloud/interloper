@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 from uuid import UUID
 
 from interloper.errors import NotFoundError
+from interloper.utils import assume_utc
 from sqlalchemy import Engine, delete, update
 from sqlmodel import Session, col, func, select
 
@@ -261,7 +261,7 @@ class OrganisationStore:
                     entries.append(ActivityEntry("runs_completed", latest, str(count)))
 
         normalized = [
-            ActivityEntry(entry.kind, self._as_utc(entry.when), entry.subject, entry.extra) for entry in entries
+            ActivityEntry(entry.kind, assume_utc(entry.when), entry.subject, entry.extra) for entry in entries
         ]
         normalized.sort(key=lambda entry: entry.when, reverse=True)
         return Page.window(normalized, query)
@@ -286,18 +286,3 @@ class OrganisationStore:
         if not organisation or organisation.deleted_at is not None:
             raise NotFoundError(f"Organisation {org_id} not found")
         return organisation
-
-    @staticmethod
-    def _as_utc(value: Any) -> datetime:
-        """An activity timestamp as an aware UTC datetime.
-
-        Args:
-            value: The stored timestamp; SQLite aggregates come back as text,
-                and SQLite columns as naive datetimes.
-
-        Returns:
-            The aware datetime.
-        """
-        if isinstance(value, str):
-            value = datetime.fromisoformat(value)
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value

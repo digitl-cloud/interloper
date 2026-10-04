@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import httpx2
 import interloper as il
@@ -68,7 +68,7 @@ def list_resource_kinds(catalog: CatalogDep) -> list[str]:
 # -- Field resolution ----------------------------------------------------------
 
 
-def handle_error(error: Exception, context: str) -> None:
+def handle_error(error: Exception, context: str) -> NoReturn:
     """Map external API errors to appropriate HTTP responses.
 
     Args:
@@ -187,7 +187,6 @@ async def resolve_fetch_field(
         result = await invoke(fn)
     except Exception as exception:  # noqa: BLE001 — every provider failure is mapped to a response
         handle_error(exception, f"resolving {key}.{body.field}")
-        return []
     return list(result or [])
 
 
