@@ -2106,20 +2106,20 @@ JSON Schema of its state model, and its relation vocabulary. The API serves the 
 </thead>
 <tbody>
 <tr>
-<td><code>GET /api/catalog/</code></td>
+<td><code>GET /api/catalog</code></td>
 <td>Every enabled definition, keyed by component key.</td>
-</tr>
-<tr>
-<td><code>GET /api/catalog/{key}</code></td>
-<td>One definition.</td>
-</tr>
-<tr>
-<td><code>GET /api/catalog/kind/{kind}</code></td>
-<td>Definitions of one kind.</td>
 </tr>
 <tr>
 <td><code>GET /api/catalog/resource-kinds</code></td>
 <td>The resource kinds present (<code>connection</code>, <code>config</code>, …).</td>
+</tr>
+<tr>
+<td><code>POST /api/catalog/{key}/check</code></td>
+<td>A live check of a connection's unsaved config.</td>
+</tr>
+<tr>
+<td><code>POST /api/catalog/{key}/resolve</code></td>
+<td>The options of a provider-backed FetchField.</td>
 </tr>
 <tr>
 <td><code>GET /api/oauth/providers</code></td>
@@ -2286,7 +2286,7 @@ when the selected targets are partitioned, with a preview of what a run covers.<
 <h3 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h3>
 <p>A <code>FetchField(provider="connection.accounts")</code> renders as a dropdown that fills itself once the
 <code>connection</code> relation is filled. The form posts the component key, the field name and that
-component's credentials to <code>POST /api/components/resolve</code>; the API reads the provider reference
+component's credentials to <code>POST /api/catalog/{key}/resolve</code>; the API reads the provider reference
 from its own copy of the schema (never from the client), instantiates the resource, calls the
 method, and returns the items. Only methods marked <code>@fetch_field_provider</code> may be called this
 way. Until the relation is filled, the field degrades to a text input.</p>
@@ -2321,7 +2321,7 @@ and <code>last_renewal_error</code>, hooks show <code>last_fired_at</code> and <
 <tbody>
 <tr>
 <td><code>ResourceDefinition.checkable</code></td>
-<td>A "Test connection" action calling <code>POST /api/components/check</code>, which runs the class's <code>check()</code> against the unsaved form values and surfaces <code>ConnectionCheckError</code> messages under the fields.</td>
+<td>A "Test connection" action calling <code>POST /api/catalog/{key}/check</code>, which runs the class's <code>check()</code> against the unsaved form values and surfaces <code>ConnectionCheckError</code> messages under the fields.</td>
 </tr>
 <tr>
 <td><code>ResourceDefinition.renewable</code></td>
