@@ -1,24 +1,31 @@
 """Tests for the run/backfill lifecycle methods in ``RunStore`` (``store/runs.py``).
 
 These run against an in-memory SQLite database (only the runs/backfills
-tables) so status transitions are exercised against real SQL.
+tables) so status transitions are exercised against real SQL. The stack's
+concurrency guarantees rest on Postgres row locks, which SQLite does not have:
+those tests read a server DSN from ``INTERLOPER_TEST_POSTGRES_DSN``, provision
+a throwaway database, and skip without the variable.
 """
 
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterator
+import os
+import threading
+from collections.abc import Callable, Iterator
 from typing import Any, ClassVar
+from urllib.parse import urlparse, urlunparse
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
 from interloper.errors import NotFoundError
-from sqlalchemy import event
+from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
+from interloper_db import provision
 from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import Store
 from interloper_db.store.runs import create_backfill_runs, partition_key_range
@@ -478,25 +485,6 @@ class TestStackNativeListing:
 
         assert [run.id for run in attempts] == [successor.id, first.id]
         assert store.runs.count(_ORG_ID, root_run_id=first.root_run_id) == 2
-
-    def test_a_branched_stack_reads_as_its_highest_attempt(self, store: Store) -> None:
-        # Two concurrent retries of one attempt branch the stack; the branch
-        # nobody retried further is not the stack's latest attempt.
-        first = store.runs.create(_ORG_ID)
-        with Session(store.engine) as session:
-            branches = [
-                Run(org_id=_ORG_ID, status="failed", retry_of=first.id, root_run_id=first.id, attempt=2)
-                for _ in range(2)
-            ]
-            session.add_all(branches)
-            session.flush()
-            head = Run(org_id=_ORG_ID, status="success", retry_of=branches[0].id, root_run_id=first.id, attempt=3)
-            session.add(head)
-            session.commit()
-            head_id = head.id
-
-        assert [run.id for run in store.runs.list_all(_ORG_ID)] == [head_id]
-        assert store.runs.count(_ORG_ID) == 1
 
     def test_unretried_runs_are_unaffected(self, store: Store) -> None:
         first = store.runs.create(_ORG_ID)
@@ -1356,3 +1344,123 @@ class TestLatestByTarget:
         self._run(store, None, status="failed", created=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc))
 
         assert store.runs.latest_by_target(_ORG_ID) == []
+
+
+@pytest.fixture(scope="module")
+def postgres_db() -> Iterator[Engine]:
+    """A throwaway Postgres database migrated to head.
+
+    Yields:
+        The engine bound to that database, dropped once the module finishes.
+    """
+    server_dsn = os.getenv("INTERLOPER_TEST_POSTGRES_DSN")
+    if not server_dsn:
+        pytest.skip("INTERLOPER_TEST_POSTGRES_DSN not set")
+    dsn = urlunparse(urlparse(server_dsn)._replace(path=f"/interloper_test_{uuid4().hex[:8]}"))
+    provision.ensure_database(dsn)
+    engine = engine_module.init_engine(dsn)
+    try:
+        provision.create_all(engine)
+        yield engine
+    finally:
+        engine.dispose()
+        engine_module._engine = None
+        provision.drop_database(dsn)
+
+
+@pytest.fixture
+def postgres_store(postgres_db: Engine) -> Store:
+    """A store over the throwaway Postgres database.
+
+    Returns:
+        A store with an empty catalog, reading and writing that database.
+    """
+    return Store(catalog=il.Catalog(components={}), engine=postgres_db)
+
+
+def _contend(store: Store, first: Callable[[], object], second: Callable[[], object]) -> BaseException | None:
+    """Race *second* against *first* while *first*'s transaction is still open.
+
+    *first* runs inside a transaction held open until *second* has had time
+    to block on whatever *first* locked; the transaction then commits and
+    *second* is let through.
+
+    Args:
+        store: The store both calls write through.
+        first: The call that wins the race.
+        second: The call that contends with it, on its own connection.
+
+    Returns:
+        What *second* raised, or ``None`` when it returned.
+
+    Raises:
+        AssertionError: If *second* finished before *first* committed, which
+            means nothing made it wait.
+    """
+    first_holds = threading.Event()
+    release = threading.Event()
+    outcome: dict[str, BaseException | None] = {}
+
+    def hold_first() -> None:
+        with store.transaction():
+            first()
+            first_holds.set()
+            release.wait(10)
+
+    def run_second() -> None:
+        try:
+            second()
+            outcome["error"] = None
+        except BaseException as error:  # noqa: BLE001
+            outcome["error"] = error
+
+    holder = threading.Thread(target=hold_first)
+    holder.start()
+    assert first_holds.wait(10)
+    contender = threading.Thread(target=run_second)
+    contender.start()
+    contender.join(0.5)
+    blocked = contender.is_alive()
+    release.set()
+    holder.join(10)
+    contender.join(10)
+    if not blocked:
+        raise AssertionError("the contending call did not wait for the first to commit")
+    return outcome["error"]
+
+
+def _attempts(store: Store, root_run_id: UUID) -> list[int]:
+    with Session(store.engine) as session:
+        runs = session.exec(select(Run).where(Run.root_run_id == root_run_id)).all()
+    return sorted(run.attempt for run in runs)
+
+
+@pytest.mark.integration
+class TestConcurrentStackWrites:
+    """Two writers racing on one stack leave it a linear chain of attempts."""
+
+    def test_a_concurrent_retry_of_the_same_head_is_refused(self, postgres_store: Store) -> None:
+        store = postgres_store
+        first = store.runs.create(_ORG_ID)
+        store.runs.complete(first.id, success=False)
+
+        error = _contend(store, lambda: store.runs.retry(first.id), lambda: store.runs.retry(first.id))
+
+        assert isinstance(error, ValueError)
+        assert "stack was retried concurrently" in str(error)
+        assert _attempts(store, first.root_run_id) == [1, 2]
+
+    def test_a_concurrent_completion_queues_one_successor(self, postgres_store: Store) -> None:
+        store = postgres_store
+        target = _job_with_retry(store, max_attempts=3, delay=60)
+        run = store.runs.create(_ORG_ID, component_id=target)
+
+        error = _contend(
+            store,
+            lambda: store.runs.complete(run.id, success=False),
+            lambda: store.runs.complete(run.id, success=False),
+        )
+
+        assert isinstance(error, ValueError)
+        assert f"Run {run.id} is already failed" in str(error)
+        assert _attempts(store, run.root_run_id) == [1, 2]

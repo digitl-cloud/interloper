@@ -328,7 +328,9 @@ class RunStore:
 
         A failure also queues its own next attempt when the target's policy
         allows one, before the backfill advances so the batch's in-flight
-        count sees the successor and does not finalize early.
+        count sees the successor and does not finalize early. The run's row is
+        locked, so a concurrent completion waits and then finds it terminal
+        rather than queueing a second successor.
 
         Args:
             run_id: The run UUID.
@@ -344,7 +346,7 @@ class RunStore:
                 the verdict or queue a retry of work that succeeded.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id)
+            db_run = session.get(Run, run_id, with_for_update=True, populate_existing=True)
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
             if db_run.status in TERMINAL_RUN_STATUSES:
@@ -383,6 +385,10 @@ class RunStore:
         run is created outside any backfill so backfill accounting is
         unaffected.
 
+        The head's row is locked for the rest of the transaction, so of two
+        concurrent retries the second waits for the first to commit, then
+        finds the head is no longer the latest attempt and is refused.
+
         Args:
             run_id: The failed run to retry, any attempt of its stack.
             scope: ``"all"`` to re-run the whole DAG, or ``"failed"`` to
@@ -393,8 +399,9 @@ class RunStore:
 
         Raises:
             NotFoundError: If the run is not found.
-            ValueError: If ``scope`` is invalid, the run has not failed, or
-                the stack's latest attempt is not a failure.
+            ValueError: If ``scope`` is invalid, the run has not failed, the
+                stack's latest attempt is not a failure, or another retry of
+                the stack committed while this one waited for its head.
         """
         if scope not in ("all", "failed"):
             raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
@@ -405,10 +412,13 @@ class RunStore:
                 raise NotFoundError(f"Run {run_id} not found")
             if src.status != "failed":
                 raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
-            head = session.exec(
-                select(Run).where(Run.root_run_id == src.root_run_id).order_by(col(Run.attempt).desc())
-            ).first()
-            assert head is not None
+            latest = select(Run).where(Run.root_run_id == src.root_run_id).order_by(col(Run.attempt).desc()).limit(1)
+            head = session.exec(latest.with_for_update().execution_options(populate_existing=True)).one()
+            # A fresh statement, so it sees an attempt committed while the lock was awaited.
+            if session.exec(latest).one().id != head.id:
+                raise ValueError(
+                    f"Run {run_id}'s stack was retried concurrently; retry it again from its latest attempt"
+                )
             if head.status != "failed":
                 raise ValueError(
                     f"Run {run_id} is attempt {src.attempt} of a stack whose latest attempt {head.attempt} "
@@ -814,9 +824,7 @@ class RunStore:
         An attempt is its stack's latest when no attempt of the same stack
         carries a higher number: a per-row probe of ``ix_runs_root_run_id``
         for a narrow listing, one anti-join over the organisation's runs for a
-        wide one, and never an aggregate the planner has to estimate. Keyed on
-        the attempt number rather than on ``retry_of``, so a stack two
-        concurrent retries branched still reads as its highest attempts.
+        wide one, and never an aggregate the planner has to estimate.
 
         The probe matches the organisation, which keeps it inside the tenant,
         but none of the caller's other filters on purpose: every attempt of a

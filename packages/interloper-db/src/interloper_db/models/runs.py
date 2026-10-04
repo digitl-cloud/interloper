@@ -69,7 +69,8 @@ class Run(SQLModel, table=True):
 
     A run is one *attempt*. ``root_run_id`` groups the attempts of one unit of
     work into a stack and is the run's own id for a first attempt, so stack
-    membership is one indexed predicate rather than a recursive walk.
+    membership is one indexed predicate rather than a recursive walk. A stack
+    is a linear chain: each attempt number is held by exactly one run.
     ``scheduled_for`` is the earliest instant the queue may claim the run,
     which is how a retry's backoff is served without a second status.
 
@@ -90,6 +91,7 @@ class Run(SQLModel, table=True):
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_runs_org_id_created_at", "org_id", "created_at"),
         Index("ix_runs_backfill_id_status", "backfill_id", "status"),
+        Index("ix_runs_root_run_id_attempt", "root_run_id", "attempt", unique=True),
         Index(
             "ix_runs_hooks_pending",
             "completed_at",
