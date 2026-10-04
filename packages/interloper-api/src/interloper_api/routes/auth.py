@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from datetime import datetime
 from typing import Annotated, Any
 from urllib.parse import urlencode
 from uuid import UUID
@@ -22,6 +21,7 @@ from interloper_api.dependencies import (
     StoreDep,
     get_features,
 )
+from interloper_api.routes.organisations import OrganisationResponse
 
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -61,14 +61,6 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
 
 
 # -- Login & session -----------------------------------------------------------
-
-
-class OrganisationResponse(BaseModel):
-    """Organisation summary for auth responses."""
-
-    id: UUID
-    name: str
-    created_at: datetime | None = None
 
 
 class AuthUserResponse(BaseModel):

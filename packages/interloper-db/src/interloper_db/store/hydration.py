@@ -25,9 +25,9 @@ the walk reaches it and referenced afterwards. Resolving a reference the
 document does not carry is the caller's job (see
 :meth:`~interloper_db.store.components.ComponentStore._load`).
 
-The Store wraps this pattern in thin ``load_*`` convenience methods, but
-any caller can use the hydrator directly to assemble a spec (for example,
-to serialize it to JSON and send it across a process boundary).
+:meth:`~interloper_db.store.components.ComponentStore.load` wraps this
+pattern, but any caller can use the hydrator directly to assemble a spec (for
+example, to serialize it to JSON and send it across a process boundary).
 """
 
 from __future__ import annotations

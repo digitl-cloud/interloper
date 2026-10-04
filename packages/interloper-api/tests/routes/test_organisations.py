@@ -14,7 +14,9 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper.errors import NotFoundError
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import (
     get_current_user,
     get_org_id,
@@ -22,6 +24,7 @@ from interloper_api.dependencies import (
     require_admin,
     require_viewer,
 )
+from interloper_api.notifications import InvitationEmail
 from interloper_api.routes import organisations as organisations_module
 
 _ORG_ID = uuid4()
@@ -62,7 +65,8 @@ class FakeStore:
             remove_member=self._remove_member,
             list_invitations=lambda org_id: self.invitations,
             create_invitation=self._create_invitation,
-            delete_invitation=self.deleted_invitations.append,
+            get_invitation=self._get_invitation,
+            delete_invitation=self._delete_invitation,
             get=lambda org_id: SimpleNamespace(id=org_id, name=self.org_name),
             member_role=lambda user_id, org_id: "admin",
         )
@@ -77,6 +81,16 @@ class FakeStore:
 
     def _remove_member(self, org_id: UUID, user_id: UUID) -> None:
         self.removed_members.append((org_id, user_id))
+
+    def _get_invitation(self, invitation_id: UUID, *, org_id: UUID) -> SimpleNamespace:
+        found = next((invitation for invitation in self.invitations if invitation.id == invitation_id), None)
+        if found is None or org_id != _ORG_ID:
+            raise NotFoundError(f"Invitation {invitation_id} not found")
+        return found
+
+    def _delete_invitation(self, invitation_id: UUID, *, org_id: UUID) -> None:
+        self._get_invitation(invitation_id, org_id=org_id)
+        self.deleted_invitations.append(invitation_id)
 
     def _create_invitation(self, org_id: UUID, email: str, role: str, invited_by: UUID) -> SimpleNamespace:
         self.created_invitations.append(
@@ -109,13 +123,26 @@ def store() -> FakeStore:
 def no_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default the route tests to email being unconfigured.
 
-    Scoped to ``client`` rather than autouse, so ``TestSmtpLookup`` still
-    sees the real lookup it is there to probe.
-
     Args:
         monkeypatch: Fixture used to stub the SMTP lookup.
     """
-    monkeypatch.setattr(organisations_module, "_get_smtp_config", lambda: None)
+    monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: None)
+
+
+@pytest.fixture
+def mailer(monkeypatch: pytest.MonkeyPatch) -> list[tuple[InvitationEmail, str]]:
+    """Configure email and record every invitation handed to SMTP instead of sending it.
+
+    Args:
+        monkeypatch: Fixture used to stub the SMTP lookup and the send.
+
+    Returns:
+        The ``(email, recipient)`` pairs sent, in order.
+    """
+    sent: list[tuple[InvitationEmail, str]] = []
+    monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: SimpleNamespace(enabled=True))
+    monkeypatch.setattr(InvitationEmail, "send", lambda email, smtp_config, to: sent.append((email, to)))
+    return sent
 
 
 @pytest.fixture
@@ -133,6 +160,7 @@ def app(store: FakeStore, no_smtp: None) -> FastAPI:
         The probe app.
     """
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(organisations_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_org_id] = lambda: _ORG_ID
@@ -299,7 +327,7 @@ class TestInviteMember:
     def test_an_unconfigured_mailer_still_creates_the_invitation(
         self, client: TestClient, store: FakeStore, caplog: pytest.LogCaptureFixture
     ) -> None:
-        with caplog.at_level("WARNING", logger="interloper_api.routes.organisations"):
+        with caplog.at_level("WARNING", logger="interloper_api.notifications.invitations"):
             response = client.post("/organisations/invite", json={"email": "new@example.com"})
 
         assert response.status_code == 201
@@ -308,62 +336,38 @@ class TestInviteMember:
     def test_a_disabled_mailer_is_treated_as_unconfigured(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.setattr(
-            organisations_module, "_get_smtp_config", lambda: SimpleNamespace(enabled=False)
-        )
+        monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: SimpleNamespace(enabled=False))
 
-        with caplog.at_level("WARNING", logger="interloper_api.routes.organisations"):
+        with caplog.at_level("WARNING", logger="interloper_api.notifications.invitations"):
             assert client.post("/organisations/invite", json={"email": "new@example.com"}).status_code == 201
 
         assert "SMTP not configured" in caplog.text
 
     def test_a_configured_mailer_is_handed_the_invite_url(
-        self, client: TestClient, store: FakeStore, monkeypatch: pytest.MonkeyPatch
+        self, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
     ) -> None:
-        sent: list[dict[str, Any]] = []
-        smtp = SimpleNamespace(enabled=True, host="smtp.example.com")
-        monkeypatch.setattr(organisations_module, "_get_smtp_config", lambda: smtp)
-        monkeypatch.setattr(
-            organisations_module,
-            "_send_invitation_email",
-            lambda request, smtp_config, invitation, org_name, inviter_name: sent.append(
-                {
-                    "smtp": smtp_config,
-                    "email": invitation.email,
-                    "org_name": org_name,
-                    "inviter_name": inviter_name,
-                }
-            ),
-        )
-
         client.post("/organisations/invite", json={"email": "new@example.com"})
 
-        assert sent == [
-            {
-                "smtp": smtp,
-                "email": "new@example.com",
-                "org_name": "Dev Org",
-                "inviter_name": "Ada",
-            }
-        ]
+        [(email, to)] = mailer
+        assert to == "new@example.com"
+        assert email.org_name == "Dev Org"
+        assert email.inviter_name == "Ada"
+        assert email.invite_url.startswith("http://testserver/invite/token-")
 
     def test_a_nameless_inviter_is_identified_by_email(
-        self, app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch
+        self, app: FastAPI, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
     ) -> None:
-        sent: list[str] = []
-        monkeypatch.setattr(
-            organisations_module, "_get_smtp_config", lambda: SimpleNamespace(enabled=True)
-        )
-        monkeypatch.setattr(
-            organisations_module,
-            "_send_invitation_email",
-            lambda request, smtp_config, invitation, org_name, inviter_name: sent.append(inviter_name),
-        )
         app.dependency_overrides[require_admin] = lambda: _profile(name=None)
 
         client.post("/organisations/invite", json={"email": "new@example.com"})
 
-        assert sent == ["ada@example.com"]
+        assert [email.inviter_name for email, _ in mailer] == ["ada@example.com"]
+
+    def test_an_unknown_role_is_rejected(self, client: TestClient, store: FakeStore) -> None:
+        response = client.post("/organisations/invite", json={"email": "new@example.com", "role": "owner"})
+
+        assert response.status_code == 422
+        assert store.created_invitations == []
 
 
 class TestCancelInvitation:
@@ -382,10 +386,12 @@ class TestCancelInvitation:
         # The id must not act as a cross-org handle.
         store.invitations = [_invitation(uuid4())]
 
-        response = client.delete(f"/organisations/invitations/{uuid4()}")
+        missing = uuid4()
+
+        response = client.delete(f"/organisations/invitations/{missing}")
 
         assert response.status_code == 404
-        assert response.json()["detail"] == "Invitation not found"
+        assert response.json()["detail"] == f"Invitation {missing} not found"
         assert store.deleted_invitations == []
 
 
@@ -420,102 +426,20 @@ class TestResendInvitation:
         invitation_id = uuid4()
         store.invitations = [_invitation(invitation_id)]
 
-        with caplog.at_level("WARNING", logger="interloper_api.routes.organisations"):
+        with caplog.at_level("WARNING", logger="interloper_api.notifications.invitations"):
             assert client.post(f"/organisations/invitations/{invitation_id}/resend").status_code == 200
 
         assert "SMTP not configured" in caplog.text
 
     def test_a_configured_mailer_gets_the_new_invitation(
-        self, client: TestClient, store: FakeStore, monkeypatch: pytest.MonkeyPatch
+        self, client: TestClient, store: FakeStore, mailer: list[tuple[InvitationEmail, str]]
     ) -> None:
         invitation_id = uuid4()
         store.invitations = [_invitation(invitation_id, email="new@example.com")]
-        sent: list[str] = []
-        monkeypatch.setattr(
-            organisations_module, "_get_smtp_config", lambda: SimpleNamespace(enabled=True)
-        )
-        monkeypatch.setattr(
-            organisations_module,
-            "_send_invitation_email",
-            lambda request, smtp_config, invitation, org_name, inviter_name: sent.append(invitation.token),
-        )
 
         client.post(f"/organisations/invitations/{invitation_id}/resend")
 
         # The reissued token, not the one that was just deleted.
-        assert sent and sent[0] != f"token-{invitation_id}"
-
-
-class TestSmtpLookup:
-    """``_get_smtp_config`` degrades instead of raising when email is unset."""
-
-    def test_it_returns_whatever_state_holds(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from interloper_api.dependencies import state as state_module
-
-        smtp = SimpleNamespace(enabled=True)
-        monkeypatch.setattr(state_module, "_smtp_config", smtp)
-
-        assert organisations_module._get_smtp_config() is smtp
-
-    def test_an_unset_config_is_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from interloper_api.dependencies import state as state_module
-
-        monkeypatch.setattr(state_module, "_smtp_config", None)
-
-        assert organisations_module._get_smtp_config() is None
-
-
-class TestSendInvitationEmail:
-    """The mailer wrapper never fails the request it was called from."""
-
-    def test_builds_the_invite_url_from_the_request(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        built: list[dict[str, Any]] = []
-
-        class FakeEmail:
-            def __init__(self, **kwargs: Any) -> None:
-                built.append(kwargs)
-
-            def send(self, smtp_config: Any, email: str) -> None:
-                built[-1]["sent_to"] = email
-
-        monkeypatch.setattr(organisations_module, "InvitationEmail", FakeEmail)
-        request = SimpleNamespace(base_url="https://app.example.com/")
-
-        organisations_module._send_invitation_email(
-            request,  # ty: ignore[invalid-argument-type]
-            SimpleNamespace(enabled=True),
-            _invitation(uuid4(), email="new@example.com"),
-            "Dev Org",
-            "Ada",
-        )
-
-        assert built[0]["invite_url"].startswith("https://app.example.com/invite/token-")
-        assert built[0]["logo_url"] == "https://app.example.com/logo-email.png"
-        assert built[0]["org_name"] == "Dev Org"
-        assert built[0]["inviter_name"] == "Ada"
-        assert built[0]["sent_to"] == "new@example.com"
-
-    def test_a_mailer_failure_is_logged_not_raised(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        # The invitation row already exists; failing the request here would
-        # leave the caller unable to tell what happened.
-        class FailingEmail:
-            def __init__(self, **kwargs: Any) -> None:
-                pass
-
-            def send(self, smtp_config: Any, email: str) -> None:
-                raise OSError("smtp unreachable")
-
-        monkeypatch.setattr(organisations_module, "InvitationEmail", FailingEmail)
-
-        with caplog.at_level("ERROR", logger="interloper_api.routes.organisations"):
-            organisations_module._send_invitation_email(
-                SimpleNamespace(base_url="https://app.example.com/"),  # ty: ignore[invalid-argument-type]
-                SimpleNamespace(enabled=True),
-                _invitation(uuid4(), email="new@example.com"),
-                "Dev Org",
-                "Ada",
-            )
-
-        assert "Failed to send invitation email to new@example.com" in caplog.text
+        [(email, to)] = mailer
+        assert to == "new@example.com"
+        assert not email.invite_url.endswith(f"token-{invitation_id}")

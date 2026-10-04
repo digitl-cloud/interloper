@@ -10,6 +10,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any
 
+from interloper_db import Profile
+from interloper_db.models import Invitation
 from interloper_db.store.organisations import INVITATION_EXPIRY_DAYS
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,31 @@ class InvitationEmail:
     inviter_name: str
     invite_url: str
     logo_url: str | None = None
+
+    @classmethod
+    def from_invitation(
+        cls, invitation: Invitation, *, org_name: str, inviter: Profile, base_url: str
+    ) -> InvitationEmail:
+        """Address the email for a stored invitation, linking back to the app it was issued from.
+
+        Args:
+            invitation: The stored invitation, read for its token.
+            org_name: Name of the organisation the recipient is invited to.
+            inviter: The profile that issued the invitation, named by its
+                display name or else its email.
+            base_url: The app's base URL, under which the invite link and the
+                hosted logo are served.
+
+        Returns:
+            The email, ready to deliver.
+        """
+        base_url = base_url.rstrip("/")
+        return cls(
+            org_name=org_name,
+            inviter_name=inviter.name or inviter.email,
+            invite_url=f"{base_url}/invite/{invitation.token}",
+            logo_url=f"{base_url}/logo-email.png",
+        )
 
     def text(self) -> str:
         """Render the plain-text alternative of the invitation email.
@@ -162,3 +189,22 @@ class InvitationEmail:
                 server.sendmail(smtp_config.from_addr, to, message.as_string())
 
         logger.info("Invite email sent to %s", to)
+
+    def deliver(self, smtp_config: Any | None, to: str) -> None:
+        """Send the invitation when email is configured, never failing the caller.
+
+        The invitation is already stored and its link stays redeemable, so an
+        unconfigured or failing SMTP server is logged rather than raised.
+
+        Args:
+            smtp_config: SmtpConfig instance, or ``None`` when the app was
+                started without one.
+            to: Recipient email address.
+        """
+        if smtp_config is None or not smtp_config.enabled:
+            logger.warning("SMTP not configured; invitation email to %s not sent", to)
+            return
+        try:
+            self.send(smtp_config, to)
+        except Exception:
+            logger.exception("Failed to send invitation email to %s", to)

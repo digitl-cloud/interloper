@@ -10,7 +10,15 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from interloper.catalog.base import Catalog
-from interloper.errors import ComponentDriftError, HydrationError, NotFoundError, QuotaExceededError
+from interloper.errors import (
+    ComponentDriftError,
+    ConfigError,
+    ConflictError,
+    HydrationError,
+    InUseError,
+    NotFoundError,
+    QuotaExceededError,
+)
 from interloper_db import Store
 
 from interloper_api.dependencies import (
@@ -61,52 +69,48 @@ _ROUTE_MODULES: tuple[ModuleType, ...] = (
 # -- Error handling ------------------------------------------------------------
 
 
-async def _not_found(_request: Request, exception: NotFoundError) -> JSONResponse:
-    """Render a missing store target as a plain 404.
+#: Framework errors that have an HTTP meaning, by the status each answers.
+#: Drift and an unhydratable record are 409s: the record stays broken until a
+#: user repoints, re-keys or rewrites it, so the reason is surfaced instead of
+#: an opaque 500. Anything absent here is a bug and stays a 500.
+_ERROR_STATUS: dict[type[Exception], int] = {
+    ConfigError: 400,
+    NotFoundError: 404,
+    ConflictError: 409,
+    ComponentDriftError: 409,
+    HydrationError: 409,
+}
+
+
+async def _plain_error(_request: Request, exception: Exception) -> JSONResponse:
+    """Render a framework error as its mapped status, the message as ``detail``.
 
     Args:
         _request: The incoming request, unused.
-        exception: The raised :class:`NotFoundError`.
+        exception: The raised error, an instance of exactly one key of
+            :data:`_ERROR_STATUS` (none of the keys subclasses another).
 
     Returns:
-        A 404 response carrying the exception message as ``detail``.
+        The response, at the status mapped to the error's class.
     """
-    return JSONResponse(status_code=404, content={"detail": str(exception)})
+    status = next(status for error_type, status in _ERROR_STATUS.items() if isinstance(exception, error_type))
+    return JSONResponse(status_code=status, content={"detail": str(exception)})
 
 
-async def _component_drift(_request: Request, exception: ComponentDriftError) -> JSONResponse:
-    """Render catalog drift as a conflict rather than a 500.
-
-    Hydrating or running a drifted source/asset cannot succeed until the user
-    resolves the drift, so it surfaces as a clean 409 the UI can act on.
+async def _in_use(_request: Request, exception: InUseError) -> JSONResponse:
+    """Render a refused deletion as a 409 naming what still depends on the record.
 
     Args:
         _request: The incoming request, unused.
-        exception: The raised :class:`ComponentDriftError`.
+        exception: The raised :class:`InUseError`.
 
     Returns:
-        A 409 response carrying the exception message as ``detail``.
+        A 409 response whose ``detail`` carries the message and the referrers
+        as ``used_by``.
     """
-    return JSONResponse(status_code=409, content={"detail": str(exception)})
-
-
-async def _hydration_failed(_request: Request, exception: HydrationError) -> JSONResponse:
-    """Render an unreadable stored record as a conflict rather than a 500.
-
-    A record that cannot be rebuilt from the database (a payload the active
-    ``INTERLOPER_ENCRYPTION_KEY`` cannot decrypt, a stored config the class no
-    longer accepts) stays broken until an operator re-keys or rewrites it, so
-    like drift it surfaces as a 409 carrying the reason instead of an opaque
-    500 that only the server log explains.
-
-    Args:
-        _request: The incoming request, unused.
-        exception: The raised :class:`HydrationError`.
-
-    Returns:
-        A 409 response carrying the exception message as ``detail``.
-    """
-    return JSONResponse(status_code=409, content={"detail": str(exception)})
+    return JSONResponse(
+        status_code=409, content={"detail": {"message": str(exception), "used_by": exception.referrers}}
+    )
 
 
 async def _quota_exceeded(_request: Request, exception: QuotaExceededError) -> JSONResponse:
@@ -133,14 +137,26 @@ async def _quota_exceeded(_request: Request, exception: QuotaExceededError) -> J
     )
 
 
-#: Framework errors that have an HTTP meaning, and the response each becomes.
-#: Anything absent here is a bug and stays a 500.
-_ERROR_HANDLERS: dict[type[Exception], Any] = {
-    NotFoundError: _not_found,
-    ComponentDriftError: _component_drift,
-    HydrationError: _hydration_failed,
+#: Errors whose response carries more than the message.
+_STRUCTURED_ERRORS: dict[type[Exception], Any] = {
+    InUseError: _in_use,
     QuotaExceededError: _quota_exceeded,
 }
+
+
+def install_error_handlers(app: FastAPI) -> None:
+    """Answer every framework error that has an HTTP meaning with its status.
+
+    Routes raise the store's errors as they come; this one mapping turns them
+    into responses, so no handler translates an exception by hand.
+
+    Args:
+        app: The application to install the handlers on.
+    """
+    for error_type in _ERROR_STATUS:
+        app.add_exception_handler(error_type, _plain_error)
+    for error_type, handler in _STRUCTURED_ERRORS.items():
+        app.add_exception_handler(error_type, handler)
 
 
 # -- Application factory -------------------------------------------------------
@@ -172,8 +188,7 @@ def create_app(
     """
     app = FastAPI(title="Interloper API", lifespan=websocket.realtime_lifespan, **kwargs)
 
-    for error_type, handler in _ERROR_HANDLERS.items():
-        app.add_exception_handler(error_type, handler)
+    install_error_handlers(app)
 
     if cors_origins:
         app.add_middleware(

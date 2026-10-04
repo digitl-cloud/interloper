@@ -10,15 +10,15 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 from interloper_db.store.quotas import QUOTAS
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_admin_config, get_current_user, get_store
 from interloper_api.routes import admin as admin_module
 
@@ -136,11 +136,12 @@ class FakeStore:
             id=uuid4(),
             email=email,
             role=role,
+            token="tok",
             created_at=datetime.now(timezone.utc),
             expires_at=datetime.now(timezone.utc),
         )
 
-    def _delete_invitation(self, invitation_id: UUID) -> None:
+    def _delete_invitation(self, invitation_id: UUID, *, org_id: UUID) -> None:
         pass
 
     # -- quotas --
@@ -191,14 +192,8 @@ def _profile(*, is_super_admin: bool):
 
 def _app(store: FakeStore, *, is_super_admin: bool) -> FastAPI:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(admin_module.router)
-
-    @app.exception_handler(NotFoundError)
-    async def _not_found(_request, exc: NotFoundError):  # mirrors create_app's handler
-        from fastapi.responses import JSONResponse
-
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
-
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: _profile(is_super_admin=is_super_admin)
     return app
@@ -460,7 +455,8 @@ def test_update_member_role_rejects_invalid_role(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).patch(
         f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "root"}
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 422
+    assert store.role_updates == []
 
 
 def test_missing_member_maps_to_404() -> None:
@@ -498,7 +494,8 @@ def test_join_organisation_rejects_invalid_role(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).post(
         f"/admin/organisations/{store.org.id}/members", json={"role": "root"}
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 422
+    assert store.added_members == []
 
 
 def test_remove_member(store: FakeStore) -> None:
@@ -647,10 +644,10 @@ def test_list_invitations_returns_the_orgs_pending_ones(store: FakeStore) -> Non
     assert [row["id"] for row in resp.json()] == [str(invitation_id)]
 
 
-def test_cancel_invitation_deletes_it(store: FakeStore) -> None:
-    """The invitation id alone identifies the row; the org only scopes the path."""
-    deleted: list[UUID] = []
-    store.organisations.delete_invitation = deleted.append
+def test_cancel_invitation_deletes_it_within_the_path_org(store: FakeStore) -> None:
+    """The path's org scopes the delete, so another org's invitation id reads as missing."""
+    deleted: list[tuple[UUID, UUID]] = []
+    store.organisations.delete_invitation = lambda invitation_id, *, org_id: deleted.append((invitation_id, org_id))
     invitation_id = uuid4()
 
     resp = _client(store, is_super_admin=True).delete(
@@ -658,7 +655,7 @@ def test_cancel_invitation_deletes_it(store: FakeStore) -> None:
     )
 
     assert resp.json() == {"status": "ok"}
-    assert deleted == [invitation_id]
+    assert deleted == [(invitation_id, store.org.id)]
 
 
 # -- Activity titles ----------------------------------------------------------
@@ -755,101 +752,3 @@ class TestRegistryDefaults:
         assert snapshot.deployment.version is None
 
 
-# -- Invitation email ----------------------------------------------------------
-
-
-class TestAdminInvitationEmail:
-    """``_send_invitation_email`` reads the SMTP config itself and never raises.
-
-    Unlike the organisations route's copy, this one looks the config up from
-    the process state rather than taking it as an argument.
-    """
-
-    @staticmethod
-    def _invitation() -> SimpleNamespace:
-        return SimpleNamespace(token="tok", email="new@acme.test")
-
-    @staticmethod
-    def _request() -> Request:
-        """Build a request stand-in carrying only the base URL.
-
-        Returns:
-            The stand-in, typed as a ``Request`` for the helper under test.
-        """
-        return cast(Request, SimpleNamespace(base_url="https://app.example.com/"))
-
-    @pytest.fixture
-    def smtp(self, monkeypatch: pytest.MonkeyPatch):
-        """Install an SMTP config into the process state.
-
-        Args:
-            monkeypatch: Fixture used to set the state slot.
-
-        Returns:
-            A callable taking the config to install.
-        """
-        from interloper_api.dependencies import state as state_module
-
-        def install(config) -> None:
-            monkeypatch.setattr(state_module, "_smtp_config", config)
-
-        return install
-
-    def test_an_unconfigured_mailer_is_logged_and_skipped(
-        self, smtp, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        smtp(None)
-
-        with caplog.at_level("WARNING", logger="interloper_api.routes.admin"):
-            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
-
-        assert "SMTP not configured" in caplog.text
-
-    def test_a_disabled_mailer_is_treated_as_unconfigured(
-        self, smtp, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        smtp(SimpleNamespace(enabled=False))
-
-        with caplog.at_level("WARNING", logger="interloper_api.routes.admin"):
-            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
-
-        assert "SMTP not configured" in caplog.text
-
-    def test_a_configured_mailer_gets_the_invite_url(
-        self, smtp, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        built: list[dict] = []
-
-        class FakeEmail:
-            def __init__(self, **kwargs) -> None:
-                built.append(kwargs)
-
-            def send(self, smtp_config, email) -> None:
-                built[-1]["sent_to"] = email
-
-        smtp(SimpleNamespace(enabled=True))
-        monkeypatch.setattr(admin_module, "InvitationEmail", FakeEmail)
-
-        admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
-
-        assert built[0]["invite_url"] == "https://app.example.com/invite/tok"
-        assert built[0]["org_name"] == "Acme"
-        assert built[0]["sent_to"] == "new@acme.test"
-
-    def test_a_mailer_failure_is_logged_not_raised(
-        self, smtp, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        class FailingEmail:
-            def __init__(self, **kwargs) -> None:
-                pass
-
-            def send(self, smtp_config, email) -> None:
-                raise OSError("smtp unreachable")
-
-        smtp(SimpleNamespace(enabled=True))
-        monkeypatch.setattr(admin_module, "InvitationEmail", FailingEmail)
-
-        with caplog.at_level("ERROR", logger="interloper_api.routes.admin"):
-            admin_module._send_invitation_email(self._request(), self._invitation(), "Acme", "Ada")
-
-        assert "Failed to send invitation email to new@acme.test" in caplog.text

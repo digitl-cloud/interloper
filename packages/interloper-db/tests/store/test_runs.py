@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, ConflictError, NotFoundError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
@@ -171,7 +171,7 @@ class TestRunTargetOperations:
 
     def test_kind_without_operation_is_rejected(self, store: Store):
         target = _component(store, kind="destination")
-        with pytest.raises(ValueError, match="cannot be run"):
+        with pytest.raises(ConfigError, match="cannot be run"):
             store.runs.create(_ORG_ID, component_id=target)
 
     def test_missing_component_is_rejected(self, store: Store):
@@ -268,7 +268,7 @@ class TestTargetResolution:
 
     def test_backfill_rejects_a_kind_with_no_workload(self, store: Store):
         target = _component(store, kind="destination")
-        with pytest.raises(ValueError, match="cannot be run"):
+        with pytest.raises(ConfigError, match="cannot be run"):
             store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
 
 
@@ -539,7 +539,7 @@ class TestCreateBackfill:
         ]
 
     def test_inverted_range_is_rejected(self, store: Store):
-        with pytest.raises(ValueError, match="ends before it starts"):
+        with pytest.raises(ConfigError, match="ends before it starts"):
             store.runs.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
 
 
@@ -613,7 +613,7 @@ class TestCancelBackfill:
     def test_cancel_terminal_backfill_raises(self, store: Store):
         backfill = _backfill(store)
         store.runs.cancel_backfill(backfill.id)
-        with pytest.raises(ValueError, match="already canceled"):
+        with pytest.raises(ConflictError, match="already canceled"):
             store.runs.cancel_backfill(backfill.id)
 
     def test_cancel_missing_backfill_raises(self, store: Store):
@@ -747,7 +747,7 @@ class TestListRunsSort:
         assert [run.id for run in descending] == [later, earlier, never]
 
     def test_an_unknown_field_is_rejected(self, store: Store):
-        with pytest.raises(ValueError, match="Cannot sort runs by 'org_id'"):
+        with pytest.raises(ConfigError, match="Cannot sort runs by 'org_id'"):
             store.runs.list_all(_ORG_ID, sort="-org_id")
 
 
@@ -823,7 +823,7 @@ class TestGetAndComplete:
         run = store.runs.create(_ORG_ID)
         store.runs.complete(run.id, success=True)
 
-        with pytest.raises(ValueError, match=f"Run {run.id} is already success"):
+        with pytest.raises(ConflictError, match=f"Run {run.id} is already success"):
             store.runs.complete(run.id, success=False)
         assert store.runs.get(run.id).status == "success"
 
@@ -870,7 +870,7 @@ class TestPartitionKeyValidation:
         assert run.partition_key == "2026-01-01"
 
     def test_an_unrecognised_shape_is_rejected(self, store: Store):
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             store.runs.create(_ORG_ID, partition_key="not-a-key")
 
 
@@ -880,7 +880,7 @@ class TestRetryValidation:
     def test_an_unknown_scope_is_rejected(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
-        with pytest.raises(ValueError, match="Invalid retry scope: 'sideways'"):
+        with pytest.raises(ConfigError, match="Invalid retry scope: 'sideways'"):
             store.runs.retry(run.id, scope="sideways")
 
     def test_a_missing_run_raises(self, store: Store):
@@ -892,7 +892,7 @@ class TestRetryValidation:
     def test_a_run_that_did_not_fail_is_rejected(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
-        with pytest.raises(ValueError, match="is not failed"):
+        with pytest.raises(ConflictError, match="is not failed"):
             store.runs.retry(run.id)
 
     def test_an_earlier_attempt_retries_the_stack_from_its_head(self, store: Store):
@@ -910,7 +910,7 @@ class TestRetryValidation:
         run = store.runs.create(_ORG_ID, component_id=target)
         store.runs.complete(run.id, success=False)
 
-        with pytest.raises(ValueError, match="latest attempt 2 is 'queued'"):
+        with pytest.raises(ConflictError, match="latest attempt 2 is 'queued'"):
             store.runs.retry(run.id)
 
     def test_a_stack_healed_by_a_later_attempt_is_not_retried(self, store: Store):
@@ -919,7 +919,7 @@ class TestRetryValidation:
         second = store.runs.retry(first.id)
         store.runs.complete(second.id, success=True)
 
-        with pytest.raises(ValueError, match="latest attempt 2 is 'success'"):
+        with pytest.raises(ConflictError, match="latest attempt 2 is 'success'"):
             store.runs.retry(first.id)
 
     def test_a_head_superseded_while_its_lock_was_awaited_is_refused(self, store: Store):
@@ -940,7 +940,7 @@ class TestRetryValidation:
 
         event.listen(Session, "do_orm_execute", commit_a_rival_retry)
         try:
-            with pytest.raises(ValueError, match="stack was retried concurrently"):
+            with pytest.raises(ConflictError, match="stack was retried concurrently"):
                 store.runs.retry(first.id)
         finally:
             event.remove(Session, "do_orm_execute", commit_a_rival_retry)
@@ -960,7 +960,7 @@ class TestBackfillGranularity:
     """A backfill spans one granularity; mixed bounds fail closed."""
 
     def test_mixed_granularity_bounds_are_rejected(self, store: Store):
-        with pytest.raises(ValueError, match="must share one granularity"):
+        with pytest.raises(ConfigError, match="must share one granularity"):
             store.runs.create_backfill(_ORG_ID, start_key="2026-01", end_key="2026-01-05")
 
     def test_a_monthly_span_is_accepted(self, store: Store):
@@ -1116,10 +1116,10 @@ class TestAllAttemptsAndPartitionRange:
         self._add(store, partition_key="2026-07-02T13")
         self._add(store, partition_key="2026-08-01")
 
-        runs = store.runs.list_all(_ORG_ID, partition_from="2026-07-01", partition_to="2026-07-31")
+        with Session(store.engine) as session:
+            matched = session.exec(select(Run.id).where(*partition_key_range("2026-07-01", "2026-07-31"))).all()
 
-        assert [run.id for run in runs] == [inside]
-        assert store.runs.count(_ORG_ID, partition_from="2026-07-01", partition_to="2026-07-31") == 1
+        assert matched == [inside]
 
     def test_partition_key_range_bounds_by_value_and_granularity(self):
         assert len(partition_key_range("2026-07-01", "2026-07-31")) == 3

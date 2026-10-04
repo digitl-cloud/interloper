@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
-from interloper.errors import NotFoundError
+from fastapi import APIRouter
 from interloper_db.models import Backfill
 from pydantic import BaseModel, Field
 
@@ -14,7 +14,6 @@ from interloper_api.dependencies import (
     OrgIdDep,
     StoreDep,
     ViewerDep,
-    authorize_org_member,
     load_authorized,
 )
 
@@ -58,9 +57,9 @@ class BackfillResponse(BaseModel):
     concurrency: int
     fail_fast: bool
     partitions: int
-    started_at: str | None = None
-    completed_at: str | None = None
-    created_at: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
     run_counts: dict[str, int] = Field(default_factory=dict)
 
     @classmethod
@@ -88,14 +87,11 @@ class BackfillResponse(BaseModel):
             concurrency=backfill.concurrency,
             fail_fast=backfill.fail_fast,
             partitions=backfill.partitions,
-            started_at=str(backfill.started_at) if backfill.started_at else None,
-            completed_at=str(backfill.completed_at) if backfill.completed_at else None,
-            created_at=str(backfill.created_at) if backfill.created_at else None,
+            started_at=backfill.started_at,
+            completed_at=backfill.completed_at,
+            created_at=backfill.created_at,
             run_counts=run_counts or {},
         )
-
-
-# -- Helpers -------------------------------------------------------------------
 
 
 # -- Endpoints -----------------------------------------------------------------
@@ -141,24 +137,18 @@ def create_backfill(
 
     Returns:
         The queued backfill, as a response model.
-
-    Raises:
-        HTTPException: 400 if the store rejects the range or the settings.
     """
     job = load_authorized(
         lambda i: store.components.get(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
-    try:
-        backfill = store.runs.create_backfill(
-            job.org_id,
-            component_id=body.component_id,
-            start_key=body.start_key,
-            end_key=body.end_key,
-            concurrency=body.concurrency,
-            fail_fast=body.fail_fast,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    backfill = store.runs.create_backfill(
+        job.org_id,
+        component_id=body.component_id,
+        start_key=body.start_key,
+        end_key=body.end_key,
+        concurrency=body.concurrency,
+        fail_fast=body.fail_fast,
+    )
     return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill.id]).get(backfill.id))
 
 
@@ -177,15 +167,8 @@ def get_backfill(
 
     Returns:
         The backfill, as a response model.
-
-    Raises:
-        HTTPException: 404 if no such backfill exists.
     """
-    try:
-        backfill = store.runs.get_backfill(backfill_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
-    authorize_org_member(user, backfill.org_id, store, detail=f"Backfill {backfill_id} not found")
+    backfill = load_authorized(store.runs.get_backfill, backfill_id, user, store, label="Backfill")
     return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill_id]).get(backfill_id))
 
 
@@ -197,27 +180,16 @@ def cancel_backfill(
 ) -> BackfillResponse:
     """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain.
 
+    A backfill already terminal answers 409.
+
     Args:
         backfill_id: The backfill UUID.
         user: The authenticated user.
         store: The Store instance.
 
     Returns:
-        The cancelled backfill, as a response model.
-
-    Raises:
-        HTTPException: 404 if no such backfill exists, 409 if it has already
-            reached a terminal state.
+        The cancelled backfill, as a response model, with its partitions per status.
     """
-    try:
-        backfill = store.runs.get_backfill(backfill_id)
-    except NotFoundError:
-        raise HTTPException(status_code=404, detail=f"Backfill {backfill_id} not found")
-    authorize_org_member(
-        user, backfill.org_id, store, minimum="editor", detail=f"Backfill {backfill_id} not found"
-    )
-    try:
-        backfill = store.runs.cancel_backfill(backfill_id)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-    return BackfillResponse.from_backfill(backfill)
+    load_authorized(store.runs.get_backfill, backfill_id, user, store, label="Backfill", minimum="editor")
+    backfill = store.runs.cancel_backfill(backfill_id)
+    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill_id]).get(backfill_id))

@@ -32,6 +32,7 @@ from interloper_db.models import (
     PersonalAccessToken,
     Profile,
     Quota,
+    Role,
     Run,
     UserOrganisation,
 )
@@ -74,7 +75,7 @@ class OrganisationStore:
                 session.add(UserOrganisation(
                     user_id=creator_id,
                     organisation_id=db_organisation.id,
-                    role="admin",
+                    role=Role.ADMIN.value,
                 ))
             commit(session)
             session.refresh(db_organisation)
@@ -164,12 +165,11 @@ class OrganisationStore:
             session.add(db_organisation)
             commit(session)
 
-    def get(self, org_id: UUID, *, include_deleted: bool = False) -> Organisation:
-        """Get an organisation by ID; soft-deleted orgs read as missing by default.
+    def get(self, org_id: UUID) -> Organisation:
+        """Get an organisation by ID; soft-deleted orgs read as missing.
 
         Args:
             org_id: Organisation UUID.
-            include_deleted: Also return soft-deleted organisations.
 
         Returns:
             The organisation row.
@@ -179,7 +179,7 @@ class OrganisationStore:
         """
         with session_scope(self._engine) as session:
             organisation = session.get(Organisation, org_id)
-            if not organisation or (organisation.deleted_at is not None and not include_deleted):
+            if not organisation or organisation.deleted_at is not None:
                 raise NotFoundError(f"Organisation {org_id} not found")
             return organisation
 
@@ -339,12 +339,14 @@ class OrganisationStore:
         Args:
             org_id: Organisation UUID.
             user_id: Profile UUID to add.
-            role: Role to assign.
+            role: Role to assign, one of :class:`Role`; any other name is a
+                ``ConfigError``.
 
         Returns:
             True if added, False if the user is already a member (an
             idempotency signal, not a missing target).
         """
+        role = Role.parse(role).value
         with session_scope(self._engine) as session:
             if self._get_membership(session, user_id, org_id):
                 return False
@@ -362,11 +364,13 @@ class OrganisationStore:
         Args:
             org_id: Organisation UUID.
             user_id: Profile UUID of the member.
-            role: New role to assign.
+            role: New role to assign, one of :class:`Role`; any other name is
+                a ``ConfigError``.
 
         Raises:
             NotFoundError: If the user is not a member.
         """
+        role = Role.parse(role).value
         with session_scope(self._engine) as session:
             membership = self._get_membership(session, user_id, org_id)
             if not membership:
@@ -406,12 +410,14 @@ class OrganisationStore:
         Args:
             org_id: Organisation UUID.
             email: Email to invite.
-            role: Role to assign on acceptance.
+            role: Role to assign on acceptance, one of :class:`Role`; any other
+                name is a ``ConfigError``.
             invited_by: Profile UUID of the inviter.
 
         Returns:
             The created Invitation row.
         """
+        role = Role.parse(role).value
         token = secrets.token_urlsafe(32)
 
         with session_scope(self._engine) as session:
@@ -443,32 +449,30 @@ class OrganisationStore:
             ).all()
             return list(db_invitations)
 
-    def get_invitation_by_token(self, token: str) -> Invitation | None:
-        """Resolve an invitation by its token.
-
-        Args:
-            token: The invitation token.
-
-        Returns:
-            The Invitation or None.
-        """
-        with session_scope(self._engine) as session:
-            return session.exec(select(Invitation).where(Invitation.token == token)).first()
-
-    def delete_invitation(self, invitation_id: UUID) -> None:
-        """Delete an invitation.
+    def get_invitation(self, invitation_id: UUID, *, org_id: UUID) -> Invitation:
+        """Get one of an organisation's invitations by ID.
 
         Args:
             invitation_id: Invitation UUID.
+            org_id: Organisation the invitation must belong to; a mismatch
+                reads as missing, so an id cannot be probed across tenants.
 
-        Raises:
-            NotFoundError: If the invitation is not found.
+        Returns:
+            The Invitation row.
         """
         with session_scope(self._engine) as session:
-            db_invitation = session.get(Invitation, invitation_id)
-            if not db_invitation:
-                raise NotFoundError(f"Invitation {invitation_id} not found")
-            session.delete(db_invitation)
+            return self._get_invitation(session, invitation_id, org_id)
+
+    def delete_invitation(self, invitation_id: UUID, *, org_id: UUID) -> None:
+        """Delete one of an organisation's invitations.
+
+        Args:
+            invitation_id: Invitation UUID.
+            org_id: Organisation the invitation must belong to; a mismatch
+                reads as missing.
+        """
+        with session_scope(self._engine) as session:
+            session.delete(self._get_invitation(session, invitation_id, org_id))
             commit(session)
 
     def has_pending_invitation(self, email: str) -> bool:
@@ -539,3 +543,23 @@ class OrganisationStore:
                 UserOrganisation.organisation_id == org_id,
             )
         ).first()
+
+    @staticmethod
+    def _get_invitation(session: Session, invitation_id: UUID, org_id: UUID) -> Invitation:
+        """Fetch an invitation row, scoped to its organisation.
+
+        Args:
+            session: Active database session.
+            invitation_id: Invitation UUID.
+            org_id: Organisation the invitation must belong to.
+
+        Returns:
+            The Invitation row.
+
+        Raises:
+            NotFoundError: If no invitation carries that id in that organisation.
+        """
+        db_invitation = session.get(Invitation, invitation_id)
+        if not db_invitation or db_invitation.organisation_id != org_id:
+            raise NotFoundError(f"Invitation {invitation_id} not found")
+        return db_invitation

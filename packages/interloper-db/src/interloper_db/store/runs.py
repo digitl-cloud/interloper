@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, ConflictError, NotFoundError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine, exists, func
 from sqlalchemy.orm import aliased, joinedload
@@ -91,14 +91,13 @@ class RunStore:
             component_id: Optional target component UUID (any kind whose
                 anchor declares a workload).
             partition_key: Optional partition key (its shape carries the
-                granularity, e.g. ``2026-08-21`` or ``2026-08``). A key matching
-                no known shape is rejected by :meth:`TimePartition.from_key`.
+                granularity, e.g. ``2026-08-21`` or ``2026-08``).
 
         Returns:
             The created Run row.
         """
         if partition_key is not None:
-            TimePartition.from_key(partition_key)
+            self._partition(partition_key)
         with session_scope(self._engine) as session:
             billable = self._target_billable(session, component_id)
             self._quotas.admit_run(org_id, billable=billable)
@@ -132,7 +131,7 @@ class RunStore:
 
         Raises:
             NotFoundError: If the component does not exist.
-            ValueError: If the kind's anchor declares no workload.
+            ConfigError: If the kind's anchor declares no workload.
         """
         if component_id is None:
             return True
@@ -141,8 +140,7 @@ class RunStore:
             raise NotFoundError(f"Component {component_id} not found")
         anchor = il.KINDS[db_component.kind]
         if not issubclass(anchor, il.Workload):
-            # A caller mistake, not a type bug: routes map ValueError to 400.
-            raise ValueError(f"Components of kind '{db_component.kind}' cannot be run")  # noqa: TRY004
+            raise ConfigError(f"Components of kind '{db_component.kind}' cannot be run")
         return anchor.billable
 
     def get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
@@ -182,8 +180,6 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
-        partition_from: str | None = None,
-        partition_to: str | None = None,
         all_attempts: bool = False,
         sort: str | None = None,
         limit: int = 50,
@@ -212,12 +208,9 @@ class RunStore:
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
             root_run_id: List this stack's attempts rather than one row per stack.
-            partition_from: With *partition_to*, keep runs whose partition key
-                lies in that inclusive range (see :func:`partition_key_range`).
-            partition_to: Last partition key of that range.
             all_attempts: Keep every attempt rather than each stack's latest.
             sort: A field of :data:`RUN_SORT_FIELDS` to order by, ``-``-prefixed
-                for descending (any other field raises ``ValueError``); None
+                for descending (any other field raises ``ConfigError``); None
                 keeps the default (newest first, or a stack's latest attempt
                 first).
             limit: Max results (default 50).
@@ -240,8 +233,6 @@ class RunStore:
                 component_kind=component_kind,
                 component_key=component_key,
                 root_run_id=root_run_id,
-                partition_from=partition_from,
-                partition_to=partition_to,
             )
             if root_run_id is None and not all_attempts:
                 filters.append(self._latest_attempt_only())
@@ -270,8 +261,6 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
-        partition_from: str | None = None,
-        partition_to: str | None = None,
         all_attempts: bool = False,
     ) -> int:
         """Count runs matching the same filters as :meth:`list_all`.
@@ -289,9 +278,6 @@ class RunStore:
             component_kind: Keep runs whose target is of this kind.
             component_key: Keep runs whose target is of this type (catalog key).
             root_run_id: Count this stack's attempts rather than one per stack.
-            partition_from: With *partition_to*, count runs whose partition key
-                lies in that inclusive range.
-            partition_to: Last partition key of that range.
             all_attempts: Count every attempt rather than each stack's latest.
 
         Returns:
@@ -311,8 +297,6 @@ class RunStore:
                 component_kind=component_kind,
                 component_key=component_key,
                 root_run_id=root_run_id,
-                partition_from=partition_from,
-                partition_to=partition_to,
             )
             if root_run_id is None and not all_attempts:
                 filters.append(self._latest_attempt_only())
@@ -341,7 +325,7 @@ class RunStore:
 
         Raises:
             NotFoundError: If the run is not found.
-            ValueError: If the run is already terminal, so a late completion
+            ConflictError: If the run is already terminal, so a late completion
                 (the reaper's, after a pod finally started) cannot overwrite
                 the verdict or queue a retry of work that succeeded.
         """
@@ -350,7 +334,7 @@ class RunStore:
             if not db_run:
                 raise NotFoundError(f"Run {run_id} not found")
             if db_run.status in TERMINAL_RUN_STATUSES:
-                raise ValueError(f"Run {run_id} is already {db_run.status}")
+                raise ConflictError(f"Run {run_id} is already {db_run.status}")
 
             db_run.status = "success" if success else "failed"
             db_run.completed_at = datetime.now(timezone.utc)
@@ -399,28 +383,31 @@ class RunStore:
 
         Raises:
             NotFoundError: If the run is not found.
-            ValueError: If ``scope`` is invalid, the run has not failed, the
-                stack's latest attempt is not a failure, or another retry of
-                the stack committed while this one waited for its head.
+            ConfigError: If ``scope`` is invalid.
+            ConflictError: If the run has not failed, the stack's latest
+                attempt is not a failure, or another retry of the stack
+                committed while this one waited for its head.
         """
         if scope not in ("all", "failed"):
-            raise ValueError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
+            raise ConfigError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
 
         with session_scope(self._engine) as session:
             src = session.get(Run, run_id)
             if not src:
                 raise NotFoundError(f"Run {run_id} not found")
             if src.status != "failed":
-                raise ValueError(f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried")
+                raise ConflictError(
+                    f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried"
+                )
             latest = select(Run).where(Run.root_run_id == src.root_run_id).order_by(col(Run.attempt).desc()).limit(1)
             head = session.exec(latest.with_for_update().execution_options(populate_existing=True)).one()
             # A fresh statement, so it sees an attempt committed while the lock was awaited.
             if session.exec(latest).one().id != head.id:
-                raise ValueError(
+                raise ConflictError(
                     f"Run {run_id}'s stack was retried concurrently; retry it again from its latest attempt"
                 )
             if head.status != "failed":
-                raise ValueError(
+                raise ConflictError(
                     f"Run {run_id} is attempt {src.attempt} of a stack whose latest attempt {head.attempt} "
                     f"is {head.status!r}; only a stack whose latest attempt failed can be retried"
                 )
@@ -546,16 +533,18 @@ class RunStore:
             The created Backfill row with runs.
 
         Raises:
-            ValueError: If a key matches no known shape, the two keys differ
-                in granularity, or the range is inverted.
+            ConfigError: If the two keys differ in granularity or the range
+                is inverted.
         """
-        start = TimePartition.from_key(start_key)
-        end = TimePartition.from_key(end_key)
+        start = self._partition(start_key)
+        end = self._partition(end_key)
         if start.granularity is not end.granularity:
-            raise ValueError(
+            raise ConfigError(
                 f"Backfill bounds must share one granularity: {start_key!r} is a "
                 f"{start.granularity.value} key but {end_key!r} is a {end.granularity.value} key"
             )
+        if end.value < start.value:
+            raise ConfigError(f"Backfill range ends before it starts: {start_key!r} to {end_key!r}")
         window = TimePartitionWindow(start.value, end.value, start.granularity)
         span = window.partition_count()
 
@@ -596,14 +585,14 @@ class RunStore:
 
         Raises:
             NotFoundError: If the backfill is not found.
-            ValueError: If the backfill is already terminal.
+            ConflictError: If the backfill is already terminal.
         """
         with session_scope(self._engine) as session:
             db_backfill = session.get(Backfill, backfill_id)
             if not db_backfill:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             if db_backfill.status not in _ACTIVE_BACKFILL_STATUSES:
-                raise ValueError(f"Backfill {backfill_id} is already {db_backfill.status}")
+                raise ConflictError(f"Backfill {backfill_id} is already {db_backfill.status}")
 
             cancel_backfill_runs(session, db_backfill)
             commit(session)
@@ -802,6 +791,25 @@ class RunStore:
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
+    def _partition(key: str) -> TimePartition:
+        """Parse a caller-supplied partition key.
+
+        Args:
+            key: The key, whose shape carries its granularity (``2026-08-21``,
+                ``2026-08``, ``2026``, ``2026-08-21T13``).
+
+        Returns:
+            The partition the key names.
+
+        Raises:
+            ConfigError: If the key matches no known shape.
+        """
+        try:
+            return TimePartition.from_key(key)
+        except ValueError as error:
+            raise ConfigError(str(error)) from error
+
+    @staticmethod
     def _backfill_filters(org_id: UUID, active_only: bool) -> list[Any]:
         """The shared where-clauses of :meth:`list_backfills` / :meth:`count_backfills`.
 
@@ -857,8 +865,6 @@ class RunStore:
         component_kind: str | None = None,
         component_key: str | None = None,
         root_run_id: UUID | None = None,
-        partition_from: str | None = None,
-        partition_to: str | None = None,
     ) -> list[Any]:
         """The shared where-clauses of :meth:`RunStore.list_all` / :meth:`RunStore.count`.
 
@@ -896,9 +902,6 @@ class RunStore:
                 key); ``None`` applies no type filter.
             root_run_id: Keep the attempts of this stack; ``None`` applies no
                 stack filter.
-            partition_from: With *partition_to*, keep runs whose partition key
-                lies in that inclusive range; either alone applies no filter.
-            partition_to: Last partition key of that range.
 
         Returns:
             Filter expressions for the given criteria.
@@ -922,8 +925,6 @@ class RunStore:
             filters.append(Run.backfill_id == backfill_id)
         if root_run_id:
             filters.append(Run.root_run_id == root_run_id)
-        if partition_from is not None and partition_to is not None:
-            filters.extend(partition_key_range(partition_from, partition_to))
         if status:
             filters.append(Run.status == status)
         if after is not None:
@@ -1034,14 +1035,14 @@ def _run_order(sort: str | None, root_run_id: UUID | None) -> tuple[Any, ...]:
         The ordering clauses.
 
     Raises:
-        ValueError: If *sort* names a field outside :data:`RUN_SORT_FIELDS`.
+        ConfigError: If *sort* names a field outside :data:`RUN_SORT_FIELDS`.
     """
     if sort is None:
         primary = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
     else:
         field = sort.removeprefix("-")
         if field not in RUN_SORT_FIELDS:
-            raise ValueError(f"Cannot sort runs by '{field}'. Known: {', '.join(sorted(RUN_SORT_FIELDS))}")
+            raise ConfigError(f"Cannot sort runs by '{field}'. Known: {', '.join(sorted(RUN_SORT_FIELDS))}")
         column = col(getattr(Run, field))
         primary = (column.desc() if sort.startswith("-") else column.asc()).nulls_last()
     return (primary, col(Run.id).asc())

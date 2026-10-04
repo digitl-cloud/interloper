@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from interloper.errors import QuotaExceededError
+from interloper.errors import ConfigError, QuotaExceededError
 from interloper.utils import month_start
 from sqlmodel import Session
 
@@ -291,9 +291,9 @@ class TestSetQuota:
         assert store.quotas.set_overrides(org_id, {"max_sources": None}) == {}
 
     def test_rejects_unknown_and_negative(self, store: Store, org_id: UUID):
-        with pytest.raises(ValueError, match="Unknown quota limit"):
+        with pytest.raises(ConfigError, match="Unknown quota limit"):
             store.quotas.set_overrides(org_id, {"max_bananas": 1})
-        with pytest.raises(ValueError, match=">= 0"):
+        with pytest.raises(ConfigError, match=">= 0"):
             store.quotas.set_overrides(org_id, {"max_sources": -1})
 
 

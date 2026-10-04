@@ -36,6 +36,35 @@ def test_render_invite_html_logo_is_optional():
     assert "<img" not in without_logo
 
 
+def test_from_invitation_links_back_to_the_app_it_was_issued_from():
+    invitation = SimpleNamespace(token="tok")
+    inviter = SimpleNamespace(name="Ada", email="ada@example.com")
+
+    email = InvitationEmail.from_invitation(
+        invitation,  # ty: ignore[invalid-argument-type]
+        org_name="Acme",
+        inviter=inviter,  # ty: ignore[invalid-argument-type]
+        base_url="https://app.example.com/",
+    )
+
+    assert email.invite_url == "https://app.example.com/invite/tok"
+    assert email.logo_url == "https://app.example.com/logo-email.png"
+    assert (email.org_name, email.inviter_name) == ("Acme", "Ada")
+
+
+def test_a_nameless_inviter_is_named_by_email():
+    inviter = SimpleNamespace(name=None, email="ada@example.com")
+
+    email = InvitationEmail.from_invitation(
+        SimpleNamespace(token="tok"),  # ty: ignore[invalid-argument-type]
+        org_name="Acme",
+        inviter=inviter,  # ty: ignore[invalid-argument-type]
+        base_url="https://x",
+    )
+
+    assert email.inviter_name == "ada@example.com"
+
+
 def test_render_invite_text_contains_link_and_expiry():
     text = InvitationEmail("Acme", "Ada", "https://x/invite/t").text()
     assert "https://x/invite/t" in text
@@ -178,3 +207,38 @@ class TestSend:
         sent = FakeSmtpServer.instances[0].sent
         assert sent is not None
         assert "Subject: You've been invited to join Acme on Interloper" in sent[2]
+
+
+class TestDeliver:
+    """Best-effort delivery: the invitation is already stored, so email never fails the caller."""
+
+    @pytest.mark.parametrize("smtp_config", [None, SimpleNamespace(enabled=False)])
+    def test_an_unconfigured_mailer_is_logged_and_skipped(
+        self, smtp_config: SimpleNamespace | None, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level("WARNING", logger="interloper_api.notifications.invitations"):
+            InvitationEmail("Acme", "Ada", "https://x").deliver(smtp_config, "new@example.com")
+
+        assert "SMTP not configured; invitation email to new@example.com not sent" in caplog.text
+
+    def test_a_configured_mailer_sends(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(smtplib, "SMTP", FakeSmtpServer)
+
+        InvitationEmail("Acme", "Ada", "https://x").deliver(_smtp_config(), "new@example.com")
+
+        sent = FakeSmtpServer.instances[0].sent
+        assert sent is not None
+        assert sent[1] == "new@example.com"
+
+    def test_a_mailer_failure_is_logged_not_raised(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        def unreachable(host: str, port: int) -> None:
+            raise OSError("smtp unreachable")
+
+        monkeypatch.setattr(smtplib, "SMTP", unreachable)
+
+        with caplog.at_level("ERROR", logger="interloper_api.notifications.invitations"):
+            InvitationEmail("Acme", "Ada", "https://x").deliver(_smtp_config(), "new@example.com")
+
+        assert "Failed to send invitation email to new@example.com" in caplog.text

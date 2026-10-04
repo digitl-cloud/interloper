@@ -1,13 +1,65 @@
 """People, the organisations they belong to, and how they sign in."""
 
 from datetime import datetime
+from enum import Enum
 from typing import ClassVar
 from uuid import UUID
 
+from interloper.errors import ConfigError
 from sqlmodel import Column, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import TZDateTime, timestamp_column
+
+
+class Role(str, Enum):
+    """A member's role in an organisation, from least to most privileged.
+
+    Each role grants everything the roles before it grant, so a gate names the
+    lowest role it admits rather than a set.
+    """
+
+    VIEWER = "viewer"
+    EDITOR = "editor"
+    ADMIN = "admin"
+
+    @classmethod
+    def parse(cls, value: str) -> "Role":
+        """The role a caller-supplied name denotes.
+
+        Args:
+            value: The role name.
+
+        Returns:
+            The role.
+
+        Raises:
+            ConfigError: If the name is not a role.
+        """
+        try:
+            return cls(value)
+        except ValueError:
+            known = ", ".join(role.value for role in cls)
+            raise ConfigError(f"Unknown role {value!r}; expected one of {known}") from None
+
+    @classmethod
+    def at_least(cls, role: str | None, minimum: str) -> bool:
+        """Whether a held role admits what *minimum* gates.
+
+        Args:
+            role: The role held, as stored on a membership; ``None`` (no
+                membership) or a name outside the vocabulary admits nothing.
+            minimum: The lowest role the gate admits.
+
+        Returns:
+            True when *role* ranks at or above *minimum*.
+        """
+        try:
+            held = cls(role)
+        except ValueError:
+            return False
+        ranks: list[Role] = list(cls)
+        return ranks.index(held) >= ranks.index(cls.parse(minimum))
 
 
 class Profile(SQLModel, table=True):

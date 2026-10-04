@@ -52,7 +52,7 @@ from pydantic_ai.models.test import TestModel
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 
-from interloper_api import app as app_module
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import (
     get_agent,
     get_catalog,
@@ -108,8 +108,7 @@ def member(store: Store) -> SimpleNamespace:
 
 def _client(store: Store, member: SimpleNamespace, agent: Agent[ToolkitContext, Any]) -> TestClient:
     app = FastAPI()
-    for error_type, handler in app_module._ERROR_HANDLERS.items():
-        app.add_exception_handler(error_type, handler)
+    install_error_handlers(app)
     app.include_router(agent_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})

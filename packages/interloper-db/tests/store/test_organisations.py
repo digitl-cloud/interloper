@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from interloper.errors import NotFoundError
+from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import Session as SQLSession
 from sqlmodel import select
@@ -17,6 +17,7 @@ from interloper_db.models import (
     ComponentRelation,
     Event,
     Invitation,
+    Organisation,
     PersonalAccessToken,
     Profile,
     Run,
@@ -70,8 +71,10 @@ class TestDeleteOrganisation:
         # The org reads as missing everywhere but the row survives, stamped.
         with pytest.raises(NotFoundError):
             store.organisations.get(org.id)
-        assert store.organisations.get(org.id, include_deleted=True).deleted_at is not None
         with SQLSession(auth_db) as session:
+            retained = session.get(Organisation, org.id)
+            assert retained is not None
+            assert retained.deleted_at is not None
             # Sensitive payload is purged...
             for model in (Component, ComponentRelation):
                 assert session.exec(select(model).where(model.org_id == org.id)).first() is None
@@ -172,7 +175,7 @@ class TestAcceptInvitation:
         invitee = store.auth.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
         org = store.organisations.create(name="Acme", creator_id=admin.id)
         invitation = store.organisations.create_invitation(
-            org_id=org.id, email=invitee.email, role="member", invited_by=admin.id
+            org_id=org.id, email=invitee.email, role="editor", invited_by=admin.id
         )
 
         joined = store.organisations.accept_invitation(invitation.token, invitee.id)
@@ -183,8 +186,8 @@ class TestAcceptInvitation:
         # DetachedInstanceError).
         assert joined.id == org.id
         assert joined.name == "Acme"
-        assert store.organisations.member_role(invitee.id, org.id) == "member"
-        assert store.organisations.get_invitation_by_token(invitation.token) is None
+        assert store.organisations.member_role(invitee.id, org.id) == "editor"
+        assert store.organisations.list_invitations(org.id) == []
 
     def test_accept_invalid_token_returns_none(self, store: Store):
         invitee = store.auth.upsert_profile(google_id="g-invitee", email="new@example.com", name="New")
@@ -196,7 +199,7 @@ class TestHasPendingInvitation:
     def _invite(self, store: Store, email: str) -> Invitation:
         admin = store.auth.upsert_profile(google_id="g-admin", email="admin@example.com", name="Admin")
         org = store.organisations.create(name="Acme", creator_id=admin.id)
-        return store.organisations.create_invitation(org_id=org.id, email=email, role="member", invited_by=admin.id)
+        return store.organisations.create_invitation(org_id=org.id, email=email, role="viewer", invited_by=admin.id)
 
     def test_pending_invitation_matches_case_insensitively(self, store: Store):
         self._invite(store, "New@Example.com")
@@ -393,20 +396,28 @@ class TestInvitations:
     def test_an_organisation_with_no_invitations_lists_nothing(self, store: Store):
         assert store.organisations.list_invitations(uuid4()) == []
 
-    def test_an_invitation_resolves_by_token(self, store: Store):
+    def test_an_invitation_is_read_within_its_organisation(self, store: Store):
         ada = store.auth.upsert_profile(google_id="g1", email="ada@x")
         org = store.organisations.create(name="Acme", creator_id=ada.id)
         invitation = store.organisations.create_invitation(
             org_id=org.id, email="new@x", role="viewer", invited_by=ada.id
         )
 
-        found = store.organisations.get_invitation_by_token(invitation.token)
+        assert store.organisations.get_invitation(invitation.id, org_id=org.id).email == "new@x"
 
-        assert found is not None
-        assert found.id == invitation.id
+    def test_another_organisations_invitation_reads_as_missing(self, store: Store):
+        ada = store.auth.upsert_profile(google_id="g1", email="ada@x")
+        mine = store.organisations.create(name="Mine", creator_id=ada.id)
+        theirs = store.organisations.create(name="Theirs", creator_id=ada.id)
+        invitation = store.organisations.create_invitation(
+            org_id=theirs.id, email="new@x", role="viewer", invited_by=ada.id
+        )
 
-    def test_an_unknown_token_resolves_to_nothing(self, store: Store):
-        assert store.organisations.get_invitation_by_token("never-issued") is None
+        with pytest.raises(NotFoundError, match=f"Invitation {invitation.id} not found"):
+            store.organisations.get_invitation(invitation.id, org_id=mine.id)
+        with pytest.raises(NotFoundError):
+            store.organisations.delete_invitation(invitation.id, org_id=mine.id)
+        assert len(store.organisations.list_invitations(theirs.id)) == 1
 
     def test_an_invitation_can_be_deleted(self, store: Store):
         ada = store.auth.upsert_profile(google_id="g1", email="ada@x")
@@ -415,7 +426,7 @@ class TestInvitations:
             org_id=org.id, email="new@x", role="viewer", invited_by=ada.id
         )
 
-        store.organisations.delete_invitation(invitation.id)
+        store.organisations.delete_invitation(invitation.id, org_id=org.id)
 
         assert store.organisations.list_invitations(org.id) == []
 
@@ -423,7 +434,20 @@ class TestInvitations:
         missing = uuid4()
 
         with pytest.raises(NotFoundError, match=f"Invitation {missing} not found"):
-            store.organisations.delete_invitation(missing)
+            store.organisations.delete_invitation(missing, org_id=uuid4())
+
+    def test_an_unknown_role_is_refused(self, store: Store):
+        ada = store.auth.upsert_profile(google_id="g1", email="ada@x")
+        org = store.organisations.create(name="Acme", creator_id=ada.id)
+
+        with pytest.raises(ConfigError, match="Unknown role 'owner'"):
+            store.organisations.create_invitation(org_id=org.id, email="new@x", role="owner", invited_by=ada.id)
+        with pytest.raises(ConfigError):
+            store.organisations.update_member_role(org.id, ada.id, "owner")
+        with pytest.raises(ConfigError):
+            store.organisations.add_member(org.id, uuid4(), "owner")
+        assert store.organisations.list_invitations(org.id) == []
+        assert store.organisations.member_role(ada.id, org.id) == "admin"
 
 
 class TestAcceptInvitationEdges:

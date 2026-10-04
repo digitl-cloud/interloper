@@ -284,7 +284,7 @@ class TestCrud:
             session.add(child)
             session.commit()
             child_id = child.id
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigError):
             store.components.delete(child_id)
 
     def test_delete_source_removes_child_rows(self, component_db: Engine):
@@ -766,25 +766,25 @@ class TestDiscriminator:
         row = discriminated_store.components.create(
             _ORG, kind="source", key="discriminated_source", name="My account", config={"account_id": "act_1"}
         )
-        assert discriminated_store.components.discriminator(row) == "act_1"
+        assert discriminated_store.components.read(row).discriminator == "act_1"
 
     def test_blank_value_is_none(self, discriminated_store: Store):
         row = discriminated_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": ""}
         )
-        assert discriminated_store.components.discriminator(row) is None
+        assert discriminated_store.components.read(row).discriminator is None
 
     def test_undiscriminated_class_is_none(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         row = store.components.create(_ORG, kind="source", key="demo_source")
-        assert store.components.discriminator(row) is None
+        assert store.components.read(row).discriminator is None
 
     def test_drifted_key_is_none(self, discriminated_store: Store):
         row = discriminated_store.components.create(
             _ORG, kind="source", key="discriminated_source", config={"account_id": "act_1"}
         )
         reader = Store(catalog=il.Catalog(components={}))
-        assert reader.components.discriminator(row) is None
+        assert reader.components.read(row).discriminator is None
 
 
 class TestTelemetry:
@@ -868,25 +868,25 @@ class TestStatus:
 
     def test_live_source_is_ok(self, demo_store: Store):
         row = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
-        assert demo_store.components.status(row) is ComponentStatus.OK
+        assert demo_store.components.read(row).status is ComponentStatus.OK
 
     def test_owned_asset_resolves_through_its_parent(self, demo_store: Store):
         # The child rows nested under a fetched source carry no loaded parent:
         # resolving one has to reach a row away, not lazy-load a detached edge.
         source = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
         child = _child(demo_store.components.get(source.id), "a")
-        assert demo_store.components.status(child) is ComponentStatus.OK
+        assert demo_store.components.read(child).status is ComponentStatus.OK
 
     def test_parent_key_spares_the_lookup(self, demo_store: Store):
         source = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
         child = _child(demo_store.components.get(source.id), "a")
-        assert demo_store.components.status(child, parent_key=DemoSource.key) is ComponentStatus.OK
+        assert demo_store.components.read(child, parent_key=DemoSource.key).status is ComponentStatus.OK
         # The hint is taken at face value; a wrong one resolves against it.
-        assert demo_store.components.status(child, parent_key="gone_source") is ComponentStatus.MISSING
+        assert demo_store.components.read(child, parent_key="gone_source").status is ComponentStatus.MISSING
 
     def test_key_outside_the_catalog_is_missing(self, store: Store):
         row = Component(org_id=_ORG, kind="source", key="gone_source")
-        assert store.components.status(row) is ComponentStatus.MISSING
+        assert store.components.read(row).status is ComponentStatus.MISSING
 
     def test_payload_the_key_cannot_decrypt_is_unreadable(self, component_db: Engine):
         catalog = il.Catalog(components={PublicToggleConnection.key: PublicToggleConnection.definition()})
@@ -900,20 +900,20 @@ class TestStatus:
             raise InvalidToken
 
         rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
-        assert rotated.components.status(row) is ComponentStatus.UNREADABLE
+        assert rotated.components.read(row).status is ComponentStatus.UNREADABLE
         # Drift outranks it: without a resolvable key there is no schema to read against.
-        assert Store(catalog=il.Catalog(components={}), decrypt=_wrong_key).components.status(row) is (
+        assert Store(catalog=il.Catalog(components={}), decrypt=_wrong_key).components.read(row).status is (
             ComponentStatus.MISSING
         )
 
     def test_plaintext_rows_are_never_decrypted(self, demo_store: Store):
         row = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
         assert not row.encrypted
-        assert demo_store.components.status(row) is ComponentStatus.OK
+        assert demo_store.components.read(row).status is ComponentStatus.OK
 
     def test_a_standalone_asset_resolves_flat(self, store: Store):
         row = Component(org_id=_ORG, kind="asset", key="guard_upstream")
-        assert store.components.status(row) is ComponentStatus.OK
+        assert store.components.read(row).status is ComponentStatus.OK
 
 
 class TestReading:
@@ -980,15 +980,6 @@ class TestReading:
         assert reading.status is ComponentStatus.MISSING
         assert reading.config == {"cron": "0 * * * *"}
         assert reading.public_config == {}
-
-    def test_the_views_agree_with_the_reading(self, store: Store):
-        row = store.components.create(_ORG, kind="source", key="discriminated_source", config={"account_id": "42"})
-
-        reading = store.components.read(row)
-
-        assert store.components.status(row) is reading.status
-        assert store.components.discriminator(row) == reading.discriminator == "42"
-        assert store.components.public_config(row) == reading.public_config
 
 
 # -- Resource encoding ---------------------------------------------------------
@@ -1144,26 +1135,26 @@ class TestPublicConfig:
             config={"api_key": "s3cret", "auto_renew": False},
         )
 
-        assert store.components.public_config(row) == {"auto_renew": False}
+        assert store.components.read(row).public_config == {"auto_renew": False}
 
     def test_a_schema_without_public_fields_discloses_nothing(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         row = store.components.create(_ORG, kind="source", key="demo_source")
 
-        assert store.components.public_config(row) == {}
+        assert store.components.read(row).public_config == {}
 
     def test_a_drifted_key_discloses_nothing(self, component_db: Engine):
         store = Store(catalog=il.Catalog(components={}), encrypt=lambda b: b[::-1], decrypt=lambda b: b[::-1])
         row = store.components.create(_ORG, kind="connection", key="gone", config={"token": "s3cret"})
 
-        assert store.components.public_config(row) == {}
+        assert store.components.read(row).public_config == {}
 
     def test_a_drifted_source_key_discloses_nothing(self, component_db: Engine):
         writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
         row = writer.components.create(_ORG, kind="source", key="demo_source")
         reader = Store(catalog=il.Catalog(components={}))
 
-        assert reader.components.public_config(row) == {}
+        assert reader.components.read(row).public_config == {}
 
 
 class TestHydrateUnreadable:
@@ -1337,7 +1328,7 @@ class TestJobPartitionGranularity:
 
         with (
             Session(component_db) as session,
-            pytest.raises(ValueError, match="Job targets disagree on partition granularity"),
+            pytest.raises(ConfigError, match="Job targets disagree on partition granularity"),
         ):
             store.components.job_partition_granularity(session, job.id)
 

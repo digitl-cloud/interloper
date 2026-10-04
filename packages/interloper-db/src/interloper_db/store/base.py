@@ -33,19 +33,18 @@ class Store:
     interloper components. The store owns the engine, the catalog and the
     session policy; each area of the schema is a facet reached through it —
     ``store.components``, ``store.runs``, ``store.auth`` and so on. Hydration
-    is delegated to a :class:`~interloper_db.hydration.Hydrator` that builds
-    ``Spec`` trees; reconstruction happens at the call site via
-    ``spec.reconstruct()``.
+    is delegated to a :class:`~interloper_db.store.hydration.Hydrator` that
+    builds ``Spec`` trees, which :meth:`ComponentStore.load` reconstructs.
 
     Attributes:
-        auth: Profiles, sessions, organisations, members and invitations.
+        auth: Profiles and the sessions authenticating them.
+        organisations: Organisations, their members and their invitations.
         tokens: Personal access tokens.
         conversations: A member's conversations with the agent.
         relations: The vocabulary-checked edges between components.
-        components: Component CRUD and hydration, for every kind.
+        components: Component CRUD, hydration and catalog status, for every kind.
         events: Run events and the asset executions derived from them.
         runs: Runs and backfills.
-        drift: Whether a stored key still resolves against the catalog.
         quotas: Limit resolution, enforcement gates and the usage ledger.
     """
 

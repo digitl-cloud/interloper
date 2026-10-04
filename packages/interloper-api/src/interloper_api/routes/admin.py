@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import datetime as dt
 import inspect
-import logging
 from datetime import datetime
 from importlib import metadata
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
+from interloper_db import Role
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
@@ -25,14 +25,17 @@ from interloper_api.dependencies import (
     QuotaDefaultsDep,
     StoreDep,
     SuperAdminDep,
+    get_smtp_config,
 )
 from interloper_api.notifications import InvitationEmail
-
-logger = logging.getLogger(__name__)
+from interloper_api.routes.organisations import (
+    CreateOrganisationRequest,
+    InvitationResponse,
+    InviteRequest,
+    MemberResponse,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-_ROLES = {"viewer", "editor", "admin"}
 
 
 # -- Request & response models -------------------------------------------------
@@ -71,12 +74,6 @@ class AdminUserResponse(BaseModel):
     created_at: datetime | None = None
 
 
-class CreateOrganisationRequest(BaseModel):
-    """Request body for creating an organisation."""
-
-    name: str
-
-
 class UpdateOrganisationRequest(BaseModel):
     """Request body for renaming an organisation."""
 
@@ -89,43 +86,16 @@ class DeleteOrganisationRequest(BaseModel):
     name: str
 
 
-class MemberResponse(BaseModel):
-    """Organisation member."""
-
-    id: UUID
-    email: str
-    name: str | None = None
-    avatar_url: str | None = None
-    role: str
-
-
 class UpdateRoleRequest(BaseModel):
     """Request body for changing a member's role."""
 
-    role: str
+    role: Role
 
 
 class JoinOrganisationRequest(BaseModel):
     """Request body for a super-admin joining an organisation."""
 
-    role: str = "admin"
-
-
-class InviteRequest(BaseModel):
-    """Request body for inviting a user."""
-
-    email: str
-    role: str = "viewer"
-
-
-class InvitationResponse(BaseModel):
-    """Pending invitation."""
-
-    id: UUID
-    email: str
-    role: str
-    created_at: datetime | None = None
-    expires_at: datetime
+    role: Role = Role.ADMIN
 
 
 class AdminLauncherConfig(BaseModel):
@@ -595,59 +565,6 @@ def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
     return [AdminQuotaField(key=key, label=QUOTAS[key].label, default=defaults.get(key)) for key in QUOTAS]
 
 
-def _validate_role(role: str) -> str:
-    """Validate a role string or raise 400.
-
-    Args:
-        role: The role name submitted by the caller.
-
-    Returns:
-        The role unchanged.
-
-    Raises:
-        HTTPException: 400 when the role is none of viewer, editor, admin.
-    """
-    if role not in _ROLES:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
-    return role
-
-
-def _send_invitation_email(
-    request: Request,
-    invitation: Any,
-    org_name: str,
-    inviter_name: str,
-) -> None:
-    """Send the invitation email if SMTP is configured, never failing the request.
-
-    Args:
-        request: The incoming request, whose base URL the invite link is built on.
-        invitation: The stored invitation, read for its recipient and token.
-        org_name: The organisation name shown to the recipient.
-        inviter_name: The display name of the super-admin who invited.
-    """
-    from interloper_api.dependencies import get_smtp_config
-
-    smtp_config = get_smtp_config()
-    if not smtp_config or not smtp_config.enabled:
-        logger.warning("SMTP not configured; invitation email to %s not sent", invitation.email)
-        return
-
-    token = invitation.token
-    email = invitation.email
-    base_url = str(request.base_url).rstrip("/")
-    invite_url = f"{base_url}/invite/{token}"
-
-    try:
-        InvitationEmail(
-            org_name=org_name,
-            inviter_name=inviter_name,
-            invite_url=invite_url,
-        ).send(smtp_config, email)
-    except Exception:
-        logger.exception("Failed to send invitation email to %s", email)
-
-
 # -- Instance config -----------------------------------------------------------
 
 
@@ -1003,17 +920,7 @@ def list_members(
         Every member of the organisation with its role.
     """
     store.organisations.get(org_id)  # 404 before touching anything else
-    members = store.organisations.list_members(org_id)
-    return [
-        MemberResponse(
-            id=profile.id,
-            email=profile.email,
-            name=profile.name,
-            avatar_url=profile.avatar_url,
-            role=role,
-        )
-        for profile, role in members
-    ]
+    return [MemberResponse.from_profile(profile, role) for profile, role in store.organisations.list_members(org_id)]
 
 
 @router.post("/organisations/{org_id}/members", status_code=201)
@@ -1038,16 +945,9 @@ def join_organisation(
         HTTPException: 409 when the caller already belongs to the organisation.
     """
     store.organisations.get(org_id)  # 404 before touching anything else
-    _validate_role(body.role)
     if not store.organisations.add_member(org_id, user.id, body.role):
         raise HTTPException(status_code=409, detail="Already a member of this organisation")
-    return MemberResponse(
-        id=user.id,
-        email=user.email,
-        name=user.name,
-        avatar_url=user.avatar_url,
-        role=body.role,
-    )
+    return MemberResponse.from_profile(user, body.role.value)
 
 
 @router.patch("/organisations/{org_id}/members/{user_id}")
@@ -1070,7 +970,6 @@ def update_member_role(
     Returns:
         ``{"status": "ok"}`` once the role is written.
     """
-    _validate_role(body.role)
     store.organisations.update_member_role(org_id, user_id, body.role)
     return {"status": "ok"}
 
@@ -1118,14 +1017,8 @@ def list_invitations(
     """
     store.organisations.get(org_id)  # 404 before touching anything else
     return [
-        InvitationResponse(
-            id=inv.id,
-            email=inv.email,
-            role=inv.role,
-            created_at=inv.created_at,
-            expires_at=inv.expires_at,
-        )
-        for inv in store.organisations.list_invitations(org_id)
+        InvitationResponse.model_validate(invitation, from_attributes=True)
+        for invitation in store.organisations.list_invitations(org_id)
     ]
 
 
@@ -1153,24 +1046,16 @@ def invite_member(
         The created invitation.
     """
     org = store.organisations.get(org_id)
-    _validate_role(body.role)
     invitation = store.organisations.create_invitation(
         org_id=org_id,
         email=body.email.strip(),
         role=body.role,
         invited_by=user.id,
     )
-
-    inviter_name = user.name or user.email
-    _send_invitation_email(request, invitation, org.name, inviter_name)
-
-    return InvitationResponse(
-        id=invitation.id,
-        email=invitation.email,
-        role=invitation.role,
-        created_at=invitation.created_at,
-        expires_at=invitation.expires_at,
-    )
+    InvitationEmail.from_invitation(
+        invitation, org_name=org.name, inviter=user, base_url=str(request.base_url)
+    ).deliver(get_smtp_config(), invitation.email)
+    return InvitationResponse.model_validate(invitation, from_attributes=True)
 
 
 @router.delete("/organisations/{org_id}/invitations/{invitation_id}")
@@ -1183,8 +1068,8 @@ def cancel_invitation(
     """Cancel a pending invitation in any organisation.
 
     Args:
-        org_id: The organisation the invitation belongs to; it scopes the path
-            only, the invitation id alone identifying the row.
+        org_id: The organisation the invitation belongs to; an invitation of
+            another organisation reads as missing.
         invitation_id: The invitation to cancel.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
@@ -1192,5 +1077,5 @@ def cancel_invitation(
     Returns:
         ``{"status": "ok"}`` once the invitation is gone.
     """
-    store.organisations.delete_invitation(invitation_id)
+    store.organisations.delete_invitation(invitation_id, org_id=org_id)
     return {"status": "ok"}
