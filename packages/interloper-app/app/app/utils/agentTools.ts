@@ -21,7 +21,6 @@ const LABELS: Record<string, [running: string, done: string]> = {
     impact_analysis: ['Analysing impact', 'Analysed impact'],
     cross_source_dependencies: ['Finding cross-source dependencies', 'Found cross-source dependencies'],
     list_jobs: ['Listing jobs', 'Listed jobs'],
-    get_job_health: ['Checking job health', 'Checked job health'],
     toggle_job: ['Switching the job', 'Switched the job'],
     toggle_asset: ['Switching the asset', 'Switched the asset'],
     list_recent_runs: ['Reading recent runs', 'Read recent runs'],
@@ -36,11 +35,9 @@ const LABELS: Record<string, [running: string, done: string]> = {
     backfill_timeline: ['Reading the backfill\'s timeline', 'Read the backfill\'s timeline'],
     trigger_backfill: ['Starting the backfill', 'Started the backfill'],
     cancel_backfill: ['Canceling the backfill', 'Canceled the backfill'],
-    run_history_summary: ['Summarising run history', 'Summarised run history'],
+    job_health: ['Checking job health', 'Checked job health'],
     run_stats: ['Computing run statistics', 'Computed run statistics'],
-    partition_coverage: ['Checking partition coverage', 'Checked partition coverage'],
     asset_coverage: ['Checking asset coverage', 'Checked asset coverage'],
-    freshness_check: ['Checking data freshness', 'Checked data freshness'],
 }
 
 /** The label of a tool call in the given tense; a tool with no entry gets its name made readable. */

@@ -3,23 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-
-def job_zone(name: str | None) -> dt.tzinfo:
-    """Resolve a job's timezone name, falling back to UTC like the scheduler does.
-
-    Args:
-        name: The IANA name from the job's config; ``None`` or an empty name
-            means UTC.
-
-    Returns:
-        The zone, or UTC when the name is unknown or malformed.
-    """
-    try:
-        return ZoneInfo(name or "UTC")
-    except (ZoneInfoNotFoundError, ValueError, TypeError):
-        return dt.timezone.utc
 
 
 def format_duration(delta: dt.timedelta) -> str:

@@ -133,7 +133,6 @@ TOOLS: tuple[Tool, ...] = (
     Tool(lineage.cross_source_dependencies, Effect.READ),
     # Scheduling
     Tool(scheduling.list_jobs, Effect.READ),
-    Tool(scheduling.get_job_health, Effect.READ),
     Tool(scheduling.toggle_job, Effect.EDIT),
     Tool(scheduling.toggle_asset, Effect.EDIT),
     Tool(scheduling.list_recent_runs, Effect.READ),
@@ -149,9 +148,7 @@ TOOLS: tuple[Tool, ...] = (
     Tool(scheduling.trigger_backfill, Effect.LAUNCH),
     Tool(scheduling.cancel_backfill, Effect.CANCEL),
     # Analytics
-    Tool(analytics.run_history_summary, Effect.READ),
-    Tool(analytics.partition_coverage, Effect.READ),
-    Tool(analytics.freshness_check, Effect.READ),
+    Tool(analytics.job_health, Effect.READ),
     Tool(analytics.run_stats, Effect.READ),
     Tool(analytics.asset_coverage, Effect.READ),
 )

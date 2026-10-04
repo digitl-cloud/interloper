@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 
-from interloper_toolkit.stats import max_concurrent, percentile, window
+from interloper_toolkit.stats import max_concurrent, window
 
 _T0 = datetime.datetime(2026, 9, 29, 4, 0, tzinfo=datetime.timezone.utc)
 
@@ -27,17 +27,6 @@ class TestWindow:
         assert datetime.timedelta(hours=23) < datetime.datetime.now(tz=datetime.timezone.utc) - start
 
         assert window(None, None, default_days=None) == (None, None)
-
-
-class TestPercentile:
-    def test_nearest_rank(self):
-        values = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0]
-
-        assert percentile(values, 50) == 50.0
-        assert percentile(values, 90) == 90.0
-        assert percentile(values, 100) == 100.0
-        assert percentile([7.0], 90) == 7.0
-        assert percentile([], 50) is None
 
 
 class TestMaxConcurrent:

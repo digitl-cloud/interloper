@@ -28,7 +28,10 @@ from typing import Any, Literal
 from uuid import UUID
 
 from interloper_db.models import Backfill, Component, Event, Execution, Run
+from interloper_db.store.insights import AssetKeyCoverage, ErrorCause, JobCoverage, JobHealth, JobOutcome
 from pydantic import BaseModel
+
+_MISSING_RANGES_LIMIT = 20
 
 
 class ToolError(BaseModel):
@@ -512,24 +515,6 @@ class JobList(BaseModel):
     jobs: list[Component]
 
 
-class JobHealthStats(BaseModel):
-    """Success/failure statistics over a job's recent runs."""
-
-    total_recent_runs: int
-    success_count: int
-    failed_count: int
-    success_rate: float | None = None
-    avg_duration_seconds: float | None = None
-
-
-class JobHealth(BaseModel):
-    """A job's metadata plus health computed from its last runs."""
-
-    status: Literal["success"] = "success"
-    job: Component
-    health: JobHealthStats
-
-
 class RunList(BaseModel):
     """One page of the runs matching the filters."""
 
@@ -623,24 +608,6 @@ class BackfillList(BaseModel):
     backfills: list[Backfill]
 
 
-class ErrorCause(BaseModel):
-    """What an error text says about its cause, parsed once at read time.
-
-    ``fingerprint`` is what identical causes share and what error groups merge
-    on; ``summary`` is the one line a reader wants.
-    """
-
-    exception_type: str | None = None
-    http_status: int | None = None
-    method: str | None = None
-    host: str | None = None
-    path: str | None = None
-    vendor_code: int | None = None
-    vendor_subcode: int | None = None
-    fingerprint: str
-    summary: str
-
-
 class Scan(BaseModel):
     """How much an aggregate read, and whether its cap cut the read short."""
 
@@ -717,70 +684,6 @@ class BackfillTimeline(BaseModel):
 # -- Analytics ------------------------------------------------------------------
 
 
-class RunHistorySummary(BaseModel):
-    """Aggregate run statistics over a look-back period."""
-
-    status: Literal["success"] = "success"
-    period_days: int
-    component_id: str | None = None
-    total_runs: int
-    by_status: dict[str, int]
-    success_rate: float | None = None
-    avg_duration_seconds: float | None = None
-
-
-class PartitionCoverage(BaseModel):
-    """Which partition dates in a range have successful runs."""
-
-    status: Literal["success"] = "success"
-    component_id: str
-    start_date: str
-    end_date: str
-    total_days: int
-    covered_days: int
-    missing_days: int
-    coverage_percent: float
-    missing_dates: list[str]
-
-
-class JobFreshness(BaseModel):
-    """One job's data freshness."""
-
-    job: Component
-    last_success_at: datetime | None = None
-    hours_since_success: float | None = None
-    stale: bool
-
-
-class FreshnessReport(BaseModel):
-    """Freshness across all enabled jobs."""
-
-    status: Literal["success"] = "success"
-    total_jobs: int
-    stale_count: int
-    jobs: list[JobFreshness]
-
-
-class JobStats(BaseModel):
-    """One job's run statistics over a window.
-
-    ``stacks`` counts each unit of work once, by its latest attempt's status;
-    ``attempts`` counts every attempt. A retried stack is ``healed`` when a
-    later attempt succeeded and ``still_failing`` when none has.
-    """
-
-    job_id: UUID | None = None
-    job_name: str | None = None
-    stacks: dict[str, int]
-    attempts: int
-    duration_p50_s: float | None = None
-    duration_p90_s: float | None = None
-    duration_max_s: float | None = None
-    stacks_retried: int
-    healed: int
-    still_failing: int
-
-
 class RunStats(BaseModel):
     """One page of per-job run statistics over a window, most failures first."""
 
@@ -789,7 +692,65 @@ class RunStats(BaseModel):
     until: datetime | None = None
     count: int
     total: int
-    jobs: list[JobStats]
+    jobs: list[JobOutcome]
+
+
+class JobHealthRow(BaseModel):
+    """One job's state and its next firing.
+
+    A job is ``failing`` when it is enabled and its latest attempt failed, and
+    ``overdue`` when its scheduled slot passed more than 15 minutes ago
+    without the scheduler firing it. ``next_start_key``/``next_end_key``
+    bound the partitions the next firing covers.
+    """
+
+    job_id: UUID
+    job_name: str | None = None
+    enabled: bool
+    failing: bool
+    overdue: bool
+    latest_run_id: UUID | None = None
+    latest_status: str | None = None
+    last_success_at: datetime | None = None
+    next_run_at: datetime | None = None
+    next_start_key: str | None = None
+    next_end_key: str | None = None
+
+    @classmethod
+    def from_health(cls, health: JobHealth) -> JobHealthRow:
+        """Project a job's health.
+
+        Args:
+            health: The job's health.
+
+        Returns:
+            The row.
+        """
+        window = health.window
+        return cls(
+            job_id=health.job.id,
+            job_name=health.job.name,
+            enabled=health.job.enabled,
+            failing=health.failing,
+            overdue=health.overdue,
+            latest_run_id=health.latest_run.id if health.latest_run else None,
+            latest_status=health.latest_run.status if health.latest_run else None,
+            last_success_at=health.last_success_at,
+            next_run_at=health.next_run_at,
+            next_start_key=window.granularity.format(window.start) if window else None,
+            next_end_key=window.granularity.format(window.end) if window else None,
+        )
+
+
+class JobHealthReport(BaseModel):
+    """One page of the jobs' health, failing then overdue jobs first."""
+
+    status: Literal["success"] = "success"
+    failing: int
+    overdue: int
+    count: int
+    total: int
+    jobs: list[JobHealthRow]
 
 
 class PartitionRange(BaseModel):
@@ -798,14 +759,34 @@ class PartitionRange(BaseModel):
     start_key: str
     end_key: str
 
+    @classmethod
+    def from_keys(cls, missing: list[str], keys: list[str]) -> list[PartitionRange]:
+        """Collapse keys into runs of consecutive partitions.
+
+        Args:
+            missing: The keys to collapse, in *keys*' order.
+            keys: Every key of the range, in order.
+
+        Returns:
+            One inclusive range per run of consecutive keys.
+        """
+        position = {key: index for index, key in enumerate(keys)}
+        ranges: list[PartitionRange] = []
+        for key in missing:
+            if ranges and position[key] == position[ranges[-1].end_key] + 1:
+                ranges[-1].end_key = key
+            else:
+                ranges.append(cls(start_key=key, end_key=key))
+        return ranges
+
 
 class AssetCoverageRow(BaseModel):
     """One asset's partition coverage over a range.
 
     A partition is ``covered`` once any run's execution of the asset
-    succeeded, ``failed`` when every execution failed, and ``never_run`` when
-    no run executed the asset for it. ``missing`` lists the uncovered
-    partitions as ranges, at most 20 of them.
+    succeeded, ``failed`` when executions of it only failed, and
+    ``never_run`` when no run executed the asset for it. ``missing`` lists
+    the uncovered partitions as ranges, at most 20 of them.
     """
 
     asset_id: UUID
@@ -816,12 +797,34 @@ class AssetCoverageRow(BaseModel):
     missing: list[PartitionRange]
     missing_ranges_total: int
 
+    @classmethod
+    def from_coverage(cls, asset: AssetKeyCoverage, keys: list[str]) -> AssetCoverageRow:
+        """Count an asset's keys by state and range its uncovered ones.
+
+        Args:
+            asset: The asset's covered and failed keys.
+            keys: Every key of the range, in order.
+
+        Returns:
+            The row.
+        """
+        ranges = PartitionRange.from_keys([key for key in keys if key not in asset.covered], keys)
+        return cls(
+            asset_id=asset.asset_id,
+            asset_key=asset.asset_key,
+            covered=len(asset.covered),
+            failed=len(asset.failed),
+            never_run=len(keys) - len(asset.covered) - len(asset.failed),
+            missing=ranges[:_MISSING_RANGES_LIMIT],
+            missing_ranges_total=len(ranges),
+        )
+
 
 class AssetCoverage(BaseModel):
     """Per-asset partition coverage of a job over a range, least covered first.
 
-    The rollup counts the range's partitions by how many of the assets seen
-    in the range are covered for them: all, some, or none.
+    The rollup counts the range's partitions by how many of the job's assets
+    are covered for them: all, some, or none.
     """
 
     status: Literal["success"] = "success"
@@ -835,3 +838,36 @@ class AssetCoverage(BaseModel):
     count: int
     total: int
     assets: list[AssetCoverageRow]
+
+    @classmethod
+    def from_coverage(cls, coverage: JobCoverage, *, limit: int, offset: int) -> AssetCoverage:
+        """Page a job's coverage, least covered asset first, and roll its partitions up.
+
+        Args:
+            coverage: The job's coverage over the range.
+            limit: Maximum number of assets on the page.
+            offset: Number of assets to skip.
+
+        Returns:
+            The page, with the rollup over every asset.
+        """
+        keys = coverage.keys
+        assets = sorted(
+            (AssetCoverageRow.from_coverage(asset, keys) for asset in coverage.assets),
+            key=lambda row: (row.covered, row.asset_key or ""),
+        )
+        per_key = [sum(key in asset.covered for asset in coverage.assets) for key in keys]
+        everyone = len(coverage.assets)
+        page = assets[offset : offset + limit]
+        return cls(
+            component_id=coverage.job_id,
+            start_key=keys[0],
+            end_key=keys[-1],
+            partitions=len(keys),
+            all_covered=sum(count == everyone for count in per_key) if everyone else 0,
+            partly_covered=sum(0 < count < everyone for count in per_key),
+            none_covered=sum(count == 0 for count in per_key),
+            count=len(page),
+            total=len(assets),
+            assets=page,
+        )

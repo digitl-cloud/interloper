@@ -19,10 +19,10 @@ import logging
 from datetime import datetime, timezone, tzinfo
 from typing import Any, cast
 from uuid import uuid4
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import croniter
 from interloper.errors import ConfigError, QuotaExceededError
+from interloper.job.cron import CronJob
 from interloper.partitioning.time import TimePartitionWindow
 from interloper_db import Store
 from interloper_db.models import Component, Event
@@ -101,9 +101,9 @@ class CronController(Controller):
                 if not cron_expression:
                     continue
 
-                zone = self._job_zone(job, config)
+                zone = CronJob.zone(config)
                 next_run = self._calculate_next_run(cron_expression, now, zone)
-                scheduled_time = self._state_datetime(job, "next_run_at")
+                scheduled_time = job.state_datetime("next_run_at")
 
                 # New job: schedule for the future, don't run yet
                 if scheduled_time is None:
@@ -214,37 +214,10 @@ class CronController(Controller):
             The window, or ``None`` for an unpartitioned job (or one whose
             lookback is explicitly null).
         """
-        # A missing key means the model default (1); an explicit null opts out.
-        lookback = config.get("lookback", 1)
-        if not lookback:
+        if not config.get("lookback", 1):
             return None
         granularity = self._store.components.job_partition_granularity(session, job.id)
-        if granularity is None:
-            return None
-        return TimePartitionWindow.lookback(
-            now,
-            lookback=lookback,
-            offset=config.get("offset", 1),
-            granularity=granularity,
-        )
-
-    @staticmethod
-    def _state_datetime(job: Component, key: str) -> datetime | None:
-        """Parse a UTC ISO-8601 timestamp from a job's state.
-
-        Args:
-            job: The job row whose state is read.
-            key: State key holding the timestamp.
-
-        Returns:
-            The timestamp as an aware UTC datetime, or ``None`` when the key
-            is absent or empty.
-        """
-        value = (job.state or {}).get(key)
-        if not value:
-            return None
-        parsed = datetime.fromisoformat(value)
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        return CronJob.window(config, fires_at=now, granularity=granularity)
 
     @staticmethod
     def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
@@ -258,28 +231,6 @@ class CronController(Controller):
         job.stamp_state(**timestamps)
         session.add(job)
         session.flush()
-
-    @staticmethod
-    def _job_zone(job: Component, config: dict[str, Any]) -> tzinfo:
-        """Resolve the job's timezone from its raw config, defaulting to UTC.
-
-        The config was zoneinfo-validated at write time, but the scheduler
-        reads raw dicts — an unresolvable name (e.g. after a tzdata change)
-        must degrade to UTC rather than wedge the whole tick.
-
-        Args:
-            job: The job row, named in the warning when its zone is unknown.
-            config: The job's raw config payload.
-
-        Returns:
-            The job's zone, or UTC when the config carries none.
-        """
-        name = config.get("timezone") or "UTC"
-        try:
-            return ZoneInfo(name)
-        except (ZoneInfoNotFoundError, ValueError, TypeError):
-            logger.warning("Job '%s' has an unknown timezone %r - evaluating in UTC", job.name, name)
-            return timezone.utc
 
     def _calculate_next_run(self, cron_expression: str, base_time: datetime, zone: tzinfo) -> datetime:
         """Calculate the next run time from a cron expression.

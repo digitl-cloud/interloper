@@ -17,7 +17,7 @@ INSTRUCTIONS = (
     "Access to an interloper deployment: the catalog of available component "
     "definitions, the organisation's collection (sources, connections, "
     "destinations, jobs), asset lineage, run and backfill monitoring, "
-    "analytics (freshness, coverage, history, error breakdowns), and, for "
+    "analytics (job health, run statistics, coverage, error breakdowns), and, for "
     "tokens holding the editor role, the writes: editing components, creating "
     "sources and jobs, toggling, triggering, retrying and canceling runs and "
     "backfills. Connections are set up in the app; request_connection_setup "

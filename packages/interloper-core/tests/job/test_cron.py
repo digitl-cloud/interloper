@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from interloper.job.cron import CronJob
+from interloper.partitioning.time import TimeGranularity
 
 
 class TestTimezone:
@@ -38,3 +42,33 @@ class TestConcurrency:
         prop = CronJob.config_schema()["properties"]["concurrency"]
         assert prop["x-section"] == "Operation"
         assert prop["title"] == "Concurrency"
+
+
+class TestZone:
+    """A stored config's timezone resolves to its zone, anything unusable to UTC."""
+
+    def test_a_known_name_resolves(self) -> None:
+        assert CronJob.zone({"timezone": "Europe/Berlin"}) == ZoneInfo("Europe/Berlin")
+
+    @pytest.mark.parametrize("name", [None, "", "Not/AZone"])
+    def test_a_missing_or_unknown_name_falls_back_to_utc(self, name: str | None) -> None:
+        assert CronJob.zone({"timezone": name}).utcoffset(dt.datetime(2026, 1, 1)) == dt.timedelta(0)
+
+
+class TestWindow:
+    """The partitions a firing covers, counted back from the firing in the job's zone."""
+
+    def test_the_lookback_ends_offset_periods_before_the_local_firing(self) -> None:
+        fires_at = dt.datetime(2026, 3, 9, 23, 30, tzinfo=dt.timezone.utc)
+        config = {"timezone": "Europe/Berlin", "lookback": 3, "offset": 1}
+
+        window = CronJob.window(config, fires_at=fires_at, granularity=TimeGranularity.DAY)
+
+        assert window is not None
+        assert (window.start, window.end) == (dt.date(2026, 3, 7), dt.date(2026, 3, 9))
+
+    @pytest.mark.parametrize(("config", "granularity"), [({"lookback": 0}, TimeGranularity.DAY), ({}, None)])
+    def test_no_lookback_or_an_unpartitioned_job_has_no_window(
+        self, config: dict, granularity: TimeGranularity | None
+    ) -> None:
+        assert CronJob.window(config, fires_at=dt.datetime.now(dt.timezone.utc), granularity=granularity) is None

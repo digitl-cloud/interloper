@@ -1344,17 +1344,3 @@ class TestCoverage:
         response = client.get("/overview/coverage", params={"since": "2026-08-13", "until": "2026-08-12"})
 
         assert response.status_code == 422
-
-
-class TestPartitionSpan:
-    """Keys of any granularity span whole days."""
-
-    def test_hourly_monthly_and_yearly_keys_span_their_days(self):
-        assert overview_module.PartitionSpan.from_key("2026-08-12T23") == (dt.date(2026, 8, 12), dt.date(2026, 8, 12))
-        assert overview_module.PartitionSpan.from_key("2026-02") == (dt.date(2026, 2, 1), dt.date(2026, 2, 28))
-        assert overview_module.PartitionSpan.from_key("2025") == (dt.date(2025, 1, 1), dt.date(2025, 12, 31))
-
-    def test_spans_enclose_from_the_earliest_first_to_the_latest_last_day(self):
-        spans = [overview_module.PartitionSpan.from_key(key) for key in ("2026-08-15", "2026-08", "2026-07-31T23")]
-
-        assert overview_module.PartitionSpan.from_spans(spans) == (dt.date(2026, 7, 31), dt.date(2026, 8, 31))

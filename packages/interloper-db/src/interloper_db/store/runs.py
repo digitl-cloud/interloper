@@ -352,48 +352,6 @@ class RunStore:
             _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
 
-    def latest_by_target(self, org_id: UUID, *, component_kind: str | None = None) -> builtins.list[Run]:
-        """The most recent attempt of every target.
-
-        What a reader means by "the last time this job ran": the most recently
-        created attempt targeting the component, whatever stack it belongs to.
-        That attempt is necessarily the latest of its own stack, so no
-        per-stack reduction is needed. The runs of one backfill share their
-        creation instant, so a tie goes to the later partition key, then to
-        the greater id. Runs whose target was deleted have no target to
-        report on and are left out.
-
-        Args:
-            org_id: Organisation UUID.
-            component_kind: Keep targets of this kind; ``None`` keeps every kind.
-
-        Returns:
-            One run per target, newest first, with the target loaded.
-        """
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=col(Run.component_id),
-                order_by=(
-                    col(Run.created_at).desc(),
-                    col(Run.partition_key).desc().nulls_last(),
-                    col(Run.id).desc(),
-                ),
-            )
-            .label("rank")
-        )
-        ranked = (
-            select(col(Run.id), rank)
-            .where(Run.org_id == org_id, col(Run.component_id).is_not(None))
-            .subquery()
-        )
-        filters: builtins.list[Any] = [col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))]
-        if component_kind:
-            filters.append(col(Run.target).has(col(Component.kind) == component_kind))
-        with session_scope(self._engine) as session:
-            statement = select(Run).where(*filters).order_by(col(Run.created_at).desc()).options(*RUN_LOAD_OPTIONS)
-            return [*session.exec(statement).all()]
-
     @staticmethod
     def parse_partition(key: str) -> TimePartition:
         """Parse a caller-supplied partition key, rejecting one of no known shape.

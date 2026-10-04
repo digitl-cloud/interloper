@@ -8,59 +8,16 @@ paid in one place.
 
 from __future__ import annotations
 
-import builtins
-import datetime as dt
 from collections.abc import Sequence
-from typing import NamedTuple
 from uuid import UUID
 
-from interloper.partitioning import TimeGranularity
-from sqlalchemy import Engine, String, case, cast
-from sqlalchemy import select as sa_select
+from sqlalchemy import Engine
 from sqlalchemy.orm import aliased
 from sqlmodel import col, func, select
 
-from interloper_db.models import Execution, Run
+from interloper_db.models import Execution
 from interloper_db.session import session_scope
 from interloper_db.store.page import Page, PageQuery
-from interloper_db.store.runs import partition_key_range
-
-
-class PartitionExecution(NamedTuple):
-    """Whether one asset ever succeeded for one partition of a job.
-
-    Attributes:
-        partition_key: The partition.
-        component_id: The asset.
-        component_key: The asset's key.
-        succeeded: Whether any of its executions for that partition succeeded.
-    """
-
-    partition_key: str
-    component_id: UUID
-    component_key: str | None
-    succeeded: bool
-
-
-class CoverageRow(NamedTuple):
-    """Whether one asset ever succeeded or failed for one time partition, from runs of any target.
-
-    Attributes:
-        asset_id: The asset.
-        partition_key: The partition, in its own granularity's key format.
-        succeeded: Whether any execution of the asset for that partition succeeded.
-        failed: Whether any execution of the asset for that partition failed,
-            whether or not another one succeeded; an asset attempted but
-            neither succeeded nor failed (in flight, canceled) is neither.
-        failed_run_id: The greatest id among the runs whose execution of the
-            asset failed, or ``None``.
-    """
-
-    asset_id: UUID
-    partition_key: str
-    succeeded: bool
-    failed: bool
-    failed_run_id: UUID | None
 
 
 class ExecutionQuery(PageQuery):
@@ -136,93 +93,3 @@ class ExecutionStore:
             for run_id, status, count in session.exec(statement).all():
                 counts.setdefault(run_id, {})[status] = count
         return counts
-
-    def partition_coverage(
-        self, org_id: UUID, job_id: UUID, start_key: str, end_key: str
-    ) -> builtins.list[PartitionExecution]:
-        """Whether each asset ever succeeded, per partition of a job's runs.
-
-        Args:
-            org_id: Organisation UUID.
-            job_id: The job whose runs are read.
-            start_key: First partition key of the range.
-            end_key: Last partition key of the range (inclusive); must share
-                the start key's granularity.
-
-        Returns:
-            One row per partition and asset that executed at least once.
-        """
-        statement = (
-            select(
-                col(Run.partition_key),
-                col(Execution.component_id),
-                func.max(col(Execution.component_key)),
-                func.max(case((col(Execution.status) == "success", 1), else_=0)),
-            )
-            .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(
-                Execution.org_id == org_id,
-                Run.org_id == org_id,
-                Run.component_id == job_id,
-                *partition_key_range(start_key, end_key),
-            )
-            .group_by(col(Run.partition_key), col(Execution.component_id))
-        )
-        with session_scope(self._engine) as session:
-            return [
-                PartitionExecution(partition_key, component_id, component_key, bool(succeeded))
-                for partition_key, component_id, component_key, succeeded in session.exec(statement).all()
-                if partition_key is not None
-            ]
-
-    def coverage_rows(self, org_id: UUID) -> builtins.list[CoverageRow]:
-        """Per asset and time partition, all-time, whether it ever succeeded or failed.
-
-        Runs of every target count (a job, a source, the asset itself, a
-        backfill, a deleted target): coverage is a property of the asset's
-        data, not of what triggered it. Keys of every time granularity are
-        read, and of every period: the caller derives both each asset's
-        attempted span and a window's days from these rows, because any read
-        of the executions view scans the organisation's operation events
-        whole, so one all-time read costs less than a bounds read plus a
-        windowed one.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            One row per asset and time partition key that executed at least once.
-        """
-        key = col(Run.partition_key)
-        key_lengths = [
-            len(granularity.format(dt.datetime(2000, 1, 1)))
-            for granularity in TimeGranularity
-            if granularity.key_format is not None
-        ]
-        # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
-        failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Run.id), String))))
-        # The asset id comes back as text and is parsed once per asset: a UUID per row costs more than the roll-up.
-        asset = cast(col(Execution.component_id), String)
-        statement = (
-            sa_select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
-            .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(
-                col(Execution.org_id) == org_id,
-                col(Run.org_id) == org_id,
-                key.is_not(None),
-                func.length(key).in_(key_lengths),
-            )
-            .group_by(col(Execution.component_id), key)
-        )
-        asset_ids: dict[str, UUID] = {}
-        with session_scope(self._engine) as session:
-            return [
-                CoverageRow(
-                    asset_ids.get(asset_text) or asset_ids.setdefault(asset_text, UUID(asset_text)),
-                    partition_key,
-                    succeeded=bool(succeeded),
-                    failed=failed is not None,
-                    failed_run_id=UUID(failed) if failed else None,
-                )
-                for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
-            ]

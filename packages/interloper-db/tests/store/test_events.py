@@ -14,7 +14,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Event, Run
+from interloper_db.models import Event
 from interloper_db.store import EventQuery, Page, Store
 from interloper_db.store.events import EventStore
 
@@ -464,20 +464,6 @@ class TestFilters:
         assert store.events.list(_ORG_ID, EventQuery(limit=100)).total == 5
 
 
-@pytest.fixture
-def run_tables(store: Store) -> None:
-    """Add the runs table to the events-only database."""
-    Run.__table__.create(engine_module.get_engine())  # ty: ignore[unresolved-attribute]
-
-
-def _run(*, org_id: UUID = _ORG_ID, job_id: UUID | None = None, partition_key: str | None = None) -> UUID:
-    run_id = uuid4()
-    with Session(engine_module.get_engine()) as session:
-        session.add(Run(id=run_id, org_id=org_id, component_id=job_id, partition_key=partition_key, status="failed"))
-        session.commit()
-    return run_id
-
-
 def _error(run_id: UUID, event_type: str, error: str | None, *, second: int = 0, org_id: UUID = _ORG_ID) -> Event:
     return Event(
         id=uuid4(),
@@ -520,76 +506,3 @@ class TestHasError:
 
         assert [e.error for e in page.items] == ["boom"]
         assert page.total == 1
-
-
-@pytest.mark.usefixtures("run_tables")
-class TestErrorGroups:
-    """Error events collapse per job, run, component, type and text, loudest first."""
-
-    def test_identical_texts_collapse_per_run(self, store: Store) -> None:
-        job = uuid4()
-        run = _run(job_id=job)
-        _seed([_error(run, "operation_retried", "HTTPStatusError: 429", second=s) for s in range(3)])
-        _seed([_error(run, "operation_failed", "HTTPStatusError: 429", second=9)])
-
-        groups, truncated = store.events.error_groups(_ORG_ID, event_types=["operation_retried", "operation_failed"])
-
-        assert not truncated
-        assert [(g.event_type, g.count, g.job_id) for g in groups] == [
-            ("operation_retried", 3, job),
-            ("operation_failed", 1, job),
-        ]
-        assert groups[0].first_seen < groups[0].last_seen
-
-    def test_only_the_requested_types_with_an_error_are_read(self, store: Store) -> None:
-        run = _run()
-        _seed(
-            [
-                _error(run, "asset_data_failed", "boom"),
-                _error(run, "operation_failed", "boom", second=1),
-                _error(run, "operation_started", None, second=2),
-            ]
-        )
-
-        groups, _ = store.events.error_groups(_ORG_ID, event_types=["operation_failed"])
-
-        assert [g.event_type for g in groups] == ["operation_failed"]
-
-    def test_the_window_and_scope_filters_narrow_the_scan(self, store: Store) -> None:
-        job, other_job = uuid4(), uuid4()
-        mine, theirs = _run(job_id=job), _run(job_id=other_job)
-        _seed([_error(mine, "operation_failed", "early"), _error(mine, "operation_failed", "late", second=60)])
-        _seed([_error(theirs, "operation_failed", "other job", second=60)])
-        _seed([_error(_run(org_id=uuid4()), "operation_failed", "other org", org_id=uuid4(), second=60)])
-        types = ["operation_failed"]
-
-        windowed, _ = store.events.error_groups(_ORG_ID, event_types=types, since=_BASE_TS + timedelta(seconds=30))
-        by_job, _ = store.events.error_groups(_ORG_ID, event_types=types, job_id=job)
-        by_run, _ = store.events.error_groups(_ORG_ID, event_types=types, run_id=theirs)
-        until, _ = store.events.error_groups(_ORG_ID, event_types=types, until=_BASE_TS + timedelta(seconds=30))
-
-        assert {g.error for g in windowed} == {"late", "other job"}
-        assert {g.error for g in by_job} == {"early", "late"}
-        assert {g.error for g in by_run} == {"other job"}
-        assert {g.error for g in until} == {"early"}
-
-    def test_the_backfill_filter_reads_its_runs(self, store: Store) -> None:
-        backfill = uuid4()
-        run = uuid4()
-        with Session(engine_module.get_engine()) as session:
-            session.add(Run(id=run, org_id=_ORG_ID, backfill_id=backfill, status="failed"))
-            session.commit()
-        _seed([_error(run, "operation_failed", "in backfill"), _error(_run(), "operation_failed", "outside")])
-
-        groups, _ = store.events.error_groups(_ORG_ID, event_types=["operation_failed"], backfill_id=backfill)
-
-        assert [g.error for g in groups] == ["in backfill"]
-
-    def test_the_cap_reports_that_it_cut_groups_off(self, store: Store) -> None:
-        run = _run()
-        _seed([_error(run, "operation_failed", f"error {i}", second=i) for i in range(3)])
-
-        groups, truncated = store.events.error_groups(_ORG_ID, event_types=["operation_failed"], max_rows=2)
-
-        assert len(groups) == 2
-        assert truncated

@@ -3,22 +3,10 @@
 from __future__ import annotations
 
 import datetime as dt
-from zoneinfo import ZoneInfo
 
 import pytest
 
-from interloper_api.utils import format_duration, job_zone
-
-
-class TestJobZone:
-    """A job's timezone name resolves to its zone, anything unusable to UTC."""
-
-    def test_a_known_name_resolves(self):
-        assert job_zone("Europe/Berlin") == ZoneInfo("Europe/Berlin")
-
-    @pytest.mark.parametrize("name", [None, "", "Not/AZone"])
-    def test_a_missing_or_unknown_name_falls_back_to_utc(self, name: str | None):
-        assert job_zone(name).utcoffset(dt.datetime(2026, 1, 1)) == dt.timedelta(0)
+from interloper_api.utils import format_duration
 
 
 class TestFormatDuration:
