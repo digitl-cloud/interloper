@@ -147,9 +147,7 @@ class AssetEvidence:
         for asset in components:
             if asset.kind != "asset" or asset.id not in partitionings:
                 continue
-            group = by_id.get(asset.parent_id) if asset.parent_id else asset
-            if group is None:
-                continue
+            group = by_id[asset.parent_id] if asset.parent_id else asset
             evidence = []
             for row in rows_by_asset[asset.id]:
                 span = spans.get(row.partition_key)

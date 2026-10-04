@@ -6,7 +6,7 @@ import datetime as dt
 from uuid import UUID, uuid4
 
 from interloper_db.models import Run
-from interloper_db.store.insights.outcomes import JobOutcome
+from interloper_db.store.insights.outcomes import Activity, JobOutcome
 
 _T0 = dt.datetime(2026, 9, 29, 4, tzinfo=dt.timezone.utc)
 
@@ -44,3 +44,25 @@ class TestJobOutcome:
         outcomes = JobOutcome.from_runs([_attempt(quiet, None, 1, "success", 1), _attempt(loud, None, 1, "failed", 1)])
 
         assert [outcome.job_id for outcome in outcomes] == [loud, quiet]
+
+
+class TestActivity:
+    def test_only_attempts_that_succeeded_or_failed_inside_the_window_count(self):
+        now = _T0 + dt.timedelta(minutes=30)
+        job = uuid4()
+        canceled = _attempt(job, None, 1, "canceled", 10)
+        unfinished = _attempt(job, None, 1, "failed", 10)
+        unfinished.completed_at = None
+        stale = _attempt(job, None, 1, "success", -60 * 25)
+
+        activity = Activity.from_runs(
+            completed=[_attempt(job, None, 1, "success", 10), canceled, unfinished, stale],
+            running=[],
+            queued=0,
+            backfills=[],
+            backfill_counts={},
+            now=now,
+        )
+
+        assert (activity.runs.total, activity.runs.succeeded, activity.runs.failed) == (1, 1, 0)
+        assert activity.runs.hourly[-1].succeeded == 1
