@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
+from sqlalchemy import Engine
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
+
 from interloper_db.models import Component, Run
 
 
@@ -31,3 +36,17 @@ def test_event_metadata_without_target() -> None:
     metadata = run.event_metadata(None)
 
     assert metadata == {"run_id": str(run.id), "backfill_id": None, "org_id": str(run.org_id)}
+
+
+def test_a_stack_holds_one_run_per_attempt(auth_db: Engine) -> None:
+    org = uuid4()
+    root = Run(id=uuid4(), org_id=org)
+    root.root_run_id = root.id
+    with Session(auth_db) as session:
+        session.add(root)
+        session.commit()
+        session.add(Run(id=uuid4(), org_id=org, root_run_id=root.id, retry_of=root.id, attempt=2))
+        session.add(Run(id=uuid4(), org_id=org, root_run_id=root.id, retry_of=root.id, attempt=2))
+
+        with pytest.raises(IntegrityError):
+            session.commit()
