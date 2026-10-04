@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
-from interloper_db.store.organisations import INVITATION_EXPIRY_DAYS
+from interloper_db.store.invitations import INVITATION_EXPIRY_DAYS
 from typing_extensions import Self
 
 from interloper_api.notifications import InvitationEmail

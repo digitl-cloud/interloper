@@ -9,10 +9,12 @@ further tokens.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.errors import NotFoundError
+from interloper_db import Page, PageQuery, Role, TokenQuery
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
@@ -104,28 +106,30 @@ def list_tokens(
     user: ViewerDep,
     org_id: OrgIdDep,
     store: StoreDep,
-) -> list[TokenResponse]:
+    query: Annotated[PageQuery, Query()],
+) -> Page[TokenResponse]:
     """List the caller's tokens in the active organisation.
 
     Args:
         user: The authenticated caller, required to hold at least the viewer role.
         org_id: The active organisation, resolved from the session.
         store: The database store.
+        query: The window to read.
 
     Returns:
-        The caller's tokens, newest first, revoked and expired ones included,
-        as metadata only.
+        The page of the caller's tokens, newest first, revoked and expired
+        ones included, as metadata only.
     """
-    rows = store.tokens.list_all(user.id, org_id)
-    return [TokenResponse.model_validate(row, from_attributes=True) for row in rows]
+    tokens = store.tokens.list(user.id, TokenQuery(org_id=org_id, **query.model_dump()))
+    return tokens.map(lambda row: TokenResponse.model_validate(row, from_attributes=True))
 
 
-@router.delete("/{token_id}")
+@router.delete("/{token_id}", status_code=204)
 def revoke_token(
     token_id: UUID,
     user: CurrentUserDep,
     store: StoreDep,
-) -> dict[str, str]:
+) -> Response:
     """Revoke a token.
 
     The owner may revoke their own tokens; an org admin may revoke any token
@@ -138,7 +142,7 @@ def revoke_token(
         store: The database store.
 
     Returns:
-        A status acknowledgement.
+        An empty 204 response; the row stays, stamped revoked.
 
     Raises:
         HTTPException: 404 when the token does not exist, or when the caller
@@ -150,10 +154,7 @@ def revoke_token(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=detail) from None
 
-    if row.user_id != user.id:
-        role = store.organisations.member_role(user.id, row.organisation_id)
-        if role != "admin":
-            raise HTTPException(status_code=404, detail=detail)
-
+    if row.user_id != user.id and not Role.at_least(store.members.role(row.organisation_id, user.id), "admin"):
+        raise HTTPException(status_code=404, detail=detail)
     store.tokens.revoke(token_id)
-    return {"status": "revoked"}
+    return Response(status_code=204)

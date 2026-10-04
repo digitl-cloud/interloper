@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
@@ -15,7 +16,7 @@ const UBadge = resolveComponent('UBadge')
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
 
-const { apiFetchRaw } = useApi()
+const { apiFetch } = useApi()
 const backfillsStore = useBackfillsStore()
 const toast = useToast()
 const { confirm } = useConfirm()
@@ -39,9 +40,9 @@ async function fetchRuns() {
         })
         const [order] = sorting.value
         if (order) params.set('sort', `${order.desc ? '-' : ''}${order.id}`)
-        const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
-        backfillRuns.value = res._data ?? []
-        runsTotal.value = Number(res.headers.get('X-Total-Count') ?? backfillRuns.value.length)
+        const page = await apiFetch<Page<Run>>(`/runs?${params}`)
+        backfillRuns.value = page.items
+        runsTotal.value = page.total
     }
     finally {
         runsLoading.value = false

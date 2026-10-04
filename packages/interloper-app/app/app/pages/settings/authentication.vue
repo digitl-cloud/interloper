@@ -12,7 +12,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const toast = useToast()
 const { confirm } = useConfirm()
-const { apiFetch } = useApi()
+const { apiFetch, fetchAll } = useApi()
 
 const tokens = ref<PersonalAccessToken[]>([])
 const loading = ref(false)
@@ -42,7 +42,7 @@ const tabs = computed<NavigationMenuItem[]>(() => [
 async function loadTokens() {
     loading.value = true
     try {
-        tokens.value = await apiFetch<PersonalAccessToken[]>('/tokens')
+        tokens.value = await fetchAll<PersonalAccessToken>('/tokens')
     }
     catch (err) {
         console.error('[Settings] Failed to load tokens', err)

@@ -1,4 +1,4 @@
-"""Tests for the run/backfill lifecycle methods in ``RunStore`` (``store/runs.py``).
+"""Tests for the run lifecycle methods in ``RunStore`` (``store/runs.py``).
 
 These run against an in-memory SQLite database (only the runs/backfills
 tables) so status transitions are exercised against real SQL. The stack's
@@ -20,15 +20,17 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.partitioning.time import TimeGranularity
+from pydantic import ValidationError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
 from interloper_db import provision
 from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
-from interloper_db.store import Store
-from interloper_db.store.runs import create_backfill_runs, partition_key_range
+from interloper_db.store import RunQuery, RunStore, Store
+from interloper_db.store.runs import partition_key_range
 
 _ORG_ID = uuid4()
 
@@ -81,59 +83,23 @@ def store() -> Iterator[Store]:
 
 
 def _backfill(store: Store, *, days: int = 4, concurrency: int = 2) -> Backfill:
-    return store.runs.create_backfill(
+    """Start a daily backfill over a fresh job, from 2026-01-01 on.
+
+    Args:
+        store: The store under test.
+        days: How many daily partitions it spans.
+        concurrency: How many of its runs are queued at once.
+
+    Returns:
+        The created backfill.
+    """
+    return store.backfills.create(
         _ORG_ID,
+        component_id=_component(store, kind="job"),
         start_key="2026-01-01",
         end_key=f"2026-01-{days:02d}",
         concurrency=concurrency,
     )
-
-
-def _mark_dispatched(store: Store, backfill_id: UUID) -> UUID:
-    """Flip one queued run to dispatched, simulating a worker claim.
-
-    Returns:
-        The id of the run that was flipped.
-    """
-    with Session(store.engine) as session:
-        run = session.exec(select(Run).where(Run.backfill_id == backfill_id, Run.status == "queued")).first()
-        assert run is not None and run.id is not None
-        run.status = "dispatched"
-        session.add(run)
-        session.commit()
-        return run.id
-
-
-def _run_statuses(store: Store, backfill_id: UUID) -> dict[UUID, str]:
-    with Session(store.engine) as session:
-        runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
-        return {run.id: run.status for run in runs if run.id}
-
-
-def _runs_of(store: Store, backfill_id: UUID) -> list[Run]:
-    with Session(store.engine) as session:
-        return list(session.exec(select(Run).where(Run.backfill_id == backfill_id)).all())
-
-
-def _record_run_failure(store: Store, run_id: UUID, error: str) -> None:
-    with Session(store.engine) as session:
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=_ORG_ID,
-                run_id=run_id,
-                event_type="run_failed",
-                error=error,
-                timestamp=dt.datetime.now(dt.timezone.utc),
-            )
-        )
-        session.commit()
-
-
-def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
-    with Session(store.engine) as session:
-        runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
-        return {run.partition_key: run.status for run in runs if run.partition_key}
 
 
 def _component(store: Store, kind: str, key: str | None = None, name: str | None = None) -> UUID:
@@ -183,29 +149,6 @@ class TestRunTargetOperations:
         run = store.runs.create(_ORG_ID, component_id=target)
         assert run.billable is False
 
-    def test_backfill_runs_record_billable_from_the_operation(self, store: Store):
-        target = _component(store, kind="fake_plumbing")
-        backfill = store.runs.create_backfill(
-            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-03"
-        )
-        with Session(store.engine) as session:
-            runs = session.exec(select(Run).where(Run.backfill_id == backfill.id)).all()
-        assert len(runs) == 3
-        assert all(run.billable is False for run in runs)
-
-    def test_non_billable_backfill_skips_the_run_quota(self, store: Store):
-        from types import SimpleNamespace
-
-        from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
-
-        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=1)
-        with Session(store.engine) as session:
-            ledger = UsageLedger(session)
-            ledger.increment(_ORG_ID, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=1)
-            session.commit()
-        target = _component(store, kind="fake_plumbing")
-        store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
-
 
 class TestTargetResolution:
     """Runs carry their target component, eagerly joined and deletion-aware."""
@@ -223,20 +166,8 @@ class TestTargetResolution:
         assert run.target is not None
         assert (run.target.kind, run.target.key, run.target.name) == ("job", "job", "job")
 
-        listed = store.runs.list_all(_ORG_ID)
+        listed = store.runs.list(_ORG_ID, RunQuery()).items
         assert [r.target.key for r in listed if r.target] == ["job"]
-
-    def test_target_is_loaded_with_the_backfill(self, store: Store):
-        target = _component(store, kind="job")
-        created = store.runs.create_backfill(
-            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02"
-        )
-
-        assert created.target is not None and created.target.key == "job"
-        assert [b.target.key for b in store.runs.list_backfills(_ORG_ID) if b.target] == ["job"]
-        assert store.runs.get_backfill(created.id).target is not None
-        canceled = store.runs.cancel_backfill(created.id)
-        assert canceled.target is not None
 
     def test_deleted_target_resolves_to_none(self, store: Store):
         target = _component(store, kind="job")
@@ -266,11 +197,6 @@ class TestTargetResolution:
 
         assert retry.billable is False
 
-    def test_backfill_rejects_a_kind_with_no_workload(self, store: Store):
-        target = _component(store, kind="destination")
-        with pytest.raises(ConfigError, match="cannot be run"):
-            store.runs.create_backfill(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-02")
-
 
 class TestStackIdentity:
     """Every run belongs to a stack; a first attempt is its own root."""
@@ -281,13 +207,6 @@ class TestStackIdentity:
         assert run.root_run_id == run.id
         assert run.scheduled_for is None
         assert run.attempt == 1
-
-    def test_backfill_runs_are_each_their_own_root(self, store: Store) -> None:
-        backfill = _backfill(store)
-
-        with Session(store.engine) as session:
-            runs = session.exec(select(Run).where(Run.backfill_id == backfill.id)).all()
-        assert {run.root_run_id for run in runs} == {run.id for run in runs}
 
     def test_a_manual_retry_joins_its_predecessors_stack(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
@@ -377,9 +296,7 @@ class TestAutomaticRetry:
 
     def test_the_successor_stays_in_its_backfill(self, store: Store) -> None:
         target = _job_with_retry(store, max_attempts=2, delay=0)
-        backfill = store.runs.create_backfill(
-            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-01"
-        )
+        backfill = store.backfills.create(_ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-01")
         with Session(store.engine) as session:
             run = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
 
@@ -388,50 +305,6 @@ class TestAutomaticRetry:
         with Session(store.engine) as session:
             successor = session.exec(select(Run).where(Run.retry_of == run.id)).one()
         assert successor.backfill_id == backfill.id
-
-
-class TestBackfillStacks:
-    """A batch's verdict reads each stack's latest attempt, not every attempt."""
-
-    def _single_partition_backfill(self, store: Store, target: UUID) -> tuple[UUID, Run]:
-        backfill = store.runs.create_backfill(
-            _ORG_ID, component_id=target, start_key="2026-01-01", end_key="2026-01-01"
-        )
-        with Session(store.engine) as session:
-            run = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
-        assert backfill.id is not None
-        return backfill.id, run
-
-    def _successor(self, store: Store, run_id: UUID) -> Run:
-        with Session(store.engine) as session:
-            return session.exec(select(Run).where(Run.retry_of == run_id)).one()
-
-    def test_a_backfill_healed_by_a_retry_succeeds(self, store: Store) -> None:
-        target = _job_with_retry(store, max_attempts=2, delay=0)
-        backfill_id, first = self._single_partition_backfill(store, target)
-
-        store.runs.complete(first.id, success=False)
-        store.runs.complete(self._successor(store, first.id).id, success=True)
-
-        assert store.runs.get_backfill(backfill_id).status == "success"
-
-    def test_a_backfill_whose_stack_exhausts_its_budget_fails(self, store: Store) -> None:
-        target = _job_with_retry(store, max_attempts=2, delay=0)
-        backfill_id, first = self._single_partition_backfill(store, target)
-
-        store.runs.complete(first.id, success=False)
-        store.runs.complete(self._successor(store, first.id).id, success=False)
-
-        assert store.runs.get_backfill(backfill_id).status == "failed"
-
-    def test_a_pending_retry_keeps_the_backfill_open(self, store: Store) -> None:
-        target = _job_with_retry(store, max_attempts=2, delay=0)
-        backfill_id, first = self._single_partition_backfill(store, target)
-
-        store.runs.complete(first.id, success=False)
-
-        # The successor is queued, so the batch still has work in flight.
-        assert store.runs.get_backfill(backfill_id).status == "running"
 
 
 class TestStackNativeListing:
@@ -454,171 +327,48 @@ class TestStackNativeListing:
     def test_a_stack_is_one_row_at_its_latest_attempt(self, store: Store) -> None:
         first, successor = self._failed_then(store, success=True)
 
-        runs = store.runs.list_all(_ORG_ID)
+        runs = store.runs.list(_ORG_ID, RunQuery()).items
 
         assert [run.id for run in runs] == [successor.id]
         assert runs[0].attempt == 2
         assert first.id not in {run.id for run in runs}
 
-    def test_count_matches_the_listing(self, store: Store) -> None:
+    def test_the_total_matches_the_listing(self, store: Store) -> None:
         self._failed_then(store, success=True)
 
-        assert store.runs.count(_ORG_ID) == 1
+        page = store.runs.list(_ORG_ID, RunQuery())
+
+        assert len(page.items) == 1
+        assert page.total == 1
 
     def test_a_status_filter_reads_the_stacks_verdict(self, store: Store) -> None:
         # The first attempt failed, so a run-level filter would surface it; the
         # stack succeeded, and that is what a reader means by "failed runs".
         self._failed_then(store, success=True)
 
-        assert store.runs.list_all(_ORG_ID, status="failed") == []
-        assert len(store.runs.list_all(_ORG_ID, status="success")) == 1
+        assert store.runs.list(_ORG_ID, RunQuery(status="failed")).items == []
+        assert len(store.runs.list(_ORG_ID, RunQuery(status="success")).items) == 1
 
     def test_an_exhausted_stack_still_reads_as_failed(self, store: Store) -> None:
         self._failed_then(store, success=False)
 
-        assert len(store.runs.list_all(_ORG_ID, status="failed")) == 1
+        assert len(store.runs.list(_ORG_ID, RunQuery(status="failed")).items) == 1
 
     def test_a_stack_lists_its_attempts_newest_first(self, store: Store) -> None:
         first, successor = self._failed_then(store, success=True)
 
-        attempts = store.runs.list_all(_ORG_ID, root_run_id=first.root_run_id)
+        attempts = store.runs.list(_ORG_ID, RunQuery(root_run_id=first.root_run_id))
 
-        assert [run.id for run in attempts] == [successor.id, first.id]
-        assert store.runs.count(_ORG_ID, root_run_id=first.root_run_id) == 2
+        assert [run.id for run in attempts.items] == [successor.id, first.id]
+        assert attempts.total == 2
 
     def test_unretried_runs_are_unaffected(self, store: Store) -> None:
         first = store.runs.create(_ORG_ID)
         second = store.runs.create(_ORG_ID)
 
-        runs = store.runs.list_all(_ORG_ID)
+        runs = store.runs.list(_ORG_ID, RunQuery()).items
 
         assert {run.id for run in runs} == {first.id, second.id}
-
-
-class TestCreateBackfill:
-    """Dispatch order: newest partition first (ITLPR-120)."""
-
-    def test_the_newest_partitions_are_queued_first(self, store: Store):
-        backfill = _backfill(store, days=4, concurrency=2)
-
-        assert _partition_statuses(store, backfill.id) == {
-            "2026-01-01": "pending",
-            "2026-01-02": "pending",
-            "2026-01-03": "queued",
-            "2026-01-04": "queued",
-        }
-
-    def test_promotion_walks_backwards(self, store: Store):
-        backfill = _backfill(store, days=4, concurrency=1)
-        assert _partition_statuses(store, backfill.id)["2026-01-04"] == "queued"
-
-        dispatched = _mark_dispatched(store, backfill.id)
-        store.runs.complete(dispatched, success=True)
-
-        statuses = _partition_statuses(store, backfill.id)
-        assert statuses["2026-01-04"] == "success"
-        assert statuses["2026-01-03"] == "queued"
-        assert statuses["2026-01-02"] == "pending"
-
-    def test_concurrency_beyond_the_span_queues_everything(self, store: Store):
-        backfill = _backfill(store, days=2, concurrency=5)
-        assert set(_partition_statuses(store, backfill.id).values()) == {"queued"}
-
-    def test_rows_are_still_created_oldest_first(self, store: Store):
-        # `list_runs` orders by created_at desc, so creation order decides how
-        # the runs list reads: newest partition on top.
-        backfill = _backfill(store, days=3, concurrency=1)
-        with Session(store.engine) as session:
-            runs = session.exec(
-                select(Run).where(Run.backfill_id == backfill.id).order_by(col(Run.created_at))
-            ).all()
-        assert [run.partition_key for run in runs] == [
-            "2026-01-01",
-            "2026-01-02",
-            "2026-01-03",
-        ]
-
-    def test_inverted_range_is_rejected(self, store: Store):
-        with pytest.raises(ConfigError, match="ends before it starts"):
-            store.runs.create_backfill(_ORG_ID, start_key="2026-01-05", end_key="2026-01-01")
-
-
-class TestCreateBackfillRuns:
-    """The fan-out every backfill shares: newest `concurrency` queued, the rest pending."""
-
-    def test_queues_the_newest_partitions_and_leaves_the_rest_pending(self, store: Store):
-        window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 4))
-        with Session(store.engine) as session:
-            db_backfill = Backfill(
-                org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=2, status="running"
-            )
-            session.add(db_backfill)
-            session.flush()
-
-            create_backfill_runs(session, db_backfill, window)
-            session.commit()
-            backfill_id = db_backfill.id
-
-        assert store.runs.get_backfill(backfill_id).partitions == 4
-        assert _partition_statuses(store, backfill_id) == {
-            "2026-01-01": "pending",
-            "2026-01-02": "pending",
-            "2026-01-03": "queued",
-            "2026-01-04": "queued",
-        }
-
-    def test_creates_rows_oldest_first(self, store: Store):
-        window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
-        with Session(store.engine) as session:
-            db_backfill = Backfill(
-                org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-03", concurrency=1, status="running"
-            )
-            session.add(db_backfill)
-            session.flush()
-            create_backfill_runs(session, db_backfill, window)
-            session.commit()
-            runs = session.exec(
-                select(Run).where(Run.backfill_id == db_backfill.id).order_by(col(Run.created_at))
-            ).all()
-        assert [run.partition_key for run in runs] == ["2026-01-01", "2026-01-02", "2026-01-03"]
-
-
-class TestCancelBackfill:
-    def test_cancels_pending_and_queued_runs_only(self, store: Store):
-        backfill = _backfill(store)  # 2 queued + 2 pending
-        dispatched_id = _mark_dispatched(store, backfill.id)
-
-        canceled = store.runs.cancel_backfill(backfill.id)
-
-        assert canceled.status == "canceled"
-        assert canceled.completed_at is not None
-        statuses = _run_statuses(store, backfill.id)
-        assert statuses.pop(dispatched_id) == "dispatched"
-        assert set(statuses.values()) == {"canceled"}
-
-    def test_late_completion_does_not_resurrect_canceled_backfill(self, store: Store):
-        backfill = _backfill(store)
-        dispatched_id = _mark_dispatched(store, backfill.id)
-        store.runs.cancel_backfill(backfill.id)
-
-        completed = store.runs.complete(dispatched_id, success=True)
-
-        assert completed.status == "success"
-        assert store.runs.get_backfill(backfill.id).status == "canceled"
-        # The completion must not promote canceled runs back to queued.
-        statuses = _run_statuses(store, backfill.id)
-        statuses.pop(dispatched_id)
-        assert set(statuses.values()) == {"canceled"}
-
-    def test_cancel_terminal_backfill_raises(self, store: Store):
-        backfill = _backfill(store)
-        store.runs.cancel_backfill(backfill.id)
-        with pytest.raises(ConflictError, match="already canceled"):
-            store.runs.cancel_backfill(backfill.id)
-
-    def test_cancel_missing_backfill_raises(self, store: Store):
-        with pytest.raises(NotFoundError):
-            store.runs.cancel_backfill(uuid4())
 
 
 def _H(hours: int) -> dt.timedelta:
@@ -673,7 +423,7 @@ class TestListRunsWindow:
         inside = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
         after_window = _timed_run(store, started_at=base + _H(6), completed_at=base + _H(7))
 
-        found = store.runs.list_all(_ORG_ID, after=base, before=base + _H(4), limit=100)
+        found = store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(4), limit=100)).items
 
         assert {r.id for r in found} == {straddling_start, inside}
         assert before_window not in {r.id for r in found}
@@ -683,7 +433,7 @@ class TestListRunsWindow:
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         running = _timed_run(store, started_at=base - _H(5), completed_at=None)
 
-        found = store.runs.list_all(_ORG_ID, after=base, before=base + _H(1), limit=100)
+        found = store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(1), limit=100)).items
 
         assert [r.id for r in found] == [running]
 
@@ -691,23 +441,27 @@ class TestListRunsWindow:
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=None, completed_at=None)
 
-        assert store.runs.list_all(_ORG_ID, after=base, before=base + _H(1), limit=100) == []
-        assert store.runs.list_all(_ORG_ID, after=base, limit=100) == []
-        assert store.runs.count(_ORG_ID, after=base) == 0
+        assert store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(1), limit=100)).items == []
+        after_only = store.runs.list(_ORG_ID, RunQuery(after=base, limit=100))
+        assert after_only.items == []
+        assert after_only.total == 0
 
-    def test_count_matches_the_same_window(self, store: Store):
+    def test_the_total_matches_the_same_window(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2))
         _timed_run(store, started_at=base + _H(9), completed_at=base + _H(10))
 
-        assert store.runs.count(_ORG_ID, after=base, before=base + _H(4)) == 1
+        page = store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(4)))
+
+        assert len(page.items) == 1
+        assert page.total == 1
 
     def test_unbounded_listing_keeps_every_run(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         _timed_run(store, started_at=base, completed_at=base + _H(1))
         _timed_run(store, started_at=None, completed_at=None)
 
-        assert len(store.runs.list_all(_ORG_ID, limit=100)) == 2
+        assert len(store.runs.list(_ORG_ID, RunQuery(limit=100)).items) == 2
 
 
 class TestListRunsSort:
@@ -717,11 +471,12 @@ class TestListRunsSort:
         backfill = _backfill(store, days=5, concurrency=1)
 
         pages = [
-            store.runs.list_all(_ORG_ID, backfill_id=backfill.id, sort="partition_key", limit=2, offset=offset)
+            store.runs.list(_ORG_ID, RunQuery(backfill_id=backfill.id, sort="partition_key", limit=2, offset=offset))
             for offset in (0, 2, 4)
         ]
 
-        assert [[run.partition_key for run in page] for page in pages] == [
+        assert {page.total for page in pages} == {5}
+        assert [[run.partition_key for run in page.items] for page in pages] == [
             ["2026-01-01", "2026-01-02"],
             ["2026-01-03", "2026-01-04"],
             ["2026-01-05"],
@@ -730,7 +485,7 @@ class TestListRunsSort:
     def test_a_dash_prefix_sorts_descending(self, store: Store):
         backfill = _backfill(store, days=3, concurrency=1)
 
-        runs = store.runs.list_all(_ORG_ID, backfill_id=backfill.id, sort="-partition_key")
+        runs = store.runs.list(_ORG_ID, RunQuery(backfill_id=backfill.id, sort="-partition_key")).items
 
         assert [run.partition_key for run in runs] == ["2026-01-03", "2026-01-02", "2026-01-01"]
 
@@ -740,15 +495,16 @@ class TestListRunsSort:
         later = _timed_run(store, started_at=base + _H(2), completed_at=base + _H(3))
         never = _timed_run(store, started_at=None, completed_at=None)
 
-        ascending = store.runs.list_all(_ORG_ID, sort="started_at")
-        descending = store.runs.list_all(_ORG_ID, sort="-started_at")
+        ascending = store.runs.list(_ORG_ID, RunQuery(sort="started_at")).items
+        descending = store.runs.list(_ORG_ID, RunQuery(sort="-started_at")).items
 
         assert [run.id for run in ascending] == [earlier, later, never]
         assert [run.id for run in descending] == [later, earlier, never]
 
-    def test_an_unknown_field_is_rejected(self, store: Store):
-        with pytest.raises(ConfigError, match="Cannot sort runs by 'org_id'"):
-            store.runs.list_all(_ORG_ID, sort="-org_id")
+    def test_an_unknown_field_is_rejected(self):
+        # The query string binds straight to the model, so validation is the gate.
+        with pytest.raises(ValidationError, match="sort"):
+            RunQuery.model_validate({"sort": "-org_id"})
 
 
 class TestListRunsCompleted:
@@ -758,12 +514,12 @@ class TestListRunsCompleted:
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         never_started = _timed_run(store, started_at=None, completed_at=base + _H(1), status="failed")
 
-        by_completion = store.runs.list_all(_ORG_ID, completed_after=base, completed_before=base + _H(4))
-        by_overlap = store.runs.list_all(_ORG_ID, after=base, before=base + _H(4))
+        by_completion = store.runs.list(_ORG_ID, RunQuery(completed_after=base, completed_before=base + _H(4)))
+        by_overlap = store.runs.list(_ORG_ID, RunQuery(after=base, before=base + _H(4)))
 
-        assert [r.id for r in by_completion] == [never_started]
-        assert by_overlap == []
-        assert store.runs.count(_ORG_ID, completed_after=base, completed_before=base + _H(4)) == 1
+        assert [r.id for r in by_completion.items] == [never_started]
+        assert by_completion.total == 1
+        assert by_overlap.items == []
 
     def test_runs_not_completed_or_completed_outside_are_left_out(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
@@ -774,18 +530,18 @@ class TestListRunsCompleted:
         _timed_run(store, started_at=base, completed_at=None)
         _timed_run(store, started_at=None, completed_at=None, status="queued")
 
-        found = store.runs.list_all(_ORG_ID, completed_after=base, completed_before=base + _H(4))
+        found = store.runs.list(_ORG_ID, RunQuery(completed_after=base, completed_before=base + _H(4))).items
 
         assert {r.id for r in found} == {at_start, at_end}
-        assert len(store.runs.list_all(_ORG_ID, completed_before=base + _H(4))) == 3
+        assert len(store.runs.list(_ORG_ID, RunQuery(completed_before=base + _H(4))).items) == 3
 
     def test_completed_order_lists_the_most_recently_completed_first(self, store: Store):
         base = dt.datetime(2026, 2, 4, 12, 0, tzinfo=dt.timezone.utc)
         long_run = _timed_run(store, started_at=base, completed_at=base + _H(5), created_at=base)
         short_run = _timed_run(store, started_at=base + _H(1), completed_at=base + _H(2), created_at=base + _H(1))
 
-        by_created = store.runs.list_all(_ORG_ID)
-        by_completed = store.runs.list_all(_ORG_ID, sort="-completed_at")
+        by_created = store.runs.list(_ORG_ID, RunQuery()).items
+        by_completed = store.runs.list(_ORG_ID, RunQuery(sort="-completed_at")).items
 
         assert [r.id for r in by_created] == [short_run, long_run]
         assert [r.id for r in by_completed] == [long_run, short_run]
@@ -805,17 +561,12 @@ class TestGetAndComplete:
         with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
             store.runs.get(missing)
 
-    def test_another_orgs_run_and_backfill_read_as_missing(self, store: Store):
+    def test_another_orgs_run_reads_as_missing(self, store: Store):
         run = store.runs.create(_ORG_ID)
-        backfill = _backfill(store, days=1)
-        other = uuid4()
 
         assert store.runs.get(run.id, org_id=_ORG_ID).id == run.id
-        assert store.runs.get_backfill(backfill.id, org_id=_ORG_ID).id == backfill.id
         with pytest.raises(NotFoundError, match=f"Run {run.id} not found"):
-            store.runs.get(run.id, org_id=other)
-        with pytest.raises(NotFoundError, match=f"Backfill {backfill.id} not found"):
-            store.runs.get_backfill(backfill.id, org_id=other)
+            store.runs.get(run.id, org_id=uuid4())
 
     def test_complete_refuses_a_terminal_run(self, store: Store):
         # The reaper failing a run whose pod finally started must not overwrite
@@ -849,16 +600,53 @@ class TestGetAndComplete:
         with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
             store.runs.complete(missing, success=True)
 
-    def test_get_backfill_returns_it(self, store: Store):
-        backfill = _backfill(store)
 
-        assert store.runs.get_backfill(backfill.id).id == backfill.id
+class TestCompletionStamping:
+    """Completing a run stamps its target's ``last_run_at`` and ``last_run_status``."""
 
-    def test_get_missing_backfill_raises(self, store: Store):
-        missing = uuid4()
+    def _job_run(self, store: Store) -> tuple[UUID, UUID]:
+        """Insert a job and a running run targeting it, in an organisation of their own.
 
-        with pytest.raises(NotFoundError, match=f"Backfill {missing} not found"):
-            store.runs.get_backfill(missing)
+        Args:
+            store: The store under test.
+
+        Returns:
+            The job's id and the run's id.
+        """
+        org = uuid4()
+        with Session(store.engine) as session:
+            job = Component(org_id=org, kind="job", key="cron_job", name="J")
+            session.add(job)
+            session.flush()
+            run = Run(id=uuid4(), org_id=org, component_id=job.id, status="running")
+            session.add(run)
+            session.commit()
+            return job.id, run.id
+
+    def test_a_success_stamps_the_jobs_last_run_at_and_status(self, store: Store) -> None:
+        component_id, run_id = self._job_run(store)
+
+        completed = store.runs.complete(run_id, success=True)
+        assert completed.status == "success"
+        assert completed.completed_at is not None
+
+        with Session(store.engine) as session:
+            stamped = session.get(Component, component_id)
+            assert stamped is not None and stamped.state is not None
+            # SQLite round-trips the column naive; the stamped ISO string is aware UTC.
+            stamped_at = dt.datetime.fromisoformat(stamped.state["last_run_at"])
+            assert stamped_at == completed.completed_at.replace(tzinfo=dt.timezone.utc)
+            assert stamped.state["last_run_status"] == "success"
+
+    def test_a_failure_stamps_a_failed_status(self, store: Store) -> None:
+        component_id, run_id = self._job_run(store)
+
+        store.runs.complete(run_id, success=False)
+
+        with Session(store.engine) as session:
+            stamped = session.get(Component, component_id)
+            assert stamped is not None and stamped.state is not None
+            assert stamped.state["last_run_status"] == "failed"
 
 
 class TestPartitionKeyValidation:
@@ -872,6 +660,22 @@ class TestPartitionKeyValidation:
     def test_an_unrecognised_shape_is_rejected(self, store: Store):
         with pytest.raises(ConfigError):
             store.runs.create(_ORG_ID, partition_key="not-a-key")
+
+    @pytest.mark.parametrize(
+        ("key", "granularity"),
+        [
+            ("2026-08-21", TimeGranularity.DAY),
+            ("2026-08", TimeGranularity.MONTH),
+            ("2026", TimeGranularity.YEAR),
+            ("2026-08-21T13", TimeGranularity.HOUR),
+        ],
+    )
+    def test_parse_partition_reads_the_granularity_off_the_shape(self, key: str, granularity: TimeGranularity):
+        assert RunStore.parse_partition(key).granularity is granularity
+
+    def test_parse_partition_refuses_an_unknown_shape_as_a_config_error(self):
+        with pytest.raises(ConfigError):
+            RunStore.parse_partition("not-a-key")
 
 
 class TestRetryValidation:
@@ -956,141 +760,6 @@ class TestRetryValidation:
         assert retried.retry_scope == "failed"
 
 
-class TestBackfillGranularity:
-    """A backfill spans one granularity; mixed bounds fail closed."""
-
-    def test_mixed_granularity_bounds_are_rejected(self, store: Store):
-        with pytest.raises(ConfigError, match="must share one granularity"):
-            store.runs.create_backfill(_ORG_ID, start_key="2026-01", end_key="2026-01-05")
-
-    def test_a_monthly_span_is_accepted(self, store: Store):
-        backfill = store.runs.create_backfill(_ORG_ID, start_key="2026-01", end_key="2026-03")
-
-        assert backfill.partitions == 3
-
-
-class TestCountBackfillRuns:
-    """One partition count per status, per backfill, read off each stack's latest attempt."""
-
-    def test_counts_each_requested_backfill_by_status(self, store: Store):
-        first = _backfill(store, days=3, concurrency=2)
-        second = _backfill(store, days=1, concurrency=1)
-        unrequested = _backfill(store, days=1, concurrency=1)
-        queued = [run_id for run_id, status in _run_statuses(store, first.id).items() if status == "queued"]
-        store.runs.complete(queued[0], success=True)
-        store.runs.complete(queued[1], success=False)
-
-        counts = store.runs.count_backfill_runs([first.id, second.id])
-
-        assert counts == {
-            first.id: {"success": 1, "failed": 1, "queued": 1},
-            second.id: {"queued": 1},
-        }
-        assert unrequested.id not in counts
-        assert store.runs.count_backfill_runs([]) == {}
-
-    def test_a_retried_partition_counts_once_as_its_latest_attempt(self, store: Store):
-        backfill = _backfill(store, days=1, concurrency=1)
-        with Session(store.engine) as session:
-            first = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
-            first.status = "failed"
-            session.add(first)
-            session.add(
-                Run(
-                    org_id=_ORG_ID,
-                    backfill_id=backfill.id,
-                    partition_key=first.partition_key,
-                    status="success",
-                    retry_of=first.id,
-                    root_run_id=first.root_run_id,
-                    attempt=2,
-                )
-            )
-            session.commit()
-
-        assert store.runs.count_backfill_runs([backfill.id]) == {backfill.id: {"success": 1}}
-
-
-class TestFailedPartitions:
-    """A backfill's failed partitions, read off each stack's latest attempt, with their errors."""
-
-    def test_reads_the_latest_attempt_and_its_error(self, store: Store):
-        backfill = _backfill(store, days=3, concurrency=3)
-        by_partition = {
-            run.partition_key: run for run in _runs_of(store, backfill.id)
-        }
-        store.runs.complete(by_partition["2026-01-01"].id, success=True)
-        failed = by_partition["2026-01-02"]
-        store.runs.complete(failed.id, success=False)
-        _record_run_failure(store, failed.id, "boom")
-        healed = by_partition["2026-01-03"]
-        store.runs.complete(healed.id, success=False)
-        with Session(store.engine) as session:
-            session.add(
-                Run(
-                    org_id=_ORG_ID,
-                    backfill_id=backfill.id,
-                    partition_key=healed.partition_key,
-                    status="success",
-                    retry_of=healed.id,
-                    root_run_id=healed.root_run_id,
-                    attempt=2,
-                )
-            )
-            session.commit()
-
-        assert store.runs.failed_partitions(backfill.id) == [("2026-01-02", "boom")]
-
-    def test_lists_newest_first_and_tolerates_a_missing_error(self, store: Store):
-        backfill = _backfill(store, days=2, concurrency=2)
-        for run in _runs_of(store, backfill.id):
-            store.runs.complete(run.id, success=False)
-
-        assert store.runs.failed_partitions(backfill.id) == [("2026-01-02", None), ("2026-01-01", None)]
-
-
-class TestListActiveBackfills:
-    """The active listing covers the two non-terminal statuses, and counts what it lists."""
-
-    def test_running_and_queued_are_listed(self, store: Store):
-        backfill = _backfill(store)
-
-        active = store.runs.list_backfills(_ORG_ID, active_only=True)
-
-        assert [row.id for row in active] == [backfill.id]
-        assert store.runs.count_backfills(_ORG_ID, active_only=True) == 1
-
-    def test_a_terminal_backfill_is_excluded(self, store: Store):
-        backfill = _backfill(store)
-        with Session(store.engine) as session:
-            row = session.get(Backfill, backfill.id)
-            assert row is not None
-            row.status = "success"
-            session.add(row)
-            session.commit()
-
-        assert store.runs.list_backfills(_ORG_ID, active_only=True) == []
-
-    def test_another_orgs_backfills_are_excluded(self, store: Store):
-        _backfill(store)
-
-        assert store.runs.list_backfills(uuid4(), active_only=True) == []
-
-
-class TestListBackfills:
-    """The listing pages newest first and counts what it filters."""
-
-    def test_pages_newest_first_and_counts_the_whole_listing(self, store: Store):
-        created = [_backfill(store, days=2).id for _ in range(3)]
-
-        page = store.runs.list_backfills(_ORG_ID, limit=2, offset=1)
-
-        assert len(page) == 2
-        assert {row.id for row in page} <= set(created)
-        assert store.runs.count_backfills(_ORG_ID) == 3
-        assert store.runs.count_backfills(uuid4()) == 0
-
-
 class TestAllAttemptsAndPartitionRange:
     """``all_attempts`` keeps every attempt; a partition range bounds by key and granularity."""
 
@@ -1106,10 +775,13 @@ class TestAllAttemptsAndPartitionRange:
         first = self._add(store, status="failed")
         second = self._add(store, retry_of=first, root_run_id=first, attempt=2)
 
-        assert [run.id for run in store.runs.list_all(_ORG_ID)] == [second]
-        assert {run.id for run in store.runs.list_all(_ORG_ID, all_attempts=True)} == {first, second}
-        assert store.runs.count(_ORG_ID) == 1
-        assert store.runs.count(_ORG_ID, all_attempts=True) == 2
+        latest = store.runs.list(_ORG_ID, RunQuery())
+        every_attempt = store.runs.list(_ORG_ID, RunQuery(all_attempts=True))
+
+        assert [run.id for run in latest.items] == [second]
+        assert latest.total == 1
+        assert {run.id for run in every_attempt.items} == {first, second}
+        assert every_attempt.total == 2
 
     def test_partition_range_excludes_other_granularities(self, store: Store):
         inside = self._add(store, partition_key="2026-07-02")
@@ -1125,138 +797,63 @@ class TestAllAttemptsAndPartitionRange:
         assert len(partition_key_range("2026-07-01", "2026-07-31")) == 3
 
 
-class TestBackfillProgression:
-    """Completing a run advances the backfill, or terminates it."""
-
-    def test_the_backfill_succeeds_once_every_run_has(self, store: Store):
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
-        )
-        for run_id in _run_statuses(store, backfill.id):
-            store.runs.complete(run_id, success=True)
-
-        assert store.runs.get_backfill(backfill.id).status == "success"
-
-    def test_one_failure_without_fail_fast_still_finishes_as_failed(self, store: Store):
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2, fail_fast=False
-        )
-        run_ids = list(_run_statuses(store, backfill.id))
-        store.runs.complete(run_ids[0], success=False)
-        store.runs.complete(run_ids[1], success=True)
-
-        finished = store.runs.get_backfill(backfill.id)
-        assert finished.status == "failed"
-        assert finished.completed_at is not None
-
-    def test_fail_fast_cancels_the_pending_runs(self, store: Store):
-        # The remaining partitions are not worth spending once one failed.
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=1, fail_fast=True
-        )
-        first = next(
-            run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued"
-        )
-
-        store.runs.complete(first, success=False)
-
-        assert store.runs.get_backfill(backfill.id).status == "failed"
-        assert "pending" not in _run_statuses(store, backfill.id).values()
-
-    def test_a_completion_promotes_the_next_partition(self, store: Store):
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=1
-        )
-        first = next(
-            run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued"
-        )
-
-        store.runs.complete(first, success=True)
-
-        statuses = _partition_statuses(store, backfill.id)
-        assert statuses["2026-01-04"] == "success"
-        # Newest-first, matching the initial dispatch order.
-        assert statuses["2026-01-03"] == "queued"
-
-    def test_a_dispatched_run_holds_its_slot(self, store: Store):
-        # Between the queue's claim and the pod's first write a run is
-        # `dispatched`: still occupying its slot, not yet `running`.
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=2
-        )
-        _mark_dispatched(store, backfill.id)
-        second = _mark_dispatched(store, backfill.id)
-
-        store.runs.complete(second, success=True)
-
-        statuses = _partition_statuses(store, backfill.id)
-        assert list(statuses.values()).count("queued") == 1
-        assert statuses["2026-01-01"] == "pending"
-
-    def test_a_dispatched_run_keeps_the_backfill_open(self, store: Store):
-        backfill = store.runs.create_backfill(
-            _ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=2
-        )
-        _mark_dispatched(store, backfill.id)
-        second = _mark_dispatched(store, backfill.id)
-
-        store.runs.complete(second, success=True)
-
-        assert store.runs.get_backfill(backfill.id).status == "running"
-
-    def test_a_completion_outside_any_backfill_is_a_no_op(self, store: Store):
-        run = store.runs.create(_ORG_ID)
-
-        store.runs.complete(run.id, success=True)
-
-        assert store.runs.get(run.id).status == "success"
-
-
 class TestRunFilters:
-    """``list_all``/``count`` narrow on component, backfill, status and the target's identity."""
+    """``list`` narrows on component, backfill, status and the target's identity, and its total follows."""
 
     def test_the_component_filter_narrows_the_listing(self, store: Store):
         target = _component(store, kind="source")
         store.runs.create(_ORG_ID, component_id=target)
         store.runs.create(_ORG_ID)
 
-        assert len(store.runs.list_all(_ORG_ID, component_id=target)) == 1
-        assert store.runs.count(_ORG_ID, component_id=target) == 1
+        page = store.runs.list(_ORG_ID, RunQuery(component_id=target))
+
+        assert len(page.items) == 1
+        assert page.total == 1
 
     def test_the_backfill_filter_narrows_the_listing(self, store: Store):
         backfill = _backfill(store, days=2)
         store.runs.create(_ORG_ID)
 
-        assert len(store.runs.list_all(_ORG_ID, backfill_id=backfill.id)) == 2
-        assert store.runs.count(_ORG_ID, backfill_id=backfill.id) == 2
+        page = store.runs.list(_ORG_ID, RunQuery(backfill_id=backfill.id))
+
+        assert len(page.items) == 2
+        assert page.total == 2
 
     def test_the_status_filter_narrows_the_listing(self, store: Store):
         succeeded = store.runs.create(_ORG_ID)
         store.runs.complete(succeeded.id, success=True)
         store.runs.create(_ORG_ID)
 
-        assert [row.id for row in store.runs.list_all(_ORG_ID, status="success")] == [succeeded.id]
-        assert store.runs.count(_ORG_ID, status="success") == 1
+        page = store.runs.list(_ORG_ID, RunQuery(status="success"))
+
+        assert [row.id for row in page.items] == [succeeded.id]
+        assert page.total == 1
 
     def test_another_orgs_runs_are_never_listed(self, store: Store):
         store.runs.create(_ORG_ID)
 
-        assert store.runs.list_all(uuid4()) == []
-        assert store.runs.count(uuid4()) == 0
+        page = store.runs.list(uuid4(), RunQuery())
+
+        assert page.items == []
+        assert page.total == 0
 
     def test_the_kind_filter_narrows_to_the_targets_kind(self, store: Store):
         job = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
         store.runs.create(_ORG_ID, component_id=_component(store, kind="source"))
 
-        assert [row.id for row in store.runs.list_all(_ORG_ID, component_kind="job")] == [job.id]
-        assert store.runs.count(_ORG_ID, component_kind="job") == 1
+        page = store.runs.list(_ORG_ID, RunQuery(component_kind="job"))
+
+        assert [row.id for row in page.items] == [job.id]
+        assert page.total == 1
 
     def test_the_key_filter_narrows_to_the_targets_type(self, store: Store):
         facebook = store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="facebook_ads"))
         store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="google_ads"))
 
-        assert [row.id for row in store.runs.list_all(_ORG_ID, component_key="facebook_ads")] == [facebook.id]
-        assert store.runs.count(_ORG_ID, component_key="facebook_ads") == 1
+        page = store.runs.list(_ORG_ID, RunQuery(component_key="facebook_ads"))
+
+        assert [row.id for row in page.items] == [facebook.id]
+        assert page.total == 1
 
     def test_the_search_matches_the_targets_name_or_key_case_insensitively(self, store: Store):
         named = _component(store, kind="source", key="s1", name="Swarovski FB")
@@ -1266,9 +863,10 @@ class TestRunFilters:
         store.runs.create(_ORG_ID, component_id=_component(store, kind="source", key="s2", name="Other"))
         store.runs.create(_ORG_ID)
 
-        listed = {row.id for row in store.runs.list_all(_ORG_ID, q="SWARO")}
-        assert listed == {by_name.id, by_key.id}
-        assert store.runs.count(_ORG_ID, q="SWARO") == 2
+        page = store.runs.list(_ORG_ID, RunQuery(q="SWARO"))
+
+        assert {row.id for row in page.items} == {by_name.id, by_key.id}
+        assert page.total == 2
 
 
 class TestLatestByTarget:

@@ -15,10 +15,10 @@ JSON Schema of its state model, and its relation vocabulary. The API serves the 
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/catalog/` | Every enabled definition, keyed by component key. |
-| `GET /api/catalog/{key}` | One definition. |
-| `GET /api/catalog/kind/{kind}` | Definitions of one kind. |
+| `GET /api/catalog` | Every enabled definition, keyed by component key. |
 | `GET /api/catalog/resource-kinds` | The resource kinds present (`connection`, `config`, …). |
+| `POST /api/catalog/{key}/check` | A live check of a connection's unsaved config. |
+| `POST /api/catalog/{key}/resolve` | The options of a provider-backed FetchField. |
 | `GET /api/oauth/providers` | Which OAuth providers have in-house app credentials configured. |
 
 The app loads the catalog once and reads everything below from it. The sidebar's "Entities"
@@ -107,7 +107,7 @@ when the selected targets are partitioned, with a preview of what a run covers.
 
 A `FetchField(provider="connection.accounts")` renders as a dropdown that fills itself once the
 `connection` relation is filled. The form posts the component key, the field name and that
-component's credentials to `POST /api/components/resolve`; the API reads the provider reference
+component's credentials to `POST /api/catalog/{key}/resolve`; the API reads the provider reference
 from its own copy of the schema (never from the client), instantiates the resource, calls the
 method, and returns the items. Only methods marked `@fetch_field_provider` may be called this
 way. Until the relation is filled, the field degrades to a text input.
@@ -143,7 +143,7 @@ and `last_renewal_error`, hooks show `last_fired_at` and `last_error`. Propertie
 
 | Definition field | UI |
 |------------------|----|
-| `ResourceDefinition.checkable` | A "Test connection" action calling `POST /api/components/check`, which runs the class's `check()` against the unsaved form values and surfaces `ConnectionCheckError` messages under the fields. |
+| `ResourceDefinition.checkable` | A "Test connection" action calling `POST /api/catalog/{key}/check`, which runs the class's `check()` against the unsaved form values and surfaces `ConnectionCheckError` messages under the fields. |
 | `ResourceDefinition.renewable` | A "Renew now" action and the `auto_renew` toggle; both disappear for classes without a renewal flow. |
 | `AssetDefinition.partitioning` | Partition pickers on manual runs and backfills, with the granularity's key shape (`2026-08`, `2026-08-21`, …). |
 | `AssetDefinition.asset_schema` | The column list shown for each asset. |

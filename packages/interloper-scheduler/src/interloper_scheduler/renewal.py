@@ -130,11 +130,11 @@ class RenewalController(Controller):
         Returns:
             The stored ``auto_renew`` value, defaulting to True.
         """
-        try:
-            return bool(self._store.components.decode_config(connection).get("auto_renew", True))
-        except Exception:  # noqa: BLE001 — any decode failure means the run would fail too
+        config = self._store.components.read(connection).config
+        if config is None:
             logger.warning("Cannot decode config of connection %s; skipping renewal", connection.id)
             return False
+        return bool(config.get("auto_renew", True))
 
     @staticmethod
     def _has_open_run(session: Session, connection: Component) -> bool:

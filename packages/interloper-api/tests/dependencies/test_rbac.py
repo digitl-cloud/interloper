@@ -19,6 +19,7 @@ from interloper_db import Profile, Store
 
 from interloper_api.dependencies import (
     authorize_org_member,
+    authorize_organisation,
     get_current_user,
     get_org_id,
     get_store,
@@ -35,22 +36,34 @@ _USER_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing only ``organisations.member_role``."""
+    """Stand-in exposing ``members.role`` and ``organisations.get``."""
 
-    def __init__(self, role: str | None) -> None:
+    def __init__(self, role: str | None, live_orgs: set[UUID] | None = None) -> None:
         """Set up the fake.
 
         Args:
             role: Role the user holds in any organisation asked about;
                 ``None`` means not a member.
+            live_orgs: Organisations ``organisations.get`` finds; every
+                other id raises ``NotFoundError``. ``None`` means every
+                organisation exists.
         """
         self.asked: list[tuple[UUID, UUID]] = []
+        self.fetched: list[UUID] = []
         self._role = role
-        self.organisations = SimpleNamespace(member_role=self._member_role)
+        self._live_orgs = live_orgs
+        self.members = SimpleNamespace(role=self._member_role)
+        self.organisations = SimpleNamespace(get=self._get_organisation)
 
-    def _member_role(self, user_id: UUID, org_id: UUID) -> str | None:
-        self.asked.append((user_id, org_id))
+    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
+        self.asked.append((org_id, user_id))
         return self._role
+
+    def _get_organisation(self, org_id: UUID) -> SimpleNamespace:
+        self.fetched.append(org_id)
+        if self._live_orgs is not None and org_id not in self._live_orgs:
+            raise NotFoundError(f"Organisation {org_id} not found")
+        return SimpleNamespace(id=org_id)
 
 
 def _profile(is_super_admin: bool = False) -> Profile:
@@ -87,7 +100,7 @@ class TestAuthorizeOrgMember:
 
         authorize_org_member(_profile(), _ORG_ID, cast(Store, store), minimum="viewer")
 
-        assert store.asked == [(_USER_ID, _ORG_ID)]
+        assert store.asked == [(_ORG_ID, _USER_ID)]
 
     def test_a_member_above_the_minimum_passes(self) -> None:
         authorize_org_member(_profile(), _ORG_ID, _store("admin"), minimum="editor")
@@ -117,6 +130,45 @@ class TestAuthorizeOrgMember:
             authorize_org_member(_profile(), _ORG_ID, _store("bogus"), minimum="viewer")
 
         assert excinfo.value.status_code == 403
+
+
+class TestAuthorizeOrganisation:
+    """Organisation-addressed routes serve members by role and super-admins on any live org."""
+
+    def test_a_member_with_enough_role_passes(self) -> None:
+        store = FakeStore("admin")
+
+        authorize_organisation(_profile(), _ORG_ID, cast(Store, store), minimum="admin")
+
+        assert store.asked == [(_ORG_ID, _USER_ID)]
+
+    def test_a_member_with_too_low_a_role_gets_a_403(self) -> None:
+        with pytest.raises(HTTPException) as excinfo:
+            authorize_organisation(_profile(), _ORG_ID, _store("viewer"), minimum="admin")
+
+        assert excinfo.value.status_code == 403
+        assert excinfo.value.detail == "Requires admin role or higher"
+
+    def test_a_non_member_reads_the_organisation_as_missing(self) -> None:
+        with pytest.raises(HTTPException) as excinfo:
+            authorize_organisation(_profile(), _ORG_ID, _store(None))
+
+        assert excinfo.value.status_code == 404
+        assert excinfo.value.detail == f"Organisation {_ORG_ID} not found"
+
+    def test_a_super_admin_passes_on_any_organisation_without_membership(self) -> None:
+        store = FakeStore(None)
+
+        authorize_organisation(_profile(is_super_admin=True), _OTHER_ORG_ID, cast(Store, store), minimum="admin")
+
+        assert store.fetched == [_OTHER_ORG_ID]
+        assert store.asked == []
+
+    def test_a_super_admin_still_gets_a_404_on_a_missing_organisation(self) -> None:
+        store = FakeStore(None, live_orgs=set())
+
+        with pytest.raises(NotFoundError):
+            authorize_organisation(_profile(is_super_admin=True), _ORG_ID, cast(Store, store))
 
 
 class TestLoadAuthorized:
@@ -189,7 +241,7 @@ class TestLoadAuthorized:
 
         load_authorized(lambda _id: entity, entity.id, _profile(), cast(Store, store), label="Asset")
 
-        assert store.asked == [(_USER_ID, _OTHER_ORG_ID)]
+        assert store.asked == [(_OTHER_ORG_ID, _USER_ID)]
 
 
 def _gate_client(gate: Any, store: FakeStore | Store, user: Profile) -> TestClient:

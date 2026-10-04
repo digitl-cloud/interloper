@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from interloper.partitioning.time import TimePartition
+from interloper_db import ComponentQuery, RunQuery
 
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
@@ -44,8 +45,8 @@ def run_history_summary(
     try:
         jid = UUID(component_id) if component_id else None
         cutoff = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=days)
-        total = ctx.store.runs.count(ctx.org_id, component_id=jid, after=cutoff)
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=jid, after=cutoff, limit=total)
+        runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=jid, after=cutoff, limit=None)).items
+        total = len(runs)
 
         by_status: dict[str, int] = {}
         durations: list[float] = []
@@ -84,8 +85,7 @@ def partition_coverage(
     """
     try:
         job = ctx.store.components.get(UUID(component_id), kind="job", org_id=ctx.org_id)
-        total = ctx.store.runs.count(ctx.org_id, component_id=job.id, status="success")
-        runs = ctx.store.runs.list_all(ctx.org_id, component_id=job.id, status="success", limit=total)
+        runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=job.id, status="success", limit=None)).items
 
         start = datetime.date.fromisoformat(start_date)
         end = datetime.date.fromisoformat(end_date)
@@ -137,7 +137,7 @@ def freshness_check(ctx: ToolkitContext) -> FreshnessReport | ToolError:
     any that haven't succeeded in over 24 hours.
     """
     try:
-        jobs = ctx.store.components.list_all(ctx.org_id, kinds=["job"])
+        jobs = ctx.store.components.list(ctx.org_id, ComponentQuery(kind=["job"], roots_only=False, limit=None)).items
         now = datetime.datetime.now(tz=datetime.timezone.utc)
 
         results = []
@@ -145,7 +145,7 @@ def freshness_check(ctx: ToolkitContext) -> FreshnessReport | ToolError:
             if not (job.config or {}).get("enabled", True):
                 continue
             component_id = job.id
-            runs = ctx.store.runs.list_all(ctx.org_id, component_id=component_id, status="success", limit=1)
+            runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=component_id, status="success", limit=1)).items
             last_success = runs[0] if runs else None
 
             hours_since = None
@@ -193,14 +193,14 @@ def run_stats(
     """
     try:
         start, end = window(since, until, default_days=7)
-        filters: dict[str, Any] = {
-            "component_id": UUID(component_id) if component_id else None,
-            "after": start,
-            "before": end,
-            "all_attempts": True,
-        }
-        total = ctx.store.runs.count(ctx.org_id, **filters)
-        runs = ctx.store.runs.list_all(ctx.org_id, **filters, limit=total)
+        query = RunQuery(
+            component_id=UUID(component_id) if component_id else None,
+            after=start,
+            before=end,
+            all_attempts=True,
+            limit=None,
+        )
+        runs = ctx.store.runs.list(ctx.org_id, query).items
 
         stacks: dict[UUID | None, dict[UUID, list[Any]]] = {}
         names: dict[UUID | None, str | None] = {}
@@ -282,7 +282,7 @@ def asset_coverage(
         granularity = first.granularity
         expected = [granularity.format(value) for value in granularity.period_range(first.value, last.value)]
 
-        rows = ctx.store.events.partition_coverage(ctx.org_id, job.id, start_key, end_key)
+        rows = ctx.store.executions.partition_coverage(ctx.org_id, job.id, start_key, end_key)
         keys: dict[UUID, str | None] = {}
         attempted: dict[UUID, set[str]] = {}
         covered: dict[UUID, set[str]] = {}

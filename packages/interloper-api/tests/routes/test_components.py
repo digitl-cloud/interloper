@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.routes.components`` type-level operations (resolve + check)."""
+"""Tests for ``interloper_api.routes.components``: component CRUD, relations and partition counts."""
 
 from __future__ import annotations
 
@@ -6,10 +6,9 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-import httpx2
 import interloper as il
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import (
     CatalogKeyError,
@@ -20,14 +19,10 @@ from interloper.errors import (
     InUseError,
     NotFoundError,
 )
-from interloper_assets.facebook_ads import connection as fb_connection
-from interloper_assets.facebook_ads.connection import FacebookAdsConnection
-from interloper_assets.facebook_ads.source import FacebookAds
-from interloper_db import Component, ComponentReading, ComponentStatus, DeleteImpact, Store
+from interloper_db import Component, ComponentQuery, ComponentReading, ComponentStatus, DeleteImpact, Page, Store
 
 from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import (
-    get_catalog,
     get_current_user,
     get_org_id,
     get_store,
@@ -35,163 +30,6 @@ from interloper_api.dependencies import (
     require_viewer,
 )
 from interloper_api.routes import components as components_module
-
-CONNECTION_CONFIG = {"access_token": "TOK", "app_id": "A", "app_secret": "S", "_id": "x"}
-
-
-class UncheckableConnection(il.Connection):
-    """A connection with no ``check()`` hook — module-level so its path imports."""
-
-    api_key: str = il.SecretField()
-
-
-def _client(catalog: il.Catalog) -> TestClient:
-    app = FastAPI()
-    install_error_handlers(app)
-    app.include_router(components_module.router)
-    app.dependency_overrides[require_editor] = lambda: None
-    app.dependency_overrides[get_catalog] = lambda: catalog
-    return TestClient(app)
-
-
-@pytest.fixture
-def source_catalog() -> il.Catalog:
-    return il.Catalog.from_assets([FacebookAds])
-
-
-@pytest.fixture
-def connection_catalog() -> il.Catalog:
-    return il.Catalog(components={FacebookAdsConnection.key: FacebookAdsConnection.definition()})
-
-
-@pytest.fixture
-def mock_graph(monkeypatch: pytest.MonkeyPatch):
-    """Patch the Facebook connection's httpx2 client with a mock transport.
-
-    Returns:
-        The list the transport records each handled request into.
-    """
-
-    def install(handler) -> None:
-        real_client = httpx2.AsyncClient
-
-        def factory(*args, **kwargs):
-            kwargs["transport"] = httpx2.MockTransport(handler)
-            return real_client(*args, **kwargs)
-
-        monkeypatch.setattr(fb_connection.httpx2, "AsyncClient", factory)
-
-    return install
-
-
-class TestResolve:
-    def test_resolves_provider_options(self, source_catalog: il.Catalog, mock_graph):
-        captured: list[httpx2.Request] = []
-
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            captured.append(request)
-            return httpx2.Response(
-                200,
-                json={
-                    "data": [
-                        {"account_id": "111", "name": "Acme", "account_status": 1},
-                        {"account_id": "222", "name": "Paused", "account_status": 2},  # filtered out
-                    ]
-                },
-            )
-
-        mock_graph(handler)
-
-        resp = _client(source_catalog).post(
-            "/components/resolve",
-            json={
-                "component_key": "facebook_ads",
-                "field": "account_id",
-                # Credentials carry an internal _id marker that must be stripped.
-                "deps": {"connection": CONNECTION_CONFIG},
-            },
-        )
-
-        assert resp.status_code == 200
-        assert resp.json() == [{"account_id": "111", "name": "Acme"}]
-        # The connection's access token reached the Graph call; _id was not sent as a field.
-        assert captured[0].url.params["access_token"] == "TOK"
-
-    def test_unknown_component_404(self, source_catalog: il.Catalog):
-        resp = _client(source_catalog).post(
-            "/components/resolve",
-            json={"component_key": "nope", "field": "account_id", "deps": {}},
-        )
-        assert resp.status_code == 404
-
-    def test_non_provider_field_400(self, source_catalog: il.Catalog):
-        resp = _client(source_catalog).post(
-            "/components/resolve",
-            json={"component_key": "facebook_ads", "field": "dataset", "deps": {}},
-        )
-        assert resp.status_code == 400
-
-
-def _check(catalog: il.Catalog, config: dict) -> httpx2.Response:
-    return _client(catalog).post(
-        "/components/check",
-        json={"component_key": "facebook_ads_connection", "config": config},
-    )
-
-
-class TestCheck:
-    def test_live_check_passes(self, connection_catalog: il.Catalog, mock_graph):
-        mock_graph(lambda request: httpx2.Response(200, json={"data": []}))
-
-        resp = _check(connection_catalog, CONNECTION_CONFIG)
-
-        assert resp.status_code == 200
-        body = resp.json()
-        assert (body["ok"], body["live"]) == (True, True)
-
-    def test_rejected_credentials_reported_as_auth(self, connection_catalog: il.Catalog, mock_graph):
-        mock_graph(lambda request: httpx2.Response(401, json={"error": "bad token"}))
-
-        body = _check(connection_catalog, CONNECTION_CONFIG).json()
-
-        assert (body["ok"], body["live"], body["category"]) == (False, True, "auth")
-
-    def test_unreachable_provider_reported_as_network(self, connection_catalog: il.Catalog, mock_graph):
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            raise httpx2.ConnectError("no route to host")
-
-        mock_graph(handler)
-
-        body = _check(connection_catalog, CONNECTION_CONFIG).json()
-
-        assert (body["ok"], body["live"], body["category"]) == (False, True, "network")
-
-    def test_invalid_config_reports_field_errors(self, connection_catalog: il.Catalog):
-        # Static tier: a missing required field never reaches the provider.
-        body = _check(connection_catalog, {"app_id": "A", "app_secret": "S"}).json()
-
-        assert (body["ok"], body["live"], body["category"]) == (False, False, "config")
-        assert [e["field"] for e in body["errors"]] == ["access_token"]
-
-    def test_uncheckable_connection_is_static_only(self):
-        catalog = il.Catalog(components={UncheckableConnection.key: UncheckableConnection.definition()})
-        resp = _client(catalog).post(
-            "/components/check",
-            json={"component_key": "uncheckable_connection", "config": {"api_key": "k"}},
-        )
-
-        body = resp.json()
-        assert (body["ok"], body["live"]) == (True, False)
-
-    def test_unknown_component_404(self, connection_catalog: il.Catalog):
-        resp = _client(connection_catalog).post("/components/check", json={"component_key": "nope", "config": {}})
-        assert resp.status_code == 404
-
-    def test_non_connection_component_404(self, source_catalog: il.Catalog):
-        resp = _client(source_catalog).post(
-            "/components/check", json={"component_key": "facebook_ads", "config": {}}
-        )
-        assert resp.status_code == 404
 
 
 class TestDelete:
@@ -208,7 +46,7 @@ class TestDelete:
 
         class FakeStore:
             def __init__(self):
-                self.organisations = SimpleNamespace(member_role=lambda user_id, org_id: "admin")
+                self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
                 self.components = SimpleNamespace(
                     get=lambda component_id: SimpleNamespace(id=component_id, org_id=org_id),
                     delete=_delete,
@@ -415,11 +253,9 @@ class CrudStore:
         self.deleted: list[UUID] = []
         self.added_relations: list[dict[str, Any]] = []
         self.removed_relations: list[dict[str, Any]] = []
-        self.listed: list[dict[str, Any]] = []
-        #: Raised by whichever store call the test is exercising.
+        self.listed: list[tuple[UUID, ComponentQuery]] = []
         self.error: Exception | None = None
         self.rows: list[Any] = []
-        self.relation_rows: list[Any] = []
         self.role: str | None = "admin"
         self.get_org_id = _ORG_ID
         self.loaded: Any = None
@@ -427,9 +263,9 @@ class CrudStore:
         self.impact_requested: list[list[UUID]] = []
         self.impact = DeleteImpact(blocking=[], detaching=[])
 
-        self.organisations = SimpleNamespace(member_role=lambda user_id, org_id: self.role)
+        self.members = SimpleNamespace(role=lambda org_id, user_id: self.role)
         self.components = SimpleNamespace(
-            list_roots=self._list_roots,
+            list=self._list,
             create=self._create,
             get=self._get,
             update=self._update,
@@ -441,14 +277,13 @@ class CrudStore:
             ),
         )
         self.relations = SimpleNamespace(
-            list_all=self._list_relations,
             add=self._add_relation,
-            remove=self._remove_relation,
+            delete=self._remove_relation,
         )
 
-    def _list_roots(self, org_id: UUID, kinds: list[str] | None = None) -> list[Any]:
-        self.listed.append({"org_id": org_id, "kinds": kinds})
-        return self.rows
+    def _list(self, org_id: UUID, query: ComponentQuery) -> Page[Any]:
+        self.listed.append((org_id, query))
+        return Page.window(self.rows, query)
 
     def _delete_impact(self, component_ids: list[UUID]) -> DeleteImpact:
         if self.error:
@@ -480,21 +315,6 @@ class CrudStore:
         if self.load_error:
             raise self.load_error
         return self.loaded
-
-    def _list_relations(
-        self,
-        org_id: UUID,
-        name: str | None = None,
-        src_kind: str | None = None,
-        dst_kind: str | None = None,
-    ) -> list[Any]:
-        return [
-            r
-            for r in self.relation_rows
-            if (name is None or r.name == name)
-            and (src_kind is None or r.src_kind == src_kind)
-            and (dst_kind is None or r.dst_kind == dst_kind)
-        ]
 
     def _add_relation(self, src_id: UUID, *, name: str, dst_id: UUID) -> Any:
         if self.error:
@@ -541,29 +361,51 @@ def crud_client(crud_store: CrudStore) -> TestClient:
 
 
 class TestListComponents:
-    """``GET /components/`` — org-scoped, secrets withheld."""
+    """``GET /components``: org-scoped roots, secrets withheld."""
 
     def test_lists_every_kind_by_default(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.rows = [_row(kind="job", key="nightly"), _row(kind="source", key="fb")]
 
-        response = crud_client.get("/components/")
+        response = crud_client.get("/components")
 
-        assert [row["key"] for row in response.json()] == ["nightly", "fb"]
-        assert crud_store.listed == [{"org_id": _ORG_ID, "kinds": None}]
+        assert response.status_code == 200
+        body = response.json()
+        assert [row["key"] for row in body["items"]] == ["nightly", "fb"]
+        assert body["total"] == 2
+        ((org_id, query),) = crud_store.listed
+        assert org_id == _ORG_ID
+        assert query == ComponentQuery()
 
-    def test_the_kind_filter_is_forwarded(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_client.get("/components/?kind=source&kind=job")
+    def test_the_kind_and_text_filters_are_forwarded(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_client.get("/components?kind=source&kind=job&q=face")
 
-        assert crud_store.listed == [{"org_id": _ORG_ID, "kinds": ["source", "job"]}]
+        ((_, query),) = crud_store.listed
+        assert query.kind == ["source", "job"]
+        assert query.q == "face"
+        assert query.roots_only is True
 
-    def test_no_components_is_an_empty_list(self, crud_client: TestClient) -> None:
-        assert crud_client.get("/components/").json() == []
+    def test_the_page_window_is_forwarded(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.rows = [_row(key=f"k{i}") for i in range(5)]
+
+        body = crud_client.get("/components", params={"limit": 2, "offset": 1}).json()
+
+        ((_, query),) = crud_store.listed
+        assert (query.limit, query.offset) == (2, 1)
+        assert [row["key"] for row in body["items"]] == ["k1", "k2"]
+        assert body["total"] == 5
+
+    def test_a_page_larger_than_the_cap_is_a_422(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        assert crud_client.get("/components", params={"limit": 501}).status_code == 422
+        assert crud_store.listed == []
+
+    def test_no_components_is_an_empty_page(self, crud_client: TestClient) -> None:
+        assert crud_client.get("/components").json() == {"items": [], "total": 0}
 
     def test_owned_components_ride_under_their_owner(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         asset = _row(kind="asset", key="ads")
         crud_store.rows = [_row(kind="source", key="fb", children=[asset])]
 
-        [source] = crud_client.get("/components/").json()
+        [source] = crud_client.get("/components").json()["items"]
 
         assert [child["key"] for child in source["children"]] == ["ads"]
 
@@ -579,7 +421,7 @@ class TestListComponents:
             )
         ]
 
-        [row] = crud_client.get("/components/").json()
+        [row] = crud_client.get("/components").json()["items"]
 
         assert row["relations"] == {
             "connection": [
@@ -591,58 +433,6 @@ class TestListComponents:
                 }
             ]
         }
-
-
-class TestListRelations:
-    """``GET /components/relations``, optionally narrowed by name and kinds."""
-
-    def test_lists_every_relation(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        source_id, destination_id = uuid4(), uuid4()
-        crud_store.relation_rows = [
-            SimpleNamespace(
-                src_id=source_id, name="connection", dst_id=destination_id, src_kind="source", dst_kind="connection"
-            )
-        ]
-
-        response = crud_client.get("/components/relations")
-
-        assert response.json() == [
-            {
-                "src_id": str(source_id),
-                "name": "connection",
-                "dst_id": str(destination_id),
-                "src_kind": "source",
-                "dst_kind": "connection",
-            }
-        ]
-
-    def test_the_name_filter_narrows_the_result(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_store.relation_rows = [
-            SimpleNamespace(
-                src_id=uuid4(), name="connection", dst_id=uuid4(), src_kind="source", dst_kind="connection"
-            ),
-            SimpleNamespace(
-                src_id=uuid4(), name="destinations", dst_id=uuid4(), src_kind="source", dst_kind="destination"
-            ),
-        ]
-
-        response = crud_client.get("/components/relations?name=destinations")
-
-        assert [r["name"] for r in response.json()] == ["destinations"]
-
-    def test_list_relations_filters_by_kind(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_store.relation_rows = [
-            SimpleNamespace(src_id=uuid4(), name="upstreams", dst_id=uuid4(), src_kind="asset", dst_kind="asset"),
-            SimpleNamespace(
-                src_id=uuid4(), name="connection", dst_id=uuid4(), src_kind="source", dst_kind="connection"
-            ),
-        ]
-
-        response = crud_client.get("/components/relations", params={"src_kind": "asset", "dst_kind": "asset"})
-
-        rows = response.json()
-        assert all(r["dst_kind"] == "asset" for r in rows)
-        assert [r["name"] for r in rows] == ["upstreams"]
 
 
 class TestDeleteImpact:
@@ -673,14 +463,14 @@ class TestDeleteImpact:
 
 
 class TestCreateComponent:
-    """``POST /components/`` — store errors become the right status."""
+    """``POST /components``: store errors become the right status."""
 
     def test_creates_and_returns_the_component(
         self, crud_client: TestClient, crud_store: CrudStore
     ) -> None:
         body = {"kind": "job", "key": "nightly", "config": {"cron": "0 2 * * *"}}
 
-        response = crud_client.post("/components/", json=body)
+        response = crud_client.post("/components", json=body)
 
         assert response.status_code == 201
         assert response.json()["key"] == "nightly"
@@ -697,14 +487,14 @@ class TestCreateComponent:
             "relations": {"connection": [{"dst_id": str(destination_id)}]},
         }
 
-        crud_client.post("/components/", json=body)
+        crud_client.post("/components", json=body)
 
         assert crud_store.created[0]["relations"] == {"connection": [destination_id]}
 
     def test_omitted_relations_stay_none(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         # None means "leave every relation type untouched", which is not the
         # same as an empty map.
-        crud_client.post("/components/", json={"kind": "job", "key": "nightly"})
+        crud_client.post("/components", json={"kind": "job", "key": "nightly"})
 
         assert crud_store.created[0]["relations"] is None
 
@@ -721,7 +511,7 @@ class TestCreateComponent:
     ) -> None:
         crud_store.error = error
 
-        response = crud_client.post("/components/", json={"kind": "job", "key": "nightly"})
+        response = crud_client.post("/components", json={"kind": "job", "key": "nightly"})
 
         assert response.status_code == expected
 
@@ -805,14 +595,15 @@ class TestUpdateComponent:
 class TestDeleteComponentStatuses:
     """``DELETE /components/{id}`` — the rest of the error mapping."""
 
-    def test_a_successful_delete_acknowledges(
+    def test_a_successful_delete_is_an_empty_204(
         self, crud_client: TestClient, crud_store: CrudStore
     ) -> None:
         component_id = uuid4()
 
         response = crud_client.delete(f"/components/{component_id}")
 
-        assert response.json() == {"status": "deleted"}
+        assert response.status_code == 204
+        assert response.content == b""
         assert crud_store.deleted == [component_id]
 
     @pytest.mark.parametrize(
@@ -1088,192 +879,3 @@ class TestComponentResponseRelations:
                 dst_id=connection_id, dst_kind="connection", dst_key="facebook_ads", dst_name="FB"
             )
         ]
-
-
-class TestHandleError:
-    """``handle_error`` maps a provider failure to a status, never a traceback."""
-
-    @staticmethod
-    def _status_error(status: int) -> httpx2.HTTPStatusError:
-        request = httpx2.Request("GET", "https://provider.example.com/x")
-        return httpx2.HTTPStatusError(
-            "boom", request=request, response=httpx2.Response(status, request=request)
-        )
-
-    @pytest.mark.parametrize("status", [401, 403])
-    def test_an_auth_failure_keeps_its_status(self, status: int) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            components_module.handle_error(self._status_error(status), "resolving facebook.ads_stats")
-
-        assert excinfo.value.status_code == status
-        assert "Authorization failed while resolving facebook.ads_stats." == excinfo.value.detail
-
-    def test_a_provider_404_stays_a_404(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            components_module.handle_error(self._status_error(404), "resolving x")
-
-        assert excinfo.value.status_code == 404
-        assert "Resource not found while resolving x." == excinfo.value.detail
-
-    def test_another_provider_status_falls_through_to_500(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            components_module.handle_error(self._status_error(503), "resolving x")
-
-        assert excinfo.value.status_code == 500
-        assert excinfo.value.detail == "Failed resolving x."
-
-    def test_an_http_exception_is_re_raised_as_is(self) -> None:
-        original = HTTPException(status_code=409, detail="conflict")
-
-        with pytest.raises(HTTPException) as excinfo:
-            components_module.handle_error(original, "resolving x")
-
-        assert excinfo.value is original
-
-    def test_anything_else_becomes_a_500(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            components_module.handle_error(RuntimeError("kaboom"), "resolving x")
-
-        assert excinfo.value.status_code == 500
-        assert excinfo.value.detail == "Failed resolving x."
-
-
-class TestCheckResponseFromFailure:
-    """A failed connection check is a categorised result, never a raised error."""
-
-    @staticmethod
-    def _status_error(status: int) -> httpx2.HTTPStatusError:
-        request = httpx2.Request("GET", "https://provider.example.com/x")
-        return httpx2.HTTPStatusError(
-            "boom", request=request, response=httpx2.Response(status, request=request)
-        )
-
-    def test_a_connection_check_error_carries_its_own_message(self) -> None:
-        from interloper.errors import ConnectionCheckError
-
-        response = components_module.CheckResponse.from_failure(
-            ConnectionCheckError("missing httpx2 extra"), "facebook_ads"
-        )
-
-        assert (response.ok, response.live, response.category) == (False, True, "error")
-        assert response.message == "missing httpx2 extra"
-
-    @pytest.mark.parametrize("status", [401, 403])
-    def test_a_rejected_credential_is_categorised_as_auth(self, status: int) -> None:
-        response = components_module.CheckResponse.from_failure(self._status_error(status), "fb")
-
-        assert response.category == "auth"
-        assert response.message == "The provider rejected the credentials."
-
-    def test_another_provider_status_is_reported_verbatim(self) -> None:
-        response = components_module.CheckResponse.from_failure(self._status_error(503), "fb")
-
-        assert response.category == "error"
-        assert response.message == "The provider responded with HTTP 503."
-
-    @pytest.mark.parametrize(
-        "exception",
-        [TimeoutError("slow"), httpx2.TimeoutException("slow")],
-    )
-    def test_a_timeout_is_categorised_as_network(self, exception: Exception) -> None:
-        response = components_module.CheckResponse.from_failure(exception, "fb")
-
-        assert response.category == "network"
-        assert response.message == "The provider did not respond in time."
-
-    def test_an_unreachable_provider_is_categorised_as_network(self) -> None:
-        response = components_module.CheckResponse.from_failure(httpx2.ConnectError("no route"), "fb")
-
-        assert response.category == "network"
-        assert response.message == "The provider could not be reached."
-
-    def test_anything_else_is_a_generic_error(self) -> None:
-        # The raw exception text may carry credentials, so it is not echoed.
-        response = components_module.CheckResponse.from_failure(RuntimeError("token=SECRET"), "fb")
-
-        assert response.category == "error"
-        assert response.message == "The connection check failed unexpectedly."
-        assert "SECRET" not in response.message
-
-
-class TestResolveEdgeCases:
-    """``POST /components/resolve`` — the guards between the field and the provider."""
-
-    def test_an_unknown_relation_name_is_a_400(
-        self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # The FetchField names a relation the component does not declare.
-        from interloper_assets.facebook_ads.source import FacebookAds
-
-        monkeypatch.setattr(FacebookAds, "relations", {})
-
-        response = _client(source_catalog).post(
-            "/components/resolve",
-            json={"component_key": "facebook_ads", "field": "account_id", "deps": {}},
-        )
-
-        assert response.status_code == 400
-        assert "Relation 'connection' not found" in response.json()["detail"]
-        assert "not declared from a component class" in response.json()["detail"]
-
-    def test_credentials_that_cannot_build_the_resource_are_a_400_without_their_values(
-        self, source_catalog: il.Catalog
-    ) -> None:
-        response = _client(source_catalog).post(
-            "/components/resolve",
-            json={
-                "component_key": "facebook_ads",
-                "field": "account_id",
-                "deps": {"connection": {"access_token": ["s3cret-value"]}},
-            },
-        )
-
-        assert response.status_code == 400
-        detail = response.json()["detail"]
-        assert detail.startswith("Cannot resolve 'account_id' from the 'connection' credentials given: ValidationError")
-        assert "access_token" in detail
-        assert "s3cret-value" not in detail
-
-    def test_a_provider_failure_is_mapped_not_raised(
-        self, source_catalog: il.Catalog, mock_graph
-    ) -> None:
-        def handler(request: httpx2.Request) -> httpx2.Response:
-            raise httpx2.ConnectError("no route to host")
-
-        mock_graph(handler)
-
-        response = _client(source_catalog).post(
-            "/components/resolve",
-            json={"component_key": "facebook_ads", "field": "account_id", "deps": {"connection": CONNECTION_CONFIG}},
-        )
-
-        assert response.status_code == 500
-        assert response.json()["detail"].startswith("Failed resolving facebook_ads.account_id")
-
-    def test_a_relation_that_is_not_a_fetch_provider_is_a_403(
-        self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        # Validated at catalog build, so this is a defensive guard.
-        monkeypatch.setattr(components_module, "is_fetch_field_provider", lambda fn: False)
-
-        response = _client(source_catalog).post(
-            "/components/resolve",
-            json={"component_key": "facebook_ads", "field": "account_id", "deps": {"connection": CONNECTION_CONFIG}},
-        )
-
-        assert response.status_code == 403
-        assert "is not a fetch provider" in response.json()["detail"]
-
-
-class TestCheckFalsyResult:
-    """A check that returns falsy is a failure, not a pass."""
-
-    def test_a_false_check_is_reported_as_an_error(
-        self, connection_catalog: il.Catalog, mock_graph, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(FacebookAdsConnection, "check", lambda self: False)
-
-        body = _check(connection_catalog, CONNECTION_CONFIG).json()
-
-        assert (body["ok"], body["live"], body["category"]) == (False, True, "error")
-        assert body["message"] == "The connection check failed."

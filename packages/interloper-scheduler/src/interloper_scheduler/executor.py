@@ -24,7 +24,7 @@ from interloper.runner import ExecutionStatus, Runner
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, inject_metadata
 from interloper.telemetry.tracer import tracer
-from interloper_db import Store
+from interloper_db import ExecutionQuery, Store
 from interloper_db.models import Component, Run
 from opentelemetry.context import Context
 from opentelemetry.trace import Link, get_current_span
@@ -118,7 +118,7 @@ class RunExecutor:
                     return self._complete(run_id, success=True)
 
                 if retry_of:
-                    successes = self._prior_successes(retry_of)
+                    successes = self._prior_successes(org_id, retry_of)
                     for operation in operations:
                         if UUID(operation.id) in successes:
                             operation.enabled = False
@@ -180,7 +180,7 @@ class RunExecutor:
         session.add(db_run)
         session.commit()
 
-    def _prior_successes(self, retry_of: UUID) -> set[UUID]:
+    def _prior_successes(self, org_id: UUID, retry_of: UUID) -> set[UUID]:
         """Node row ids that already succeeded in the retry lineage.
 
         For a ``"failed"``-scope retry, nodes that completed successfully in an
@@ -194,6 +194,7 @@ class RunExecutor:
         the others.
 
         Args:
+            org_id: Organisation the retry lineage belongs to.
             retry_of: The retried run, the walk's starting point.
 
         Returns:
@@ -203,7 +204,7 @@ class RunExecutor:
         parent_id: UUID | None = retry_of
         with Session(self._store.engine) as session:
             while parent_id:
-                for row in self._store.events.list_executions(parent_id):
+                for row in self._store.executions.list(org_id, ExecutionQuery(limit=None), run_id=parent_id).items:
                     # Closest ancestor wins: only record a node the first time we see it.
                     statuses.setdefault(row.component_id, row.status)
                 parent = session.get(Run, parent_id)

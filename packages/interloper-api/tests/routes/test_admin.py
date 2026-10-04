@@ -1,4 +1,4 @@
-"""Tests for ``interloper_api.routes.admin`` (super-admin cross-org surface).
+"""Tests for ``interloper_api.routes.admin`` (super-admin platform-wide surface).
 
 The critical property is that every endpoint is gated by ``require_super_admin``
 and is *not* bound to the session's active organisation. A lightweight fake
@@ -8,7 +8,7 @@ store stands in for persistence so these stay pure unit tests.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -16,6 +16,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
+from interloper_db import OrganisationQuery, Page, PageQuery, UsageQuery
+from interloper_db.store import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.app import install_error_handlers
@@ -31,148 +33,99 @@ class FakeStore:
         self.member = SimpleNamespace(
             id=uuid4(), email="member@acme.test", name="Member", avatar_url=None
         )
-        self.role_updates: list[tuple[UUID, UUID, str]] = []
-        self.removed: list[tuple[UUID, UUID]] = []
-        self.created_invites: list[dict] = []
-        self.added_members: list[tuple[UUID, UUID, str]] = []
-        self.already_member = False
         self.deleted_profiles: list[UUID] = []
-        self.deleted_organisations: list[UUID] = []
         self.quota_updates: list[tuple[UUID, dict]] = []
-        self.auth = SimpleNamespace(
-            delete_profile=self._delete_profile,
-            list_all_profiles=self._list_all_profiles,
+        self.listed_orgs: list[OrganisationQuery] = []
+        self.listed_profiles: list[PageQuery] = []
+        self.counted_orgs: list[list[UUID]] = []
+        self.activity_calls: list[tuple[UUID, PageQuery]] = []
+        self.activity: list[ActivityEntry] = []
+        self.profiles = SimpleNamespace(
+            delete=self._delete_profile,
+            list=self._list_profiles,
         )
         self.organisations = SimpleNamespace(
-            delete=self._delete_organisation,
-            list_all=self._list_all_organisations,
+            list=self._list_organisations,
             create=self._create_organisation,
-            update=self._update_organisation,
             get=self._get_organisation,
-            list_members=self._list_org_members,
-            add_member=self._add_org_member,
-            update_member_role=self._update_member_role,
-            remove_member=self._remove_org_member,
-            list_invitations=self._list_invitations,
-            create_invitation=self._create_invitation,
-            delete_invitation=self._delete_invitation,
+            activity=self._activity,
         )
+        self.members = SimpleNamespace(count_by_org=self._count_by_org)
         self.quotas = SimpleNamespace(
-            current_period_start=self._current_period_start,
-            list_overrides=self._list_quota_overrides,
-            list_usage=self._list_usage,
-            count_sources_by_org=self._count_sources_by_org,
-            max_assets_per_source_by_org=self._max_assets_per_source_by_org,
-            count_successful_runs_by_org=self._count_successful_runs_by_org,
+            all_overrides=self._all_quota_overrides,
             set_overrides=self._set_quota,
+        )
+        self.usage = SimpleNamespace(
+            current_period=self._current_period,
+            list=self._list_usage,
+            sources_by_org=self._sources_by_org,
+            max_assets_per_source_by_org=self._max_assets_per_source_by_org,
+            successful_runs_by_org=self._successful_runs_by_org,
         )
 
     def _delete_profile(self, user_id: UUID) -> None:
         self.deleted_profiles.append(user_id)
 
-    def _delete_organisation(self, org_id: UUID) -> None:
-        self.deleted_organisations.append(org_id)
-
     # -- users --
-    def _list_all_profiles(self):
-        return [
-            (
-                SimpleNamespace(
-                    id=self.member.id,
-                    email=self.member.email,
-                    name=self.member.name,
-                    avatar_url=None,
-                    is_super_admin=False,
-                    created_at=datetime.now(timezone.utc),
-                ),
-                [self.org],
-            )
-        ]
+    def _list_profiles(self, query: PageQuery) -> Page:
+        self.listed_profiles.append(query)
+        profile = SimpleNamespace(
+            id=self.member.id,
+            email=self.member.email,
+            name=self.member.name,
+            avatar_url=None,
+            is_super_admin=False,
+            created_at=datetime.now(timezone.utc),
+            organisations=[self.org],
+        )
+        return Page.window([profile], query)
 
     # -- organisations --
-    def _list_all_organisations(self):
-        return [(self.org, 1)]
+    def _list_organisations(self, query: OrganisationQuery) -> Page:
+        self.listed_orgs.append(query)
+        return Page.window([self.org], query)
+
+    def _count_by_org(self, org_ids: list[UUID]) -> dict[UUID, int]:
+        self.counted_orgs.append(list(org_ids))
+        return {self.org.id: 1}
 
     def _create_organisation(self, name: str, creator_id: UUID | None = None):
-        return SimpleNamespace(id=uuid4(), name=name, created_at=datetime.now(timezone.utc))
-
-    def _update_organisation(self, org_id: UUID, name: str):
-        return SimpleNamespace(id=org_id, name=name, created_at=self.org.created_at)
+        return SimpleNamespace(id=uuid4(), name=name, created_at=datetime.now(timezone.utc), deleted_at=None)
 
     def _get_organisation(self, org_id: UUID):
         return self.org
 
-    # -- members --
-    def _list_org_members(self, org_id: UUID):
-        return [(self.member, "admin")]
-
-    def _add_org_member(self, org_id: UUID, user_id: UUID, role: str) -> bool:
-        if self.already_member:
-            return False
-        self.added_members.append((org_id, user_id, role))
-        return True
-
-    def _update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
-        self.role_updates.append((org_id, user_id, role))
-
-    def _remove_org_member(self, org_id: UUID, user_id: UUID) -> None:
-        self.removed.append((org_id, user_id))
-
-    # -- invitations --
-    def _list_invitations(self, org_id: UUID):
-        return [
-            SimpleNamespace(
-                id=uuid4(),
-                email="invitee@acme.test",
-                role="viewer",
-                created_at=datetime.now(timezone.utc),
-                expires_at=datetime.now(timezone.utc),
-            )
-        ]
-
-    def _create_invitation(self, org_id: UUID, email: str, role: str, invited_by: UUID):
-        self.created_invites.append({"org_id": org_id, "email": email, "role": role})
-        return SimpleNamespace(
-            id=uuid4(),
-            email=email,
-            role=role,
-            token="tok",
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc),
-        )
-
-    def _delete_invitation(self, invitation_id: UUID, *, org_id: UUID) -> None:
-        pass
+    def _activity(self, org_id: UUID, query: PageQuery) -> Page:
+        self.activity_calls.append((org_id, query))
+        return Page.window(self.activity, query)
 
     # -- quotas --
-    def _current_period_start(self):
-        import datetime as dt
+    def _current_period(self):
+        return date(2026, 8, 1)
 
-        return dt.date(2026, 8, 1)
-
-    def _list_quota_overrides(self):
+    def _all_quota_overrides(self):
         return {self.org.id: {"max_sources": 5}}
 
-    def _list_usage(self, *, period_start=None, org_id=None):
-        import datetime as dt
-
-        return [
+    def _list_usage(self, query: UsageQuery) -> Page:
+        assert query.limit is None
+        rows = [
             SimpleNamespace(
                 org_id=self.org.id,
                 metric="successful_runs",
-                period_start=dt.date(2026, 8, 1),
+                period_start=date(2026, 8, 1),
                 used=7,
                 reserved=1,
             )
         ]
+        return Page(items=[row for row in rows if row.period_start == query.period_start], total=1)
 
-    def _count_sources_by_org(self):
+    def _sources_by_org(self):
         return {self.org.id: 2}
 
     def _max_assets_per_source_by_org(self):
         return {self.org.id: 4}
 
-    def _count_successful_runs_by_org(self, period_start):
+    def _successful_runs_by_org(self, period_start):
         return {self.org.id: 8}
 
     def _set_quota(self, org_id: UUID, limits: dict):
@@ -356,9 +309,24 @@ def test_super_admin_lists_all_users(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).get("/admin/users")
     assert resp.status_code == 200
     body = resp.json()
-    assert body[0]["email"] == "member@acme.test"
-    assert [org["name"] for org in body[0]["organisations"]] == ["Acme"]
-    assert body[0]["is_super_admin"] is False
+    assert body["total"] == 1
+    (user,) = body["items"]
+    assert user["email"] == "member@acme.test"
+    assert user["organisations"] == [{"id": str(store.org.id), "name": "Acme"}]
+    assert user["is_super_admin"] is False
+    assert store.listed_profiles == [PageQuery()]
+
+
+def test_list_users_forwards_the_page_window(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/users", params={"limit": 20, "offset": 40})
+    assert resp.status_code == 200
+    assert store.listed_profiles == [PageQuery(limit=20, offset=40)]
+
+
+def test_list_users_rejects_a_page_larger_than_the_cap(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/users", params={"limit": 501})
+    assert resp.status_code == 422
+    assert store.listed_profiles == []
 
 
 def test_non_super_admin_cannot_delete_user(store: FakeStore) -> None:
@@ -370,7 +338,8 @@ def test_non_super_admin_cannot_delete_user(store: FakeStore) -> None:
 def test_delete_user(store: FakeStore) -> None:
     target = uuid4()
     resp = _client(store, is_super_admin=True).delete(f"/admin/users/{target}")
-    assert resp.status_code == 200
+    assert resp.status_code == 204
+    assert resp.content == b""
     assert store.deleted_profiles == [target]
 
 
@@ -388,8 +357,25 @@ def test_super_admin_lists_all_organisations(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).get("/admin/organisations")
     assert resp.status_code == 200
     body = resp.json()
-    assert body[0]["name"] == "Acme"
-    assert body[0]["member_count"] == 1
+    assert body["total"] == 1
+    (org,) = body["items"]
+    assert org["name"] == "Acme"
+    assert org["member_count"] == 1
+    # Soft-deleted organisations stay listed on the admin surface.
+    assert store.listed_orgs == [OrganisationQuery(include_deleted=True)]
+    assert store.counted_orgs == [[store.org.id]]
+
+
+def test_list_organisations_forwards_the_page_window(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/organisations", params={"limit": 3, "offset": 6})
+    assert resp.status_code == 200
+    assert store.listed_orgs == [OrganisationQuery(include_deleted=True, limit=3, offset=6)]
+
+
+def test_list_organisations_rejects_a_page_larger_than_the_cap(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get("/admin/organisations", params={"limit": 501})
+    assert resp.status_code == 422
+    assert store.listed_orgs == []
 
 
 # -- organisations ------------------------------------------------------------
@@ -400,123 +386,29 @@ def test_create_organisation_does_not_add_creator(store: FakeStore) -> None:
     assert resp.status_code == 201
     assert resp.json()["name"] == "New"
     assert resp.json()["member_count"] == 0
+    assert resp.json()["deleted_at"] is None
 
 
-def test_delete_organisation_requires_matching_name(store: FakeStore) -> None:
-    client = _client(store, is_super_admin=True)
-    resp = client.request("DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Wrong"})
-    assert resp.status_code == 400
-    assert store.deleted_organisations == []
-
-
-def test_delete_organisation(store: FakeStore) -> None:
-    client = _client(store, is_super_admin=True)
-    resp = client.request("DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Acme"})
-    assert resp.status_code == 200
-    assert store.deleted_organisations == [store.org.id]
-
-
-def test_non_super_admin_cannot_delete_organisation(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=False).request(
-        "DELETE", f"/admin/organisations/{store.org.id}", json={"name": "Acme"}
-    )
+def test_non_super_admin_cannot_create_organisation(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=False).post("/admin/organisations", json={"name": "New"})
     assert resp.status_code == 403
-    assert store.deleted_organisations == []
 
 
-def test_rename_organisation(store: FakeStore) -> None:
-    org_id = store.org.id
-    resp = _client(store, is_super_admin=True).patch(
-        f"/admin/organisations/{org_id}", json={"name": "Renamed"}
-    )
-    assert resp.status_code == 200
-    assert resp.json()["name"] == "Renamed"
-
-
-# -- members ------------------------------------------------------------------
-
-
-def test_list_members_of_any_org(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/members")
-    assert resp.status_code == 200
-    assert resp.json()[0]["email"] == "member@acme.test"
-
-
-def test_update_member_role(store: FakeStore) -> None:
-    user_id = uuid4()
-    resp = _client(store, is_super_admin=True).patch(
-        f"/admin/organisations/{store.org.id}/members/{user_id}", json={"role": "editor"}
-    )
-    assert resp.status_code == 200
-    assert store.role_updates[0][2] == "editor"
-
-
-def test_update_member_role_rejects_invalid_role(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).patch(
-        f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "root"}
-    )
-    assert resp.status_code == 422
-    assert store.role_updates == []
-
-
-def test_missing_member_maps_to_404() -> None:
-    # Store mutations raise NotFoundError; the app-level handler turns it into 404.
-    class RaisingStore(FakeStore):
-        def _update_member_role(self, org_id: UUID, user_id: UUID, role: str) -> None:
-            raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
-
-    store = RaisingStore()
-    resp = _client(store, is_super_admin=True).patch(
-        f"/admin/organisations/{store.org.id}/members/{uuid4()}", json={"role": "editor"}
-    )
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("PATCH", "/admin/organisations/{org_id}"),
+        ("DELETE", "/admin/organisations/{org_id}"),
+        ("GET", "/admin/organisations/{org_id}/members"),
+        ("POST", "/admin/organisations/{org_id}/members"),
+        ("GET", "/admin/organisations/{org_id}/invitations"),
+        ("POST", "/admin/organisations/{org_id}/invitations"),
+    ],
+)
+def test_org_management_moved_to_the_organisation_routes(store: FakeStore, method: str, path: str) -> None:
+    """Managing one organisation goes through ``/organisations/{org_id}/...``, which admits super-admins."""
+    resp = _client(store, is_super_admin=True).request(method, path.format(org_id=store.org.id), json={})
     assert resp.status_code == 404
-
-
-def test_join_organisation_without_invitation(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).post(
-        f"/admin/organisations/{store.org.id}/members", json={"role": "admin"}
-    )
-    assert resp.status_code == 201
-    assert resp.json()["role"] == "admin"
-    assert store.added_members[0][0] == store.org.id
-    assert store.created_invites == []
-
-
-def test_join_organisation_conflicts_when_already_member(store: FakeStore) -> None:
-    store.already_member = True
-    resp = _client(store, is_super_admin=True).post(
-        f"/admin/organisations/{store.org.id}/members", json={"role": "admin"}
-    )
-    assert resp.status_code == 409
-
-
-def test_join_organisation_rejects_invalid_role(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).post(
-        f"/admin/organisations/{store.org.id}/members", json={"role": "root"}
-    )
-    assert resp.status_code == 422
-    assert store.added_members == []
-
-
-def test_remove_member(store: FakeStore) -> None:
-    user_id = uuid4()
-    resp = _client(store, is_super_admin=True).delete(
-        f"/admin/organisations/{store.org.id}/members/{user_id}"
-    )
-    assert resp.status_code == 200
-    assert store.removed[0][1] == user_id
-
-
-# -- invitations --------------------------------------------------------------
-
-
-def test_invite_into_any_org(store: FakeStore) -> None:
-    resp = _client(store, is_super_admin=True).post(
-        f"/admin/organisations/{store.org.id}/invitations",
-        json={"email": "x@acme.test", "role": "viewer"},
-    )
-    assert resp.status_code == 201
-    assert store.created_invites[0]["email"] == "x@acme.test"
 
 
 def test_non_super_admin_cannot_update_quota(store: FakeStore) -> None:
@@ -559,7 +451,7 @@ def test_deleted_org_is_listed_but_not_manageable(store: FakeStore) -> None:
 
     listed = client.get("/admin/organisations")
     assert listed.status_code == 200
-    assert listed.json()[0]["deleted_at"] is not None
+    assert listed.json()["items"][0]["deleted_at"] is not None
 
     resp = client.patch(f"/admin/organisations/{store.org.id}/quota", json={"max_sources": 1})
     assert resp.status_code == 404
@@ -573,23 +465,32 @@ def test_non_super_admin_cannot_read_activity(store: FakeStore) -> None:
 
 def test_activity_feed_composes_titles(store: FakeStore) -> None:
     when = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
-    store.activity = [  # ty: ignore[unresolved-attribute]
-        {"kind": "runs_completed", "when": when, "subject": "1204", "extra": None},
-        {"kind": "invitation_sent", "when": when, "subject": "a@b.io", "extra": "Root"},
-        {"kind": "member_joined", "when": when, "subject": "Jonas", "extra": "editor"},
-        {"kind": "org_created", "when": when, "subject": None, "extra": None},
+    store.activity = [
+        ActivityEntry(kind="runs_completed", when=when, subject="1204"),
+        ActivityEntry(kind="invitation_sent", when=when, subject="a@b.io", extra="Root"),
+        ActivityEntry(kind="member_joined", when=when, subject="Jonas", extra="editor"),
+        ActivityEntry(kind="org_created", when=when),
     ]
-    store.organisations.list_activity = lambda org_id: store.activity  # ty: ignore[unresolved-attribute]
 
     resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/activity")
     assert resp.status_code == 200
-    titles = [(entry["kind"], entry["title"], entry["detail"]) for entry in resp.json()]
+    assert resp.json()["total"] == 4
+    assert store.activity_calls == [(store.org.id, PageQuery())]
+    titles = [(entry["kind"], entry["title"], entry["detail"]) for entry in resp.json()["items"]]
     assert titles == [
         ("runs_completed", "1,204 runs completed successfully", None),
         ("invitation_sent", "Invitation sent to a@b.io", "Invited by Root"),
         ("member_joined", "Jonas joined the organisation", "Role: editor"),
         ("org_created", "Organisation created", None),
     ]
+
+
+def test_activity_feed_forwards_the_page_window(store: FakeStore) -> None:
+    resp = _client(store, is_super_admin=True).get(
+        f"/admin/organisations/{store.org.id}/activity", params={"limit": 10, "offset": 10}
+    )
+    assert resp.status_code == 200
+    assert store.activity_calls == [(store.org.id, PageQuery(limit=10, offset=10))]
 
 
 def test_quota_payload_is_derived_from_the_registry() -> None:
@@ -609,105 +510,54 @@ def test_update_quota_rejects_an_unknown_quota(store: FakeStore) -> None:
     assert store.quota_updates == []
 
 
-# -- Cross-org invitations -----------------------------------------------------
-
-
-def test_list_invitations_404s_before_touching_anything(store: FakeStore) -> None:
-    """The org is resolved first, so an unknown id never reaches the invitations."""
-
-    def missing(org_id):
-        raise NotFoundError(f"Organisation {org_id} not found")
-
-    store.organisations.get = missing
-
-    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{uuid4()}/invitations")
-
-    assert resp.status_code == 404
-
-
-def test_list_invitations_returns_the_orgs_pending_ones(store: FakeStore) -> None:
-    """A super-admin sees any organisation's outstanding invitations."""
-    invitation_id = uuid4()
-    store.organisations.list_invitations = lambda org_id: [
-        SimpleNamespace(
-            id=invitation_id,
-            email="new@acme.test",
-            role="viewer",
-            created_at=None,
-            expires_at=datetime.now(timezone.utc),
-        )
-    ]
-
-    resp = _client(store, is_super_admin=True).get(f"/admin/organisations/{store.org.id}/invitations")
-
-    assert resp.status_code == 200
-    assert [row["id"] for row in resp.json()] == [str(invitation_id)]
-
-
-def test_cancel_invitation_deletes_it_within_the_path_org(store: FakeStore) -> None:
-    """The path's org scopes the delete, so another org's invitation id reads as missing."""
-    deleted: list[tuple[UUID, UUID]] = []
-    store.organisations.delete_invitation = lambda invitation_id, *, org_id: deleted.append((invitation_id, org_id))
-    invitation_id = uuid4()
-
-    resp = _client(store, is_super_admin=True).delete(
-        f"/admin/organisations/{store.org.id}/invitations/{invitation_id}"
-    )
-
-    assert resp.json() == {"status": "ok"}
-    assert deleted == [(invitation_id, store.org.id)]
-
-
 # -- Activity titles ----------------------------------------------------------
 
 
 class TestActivityTitles:
-    """``_activity_title`` renders each derived entry kind."""
+    """``AdminActivityEntry.from_entry`` words each derived entry kind."""
+
+    _WHEN = datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc)
+
+    @classmethod
+    def _title(cls, kind: str, subject: str | None = None, extra: str | None = None) -> tuple[str, str | None]:
+        entry = admin_module.AdminActivityEntry.from_entry(
+            ActivityEntry(kind=kind, when=cls._WHEN, subject=subject, extra=extra)
+        )
+        assert (entry.kind, entry.when) == (kind, cls._WHEN)
+        return entry.title, entry.detail
 
     @pytest.mark.parametrize(
-        ("entry", "expected"),
+        ("kind", "subject", "extra", "expected"),
         [
-            ({"kind": "org_created", "subject": "", "extra": None}, ("Organisation created", None)),
-            (
-                {"kind": "org_deleted", "subject": "", "extra": None},
-                ("Organisation deleted", "Retained read-only for billing history."),
-            ),
-            (
-                {"kind": "member_joined", "subject": "ada@x", "extra": "admin"},
-                ("ada@x joined the organisation", "Role: admin"),
-            ),
-            ({"kind": "member_joined", "subject": "ada@x", "extra": None}, ("ada@x joined the organisation", None)),
-            (
-                {"kind": "invitation_sent", "subject": "new@x", "extra": "Ada"},
-                ("Invitation sent to new@x", "Invited by Ada"),
-            ),
-            ({"kind": "invitation_sent", "subject": "new@x", "extra": None}, ("Invitation sent to new@x", None)),
-            ({"kind": "source_added", "subject": "facebook_ads", "extra": None}, ("Source added — facebook_ads", None)),
+            ("org_created", None, None, ("Organisation created", None)),
+            ("org_deleted", None, None, ("Organisation deleted", "Retained read-only for billing history.")),
+            ("member_joined", "ada@x", "admin", ("ada@x joined the organisation", "Role: admin")),
+            ("member_joined", "ada@x", None, ("ada@x joined the organisation", None)),
+            ("invitation_sent", "new@x", "Ada", ("Invitation sent to new@x", "Invited by Ada")),
+            ("invitation_sent", "new@x", None, ("Invitation sent to new@x", None)),
+            ("source_added", "facebook_ads", None, ("Source added: facebook_ads", None)),
         ],
     )
-    def test_each_kind_renders(self, entry: dict, expected: tuple[str, str | None]) -> None:
-        assert admin_module._activity_title(entry) == expected
+    def test_each_kind_renders(
+        self, kind: str, subject: str | None, extra: str | None, expected: tuple[str, str | None]
+    ) -> None:
+        assert self._title(kind, subject, extra) == expected
 
     @pytest.mark.parametrize(
         ("count", "expected"),
         [("1", "1 run completed successfully"), ("2", "2 runs completed successfully")],
     )
     def test_the_run_count_is_pluralised(self, count: str, expected: str) -> None:
-        title, detail = admin_module._activity_title({"kind": "runs_completed", "subject": count, "extra": None})
-
-        assert (title, detail) == (expected, None)
+        assert self._title("runs_completed", count) == (expected, None)
 
     def test_large_run_counts_are_thousands_separated(self) -> None:
-        title, _ = admin_module._activity_title({"kind": "runs_completed", "subject": "12345", "extra": None})
+        title, _ = self._title("runs_completed", "12345")
 
         assert title == "12,345 runs completed successfully"
 
     def test_an_unknown_kind_falls_back_to_its_name(self) -> None:
         # A new derived kind must render as something rather than crashing.
-        assert admin_module._activity_title({"kind": "future_kind", "subject": "x", "extra": None}) == (
-            "future_kind",
-            None,
-        )
+        assert self._title("future_kind", "x") == ("future_kind", None)
 
 
 # -- Config-snapshot introspection --------------------------------------------

@@ -22,9 +22,10 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
 from interloper.utils.time import assume_utc
-from interloper_db import Backfill, Component, ComponentStatus
+from interloper_db import Backfill, BackfillQuery, Component, ComponentQuery, ComponentStatus, ExecutionQuery, RunQuery
 from interloper_db.models import Run
-from interloper_db.store.events import CoverageRow, ErrorGroup
+from interloper_db.store.events import ErrorGroup
+from interloper_db.store.executions import CoverageRow
 from pydantic import BaseModel
 
 from interloper_api.dependencies import OrgIdDep, StoreDep, ViewerDep
@@ -883,7 +884,7 @@ def get_overview(
     day_ago = now - dt.timedelta(hours=24)
 
     # gather rows
-    components = store.components.list_all(org_id)
+    components = store.components.list(org_id, ComponentQuery(roots_only=False, limit=None)).items
     keys = {component.id: component.key for component in components}
     statuses = [
         (component, store.components.read(component, parent_key=keys.get(component.parent_id)).status)
@@ -892,12 +893,16 @@ def get_overview(
     jobs = [component for component in components if component.kind == "job"]
     enabled_jobs = [job for job in jobs if job.enabled]
     names = {job.id: job.name or job.key for job in jobs}
-    running = store.runs.list_all(org_id, status="running", limit=10_000)
-    backfills = store.runs.list_backfills(org_id, active_only=True)
+    running = store.runs.list(org_id, RunQuery(status="running", limit=None)).items
+    queued = store.runs.list(org_id, RunQuery(status="queued", limit=1)).total
+    backfills = store.backfills.list(org_id, BackfillQuery(status=["queued", "running"], limit=None)).items
     latest_by_job = {run.component_id: run for run in store.runs.latest_by_target(org_id, component_kind="job")}
-    failed_stacks = store.runs.list_all(
-        org_id, status="failed", component_kind="job", completed_after=day_ago, completed_before=now, limit=10_000
-    )
+    failed_stacks = store.runs.list(
+        org_id,
+        RunQuery(
+            status="failed", component_kind="job", completed_after=day_ago, completed_before=now, limit=None
+        ),
+    ).items
     granularities = store.components.job_partition_granularities([job.id for job in enabled_jobs])
     groups, _ = store.events.error_groups(org_id, event_types=FAILURE_EVENT_TYPES, since=day_ago, until=now)
 
@@ -905,7 +910,7 @@ def get_overview(
     failing_jobs = {job.id for job in enabled_jobs if (run := latest_by_job.get(job.id)) and run.status == "failed"}
     failing_assets = {
         execution.component_id
-        for execution in store.events.latest_executions(org_id)
+        for execution in store.executions.list(org_id, ExecutionQuery(latest=True, limit=None)).items
         if execution.status == "failed" and execution.component_id
     }
     failing_sources = {
@@ -937,21 +942,23 @@ def get_overview(
     return OverviewResponse(
         generated_at=now,
         runs=RunsSummary.from_runs(
-            store.runs.list_all(
-                org_id, completed_after=day_ago, completed_before=now, all_attempts=True, limit=100_000
-            ),
+            store.runs.list(
+                org_id, RunQuery(completed_after=day_ago, completed_before=now, all_attempts=True, limit=None)
+            ).items,
             now,
         ),
-        activity=ActivitySummary.from_runs(running, store.runs.count(org_id, status="queued"), now),
+        activity=ActivitySummary.from_runs(running, queued, now),
         backfills=BackfillsSummary.from_backfills(
-            backfills, store.runs.count_backfill_runs([backfill.id for backfill in backfills])
+            backfills, store.backfills.run_counts([backfill.id for backfill in backfills])
         ),
         jobs=JobsSummary.from_jobs(enabled_jobs, failing_jobs),
         attention=attention,
         upcoming=UpcomingRun.from_jobs(jobs, granularities),
         recent=[
             RunResponse.from_run(run)
-            for run in store.runs.list_all(org_id, completed_before=now, sort="-completed_at", limit=RECENT_LIMIT)
+            for run in store.runs.list(
+                org_id, RunQuery(completed_before=now, sort="-completed_at", limit=RECENT_LIMIT)
+            ).items
         ],
         components=KindInventory.from_statuses(statuses, failing_ids, attention_ids),
     )
@@ -990,8 +997,10 @@ def get_coverage(
         raise HTTPException(status_code=422, detail=f"The window must span 1 to {MAX_COVERAGE_SPAN_DAYS} days")
     now = assume_utc(now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
     assets = AssetCoverage.from_components(
-        store.components.list_all(org_id, kinds=["source", "asset", "job"]),
+        store.components.list(
+            org_id, ComponentQuery(kind=["source", "asset", "job"], roots_only=False, limit=None)
+        ).items,
         store.components.asset_partitionings(org_id),
-        store.events.coverage_rows(org_id),
+        store.executions.coverage_rows(org_id),
     )
     return CoverageResponse.from_assets(assets, since, until, now)

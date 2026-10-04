@@ -1,3 +1,4 @@
+import { MAX_PAGE_SIZE, type Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 
 /**
@@ -23,7 +24,7 @@ export const TIMELINE_SPANS = [
 const MAX_RUNS = 1000
 
 export const useTimelineStore = defineStore('timeline', () => {
-    const { apiFetchRaw } = useApi()
+    const { apiFetch } = useApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -105,11 +106,17 @@ export const useTimelineStore = defineStore('timeline', () => {
             const params = new URLSearchParams({
                 after: new Date(rangeStart.value).toISOString(),
                 before: new Date(Math.min(rangeEnd.value, Date.now())).toISOString(),
-                limit: String(MAX_RUNS),
+                limit: String(MAX_PAGE_SIZE),
             })
-            const res = await apiFetchRaw<Run[]>(`/runs?${params}`)
-            runs.value = res._data ?? []
-            total.value = Number(res.headers.get('X-Total-Count') ?? runs.value.length)
+            const loaded: Run[] = []
+            let page: Page<Run>
+            do {
+                params.set('offset', String(loaded.length))
+                page = await apiFetch<Page<Run>>(`/runs?${params}`)
+                loaded.push(...page.items)
+            } while (page.items.length && loaded.length < Math.min(page.total, MAX_RUNS))
+            runs.value = loaded
+            total.value = page.total
         }
         catch (e) {
             error.value = e as Error

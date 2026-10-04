@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from interloper.oauth import OAuthAppCredentials
+from interloper_db import ComponentQuery
 
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
@@ -86,7 +87,10 @@ def list_definitions(
 
         collection_counts: dict[str, int] = {}
         if kind == "source":
-            for s in ctx.store.components.list_all(ctx.org_id, kinds=["source"]):
+            sources = ctx.store.components.list(
+                ctx.org_id, ComponentQuery(kind=["source"], roots_only=False, limit=None)
+            )
+            for s in sources.items:
                 collection_counts[s.key] = collection_counts.get(s.key, 0) + 1
 
         results = []

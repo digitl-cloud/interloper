@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from collections.abc import Callable
-from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
 from interloper.errors import ConfigError
-from interloper.utils import add_months
-from sqlalchemy import Engine, func
-from sqlalchemy import select as sa_select
-from sqlmodel import col, select
+from sqlalchemy import Engine
+from sqlmodel import select
 
-from interloper_db.models import Component, Quota, Run, Usage
+from interloper_db.models import Quota, Run
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.quotas.definitions import (
     QUOTA_MAX_SUCCESSFUL_RUNS_PER_MONTH,
@@ -22,7 +18,6 @@ from interloper_db.store.quotas.definitions import (
     CapacityQuota,
     ConsumptionQuota,
 )
-from interloper_db.store.quotas.metering import METRIC_SUCCESSFUL_RUNS, UsageLedger
 
 
 class QuotaStore:
@@ -90,7 +85,7 @@ class QuotaStore:
                 value = getattr(self._defaults(), key, None)
             return value
 
-    def get_overrides(self, org_id: UUID) -> dict[str, int]:
+    def overrides(self, org_id: UUID) -> dict[str, int]:
         """The organisation's set overrides as ``{key: limit}`` (null rows excluded).
 
         Args:
@@ -104,7 +99,7 @@ class QuotaStore:
             rows = session.exec(select(Quota).where(Quota.org_id == org_id)).all()
             return {row.key: row.limit for row in rows if row.limit is not None}
 
-    def list_overrides(self) -> dict[UUID, dict[str, int]]:
+    def all_overrides(self) -> dict[UUID, dict[str, int]]:
         """Every organisation's set overrides, keyed by org id.
 
         Returns:
@@ -150,7 +145,7 @@ class QuotaStore:
                 )
                 session.execute(statement)  # ty: ignore[deprecated]
             commit(session)
-            return self.get_overrides(org_id)
+            return self.overrides(org_id)
 
     # -- Enforcement -----------------------------------------------------------
 
@@ -254,138 +249,3 @@ class QuotaStore:
             session.add(db_run)
             commit(session)
             return True
-
-    # -- Usage -----------------------------------------------------------------
-
-    def list_usage(
-        self,
-        *,
-        period_start: dt.date | None = None,
-        org_id: UUID | None = None,
-    ) -> list[Usage]:
-        """Usage ledger rows, optionally filtered by period and organisation.
-
-        Args:
-            period_start: First day of the UTC month to restrict to, or None
-                for every period.
-            org_id: Organisation to restrict to, or None for every
-                organisation.
-
-        Returns:
-            The matching ledger rows, one per ``(org, metric, period)``.
-        """
-        with session_scope(self._engine) as session:
-            statement = select(Usage)
-            if period_start is not None:
-                statement = statement.where(Usage.period_start == period_start)
-            if org_id is not None:
-                statement = statement.where(Usage.org_id == org_id)
-            return list(session.exec(statement).all())
-
-    def current_period_start(self) -> dt.date:
-        """The current UTC calendar month, per the database clock.
-
-        Returns:
-            The first day of the month usage is currently charged into.
-        """
-        with session_scope(self._engine) as session:
-            return UsageLedger(session).current_period()
-
-    def count_sources_by_org(self) -> dict[UUID, int]:
-        """Current number of sources per organisation.
-
-        Returns:
-            The source count keyed by org id; organisations with no sources
-            are absent.
-        """
-        with session_scope(self._engine) as session:
-            rows = session.exec(
-                select(Component.org_id, func.count())
-                .where(Component.kind == "source")
-                .group_by(Component.org_id)  # ty: ignore[invalid-argument-type]
-            ).all()
-            return dict(rows)
-
-    def max_assets_per_source_by_org(self) -> dict[UUID, int]:
-        """The largest child-asset count of any single source, per organisation.
-
-        Returns:
-            The peak per-source asset count keyed by org id; organisations
-            with no parented assets are absent.
-        """
-        with session_scope(self._engine) as session:
-            per_source = (
-                sa_select(col(Component.org_id).label("org_id"), func.count().label("n"))
-                .where(col(Component.kind) == "asset", col(Component.parent_id).is_not(None))
-                .group_by(col(Component.org_id), col(Component.parent_id))
-            ).subquery()
-            rows = session.execute(  # ty: ignore[deprecated]
-                sa_select(per_source.c.org_id, func.max(per_source.c.n)).group_by(per_source.c.org_id)
-            ).all()
-            return {org_id: count for org_id, count in rows}
-
-    def count_successful_runs_by_org(self, period_start: dt.date) -> dict[UUID, int]:
-        """Recompute the ledger's truth: successful billable runs completed in the period.
-
-        Counts on ``completed_at`` — the nearest column to the charge moment.
-        Non-billable runs are left out, as settlement never charges them.
-        Reconciliation compares this against ``usage.used``.
-
-        Args:
-            period_start: First day of the UTC month to recompute, whose
-                following month bounds the window.
-
-        Returns:
-            The successful billable-run count keyed by org id; organisations
-            with none are absent.
-        """
-        with session_scope(self._engine) as session:
-            lower = datetime.combine(period_start, dt.time.min, tzinfo=timezone.utc)
-            upper = datetime.combine(add_months(period_start, 1), dt.time.min, tzinfo=timezone.utc)
-            rows = session.exec(
-                select(Run.org_id, func.count())
-                .where(
-                    Run.status == "success",
-                    col(Run.billable).is_(True),
-                    col(Run.completed_at) >= lower,
-                    col(Run.completed_at) < upper,
-                )
-                .group_by(Run.org_id)  # ty: ignore[invalid-argument-type]
-            ).all()
-            return dict(rows)
-
-    def reconcile_usage(self) -> list[dict[str, Any]]:
-        """Compare the current period's ledger against the runs table.
-
-        Returns one entry per organisation whose ``usage.used`` differs from
-        the recomputed successful-run count. Both sides move in the same
-        transaction on completion, so persistent drift is a bug signal;
-        transient off-by-ones are possible (the two reads are separate
-        queries, and charge months are DB-clock while ``completed_at`` is
-        the executor's clock at the boundary).
-
-        Returns:
-            One ``{org_id, period_start, ledger, recomputed}`` entry per
-            drifting organisation, ordered by org id; empty when the ledger
-            agrees with the runs table.
-        """
-        # Scoped, though the handle is unused: the three reads below join it, so
-        # the ledger and the runs table are compared at one point in time.
-        with session_scope(self._engine):
-            period_start = self.current_period_start()
-            recomputed = self.count_successful_runs_by_org(period_start)
-            ledger = {
-                row.org_id: row.used
-                for row in self.list_usage(period_start=period_start)
-                if row.metric == METRIC_SUCCESSFUL_RUNS
-            }
-            return [
-                {
-                    "org_id": org_id,
-                    "period_start": period_start,
-                    "ledger": ledger.get(org_id, 0),
-                    "recomputed": recomputed.get(org_id, 0),
-                }
-                for org_id in sorted(set(recomputed) | set(ledger), key=str)
-                if recomputed.get(org_id, 0) != ledger.get(org_id, 0)
-            ]

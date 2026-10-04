@@ -15,12 +15,13 @@ from uuid import UUID
 from interloper.errors import NotFoundError
 from interloper.utils import assume_utc
 from sqlalchemy import Engine
-from sqlmodel import select
+from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
 from interloper_db.models import PersonalAccessToken, Profile
 from interloper_db.session import commit, session_scope
-from interloper_db.store.organisations import OrganisationStore
+from interloper_db.store.members import MemberStore
+from interloper_db.store.page import Page, PageQuery
 
 TOKEN_PREFIX = "ilp_"
 
@@ -31,24 +32,36 @@ TOKEN_PREFIX_LEN = 12
 LAST_USED_THROTTLE_SECONDS = 60
 
 
+class TokenQuery(PageQuery):
+    """Which of a user's tokens a listing reads.
+
+    Attributes:
+        org_id: Keep the tokens scoped to this organisation; ``None`` keeps
+            every organisation's.
+    """
+
+    org_id: UUID | None = None
+
+
 class TokenStore:
     """Store methods for personal access tokens."""
 
-    def __init__(self, engine: Engine, organisations: OrganisationStore) -> None:
+    def __init__(self, engine: Engine, members: MemberStore) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
-            organisations: Organisation facet, for the membership a token's
-                scope resolves against.
+            members: Membership facet, for the live role a token's scope
+                resolves against.
         """
         self._engine = engine
-        self._organisations = organisations
+        self._members = members
 
     def create(
         self,
         user_id: UUID,
-        organisation_id: UUID,
+        org_id: UUID,
+        *,
         name: str,
         expires_at: datetime | None = None,
     ) -> tuple[PersonalAccessToken, str]:
@@ -56,7 +69,7 @@ class TokenStore:
 
         Args:
             user_id: Profile UUID of the token holder.
-            organisation_id: Organisation the token is scoped to.
+            org_id: Organisation the token is scoped to.
             name: User-facing label (e.g. "Claude Code laptop").
             expires_at: Optional expiry; ``None`` means the token never expires.
 
@@ -69,7 +82,7 @@ class TokenStore:
         with session_scope(self._engine) as session:
             db_token = PersonalAccessToken(
                 user_id=user_id,
-                organisation_id=organisation_id,
+                organisation_id=org_id,
                 name=name,
                 token_prefix=raw[:TOKEN_PREFIX_LEN],
                 token_hash=hash_token(raw),
@@ -111,7 +124,7 @@ class TokenStore:
             if not db_profile:
                 return None
 
-            role = self._organisations.member_role(db_token.user_id, db_token.organisation_id)
+            role = self._members.role(db_token.organisation_id, db_token.user_id)
             if role is None:
                 return None
 
@@ -124,23 +137,26 @@ class TokenStore:
 
             return db_profile, db_token, role
 
-    def list_all(self, user_id: UUID, organisation_id: UUID | None = None) -> list[PersonalAccessToken]:
-        """List a user's tokens, optionally filtered to one organisation.
+    def list(self, user_id: UUID, query: TokenQuery) -> Page[PersonalAccessToken]:
+        """List a user's tokens, newest first.
 
         Args:
-            user_id: Profile UUID.
-            organisation_id: Restrict to this organisation when provided.
+            user_id: Profile UUID of the holder.
+            query: Which organisation's tokens, and the window to read.
 
         Returns:
-            Token rows, newest first. Rows carry only the display prefix and
-            the hash — exposing neither raw secrets nor anything recoverable.
+            The page of tokens. Rows carry only the display prefix and the
+            hash — exposing neither raw secrets nor anything recoverable.
         """
+        statement = (
+            select(PersonalAccessToken)
+            .where(PersonalAccessToken.user_id == user_id)
+            .order_by(col(PersonalAccessToken.created_at).desc(), col(PersonalAccessToken.id))
+        )
+        if query.org_id is not None:
+            statement = statement.where(PersonalAccessToken.organisation_id == query.org_id)
         with session_scope(self._engine) as session:
-            statement = select(PersonalAccessToken).where(PersonalAccessToken.user_id == user_id)
-            if organisation_id is not None:
-                statement = statement.where(PersonalAccessToken.organisation_id == organisation_id)
-            statement = statement.order_by(PersonalAccessToken.created_at.desc())  # ty: ignore[unresolved-attribute]
-            return list(session.exec(statement).all())
+            return Page.read(session, statement, query)
 
     def get(self, token_id: UUID) -> PersonalAccessToken:
         """Get a token row by ID.

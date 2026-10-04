@@ -11,6 +11,7 @@ const route = useRoute()
 const orgId = computed(() => route.params.id as string)
 
 const adminStore = useAdminStore()
+const organisationStore = useOrganisationStore()
 const userStore = useUserStore()
 const toast = useToast()
 const { switchToOrg } = useOrgSwitch()
@@ -25,17 +26,14 @@ const inviteOpen = ref(false)
 const isMember = computed(() =>
     rows.value.some(r => r.status === 'active' && r.id === userStore.user?.id))
 
-const inviteEndpoint = computed(() => `/admin/organisations/${orgId.value}/invitations`)
-
 const quotaRow = computed<AdminOrgQuotaStatus | null>(() =>
     quotas.value?.organisations.find(row => row.id === orgId.value) ?? null)
 
 async function loadData() {
     loading.value = true
     try {
-        const [members, invitations, organisations, quotasResp, activityResp] = await Promise.all([
-            adminStore.listMembers(orgId.value),
-            adminStore.listInvitations(orgId.value),
+        const [memberRows, organisations, quotasResp, activityResp] = await Promise.all([
+            organisationStore.fetchMemberRows(orgId.value, true),
             adminStore.listOrganisations(),
             adminStore.getQuotas(),
             adminStore.getOrgActivity(orgId.value),
@@ -44,26 +42,7 @@ async function loadData() {
         org.value = organisations.find(o => o.id === orgId.value) ?? null
         quotas.value = quotasResp
         activity.value = activityResp
-
-        const memberRows: OrgMember[] = members.map(m => ({
-            id: m.id,
-            email: m.email,
-            name: m.name,
-            avatar_url: m.avatar_url,
-            role: m.role,
-            status: 'active' as const,
-        }))
-
-        const inviteRows: OrgMember[] = invitations.map(i => ({
-            id: i.id,
-            email: i.email,
-            name: null,
-            avatar_url: null,
-            role: i.role,
-            status: 'invited' as const,
-        }))
-
-        rows.value = [...memberRows, ...inviteRows]
+        rows.value = memberRows
     }
     catch (err) {
         console.error('[Admin] Failed to load organisation', err)
@@ -103,7 +82,7 @@ const tabs = computed<NavigationMenuItem[]>(() => [
 
 async function removeMember(member: OrgMember) {
     try {
-        await adminStore.removeMember(orgId.value, member.id)
+        await organisationStore.removeMember(orgId.value, member.id)
         toast.add({ title: `${member.name || member.email} removed`, color: 'success' })
         await loadData()
     }
@@ -114,7 +93,7 @@ async function removeMember(member: OrgMember) {
 
 async function cancelInvite(member: OrgMember) {
     try {
-        await adminStore.cancelInvitation(orgId.value, member.id)
+        await organisationStore.cancelInvitation(orgId.value, member.id)
         toast.add({ title: `Invitation to ${member.email} cancelled`, color: 'success' })
         await loadData()
     }
@@ -125,7 +104,7 @@ async function cancelInvite(member: OrgMember) {
 
 async function joinOrganisation() {
     try {
-        await adminStore.joinOrganisation(orgId.value)
+        await organisationStore.joinOrganisation(orgId.value)
         toast.add({ title: `Joined ${org.value?.name ?? 'organisation'}`, color: 'success' })
         await loadData()
     }
@@ -136,8 +115,7 @@ async function joinOrganisation() {
 
 async function resendInvite(member: OrgMember) {
     try {
-        await adminStore.cancelInvitation(orgId.value, member.id)
-        await adminStore.inviteMember(orgId.value, member.email, member.role)
+        await organisationStore.resendInvitation(orgId.value, member.id)
         toast.add({ title: `Invitation resent to ${member.email}`, color: 'success' })
         await loadData()
     }
@@ -280,7 +258,7 @@ async function submitRename() {
     if (!name || name === org.value?.name) return
     renaming.value = true
     try {
-        await adminStore.renameOrganisation(orgId.value, name)
+        await organisationStore.renameOrganisation(orgId.value, name)
         toast.add({ title: 'Organisation renamed', color: 'success' })
         await loadData()
     }
@@ -307,7 +285,7 @@ async function submitDelete() {
     if (!target || deleteConfirmName.value !== target.name) return
     deleting.value = true
     try {
-        await adminStore.deleteOrganisation(target.id, deleteConfirmName.value)
+        await organisationStore.deleteOrganisation(target.id, deleteConfirmName.value)
         toast.add({ title: `Organisation "${target.name}" deleted`, color: 'success' })
         await navigateTo('/admin/organisations')
     }
@@ -569,7 +547,7 @@ watch(orgId, loadData)
                     </OrganizationMembersTable>
 
                     <OrganizationInviteModal v-model:open="inviteOpen"
-                                             :endpoint="inviteEndpoint"
+                                             :org-id="orgId"
                                              @invited="loadData" />
                 </template>
             </div>

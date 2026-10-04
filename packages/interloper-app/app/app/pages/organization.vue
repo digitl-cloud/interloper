@@ -1,24 +1,8 @@
 <script setup lang="ts">
 import type { OrgMember } from '~/types/organisation'
 
-interface Invitation {
-    id: string
-    email: string
-    role: string
-    created_at: string | null
-    expires_at: string
-}
-
-interface MemberResponse {
-    id: string
-    email: string
-    name: string | null
-    avatar_url: string | null
-    role: string
-}
-
-const { apiFetch } = useApi()
 const userStore = useUserStore()
+const organisationStore = useOrganisationStore()
 const toast = useToast()
 
 const rows = ref<OrgMember[]>([])
@@ -26,34 +10,13 @@ const loading = ref(false)
 const inviteOpen = ref(false)
 
 const isAdmin = computed(() => userStore.user?.role === 'admin')
+const orgId = computed(() => organisationStore.organisation?.id)
 
 async function loadData() {
+    if (!orgId.value) return
     loading.value = true
     try {
-        const [members, invitations] = await Promise.all([
-            apiFetch<MemberResponse[]>('/organisations/members'),
-            isAdmin.value ? apiFetch<Invitation[]>('/organisations/invitations') : Promise.resolve([]),
-        ])
-
-        const memberRows: OrgMember[] = members.map(m => ({
-            id: m.id,
-            email: m.email,
-            name: m.name,
-            avatar_url: m.avatar_url,
-            role: m.role,
-            status: 'active' as const,
-        }))
-
-        const inviteRows: OrgMember[] = invitations.map(i => ({
-            id: i.id,
-            email: i.email,
-            name: null,
-            avatar_url: null,
-            role: i.role,
-            status: 'invited' as const,
-        }))
-
-        rows.value = [...memberRows, ...inviteRows]
+        rows.value = await organisationStore.fetchMemberRows(orgId.value, isAdmin.value)
     }
     catch (err) {
         console.error('[Organization] Failed to load members', err)
@@ -65,7 +28,7 @@ async function loadData() {
 
 async function removeMember(member: OrgMember) {
     try {
-        await apiFetch(`/organisations/members/${member.id}`, { method: 'DELETE' })
+        await organisationStore.removeMember(orgId.value!, member.id)
         toast.add({ title: `${member.name || member.email} removed`, color: 'success' })
         await loadData()
     }
@@ -76,7 +39,7 @@ async function removeMember(member: OrgMember) {
 
 async function cancelInvite(member: OrgMember) {
     try {
-        await apiFetch(`/organisations/invitations/${member.id}`, { method: 'DELETE' })
+        await organisationStore.cancelInvitation(orgId.value!, member.id)
         toast.add({ title: `Invitation to ${member.email} cancelled`, color: 'success' })
         await loadData()
     }
@@ -87,15 +50,13 @@ async function cancelInvite(member: OrgMember) {
 
 async function resendInvite(member: OrgMember) {
     try {
-        await apiFetch(`/organisations/invitations/${member.id}/resend`, { method: 'POST' })
+        await organisationStore.resendInvitation(orgId.value!, member.id)
         toast.add({ title: `Invitation resent to ${member.email}`, color: 'success' })
     }
     catch (err) {
         toast.add(errorToast(err, 'Failed to resend invitation'))
     }
 }
-
-const organisationStore = useOrganisationStore()
 
 onMounted(loadData)
 watch(() => organisationStore.organisation, loadData)
@@ -161,7 +122,9 @@ const ROLE_CARDS = [
                 </div>
             </UCard>
 
-            <OrganizationInviteModal v-model:open="inviteOpen"
+            <OrganizationInviteModal v-if="orgId"
+                                     v-model:open="inviteOpen"
+                                     :org-id="orgId"
                                      @invited="loadData" />
         </template>
     </UDashboardPanel>

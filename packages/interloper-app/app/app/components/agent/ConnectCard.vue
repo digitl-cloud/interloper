@@ -6,7 +6,7 @@
  * SchemaForm (OAuth sign-in or manual credentials) so secrets go straight
  * from the form to the API, never through the conversation.
  *
- * Creation is gated on the candidate check (`POST /components/check`): the
+ * Creation is gated on the candidate check (`POST /catalog/{key}/check`): the
  * create button runs the check first and only creates when it passes. A
  * failure is surfaced by the button itself — it turns into an error state
  * carrying the categorised message, and a click retries. Config failures
@@ -95,9 +95,9 @@ async function submit() {
 
     let check: CheckResult
     try {
-        check = await apiFetch<CheckResult>('/components/check', {
+        check = await apiFetch<CheckResult>(`/catalog/${props.request.connection_key}/check`, {
             method: 'POST',
-            body: { component_key: props.request.connection_key, config: formData.value },
+            body: { config: formData.value },
         })
     }
     catch (e) {

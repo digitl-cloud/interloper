@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Organisation, PersonalAccessToken, Profile, UserOrganisation
-from interloper_db.store import Store
+from interloper_db.store import Store, TokenQuery
 from interloper_db.store.tokens import TOKEN_PREFIX_LEN
 
 
@@ -64,7 +64,7 @@ def member(store: Store) -> tuple[Profile, Organisation]:
     Returns:
         The profile and the organisation it was made admin of, in that order.
     """
-    profile = store.auth.upsert_profile(google_id="g-user", email="user@example.com", name="User")
+    profile = store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return profile, org
 
@@ -101,7 +101,7 @@ class TestResolveToken:
         profile, org = member
         _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.organisations.update_member_role(org.id, profile.id, "viewer")
+        store.members.update(org.id, profile.id, "viewer")
 
         resolved = store.tokens.resolve(raw)
         assert resolved is not None
@@ -111,7 +111,7 @@ class TestResolveToken:
         profile, org = member
         _, raw = store.tokens.create(profile.id, org.id, name="t")
 
-        store.organisations.remove_member(org.id, profile.id)
+        store.members.delete(org.id, profile.id)
 
         assert store.tokens.resolve(raw) is None
 
@@ -156,8 +156,13 @@ class TestListAndRevoke:
         store.tokens.create(profile.id, org.id, name="a")
         store.tokens.create(profile.id, other_org.id, name="b")
 
-        assert {t.name for t in store.tokens.list_all(profile.id)} == {"a", "b"}
-        assert {t.name for t in store.tokens.list_all(profile.id, org.id)} == {"a"}
+        everything = store.tokens.list(profile.id, TokenQuery())
+        scoped = store.tokens.list(profile.id, TokenQuery(org_id=org.id))
+
+        assert {t.name for t in everything.items} == {"a", "b"}
+        assert everything.total == 2
+        assert {t.name for t in scoped.items} == {"a"}
+        assert scoped.total == 1
 
     def test_revoke_missing_token_raises(self, store: Store):
         with pytest.raises(NotFoundError):
@@ -179,7 +184,7 @@ class TestGetToken:
 
     def test_get_returns_the_token(self, store: Store, member: tuple[Profile, Organisation]):
         profile, org = member
-        token, _raw = store.tokens.create(user_id=profile.id, organisation_id=org.id, name="ci")
+        token, _raw = store.tokens.create(profile.id, org.id, name="ci")
 
         assert store.tokens.get(token.id).id == token.id
 
@@ -198,7 +203,7 @@ class TestResolveOrphanedToken:
         # so the orphan is fabricated with constraints off — the guard exists
         # for a row that should not be there.
         profile, org = member
-        _token, raw = store.tokens.create(user_id=profile.id, organisation_id=org.id, name="ci")
+        _token, raw = store.tokens.create(profile.id, org.id, name="ci")
         with token_db.connect() as connection:
             connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
             connection.exec_driver_sql("DELETE FROM profiles")

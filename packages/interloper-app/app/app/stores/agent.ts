@@ -1,7 +1,7 @@
 import type { Conversation, ConversationDetail } from '~/types/agent'
 
 export const useAgentStore = defineStore('agent', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch, fetchAll } = useApi()
 
     /**********************
      * State
@@ -17,7 +17,7 @@ export const useAgentStore = defineStore('agent', () => {
         loading.value = true
         error.value = null
         try {
-            conversations.value = await apiFetch<Conversation[]>('/agent/conversations')
+            conversations.value = await fetchAll<Conversation>('/agent/conversations')
         }
         catch (e) {
             error.value = e as Error

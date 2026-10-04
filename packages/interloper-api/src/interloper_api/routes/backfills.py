@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from interloper_db import BackfillQuery, Page
 from interloper_db.models import Backfill
 from pydantic import BaseModel, Field
 
@@ -97,31 +99,31 @@ class BackfillResponse(BaseModel):
 # -- Endpoints -----------------------------------------------------------------
 
 
-@router.get("/")
+@router.get("")
 def list_backfills(
     user: ViewerDep,
     org_id: OrgIdDep,
     store: StoreDep,
-    active_only: bool = False,
-) -> list[BackfillResponse]:
-    """List backfills for the current organisation.
+    query: Annotated[BackfillQuery, Query()],
+) -> Page[BackfillResponse]:
+    """List the organisation's backfills, newest first.
 
     Args:
-        active_only: Restrict the listing to backfills still ``"queued"`` or
-            ``"running"``.
         user: The authenticated user, required to hold at least the ``viewer`` role.
         org_id: The active organisation's UUID.
         store: The Store instance.
+        query: The statuses to keep (``status=queued&status=running`` for the
+            active ones) and the window to read.
 
     Returns:
-        The organisation's backfills, as response models.
+        The page of backfills, each with its partitions per status.
     """
-    backfills = store.runs.list_backfills(org_id, active_only=active_only)
-    counts = store.runs.count_backfill_runs([backfill.id for backfill in backfills])
-    return [BackfillResponse.from_backfill(backfill, counts.get(backfill.id)) for backfill in backfills]
+    backfills = store.backfills.list(org_id, query)
+    counts = store.backfills.run_counts([backfill.id for backfill in backfills.items])
+    return backfills.map(lambda backfill: BackfillResponse.from_backfill(backfill, counts.get(backfill.id)))
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 def create_backfill(
     body: BackfillCreateRequest,
     user: CurrentUserDep,
@@ -141,7 +143,7 @@ def create_backfill(
     job = load_authorized(
         lambda i: store.components.get(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
     )
-    backfill = store.runs.create_backfill(
+    backfill = store.backfills.create(
         job.org_id,
         component_id=body.component_id,
         start_key=body.start_key,
@@ -149,7 +151,7 @@ def create_backfill(
         concurrency=body.concurrency,
         fail_fast=body.fail_fast,
     )
-    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill.id]).get(backfill.id))
+    return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill.id]).get(backfill.id))
 
 
 @router.get("/{backfill_id}")
@@ -168,8 +170,8 @@ def get_backfill(
     Returns:
         The backfill, as a response model.
     """
-    backfill = load_authorized(store.runs.get_backfill, backfill_id, user, store, label="Backfill")
-    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill_id]).get(backfill_id))
+    backfill = load_authorized(store.backfills.get, backfill_id, user, store, label="Backfill")
+    return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill_id]).get(backfill_id))
 
 
 @router.post("/{backfill_id}/cancel")
@@ -190,6 +192,6 @@ def cancel_backfill(
     Returns:
         The cancelled backfill, as a response model, with its partitions per status.
     """
-    load_authorized(store.runs.get_backfill, backfill_id, user, store, label="Backfill", minimum="editor")
-    backfill = store.runs.cancel_backfill(backfill_id)
-    return BackfillResponse.from_backfill(backfill, store.runs.count_backfill_runs([backfill_id]).get(backfill_id))
+    load_authorized(store.backfills.get, backfill_id, user, store, label="Backfill", minimum="editor")
+    backfill = store.backfills.cancel(backfill_id)
+    return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill_id]).get(backfill_id))

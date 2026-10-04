@@ -1,9 +1,11 @@
-"""Super-admin routes — cross-organisation management.
+"""Super-admin routes: the platform-wide views.
 
 These endpoints are gated by :func:`require_super_admin` and are NOT bound to
-the session's active organisation. They let a platform super-admin manage every
-organisation's metadata, membership, and invitations. They deliberately grant
-no access to org-scoped *data* (sources, jobs, runs, …).
+the session's active organisation: every organisation (soft-deleted ones
+included), every user, quotas and the instance configuration. Managing one
+organisation's members and invitations goes through the organisation routes,
+which admit super-admins (:mod:`interloper_api.routes.organisations`). They
+deliberately grant no access to org-scoped *data* (sources, jobs, runs, …).
 """
 
 from __future__ import annotations
@@ -12,11 +14,12 @@ import datetime as dt
 import inspect
 from datetime import datetime
 from importlib import metadata
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
-from interloper_db import Role
+from fastapi import APIRouter, HTTPException, Query, Response
+from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, UsageQuery
+from interloper_db.store import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
@@ -25,15 +28,8 @@ from interloper_api.dependencies import (
     QuotaDefaultsDep,
     StoreDep,
     SuperAdminDep,
-    get_smtp_config,
 )
-from interloper_api.notifications import InvitationEmail
-from interloper_api.routes.organisations import (
-    CreateOrganisationRequest,
-    InvitationResponse,
-    InviteRequest,
-    MemberResponse,
-)
+from interloper_api.routes.organisations import CreateOrganisationRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -54,6 +50,25 @@ class AdminOrganisationResponse(BaseModel):
     created_at: datetime | None = None
     deleted_at: datetime | None = None
 
+    @classmethod
+    def from_organisation(cls, organisation: Organisation, member_count: int) -> AdminOrganisationResponse:
+        """Describe an organisation row with its member count.
+
+        Args:
+            organisation: The organisation row.
+            member_count: How many members it has.
+
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=organisation.id,
+            name=organisation.name,
+            member_count=member_count,
+            created_at=organisation.created_at,
+            deleted_at=organisation.deleted_at,
+        )
+
 
 class AdminUserOrganisation(BaseModel):
     """Organisation reference on a user row."""
@@ -73,29 +88,25 @@ class AdminUserResponse(BaseModel):
     organisations: list[AdminUserOrganisation]
     created_at: datetime | None = None
 
+    @classmethod
+    def from_profile(cls, profile: Profile) -> AdminUserResponse:
+        """Describe a profile with the organisations it belongs to.
 
-class UpdateOrganisationRequest(BaseModel):
-    """Request body for renaming an organisation."""
+        Args:
+            profile: The profile row, its ``organisations`` loaded.
 
-    name: str
-
-
-class DeleteOrganisationRequest(BaseModel):
-    """Confirmation body for deleting an organisation — must repeat its exact name."""
-
-    name: str
-
-
-class UpdateRoleRequest(BaseModel):
-    """Request body for changing a member's role."""
-
-    role: Role
-
-
-class JoinOrganisationRequest(BaseModel):
-    """Request body for a super-admin joining an organisation."""
-
-    role: Role = Role.ADMIN
+        Returns:
+            The response model.
+        """
+        return cls(
+            id=profile.id,
+            email=profile.email,
+            name=profile.name,
+            avatar_url=profile.avatar_url,
+            is_super_admin=profile.is_super_admin,
+            organisations=[AdminUserOrganisation(id=org.id, name=org.name) for org in profile.organisations],
+            created_at=profile.created_at,
+        )
 
 
 class AdminLauncherConfig(BaseModel):
@@ -279,12 +290,41 @@ class AdminQuotaUpdateRequest(RootModel[AdminQuotaLimits]):
 
 
 class AdminActivityEntry(BaseModel):
-    """One event in an organisation's derived activity feed."""
+    """One event in an organisation's derived activity feed, worded for display."""
 
     kind: str
     when: datetime
     title: str
     detail: str | None = None
+
+    @classmethod
+    def from_entry(cls, entry: ActivityEntry) -> AdminActivityEntry:
+        """Word a derived activity entry as a title and a detail line.
+
+        Args:
+            entry: The store's activity entry.
+
+        Returns:
+            The response model; the detail is ``None`` when the entry carries
+            nothing beyond its title.
+        """
+        subject, extra = entry.subject, entry.extra
+        if entry.kind == "org_created":
+            title, detail = "Organisation created", None
+        elif entry.kind == "org_deleted":
+            title, detail = "Organisation deleted", "Retained read-only for billing history."
+        elif entry.kind == "member_joined":
+            title, detail = f"{subject} joined the organisation", f"Role: {extra}" if extra else None
+        elif entry.kind == "invitation_sent":
+            title, detail = f"Invitation sent to {subject}", f"Invited by {extra}" if extra else None
+        elif entry.kind == "source_added":
+            title, detail = f"Source added: {subject}", None
+        elif entry.kind == "runs_completed":
+            count = int(subject or 0)
+            title, detail = f"{count:,} run{'' if count == 1 else 's'} completed successfully", None
+        else:
+            title, detail = entry.kind, None
+        return cls(kind=entry.kind, when=entry.when, title=title, detail=detail)
 
 
 class AdminConfigResponse(BaseModel):
@@ -612,19 +652,19 @@ def get_quotas(
         and one status entry per organisation, soft-deleted ones included.
     """
     defaults = _quota_limits(quota_defaults)
-    period_start = store.quotas.current_period_start()
-    overrides = store.quotas.list_overrides()
+    period_start = store.usage.current_period()
+    overrides = store.quotas.all_overrides()
     usage = {
         row.org_id: row
-        for row in store.quotas.list_usage(period_start=period_start)
+        for row in store.usage.list(UsageQuery(period_start=period_start, limit=None)).items
         if row.metric == METRIC_SUCCESSFUL_RUNS
     }
-    sources = store.quotas.count_sources_by_org()
-    max_assets = store.quotas.max_assets_per_source_by_org()
-    recomputed = store.quotas.count_successful_runs_by_org(period_start)
+    sources = store.usage.sources_by_org()
+    max_assets = store.usage.max_assets_per_source_by_org()
+    recomputed = store.usage.successful_runs_by_org(period_start)
 
     organisations = []
-    for org, _member_count in store.organisations.list_all():
+    for org in store.organisations.list(OrganisationQuery(include_deleted=True, limit=None)).items:
         limits = _quota_limits(overrides.get(org.id, {}))
         org_usage = usage.get(org.id)
         organisations.append(
@@ -668,152 +708,32 @@ def update_org_quota(
     Returns:
         The organisation's overrides after the write, ``None`` where unset.
     """
-    store.organisations.get(org_id)  # 404 before touching anything else
-    overrides = store.quotas.set_overrides(org_id, body.root)
-    return _quota_limits(overrides)
-
-
-# -- Activity ------------------------------------------------------------------
-
-
-def _activity_title(entry: dict[str, Any]) -> tuple[str, str | None]:
-    """Presentation strings for a derived activity entry.
-
-    Args:
-        entry: One raw activity record, read for its ``kind``, ``subject`` and
-            ``extra`` keys.
-
-    Returns:
-        The title and the detail line, the latter ``None`` when the entry
-        carries nothing beyond its title.
-    """
-    kind, subject, extra = entry["kind"], entry["subject"], entry["extra"]
-    if kind == "org_created":
-        return "Organisation created", None
-    if kind == "org_deleted":
-        return "Organisation deleted", "Retained read-only for billing history."
-    if kind == "member_joined":
-        return f"{subject} joined the organisation", f"Role: {extra}" if extra else None
-    if kind == "invitation_sent":
-        return f"Invitation sent to {subject}", f"Invited by {extra}" if extra else None
-    if kind == "source_added":
-        return f"Source added — {subject}", None
-    if kind == "runs_completed":
-        count = int(subject)
-        return f"{count:,} run{'' if count == 1 else 's'} completed successfully", None
-    return kind, None
-
-
-@router.get("/organisations/{org_id}/activity")
-def get_organisation_activity(
-    org_id: UUID,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> list[AdminActivityEntry]:
-    """Derived activity feed for one organisation, newest first.
-
-    Composed from existing records (memberships, pending invitations,
-    sources, run aggregates, the org row itself) — there is no audit
-    trail, so actor attribution is limited to what those rows carry.
-
-    Args:
-        org_id: The organisation whose activity is derived.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        The activity entries, newest first.
-    """
-    entries = []
-    for entry in store.organisations.list_activity(org_id):
-        title, detail = _activity_title(entry)
-        entries.append(AdminActivityEntry(kind=entry["kind"], when=entry["when"], title=title, detail=detail))
-    return entries
-
-
-# -- Users ---------------------------------------------------------------------
-
-
-@router.get("/users")
-def list_all_users(
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> list[AdminUserResponse]:
-    """List every user profile with the organisations it belongs to.
-
-    Args:
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        Every profile on the platform, each with its memberships.
-    """
-    return [
-        AdminUserResponse(
-            id=profile.id,
-            email=profile.email,
-            name=profile.name,
-            avatar_url=profile.avatar_url,
-            is_super_admin=profile.is_super_admin,
-            organisations=[AdminUserOrganisation(id=org.id, name=org.name) for org in orgs],
-            created_at=profile.created_at,
-        )
-        for profile, orgs in store.auth.list_all_profiles()
-    ]
-
-
-@router.delete("/users/{user_id}")
-def delete_user(
-    user_id: UUID,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> dict[str, str]:
-    """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations.
-
-    Args:
-        user_id: The profile to delete.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        ``{"status": "ok"}`` once the profile is gone.
-
-    Raises:
-        HTTPException: 400 when the caller targets their own account.
-    """
-    if user_id == user.id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account")
-    store.auth.delete_profile(user_id)
-    return {"status": "ok"}
+    store.organisations.get(org_id)
+    return _quota_limits(store.quotas.set_overrides(org_id, body.root))
 
 
 # -- Organisations -------------------------------------------------------------
 
 
 @router.get("/organisations")
-def list_all_organisations(
+def list_organisations(
     user: SuperAdminDep,
     store: StoreDep,
-) -> list[AdminOrganisationResponse]:
+    query: Annotated[PageQuery, Query()],
+) -> Page[AdminOrganisationResponse]:
     """List every organisation with its member count, soft-deleted ones included.
 
     Args:
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
+        query: The window to read.
 
     Returns:
-        Every organisation, each with its member count.
+        The page of organisations.
     """
-    return [
-        AdminOrganisationResponse(
-            id=org.id,
-            name=org.name,
-            member_count=count,
-            created_at=org.created_at,
-            deleted_at=org.deleted_at,
-        )
-        for org, count in store.organisations.list_all()
-    ]
+    organisations = store.organisations.list(OrganisationQuery(include_deleted=True, **query.model_dump()))
+    counts = store.members.count_by_org([org.id for org in organisations.items])
+    return organisations.map(lambda org: AdminOrganisationResponse.from_organisation(org, counts.get(org.id, 0)))
 
 
 @router.post("/organisations", status_code=201)
@@ -832,250 +752,76 @@ def create_organisation(
     Returns:
         The created organisation, whose member count is therefore zero.
     """
-    org = store.organisations.create(name=body.name)
-    return AdminOrganisationResponse(
-        id=org.id,
-        name=org.name,
-        member_count=0,
-        created_at=org.created_at,
-    )
+    return AdminOrganisationResponse.from_organisation(store.organisations.create(name=body.name), member_count=0)
 
 
-@router.patch("/organisations/{org_id}")
-def update_organisation(
-    org_id: UUID,
-    body: UpdateOrganisationRequest,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> AdminOrganisationResponse:
-    """Rename an organisation.
-
-    Args:
-        org_id: The organisation to rename.
-        body: The new name.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        The renamed organisation with its current member count.
-    """
-    org = store.organisations.update(org_id, body.name)
-    members = store.organisations.list_members(org_id)
-    return AdminOrganisationResponse(
-        id=org.id,
-        name=org.name,
-        member_count=len(members),
-        created_at=org.created_at,
-    )
-
-
-@router.delete("/organisations/{org_id}")
-def delete_organisation(
-    org_id: UUID,
-    body: DeleteOrganisationRequest,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> dict[str, str]:
-    """Soft-delete an organisation: purges its data, keeps execution history and the usage ledger.
-
-    The body must repeat the exact name. Deleted organisations stay in the
-    list (read-only) and read as missing everywhere else.
-
-    Args:
-        org_id: The organisation to soft-delete.
-        body: The confirmation, repeating the organisation's exact name.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        ``{"status": "ok"}`` once the organisation is soft-deleted.
-
-    Raises:
-        HTTPException: 400 when the confirmation name does not match.
-    """
-    org = store.organisations.get(org_id)
-    if body.name != org.name:
-        raise HTTPException(status_code=400, detail="Organisation name does not match")
-    store.organisations.delete(org_id)
-    return {"status": "ok"}
-
-
-# -- Members -------------------------------------------------------------------
-
-
-@router.get("/organisations/{org_id}/members")
-def list_members(
+@router.get("/organisations/{org_id}/activity")
+def get_organisation_activity(
     org_id: UUID,
     user: SuperAdminDep,
     store: StoreDep,
-) -> list[MemberResponse]:
-    """List all members of any organisation.
+    query: Annotated[PageQuery, Query()],
+) -> Page[AdminActivityEntry]:
+    """Derived activity feed for one organisation, newest first.
+
+    Composed from existing records (memberships, pending invitations,
+    sources, run aggregates, the org row itself); there is no audit trail,
+    so actor attribution is limited to what those rows carry.
 
     Args:
-        org_id: The organisation whose members are listed.
+        org_id: The organisation whose activity is derived.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
+        query: The window to read.
 
     Returns:
-        Every member of the organisation with its role.
+        The page of activity entries, newest first.
     """
-    store.organisations.get(org_id)  # 404 before touching anything else
-    return [MemberResponse.from_profile(profile, role) for profile, role in store.organisations.list_members(org_id)]
+    return store.organisations.activity(org_id, query).map(AdminActivityEntry.from_entry)
 
 
-@router.post("/organisations/{org_id}/members", status_code=201)
-def join_organisation(
-    org_id: UUID,
-    body: JoinOrganisationRequest,
+# -- Users ---------------------------------------------------------------------
+
+
+@router.get("/users")
+def list_users(
     user: SuperAdminDep,
     store: StoreDep,
-) -> MemberResponse:
-    """Add the calling super-admin to any organisation — no invitation needed.
+    query: Annotated[PageQuery, Query()],
+) -> Page[AdminUserResponse]:
+    """List every user profile with the organisations it belongs to.
 
     Args:
-        org_id: The organisation to join.
-        body: The role to take, ``admin`` unless overridden.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
+        query: The window to read.
 
     Returns:
-        The caller's new membership.
-
-    Raises:
-        HTTPException: 409 when the caller already belongs to the organisation.
+        The page of profiles, each with its memberships.
     """
-    store.organisations.get(org_id)  # 404 before touching anything else
-    if not store.organisations.add_member(org_id, user.id, body.role):
-        raise HTTPException(status_code=409, detail="Already a member of this organisation")
-    return MemberResponse.from_profile(user, body.role.value)
+    return store.profiles.list(query).map(AdminUserResponse.from_profile)
 
 
-@router.patch("/organisations/{org_id}/members/{user_id}")
-def update_member_role(
-    org_id: UUID,
-    user_id: UUID,
-    body: UpdateRoleRequest,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> dict[str, str]:
-    """Change a member's role in any organisation.
-
-    Args:
-        org_id: The organisation the membership belongs to.
-        user_id: The member whose role changes.
-        body: The new role.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        ``{"status": "ok"}`` once the role is written.
-    """
-    store.organisations.update_member_role(org_id, user_id, body.role)
-    return {"status": "ok"}
-
-
-@router.delete("/organisations/{org_id}/members/{user_id}")
-def remove_member(
-    org_id: UUID,
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
     user_id: UUID,
     user: SuperAdminDep,
     store: StoreDep,
-) -> dict[str, str]:
-    """Remove a member from any organisation.
+) -> Response:
+    """Delete a user entirely: profile, sessions, tokens, memberships, sent invitations.
 
     Args:
-        org_id: The organisation the membership belongs to.
-        user_id: The member to remove.
+        user_id: The profile to delete.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
 
     Returns:
-        ``{"status": "ok"}`` once the membership is gone.
+        An empty 204 response.
+
+    Raises:
+        HTTPException: 400 when the caller targets their own account.
     """
-    store.organisations.remove_member(org_id, user_id)
-    return {"status": "ok"}
-
-
-# -- Invitations ---------------------------------------------------------------
-
-
-@router.get("/organisations/{org_id}/invitations")
-def list_invitations(
-    org_id: UUID,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> list[InvitationResponse]:
-    """List pending invitations for any organisation.
-
-    Args:
-        org_id: The organisation whose invitations are listed.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        The organisation's pending invitations.
-    """
-    store.organisations.get(org_id)  # 404 before touching anything else
-    return [
-        InvitationResponse.model_validate(invitation, from_attributes=True)
-        for invitation in store.organisations.list_invitations(org_id)
-    ]
-
-
-@router.post("/organisations/{org_id}/invitations", status_code=201)
-def invite_member(
-    org_id: UUID,
-    body: InviteRequest,
-    request: Request,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> InvitationResponse:
-    """Invite a user to any organisation by email.
-
-    The invitation is stored first and mailed best-effort: an unconfigured or
-    failing SMTP is logged, never surfaced, so the link stays redeemable.
-
-    Args:
-        org_id: The organisation to invite into.
-        body: The recipient email and the role granted on acceptance.
-        request: The incoming request, whose base URL the invite link is built on.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        The created invitation.
-    """
-    org = store.organisations.get(org_id)
-    invitation = store.organisations.create_invitation(
-        org_id=org_id,
-        email=body.email.strip(),
-        role=body.role,
-        invited_by=user.id,
-    )
-    InvitationEmail.from_invitation(
-        invitation, org_name=org.name, inviter=user, base_url=str(request.base_url)
-    ).deliver(get_smtp_config(), invitation.email)
-    return InvitationResponse.model_validate(invitation, from_attributes=True)
-
-
-@router.delete("/organisations/{org_id}/invitations/{invitation_id}")
-def cancel_invitation(
-    org_id: UUID,
-    invitation_id: UUID,
-    user: SuperAdminDep,
-    store: StoreDep,
-) -> dict[str, str]:
-    """Cancel a pending invitation in any organisation.
-
-    Args:
-        org_id: The organisation the invitation belongs to; an invitation of
-            another organisation reads as missing.
-        invitation_id: The invitation to cancel.
-        user: The calling super-admin, resolved from the session.
-        store: The database store backing the request.
-
-    Returns:
-        ``{"status": "ok"}`` once the invitation is gone.
-    """
-    store.organisations.delete_invitation(invitation_id, org_id=org_id)
-    return {"status": "ok"}
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+    store.profiles.delete(user_id)
+    return Response(status_code=204)

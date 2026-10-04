@@ -2,11 +2,11 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import ClassVar
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from interloper.errors import ConfigError
-from sqlmodel import Column, SQLModel, text
+from sqlmodel import Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import TZDateTime, timestamp_column
@@ -62,8 +62,29 @@ class Role(str, Enum):
         return ranks.index(held) >= ranks.index(cls.parse(minimum))
 
 
+class UserOrganisation(SQLModel, table=True):
+    """Junction: user membership in an organisation with a role.
+
+    ``profile`` reads the member's profile, so a membership listing names its
+    members without a second lookup. Declared ahead of :class:`Profile`,
+    whose organisations are reached through this table.
+    """
+
+    __tablename__: ClassVar[str] = "user_organisations"
+
+    user_id: UUID = SQLField(foreign_key="profiles.id", primary_key=True)
+    organisation_id: UUID = SQLField(foreign_key="organisations.id", primary_key=True)
+    role: str = "viewer"
+    created_at: datetime | None = timestamp_column()
+
+    profile: Optional["Profile"] = Relationship(sa_relationship_kwargs={"viewonly": True})
+
+
 class Profile(SQLModel, table=True):
-    """An authenticated user profile (Google OAuth)."""
+    """An authenticated user profile (Google OAuth).
+
+    ``organisations`` reads the organisations the profile is a member of.
+    """
 
     __tablename__: ClassVar[str] = "profiles"
 
@@ -80,6 +101,10 @@ class Profile(SQLModel, table=True):
     is_super_admin: bool = SQLField(default=False, sa_column_kwargs={"server_default": text("false")})
     last_organisation_id: UUID | None = SQLField(default=None, foreign_key="organisations.id")
     created_at: datetime | None = timestamp_column()
+
+    organisations: list["Organisation"] = Relationship(
+        link_model=UserOrganisation, sa_relationship_kwargs={"viewonly": True}
+    )
 
 
 class Organisation(SQLModel, table=True):
@@ -100,17 +125,6 @@ class Organisation(SQLModel, table=True):
     )
     name: str
     deleted_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
-    created_at: datetime | None = timestamp_column()
-
-
-class UserOrganisation(SQLModel, table=True):
-    """Junction: user membership in an organisation with a role."""
-
-    __tablename__: ClassVar[str] = "user_organisations"
-
-    user_id: UUID = SQLField(foreign_key="profiles.id", primary_key=True)
-    organisation_id: UUID = SQLField(foreign_key="organisations.id", primary_key=True)
-    role: str = "viewer"
     created_at: datetime | None = timestamp_column()
 
 

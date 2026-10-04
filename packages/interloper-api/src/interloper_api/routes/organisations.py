@@ -1,7 +1,10 @@
-"""Organisation routes — CRUD, membership, and invitation management.
+"""Organisation routes: the tenant, its members and its invitations.
 
-The member and invitation models here are the API's one shape for both, shared
-with the super-admin surface in :mod:`interloper_api.routes.admin`.
+Every route below the collection takes the organisation from the path and
+serves both its own members, by role, and the platform's super-admins through
+the same endpoints (:func:`~interloper_api.dependencies.authorize_organisation`).
+Platform-wide views (every organisation, every user, quotas) live in
+:mod:`interloper_api.routes.admin`.
 """
 
 from __future__ import annotations
@@ -10,16 +13,16 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, HTTPException, Request
-from interloper_db import Profile, Role
+from fastapi import APIRouter, Cookie, HTTPException, Query, Request, Response
+from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Role
+from interloper_db.models import UserOrganisation
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
-    AdminDep,
     CurrentUserDep,
-    OrgIdDep,
     StoreDep,
-    ViewerDep,
+    SuperAdminDep,
+    authorize_organisation,
     get_smtp_config,
 )
 from interloper_api.notifications import InvitationEmail
@@ -27,7 +30,7 @@ from interloper_api.notifications import InvitationEmail
 router = APIRouter(prefix="/organisations", tags=["organisations"])
 
 
-# -- Response / Request models -------------------------------------------------
+# -- Request & response models -------------------------------------------------
 
 
 class OrganisationResponse(BaseModel):
@@ -37,9 +40,33 @@ class OrganisationResponse(BaseModel):
     name: str
     created_at: datetime | None = None
 
+    @classmethod
+    def from_organisation(cls, organisation: Organisation) -> OrganisationResponse:
+        """Describe an organisation row.
+
+        Args:
+            organisation: The organisation row.
+
+        Returns:
+            The response model.
+        """
+        return cls(id=organisation.id, name=organisation.name, created_at=organisation.created_at)
+
 
 class CreateOrganisationRequest(BaseModel):
     """Request body for creating an organisation."""
+
+    name: str
+
+
+class UpdateOrganisationRequest(BaseModel):
+    """Request body for renaming an organisation."""
+
+    name: str
+
+
+class DeleteOrganisationRequest(BaseModel):
+    """Confirmation body for deleting an organisation: it must repeat the exact name."""
 
     name: str
 
@@ -54,20 +81,39 @@ class MemberResponse(BaseModel):
     role: str
 
     @classmethod
-    def from_profile(cls, profile: Profile, role: str) -> MemberResponse:
-        """Describe a profile as a member holding *role*.
+    def from_membership(cls, membership: UserOrganisation) -> MemberResponse:
+        """Describe a membership by its member's profile and role.
 
         Args:
-            profile: The member's profile.
-            role: The role the membership grants.
+            membership: The membership row, its ``profile`` loaded.
 
         Returns:
             The response model.
         """
-        return cls(id=profile.id, email=profile.email, name=profile.name, avatar_url=profile.avatar_url, role=role)
+        profile = membership.profile
+        assert profile is not None
+        return cls(
+            id=profile.id,
+            email=profile.email,
+            name=profile.name,
+            avatar_url=profile.avatar_url,
+            role=membership.role,
+        )
 
 
-class InviteRequest(BaseModel):
+class MemberCreateRequest(BaseModel):
+    """Request body for a super-admin joining an organisation without an invitation."""
+
+    role: Role = Role.ADMIN
+
+
+class MemberUpdateRequest(BaseModel):
+    """Request body for changing a member's role."""
+
+    role: Role
+
+
+class InvitationCreateRequest(BaseModel):
     """Request body for inviting a user."""
 
     email: str
@@ -84,7 +130,27 @@ class InvitationResponse(BaseModel):
     expires_at: datetime
 
 
-# -- Organisation CRUD ---------------------------------------------------------
+# -- Organisations -------------------------------------------------------------
+
+
+@router.get("")
+def list_organisations(
+    user: CurrentUserDep,
+    store: StoreDep,
+    query: Annotated[PageQuery, Query()],
+) -> Page[OrganisationResponse]:
+    """List the organisations the caller belongs to.
+
+    Args:
+        user: The authenticated caller.
+        store: The database store.
+        query: The window to read.
+
+    Returns:
+        The page of the caller's organisations.
+    """
+    organisations = store.organisations.list(OrganisationQuery(user_id=user.id, **query.model_dump()))
+    return organisations.map(OrganisationResponse.from_organisation)
 
 
 @router.post("", status_code=201)
@@ -94,7 +160,7 @@ def create_organisation(
     store: StoreDep,
     session_token: Annotated[str | None, Cookie()] = None,
 ) -> OrganisationResponse:
-    """Create a new organisation. The creating user becomes its admin.
+    """Create an organisation; the creator becomes its admin.
 
     Args:
         body: The name of the organisation to create.
@@ -106,197 +172,277 @@ def create_organisation(
     Returns:
         The created organisation.
     """
-    org = store.organisations.create(name=body.name, creator_id=user.id)
-
+    organisation = store.organisations.create(name=body.name, creator_id=user.id)
     if session_token:
-        store.auth.set_session_org(session_token, org.id, user_id=user.id)
+        store.sessions.switch_org(session_token, organisation.id, user.id)
+    return OrganisationResponse.from_organisation(organisation)
 
-    return OrganisationResponse.model_validate(org, from_attributes=True)
 
-
-@router.get("")
-def list_organisations(
+@router.patch("/{org_id}")
+def update_organisation(
+    org_id: UUID,
+    body: UpdateOrganisationRequest,
     user: CurrentUserDep,
     store: StoreDep,
-) -> list[OrganisationResponse]:
-    """List all organisations the user belongs to.
+) -> OrganisationResponse:
+    """Rename an organisation. Requires its admin role, or super-admin.
 
     Args:
+        org_id: The organisation to rename.
+        body: The new name.
         user: The authenticated caller.
         store: The database store.
 
     Returns:
-        Every organisation the caller is a member of.
+        The renamed organisation.
     """
-    orgs = store.organisations.list_for_user(user.id)
-    return [OrganisationResponse.model_validate(o, from_attributes=True) for o in orgs]
+    authorize_organisation(user, org_id, store, minimum="admin")
+    return OrganisationResponse.from_organisation(store.organisations.update(org_id, name=body.name))
+
+
+@router.delete("/{org_id}", status_code=204)
+def delete_organisation(
+    org_id: UUID,
+    body: DeleteOrganisationRequest,
+    user: SuperAdminDep,
+    store: StoreDep,
+) -> Response:
+    """Soft-delete an organisation: purge its data, keep its execution history and usage ledger.
+
+    The body must repeat the exact name. Deleted organisations stay in the
+    admin list (read-only) and read as missing everywhere else.
+
+    Args:
+        org_id: The organisation to soft-delete.
+        body: The confirmation, repeating the organisation's exact name.
+        user: The calling super-admin.
+        store: The database store.
+
+    Returns:
+        An empty 204 response.
+
+    Raises:
+        HTTPException: 400 when the confirmation name does not match.
+    """
+    if body.name != store.organisations.get(org_id).name:
+        raise HTTPException(status_code=400, detail="Organisation name does not match")
+    store.organisations.delete(org_id)
+    return Response(status_code=204)
 
 
 # -- Members -------------------------------------------------------------------
 
 
-@router.get("/members")
+@router.get("/{org_id}/members")
 def list_members(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    org_id: UUID,
+    user: CurrentUserDep,
     store: StoreDep,
-) -> list[MemberResponse]:
-    """List all members of the current organisation.
+    query: Annotated[PageQuery, Query()],
+) -> Page[MemberResponse]:
+    """List an organisation's members with their roles. Any member, or super-admin.
 
     Args:
-        user: The authenticated caller, required to hold at least the viewer role.
-        org_id: The active organisation, resolved from the session.
+        org_id: The organisation whose members are listed.
+        user: The authenticated caller.
         store: The database store.
+        query: The window to read.
 
     Returns:
-        Every member of the organisation with the role they hold in it.
+        The page of members.
     """
-    return [MemberResponse.from_profile(profile, role) for profile, role in store.organisations.list_members(org_id)]
+    authorize_organisation(user, org_id, store)
+    return store.members.list(org_id, query).map(MemberResponse.from_membership)
 
 
-@router.delete("/members/{user_id}")
-def remove_member(
-    user_id: UUID,
-    user: AdminDep,
-    org_id: OrgIdDep,
+@router.post("/{org_id}/members", status_code=201)
+def join_organisation(
+    org_id: UUID,
+    body: MemberCreateRequest,
+    user: SuperAdminDep,
     store: StoreDep,
-) -> dict[str, str]:
-    """Remove a member from the organisation. Requires admin role.
+) -> MemberResponse:
+    """Add the calling super-admin to an organisation, without an invitation.
 
     Args:
-        user_id: The member to remove.
-        user: The authenticated caller, required to hold the admin role.
-        org_id: The active organisation, resolved from the session.
+        org_id: The organisation to join.
+        body: The role to take, ``admin`` unless overridden.
+        user: The calling super-admin.
         store: The database store.
 
     Returns:
-        A status acknowledgement.
+        The caller's new membership.
 
     Raises:
-        HTTPException: 400 when the caller targets their own membership.
+        HTTPException: 409 when the caller already belongs to the organisation.
     """
+    store.organisations.get(org_id)
+    if not store.members.add(org_id, user.id, body.role):
+        raise HTTPException(status_code=409, detail="Already a member of this organisation")
+    return MemberResponse(id=user.id, email=user.email, name=user.name, avatar_url=user.avatar_url, role=body.role)
+
+
+@router.patch("/{org_id}/members/{user_id}")
+def update_member(
+    org_id: UUID,
+    user_id: UUID,
+    body: MemberUpdateRequest,
+    user: CurrentUserDep,
+    store: StoreDep,
+) -> MemberResponse:
+    """Change a member's role. Requires the organisation's admin role, or super-admin.
+
+    Args:
+        org_id: The organisation the membership belongs to.
+        user_id: The member whose role changes.
+        body: The new role.
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        The updated member.
+    """
+    authorize_organisation(user, org_id, store, minimum="admin")
+    return MemberResponse.from_membership(store.members.update(org_id, user_id, body.role))
+
+
+@router.delete("/{org_id}/members/{user_id}", status_code=204)
+def remove_member(
+    org_id: UUID,
+    user_id: UUID,
+    user: CurrentUserDep,
+    store: StoreDep,
+) -> Response:
+    """Remove a member. Requires the organisation's admin role, or super-admin.
+
+    Args:
+        org_id: The organisation the membership belongs to.
+        user_id: The member to remove.
+        user: The authenticated caller.
+        store: The database store.
+
+    Returns:
+        An empty 204 response.
+
+    Raises:
+        HTTPException: 400 when the caller targets their own membership, which
+            would let an admin lock the organisation out of its admin seat.
+    """
+    authorize_organisation(user, org_id, store, minimum="admin")
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="Cannot remove yourself")
-
-    store.organisations.remove_member(org_id, user_id)
-
-    return {"status": "ok"}
+    store.members.delete(org_id, user_id)
+    return Response(status_code=204)
 
 
 # -- Invitations ---------------------------------------------------------------
 
 
-@router.get("/invitations")
+@router.get("/{org_id}/invitations")
 def list_invitations(
-    user: AdminDep,
-    org_id: OrgIdDep,
+    org_id: UUID,
+    user: CurrentUserDep,
     store: StoreDep,
-) -> list[InvitationResponse]:
-    """List pending invitations for the current organisation. Requires admin role.
+    query: Annotated[PageQuery, Query()],
+) -> Page[InvitationResponse]:
+    """List an organisation's pending invitations. Requires its admin role, or super-admin.
 
     Args:
-        user: The authenticated caller, required to hold the admin role.
-        org_id: The active organisation, resolved from the session.
+        org_id: The organisation whose invitations are listed.
+        user: The authenticated caller.
         store: The database store.
+        query: The window to read.
 
     Returns:
-        The invitations that are still outstanding for the organisation.
+        The page of invitations.
     """
-    return [
-        InvitationResponse.model_validate(invitation, from_attributes=True)
-        for invitation in store.organisations.list_invitations(org_id)
-    ]
+    authorize_organisation(user, org_id, store, minimum="admin")
+    return store.invitations.list(org_id, query).map(
+        lambda invitation: InvitationResponse.model_validate(invitation, from_attributes=True)
+    )
 
 
-@router.post("/invite", status_code=201)
-def invite_member(
-    body: InviteRequest,
+@router.post("/{org_id}/invitations", status_code=201)
+def create_invitation(
+    org_id: UUID,
+    body: InvitationCreateRequest,
     request: Request,
-    user: AdminDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
     store: StoreDep,
 ) -> InvitationResponse:
-    """Invite a user to the organisation by email. Requires admin role.
+    """Invite someone by email. Requires the organisation's admin role, or super-admin.
 
-    The invitation is created whether or not email is configured; a missing SMTP
-    config only means the recipient has to be handed the link by other means.
+    The invitation is stored first and mailed best-effort: an unconfigured or
+    failing mailer only means the recipient has to be handed the link another way.
 
     Args:
-        body: The address to invite and the role to grant on acceptance.
-        request: The incoming request, used to build the invite URL.
-        user: The authenticated caller, required to hold the admin role.
-        org_id: The active organisation, resolved from the session.
+        org_id: The organisation to invite into.
+        body: The address to invite and the role granted on acceptance.
+        request: The incoming request, whose base URL the invite link is built on.
+        user: The authenticated caller.
         store: The database store.
 
     Returns:
         The created invitation.
     """
-    invitation = store.organisations.create_invitation(
-        org_id=org_id,
-        email=body.email.strip(),
-        role=body.role,
-        invited_by=user.id,
-    )
+    authorize_organisation(user, org_id, store, minimum="admin")
+    invitation = store.invitations.create(org_id, email=body.email.strip(), role=body.role, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=store.organisations.get(org_id).name, inviter=user, base_url=str(request.base_url)
     ).deliver(get_smtp_config(), invitation.email)
     return InvitationResponse.model_validate(invitation, from_attributes=True)
 
 
-@router.delete("/invitations/{invitation_id}")
-def cancel_invitation(
+@router.delete("/{org_id}/invitations/{invitation_id}", status_code=204)
+def delete_invitation(
+    org_id: UUID,
     invitation_id: UUID,
-    user: AdminDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
     store: StoreDep,
-) -> dict[str, str]:
-    """Cancel a pending invitation. Requires admin role.
+) -> Response:
+    """Withdraw a pending invitation. Requires the organisation's admin role, or super-admin.
 
     Args:
-        invitation_id: The invitation to cancel.
-        user: The authenticated caller, required to hold the admin role.
-        org_id: The active organisation, resolved from the session.
+        org_id: The organisation the invitation belongs to; another
+            organisation's invitation reads as missing.
+        invitation_id: The invitation to withdraw.
+        user: The authenticated caller.
         store: The database store.
 
     Returns:
-        A status acknowledgement.
+        An empty 204 response.
     """
-    store.organisations.delete_invitation(invitation_id, org_id=org_id)
-    return {"status": "ok"}
+    authorize_organisation(user, org_id, store, minimum="admin")
+    store.invitations.delete(invitation_id, org_id=org_id)
+    return Response(status_code=204)
 
 
-@router.post("/invitations/{invitation_id}/resend")
+@router.post("/{org_id}/invitations/{invitation_id}/resend", status_code=201)
 def resend_invitation(
+    org_id: UUID,
     invitation_id: UUID,
     request: Request,
-    user: AdminDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
     store: StoreDep,
-) -> dict[str, str]:
-    """Resend an invitation (recreates with fresh expiry). Requires admin role.
+) -> InvitationResponse:
+    """Reissue an invitation with a fresh token and expiry, and mail it again.
 
-    The old invitation is deleted and a new one issued, so the previously mailed
-    link stops working.
+    The previously mailed link stops working. Requires the organisation's
+    admin role, or super-admin.
 
     Args:
+        org_id: The organisation the invitation belongs to.
         invitation_id: The invitation to reissue.
-        request: The incoming request, used to build the invite URL.
-        user: The authenticated caller, required to hold the admin role.
-        org_id: The active organisation, resolved from the session.
+        request: The incoming request, whose base URL the invite link is built on.
+        user: The authenticated caller.
         store: The database store.
 
     Returns:
-        A status acknowledgement.
+        The reissued invitation.
     """
-    previous = store.organisations.get_invitation(invitation_id, org_id=org_id)
-    store.organisations.delete_invitation(invitation_id, org_id=org_id)
-    invitation = store.organisations.create_invitation(
-        org_id=org_id,
-        email=previous.email,
-        role=previous.role,
-        invited_by=user.id,
-    )
+    authorize_organisation(user, org_id, store, minimum="admin")
+    invitation = store.invitations.reissue(invitation_id, org_id=org_id, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=store.organisations.get(org_id).name, inviter=user, base_url=str(request.base_url)
     ).deliver(get_smtp_config(), invitation.email)
-    return {"status": "ok"}
+    return InvitationResponse.model_validate(invitation, from_attributes=True)

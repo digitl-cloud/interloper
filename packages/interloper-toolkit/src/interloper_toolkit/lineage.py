@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from uuid import UUID
 
+from interloper_db import ComponentQuery, RelationQuery
+
 from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
     AssetRef,
@@ -19,6 +21,9 @@ from interloper_toolkit.models import (
     UpstreamResult,
 )
 
+_ASSET_EDGES = RelationQuery(src_kind="asset", dst_kind="asset", limit=None)
+_ASSETS = ComponentQuery(kind=["asset"], roots_only=False, limit=None)
+
 
 def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolError:
     """Get the direct upstream dependencies of an asset.
@@ -31,7 +36,7 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
     """
     try:
         target = ctx.store.components.get(UUID(asset_id), kind="asset", org_id=ctx.org_id).id
-        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
+        deps = ctx.store.relations.list(ctx.org_id, _ASSET_EDGES).items
 
         upstream = []
         for dep in deps:
@@ -59,7 +64,7 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
     """
     try:
         target = ctx.store.components.get(UUID(asset_id), kind="asset", org_id=ctx.org_id).id
-        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
+        deps = ctx.store.relations.list(ctx.org_id, _ASSET_EDGES).items
 
         downstream = []
         for dep in deps:
@@ -165,8 +170,8 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
     different sources.
     """
     try:
-        deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
-        assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
+        deps = ctx.store.relations.list(ctx.org_id, _ASSET_EDGES).items
+        assets = ctx.store.components.list(ctx.org_id, _ASSETS).items
 
         asset_source: dict[UUID, UUID | None] = {}
         asset_info: dict[UUID, AssetRef] = {}
@@ -211,8 +216,8 @@ def _build_adjacency(
         ``(adjacency_map, asset_info_map)`` — info values feed
         :class:`LineageItem` kwargs (asset_key, source_id, source_key).
     """
-    deps = ctx.store.relations.list_all(ctx.org_id, src_kind="asset", dst_kind="asset")
-    assets = ctx.store.components.list_all(ctx.org_id, kinds=["asset"])
+    deps = ctx.store.relations.list(ctx.org_id, _ASSET_EDGES).items
+    assets = ctx.store.components.list(ctx.org_id, _ASSETS).items
 
     asset_info: dict[UUID, dict[str, str]] = {}
     source_keys: dict[UUID, str] = {}

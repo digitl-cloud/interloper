@@ -12,7 +12,7 @@ from typing import Any
 
 from interloper_db import Profile
 from interloper_db.models import Invitation
-from interloper_db.store.organisations import INVITATION_EXPIRY_DAYS
+from interloper_db.store.invitations import INVITATION_EXPIRY_DAYS
 
 logger = logging.getLogger(__name__)
 

@@ -37,6 +37,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
+from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
 from interloper_api.routes import overview as overview_module
 
@@ -190,7 +191,7 @@ def member(store: Store) -> SimpleNamespace:
     Returns:
         The profile and organisation ids the routes resolve.
     """
-    profile = store.auth.upsert_profile(google_id="g-1", email="ada@example.com", name="Ada")
+    profile = store.profiles.upsert(google_id="g-1", email="ada@example.com", name="Ada")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
     return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
 
@@ -207,6 +208,7 @@ def client(store: Store, member: SimpleNamespace) -> TestClient:
         The test client.
     """
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(overview_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: member
@@ -426,7 +428,7 @@ class TestHealthStrip:
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         job = _job(store, member.org_id, "j")
-        backfill = store.runs.create_backfill(
+        backfill = store.backfills.create(
             member.org_id, component_id=job.id, start_key="2026-07-01", end_key="2026-07-04"
         )
         with Session(store.engine) as session:
@@ -765,7 +767,7 @@ class TestUpcomingAndRecent:
             )
             for i in range(2)
         ]
-        store.runs.create_backfill(member.org_id, component_id=job.id, start_key="2026-07-01", end_key="2026-07-10")
+        store.backfills.create(member.org_id, component_id=job.id, start_key="2026-07-01", end_key="2026-07-10")
 
         recent = _overview(client)["recent"]
 
@@ -839,6 +841,7 @@ class TestAuth:
 
     def test_a_viewer_is_required(self, store: Store, member: SimpleNamespace):
         app = FastAPI()
+        install_error_handlers(app)
         app.include_router(overview_module.router)
         app.dependency_overrides[get_store] = lambda: store
         app.dependency_overrides[get_org_id] = lambda: member.org_id
@@ -880,7 +883,7 @@ class TestAuth:
         _execution(store, retry, source.children[0], "failed")
         _run_failed_event(store, retry, "token expired")
         _run(store, other, job, status="running", started=NOW - dt.timedelta(minutes=5), completed=None)
-        store.runs.create_backfill(other, component_id=job.id, start_key="2026-07-01", end_key="2026-07-03")
+        store.backfills.create(other, component_id=job.id, start_key="2026-07-01", end_key="2026-07-03")
 
         body = _overview(client)
         coverage = client.get(

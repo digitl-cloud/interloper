@@ -9,6 +9,7 @@ profile creation for first-time logins without touching existing profiles.
 
 from __future__ import annotations
 
+import datetime as dt
 from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -19,26 +20,28 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 
-from interloper_api.dependencies import get_auth_config, get_current_user, get_store
+from interloper_api.app import install_error_handlers
+from interloper_api.dependencies import get_auth_config, get_current_user, get_session_context, get_store
 from interloper_api.routes import auth as auth_module
 
 
 class FakeStore:
-    """In-memory stand-in exposing only the ``auth`` facet methods the callback calls."""
+    """In-memory stand-in exposing only the store facet methods the callback calls."""
 
     def __init__(self, *, is_super_admin: bool = False, exists: bool = False, invited: bool = False) -> None:
         self.profile = SimpleNamespace(id=uuid4(), is_super_admin=is_super_admin)
         self.exists = exists
         self.invited = invited
         self.promoted: list[UUID] = []
-        self.upserted = False
-        self.auth = SimpleNamespace(
-            get_profile_by_google_id=self._get_profile_by_google_id,
-            upsert_profile=self._upsert_profile,
+        self.upserted: dict[str, Any] | None = None
+        self.sessions_created: list[UUID] = []
+        self.profiles = SimpleNamespace(
+            get_by_google_id=self._get_profile_by_google_id,
+            upsert=self._upsert_profile,
             set_super_admin=self._set_super_admin,
-            create_session=self._create_session,
         )
-        self.organisations = SimpleNamespace(has_pending_invitation=self._has_pending_invitation)
+        self.sessions = SimpleNamespace(create=self._create_session)
+        self.invitations = SimpleNamespace(has_pending=self._has_pending_invitation)
 
     def _get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
         return self.profile if self.exists else None
@@ -47,15 +50,16 @@ class FakeStore:
         return self.invited
 
     def _upsert_profile(self, **kwargs) -> SimpleNamespace:
-        self.upserted = True
+        self.upserted = kwargs
         return self.profile
 
-    def _set_super_admin(self, user_id: UUID) -> SimpleNamespace:
+    def _set_super_admin(self, user_id: UUID, *, value: bool) -> SimpleNamespace:
         self.promoted.append(user_id)
-        self.profile.is_super_admin = True
+        self.profile.is_super_admin = value
         return self.profile
 
-    def _create_session(self, user_id: UUID) -> str:
+    def _create_session(self, user_id: UUID, org_id: UUID | None = None) -> str:
+        self.sessions_created.append(user_id)
         return "token"
 
 
@@ -77,6 +81,7 @@ def _client(
     allowed_domains: list[str] | None = None,
 ) -> TestClient:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_auth_config] = lambda: _auth_config(
@@ -108,6 +113,7 @@ def test_listed_email_is_promoted_case_insensitively() -> None:
     resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert store.promoted == [store.profile.id]
+    assert store.profile.is_super_admin is True
 
 
 def test_unlisted_email_is_not_promoted() -> None:
@@ -130,7 +136,8 @@ def test_signup_blocked_when_domain_not_allowed() -> None:
     resp = client.get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/login?error=signup_not_allowed"
-    assert not store.upserted
+    assert store.upserted is None
+    assert store.sessions_created == []
     assert "session_token" not in resp.cookies
 
 
@@ -139,7 +146,13 @@ def test_signup_allowed_for_listed_domain() -> None:
     resp = _client(store, allowed_domains=["example.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
-    assert store.upserted
+    assert store.upserted == {
+        "google_id": "google-1",
+        "email": "Boss@Example.com",
+        "name": "Boss",
+        "avatar_url": None,
+    }
+    assert store.sessions_created == [store.profile.id]
 
 
 def test_existing_profile_bypasses_allowlist() -> None:
@@ -149,7 +162,7 @@ def test_existing_profile_bypasses_allowlist() -> None:
     )
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
-    assert store.upserted
+    assert store.upserted is not None
 
 
 def test_invited_email_can_sign_up() -> None:
@@ -159,7 +172,7 @@ def test_invited_email_can_sign_up() -> None:
     )
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
-    assert store.upserted
+    assert store.upserted is not None
 
 
 def test_super_admin_email_can_sign_up() -> None:
@@ -175,19 +188,28 @@ def test_super_admin_email_can_sign_up() -> None:
 
 
 class FakeProfileStore:
-    """In-memory stand-in exposing only ``auth.update_profile``."""
+    """In-memory stand-in for ``PATCH /auth/me``: the profile update and what ``GET /auth/me`` reads."""
 
     def __init__(self) -> None:
+        self.org = SimpleNamespace(id=uuid4(), name="Dev Org", created_at=None)
         self.profile = SimpleNamespace(
             id=uuid4(),
             email="user@example.com",
             name="Google Name",
             avatar_url=None,
             timezone=None,
+            is_super_admin=False,
+            last_organisation_id=None,
         )
-        self.auth = SimpleNamespace(update_profile=self._update_profile)
+        self.session_row = SimpleNamespace(organisation_id=self.org.id)
+        self.updates: list[tuple[UUID, str | None, str | None]] = []
+        self.profiles = SimpleNamespace(update=self._update_profile)
+        self.sessions = SimpleNamespace(resolve=lambda token: (self.profile, self.session_row))
+        self.organisations = SimpleNamespace(get=lambda org_id: self.org)
+        self.members = SimpleNamespace(role=lambda org_id, user_id: "editor")
 
     def _update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
+        self.updates.append((user_id, name, timezone))
         if name is not None:
             self.profile.name = name
         if timezone is not None:
@@ -196,12 +218,11 @@ class FakeProfileStore:
 
 
 def _me_client(store: FakeProfileStore) -> TestClient:
-    from interloper_api.dependencies import get_current_user
-
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: store.profile
+    app.dependency_overrides[get_session_context] = lambda: (store.profile, store.session_row)
     return TestClient(app)
 
 
@@ -212,6 +233,21 @@ def test_update_me_sets_name_and_timezone() -> None:
     body = resp.json()
     assert body["name"] == "Custom"
     assert body["timezone"] == "Europe/Berlin"
+    assert store.updates == [(store.profile.id, "Custom", "Europe/Berlin")]
+
+
+def test_update_me_answers_the_same_shape_as_get_me() -> None:
+    store = FakeProfileStore()
+    client = _me_client(store)
+
+    patched = client.patch("/auth/me", json={"name": "Custom"})
+    fetched = client.get("/auth/me")
+
+    assert patched.status_code == 200
+    assert patched.json() == fetched.json()
+    assert patched.json()["organisation"] == {"id": str(store.org.id), "name": "Dev Org", "created_at": None}
+    assert patched.json()["role"] == "editor"
+    assert set(patched.json()) == set(auth_module.AuthUserResponse.model_fields)
 
 
 def test_update_me_omitted_fields_stay_untouched() -> None:
@@ -220,6 +256,7 @@ def test_update_me_omitted_fields_stay_untouched() -> None:
     assert resp.status_code == 200
     assert resp.json()["name"] == "Google Name"
     assert store.profile.timezone == "UTC"
+    assert store.updates == [(store.profile.id, None, "UTC")]
 
 
 def test_update_me_rejects_unknown_timezone() -> None:
@@ -227,6 +264,7 @@ def test_update_me_rejects_unknown_timezone() -> None:
     resp = _me_client(store).patch("/auth/me", json={"timezone": "Mars/Olympus_Mons"})
     assert resp.status_code == 422
     assert store.profile.timezone is None
+    assert store.updates == []
 
 
 def test_update_me_rejects_empty_name() -> None:
@@ -234,6 +272,7 @@ def test_update_me_rejects_empty_name() -> None:
     resp = _me_client(store).patch("/auth/me", json={"name": ""})
     assert resp.status_code == 422
     assert store.profile.name == "Google Name"
+    assert store.updates == []
 
 
 # -- Login redirect ------------------------------------------------------------
@@ -263,6 +302,7 @@ class TestGoogleLogin:
 
     def test_an_unconfigured_client_id_is_a_500(self) -> None:
         app = FastAPI()
+        install_error_handlers(app)
         app.include_router(auth_module.router)
         app.dependency_overrides[get_store] = lambda: FakeStore()
         config = _auth_config([], [])
@@ -280,6 +320,7 @@ class TestGoogleCallbackFailures:
 
     def test_an_unconfigured_secret_is_a_500(self) -> None:
         app = FastAPI()
+        install_error_handlers(app)
         app.include_router(auth_module.router)
         app.dependency_overrides[get_store] = lambda: FakeStore()
         config = _auth_config([], [])
@@ -391,43 +432,44 @@ class SessionStore:
         """Set up the fake.
 
         Args:
-            session: What ``resolve_session`` returns.
+            session: What ``sessions.resolve`` returns.
             org: What ``organisations.get`` returns.
             role: The caller's role in the organisation asked about.
             org_missing: Whether ``organisations.get`` raises ``NotFoundError``.
-            accepted: What ``accept_invitation`` returns; ``None`` means the
+            accepted: What ``invitations.accept`` returns; ``None`` means the
                 token was unknown or expired.
         """
         self.deleted_sessions: list[UUID] = []
         self.session_org_calls: list[tuple[str, UUID, UUID]] = []
+        self.accept_calls: list[tuple[str, UUID]] = []
         self._accepted = accepted
-        self.auth = SimpleNamespace(
-            resolve_session=lambda token: session,
-            delete_user_sessions=self.deleted_sessions.append,
-            set_session_org=self._set_session_org,
+        self._org = org
+        self.sessions = SimpleNamespace(
+            resolve=lambda token: session,
+            delete_all=self.deleted_sessions.append,
+            switch_org=self._switch_org,
         )
-        self.organisations = SimpleNamespace(
-            get=self._get_org if not org_missing else self._missing_org,
-            member_role=lambda user_id, org_id: role,
-            accept_invitation=self._accept,
-            _org=org,
-        )
+        self.organisations = SimpleNamespace(get=self._get_org if not org_missing else self._missing_org)
+        self.members = SimpleNamespace(role=lambda org_id, user_id: role)
+        self.invitations = SimpleNamespace(accept=self._accept)
 
     def _get_org(self, org_id: UUID) -> Any:
-        return self.organisations._org
+        return self._org
 
     def _missing_org(self, org_id: UUID) -> Any:
         raise NotFoundError(f"Organisation {org_id} not found")
 
-    def _set_session_org(self, token: str, org_id: UUID, user_id: UUID) -> None:
+    def _switch_org(self, token: str, org_id: UUID, user_id: UUID) -> None:
         self.session_org_calls.append((token, org_id, user_id))
 
     def _accept(self, token: str, user_id: UUID) -> Any:
+        self.accept_calls.append((token, user_id))
         return self._accepted
 
 
 def _session_client(store: Any, user: Any = None) -> TestClient:
     app = FastAPI()
+    install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_auth_config] = lambda: _auth_config([], [])
@@ -533,7 +575,8 @@ class TestLogout:
 
         response = client.post("/auth/logout")
 
-        assert response.json() == {"status": "ok"}
+        assert response.status_code == 204
+        assert response.content == b""
         assert store.deleted_sessions == [profile.id]
         assert 'session_token=""' in response.headers["set-cookie"]
 
@@ -550,7 +593,8 @@ class TestSwitchOrg:
 
         response = client.post("/auth/switch-org", json={"organisation_id": str(org_id)})
 
-        assert response.json() == {"status": "ok"}
+        assert response.status_code == 204
+        assert response.content == b""
         assert store.session_org_calls == [("tok", org_id, profile.id)]
 
     def test_a_non_member_is_refused(self) -> None:
@@ -570,7 +614,7 @@ class TestSwitchOrg:
 
         response = client.post("/auth/switch-org", json={"organisation_id": str(uuid4())})
 
-        assert response.json() == {"status": "ok"}
+        assert response.status_code == 204
         assert store.session_org_calls == []
 
 
@@ -580,14 +624,25 @@ class TestAcceptInvite:
     def test_joining_makes_the_org_active(self) -> None:
         profile = _me_profile()
         org_id = uuid4()
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org"))
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=None))
         client = _session_client(store, user=profile)
         client.cookies.set("session_token", "tok")
 
         response = client.post("/auth/accept-invite", json={"token": "invite-token"})
 
-        assert response.json() == {"status": "ok"}
+        assert response.status_code == 200
+        assert store.accept_calls == [("invite-token", profile.id)]
         assert store.session_org_calls == [("tok", org_id, profile.id)]
+
+    def test_the_joined_organisation_is_returned(self) -> None:
+        org_id = uuid4()
+        created_at = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=created_at))
+        client = _session_client(store, user=_me_profile())
+
+        response = client.post("/auth/accept-invite", json={"token": "invite-token"})
+
+        assert response.json() == {"id": str(org_id), "name": "Dev Org", "created_at": "2026-01-02T00:00:00Z"}
 
     def test_an_unknown_or_expired_token_is_a_400(self) -> None:
         store = SessionStore(accepted=None)
@@ -601,8 +656,13 @@ class TestAcceptInvite:
         assert store.session_org_calls == []
 
     def test_without_a_cookie_the_membership_still_lands(self) -> None:
-        store = SessionStore(accepted=SimpleNamespace(id=uuid4(), name="Dev Org"))
+        org_id = uuid4()
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=None))
         client = _session_client(store, user=_me_profile())
 
-        assert client.post("/auth/accept-invite", json={"token": "invite-token"}).json() == {"status": "ok"}
+        response = client.post("/auth/accept-invite", json={"token": "invite-token"})
+
+        assert response.status_code == 200
+        assert response.json()["id"] == str(org_id)
+        assert len(store.accept_calls) == 1
         assert store.session_org_calls == []

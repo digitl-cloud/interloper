@@ -140,7 +140,7 @@ class CronController(Controller):
                 # re-fire every tick.
                 try:
                     if window is not None:
-                        self._store.runs.create_backfill(
+                        self._store.backfills.create(
                             job.org_id,
                             component_id=job.id,
                             start_key=window.granularity.format(window.start),

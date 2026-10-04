@@ -21,9 +21,10 @@ so the acceptance rules a relation name carries live in one place (see
 
 from __future__ import annotations
 
+import builtins
 import functools
 import json
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
@@ -44,12 +45,12 @@ from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, func, select
-from sqlmodel.sql.expression import SelectOfScalar
+from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.hydration import Hydrator
+from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.status import ComponentStatus, asset_status, source_status
@@ -65,6 +66,23 @@ COMPONENT_LOAD_OPTIONS = [
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
 ]
+
+
+class ComponentQuery(PageQuery):
+    """Which of an organisation's components a listing reads.
+
+    Attributes:
+        kind: Keep components of these kinds; ``None`` keeps every kind.
+        q: Keep components whose name or key contains this, case-insensitively.
+        roots_only: Keep only components no other component owns, each
+            carrying its owned components under ``children`` — the
+            collection's unit, the way the catalog reaches an owned definition
+            through its owner. ``False`` lists every row, owned ones included.
+    """
+
+    kind: list[str] | None = None
+    q: str | None = None
+    roots_only: bool = True
 
 
 @dataclass(frozen=True)
@@ -137,8 +155,8 @@ class ComponentStore:
         name: str | None = None,
         config: dict[str, Any] | None = None,
         encrypted: bool | None = None,
-        children: list[str] | None = None,
-        relations: dict[str, list[UUID]] | None = None,
+        children: Sequence[str] | None = None,
+        relations: Mapping[str, Sequence[UUID]] | None = None,
     ) -> Component:
         """Create a component of any kind.
 
@@ -197,106 +215,34 @@ class ComponentStore:
         with session_scope(self._engine) as session:
             return self._load_component(session, component_id, kind=kind, org_id=org_id)
 
-    def list_all(
-        self,
-        org_id: UUID,
-        *,
-        kinds: list[str] | None = None,
-        q: str | None = None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[Component]:
-        """List an organisation's component rows, optionally filtered by kind and text.
-
-        Every row lists, owned ones included: this is the row-level view.
-        :meth:`list_roots` is the collection view.
+    def list(self, org_id: UUID, query: ComponentQuery) -> Page[Component]:
+        """List an organisation's components, oldest first.
 
         Args:
             org_id: Organisation UUID.
-            kinds: Kinds to include (``None`` = all).
-            q: Keep rows whose name or key contains this, case-insensitively.
-            limit: Max results; ``None`` lists them all.
-            offset: Pagination offset.
+            query: Which kinds, what text, whether owned components list on
+                their own, and the window to read.
 
         Returns:
-            Eager-loaded component rows, oldest first.
+            The page of components, eager-loaded and safe to hand out detached.
         """
-        with session_scope(self._engine) as session:
-            statement = self._listing(org_id, kinds, q).offset(offset).limit(limit)
-            return list(session.exec(statement).all())
-
-    def count(self, org_id: UUID, *, kinds: list[str] | None = None, q: str | None = None) -> int:
-        """Count component rows matching the same filters as :meth:`list_all`.
-
-        Args:
-            org_id: Organisation UUID.
-            kinds: Kinds to include (``None`` = all).
-            q: Count rows whose name or key contains this, case-insensitively.
-
-        Returns:
-            Total number of matching rows (ignoring limit/offset).
-        """
-        with session_scope(self._engine) as session:
-            statement = select(func.count()).select_from(Component).where(*self._listing_filters(org_id, kinds, q))
-            return session.exec(statement).one()
-
-    def list_roots(self, org_id: UUID, *, kinds: list[str] | None = None) -> list[Component]:
-        """List an organisation's root components, owned ones nested under ``children``.
-
-        The collection's unit is the owner: an owned component (a source's
-        asset) never lists on its own but rides inside the root that owns it,
-        the way the catalog reaches an owned definition through its owner.
-
-        Args:
-            org_id: Organisation UUID.
-            kinds: Root kinds to include (``None`` = all).
-
-        Returns:
-            Eager-loaded root rows, oldest first, each carrying its children.
-        """
-        with session_scope(self._engine) as session:
-            statement = self._listing(org_id, kinds).where(col(Component.parent_id).is_(None))
-            return list(session.exec(statement).all())
-
-    @classmethod
-    def _listing(cls, org_id: UUID, kinds: list[str] | None, q: str | None = None) -> SelectOfScalar[Component]:
-        """The eager-loaded, oldest-first selection of an organisation's components.
-
-        Args:
-            org_id: Organisation UUID.
-            kinds: Kinds to include (``None`` = all).
-            q: Keep rows whose name or key contains this, case-insensitively.
-
-        Returns:
-            The select statement, for the caller to narrow further.
-        """
-        return (
+        statement = (
             select(Component)
-            .where(*cls._listing_filters(org_id, kinds, q))
+            .where(Component.org_id == org_id)
             .options(*COMPONENT_LOAD_OPTIONS)
-            .order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
+            .order_by(col(Component.created_at), col(Component.id))
         )
-
-    @staticmethod
-    def _listing_filters(org_id: UUID, kinds: list[str] | None, q: str | None) -> list[Any]:
-        """The shared where-clauses of :meth:`list_all` / :meth:`count`.
-
-        Args:
-            org_id: Organisation UUID; always applied.
-            kinds: Kinds to include (``None`` or empty = all).
-            q: Keep rows whose name or key contains this, case-insensitively.
-
-        Returns:
-            Filter expressions for the given criteria.
-        """
-        filters: list[Any] = [Component.org_id == org_id]
-        if kinds:
-            filters.append(col(Component.kind).in_(kinds))
-        if q:
-            filters.append(
-                col(Component.name).icontains(q, autoescape=True) | col(Component.key).icontains(q, autoescape=True)
+        if query.kind:
+            statement = statement.where(col(Component.kind).in_(query.kind))
+        if query.q:
+            statement = statement.where(
+                col(Component.name).icontains(query.q, autoescape=True)
+                | col(Component.key).icontains(query.q, autoescape=True)
             )
-        return filters
+        if query.roots_only:
+            statement = statement.where(col(Component.parent_id).is_(None))
+        with session_scope(self._engine) as session:
+            return Page.read(session, statement, query)
 
     def update(
         self,
@@ -305,8 +251,8 @@ class ComponentStore:
         name: str | None = None,
         config: dict[str, Any] | None = None,
         encrypted: bool | None = None,
-        children: list[str] | None = None,
-        relations: dict[str, list[UUID]] | None = None,
+        children: Sequence[str] | None = None,
+        relations: Mapping[str, Sequence[UUID]] | None = None,
     ) -> Component:
         """Update a component's spec. ``None`` leaves a facet untouched.
 
@@ -395,7 +341,7 @@ class ComponentStore:
             session.delete(db_component)
             commit(session)
 
-    def _blocking_referrers(self, session: Session, db_component: Component) -> list[dict[str, str | None]]:
+    def _blocking_referrers(self, session: Session, db_component: Component) -> builtins.list[dict[str, str | None]]:
         """Components outside a component's subtree whose relations into it block deletion.
 
         Deleting a relation destination cascades the edge row, which would
@@ -422,7 +368,7 @@ class ComponentStore:
         subtree_ids = {db_component.id} | set(child_ids)
         return self._referrers_into(session, subtree_ids, subtree_ids).blocking
 
-    def delete_impact(self, component_ids: list[UUID]) -> DeleteImpact:
+    def delete_impact(self, component_ids: Sequence[UUID]) -> DeleteImpact:
         """Preview what deleting *component_ids* does to the components bound to them.
 
         The rule :meth:`delete` enforces, evaluated without deleting:
@@ -489,7 +435,7 @@ class ComponentStore:
         )
 
     @staticmethod
-    def _referrer_refs(components: Iterable[Component]) -> list[dict[str, str | None]]:
+    def _referrer_refs(components: Iterable[Component]) -> builtins.list[dict[str, str | None]]:
         """``{id, kind, key, name}`` mappings for *components*, sorted by display name.
 
         Args:
@@ -771,7 +717,7 @@ class ComponentStore:
         value = config.get(field)
         return str(value) if value else None
 
-    def decode_config(self, db_component: Component) -> dict[str, Any]:
+    def _decode_config(self, db_component: Component) -> dict[str, Any]:
         """The component's config payload, decrypting secret kinds.
 
         Args:
@@ -802,7 +748,7 @@ class ComponentStore:
         """
         with session_scope(self._engine) as session:
             db_component = self._load_component(session, component_id)
-            payload = {**self.decode_config(db_component), **fields}
+            payload = {**self._decode_config(db_component), **fields}
             encrypted = db_component.encrypted if il.KINDS[db_component.kind].sensitive else None
             self._apply_config(db_component, payload, encrypted)
             session.add(db_component)
@@ -947,7 +893,7 @@ class ComponentStore:
             decoded (no cipher configured, or a corrupt payload).
         """
         try:
-            return self.decode_config(db_component)
+            return self._decode_config(db_component)
         except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
             return None
 
@@ -1003,7 +949,7 @@ class ComponentStore:
                     f"Configure a distinct discriminator (or dataset) so the two don't overwrite each other's data."
                 )
 
-    def _ensure_children(self, session: Session, db_source: Component, child_keys: list[str] | None) -> None:
+    def _ensure_children(self, session: Session, db_source: Component, child_keys: Sequence[str] | None) -> None:
         """Sync a source's child asset rows to match the desired set.
 
         When ``child_keys`` is provided, only those assets will exist —
@@ -1074,7 +1020,7 @@ class ComponentStore:
             session.add(children[key])
         session.flush()
 
-        self._relations.bind_siblings(session, source_cls, children)
+        self._relations._bind_siblings(session, source_cls, children)
 
     def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.
@@ -1209,7 +1155,7 @@ class ComponentStore:
             )
         return partitionings
 
-    def _target_partitionings(self, target: Component, parent_key: str | None) -> list[dict[str, Any]]:
+    def _target_partitionings(self, target: Component, parent_key: str | None) -> builtins.list[dict[str, Any]]:
         """The partitioning dicts of one target's partitioned assets.
 
         Args:

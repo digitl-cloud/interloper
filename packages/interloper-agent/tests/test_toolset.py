@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from interloper_db.store import Store
+from interloper_db.store import ComponentQuery, Store
 from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, RunContext
@@ -55,7 +55,7 @@ class TestApproval:
 
         assert isinstance(result.output, DeferredToolRequests)
         assert [call.tool_name for call in result.output.approvals] == ["create_job"]
-        assert store.components.count(ctx.org_id, kinds=["job"]) == 0
+        assert store.components.list(ctx.org_id, ComponentQuery(kind=["job"])).total == 0
 
 
 class TestDeferral:

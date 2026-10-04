@@ -1,27 +1,34 @@
-"""Run, event, and backfill persistence."""
+"""Run persistence: queue, complete and retry runs, and list them.
+
+A run is one *attempt*; the attempts of one unit of work form a stack rooted
+at ``root_run_id``. Listings read each stack's latest attempt unless told
+otherwise, so a retried failure reads as whatever its last attempt became.
+Backfill batches are :mod:`~interloper_db.store.backfills`, which a run's
+completion advances in the same transaction.
+"""
 
 from __future__ import annotations
 
+import builtins
 import logging
-from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 import interloper as il
 from interloper.errors import ConfigError, ConflictError, NotFoundError
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning.time import TimePartition
 from sqlalchemy import Engine, exists, func
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import Session, col, select
 
-from interloper_db.models import Backfill, Component, Event, Run
+from interloper_db.models import Component, Run
 from interloper_db.session import commit, session_scope
-from interloper_db.store.quotas import (
-    QUOTA_MAX_BACKFILL_PARTITIONS,
-    QuotaStore,
-    UsageLedger,
-)
+from interloper_db.store.page import Page, PageQuery
+from interloper_db.store.quotas import QuotaStore, UsageLedger
+
+if TYPE_CHECKING:
+    from interloper_db.store.backfills import BackfillStore
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +37,24 @@ logger = logging.getLogger(__name__)
 # queue claim, backfill cancelation) select these tables with FOR UPDATE,
 # which rejects outer joins.
 RUN_LOAD_OPTIONS = (joinedload(Run.target),)  # ty: ignore[invalid-argument-type]
-BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
 
 TERMINAL_RUN_STATUSES = frozenset({"success", "failed", "canceled"})
 
-_ACTIVE_BACKFILL_STATUSES = ("running", "queued")
-
-RUN_SORT_FIELDS = frozenset({"id", "partition_key", "status", "created_at", "started_at", "completed_at"})
+RunSort = Literal[
+    "id",
+    "-id",
+    "partition_key",
+    "-partition_key",
+    "status",
+    "-status",
+    "created_at",
+    "-created_at",
+    "started_at",
+    "-started_at",
+    "completed_at",
+    "-completed_at",
+]
+"""A runs listing's sort: a column, ``-``-prefixed for descending."""
 
 
 def partition_key_range(start_key: str, end_key: str) -> list[Any]:
@@ -58,20 +76,63 @@ def partition_key_range(start_key: str, end_key: str) -> list[Any]:
     return [key >= start_key, key <= end_key, func.length(key) == len(start_key)]
 
 
-class RunStore:
-    """Store methods for runs and the backfills that batch them."""
+class RunQuery(PageQuery):
+    """Which of an organisation's runs a listing reads, and in which order.
 
-    def __init__(self, engine: Engine, quotas: QuotaStore) -> None:
+    ``after``/``before`` select the runs whose execution *overlaps* the window
+    — a run occupies ``[started_at, completed_at)``, left open-ended while it
+    is still running, so runs that never started fall outside every window.
+    ``completed_after``/``completed_before`` read the completion instant
+    alone, so they keep a run that ended without ever starting and drop every
+    run not yet completed. The target filters read the target through the
+    relationship, so a run whose target was deleted matches none of them.
+
+    Attributes:
+        component_id: Keep runs targeting this component.
+        backfill_id: Keep runs of this backfill.
+        root_run_id: List this stack's attempts rather than one row per stack.
+        status: Keep runs (each stack's latest attempt) in this status.
+        after: Window start: keep runs still executing at or after this instant.
+        before: Window end: keep runs that had started by this instant.
+        completed_after: Keep runs that completed at or after this instant.
+        completed_before: Keep runs that completed at or before this instant.
+        q: Keep runs whose target's name or key contains this, case-insensitively.
+        component_kind: Keep runs whose target is of this kind.
+        component_key: Keep runs whose target is of this type (catalog key).
+        all_attempts: Keep every attempt rather than each stack's latest.
+        sort: The order; ``None`` lists newest first (one stack: its latest
+            attempt first).
+    """
+
+    component_id: UUID | None = None
+    backfill_id: UUID | None = None
+    root_run_id: UUID | None = None
+    status: str | None = None
+    after: datetime | None = None
+    before: datetime | None = None
+    completed_after: datetime | None = None
+    completed_before: datetime | None = None
+    q: str | None = None
+    component_kind: str | None = None
+    component_key: str | None = None
+    all_attempts: bool = False
+    sort: RunSort | None = None
+
+
+class RunStore:
+    """Store methods for runs."""
+
+    def __init__(self, engine: Engine, quotas: QuotaStore, backfills: BackfillStore) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
             quotas: Quota gates it enforces through.
+            backfills: Backfill facet a completing run advances its batch through.
         """
         self._engine = engine
         self._quotas = quotas
-
-    # -- Runs ------------------------------------------------------------------
+        self._backfills = backfills
 
     def create(
         self,
@@ -97,7 +158,7 @@ class RunStore:
             The created Run row.
         """
         if partition_key is not None:
-            self._partition(partition_key)
+            self.parse_partition(partition_key)
         with session_scope(self._engine) as session:
             billable = self._target_billable(session, component_id)
             self._quotas.admit_run(org_id, billable=billable)
@@ -113,35 +174,6 @@ class RunStore:
             session.refresh(db_run)
             _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
-
-    @staticmethod
-    def _target_billable(session: Session, component_id: UUID | None) -> bool:
-        """Resolve whether runs of a target count against the run quota.
-
-        The target's kind must declare a workload, whose ``billable`` decides;
-        an untargeted run is billable.
-
-        Args:
-            session: Open session the component row is read through.
-            component_id: The target component UUID, or None for an
-                untargeted run.
-
-        Returns:
-            The billability the target's workload declares.
-
-        Raises:
-            NotFoundError: If the component does not exist.
-            ConfigError: If the kind's anchor declares no workload.
-        """
-        if component_id is None:
-            return True
-        db_component = session.get(Component, component_id)
-        if not db_component:
-            raise NotFoundError(f"Component {component_id} not found")
-        anchor = il.KINDS[db_component.kind]
-        if not issubclass(anchor, il.Workload):
-            raise ConfigError(f"Components of kind '{db_component.kind}' cannot be run")
-        return anchor.billable
 
     def get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
         """Load a run by ID.
@@ -165,142 +197,32 @@ class RunStore:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
-    def list_all(
-        self,
-        org_id: UUID,
-        *,
-        component_id: UUID | None = None,
-        backfill_id: UUID | None = None,
-        status: str | None = None,
-        after: datetime | None = None,
-        before: datetime | None = None,
-        completed_after: datetime | None = None,
-        completed_before: datetime | None = None,
-        q: str | None = None,
-        component_kind: str | None = None,
-        component_key: str | None = None,
-        root_run_id: UUID | None = None,
-        all_attempts: bool = False,
-        sort: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Run]:
+    def list(self, org_id: UUID, query: RunQuery) -> Page[Run]:
         """List one row per stack, one stack's attempts, or every attempt.
 
         A stack is one piece of work, so a listing shows its **latest
         attempt** and every filter reads that attempt: a stack whose first
         attempt failed and whose second succeeded is a success, which is what
-        a reader means by "failed runs". Passing *root_run_id* asks for one
-        stack instead, and returns its attempts newest first; *all_attempts*
-        keeps every attempt of every stack, which is what statistics over
-        durations and retries read.
+        a reader means by "failed runs". A ``root_run_id`` asks for one stack
+        instead, and lists its attempts newest first; ``all_attempts`` keeps
+        every attempt of every stack, which is what statistics over durations
+        and retries read.
 
         Args:
             org_id: Organisation UUID.
-            component_id: Optional target component filter.
-            backfill_id: Optional backfill filter.
-            status: Optional status filter.
-            after: Keep runs still executing at or after this instant.
-            before: Keep runs that had started by this instant.
-            completed_after: Keep runs that completed at or after this instant.
-            completed_before: Keep runs that completed at or before this instant.
-            q: Keep runs whose target's name or key contains this, case-insensitively.
-            component_kind: Keep runs whose target is of this kind.
-            component_key: Keep runs whose target is of this type (catalog key).
-            root_run_id: List this stack's attempts rather than one row per stack.
-            all_attempts: Keep every attempt rather than each stack's latest.
-            sort: A field of :data:`RUN_SORT_FIELDS` to order by, ``-``-prefixed
-                for descending (any other field raises ``ConfigError``); None
-                keeps the default (newest first, or a stack's latest attempt
-                first).
-            limit: Max results (default 50).
-            offset: Pagination offset.
+            query: The filters, the order, and the window to read.
 
         Returns:
-            List of Run rows.
+            The page of runs, their targets loaded.
         """
+        statement = (
+            select(Run)
+            .where(*self._filters(org_id, query))
+            .order_by(*self._order(query))
+            .options(*RUN_LOAD_OPTIONS)
+        )
         with session_scope(self._engine) as session:
-            filters = self._run_filters(
-                org_id,
-                component_id,
-                backfill_id,
-                status,
-                after,
-                before,
-                completed_after=completed_after,
-                completed_before=completed_before,
-                q=q,
-                component_kind=component_kind,
-                component_key=component_key,
-                root_run_id=root_run_id,
-            )
-            if root_run_id is None and not all_attempts:
-                filters.append(self._latest_attempt_only())
-            statement = (
-                select(Run)
-                .where(*filters)
-                .order_by(*_run_order(sort, root_run_id))
-                .offset(offset)
-                .limit(limit)
-                .options(*RUN_LOAD_OPTIONS)
-            )
-            return list(session.exec(statement).all())
-
-    def count(
-        self,
-        org_id: UUID,
-        *,
-        component_id: UUID | None = None,
-        backfill_id: UUID | None = None,
-        status: str | None = None,
-        after: datetime | None = None,
-        before: datetime | None = None,
-        completed_after: datetime | None = None,
-        completed_before: datetime | None = None,
-        q: str | None = None,
-        component_kind: str | None = None,
-        component_key: str | None = None,
-        root_run_id: UUID | None = None,
-        all_attempts: bool = False,
-    ) -> int:
-        """Count runs matching the same filters as :meth:`list_all`.
-
-        Args:
-            org_id: Organisation UUID.
-            component_id: Optional target component filter.
-            backfill_id: Optional backfill filter.
-            status: Optional status filter.
-            after: Keep runs still executing at or after this instant.
-            before: Keep runs that had started by this instant.
-            completed_after: Keep runs that completed at or after this instant.
-            completed_before: Keep runs that completed at or before this instant.
-            q: Keep runs whose target's name or key contains this, case-insensitively.
-            component_kind: Keep runs whose target is of this kind.
-            component_key: Keep runs whose target is of this type (catalog key).
-            root_run_id: Count this stack's attempts rather than one per stack.
-            all_attempts: Count every attempt rather than each stack's latest.
-
-        Returns:
-            Total number of matching runs (ignoring limit/offset).
-        """
-        with session_scope(self._engine) as session:
-            filters = self._run_filters(
-                org_id,
-                component_id,
-                backfill_id,
-                status,
-                after,
-                before,
-                completed_after=completed_after,
-                completed_before=completed_before,
-                q=q,
-                component_kind=component_kind,
-                component_key=component_key,
-                root_run_id=root_run_id,
-            )
-            if root_run_id is None and not all_attempts:
-                filters.append(self._latest_attempt_only())
-            return session.exec(select(func.count()).select_from(Run).where(*filters)).one()
+            return Page.read(session, statement, query)
 
     def complete(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
@@ -352,7 +274,7 @@ class RunStore:
                 self._plan_retry(session, db_run)
 
             if db_run.backfill_id:
-                self._advance_backfill(session, db_run.backfill_id, failed=not success)
+                self._backfills._advance(session, db_run.backfill_id, failed=not success)
 
             commit(session)
             return db_run
@@ -430,6 +352,94 @@ class RunStore:
             _ = db_run.target  # load before the session closes; readers reach it detached
             return db_run
 
+    def latest_by_target(self, org_id: UUID, *, component_kind: str | None = None) -> builtins.list[Run]:
+        """The most recent attempt of every target.
+
+        What a reader means by "the last time this job ran": the most recently
+        created attempt targeting the component, whatever stack it belongs to.
+        That attempt is necessarily the latest of its own stack, so no
+        per-stack reduction is needed. The runs of one backfill share their
+        creation instant, so a tie goes to the later partition key, then to
+        the greater id. Runs whose target was deleted have no target to
+        report on and are left out.
+
+        Args:
+            org_id: Organisation UUID.
+            component_kind: Keep targets of this kind; ``None`` keeps every kind.
+
+        Returns:
+            One run per target, newest first, with the target loaded.
+        """
+        rank = (
+            func.row_number()
+            .over(
+                partition_by=col(Run.component_id),
+                order_by=(
+                    col(Run.created_at).desc(),
+                    col(Run.partition_key).desc().nulls_last(),
+                    col(Run.id).desc(),
+                ),
+            )
+            .label("rank")
+        )
+        ranked = (
+            select(col(Run.id), rank)
+            .where(Run.org_id == org_id, col(Run.component_id).is_not(None))
+            .subquery()
+        )
+        filters: builtins.list[Any] = [col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))]
+        if component_kind:
+            filters.append(col(Run.target).has(col(Component.kind) == component_kind))
+        with session_scope(self._engine) as session:
+            statement = select(Run).where(*filters).order_by(col(Run.created_at).desc()).options(*RUN_LOAD_OPTIONS)
+            return [*session.exec(statement).all()]
+
+    @staticmethod
+    def parse_partition(key: str) -> TimePartition:
+        """Parse a caller-supplied partition key, rejecting one of no known shape.
+
+        Args:
+            key: The key, whose shape carries its granularity (``2026-08-21``,
+                ``2026-08``, ``2026``, ``2026-08-21T13``).
+
+        Returns:
+            The partition the key names.
+
+        Raises:
+            ConfigError: If the key matches no known shape.
+        """
+        try:
+            return TimePartition.from_key(key)
+        except ValueError as error:
+            raise ConfigError(str(error)) from error
+
+    # -- Internals -------------------------------------------------------------
+
+    @staticmethod
+    def _target_billable(session: Session, component_id: UUID | None) -> bool:
+        """Resolve whether runs of a target count against the run quota.
+
+        An untargeted run is billable; a targeted one follows what its kind's
+        workload declares (:meth:`Component.run_billable`).
+
+        Args:
+            session: Open session the component row is read through.
+            component_id: The target component UUID, or None for an
+                untargeted run.
+
+        Returns:
+            The billability.
+
+        Raises:
+            NotFoundError: If the component does not exist.
+        """
+        if component_id is None:
+            return True
+        db_component = session.get(Component, component_id)
+        if not db_component:
+            raise NotFoundError(f"Component {component_id} not found")
+        return db_component.run_billable()
+
     @staticmethod
     def _retry_policy(session: Session, db_run: Run) -> il.RetryPolicy | None:
         """The run-level policy in force for a run.
@@ -499,332 +509,6 @@ class RunStore:
         logger.info("Queued attempt %d of run stack %s", successor.attempt, successor.root_run_id)
         return successor
 
-    # -- Backfills -------------------------------------------------------------
-
-    def create_backfill(
-        self,
-        org_id: UUID,
-        *,
-        component_id: UUID | None = None,
-        start_key: str,
-        end_key: str,
-        concurrency: int = 1,
-        fail_fast: bool = False,
-    ) -> Backfill:
-        """Create a backfill with one run per partition from start to end (inclusive).
-
-        The bounds are partition keys whose shape carries the granularity
-        (``2026-08-21``, ``2026-08``, ``2026``, ``2026-08-21T13``), so a
-        monthly backfill is just two month keys. The runs are fanned out by
-        :func:`create_backfill_runs`: newest partition first, ``concurrency``
-        of them queued at once. Like :meth:`create`, the runs record the
-        target workload's billability, and a non-billable backfill skips the
-        run quota.
-
-        Args:
-            org_id: Organisation UUID.
-            component_id: Optional target component UUID.
-            start_key: First partition's key.
-            end_key: Last partition's key (inclusive).
-            concurrency: Max runs in-flight at once.
-            fail_fast: Cancel remaining runs on first failure.
-
-        Returns:
-            The created Backfill row with runs.
-
-        Raises:
-            ConfigError: If the two keys differ in granularity or the range
-                is inverted.
-        """
-        start = self._partition(start_key)
-        end = self._partition(end_key)
-        if start.granularity is not end.granularity:
-            raise ConfigError(
-                f"Backfill bounds must share one granularity: {start_key!r} is a "
-                f"{start.granularity.value} key but {end_key!r} is a {end.granularity.value} key"
-            )
-        if end.value < start.value:
-            raise ConfigError(f"Backfill range ends before it starts: {start_key!r} to {end_key!r}")
-        window = TimePartitionWindow(start.value, end.value, start.granularity)
-        span = window.partition_count()
-
-        with session_scope(self._engine) as session:
-            billable = self._target_billable(session, component_id)
-            self._quotas.check(org_id, QUOTA_MAX_BACKFILL_PARTITIONS, used=span)
-            self._quotas.admit_run(org_id, billable=billable, subject="backfill")
-            db_backfill = Backfill(
-                org_id=org_id,
-                component_id=component_id,
-                start_key=start_key,
-                end_key=end_key,
-                concurrency=concurrency,
-                fail_fast=fail_fast,
-                status="running",
-                started_at=datetime.now(timezone.utc),
-            )
-            session.add(db_backfill)
-            session.flush()
-            create_backfill_runs(session, db_backfill, window, billable=billable)
-            commit(session)
-            session.refresh(db_backfill)
-            _ = db_backfill.target  # load before the session closes; readers reach it detached
-            return db_backfill
-
-    def cancel_backfill(self, backfill_id: UUID) -> Backfill:
-        """Cancel a backfill: runs not yet dispatched will never execute.
-
-        Pending and queued runs flip to ``"canceled"``; runs already
-        dispatched or running drain to their own terminal state (their late
-        completions are no-ops on the now-terminal backfill).
-
-        Args:
-            backfill_id: The backfill UUID.
-
-        Returns:
-            The updated Backfill row.
-
-        Raises:
-            NotFoundError: If the backfill is not found.
-            ConflictError: If the backfill is already terminal.
-        """
-        with session_scope(self._engine) as session:
-            db_backfill = session.get(Backfill, backfill_id)
-            if not db_backfill:
-                raise NotFoundError(f"Backfill {backfill_id} not found")
-            if db_backfill.status not in _ACTIVE_BACKFILL_STATUSES:
-                raise ConflictError(f"Backfill {backfill_id} is already {db_backfill.status}")
-
-            cancel_backfill_runs(session, db_backfill)
-            commit(session)
-            session.refresh(db_backfill)
-            _ = db_backfill.target  # load before the session closes; readers reach it detached
-            return db_backfill
-
-    def get_backfill(self, backfill_id: UUID, *, org_id: UUID | None = None) -> Backfill:
-        """Load a backfill by ID.
-
-        Args:
-            backfill_id: The backfill UUID.
-            org_id: Organisation the backfill must belong to (``None`` accepts
-                any); a mismatch raises ``NotFoundError`` like an absent row.
-
-        Returns:
-            The Backfill row.
-
-        Raises:
-            NotFoundError: If the backfill is not found, or belongs to another
-                organisation.
-        """
-        with session_scope(self._engine) as session:
-            db_backfill = session.get(Backfill, backfill_id, options=BACKFILL_LOAD_OPTIONS)
-            if not db_backfill or (org_id is not None and db_backfill.org_id != org_id):
-                raise NotFoundError(f"Backfill {backfill_id} not found")
-            return db_backfill
-
-    def list_backfills(
-        self, org_id: UUID, *, active_only: bool = False, limit: int | None = None, offset: int = 0
-    ) -> list[Backfill]:
-        """List an organisation's backfills, newest first.
-
-        Args:
-            org_id: Organisation UUID.
-            active_only: Keep only backfills still ``"queued"`` or ``"running"``.
-            limit: Max results; ``None`` lists them all.
-            offset: Pagination offset.
-
-        Returns:
-            List of Backfill rows.
-        """
-        with session_scope(self._engine) as session:
-            statement = (
-                select(Backfill)
-                .where(*self._backfill_filters(org_id, active_only))
-                .order_by(col(Backfill.created_at).desc())
-                .offset(offset)
-                .limit(limit)
-                .options(*BACKFILL_LOAD_OPTIONS)
-            )
-            return list(session.exec(statement).all())
-
-    def count_backfills(self, org_id: UUID, *, active_only: bool = False) -> int:
-        """Count backfills matching the same filters as :meth:`list_backfills`.
-
-        Args:
-            org_id: Organisation UUID.
-            active_only: Count only backfills still ``"queued"`` or ``"running"``.
-
-        Returns:
-            Total number of matching backfills (ignoring limit/offset).
-        """
-        with session_scope(self._engine) as session:
-            statement = select(func.count()).select_from(Backfill).where(*self._backfill_filters(org_id, active_only))
-            return session.exec(statement).one()
-
-    def failed_partitions(self, backfill_id: UUID) -> list[tuple[str, str | None]]:
-        """A backfill's failed partitions, newest first, each with its recorded error.
-
-        A partition reads as its stack's latest attempt, so one a retry healed
-        is absent. The error is what that attempt's ``run_failed`` event
-        recorded; ``None`` when nothing was.
-
-        Args:
-            backfill_id: The backfill UUID.
-
-        Returns:
-            ``(partition_key, error)`` pairs, newest partition first.
-        """
-        latest = (
-            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
-            .where(Run.backfill_id == backfill_id)
-            .group_by(col(Run.root_run_id))
-            .subquery()
-        )
-        statement = (
-            select(Run)
-            .join(
-                latest,
-                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
-            )
-            .where(Run.backfill_id == backfill_id, Run.status == "failed")
-            .order_by(col(Run.partition_key).desc())
-        )
-        with session_scope(self._engine) as session:
-            failed = session.exec(statement).all()
-            return [(run.partition_key or "", self._recorded_error(session, run.id)) for run in failed]
-
-    @staticmethod
-    def _recorded_error(session: Session, run_id: UUID) -> str | None:
-        """The error a run's newest ``run_failed`` event recorded.
-
-        Args:
-            session: Open session the event is read through.
-            run_id: The run whose failure is read.
-
-        Returns:
-            The error text, or ``None`` when no failure event carries one.
-        """
-        return session.exec(
-            select(Event.error)
-            .where(Event.run_id == run_id, Event.event_type == "run_failed", col(Event.error).is_not(None))
-            .order_by(col(Event.timestamp).desc())
-        ).first()
-
-    def count_backfill_runs(self, backfill_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
-        """Count each backfill's partitions by their latest attempt's status, in one query.
-
-        A partition reads as its stack's latest attempt, so one a retry healed
-        counts as a success and one waiting out a retry's backoff as queued.
-
-        Args:
-            backfill_ids: The backfills to count, typically one listing.
-
-        Returns:
-            Per backfill, its partition count per status; a backfill with no
-            runs is absent.
-        """
-        if not backfill_ids:
-            return {}
-        latest = (
-            select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
-            .where(col(Run.backfill_id).in_(backfill_ids))
-            .group_by(col(Run.root_run_id))
-            .subquery()
-        )
-        statement = (
-            select(col(Run.backfill_id), col(Run.status), func.count())
-            .join(
-                latest,
-                onclause=(col(Run.root_run_id) == latest.c.root_run_id) & (col(Run.attempt) == latest.c.attempt),
-            )
-            .where(col(Run.backfill_id).in_(backfill_ids))
-            .group_by(col(Run.backfill_id), col(Run.status))
-        )
-        counts: dict[UUID, dict[str, int]] = {}
-        with session_scope(self._engine) as session:
-            for backfill_id, status, count in session.exec(statement).all():
-                assert backfill_id is not None
-                counts.setdefault(backfill_id, {})[status] = count
-        return counts
-
-    def latest_by_target(self, org_id: UUID, *, component_kind: str | None = None) -> list[Run]:
-        """The most recent attempt of every target.
-
-        What a reader means by "the last time this job ran": the most recently
-        created attempt targeting the component, whatever stack it belongs to.
-        That attempt is necessarily the latest of its own stack, so no
-        per-stack reduction is needed. The runs of one backfill share their
-        creation instant, so a tie goes to the later partition key, then to
-        the greater id. Runs whose target was deleted have no target to
-        report on and are left out.
-
-        Args:
-            org_id: Organisation UUID.
-            component_kind: Keep targets of this kind; ``None`` keeps every kind.
-
-        Returns:
-            One run per target, newest first, with the target loaded.
-        """
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=col(Run.component_id),
-                order_by=(
-                    col(Run.created_at).desc(),
-                    col(Run.partition_key).desc().nulls_last(),
-                    col(Run.id).desc(),
-                ),
-            )
-            .label("rank")
-        )
-        ranked = (
-            select(col(Run.id), rank)
-            .where(Run.org_id == org_id, col(Run.component_id).is_not(None))
-            .subquery()
-        )
-        filters: list[Any] = [col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1))]
-        if component_kind:
-            filters.append(col(Run.target).has(col(Component.kind) == component_kind))
-        with session_scope(self._engine) as session:
-            statement = select(Run).where(*filters).order_by(col(Run.created_at).desc()).options(*RUN_LOAD_OPTIONS)
-            return list(session.exec(statement).all())
-
-    # -- Internals -------------------------------------------------------------
-
-    @staticmethod
-    def _partition(key: str) -> TimePartition:
-        """Parse a caller-supplied partition key.
-
-        Args:
-            key: The key, whose shape carries its granularity (``2026-08-21``,
-                ``2026-08``, ``2026``, ``2026-08-21T13``).
-
-        Returns:
-            The partition the key names.
-
-        Raises:
-            ConfigError: If the key matches no known shape.
-        """
-        try:
-            return TimePartition.from_key(key)
-        except ValueError as error:
-            raise ConfigError(str(error)) from error
-
-    @staticmethod
-    def _backfill_filters(org_id: UUID, active_only: bool) -> list[Any]:
-        """The shared where-clauses of :meth:`list_backfills` / :meth:`count_backfills`.
-
-        Args:
-            org_id: Organisation whose backfills are listed; always applied.
-            active_only: Keep only backfills still ``"queued"`` or ``"running"``.
-
-        Returns:
-            Filter expressions for the given criteria.
-        """
-        filters: list[Any] = [Backfill.org_id == org_id]
-        if active_only:
-            filters.append(col(Backfill.status).in_(_ACTIVE_BACKFILL_STATUSES))
-        return filters
-
     @staticmethod
     def _latest_attempt_only() -> Any:
         """Keep only each stack's latest attempt.
@@ -850,23 +534,8 @@ class RunStore:
             col(later.attempt) > col(Run.attempt),
         )
 
-    @staticmethod
-    def _run_filters(
-        org_id: UUID,
-        component_id: UUID | None,
-        backfill_id: UUID | None,
-        status: str | None,
-        after: datetime | None = None,
-        before: datetime | None = None,
-        *,
-        completed_after: datetime | None = None,
-        completed_before: datetime | None = None,
-        q: str | None = None,
-        component_kind: str | None = None,
-        component_key: str | None = None,
-        root_run_id: UUID | None = None,
-    ) -> list[Any]:
-        """The shared where-clauses of :meth:`RunStore.list_all` / :meth:`RunStore.count`.
+    def _filters(self, org_id: UUID, query: RunQuery) -> builtins.list[Any]:
+        """The where-clauses of a runs listing.
 
         ``after``/``before`` select the runs whose execution *overlaps* the window
         — a run occupies ``[started_at, completed_at)``, left open-ended while it
@@ -881,234 +550,66 @@ class RunStore:
 
         Args:
             org_id: Organisation whose runs are listed; always applied.
-            component_id: Keep runs targeting this component; ``None`` applies
-                no component filter.
-            backfill_id: Keep runs belonging to this backfill; ``None`` applies
-                no backfill filter.
-            status: Keep runs in this status; ``None`` applies no status filter.
-            after: Window start — keep runs still executing at or after this
-                instant. ``None`` leaves the window open-ended in the past.
-            before: Window end — keep runs that had started by this instant.
-                ``None`` leaves the window open-ended in the future.
-            completed_after: Keep runs that completed at or after this
-                instant; ``None`` applies no lower completion bound.
-            completed_before: Keep runs that completed at or before this
-                instant; ``None`` applies no upper completion bound.
-            q: Keep runs whose target's name or key contains this text,
-                case-insensitively; ``None`` applies no search.
-            component_kind: Keep runs whose target is of this kind; ``None``
-                applies no kind filter.
-            component_key: Keep runs whose target is of this type (catalog
-                key); ``None`` applies no type filter.
-            root_run_id: Keep the attempts of this stack; ``None`` applies no
-                stack filter.
+            query: The filters to translate; see :class:`RunQuery`.
 
         Returns:
             Filter expressions for the given criteria.
         """
-        filters: list[Any] = [Run.org_id == org_id]
+        filters: builtins.list[Any] = [Run.org_id == org_id]
         target = col(Run.target)
-        if q:
+        if query.q:
             filters.append(
                 target.has(
-                    col(Component.name).icontains(q, autoescape=True)
-                    | col(Component.key).icontains(q, autoescape=True)
+                    col(Component.name).icontains(query.q, autoescape=True)
+                    | col(Component.key).icontains(query.q, autoescape=True)
                 )
             )
-        if component_kind:
-            filters.append(target.has(col(Component.kind) == component_kind))
-        if component_key:
-            filters.append(target.has(col(Component.key) == component_key))
-        if component_id:
-            filters.append(Run.component_id == component_id)
-        if backfill_id:
-            filters.append(Run.backfill_id == backfill_id)
-        if root_run_id:
-            filters.append(Run.root_run_id == root_run_id)
-        if status:
-            filters.append(Run.status == status)
-        if after is not None:
-            filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= after))
-        if before is not None:
-            filters.append(col(Run.started_at) <= before)
-        if after is not None and before is None:
+        if query.component_kind:
+            filters.append(target.has(col(Component.kind) == query.component_kind))
+        if query.component_key:
+            filters.append(target.has(col(Component.key) == query.component_key))
+        if query.component_id:
+            filters.append(Run.component_id == query.component_id)
+        if query.backfill_id:
+            filters.append(Run.backfill_id == query.backfill_id)
+        if query.root_run_id:
+            filters.append(Run.root_run_id == query.root_run_id)
+        elif not query.all_attempts:
+            filters.append(self._latest_attempt_only())
+        if query.status:
+            filters.append(Run.status == query.status)
+        if query.after is not None:
+            filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= query.after))
+        if query.before is not None:
+            filters.append(col(Run.started_at) <= query.before)
+        if query.after is not None and query.before is None:
             # An `after` bound alone still means "ran at some point", so a
             # never-started run must not slip through on the NULL completed_at.
             filters.append(col(Run.started_at).is_not(None))
-        if completed_after is not None:
-            filters.append(col(Run.completed_at) >= completed_after)
-        if completed_before is not None:
-            filters.append(col(Run.completed_at) <= completed_before)
+        if query.completed_after is not None:
+            filters.append(col(Run.completed_at) >= query.completed_after)
+        if query.completed_before is not None:
+            filters.append(col(Run.completed_at) <= query.completed_before)
         return filters
 
     @staticmethod
-    def _advance_backfill(session: Session, backfill_id: UUID, *, failed: bool) -> None:
-        """Advance a backfill after a run completes.
+    def _order(query: RunQuery) -> tuple[Any, ...]:
+        """The ORDER BY of a runs listing, ending on the id so pages never overlap.
 
-        1. **Fail-fast**: if enabled and the run failed, cancel pending runs.
-        2. **Finalize**: if nothing in-flight or pending, mark complete. In
-           flight is queued, dispatched or running: a claimed run occupies its
-           slot before its pod first writes. The verdict reads each stack's
-           latest attempt, so an attempt a later one healed no longer condemns
-           the batch. A queued successor still counts as in flight, which is
-           what keeps the batch open while a retry waits out its backoff.
-        3. **Advance**: promote next pending runs up to concurrency limit.
+        A backfill's runs share one ``created_at`` (one transaction creates
+        them all), so without the tiebreaker offset paging could repeat or
+        skip rows.
 
         Args:
-            session: Active database session (caller commits).
-            backfill_id: The backfill UUID.
-            failed: Whether the completing run failed.
+            query: The listing's query; its ``sort`` wins, else one stack lists
+                its attempts newest first and anything else lists newest first.
+
+        Returns:
+            The ordering clauses.
         """
-        db_backfill = session.get(Backfill, backfill_id)
-        if not db_backfill or db_backfill.status not in _ACTIVE_BACKFILL_STATUSES:
-            return
-
-        if db_backfill.fail_fast and failed:
-            pending_runs = session.exec(
-                select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending")
-            ).all()
-            for pending_run in pending_runs:
-                pending_run.status = "canceled"
-                session.add(pending_run)
-
-            db_backfill.status = "failed"
-            db_backfill.completed_at = datetime.now(timezone.utc)
-            session.add(db_backfill)
-            return
-
-        in_flight_count = len(
-            session.exec(
-                select(Run).where(
-                    Run.backfill_id == backfill_id,
-                    col(Run.status).in_(["queued", "dispatched", "running"]),
-                )
-            ).all()
-        )
-        # Newest partition first, matching create_backfill's initial dispatch. A
-        # backfill is single-granularity, so the string order is the time order.
-        pending_runs = session.exec(
-            select(Run)
-            .where(Run.backfill_id == backfill_id, Run.status == "pending")
-            .order_by(col(Run.partition_key).desc())
-        ).all()
-
-        if in_flight_count == 0 and len(pending_runs) == 0:
-            latest = (
-                select(col(Run.root_run_id), func.max(col(Run.attempt)).label("attempt"))
-                .where(Run.backfill_id == backfill_id)
-                .group_by(col(Run.root_run_id))
-                .subquery()
-            )
-            any_failed = session.exec(
-                select(Run)
-                .join(
-                    latest,
-                    onclause=(col(Run.root_run_id) == latest.c.root_run_id)
-                    & (col(Run.attempt) == latest.c.attempt),
-                )
-                .where(Run.backfill_id == backfill_id, Run.status == "failed")
-            ).first()
-            db_backfill.status = "failed" if any_failed else "success"
-            db_backfill.completed_at = datetime.now(timezone.utc)
-            session.add(db_backfill)
-            return
-
-        available_slots = max(0, db_backfill.concurrency - in_flight_count)
-        for pending_run in pending_runs[:available_slots]:
-            pending_run.status = "queued"
-            session.add(pending_run)
-
-
-def _run_order(sort: str | None, root_run_id: UUID | None) -> tuple[Any, ...]:
-    """The ORDER BY of a runs listing, ending on the id so pages never overlap.
-
-    A backfill's runs share one ``created_at`` (one transaction creates them
-    all), so without the tiebreaker offset paging could repeat or skip rows.
-
-    Args:
-        sort: A field of :data:`RUN_SORT_FIELDS`, ``-``-prefixed for
-            descending; None picks the listing's default.
-        root_run_id: Set when listing one stack, whose default is its
-            attempts newest first.
-
-    Returns:
-        The ordering clauses.
-
-    Raises:
-        ConfigError: If *sort* names a field outside :data:`RUN_SORT_FIELDS`.
-    """
-    if sort is None:
-        primary = col(Run.created_at).desc() if root_run_id is None else col(Run.attempt).desc()
-    else:
-        field = sort.removeprefix("-")
-        if field not in RUN_SORT_FIELDS:
-            raise ConfigError(f"Cannot sort runs by '{field}'. Known: {', '.join(sorted(RUN_SORT_FIELDS))}")
-        column = col(getattr(Run, field))
-        primary = (column.desc() if sort.startswith("-") else column.asc()).nulls_last()
-    return (primary, col(Run.id).asc())
-
-
-def create_backfill_runs(
-    session: Session, db_backfill: Backfill, window: TimePartitionWindow, *, billable: bool = True
-) -> None:
-    """Create a backfill's runs: one per partition, the newest ``concurrency`` of them queued.
-
-    Part of the caller's transaction (the caller commits), on a backfill row
-    already flushed so the runs can reference it. Rows are created oldest
-    first, so a runs list ordered by ``created_at`` desc keeps the newest
-    partition on top, while the *newest* ``concurrency`` of them are ``queued``
-    and the rest wait ``pending``; ``_advance_backfill`` promotes in the same
-    newest-first order, so the freshest data lands first and an interrupted
-    backfill keeps the recent window rather than the ancient tail.
-
-    Args:
-        session: Active database session (the caller commits).
-        db_backfill: The flushed backfill row the runs belong to; its
-            ``partitions`` count is stamped here.
-        window: The partitions the backfill covers.
-        billable: Whether the runs count against the run quota, as the
-            target's workload declares.
-    """
-    span = window.partition_count()
-    first_queued = max(0, span - db_backfill.concurrency)
-    for index, value in enumerate(window.granularity.period_range(window.start, window.end)):
-        session.add(
-            Run(
-                org_id=db_backfill.org_id,
-                component_id=db_backfill.component_id,
-                backfill_id=db_backfill.id,
-                partition_key=window.granularity.format(value),
-                status="queued" if index >= first_queued else "pending",
-                billable=billable,
-            )
-        )
-    db_backfill.partitions = span
-    session.add(db_backfill)
-
-
-def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
-    """Cancel a backfill's not-yet-dispatched runs and terminalize it.
-
-    Part of the caller's transaction (the caller commits). ``skip_locked``
-    leaves runs the worker is claiming right now to the worker — they are
-    effectively dispatched and drain like any other in-flight run.
-
-    Args:
-        session: Active database session (the caller commits).
-        db_backfill: The backfill row to cancel, mutated in place along with
-            its pending and queued runs.
-    """
-    cancellable = session.exec(
-        select(Run)
-        .where(Run.backfill_id == db_backfill.id, col(Run.status).in_(["pending", "queued"]))
-        .with_for_update(skip_locked=True)
-    ).all()
-    for db_run in cancellable:
-        db_run.status = "canceled"
-        session.add(db_run)
-
-    db_backfill.status = "canceled"
-    db_backfill.completed_at = datetime.now(timezone.utc)
-    session.add(db_backfill)
-
-
+        if query.sort is None:
+            primary = col(Run.created_at).desc() if query.root_run_id is None else col(Run.attempt).desc()
+        else:
+            column = col(getattr(Run, query.sort.removeprefix("-")))
+            primary = (column.desc() if query.sort.startswith("-") else column.asc()).nulls_last()
+        return (primary, col(Run.id).asc())

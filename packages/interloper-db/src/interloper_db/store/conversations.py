@@ -1,4 +1,4 @@
-"""Agent conversations: create, read back, save a turn, delete.
+"""Agent conversations: create, read back, update after a turn, delete.
 
 A conversation belongs to the member who started it, in the organisation it
 was started in; every read takes both, and a row that matches neither reads
@@ -17,6 +17,7 @@ from sqlmodel import col, select
 
 from interloper_db.models import Conversation
 from interloper_db.session import commit, session_scope
+from interloper_db.store.page import Page, PageQuery
 
 TITLE_LENGTH = 80
 
@@ -70,30 +71,34 @@ class ConversationStore:
                 raise NotFoundError(f"Conversation {conversation_id} not found")
             return row
 
-    def list_all(self, org_id: UUID, user_id: UUID) -> list[Conversation]:
+    def list(self, org_id: UUID, user_id: UUID, query: PageQuery) -> Page[Conversation]:
         """A member's conversations in an organisation, most recently updated first.
 
         Args:
             org_id: Organisation UUID.
             user_id: Profile UUID.
+            query: The window to read.
 
         Returns:
-            The rows.
+            The page of conversations.
         """
+        statement = (
+            select(Conversation)
+            .where(Conversation.org_id == org_id, Conversation.user_id == user_id)
+            .order_by(col(Conversation.updated_at).desc(), col(Conversation.created_at).desc(), col(Conversation.id))
+        )
         with session_scope(self._engine) as session:
-            statement = (
-                select(Conversation)
-                .where(Conversation.org_id == org_id, Conversation.user_id == user_id)
-                .order_by(col(Conversation.updated_at).desc(), col(Conversation.created_at).desc())
-            )
-            return list(session.exec(statement).all())
+            return Page.read(session, statement, query)
 
-    def save(self, conversation_id: UUID, messages: Sequence[Any], *, title: str | None = None) -> Conversation:
-        """Replace a conversation's history after a turn.
+    def update(
+        self, conversation_id: UUID, *, messages: Sequence[Any] | None = None, title: str | None = None
+    ) -> Conversation:
+        """Replace a conversation's history after a turn, and title it once.
 
         Args:
             conversation_id: The conversation UUID.
-            messages: The whole history as the agent framework serialises it.
+            messages: The whole history as the agent framework serialises it;
+                ``None`` leaves the history alone.
             title: A title to set when the conversation has none yet, clipped
                 to ``TITLE_LENGTH``; ``None`` leaves the title alone.
 
@@ -107,7 +112,8 @@ class ConversationStore:
             row = session.get(Conversation, conversation_id)
             if row is None:
                 raise NotFoundError(f"Conversation {conversation_id} not found")
-            row.messages = list(messages)
+            if messages is not None:
+                row.messages = [*messages]
             if title and not row.title:
                 row.title = title[:TITLE_LENGTH]
             session.add(row)

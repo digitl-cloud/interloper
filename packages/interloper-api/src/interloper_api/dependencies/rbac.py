@@ -41,11 +41,31 @@ def authorize_org_member(
     Raises:
         HTTPException: 404 if not a member, 403 if the role is insufficient.
     """
-    role = store.organisations.member_role(user.id, org_id)
+    role = store.members.role(org_id, user.id)
     if role is None:
         raise HTTPException(status_code=404, detail=detail)
     if not Role.at_least(role, minimum):
         raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
+
+
+def authorize_organisation(user: Profile, org_id: UUID, store: Store, *, minimum: str = "viewer") -> None:
+    """Authorize an organisation-addressed route: a member holding *minimum*, or a super-admin.
+
+    The organisation routes take the organisation from the path, so they serve
+    its own members and the platform's super-admins through one set of
+    endpoints. A super-admin passes on any live organisation; anyone else must
+    be a member, a non-member reading as a missing organisation.
+
+    Args:
+        user: The authenticated user.
+        org_id: The organisation the path addresses.
+        store: The Store instance.
+        minimum: Minimum role a member needs (``viewer``, ``editor``, ``admin``).
+    """
+    if user.is_super_admin:
+        store.organisations.get(org_id)
+        return
+    authorize_org_member(user, org_id, store, minimum=minimum, detail=f"Organisation {org_id} not found")
 
 
 def load_authorized(
@@ -107,7 +127,7 @@ def _check_role(
     Raises:
         HTTPException: 403 if insufficient permissions.
     """
-    role = store.organisations.member_role(user.id, org_id)
+    role = store.members.role(org_id, user.id)
     if role is None:
         raise HTTPException(status_code=403, detail="Not a member of this organisation")
     if not Role.at_least(role, minimum):
