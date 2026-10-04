@@ -5,7 +5,10 @@ from __future__ import annotations
 import datetime as dt
 from uuid import uuid4
 
-from interloper_db.store.insights.coverage import CoverageRow, JobCoverage, PartitionSpan
+import interloper as il
+
+from interloper_db.models import Component
+from interloper_db.store.insights.coverage import AssetEvidence, CoverageRow, DayCounts, JobCoverage, PartitionSpan
 
 
 class TestPartitionSpan:
@@ -37,3 +40,14 @@ class TestJobCoverage:
             ("orders", {"2026-07-01"}, {"2026-07-02"}),
             ("r", frozenset(), frozenset()),
         ]
+
+
+class TestDayCounts:
+    def test_an_asset_owing_nothing_inside_the_window_has_no_days(self):
+        asset = Component(org_id=uuid4(), kind="asset", key="orders")
+        row = CoverageRow(asset.id, "2026-07-01", succeeded=True, failed=False, failed_run_id=None)
+        [evidence] = AssetEvidence.from_components([asset], {asset.id: il.TimePartitionConfig(column="date")}, [row])
+        now = dt.datetime(2026, 8, 13, tzinfo=dt.timezone.utc)
+
+        assert DayCounts.from_asset(evidence, dt.date(2026, 6, 1), dt.date(2026, 6, 30), now) is None
+        assert DayCounts.from_asset(evidence, dt.date(2026, 7, 1), dt.date(2026, 7, 31), now) is not None

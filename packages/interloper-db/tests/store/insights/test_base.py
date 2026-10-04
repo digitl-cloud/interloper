@@ -40,6 +40,10 @@ class HourlySource(il.Source):
     def clicks(self) -> list[dict]:
         return []
 
+    @il.asset
+    def accounts(self) -> list[dict]:
+        return []
+
 
 @pytest.fixture
 def store() -> Iterator[Store]:
@@ -295,7 +299,7 @@ class TestAssetPartitionings:
         assert store.insights._asset_partitionings(_ORG) == {
             **{child.id: day for child in daily.children},
             monthly.children[0].id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
-            hourly.children[0].id: il.TimePartitionConfig(
+            next(child for child in hourly.children if child.key == "clicks").id: il.TimePartitionConfig(
                 column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
             ),
             standalone.id: day,
@@ -307,3 +311,22 @@ class TestAssetPartitionings:
         _add(Component(org_id=_ORG, kind="asset", key="demo_asset", parent_id=daily.id))
 
         assert set(store.insights._asset_partitionings(_ORG)) == {child.id for child in daily.children}
+
+
+class TestHealth:
+    """Each job's state and next firing."""
+
+    def test_a_job_whose_stored_config_cannot_window_has_none(self, store: Store) -> None:
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
+        with Session(engine_module.get_engine()) as session:
+            row = session.get(Component, job.id)
+            assert row is not None
+            row.config = {**(row.config or {}), "offset": -1}
+            row.state = {"next_run_at": _T0.isoformat()}
+            session.add(row)
+            session.commit()
+
+        [health] = store.insights.health(_ORG, now=_T0).jobs
+
+        assert (health.next_run_at, health.window) == (_T0, None)
