@@ -4,7 +4,7 @@
 # component class declares a relation, and the collector needs it as a real
 # class, not a lazy string.
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from pydantic import ValidationError
@@ -371,6 +371,21 @@ class TestDefinition:
         assert all(isinstance(a, AssetDefinition) for a in defn.assets)
         asset_keys = {a.key for a in defn.assets}
         assert asset_keys == {"fake_first", "fake_second"}
+
+    def test_partitionings_are_the_partitioned_assets_own(self):
+        class FakeDaily(il.Asset):
+            partitioning = il.TimePartitionConfig(column="date")
+
+            def data(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+                return []
+
+        class FakeMixedSource(il.Source):
+            asset_types: ClassVar[list[type[il.Asset]]] = [FakeDaily, *FakeSourceWithAssets.asset_types]
+
+        [partitioning] = FakeMixedSource.definition().partitionings()
+
+        assert partitioning["column"] == "date"
+        assert FakeSource.definition().partitionings() == []
 
     def test_config_leads_with_the_sources_own_fields(self):
         class FakeAccountSource(il.Source):

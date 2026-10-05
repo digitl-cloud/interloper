@@ -1,10 +1,8 @@
-"""Tests for the generic component store (``interloper_db.store.components``)."""
+"""Tests for ``interloper_db.store.components.base``: component rows and what they read as."""
 
 from __future__ import annotations
 
 import datetime as dt
-import json
-from collections.abc import Callable
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -22,13 +20,12 @@ from interloper.errors import (
 from interloper.partitioning.time import TimeGranularity
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
 from interloper_db.models import Component
 from interloper_db.store import ComponentQuery, RelationQuery, Store
-from interloper_db.store.components import ComponentStore
-from interloper_db.store.status import ComponentStatus
+from interloper_db.store.components import ComponentStatus
 
 _ORG = uuid4()
 
@@ -906,12 +903,32 @@ class TestStatus:
         child = _child(demo_store.components.get(source.id), "a")
         assert demo_store.components.read(child).status is ComponentStatus.OK
 
-    def test_parent_key_spares_the_lookup(self, demo_store: Store):
-        source = demo_store.components.create(_ORG, kind="source", key=DemoSource.key)
-        child = _child(demo_store.components.get(source.id), "a")
-        assert demo_store.components.read(child, parent_key=DemoSource.key).status is ComponentStatus.OK
-        # The hint is taken at face value; a wrong one resolves against it.
-        assert demo_store.components.read(child, parent_key="gone_source").status is ComponentStatus.MISSING
+    @pytest.mark.parametrize(
+        ("enabled", "source_key", "key", "status"),
+        [
+            ([DemoSource], None, "demo_source", ComponentStatus.OK),
+            ([], None, "demo_source", ComponentStatus.DISABLED),
+            ([], None, "gone_from_code", ComponentStatus.MISSING),
+            ([DemoSource], "demo_source", "a", ComponentStatus.OK),
+            ([DemoSource], "demo_source", "renamed_away", ComponentStatus.MISSING),
+            ([], "demo_source", "a", ComponentStatus.DISABLED),
+            ([], "gone_source", "a", ComponentStatus.MISSING),
+        ],
+    )
+    def test_a_key_resolves_here_in_the_installed_code_or_nowhere(
+        self,
+        component_db: Engine,
+        enabled: list[type[il.Source]],
+        source_key: str | None,
+        key: str,
+        status: ComponentStatus,
+    ):
+        # An owned asset reads by its qualified key, so its source's drift cascades to it.
+        store = Store(catalog=il.Catalog.from_assets(enabled))
+        parent = Component(org_id=_ORG, kind="source", key=source_key) if source_key else None
+        row = Component(org_id=_ORG, kind="asset" if parent else "source", key=key, parent=parent)
+
+        assert store.components.read(row).status is status
 
     def test_key_outside_the_catalog_is_missing(self, store: Store):
         row = Component(org_id=_ORG, kind="source", key="gone_source")
@@ -1009,57 +1026,6 @@ class TestReading:
         assert reading.status is ComponentStatus.MISSING
         assert reading.config == {"cron": "0 * * * *"}
         assert reading.public_config == {}
-
-
-# -- Resource encoding ---------------------------------------------------------
-
-
-def _encoder(encrypt: Callable[[bytes], bytes] | None) -> ComponentStore:
-    """The component facet of a store carrying only the cipher under test.
-
-    Args:
-        encrypt: Cipher the store encrypts resources with, or None for an
-            instance with no encryption key configured.
-
-    Returns:
-        The facet whose ``_encode_data`` decides encryption. Its engine is
-        never connected to: encoding is pure.
-    """
-    store = Store(catalog=il.Catalog(components={}), engine=create_engine("sqlite://"), encrypt=encrypt)
-    return store.components
-
-
-def _fake_encrypt(data: bytes) -> bytes:
-    return b"ENC:" + data
-
-
-class TestResourceEncoding:
-    """``_encode_data`` is the single place that decides whether a blob is encrypted."""
-
-    def test_default_encrypts_when_key_is_configured(self) -> None:
-        raw, encrypted = _encoder(_fake_encrypt)._encode_data({"a": 1}, None)
-        assert encrypted is True
-        assert raw == b"ENC:" + json.dumps({"a": 1}).encode()
-
-    def test_default_without_key_raises(self) -> None:
-        # Fail closed: the default must never silently store a resource in plaintext.
-        with pytest.raises(ConfigError):
-            _encoder(None)._encode_data({"a": 1}, None)
-
-    def test_explicit_true_without_key_raises(self) -> None:
-        with pytest.raises(ConfigError):
-            _encoder(None)._encode_data({"a": 1}, True)
-
-    def test_explicit_false_stays_plaintext_even_with_key(self) -> None:
-        raw, encrypted = _encoder(_fake_encrypt)._encode_data({"a": 1}, False)
-        assert encrypted is False
-        assert raw == json.dumps({"a": 1}).encode()
-
-    def test_explicit_false_without_key_stays_plaintext(self) -> None:
-        # Opting out explicitly still works without a key (for non-secret resources).
-        raw, encrypted = _encoder(None)._encode_data({"a": 1}, False)
-        assert encrypted is False
-        assert raw == json.dumps({"a": 1}).encode()
 
 
 class TestConfigWriteBack:
@@ -1200,7 +1166,7 @@ class TestHydrateUnreadable:
             raise InvalidToken
 
         rotated = Store(catalog=catalog, encrypt=lambda b: b[::-1], decrypt=_wrong_key)
-        with pytest.raises(HydrationError, match="does not decrypt"):
+        with pytest.raises(HydrationError, match="Failed to decrypt"):
             rotated.components.load(row.id)
 
 
@@ -1260,7 +1226,7 @@ class TestLoadDrift:
         row = writer.components.create(_ORG, kind="source", key="demo_source")
         reader = Store(catalog=il.Catalog(components={}))
 
-        with pytest.raises(ComponentDriftError, match="its catalog key is disabled"):
+        with pytest.raises(ComponentDriftError, match="does not resolve"):
             reader.components.load(row.id)
 
     def test_an_unreadable_payload_raises_hydration_error(self, component_db: Engine):
@@ -1279,7 +1245,7 @@ class TestLoadDrift:
 
         reader = Store(catalog=catalog, encrypt=lambda b: b, decrypt=broken_decrypt)
 
-        with pytest.raises(HydrationError, match="does not decrypt"):
+        with pytest.raises(HydrationError, match="Failed to decrypt"):
             reader.components.load(row.id)
 
     def test_an_asset_the_source_no_longer_declares_raises(self, component_db: Engine):
@@ -1445,19 +1411,3 @@ class TestJobPartitionGranularities:
 
         assert Store(catalog=il.Catalog(components={})).components.job_partition_granularities([]) == {}
         assert statements == []
-
-
-class TestCheckJobTargets:
-    """A job whose target drifted cannot be hydrated."""
-
-    def test_a_drifted_target_raises(self, component_db: Engine):
-        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
-        source = writer.components.create(_ORG, kind="source", key="demo_source")
-        job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
-        reader = Store(catalog=il.Catalog(components={}))
-
-        with Session(component_db) as session:
-            db_job = session.get(Component, job.id)
-            assert db_job is not None
-            with pytest.raises(ComponentDriftError, match="is disabled"):
-                reader.components._check_job_targets(session, db_job)

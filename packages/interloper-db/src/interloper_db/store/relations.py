@@ -318,7 +318,7 @@ class RelationStore:
             source's declaration for a source-owned asset. Empty when nothing
             resolves.
         """
-        return self._catalog.vocabulary(row.kind, row.key, parent_key=row.parent_key(session))
+        return self._catalog.vocabulary(row.kind, row.qualified_key)
 
     def _relation(self, session: Session, src: Component, name: str) -> il.Relation:
         """The relation a row's class declares under *name*.
@@ -352,7 +352,7 @@ class RelationStore:
             The row's identity: its owning source's key (None when it has no
             parent) and its own key.
         """
-        return il.ComponentIdentity(row.parent_key(session), row.key)
+        return il.ComponentIdentity.resolve(row.qualified_key, own_source_key=None)
 
     def _resolve(self, session: Session, src: Component, relation: il.Relation, name: str, dst_id: UUID) -> Component:
         """Load a relation destination and check the declared relation accepts it.

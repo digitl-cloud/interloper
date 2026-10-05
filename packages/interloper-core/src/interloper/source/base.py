@@ -93,6 +93,14 @@ class SourceDefinition(ComponentDefinition):
 
     assets: list[AssetDefinition] = Field(default_factory=list)
 
+    def partitionings(self) -> list[dict[str, Any]]:
+        """The partitioning of each partitioned asset the source declares.
+
+        Returns:
+            One partitioning per partitioned asset, in declaration order.
+        """
+        return [asset.partitioning for asset in self.assets if asset.partitioning is not None]
+
 
 class Source(Component, Workload):
     """A grouping component that holds assets with shared relations and destinations.

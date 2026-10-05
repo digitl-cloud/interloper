@@ -1,14 +1,16 @@
 """Component instances and the typed relations between them."""
 
+import json
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
 import interloper as il
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, HydrationError, format_exception
 from interloper.utils.time import assume_utc
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
-from sqlmodel import Column, LargeBinary, Relationship, Session, SQLModel, text
+from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import PortableJSON, timestamp_column
@@ -88,22 +90,88 @@ class Component(SQLModel, table=True):
         },
     )
 
-    def parent_key(self, session: Session) -> str | None:
-        """The owning source's catalog key, for a source-owned asset.
+    @property
+    def qualified_key(self) -> str:
+        """The row's catalog key, qualified by its owning source's key when it has one.
 
-        Assets owned by a source are not flat catalog entries: resolving one
-        needs the key of the source that declares it, which lives a row away.
-
-        Args:
-            session: Open session the parent row is read through.
+        The framework's own form (``Component.qualified_key``), and the one
+        ``Catalog.get`` resolves: an owned asset is declared inside its
+        source, so its bare key names nothing on its own. Reads the parent
+        row, which the store's listings load alongside.
 
         Returns:
-            The parent's catalog key, or ``None`` for a row with no parent.
+            ``source.asset`` for an owned asset, the bare key otherwise.
         """
-        if self.parent_id is None:
-            return None
-        parent = session.get(Component, self.parent_id)
-        return parent.key if parent else None
+        return f"{self.parent.key}.{self.key}" if self.parent is not None else self.key
+
+    def write_config(
+        self, config: dict[str, Any] | None, *, encrypt: Callable[[bytes], bytes] | None, encrypted: bool | None
+    ) -> None:
+        """Store a config payload on the row, encrypting a sensitive kind's.
+
+        A sensitive kind's payload is serialised into ``data``, encrypted
+        unless *encrypted* opts out, and ``config`` is left empty; any other
+        kind's is stored as ``config``.
+
+        Args:
+            config: The payload to store; ``None`` stores an empty one.
+            encrypt: Callable encrypting a serialised payload, or ``None``
+                when no encryption key is configured.
+            encrypted: Sensitive kinds only: ``True``/``None`` encrypt,
+                ``False`` stores the payload in plaintext.
+
+        Raises:
+            ConfigError: If a sensitive payload must be encrypted but no
+                encryption key is configured, so secrets are never silently
+                written in plaintext.
+        """
+        if not il.KINDS[self.kind].sensitive:
+            self.config = config
+            return
+        should_encrypt = True if encrypted is None else encrypted
+        raw = json.dumps(config or {}).encode()
+        if should_encrypt:
+            if encrypt is None:
+                raise ConfigError(
+                    "Refusing to store a resource without encryption at rest: "
+                    "INTERLOPER_ENCRYPTION_KEY is not configured. Set it, or pass "
+                    "encrypted=false to store this resource in plaintext."
+                )
+            raw = encrypt(raw)
+        self.data, self.encrypted, self.config = raw, should_encrypt, None
+
+    def read_config(self, decrypt: Callable[[bytes], bytes] | None) -> dict[str, Any]:
+        """The row's config payload, decrypting a sensitive kind's.
+
+        Args:
+            decrypt: Callable decrypting a stored payload, or ``None`` when no
+                encryption key is configured.
+
+        Returns:
+            The decoded payload; empty when the row carries none.
+
+        Raises:
+            HydrationError: If the payload is encrypted but no key is
+                configured, or does not decrypt under the configured one.
+        """
+        if not il.KINDS[self.kind].sensitive:
+            return dict(self.config or {})
+        if self.data is None:
+            return {}
+        raw = self.data
+        if self.encrypted:
+            if decrypt is None:
+                raise HydrationError(
+                    f"Component {self.id} is encrypted but INTERLOPER_ENCRYPTION_KEY is not configured; cannot decrypt"
+                )
+            try:
+                raw = decrypt(raw)
+            except Exception as e:
+                raise HydrationError(
+                    f"Failed to decrypt component {self.id}; the configured INTERLOPER_ENCRYPTION_KEY may be "
+                    f"wrong or the data was not encrypted with it: {format_exception(e)}"
+                ) from e
+        return json.loads(raw)
 
     def stamp_state(self, **fields: Any) -> None:
         """Merge machine-owned state fields onto a component row (spec untouched).

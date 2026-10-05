@@ -1,17 +1,19 @@
-"""Component persistence: one generic surface for every kind.
+"""Component rows: their CRUD and what one row reads as in this deployment.
 
-CRUD, relations, and hydration are kind-agnostic; the semantics a kind
-genuinely owns are applied where the row's ``kind`` demands them:
+CRUD and relations are kind-agnostic; the semantics a kind genuinely owns
+are applied where the row's ``kind`` demands them:
 
 - **secret kinds** (connection/config/resource): the ``config`` payload is
   encrypted into the ``data`` column (fail-closed without a key) and decoded
-  on read — callers only ever see ``config``.
+  on read (callers only ever see ``config``).
 - **source**: child asset rows are kept in sync with the catalog class's
   ``asset_types`` after every write, including the sibling relations the
   class declares between its own assets.
-- **asset**: a source-owned asset hydrates through its parent; its drift
-  status cascades through the parent's.
-- **job**: hydration drift-checks every target before reconstruction.
+- **asset**: an owned asset resolves by its qualified key, so its status
+  cascades through its source's.
+
+Turning a row into a live framework component is
+:mod:`~interloper_db.store.components.hydration`'s job.
 
 Relation reads and writes are not here at all: this store composes a
 :class:`~interloper_db.store.relations.RelationStore` and delegates to it,
@@ -22,39 +24,32 @@ so the acceptance rules a relation name carries live in one place (see
 from __future__ import annotations
 
 import builtins
-import functools
-import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, cast
+from enum import Enum
+from typing import Any
 from uuid import UUID
 
 import interloper as il
 from interloper.catalog.base import Catalog
 from interloper.errors import (
     CatalogKeyError,
-    ComponentDriftError,
     ConfigError,
-    HydrationError,
     InUseError,
     NotFoundError,
-    format_exception,
 )
 from interloper.partitioning.time import TimeGranularity
-from interloper.telemetry import attributes
-from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
-from interloper_db.store.hydration import Hydrator
+from interloper_db.store.components.hydration import Hydrator
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
 from interloper_db.store.relations import RelationStore
-from interloper_db.store.status import ComponentStatus, asset_status, source_status
 
 # Eager-load set for rows returned to API consumers: the parent, the row's
 # own relations with the rows they point at, and the children with theirs, so
@@ -66,7 +61,26 @@ COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.children).selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
 ]
+
+
+class ComponentStatus(str, Enum):
+    """Usability state of a persisted component in this deployment."""
+
+    OK = "ok"
+    """Key resolves in the enabled catalog: the component is live."""
+
+    DISABLED = "disabled"
+    """Key exists in code but is not exposed by this deployment's catalog."""
+
+    MISSING = "missing"
+    """Key no longer exists in code at all: this is drift."""
+
+    UNREADABLE = "unreadable"
+    """Key resolves, but the stored payload does not decrypt under the active
+    ``INTERLOPER_ENCRYPTION_KEY`` (rotated, mismatched, or absent). The row is
+    intact; its config has to be re-entered or re-keyed."""
 
 
 class ComponentQuery(PageQuery):
@@ -117,14 +131,15 @@ class DeleteImpact:
 
 
 class ComponentStore:
-    """Store methods for component CRUD, hydration and usability status."""
+    """Store methods for component rows: CRUD, reading, and live components through the hydrator."""
 
     def __init__(
         self,
         engine: Engine,
         catalog: Catalog,
         hydrator: Hydrator,
-        encrypt: Any,
+        encrypt: Callable[[bytes], bytes] | None,
+        decrypt: Callable[[bytes], bytes] | None,
         quotas: QuotaStore,
         relations: RelationStore,
     ) -> None:
@@ -133,8 +148,9 @@ class ComponentStore:
         Args:
             engine: Engine the facet opens its sessions on.
             catalog: Catalog its component keys resolve against.
-            hydrator: Hydrator that turns rows back into framework objects.
-            encrypt: Callable that encrypts a resource payload, or None for plaintext.
+            hydrator: Hydrator that turns rows into live framework components.
+            encrypt: Callable encrypting a sensitive payload, or None for plaintext.
+            decrypt: Callable decrypting a sensitive payload, or None when no key is configured.
             quotas: Quota gates it enforces through.
             relations: Relation facet it wires component edges through.
         """
@@ -142,6 +158,7 @@ class ComponentStore:
         self._catalog = catalog
         self._hydrator = hydrator
         self._encrypt = encrypt
+        self._decrypt = decrypt
         self._quotas = quotas
         self._relations = relations
 
@@ -183,7 +200,7 @@ class ComponentStore:
         with session_scope(self._engine) as session:
             self._quotas.admit_component(org_id, kind)
             db_component = Component(org_id=org_id, kind=kind, key=key, name=name)
-            self._apply_config(db_component, config, encrypted)
+            db_component.write_config(config, encrypt=self._encrypt, encrypted=encrypted)
             if name is None:
                 db_component.name = self._derived_name(db_component, config)
             session.add(db_component)
@@ -292,7 +309,7 @@ class ComponentStore:
             if config is not None:
                 self._refresh_derived_name(db_component, new_config=config, explicit_rename=name is not None)
                 spec_changed = config != (db_component.config or {})
-                self._apply_config(db_component, config, encrypted)
+                db_component.write_config(config, encrypt=self._encrypt, encrypted=encrypted)
                 if db_component.kind == "job" and spec_changed:
                     db_component.stamp_state(next_run_at=None)
             if db_component.kind == "source":
@@ -450,286 +467,87 @@ class ComponentStore:
             for c in sorted(components, key=lambda c: ((c.name or c.key).lower(), str(c.id)))
         ]
 
-    # -- Hydration & status ----------------------------------------------------
+    # -- Reading ---------------------------------------------------------------
 
     def load(self, component_id: UUID) -> il.Component:
         """Hydrate a framework component of any kind from its row.
 
-        Source-owned assets hydrate through their parent source and are
-        extracted from it; jobs drift-check every target first. One cache
-        backs the whole call (see :meth:`_load`), so a component reached
-        several times within the same document (a job's own target and,
-        through a cross-source upstream, that same target again) hydrates
-        once and every consumer binds the identical instance. Fails closed
-        on any catalog drift: see :meth:`_load` for what a missing row, a
-        drifted key or a failed reconstruction raises.
-
         Args:
             component_id: The component UUID.
 
         Returns:
-            The reconstructed framework component.
+            The live component; see :meth:`Hydrator.load` for what fails closed.
         """
-        with tracer().start_as_current_span(
-            "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
-        ):
-            return self._load(component_id, {})
+        return self._hydrator.load(component_id)
 
-    def _load(
-        self,
-        component_id: UUID,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...] = (),
-    ) -> il.Component:
-        """Hydrate a component row (the traced body of :meth:`load`).
-
-        A spec reference (``{"ref": id}``) is resolved from the document
-        first, which reconstruction does on its own, and only then through
-        :meth:`_resolve_reference`, which re-enters here with the same
-        *cache* and *chain* rather than starting a fresh call: a job that
-        targets both a source and a consumer of that source's asset holds
-        one instance of it, not two, and an owned asset's parent (loaded
-        through :meth:`_load_owned_asset`) shares the cache the same way.
-        *chain* is the trail of ids currently being hydrated, paired with
-        the catalog key each was hydrated under; a reference back onto one
-        of them is a cycle, reported from the trail rather than left to
-        exhaust the stack.
-
-        Args:
-            component_id: The component UUID.
-            cache: Components already hydrated within this :meth:`load` call,
-                by id, consulted before doing any work.
-            chain: Ids currently being hydrated in this call, in resolution
-                order. Defaults to ``()``, the top-level call's empty trail.
-
-        Returns:
-            The reconstructed framework component.
-
-        Raises:
-            NotFoundError: If the component is not found.
-            ComponentDriftError: If a catalog key no longer resolves.
-            HydrationError: If the stored payload does not decrypt, if
-                reconstruction fails, or if a reference revisits an id
-                already being hydrated earlier in the same call.
-        """
-        if component_id in cache:
-            return cache[component_id]
-        cyclic_key = next((key for id_, key in chain if id_ == component_id), None)
-        if cyclic_key is not None:
-            trail = " -> ".join(key for _, key in chain)
-            raise HydrationError(f"Reference cycle while hydrating: {trail} -> {cyclic_key}")
-
-        with session_scope(self._engine) as session:
-            db_component = session.get(Component, component_id)
-            if not db_component:
-                raise NotFoundError(f"Component {component_id} not found")
-            owned_asset = db_component.kind == "asset" and db_component.parent_id is not None
-            if not owned_asset:
-                status = self.read(db_component).status
-                if status is not ComponentStatus.OK:
-                    subject = f"{db_component.kind.capitalize()} '{db_component.key}' ({db_component.id})"
-                    # Different failures, different remedies, so different
-                    # errors: a drifted key needs the component repointed or
-                    # removed, an unreadable payload needs its config
-                    # re-entered or re-keyed.
-                    if status is ComponentStatus.UNREADABLE:
-                        raise HydrationError(
-                            f"{subject} cannot be hydrated: its stored config does not decrypt "
-                            "under the configured INTERLOPER_ENCRYPTION_KEY."
-                        )
-                    raise ComponentDriftError(f"{subject} cannot be hydrated: its catalog key is {status.value}.")
-                if db_component.kind == "job":
-                    self._check_job_targets(session, db_component)
-                spec = self._hydrator.build_component_spec(session, db_component)
-
-        # Reconstruction happens outside the session: it imports classes and,
-        # for owned assets, recursively loads the parent source.
-        chain = (*chain, (component_id, db_component.key))
-        if owned_asset:
-            component = self._load_owned_asset(db_component.parent_id, db_component.key, component_id, cache, chain)
-        else:
-            resolve = functools.partial(self._resolve_reference, cache=cache, chain=chain)
-            try:
-                component = il.Component.from_spec(spec, resolve=resolve)
-            except (ComponentDriftError, NotFoundError):
-                # A dedicated handler (the API's drift endpoint, say) needs to
-                # tell these apart from a generic hydration failure, so they
-                # pass through untouched rather than folding into the catch-all.
-                raise
-            except Exception as e:
-                # format_exception, never str(e): a ValidationError here carries the
-                # decrypted payload of sensitive kinds in its input_value dumps, and
-                # this message is persisted into run events and shown in the UI.
-                raise HydrationError(
-                    f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): "
-                    f"{format_exception(e)}"
-                ) from e
-        cache[component_id] = component
-        return component
-
-    def _resolve_reference(
-        self,
-        reference: str,
-        *,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...],
-    ) -> il.Component:
-        """Hydrate the component a spec reference names from outside its document.
-
-        Args:
-            reference: Id of the referenced component, as the spec carries it.
-            cache: Components already hydrated within the enclosing
-                :meth:`load` call, consulted (and extended) instead of
-                hydrating a fresh instance for a component reached again.
-            chain: Ids currently being hydrated in the enclosing call, for
-                :meth:`_load`'s cycle check.
-
-        Returns:
-            The referenced component, hydrated through the store.
-        """
-        return self._load(UUID(reference), cache, chain)
-
-    def _load_owned_asset(
-        self,
-        parent_id: UUID,
-        key: str,
-        asset_id: UUID,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...],
-    ) -> il.Asset:
-        """Hydrate a source-owned asset through its parent source.
-
-        The parent source is the unit of reconstruction: loading it binds all
-        its assets, and the child is picked out by key. The parent loads
-        through the same *cache* and *chain* as the asset itself, so a
-        source hydrates once even when several of its owned assets are each
-        reached independently within one :meth:`load` call.
-
-        Args:
-            parent_id: UUID of the owning source component.
-            key: Catalog key of the asset to pick out of the source.
-            asset_id: UUID of the asset row, for the drift error message.
-            cache: Components already hydrated within the enclosing
-                :meth:`load` call.
-            chain: Ids currently being hydrated in the enclosing call.
-
-        Returns:
-            The bound asset instance.
-
-        Raises:
-            ComponentDriftError: If the source no longer declares the key.
-        """
-        source = cast(il.Source, self._load(parent_id, cache, chain))
-        for asset in source.assets:
-            if asset.key == key:
-                return asset
-        raise ComponentDriftError(
-            f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
-        )
-
-    def read(self, db_component: Component, *, parent_key: str | None = None) -> ComponentReading:
+    def read(self, db_component: Component) -> ComponentReading:
         """Read a row once: its status and every view of its payload a response shows.
 
         The catalog answers first: without a resolvable key there is no schema
         to read the payload against, so drift outranks readability. The payload
         is then decoded once; a payload that does not decode makes an otherwise
         live row ``UNREADABLE``, while a drifted row keeps whatever config it
-        holds, so a surface can still show what the row carries.
-
-        An owned row resolves through its owner, whose key is read a row away
-        unless the caller supplies it. A caller walking many children of one
-        owner should pass *parent_key*: it already knows it, and the lookup is
-        then skipped per child.
+        holds, so a surface can still show what the row carries. The row's
+        class says which fields are public and which one is the
+        discriminator; the payload supplies their values.
 
         Args:
-            db_component: The row to read.
-            parent_key: The owner's key when the caller already knows it.
-                Defaults to ``None``, which reads it from the database for an
-                owned row.
+            db_component: The row to read, its parent loaded when it has one.
 
         Returns:
             The reading: status, decoded config, its public subset and the
             discriminator value.
         """
-        status = self._key_status(db_component, parent_key=parent_key)
+        status = self._key_status(db_component)
         config = self._current_config(db_component)
         if config is None and status is ComponentStatus.OK:
             status = ComponentStatus.UNREADABLE
+        cls = self._resolve_class(db_component)
+        if cls is None or config is None:
+            return ComponentReading(status=status, config=config, public_config={}, discriminator=None)
+        field = cls.discriminator_field()
+        discriminator = config.get(field) if field else None
         return ComponentReading(
             status=status,
             config=config,
-            public_config=self._public_subset(db_component, config),
-            discriminator=self._discriminator_of(db_component, config),
+            public_config={name: config[name] for name in cls.public_fields() if name in config},
+            discriminator=str(discriminator) if discriminator else None,
         )
 
-    def _key_status(self, db_component: Component, *, parent_key: str | None = None) -> ComponentStatus:
-        """Catalog status of a row's key, an owned row resolving through its owner.
+    def _key_status(self, db_component: Component) -> ComponentStatus:
+        """Whether a row's key resolves here, exists only in the installed code, or is gone.
+
+        An owned asset resolves by its qualified key, so a drifted source
+        cascades to its assets, and an asset its source no longer declares
+        reads as drifted under a live source.
 
         Args:
-            db_component: The row to resolve.
-            parent_key: The owner's key when the caller already knows it.
-                Defaults to ``None``, which reads it a row away.
+            db_component: The row to resolve, its parent loaded when it has one.
 
         Returns:
             ``OK``, ``DISABLED`` or ``MISSING``.
         """
-        if db_component.parent_id is not None:
-            if parent_key is None:
-                with session_scope(self._engine) as session:
-                    parent_key = db_component.parent_key(session)
-            return asset_status(self._catalog, db_component.key, source_key=parent_key)
-        if db_component.kind == "asset":
-            return asset_status(self._catalog, db_component.key)
-        return source_status(self._catalog, db_component.key)
+        key = db_component.qualified_key
+        if self._catalog.get(key) is not None:
+            return ComponentStatus.OK
+        if Catalog.discover().get(key) is not None:
+            return ComponentStatus.DISABLED
+        return ComponentStatus.MISSING
 
-    def _public_subset(self, db_component: Component, config: dict[str, Any] | None) -> dict[str, Any]:
-        """The ``x-public`` fields of a decoded payload, per the row's config schema.
-
-        Args:
-            db_component: The row whose key selects the schema.
-            config: The decoded payload, or ``None`` when it could not be read.
-
-        Returns:
-            The disclosed fields; empty when the schema marks none public, the
-            key does not resolve, or there is no payload.
-        """
-        definition = self._catalog.get(db_component.key)
-        if definition is None or config is None:
-            return {}
-        properties = definition.config_schema.get("properties", {})
-        public_fields = {name for name, schema in properties.items() if schema.get("x-public")}
-        return {name: value for name, value in config.items() if name in public_fields}
-
-    def _discriminator_of(self, db_component: Component, config: dict[str, Any] | None) -> str | None:
-        """The discriminator value a decoded payload carries for the row's class.
-
-        Args:
-            db_component: The row whose key and kind select the class.
-            config: The decoded payload, or ``None`` when it could not be read.
-
-        Returns:
-            The value as a string, or ``None`` when the class declares no
-            discriminator, the value is blank, or there is no payload.
-        """
-        cls = self._resolve_class(db_component)
-        field = cls.discriminator_field() if cls else None
-        if field is None or config is None:
-            return None
-        value = config.get(field)
-        return str(value) if value else None
-
-    def _decode_config(self, db_component: Component) -> dict[str, Any]:
-        """The component's config payload, decrypting secret kinds.
+    def _current_config(self, db_component: Component) -> dict[str, Any] | None:
+        """The row's stored config payload, decoding secret kinds.
 
         Args:
             db_component: The row to read the payload from.
 
         Returns:
-            The decoded configuration dict (empty when the row carries none).
+            The decoded configuration dict, or ``None`` when it can't be
+            decoded (no cipher configured, or a corrupt payload).
         """
-        if il.KINDS[db_component.kind].sensitive:
-            return self._hydrator.decode_data(db_component)
-        return dict(db_component.config or {})
+        try:
+            return db_component.read_config(self._decrypt)
+        except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
+            return None
 
     def merge_config(self, component_id: UUID, fields: dict[str, Any]) -> Component:
         """Merge fields into a component's stored config payload.
@@ -749,9 +567,9 @@ class ComponentStore:
         """
         with session_scope(self._engine) as session:
             db_component = self._load_component(session, component_id)
-            payload = {**self._decode_config(db_component), **fields}
+            payload = {**db_component.read_config(self._decrypt), **fields}
             encrypted = db_component.encrypted if il.KINDS[db_component.kind].sensitive else None
-            self._apply_config(db_component, payload, encrypted)
+            db_component.write_config(payload, encrypt=self._encrypt, encrypted=encrypted)
             session.add(db_component)
             commit(session)
             session.refresh(db_component)
@@ -826,50 +644,6 @@ class ComponentStore:
 
     # -- Kind semantics --------------------------------------------------------
 
-    def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
-        """Write the config payload onto the row, encrypting secret kinds.
-
-        Args:
-            db_component: The row to write onto.
-            config: The payload to store (``None`` stores an empty payload).
-            encrypted: Secret kinds only — ``True``/``None`` (default) encrypt,
-                ``False`` opts into plaintext storage.
-        """
-        if il.KINDS[db_component.kind].sensitive:
-            db_component.data, db_component.encrypted = self._encode_data(config or {}, encrypted)
-            db_component.config = None
-        else:
-            db_component.config = config
-
-    def _encode_data(self, data: dict[str, Any], encrypted: bool | None) -> tuple[bytes, bool]:
-        """Serialise a secret payload and encrypt it according to ``encrypted``.
-
-        Args:
-            data: The payload to serialise.
-            encrypted: ``True``/``None`` (default) encrypt, ``False`` opts into
-                plaintext storage.
-
-        Returns:
-            A ``(blob, encrypted)`` tuple: the bytes to persist and whether
-            they are encrypted.
-
-        Raises:
-            ConfigError: If encryption is required (the default, or an explicit
-                ``True``) but no encryption key is configured. Fails closed so
-                secrets are never silently written in plaintext.
-        """
-        should_encrypt = True if encrypted is None else encrypted
-        raw = json.dumps(data).encode()
-        if should_encrypt:
-            if not self._encrypt:
-                raise ConfigError(
-                    "Refusing to store a resource without encryption at rest: "
-                    "INTERLOPER_ENCRYPTION_KEY is not configured. Set it, or pass "
-                    "encrypted=false to store this resource in plaintext."
-                )
-            raw = self._encrypt(raw)
-        return raw, should_encrypt
-
     def _resolve_class(self, db_component: Component) -> type[il.Component] | None:
         """The component class a row's ``key`` and ``kind`` select in this catalog.
 
@@ -927,21 +701,6 @@ class ComponentStore:
         old_default = self._derived_name(db_component, self._current_config(db_component))
         if db_component.name is None or db_component.name == old_default:
             db_component.name = self._derived_name(db_component, new_config) or db_component.name
-
-    def _current_config(self, db_component: Component) -> dict[str, Any] | None:
-        """The row's stored config payload, decoding secret kinds.
-
-        Args:
-            db_component: The row to read the payload from.
-
-        Returns:
-            The decoded configuration dict, or ``None`` when it can't be
-            decoded (no cipher configured, or a corrupt payload).
-        """
-        try:
-            return self._decode_config(db_component)
-        except Exception:  # noqa: BLE001 — no cipher / corrupt payload: treat as underivable
-            return None
 
     def _check_source_collision(self, session: Session, db_source: Component) -> None:
         """Reject a source instance whose materialization target collides with a sibling.
@@ -1121,8 +880,11 @@ class ComponentStore:
     def _job_target_granularities(self, session: Session, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
         """The granularities each job's partitioned targets declare, in three queries.
 
-        The jobs' target relations, the target rows and the owned targets'
-        parent rows are each read in one query, whatever the number of jobs.
+        The jobs' target relations, the target rows and their parents are each
+        read in one query, whatever the number of jobs. A source target
+        contributes its partitioned assets' granularities, an asset target
+        its own; a target whose key does not resolve contributes nothing
+        (drift is the run path's problem, not the scheduler's).
 
         Args:
             session: Open session to resolve the targets in.
@@ -1130,8 +892,7 @@ class ComponentStore:
 
         Returns:
             Per job with at least one target relation, the distinct
-            granularities its targets resolve to; a target row that no longer
-            exists contributes nothing.
+            granularities its targets resolve to.
         """
         relations = session.exec(
             select(ComponentRelation).where(
@@ -1141,73 +902,29 @@ class ComponentStore:
         targets = {
             row.id: row
             for row in session.exec(
-                select(Component).where(col(Component.id).in_({relation.dst_id for relation in relations}))
+                select(Component)
+                .where(col(Component.id).in_({relation.dst_id for relation in relations}))
+                .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
             ).all()
         }
-        parent_ids = {row.parent_id for row in targets.values() if row.parent_id is not None}
-        parent_keys = dict(
-            session.exec(select(col(Component.id), col(Component.key)).where(col(Component.id).in_(parent_ids))).all()
-        )
         granularities: dict[UUID, set[TimeGranularity]] = {}
         for relation in relations:
             shared = granularities.setdefault(relation.src_id, set())
             if (target := targets.get(relation.dst_id)) is None:
                 continue
-            parent_key = parent_keys.get(target.parent_id) if target.parent_id is not None else None
-            for partitioning in self._target_partitionings(target, parent_key):
-                if (granularity := partitioning.get("granularity")) is not None:
-                    shared.add(TimeGranularity(granularity))
-        return granularities
-
-    def _target_partitionings(self, target: Component, parent_key: str | None) -> builtins.list[dict[str, Any]]:
-        """The partitioning dicts of one target's partitioned assets.
-
-        Args:
-            target: The job target row (a source or an asset).
-            parent_key: The catalog key of an owned asset's parent source,
-                ``None`` for any other target.
-
-        Returns:
-            One dict per partitioned asset the target resolves to; empty when
-            the catalog key does not resolve (drift is the run path's problem,
-            not the scheduler's).
-        """
-        if target.kind == "source":
-            definition = self._catalog.get(target.key)
-            if not isinstance(definition, il.SourceDefinition):
-                return []
-            return [asset.partitioning for asset in definition.assets if asset.partitioning is not None]
-        if target.kind == "asset":
-            definition = self._catalog.get(target.key, parent_key=parent_key)
-            partitioning = definition.partitioning if isinstance(definition, il.AssetDefinition) else None
-            return [partitioning] if partitioning is not None else []
-        return []
-
-    def _check_job_targets(self, session: Session, db_job: Component) -> None:
-        """Fail closed when any job target's catalog key has drifted.
-
-        Args:
-            session: Open session to resolve the targets in.
-            db_job: The job row being hydrated.
-
-        Raises:
-            ComponentDriftError: If a target's catalog key is disabled or missing.
-        """
-        targets = session.exec(
-            select(ComponentRelation).where(
-                ComponentRelation.src_id == db_job.id, ComponentRelation.name == "targets"
+            definition = self._catalog.get(target.qualified_key)
+            if isinstance(definition, il.SourceDefinition):
+                partitionings = definition.partitionings()
+            elif isinstance(definition, il.AssetDefinition) and definition.partitioning is not None:
+                partitionings = [definition.partitioning]
+            else:
+                partitionings = []
+            shared.update(
+                TimeGranularity(partitioning["granularity"])
+                for partitioning in partitionings
+                if partitioning.get("granularity") is not None
             )
-        ).all()
-        for relation in targets:
-            target = session.get(Component, relation.dst_id)
-            if target is None:
-                continue  # defensive: FKs make this unreachable
-            status = self.read(target).status
-            if status is not ComponentStatus.OK:
-                raise ComponentDriftError(
-                    f"Job '{db_job.name}' ({db_job.id}) cannot be hydrated: target "
-                    f"{target.kind} '{target.key}' ({target.id}) is {status.value}."
-                )
+        return granularities
 
     # -- Internals -------------------------------------------------------------
 

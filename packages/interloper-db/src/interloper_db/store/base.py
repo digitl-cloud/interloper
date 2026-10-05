@@ -13,11 +13,10 @@ from sqlmodel import Session
 from interloper_db.engine import engine_from_settings, get_engine
 from interloper_db.session import transaction
 from interloper_db.store.backfills import BackfillStore
-from interloper_db.store.components import ComponentStore
+from interloper_db.store.components import ComponentStore, Hydrator
 from interloper_db.store.conversations import ConversationStore
 from interloper_db.store.events import EventStore
 from interloper_db.store.executions import ExecutionStore
-from interloper_db.store.hydration import Hydrator
 from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
@@ -38,9 +37,9 @@ class Store:
     Bridges catalog definitions and database rows to hydrate and persist
     interloper components. The store owns the engine, the catalog and the
     session policy; each entity is a facet reached through it —
-    ``store.components``, ``store.runs``, ``store.members`` and so on. Hydration
-    is delegated to a :class:`~interloper_db.store.hydration.Hydrator` that
-    builds ``Spec`` trees, which :meth:`ComponentStore.load` reconstructs.
+    ``store.components``, ``store.runs``, ``store.members`` and so on.
+    ``store.components.load`` hydrates a live component through the
+    :class:`~interloper_db.store.components.Hydrator`.
 
     Attributes:
         profiles: Who a person is.
@@ -85,7 +84,6 @@ class Store:
         self._encrypt = encrypt
         self._decrypt = decrypt
         self._quota_defaults = quota_defaults
-        self._hydrator = Hydrator(catalog, decrypt=decrypt)
 
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
@@ -104,7 +102,13 @@ class Store:
         self.runs = RunStore(self._engine, self.quotas, self.backfills, self.events)
         self.executions = ExecutionStore(self._engine)
         self.components = ComponentStore(
-            self._engine, catalog, self._hydrator, encrypt, self.quotas, self.relations
+            self._engine,
+            catalog,
+            Hydrator(self._engine, catalog, decrypt=decrypt),
+            encrypt,
+            decrypt,
+            self.quotas,
+            self.relations,
         )
         self.insights = InsightStore(
             self._engine, catalog, self.components, self.runs, self.backfills, self.executions

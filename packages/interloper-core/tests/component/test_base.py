@@ -129,6 +129,14 @@ class TestDiscriminator:
         assert FakeDiscriminated.discriminator_field() == "account_id"
         assert FakeComponent.discriminator_field() is None
 
+    def test_public_fields_are_the_x_public_ones(self):
+        class FakeAccount(Component):
+            region: str = il.InputField(default="", json_schema_extra={"x-public": True})
+            token: str = il.InputField(default="")
+
+        assert FakeAccount.public_fields() == {"region"}
+        assert FakeComponent.public_fields() == frozenset()
+
     def test_instance_name_is_the_discriminator(self):
         class FakeShop(Component):
             shop_id: str = il.InputField(default="", discriminator=True)

@@ -752,6 +752,22 @@ class Component(Serializable):
         return marked[0] if marked else None
 
     @classmethod
+    def public_fields(cls) -> frozenset[str]:
+        """Names of the config fields marked ``x-public``.
+
+        A public field may be shown wherever the component is, even when the
+        rest of a sensitive kind's config may not.
+
+        Returns:
+            The marked field names.
+        """
+        return frozenset(
+            name
+            for name, field in cls.model_fields.items()
+            if isinstance(field.json_schema_extra, dict) and field.json_schema_extra.get("x-public")
+        )
+
+    @classmethod
     def _discriminator_fields(cls) -> list[str]:
         """Names of the config fields marked ``discriminator=True``.
 

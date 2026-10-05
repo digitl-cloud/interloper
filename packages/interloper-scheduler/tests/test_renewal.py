@@ -233,10 +233,10 @@ class TestAutoRenewDecode:
         component_id = _connection(store)
         controller = RenewalController(catalog=_CATALOG, store=store)
 
-        def broken_decode(component: Any) -> dict[str, Any]:
+        def broken_decode(component: Any, decrypt: Any) -> dict[str, Any]:
             raise RuntimeError("cannot decrypt")
 
-        monkeypatch.setattr(store.components, "_decode_config", broken_decode)
+        monkeypatch.setattr(Component, "read_config", broken_decode)
 
         with Session(store.engine) as session:
             row = session.get(Component, component_id)

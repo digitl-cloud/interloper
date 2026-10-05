@@ -5,8 +5,8 @@ from __future__ import annotations
 from uuid import uuid4
 
 from interloper_db.models import Component
+from interloper_db.store.components import ComponentStatus
 from interloper_db.store.insights.health import KindInventory
-from interloper_db.store.status import ComponentStatus
 
 
 class TestKindInventory:
