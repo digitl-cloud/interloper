@@ -13,6 +13,7 @@ import datetime as dt
 import os
 import threading
 from collections.abc import Callable, Iterator
+from types import SimpleNamespace
 from typing import Any, ClassVar
 from urllib.parse import urlparse, urlunparse
 from uuid import UUID, uuid4
@@ -28,8 +29,9 @@ from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
 from interloper_db import provision
-from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
-from interloper_db.store import RunQuery, RunStore, Store
+from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
+from interloper_db.store import BackfillQuery, EventQuery, RunQuery, RunStore, Store
+from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.runs import partition_key_range
 
 _ORG_ID = uuid4()
@@ -346,13 +348,13 @@ class TestStackNativeListing:
         # stack succeeded, and that is what a reader means by "failed runs".
         self._failed_then(store, success=True)
 
-        assert store.runs.list(_ORG_ID, RunQuery(status="failed")).items == []
-        assert len(store.runs.list(_ORG_ID, RunQuery(status="success")).items) == 1
+        assert store.runs.list(_ORG_ID, RunQuery(status=[RunStatus.FAILED])).items == []
+        assert len(store.runs.list(_ORG_ID, RunQuery(status=[RunStatus.SUCCESS])).items) == 1
 
     def test_an_exhausted_stack_still_reads_as_failed(self, store: Store) -> None:
         self._failed_then(store, success=False)
 
-        assert len(store.runs.list(_ORG_ID, RunQuery(status="failed")).items) == 1
+        assert len(store.runs.list(_ORG_ID, RunQuery(status=[RunStatus.FAILED])).items) == 1
 
     def test_a_stack_lists_its_attempts_newest_first(self, store: Store) -> None:
         first, successor = self._failed_then(store, success=True)
@@ -824,7 +826,7 @@ class TestRunFilters:
         store.runs.complete(succeeded.id, success=True)
         store.runs.create(_ORG_ID)
 
-        page = store.runs.list(_ORG_ID, RunQuery(status="success"))
+        page = store.runs.list(_ORG_ID, RunQuery(status=[RunStatus.SUCCESS]))
 
         assert [row.id for row in page.items] == [succeeded.id]
         assert page.total == 1
@@ -867,6 +869,193 @@ class TestRunFilters:
 
         assert {row.id for row in page.items} == {by_name.id, by_key.id}
         assert page.total == 2
+
+
+def _exhaust_quota(store: Store, limit: int = 1) -> None:
+    """Give the org a run quota and a ledger already at it."""
+    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=limit)
+    with Session(store.engine) as session:
+        ledger = UsageLedger(session)
+        ledger.increment(_ORG_ID, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=limit)
+        session.commit()
+
+
+def _schedule(store: Store, run_id: UUID, *, seconds: float) -> None:
+    """Move a queued run's earliest claim time by *seconds* from now."""
+    with Session(store.engine) as session:
+        db_run = session.get(Run, run_id)
+        assert db_run is not None
+        db_run.scheduled_for = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=seconds)
+        session.add(db_run)
+        session.commit()
+
+
+def _drain(store: Store) -> list[UUID]:
+    claimed = []
+    while (run := store.runs.claim_next()) is not None:
+        claimed.append(run.id)
+    return claimed
+
+
+class TestClaimNext:
+    """The queue's claim: oldest claimable first, dispatched only with a quota slot."""
+
+    def test_runs_are_claimed_oldest_first_and_dispatched(self, store: Store) -> None:
+        first, second = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
+
+        assert _drain(store) == [first.id, second.id]
+        assert {store.runs.get(run.id).status for run in (first, second)} == {RunStatus.DISPATCHED}
+
+    @pytest.mark.parametrize(("seconds", "claimed"), [(3600, False), (-1, True)])
+    def test_a_scheduled_run_waits_for_its_slot(self, store: Store, seconds: float, claimed: bool) -> None:
+        run = store.runs.create(_ORG_ID)
+        _schedule(store, run.id, seconds=seconds)
+
+        assert _drain(store) == ([run.id] if claimed else [])
+
+    def test_a_run_backing_off_does_not_block_the_queue_behind_it(self, store: Store) -> None:
+        waiting = store.runs.create(_ORG_ID)
+        _schedule(store, waiting.id, seconds=3600)
+        ready = store.runs.create(_ORG_ID)
+
+        assert _drain(store) == [ready.id]
+
+    def test_dispatch_reserves_a_quota_slot(self, store: Store) -> None:
+        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
+        run = store.runs.create(_ORG_ID)
+
+        assert _drain(store) == [run.id]
+        assert store.runs.get(run.id).quota_reserved_at is not None
+        with Session(store.engine) as session:
+            usage = session.exec(select(Usage)).one()
+        assert (usage.used, usage.reserved) == (0, 1)
+
+    def test_an_unlimited_org_dispatches_without_touching_the_ledger(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        assert _drain(store) == [run.id]
+        with Session(store.engine) as session:
+            assert session.exec(select(Usage)).all() == []
+
+    def test_a_quota_denied_run_is_canceled_with_its_reason_and_settled(self, store: Store) -> None:
+        first, second = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
+        _exhaust_quota(store)
+
+        assert _drain(store) == []
+        for run in (first, second):
+            canceled = store.runs.get(run.id)
+            assert (canceled.status, canceled.hooks_evaluated_at is not None) == (RunStatus.CANCELED, True)
+        with Session(store.engine) as session:
+            messages = [event.message or "" for event in session.exec(select(Event)).all()]
+        assert len(messages) == 2 and all("quota" in message for message in messages)
+
+    def test_a_quota_denied_backfill_run_cancels_the_whole_backfill(self, store: Store) -> None:
+        backfill = _backfill(store, days=3, concurrency=1)
+        _exhaust_quota(store)
+
+        assert _drain(store) == []
+        runs = store.runs.list(_ORG_ID, RunQuery(backfill_id=backfill.id, all_attempts=True, limit=None)).items
+        assert {run.status for run in runs} == {RunStatus.CANCELED}
+        canceled = store.backfills.get(backfill.id)
+        assert canceled.status == BackfillStatus.CANCELED
+        assert canceled.completed_at is not None and canceled.hooks_evaluated_at is not None
+
+
+class TestStartAndFail:
+    """The executor's and the reaper's transitions."""
+
+    def test_start_marks_the_run_running_with_its_target(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))
+
+        started = store.runs.start(run.id)
+
+        assert (started.status, started.started_at is not None) == (RunStatus.RUNNING, True)
+        assert started.target is not None and started.target.name == "Nightly"
+
+    def test_a_terminal_run_cannot_start(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
+
+        with pytest.raises(ConflictError):
+            store.runs.start(run.id)
+
+    def test_fail_records_the_reason_and_the_verdict_together(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        failed = store.runs.fail(run.id, "pod OOMKilled", metadata={"trace": "abc"})
+
+        assert failed.status == RunStatus.FAILED
+        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["run_failed"]), run_id=run.id).items
+        assert (event.error, (event.data or {}).get("trace")) == ("pod OOMKilled", "abc")
+
+    def test_failing_a_terminal_run_records_nothing(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=True)
+
+        with pytest.raises(ConflictError):
+            store.runs.fail(run.id, "late reap")
+        assert store.events.list(_ORG_ID, EventQuery(), run_id=run.id).items == []
+        assert store.runs.get(run.id).status == RunStatus.SUCCESS
+
+    def test_failing_a_missing_run_is_not_found(self, store: Store) -> None:
+        with pytest.raises(NotFoundError):
+            store.runs.fail(uuid4(), "gone")
+
+
+class TestHooksPending:
+    """``hooks_pending`` lists exactly the verdicts hooks still owe a reaction."""
+
+    @staticmethod
+    def _pending(store: Store) -> set[UUID]:
+        query = RunQuery(hooks_pending=True, all_attempts=True, sort="completed_at", limit=None)
+        return {run.id for run in store.runs.list(None, query).items}
+
+    @pytest.mark.parametrize("success", [True, False])
+    def test_a_verdict_is_pending_until_marked(self, store: Store, success: bool) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=success)
+
+        assert self._pending(store) == {run.id}
+        store.runs.mark_hooks_evaluated(run.id)
+        assert self._pending(store) == set()
+
+    def test_open_runs_are_not_pending(self, store: Store) -> None:
+        store.runs.create(_ORG_ID)
+
+        assert self._pending(store) == set()
+
+    def test_an_automatically_retried_failure_is_settled_with_its_successor(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_job_with_retry(store, max_attempts=2))
+
+        store.runs.complete(run.id, success=False)
+
+        assert self._pending(store) == set()
+
+    def test_a_manually_retried_failure_is_settled_with_its_successor(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
+
+        retry = store.runs.retry(run.id)
+
+        assert self._pending(store) == set()
+        store.runs.complete(retry.id, success=True)
+        assert self._pending(store) == {retry.id}
+
+    def test_every_organisation_is_read_when_none_is_given(self, store: Store) -> None:
+        other = store.runs.create(uuid4())
+        store.runs.complete(other.id, success=True)
+
+        assert self._pending(store) == {other.id}
+        assert store.runs.list(_ORG_ID, RunQuery(hooks_pending=True)).items == []
+
+    def test_canceled_backfill_runs_are_settled(self, store: Store) -> None:
+        backfill = _backfill(store)
+
+        store.backfills.cancel(backfill.id)
+
+        assert self._pending(store) == set()
+        query = BackfillQuery(hooks_pending=True, limit=None)
+        assert store.backfills.list(None, query).items == []
 
 
 @pytest.fixture(scope="module")

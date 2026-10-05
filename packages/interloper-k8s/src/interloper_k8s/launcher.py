@@ -14,7 +14,7 @@ from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
     from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
-from interloper_scheduler.launcher import Launcher, RunState, RunStatus
+from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
 from kubernetes import client, config
 
 logger = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ class KubernetesLauncher(Launcher):
             logger.exception("Failed to create Job for run %s", run_id)
             raise
 
-    def describe_run(self, run_id: UUID) -> RunState:
+    def describe_run(self, run_id: UUID) -> LaunchState:
         """Return the authoritative state of a Job/pod.
 
         Used by the reaper to catch failed runs as soon as the Job
@@ -221,7 +221,7 @@ class KubernetesLauncher(Launcher):
             run_id: The run UUID to describe.
 
         Returns:
-            A :class:`RunState` indicating whether the Job is still
+            A :class:`LaunchState` indicating whether the Job is still
             running, has succeeded, has failed, or is gone.
         """
         from typing import cast
@@ -236,20 +236,20 @@ class KubernetesLauncher(Launcher):
                 self._batch_v1.read_namespaced_job_status(name=job_name, namespace=self._namespace),
             )
         except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return RunState(status=RunStatus.NOT_FOUND)
+            return LaunchState(status=LaunchStatus.NOT_FOUND)
 
         status = job.status
         if status is None:
-            return RunState(status=RunStatus.RUNNING)
+            return LaunchState(status=LaunchStatus.RUNNING)
 
         if status.succeeded and status.succeeded > 0:
-            return RunState(status=RunStatus.SUCCEEDED)
+            return LaunchState(status=LaunchStatus.SUCCEEDED)
 
         if status.failed and status.failed > 0:
-            return RunState(status=RunStatus.FAILED, error=self._pod_failure_reason(job_name))
+            return LaunchState(status=LaunchStatus.FAILED, error=self._pod_failure_reason(job_name))
 
         # active / no terminal condition yet
-        return RunState(status=RunStatus.RUNNING)
+        return LaunchState(status=LaunchStatus.RUNNING)
 
     def _pod_failure_reason(self, job_name: str) -> str:
         """Build a short failure description from the pod's termination state.

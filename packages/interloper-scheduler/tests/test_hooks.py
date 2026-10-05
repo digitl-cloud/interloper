@@ -15,7 +15,7 @@ import interloper as il
 import pytest
 from interloper.settings import AppSettings, ServerSettings
 from interloper_assets.demo.source import DemoSource, demo_asset
-from interloper_db import Store
+from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
@@ -68,7 +68,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
         engine_module._engine = None
 
 
-def _terminal_run(store: Store, component_id: UUID, *, status: str = "success") -> Run:
+def _terminal_run(store: Store, component_id: UUID, *, status: RunStatus = RunStatus.SUCCESS) -> Run:
     run = store.runs.create(_ORG, component_id=component_id, partition_key="2026-07-06")
     with Session(engine_module.get_engine()) as session:
         db_run = session.get(Run, run.id)
@@ -190,7 +190,7 @@ class TestHookEvaluation:
             config={"events": ["run_failed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
-        _terminal_run(store, leaf.id, status="success")
+        _terminal_run(store, leaf.id, status=RunStatus.SUCCESS)
 
         _sweep(store)
 
@@ -236,7 +236,7 @@ class TestHookEvaluation:
             config={"events": ["run_failed"], "url": "https://example.test/x"},
             relations={"watches": [source.id]},
         )
-        run = _terminal_run(store, source.id, status="failed")
+        run = _terminal_run(store, source.id, status=RunStatus.FAILED)
 
         _sweep(store)
         _sweep(store)  # failure claim is terminal: no retry
@@ -262,7 +262,7 @@ class TestHookEvaluation:
             config={"events": ["run_failed"], "url": "https://example.test/x"},
             relations={"watches": [source.id]},
         )
-        _terminal_run(store, source.id, status="failed")
+        _terminal_run(store, source.id, status=RunStatus.FAILED)
 
         _sweep(store)
 
@@ -386,7 +386,7 @@ class TestHookEvaluation:
             config={"events": ["run_failed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
-        run = _terminal_run(store, source.id, status="failed")
+        run = _terminal_run(store, source.id, status=RunStatus.FAILED)
         # The error text lives on the run's event rows, not the run itself.
         _record_run_failure(run.id, "HTTPStatusError: 429 Too Many Requests")
 
@@ -800,68 +800,31 @@ class TestSubjectUrl:
 
 
 class TestEvaluateGuards:
-    """``_evaluate`` skips a run it cannot react to."""
+    """``_evaluate`` skips a subject it cannot react to."""
 
-    def test_a_run_without_a_component_is_skipped(self, store: Store):
+    def test_a_run_without_a_target_is_skipped(self, store: Store):
         run = store.runs.create(_ORG)
-        controller = HookController(store=store, poll_interval=999)
+        store.runs.complete(run.id, success=True)
 
-        with Session(engine_module.get_engine()) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            db_run.status = "success"
-            controller._evaluate(session, db_run)
+        HookController(store=store, poll_interval=999)._evaluate(store.runs.get(run.id))
 
     def test_a_non_terminal_run_is_skipped(self, store: Store):
         component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
         run = store.runs.create(_ORG, component_id=component_id)
-        controller = HookController(store=store, poll_interval=999)
 
-        with Session(engine_module.get_engine()) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            controller._evaluate(session, db_run)
+        HookController(store=store, poll_interval=999)._evaluate(store.runs.get(run.id))
 
-    def test_a_run_whose_target_vanished_is_skipped(self, store: Store):
-        # Defensive: the foreign key makes this unreachable in practice.
-        component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
-        run = _terminal_run(store, component_id)
-        controller = HookController(store=store, poll_interval=999)
-
-        with Session(engine_module.get_engine()) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            db_run.component_id = uuid4()
-            controller._evaluate(session, db_run)
-
-    def test_a_backfill_without_a_component_is_skipped(self, store: Store):
-        controller = HookController(store=store, poll_interval=999)
-
+    def test_a_backfill_without_a_target_is_skipped(self, store: Store):
         with Session(engine_module.get_engine()) as session:
             orphan = Backfill(org_id=_ORG, status="success", start_key="2026-09-01", end_key="2026-09-01")
             session.add(orphan)
             session.commit()
-            controller._evaluate_backfill(session, orphan)
+            orphan_id = orphan.id
 
-    def test_a_backfill_whose_target_vanished_is_skipped(self, store: Store):
-        # Defensive: the foreign key makes this unreachable in practice.
-        job = store.components.create(_ORG, kind="job", key="cron_job", name="J", config={"cron": "0 6 * * *"})
-        backfill = store.backfills.create(_ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-01")
-        controller = HookController(store=store, poll_interval=999)
-
-        with Session(engine_module.get_engine()) as session:
-            db_backfill = session.get(Backfill, backfill.id)
-            assert db_backfill is not None
-            db_backfill.status = "success"
-            db_backfill.component_id = uuid4()
-            controller._evaluate_backfill(session, db_backfill)
+        HookController(store=store, poll_interval=999)._evaluate_backfill(store.backfills.get(orphan_id))
 
     def test_a_run_with_no_matching_hook_is_skipped(self, store: Store):
         component_id = store.components.create(_ORG, kind="source", key="demo_source", name="Demo").id
         run = _terminal_run(store, component_id)
-        controller = HookController(store=store, poll_interval=999)
 
-        with Session(engine_module.get_engine()) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            controller._evaluate(session, db_run)
+        HookController(store=store, poll_interval=999)._evaluate(store.runs.get(run.id))

@@ -13,22 +13,19 @@ operation's component row after the run.
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import logging
 from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import format_exception
+from interloper.errors import ConflictError, NotFoundError, format_exception
 from interloper.runner import ExecutionStatus, Runner
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, inject_metadata
 from interloper.telemetry.tracer import tracer
 from interloper_db import ExecutionQuery, Store
-from interloper_db.models import Component, Run
 from opentelemetry.context import Context
 from opentelemetry.trace import Link, get_current_span
-from sqlmodel import Session
 
 logger = logging.getLogger(__name__)
 
@@ -71,27 +68,24 @@ class RunExecutor:
             ``True`` if the run completed successfully, ``False`` otherwise.
 
         Raises:
+            NotFoundError: If the run's target was deleted.
             TypeError: If the run's component declares no workload.
         """
-        org_id: UUID | None = None
-        run_metadata: dict[str, Any] = {"run_id": str(run_id), "backfill_id": None}
+        logger.info("Starting run %s", run_id)
+        try:
+            db_run = self._store.runs.start(run_id)
+        except (NotFoundError, ConflictError) as e:
+            logger.warning("Run %s cannot start, skipping: %s", run_id, e)
+            return False
+        run_metadata = db_run.event_metadata(db_run.target)
 
         try:
-            logger.info("Starting run %s", run_id)
-
-            with Session(self._store.engine) as session:
-                db_run = session.get(Run, run_id)
-                if not db_run or not db_run.component_id:
-                    logger.info("Run %s not found, skipping", run_id)
-                    return False
-
-                component_id = db_run.component_id
-                org_id = db_run.org_id
-                partition_key = db_run.partition_key
-                retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
-                run_metadata = db_run.event_metadata(session.get(Component, component_id))
-
-                self._mark_running(session, db_run)
+            if db_run.component_id is None:
+                raise NotFoundError(f"Run {run_id} targets a component that was deleted")
+            component_id = db_run.component_id
+            org_id = db_run.org_id
+            partition_key = db_run.partition_key
+            retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
 
             # The run roots its own trace: dispatch and execution are
             # asynchronous, so the dispatch span (the ``TRACEPARENT`` env in a
@@ -135,11 +129,9 @@ class RunExecutor:
         except Exception as e:
             logger.exception("Run %s failed", run_id)
             try:
-                if org_id is not None:
-                    metadata = {**run_metadata, "error": format_exception(e)}
-                    event = il.Event(type=il.EventType.RUN_FAILED, metadata=metadata)
-                    self._store.events.save(event, org_id=org_id, run_id=run_id)
-                self._complete(run_id, success=False)
+                self._store.runs.fail(run_id, format_exception(e), metadata=run_metadata)
+            except ConflictError as conflict:
+                logger.warning("Run %s was completed by another writer first: %s", run_id, conflict)
             except Exception:
                 logger.exception("Failed to mark run %s as failed", run_id)
             return False
@@ -167,19 +159,6 @@ class RunExecutor:
 
     # -- Internals -------------------------------------------------------------
 
-    @staticmethod
-    def _mark_running(session: Session, db_run: Run) -> None:
-        """Flip the run to ``running`` and stamp its start time.
-
-        Args:
-            session: Open session the write joins.
-            db_run: The run row to mark.
-        """
-        db_run.status = "running"
-        db_run.started_at = dt.datetime.now(dt.timezone.utc)
-        session.add(db_run)
-        session.commit()
-
     def _prior_successes(self, org_id: UUID, retry_of: UUID) -> set[UUID]:
         """Node row ids that already succeeded in the retry lineage.
 
@@ -202,14 +181,11 @@ class RunExecutor:
         """
         statuses: dict[UUID, str] = {}
         parent_id: UUID | None = retry_of
-        with Session(self._store.engine) as session:
-            while parent_id:
-                for row in self._store.executions.list(org_id, ExecutionQuery(limit=None), run_id=parent_id).items:
-                    # Closest ancestor wins: only record a node the first time we see it.
-                    statuses.setdefault(row.component_id, row.status)
-                parent = session.get(Run, parent_id)
-                parent_id = parent.retry_of if parent else None
-
+        while parent_id:
+            for row in self._store.executions.list(org_id, ExecutionQuery(limit=None), run_id=parent_id).items:
+                # Closest ancestor wins: only record a node the first time we see it.
+                statuses.setdefault(row.component_id, row.status)
+            parent_id = self._store.runs.get(parent_id).retry_of
         return {asset_id for asset_id, status in statuses.items() if status == "success"}
 
     def _apply_effects(self, result: il.RunResult) -> None:

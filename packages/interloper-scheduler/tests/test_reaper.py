@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper_db import Store
+from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
@@ -18,7 +18,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
-from interloper_scheduler.launcher import Launcher, RunState, RunStatus
+from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
 from interloper_scheduler.reaper import Reaper
 
 _ORG = uuid4()
@@ -27,13 +27,13 @@ _ORG = uuid4()
 class _FakeLauncher(Launcher):
     """Answers ``describe_run`` with one canned state."""
 
-    def __init__(self, state: RunState | None) -> None:
+    def __init__(self, state: LaunchState | None) -> None:
         self._state = state
 
     def launch(self, run_id: UUID) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
-    def describe_run(self, run_id: UUID) -> RunState | None:
+    def describe_run(self, run_id: UUID) -> LaunchState | None:
         return self._state
 
 
@@ -80,7 +80,7 @@ def _dispatched_run(store: Store, *, age_seconds: int = 0) -> UUID:
     with Session(store.engine) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
-        db_run.status = "dispatched"
+        db_run.status = RunStatus.DISPATCHED
         db_run.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=age_seconds)
         session.add(db_run)
         session.commit()
@@ -94,26 +94,26 @@ def _status(store: Store, run_id: UUID) -> str:
 class TestLauncherTruth:
     def test_running_is_left_alone(self, store: Store) -> None:
         run_id = _dispatched_run(store)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(RunState(status=RunStatus.RUNNING)))
+        reaper = Reaper(store=store, launcher=_FakeLauncher(LaunchState(status=LaunchStatus.RUNNING)))
         assert reaper._reap() == 0
         assert _status(store, run_id) == "dispatched"
 
     def test_failed_is_reaped_with_the_launcher_error(self, store: Store) -> None:
         run_id = _dispatched_run(store)
-        state = RunState(status=RunStatus.FAILED, error="OOMKilled")
+        state = LaunchState(status=LaunchStatus.FAILED, error="OOMKilled")
         assert Reaper(store=store, launcher=_FakeLauncher(state))._reap() == 1
         assert _status(store, run_id) == "failed"
 
     def test_succeeded_without_db_update_is_reaped(self, store: Store) -> None:
         run_id = _dispatched_run(store)
-        state = RunState(status=RunStatus.SUCCEEDED)
+        state = LaunchState(status=LaunchStatus.SUCCEEDED)
         assert Reaper(store=store, launcher=_FakeLauncher(state))._reap() == 1
         assert _status(store, run_id) == "failed"
 
     def test_not_found_waits_for_the_timeout(self, store: Store) -> None:
         fresh = _dispatched_run(store)
         stale = _dispatched_run(store, age_seconds=1200)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(RunState(status=RunStatus.NOT_FOUND)), timeout=600)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(LaunchState(status=LaunchStatus.NOT_FOUND)), timeout=600)
         assert reaper._reap() == 1
         assert _status(store, fresh) == "dispatched"
         assert _status(store, stale) == "failed"
@@ -141,7 +141,7 @@ class TestTargetContext:
         with Session(store.engine) as session:
             db_run = session.get(Run, run.id)
             assert db_run is not None
-            db_run.status = "dispatched"
+            db_run.status = RunStatus.DISPATCHED
             db_run.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1200)
             session.add(db_run)
             session.commit()
@@ -264,7 +264,7 @@ class TestLauncherFailure:
             def launch(self, run_id: UUID) -> None:  # pragma: no cover - unused
                 raise NotImplementedError
 
-            def describe_run(self, run_id: UUID) -> RunState | None:
+            def describe_run(self, run_id: UUID) -> LaunchState | None:
                 raise RuntimeError("api unreachable")
 
         run_id = _dispatched_run(store, age_seconds=7200)
@@ -278,11 +278,14 @@ class TestLauncherFailure:
 
 
 class TestFailureReportingIsBestEffort:
-    """Neither half of the failure record may take the reaper down."""
+    """A failure that cannot be recorded never takes the reaper down."""
 
-    def test_a_failed_event_save_is_logged_and_survived(
+    def test_an_unrecordable_reason_leaves_the_run_for_the_next_sweep(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
+        # The reason and the verdict commit together, so a run is never failed
+        # without saying why; one the reaper could not record stays dispatched
+        # and is reaped again on the next tick.
         run_id = _dispatched_run(store, age_seconds=7200)
 
         def broken_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> None:
@@ -294,9 +297,8 @@ class TestFailureReportingIsBestEffort:
         with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
             assert reaper._reap() == 1
 
-        assert f"Failed to save RUN_FAILED event for run {run_id}" in caplog.text
-        # The run is still marked failed, which is what unsticks it.
-        assert _status(store, run_id) == "failed"
+        assert f"Failed to mark run {run_id} as failed" in caplog.text
+        assert _status(store, run_id) == "dispatched"
 
     def test_a_failed_completion_is_logged_and_survived(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

@@ -16,12 +16,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from interloper import Connection
 from interloper.catalog.base import Catalog
-from interloper_db import Store
-from interloper_db.models import Component, Run
-from sqlalchemy import or_
-from sqlmodel import Session, col, select
+from interloper_db import OPEN_RUN_STATUSES, RunQuery, Store
+from interloper_db.models import Component
 
 from interloper_scheduler.controller import Controller
 
@@ -38,11 +35,9 @@ _RECHECK_INTERVAL = timedelta(hours=24)
 class RenewalController(Controller):
     """Enqueues a renewal run for every renewable, opted-in, due connection.
 
-    Each tick:
-    1. ``SELECT FOR UPDATE SKIP LOCKED`` due rows of renewable catalog keys
-    2. stamp ``state.next_renewal_at`` (provisional pending slot)
-    3. ``INSERT run`` with ``status='queued'``
-    4. ``COMMIT`` (release locks)
+    Each tick, in one transaction: lock the due rows of renewable catalog
+    keys, stamp ``state.next_renewal_at`` (the provisional pending slot), and
+    queue a renewal run for each.
     """
 
     def __init__(
@@ -75,47 +70,25 @@ class RenewalController(Controller):
         if not self._renewable_keys:
             return
 
-        with Session(self._store.engine) as session:
-            now = datetime.now(timezone.utc)
-
-            next_renewal_at = Component.state["next_renewal_at"].as_string()  # ty: ignore[not-subscriptable]
-            statement = (
-                select(Component)
-                .where(Component.kind == "connection")
-                .where(col(Component.key).in_(self._renewable_keys))
-                .where(or_(next_renewal_at <= now.isoformat(), next_renewal_at.is_(None)))
-                .order_by(next_renewal_at.asc().nulls_first())
-                .limit(self._batch_size)
-                .with_for_update(skip_locked=True)
+        now = datetime.now(timezone.utc)
+        with self._store.transaction():
+            connections = self._store.components.lock_due(
+                "connection", "next_renewal_at", now=now, limit=self._batch_size, keys=self._renewable_keys
             )
-
-            connections = session.exec(statement).all()
-            if not connections:
-                return
-
             for connection in connections:
                 if not self._auto_renew(connection):
                     # Opted out: reconsider later rather than rescan every
                     # tick. Re-enabling the flag takes effect within this
                     # window.
-                    self._set_state(session, connection, next_renewal_at=now + _RECHECK_INTERVAL)
+                    self._store.components.stamp_state(connection.id, next_renewal_at=now + _RECHECK_INTERVAL)
                     continue
 
-                self._set_state(session, connection, next_renewal_at=now + _PENDING_TTL)
-                if self._has_open_run(session, connection):
+                self._store.components.stamp_state(connection.id, next_renewal_at=now + _PENDING_TTL)
+                if self._has_open_run(connection):
                     continue
 
-                session.add(
-                    Run(
-                        component_id=connection.id,
-                        org_id=connection.org_id,
-                        status="queued",
-                        billable=Connection.billable,
-                    )
-                )
+                self._store.runs.create(connection.org_id, component_id=connection.id)
                 logger.info("Queued renewal for connection '%s' (%s)", connection.name, connection.id)
-
-            session.commit()
 
     def _auto_renew(self, connection: Component) -> bool:
         """Whether the connection's stored config opts into automatic renewal.
@@ -136,8 +109,7 @@ class RenewalController(Controller):
             return False
         return bool(config.get("auto_renew", True))
 
-    @staticmethod
-    def _has_open_run(session: Session, connection: Component) -> bool:
+    def _has_open_run(self, connection: Component) -> bool:
         """Whether a run for this connection is already in flight.
 
         The provisional stamp prevents re-enqueueing in the normal flow;
@@ -146,29 +118,10 @@ class RenewalController(Controller):
         could rotate a credential out from under the first.
 
         Args:
-            session: Open session the check is made through.
             connection: The connection row being considered for renewal.
 
         Returns:
-            True when a queued/dispatched/running run exists.
+            True when a queued, dispatched or running run exists.
         """
-        statement = (
-            select(Run.id)
-            .where(Run.component_id == connection.id)
-            .where(col(Run.status).in_(["queued", "dispatched", "running"]))
-            .limit(1)
-        )
-        return session.exec(statement).first() is not None
-
-    @staticmethod
-    def _set_state(session: Session, connection: Component, **timestamps: datetime) -> None:
-        """Merge timestamps into the connection's machine-owned state.
-
-        Args:
-            session: Open session the write joins.
-            connection: The connection row to stamp.
-            **timestamps: State fields to set, merged over the existing payload.
-        """
-        connection.stamp_state(**timestamps)
-        session.add(connection)
-        session.flush()
+        query = RunQuery(component_id=connection.id, status=[*OPEN_RUN_STATUSES], all_attempts=True, limit=1)
+        return self._store.runs.list(connection.org_id, query).total > 0

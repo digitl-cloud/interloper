@@ -6,13 +6,14 @@ them against hooks watching the subject's target component (or its parent
 source), and calls each matching hook's ``fire()``.
 
 A hook observes a **verdict**, never an attempt: a failed run whose next
-attempt is already queued is not an outcome, so the sweep stamps it without
-firing. Because the successor is created in the same transaction that marks
-the run failed, there is no window in which a doomed attempt looks final,
-and the rule needs no knowledge of budgets or backoff. A backfill is its own
+attempt is queued is not an outcome, and the store stamps it evaluated in
+the transaction that queues the successor, so there is no window in which a
+doomed attempt looks final and the sweep needs no knowledge of budgets or
+backoff. A backfill is its own
 subject: it finalises from each partition's latest attempt and stays open
 while a retry waits, so its status is a verdict by construction. A canceled
-run or backfill is not an outcome of the work and fires nothing.
+run or backfill is not an outcome of the work: the store stamps it at
+cancelation, and it fires nothing.
 
 The cursor is the row itself: ``hooks_evaluated_at`` is stamped once a
 subject's hooks have been evaluated, so no clock is compared with another
@@ -33,13 +34,10 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
+from interloper.errors import ConfigError, NotFoundError
 from interloper.settings import AppSettings
-from interloper_db import Store
-from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Run
-from interloper_db.models import Event as EventRow
-from sqlalchemy import func
-from sqlalchemy.orm import aliased
-from sqlmodel import Session, col, select
+from interloper_db import BackfillQuery, BackfillStatus, EventQuery, RelationQuery, RunQuery, RunStatus, Store
+from interloper_db.models import Backfill, Component, Run
 
 from interloper_scheduler.controller import Controller
 
@@ -49,14 +47,10 @@ logger = logging.getLogger(__name__)
 _CLAIM_NAMESPACE = uuid.UUID("f6c1a9de-7b6e-4dbb-9f43-1a2b3c4d5e6f")
 
 #: Terminal run status → the hook event type it produces.
-_TERMINAL_EVENT_TYPES = {"success": "run_completed", "failed": "run_failed"}
-_TERMINAL_STATUSES = frozenset(_TERMINAL_EVENT_TYPES)
+_TERMINAL_EVENT_TYPES = {RunStatus.SUCCESS: "run_completed", RunStatus.FAILED: "run_failed"}
 
 #: Terminal backfill status → the hook event type it produces.
-_BACKFILL_EVENT_TYPES = {"success": "backfill_completed", "failed": "backfill_failed"}
-
-#: Every status the sweep stamps, verdict or not.
-_SWEPT_STATUSES = frozenset({"success", "failed", "canceled"})
+_BACKFILL_EVENT_TYPES = {BackfillStatus.SUCCESS: "backfill_completed", BackfillStatus.FAILED: "backfill_failed"}
 
 
 def _claim_id(hook_id: UUID, subject_id: UUID) -> str:
@@ -76,9 +70,7 @@ class HookController(Controller):
     """Evaluates hooks against terminal runs and backfills.
 
     Each tick, for runs and then for backfills:
-    1. sweep terminal rows not yet stamped ``hooks_evaluated_at``, oldest
-       first; a canceled row, or a failed run whose successor is queued, is
-       stamped straight away
+    1. read the terminal rows whose hooks are pending, oldest completion first
     2. match each subject against enabled hooks watching its target component
        or the target's parent
     3. fire unclaimed matches, recording each firing as an ``events`` row
@@ -100,62 +92,27 @@ class HookController(Controller):
 
     def _tick(self) -> None:
         """Evaluate every terminal run and backfill not yet stamped, oldest first."""
-        with Session(self._store.engine) as session:
-            successor = aliased(Run)
-            has_successor = select(successor.id).where(col(successor.retry_of) == Run.id).exists()
-            retried = (col(Run.status) == "failed") & has_successor
-            pending_runs = (
-                select(Run)
-                .where(col(Run.status).in_(_SWEPT_STATUSES))
-                .where(col(Run.hooks_evaluated_at).is_(None))
-                .order_by(col(Run.completed_at))
-            )
-            for run in session.exec(pending_runs.where((col(Run.status) == "canceled") | retried)).all():
-                self._stamp(session, run)
-            for run in session.exec(pending_runs.where(~((col(Run.status) == "canceled") | retried))).all():
-                self._evaluate(session, run)
-                self._stamp(session, run)
+        runs = RunQuery(hooks_pending=True, all_attempts=True, sort="completed_at", limit=None)
+        for run in self._store.runs.list(None, runs).items:
+            self._evaluate(run)
+            self._store.runs.mark_hooks_evaluated(run.id)
+        for backfill in self._store.backfills.list(None, BackfillQuery(hooks_pending=True, limit=None)).items:
+            self._evaluate_backfill(backfill)
+            self._store.backfills.mark_hooks_evaluated(backfill.id)
 
-            pending_backfills = (
-                select(Backfill)
-                .where(col(Backfill.status).in_(_SWEPT_STATUSES))
-                .where(col(Backfill.hooks_evaluated_at).is_(None))
-                .order_by(col(Backfill.completed_at))
-            )
-            for backfill in session.exec(pending_backfills).all():
-                if backfill.status in _BACKFILL_EVENT_TYPES:
-                    self._evaluate_backfill(session, backfill)
-                self._stamp(session, backfill)
-
-    @staticmethod
-    def _stamp(session: Session, subject: Run | Backfill) -> None:
-        """Mark a run or backfill as evaluated, so no sweep reads it again.
-
-        Args:
-            session: Open session the stamp is written through.
-            subject: The row whose hooks have been evaluated, or which is not a verdict.
-        """
-        subject.hooks_evaluated_at = dt.datetime.now(dt.timezone.utc)
-        session.add(subject)
-        session.commit()
-
-    def _evaluate(self, session: Session, run: Run) -> None:
+    def _evaluate(self, run: Run) -> None:
         """Fire every unclaimed, matching hook for one terminal run.
 
         Args:
-            session: Open session the evaluation is made through.
-            run: The terminal run being reacted to.
+            run: The terminal run being reacted to, its target loaded.
         """
-        if run.component_id is None or run.status not in _TERMINAL_STATUSES:
+        target = run.target
+        if target is None or run.status not in _TERMINAL_EVENT_TYPES:
             return
         event_type = _TERMINAL_EVENT_TYPES[run.status]
 
-        target = session.get(Component, run.component_id)
-        if target is None:
-            return
-
-        metadata = self._event_metadata(session, run, target, event_type)
-        for hook_row, hook, claim in self._unclaimed_hooks(session, run.org_id, target, run.id, event_type):
+        metadata = self._event_metadata(run, target, event_type)
+        for hook_row, hook, claim in self._unclaimed_hooks(run.org_id, target, run.id, event_type):
             watched_ids = {str(watch.id) for watch in hook.watches}
             context = il.HookContext(
                 event_type=event_type,
@@ -164,31 +121,23 @@ class HookController(Controller):
                 partition_key=run.partition_key,
                 url=self._subject_url(f"/executions/runs/{run.id}"),
                 metadata=metadata,
-                trigger=lambda component_id, watched_ids=watched_ids: self._trigger(
-                    session, run, component_id, watched_ids
-                ),
+                trigger=lambda component_id, watched_ids=watched_ids: self._trigger(run, component_id, watched_ids),
             )
             self._fire(hook_row, hook, context, claim, org_id=run.org_id, run_id=run.id, subject=f"run {run.id}")
-            session.add(hook_row)
-            session.commit()
 
-    def _evaluate_backfill(self, session: Session, backfill: Backfill) -> None:
+    def _evaluate_backfill(self, backfill: Backfill) -> None:
         """Fire every unclaimed, matching hook for one terminal backfill.
 
         Args:
-            session: Open session the evaluation is made through.
-            backfill: The terminal backfill being reacted to.
+            backfill: The terminal backfill being reacted to, its target loaded.
         """
-        if backfill.component_id is None or backfill.status not in _BACKFILL_EVENT_TYPES:
+        target = backfill.target
+        if target is None or backfill.status not in _BACKFILL_EVENT_TYPES:
             return
         event_type = _BACKFILL_EVENT_TYPES[backfill.status]
 
-        target = session.get(Component, backfill.component_id)
-        if target is None:
-            return
-
-        metadata = self._backfill_metadata(session, backfill, target, event_type)
-        for hook_row, hook, claim in self._unclaimed_hooks(session, backfill.org_id, target, backfill.id, event_type):
+        metadata = self._backfill_metadata(backfill, target, event_type)
+        for hook_row, hook, claim in self._unclaimed_hooks(backfill.org_id, target, backfill.id, event_type):
             watched_ids = {str(watch.id) for watch in hook.watches}
             context = il.HookContext(
                 event_type=event_type,
@@ -199,7 +148,7 @@ class HookController(Controller):
                 url=self._subject_url(f"/executions/backfills/{backfill.id}"),
                 metadata=metadata,
                 trigger=lambda component_id, watched_ids=watched_ids: self._trigger_backfill(
-                    session, backfill, component_id, watched_ids
+                    backfill, component_id, watched_ids
                 ),
             )
             self._fire(
@@ -212,8 +161,6 @@ class HookController(Controller):
                 subject=f"backfill {backfill.id}",
                 data={"backfill_id": str(backfill.id)},
             )
-            session.add(hook_row)
-            session.commit()
 
     @staticmethod
     def _subject_url(path: str) -> str | None:
@@ -229,12 +176,11 @@ class HookController(Controller):
         return f"{base}{path}" if base else None
 
     def _unclaimed_hooks(
-        self, session: Session, org_id: UUID, target: Component, subject_id: UUID, event_type: str
+        self, org_id: UUID, target: Component, subject_id: UUID, event_type: str
     ) -> list[tuple[Component, il.Hook, str]]:
         """The enabled hooks watching *target* that subscribe to *event_type* and have not fired on *subject_id*.
 
         Args:
-            session: Open session the hooks and claims are read through.
             org_id: The subject's organisation, scoping the hook search.
             target: The subject's component.
             subject_id: The run or backfill the claim is keyed on.
@@ -244,9 +190,9 @@ class HookController(Controller):
             ``(row, hydrated hook, claim id)`` per hook still to fire.
         """
         matches: list[tuple[Component, il.Hook, str]] = []
-        for hook_row in self._matching_hooks(session, org_id, target):
+        for hook_row in self._matching_hooks(org_id, target):
             claim = _claim_id(hook_row.id, subject_id)
-            if session.get(EventRow, UUID(claim)) is not None:
+            if self._claimed(claim):
                 continue
             hook = self._store.components.load(hook_row.id)
             if not isinstance(hook, il.Hook) or not hook.enabled or event_type not in hook.events:
@@ -254,11 +200,10 @@ class HookController(Controller):
             matches.append((hook_row, hook, claim))
         return matches
 
-    def _event_metadata(self, session: Session, run: Run, target: Component, event_type: str) -> dict[str, Any]:
+    def _event_metadata(self, run: Run, target: Component, event_type: str) -> dict[str, Any]:
         """Describe a run event for the hooks about to see it.
 
         Args:
-            session: Open session the target's parent is resolved through.
             run: The terminal run the event describes.
             target: The run's component.
             event_type: The hook event type the run's status produced.
@@ -275,33 +220,22 @@ class HookController(Controller):
         """
         metadata: dict[str, Any] = {
             "status": run.status,
-            "organisation_name": self._organisation_name(session, run.org_id),
+            "organisation_name": self._organisation_name(run.org_id),
             "component_name": target.name or target.key,
             "component_key": target.key,
             "attempt": run.attempt,
-            "attempts": session.exec(
-                select(func.count()).select_from(Run).where(Run.root_run_id == run.root_run_id)
-            ).one(),
+            "attempts": self._store.runs.list(run.org_id, RunQuery(root_run_id=run.root_run_id, limit=1)).total,
         }
         if event_type == "run_failed":
-            error = session.exec(
-                select(EventRow.error)
-                .where(EventRow.run_id == run.id)
-                .where(EventRow.event_type == "run_failed")
-                .where(col(EventRow.error).is_not(None))
-                .order_by(col(EventRow.timestamp).desc())
-            ).first()
-            if error:
-                metadata["error"] = error
+            failures = EventQuery(event_type=[il.EventType.RUN_FAILED.value], has_error=True, limit=None)
+            if errors := self._store.events.list(run.org_id, failures, run_id=run.id).items:
+                metadata["error"] = errors[-1].error
         return metadata
 
-    def _backfill_metadata(
-        self, session: Session, backfill: Backfill, target: Component, event_type: str
-    ) -> dict[str, Any]:
+    def _backfill_metadata(self, backfill: Backfill, target: Component, event_type: str) -> dict[str, Any]:
         """Describe a backfill event for the hooks about to see it.
 
         Args:
-            session: Open session the organisation is read through.
             backfill: The terminal backfill the event describes.
             target: The backfill's component.
             event_type: The hook event type the backfill's status produced.
@@ -316,7 +250,7 @@ class HookController(Controller):
         """
         metadata: dict[str, Any] = {
             "status": backfill.status,
-            "organisation_name": self._organisation_name(session, backfill.org_id),
+            "organisation_name": self._organisation_name(backfill.org_id),
             "component_name": target.name or target.key,
             "component_key": target.key,
             "partitions": backfill.partitions,
@@ -328,25 +262,39 @@ class HookController(Controller):
             ]
         return metadata
 
-    @staticmethod
-    def _organisation_name(session: Session, org_id: UUID) -> str | None:
+    def _organisation_name(self, org_id: UUID) -> str | None:
         """The display name of the organisation a subject belongs to.
 
         Args:
-            session: Open session the organisation is read through.
             org_id: The subject's organisation.
 
         Returns:
-            The name, or ``None`` when the organisation row is gone.
+            The name, or ``None`` when the organisation is gone.
         """
-        organisation = session.get(Organisation, org_id)
-        return organisation.name if organisation else None
+        try:
+            return self._store.organisations.get(org_id).name
+        except NotFoundError:
+            return None
 
-    def _matching_hooks(self, session: Session, org_id: UUID, target: Component) -> list[Component]:
+    def _claimed(self, claim: str) -> bool:
+        """Whether a firing's claim is already recorded.
+
+        Args:
+            claim: The deterministic claim id.
+
+        Returns:
+            True when the claim event exists.
+        """
+        try:
+            self._store.events.get(UUID(claim))
+        except NotFoundError:
+            return False
+        return True
+
+    def _matching_hooks(self, org_id: UUID, target: Component) -> list[Component]:
         """Hooks watching *target* (the subject's component) or its parent.
 
         Args:
-            session: Open session the hooks are read through.
             org_id: The subject's organisation, scoping the search.
             target: The subject's component.
 
@@ -354,18 +302,9 @@ class HookController(Controller):
             The matching hook rows.
         """
         watched_ids = [target.id] + ([target.parent_id] if target.parent_id else [])
-
-        return list(
-            session.exec(
-                select(Component)
-                .join(ComponentRelation, onclause=ComponentRelation.src_id == Component.id)  # ty: ignore[invalid-argument-type]
-                .where(Component.kind == "hook")
-                .where(Component.org_id == org_id)
-                .where(ComponentRelation.name == "watches")
-                .where(col(ComponentRelation.dst_id).in_(watched_ids))
-                .distinct()
-            ).all()
-        )
+        query = RelationQuery(name="watches", src_kind="hook", dst_id=watched_ids, limit=None)
+        hook_ids = dict.fromkeys(relation.src_id for relation in self._store.relations.list(org_id, query).items)
+        return [self._store.components.get(hook_id) for hook_id in hook_ids]
 
     def _fire(
         self,
@@ -379,10 +318,7 @@ class HookController(Controller):
         subject: str,
         data: dict[str, Any] | None = None,
     ) -> None:
-        """Fire one hook and record the outcome on its claim.
-
-        The caller adds and commits ``hook_row`` afterwards: the state stamp
-        joins its session.
+        """Fire one hook, record the outcome on its claim, and stamp the hook's state.
 
         Args:
             hook_row: The hook's component row, carrying its state.
@@ -420,42 +356,40 @@ class HookController(Controller):
             run_id=run_id,
         )
 
-        hook_row.stamp_state(
+        self._store.components.stamp_state(
+            hook_row.id,
             last_fired_at=dt.datetime.now(dt.timezone.utc),
             last_error=error,
             **({"last_run_id": str(run_id)} if run_id else {}),
         )
 
-    def _trigger(self, session: Session, run: Run, component_id: str, watched_ids: set[str]) -> None:
+    def _trigger(self, run: Run, component_id: str, watched_ids: set[str]) -> None:
         """The trigger capability handed to hooks on a run event: queue a run for a component.
 
         The originating run's partition is propagated, so cascading pipelines
         stay on the same partition.
 
         Args:
-            session: Open session the target's parent is resolved through.
             run: The terminal run that triggered the hook.
             component_id: The component the hook asks to run.
             watched_ids: Ids the hook watches, which bound what it may trigger.
         """
-        self._refuse_reentry(session, component_id, watched_ids)
+        self._refuse_reentry(component_id, watched_ids)
         self._store.runs.create(run.org_id, component_id=UUID(component_id), partition_key=run.partition_key)
 
-    def _trigger_backfill(self, session: Session, backfill: Backfill, component_id: str, watched_ids: set[str]) -> None:
+    def _trigger_backfill(self, backfill: Backfill, component_id: str, watched_ids: set[str]) -> None:
         """The trigger capability handed to hooks on a backfill event: backfill a component over the same range.
 
         A job target runs the range the way its own firing would, gated by its
         ``concurrency``; any other target runs it one partition at a time.
 
         Args:
-            session: Open session the target is resolved through.
             backfill: The terminal backfill that triggered the hook.
             component_id: The component the hook asks to backfill.
             watched_ids: Ids the hook watches, which bound what it may trigger.
         """
-        self._refuse_reentry(session, component_id, watched_ids)
-        target = session.get(Component, UUID(component_id))
-        concurrency = (target.config or {}).get("concurrency", 1) if target and target.kind == "job" else 1
+        target = self._refuse_reentry(component_id, watched_ids)
+        concurrency = (target.config or {}).get("concurrency", 1) if target.kind == "job" else 1
         self._store.backfills.create(
             backfill.org_id,
             component_id=UUID(component_id),
@@ -464,8 +398,7 @@ class HookController(Controller):
             concurrency=concurrency,
         )
 
-    @staticmethod
-    def _refuse_reentry(session: Session, component_id: str, watched_ids: set[str]) -> None:
+    def _refuse_reentry(self, component_id: str, watched_ids: set[str]) -> Component:
         """Refuse a trigger that would re-enter the firing hook's own watch set.
 
         Triggering a component the hook watches (directly or through the
@@ -474,19 +407,20 @@ class HookController(Controller):
         responsibility, like any recursive schedule.
 
         Args:
-            session: Open session the target's parent is resolved through.
             component_id: The component the hook asks to run.
             watched_ids: Ids the hook watches.
+
+        Returns:
+            The component to trigger.
 
         Raises:
             ConfigError: If the trigger would re-enter the hook's own watch set.
         """
-        from interloper.errors import ConfigError
-
-        target = session.get(Component, UUID(component_id))
-        target_closure = {component_id} | ({str(target.parent_id)} if target and target.parent_id else set())
+        target = self._store.components.get(UUID(component_id))
+        target_closure = {component_id} | ({str(target.parent_id)} if target.parent_id else set())
         if target_closure & watched_ids:
             raise ConfigError(
                 f"Refusing to trigger component {component_id}: the hook watches it "
                 "(directly or via its parent), which would loop forever"
             )
+        return target

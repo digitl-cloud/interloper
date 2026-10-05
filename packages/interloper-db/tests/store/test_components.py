@@ -5,8 +5,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 from collections.abc import Callable
-from typing import ClassVar
-from uuid import uuid4
+from typing import Any, ClassVar
+from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
@@ -1319,6 +1319,41 @@ class TestEnsureChildrenDrift:
             reader.components.update(row.id, children=["a"])
 
 
+class TestLockDue:
+    """Rows whose state instant has come, most overdue first, never-scheduled last."""
+
+    @staticmethod
+    def _job(store: Store, *, due: dt.datetime | None, enabled: bool = True, key: str = "cron_job") -> UUID:
+        job = store.components.create(_ORG, kind="job", key=key, config={"enabled": enabled})
+        if due is not None:
+            store.components.stamp_state(job.id, next_run_at=due)
+        return job.id
+
+    def test_due_and_unscheduled_rows_are_locked_most_overdue_first(self, store: Store):
+        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.timezone.utc)
+        unscheduled = self._job(store, due=None)
+        late = self._job(store, due=now - dt.timedelta(hours=2))
+        just_due = self._job(store, due=now)
+        self._job(store, due=now + dt.timedelta(minutes=1))
+
+        with store.transaction():
+            rows = store.components.lock_due("job", "next_run_at", now=now, limit=10)
+
+        assert [row.id for row in rows] == [late, just_due, unscheduled]
+
+    def test_the_limit_and_the_filters_narrow_the_rows(self, store: Store):
+        now = dt.datetime(2026, 10, 5, 12, tzinfo=dt.timezone.utc)
+        oldest = self._job(store, due=now - dt.timedelta(hours=3))
+        self._job(store, due=now - dt.timedelta(hours=2), enabled=False)
+
+        def due(**filters: Any) -> list[UUID]:
+            return [row.id for row in store.components.lock_due("job", "next_run_at", now=now, **filters)]
+
+        assert due(limit=1) == [oldest]
+        assert due(limit=10, enabled_only=True) == [oldest]
+        assert due(limit=10, keys=["other_job"]) == []
+
+
 class TestJobPartitionGranularity:
     """The scheduler reads one granularity off a job's targets, or fails closed."""
 
@@ -1326,16 +1361,14 @@ class TestJobPartitionGranularity:
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         job = store.components.create(_ORG, kind="job", key="cron_job")
 
-        with Session(component_db) as session:
-            assert store.components.job_partition_granularity(session, job.id) is None
+        assert store.components.job_partition_granularity(job.id) is None
 
     def test_a_partitioned_source_target_reports_its_granularity(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
         source = store.components.create(_ORG, kind="source", key="demo_source")
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
 
-        with Session(component_db) as session:
-            assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
+        assert store.components.job_partition_granularity(job.id) is TimeGranularity.DAY
 
     def test_a_partitioned_asset_target_reports_its_granularity(self, component_db: Engine):
         store = Store(catalog=il.Catalog.from_assets([DemoSource]))
@@ -1345,8 +1378,7 @@ class TestJobPartitionGranularity:
             asset_id = asset.id
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [asset_id]})
 
-        with Session(component_db) as session:
-            assert store.components.job_partition_granularity(session, job.id) is TimeGranularity.DAY
+        assert store.components.job_partition_granularity(job.id) is TimeGranularity.DAY
 
     def test_targets_disagreeing_on_granularity_fail_closed(self, component_db: Engine):
         # Scheduling one window would be wrong for at least one target.
@@ -1355,11 +1387,8 @@ class TestJobPartitionGranularity:
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]})
 
-        with (
-            Session(component_db) as session,
-            pytest.raises(ConfigError, match="Job targets disagree on partition granularity"),
-        ):
-            store.components.job_partition_granularity(session, job.id)
+        with pytest.raises(ConfigError, match="Job targets disagree on partition granularity"):
+            store.components.job_partition_granularity(job.id)
 
     def test_a_drifted_target_contributes_nothing(self, component_db: Engine):
         # Drift is the run path's problem, not the scheduler's.
@@ -1368,8 +1397,7 @@ class TestJobPartitionGranularity:
         job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
         reader = Store(catalog=il.Catalog(components={}))
 
-        with Session(component_db) as session:
-            assert reader.components.job_partition_granularity(session, job.id) is None
+        assert reader.components.job_partition_granularity(job.id) is None
 
 
 class TestJobPartitionGranularities:

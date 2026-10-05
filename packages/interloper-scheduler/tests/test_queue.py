@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID, uuid4
@@ -89,50 +88,6 @@ def test_tick_drains_the_queue(store: Store) -> None:
     assert set(_statuses(store).values()) == {"dispatched"}
 
 
-def _schedule(store: Store, run_id: UUID, *, seconds: float) -> None:
-    """Move a queued run's earliest claim time by *seconds* from now."""
-    with Session(store.engine) as session:
-        db_run = session.get(Run, run_id)
-        assert db_run is not None
-        db_run.scheduled_for = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=seconds)
-        session.add(db_run)
-        session.commit()
-
-
-def test_a_scheduled_run_is_not_claimed_before_its_time(store: Store) -> None:
-    run = store.runs.create(_ORG)
-    _schedule(store, run.id, seconds=3600)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == []
-    assert _statuses(store)[run.id] == "queued"
-
-
-def test_a_run_whose_schedule_has_passed_is_claimed(store: Store) -> None:
-    run = store.runs.create(_ORG)
-    _schedule(store, run.id, seconds=-1)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == [run.id]
-
-
-def test_a_scheduled_run_does_not_block_the_queue_behind_it(store: Store) -> None:
-    # The claim orders by creation, so a run waiting out its backoff must be
-    # skipped rather than held at the head of the line.
-    waiting = store.runs.create(_ORG)
-    _schedule(store, waiting.id, seconds=3600)
-    ready = store.runs.create(_ORG)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == [ready.id]
-
-
 def test_empty_queue_is_a_noop(store: Store) -> None:
     launcher = _FakeLauncher()
     QueueController(launcher=launcher, store=store)._tick()
@@ -177,90 +132,3 @@ def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -
 def test_empty_tick_emits_no_launch_spans(store: Store, span_exporter: Any) -> None:
     QueueController(launcher=_FakeLauncher(), store=store)._tick()
     assert not [s for s in span_exporter.get_finished_spans() if s.name == "interloper.launcher.launch"]
-
-
-# -- Run quota at dispatch -----------------------------------------------------
-
-
-def _exhaust_quota(store: Store, limit: int = 1) -> None:
-    """Give the org a limit and a ledger already at it."""
-    from types import SimpleNamespace
-
-    from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
-
-    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=limit)
-    with Session(store.engine) as session:
-        ledger = UsageLedger(session)
-        ledger.increment(_ORG, METRIC_SUCCESSFUL_RUNS, ledger.current_period(), used=limit)
-        session.commit()
-
-
-def test_dispatch_reserves_a_quota_slot(store: Store) -> None:
-    from types import SimpleNamespace
-
-    from interloper_db.models import Usage
-
-    store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
-    run = store.runs.create(_ORG)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == [run.id]
-    with Session(store.engine) as session:
-        dispatched = session.get(Run, run.id)
-        assert dispatched is not None and dispatched.quota_reserved_at is not None
-        usage = session.exec(select(Usage)).one()
-        assert (usage.used, usage.reserved) == (0, 1)
-
-
-def test_quota_denied_claim_cancels_instead_of_blocking(store: Store) -> None:
-    first = store.runs.create(_ORG)
-    second = store.runs.create(_ORG)
-    _exhaust_quota(store)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == []
-    statuses = _statuses(store)
-    assert statuses[first.id] == "canceled"
-    assert statuses[second.id] == "canceled"
-    with Session(store.engine) as session:
-        from interloper_db.models import Event
-
-        messages = [e.message for e in session.exec(select(Event)).all()]
-    assert len(messages) == 2 and all(m and "quota" in m for m in messages)
-
-
-def test_quota_denied_backfill_run_cancels_the_whole_backfill(store: Store) -> None:
-    backfill = store.backfills.create(
-        _ORG,
-        component_id=_job(store),
-        start_key="2026-01-01",
-        end_key="2026-01-03",
-        concurrency=1,
-    )
-    _exhaust_quota(store)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == []
-    assert set(_statuses(store).values()) == {"canceled"}
-    refreshed = store.backfills.get(backfill.id)
-    assert refreshed.status == "canceled"
-    assert refreshed.completed_at is not None
-
-
-def test_unlimited_org_dispatches_without_touching_the_ledger(store: Store) -> None:
-    from interloper_db.models import Usage
-
-    run = store.runs.create(_ORG)
-    launcher = _FakeLauncher()
-
-    QueueController(launcher=launcher, store=store)._tick()
-
-    assert launcher.launched == [run.id]
-    with Session(store.engine) as session:
-        assert session.exec(select(Usage)).all() == []

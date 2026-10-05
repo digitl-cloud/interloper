@@ -1,7 +1,7 @@
 """Unit tests for ``RunExecutor``: execution telemetry and retry skip logic.
 
-These avoid a live database by faking the store and session, so they stay
-pure unit tests; the DAG itself runs for real through an ``AsyncRunner``.
+These avoid a live database by faking the store, so they stay pure unit
+tests; the DAG itself runs for real through an ``AsyncRunner``.
 """
 
 from __future__ import annotations
@@ -13,54 +13,13 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
+from interloper.errors import ConflictError, NotFoundError
 from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
 from interloper.telemetry.tracer import tracer
-from interloper_db import Store
+from interloper_db import RunStatus, Store
 from interloper_db.models import Run
-from typing_extensions import Self
 
-from interloper_scheduler import executor as executor_module
 from interloper_scheduler.executor import RunExecutor
-
-
-class _FakeSession:
-    """Context-manager session serving one run row; writes are no-ops."""
-
-    def __init__(self, run: Run | None) -> None:
-        self._run = run
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *exc: object) -> bool:
-        return False
-
-    def get(self, model: Any, _id: UUID) -> Any:
-        return self._run if model is Run else None
-
-    def add(self, _obj: Any) -> None:
-        pass
-
-    def commit(self) -> None:
-        pass
-
-    def exec(self, _statement: Any) -> Any:
-        return SimpleNamespace(all=list)
-
-
-class _FakeStore:
-    """Serves one hydrated asset and records completion, facet by facet."""
-
-    engine = None  # the fake Session ignores it
-
-    def __init__(self, asset: il.Asset) -> None:
-        self._asset = asset
-        self.completed: list[tuple[UUID, bool]] = []
-        self.components = SimpleNamespace(load=lambda _component_id: self._asset)
-        self.runs = SimpleNamespace(
-            complete=lambda run_id, success: self.completed.append((run_id, success)),
-            save_event=lambda event, **_kwargs: None,
-        )
 
 
 @pytest.fixture
@@ -74,13 +33,10 @@ def hydrated_asset() -> il.Asset:
     return solo(id=str(uuid4()), destinations=[il.MemoryDestination()])
 
 
-def test_execute_roots_its_own_trace_linked_to_the_dispatch_span(
-    monkeypatch: pytest.MonkeyPatch, hydrated_asset: il.Asset, span_exporter: Any
-) -> None:
-    run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-    monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-    store = _FakeStore(hydrated_asset)
-    executor = _executor(store)  # ty: ignore[invalid-argument-type]
+def test_execute_roots_its_own_trace_linked_to_the_dispatch_span(hydrated_asset: il.Asset, span_exporter: Any) -> None:
+    run = _dispatched()
+    store = _RecordingStore(hydrated_asset, run=run)
+    executor = _executor(store)
 
     with tracer().start_as_current_span("dispatch") as dispatch:
         assert executor.execute(run.id) is True
@@ -104,14 +60,11 @@ def test_execute_roots_its_own_trace_linked_to_the_dispatch_span(
     assert spans["interloper.operation.execute"].context.trace_id == root.context.trace_id
 
 
-def test_execute_roots_a_trace_without_any_dispatch_span(
-    monkeypatch: pytest.MonkeyPatch, hydrated_asset: il.Asset, span_exporter: Any
-) -> None:
+def test_execute_roots_a_trace_without_any_dispatch_span(hydrated_asset: il.Asset, span_exporter: Any) -> None:
     # Nothing dispatched this (a bare CLI launch): no ambient span, no env
     # context — the run still roots a trace, just with no link.
-    run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-    monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-    executor = RunExecutor(store=_FakeStore(hydrated_asset), runner=il.AsyncRunner())  # ty: ignore[invalid-argument-type]
+    run = _dispatched()
+    executor = _executor(_RecordingStore(hydrated_asset, run=run))
 
     assert executor.execute(run.id) is True
 
@@ -134,41 +87,20 @@ class _FakeExecutionStore:
 
 
 class _RetryStore:
-    """Presents the ``executions`` facet the executor's retry walk reaches for."""
+    """Presents the ``executions`` and ``runs`` facets the executor's retry walk reaches for."""
 
-    engine = None  # the fake Session ignores it
-
-    def __init__(self, executions: dict[UUID, list[dict[str, Any]]]) -> None:
+    def __init__(self, executions: dict[UUID, list[dict[str, Any]]], lineage: dict[UUID, UUID | None]) -> None:
         self.executions = _FakeExecutionStore(executions)
+        self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(retry_of=lineage[run_id]))
 
 
-class _LineageSession:
-    """Context-manager session whose ``get`` resolves runs by id."""
-
-    def __init__(self, runs: dict[UUID, Any]) -> None:
-        self._runs = runs
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *exc: object) -> bool:
-        return False
-
-    def get(self, _model: Any, run_id: UUID) -> Any:
-        return self._runs.get(run_id)
-
-
-def _patch_session(monkeypatch: pytest.MonkeyPatch, runs: dict[UUID, Any]) -> None:
-    monkeypatch.setattr(executor_module, "Session", lambda _engine: _LineageSession(runs))
-
-
-def test_succeeded_operations_are_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_succeeded_operations_are_reported() -> None:
     parent_id = uuid4()
     id_a, id_b = uuid4(), uuid4()
     store = _RetryStore(
-        {parent_id: [{"component_id": id_a, "status": "success"}, {"component_id": id_b, "status": "failed"}]}
+        {parent_id: [{"component_id": id_a, "status": "success"}, {"component_id": id_b, "status": "failed"}]},
+        {parent_id: None},
     )
-    _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
@@ -176,7 +108,7 @@ def test_succeeded_operations_are_reported(monkeypatch: pytest.MonkeyPatch) -> N
     assert executor._prior_successes(uuid4(), parent_id) == {id_a}
 
 
-def test_statuses_match_by_component_id_not_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_statuses_match_by_component_id_not_key() -> None:
     # A run can span many assets sharing one key (e.g. an ads_stats per
     # account). One account's success must not skip the others' retries.
     parent_id = uuid4()
@@ -188,16 +120,16 @@ def test_statuses_match_by_component_id_not_key(monkeypatch: pytest.MonkeyPatch)
                 {"component_id": id_b, "status": "failed"},
                 {"component_id": id_c, "status": "canceled"},
             ]
-        }
+        },
+        {parent_id: None},
     )
-    _patch_session(monkeypatch, {parent_id: SimpleNamespace(retry_of=None)})
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
 
     assert executor._prior_successes(uuid4(), parent_id) == {id_a}
 
 
-def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_success_carries_forward_across_the_lineage_chain() -> None:
     # attempt1: a succeeded, b failed.  attempt2 (failed-only) re-ran only b,
     # which failed again — so attempt2 has no event for the skipped 'a'.
     # Retrying attempt2 must still skip 'a' by walking back to attempt1.
@@ -208,11 +140,8 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
         {
             mid_id: [{"component_id": id_b, "status": "failed"}],
             root_id: [{"component_id": id_a, "status": "success"}, {"component_id": id_b, "status": "failed"}],
-        }
-    )
-    _patch_session(
-        monkeypatch,
-        {mid_id: SimpleNamespace(retry_of=root_id), root_id: SimpleNamespace(retry_of=None)},
+        },
+        {mid_id: root_id, root_id: None},
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
@@ -220,7 +149,7 @@ def test_success_carries_forward_across_the_lineage_chain(monkeypatch: pytest.Mo
     assert executor._prior_successes(uuid4(), mid_id) == {id_a}
 
 
-def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_closest_ancestor_status_wins() -> None:
     # If an asset failed in the root but succeeded in a later attempt, the
     # most-recent (closest) success should win and the asset should be skipped.
     root_id = uuid4()
@@ -230,11 +159,8 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
         {
             mid_id: [{"component_id": id_a, "status": "success"}],
             root_id: [{"component_id": id_a, "status": "failed"}],
-        }
-    )
-    _patch_session(
-        monkeypatch,
-        {mid_id: SimpleNamespace(retry_of=root_id), root_id: SimpleNamespace(retry_of=None)},
+        },
+        {mid_id: root_id, root_id: None},
     )
 
     executor = RunExecutor(store=store)  # ty: ignore[invalid-argument-type]
@@ -242,25 +168,36 @@ def test_closest_ancestor_status_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     assert executor._prior_successes(uuid4(), mid_id) == {id_a}
 
 
+def _dispatched(component_id: UUID | None = None) -> Run:
+    return Run(id=uuid4(), component_id=component_id or uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED)
+
+
 class _RecordingStore:
-    """Store stand-in recording completions, saved events and applied effects."""
+    """Store stand-in recording completions, failures and applied effects."""
 
-    engine = None  # the fake Session ignores it
-
-    def __init__(self, target: Any, *, complete_raises: bool = False, already_terminal: bool = False) -> None:
+    def __init__(
+        self,
+        target: Any,
+        *,
+        run: Run | None = None,
+        complete_raises: bool = False,
+        already_terminal: bool = False,
+    ) -> None:
         """Set up the fake.
 
         Args:
             target: What ``components.load`` hands back.
-            complete_raises: Whether ``runs.complete`` raises, standing in for
-                a store that is unreachable while reporting a failure.
-            already_terminal: Whether ``runs.complete`` refuses the run as
+            run: What ``runs.start`` hands back; ``None`` reads as a missing run.
+            complete_raises: Whether recording the verdict raises, standing in
+                for a store that is unreachable while reporting a failure.
+            already_terminal: Whether recording the verdict is refused as
                 already terminal, standing in for a verdict the reaper wrote first.
         """
         self.completed: list[tuple[UUID, bool]] = []
-        self.saved_events: list[il.Event] = []
+        self.failures: list[str] = []
         self.merged: list[tuple[UUID, dict[str, Any]]] = []
         self.stamped: list[tuple[UUID, dict[str, Any]]] = []
+        self._run = run
         self._complete_raises = complete_raises
         self._already_terminal = already_terminal
         self.components = SimpleNamespace(
@@ -268,18 +205,25 @@ class _RecordingStore:
             merge_config=lambda component_id, config: self.merged.append((component_id, config)),
             stamp_state=lambda component_id, **state: self.stamped.append((component_id, state)),
         )
-        self.runs = SimpleNamespace(complete=self._complete)
-        self.events = SimpleNamespace(
-            save=lambda event, org_id, run_id: self.saved_events.append(event),
-        )
+        self.runs = SimpleNamespace(start=self._start, complete=self._complete, fail=self._fail)
+        self.events = SimpleNamespace(save=lambda event, org_id, run_id: None)
         self.executions = SimpleNamespace(list=lambda org_id, query, run_id: SimpleNamespace(items=[]))
+
+    def _start(self, run_id: UUID) -> Run:
+        if self._run is None:
+            raise NotFoundError(f"Run {run_id} not found")
+        return self._run
 
     def _complete(self, run_id: UUID, success: bool) -> None:
         if self._complete_raises:
             raise RuntimeError("store unreachable")
         if self._already_terminal:
-            raise ValueError(f"Run {run_id} is already failed")
+            raise ConflictError(f"Run {run_id} is already failed")
         self.completed.append((run_id, success))
+
+    def _fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> None:
+        self._complete(run_id, success=False)
+        self.failures.append(error)
 
 
 def _executor(store: _RecordingStore) -> RunExecutor:
@@ -297,20 +241,19 @@ def _executor(store: _RecordingStore) -> RunExecutor:
 class TestRunLookup:
     """A run that cannot be executed is skipped rather than half-started."""
 
-    def test_a_missing_run_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(None))
+    def test_a_missing_run_is_skipped(self) -> None:
         store = _RecordingStore(None)
 
         assert _executor(store).execute(uuid4()) is False
         assert store.completed == []
 
-    def test_a_run_without_a_component_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        run = Run(id=uuid4(), component_id=None, org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(None)
+    def test_a_run_whose_target_was_deleted_fails_with_the_reason(self) -> None:
+        run = Run(id=uuid4(), component_id=None, org_id=uuid4(), status=RunStatus.DISPATCHED)
+        store = _RecordingStore(None, run=run)
 
         assert _executor(store).execute(run.id) is False
-        assert store.completed == []
+        assert store.completed == [(run.id, False)]
+        assert "deleted" in store.failures[0]
 
 
 class _NotAWorkload:
@@ -322,33 +265,29 @@ class _NotAWorkload:
 class TestWorkloadValidation:
     """A component whose kind declares no workload fails the run."""
 
-    def test_a_non_workload_target_fails_the_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_a_non_workload_target_fails_the_run(self) -> None:
         # Silently succeeding would report a run that materialized nothing.
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(_NotAWorkload())
+        run = _dispatched()
+        store = _RecordingStore(_NotAWorkload(), run=run)
 
         assert _executor(store).execute(run.id) is False
         assert store.completed == [(run.id, False)]
 
-    def test_the_failure_is_reported_as_an_event(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(_NotAWorkload())
+    def test_the_failure_is_reported_as_an_event(self) -> None:
+        run = _dispatched()
+        store = _RecordingStore(_NotAWorkload(), run=run)
 
         _executor(store).execute(run.id)
 
-        (event,) = store.saved_events
-        assert event.type is il.EventType.RUN_FAILED
-        assert "declares no workload" in event.metadata["error"]
+        (error,) = store.failures
+        assert "declares no workload" in error
 
     def test_a_store_that_cannot_record_the_failure_still_returns_false(
-        self, monkeypatch: pytest.MonkeyPatch
+        self
     ) -> None:
         # Otherwise the launcher would read the raise as a crash, not a failed run.
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(_NotAWorkload(), complete_raises=True)
+        run = _dispatched()
+        store = _RecordingStore(_NotAWorkload(), run=run, complete_raises=True)
 
         assert _executor(store).execute(run.id) is False
 
@@ -357,15 +296,14 @@ class TestAlreadyTerminal:
     """A run another writer finished first is not this executor's to finish."""
 
     def test_it_logs_and_reports_failure_without_retrying_the_completion(
-        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
+        run = _dispatched()
 
         class EmptyWorkload(il.Source):
             """Source that selects none of its assets."""
 
-        store = _RecordingStore(EmptyWorkload(select=[]), already_terminal=True)
+        store = _RecordingStore(EmptyWorkload(select=[]), run=run, already_terminal=True)
 
         with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
             assert _executor(store).execute(run.id) is False
@@ -378,14 +316,13 @@ class TestAlreadyTerminal:
 class TestEmptyWorkload:
     """A workload that resolves to no operations succeeds without a DAG run."""
 
-    def test_it_completes_successfully(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
+    def test_it_completes_successfully(self) -> None:
+        run = _dispatched()
 
         class EmptyWorkload(il.Source):
             """Source that selects none of its assets."""
 
-        store = _RecordingStore(EmptyWorkload(select=[]))
+        store = _RecordingStore(EmptyWorkload(select=[]), run=run)
 
         assert _executor(store).execute(run.id) is True
         assert store.completed == [(run.id, True)]
@@ -478,17 +415,14 @@ class TestUpstreamJoinsReadOnly:
     ``_run_dag`` to inspect what it built.
     """
 
-    def test_a_bound_upstream_is_joined_and_made_non_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_bound_upstream_is_joined_and_made_non_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         il.MemoryDestination.clear()
         upstream = _UpstreamFixture(id=str(uuid4()), destinations=[il.MemoryDestination()])
         target = _DownstreamFixture(
             id=str(uuid4()), destinations=[il.MemoryDestination()], upstream=upstream
         )
 
-        run = Run(id=uuid4(), component_id=uuid4(), org_id=uuid4(), status="dispatched")
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
+        run = _dispatched()
 
         built: list[il.DAG] = []
         real_run_dag = RunExecutor._run_dag
@@ -499,7 +433,7 @@ class TestUpstreamJoinsReadOnly:
 
         monkeypatch.setattr(RunExecutor, "_run_dag", _capturing_run_dag)
 
-        store = _RecordingStore(target)
+        store = _RecordingStore(target, run=run)
         executor = _executor(store)
 
         assert executor.execute(run.id) is True
@@ -512,9 +446,7 @@ class TestUpstreamJoinsReadOnly:
 class TestRetrySkipsPriorSuccesses:
     """A failed-only retry reads earlier successes instead of recomputing them."""
 
-    def test_a_previously_successful_node_is_made_non_enabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_previously_successful_node_is_made_non_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         il.MemoryDestination.clear()
 
         @il.asset()
@@ -528,12 +460,11 @@ class TestRetrySkipsPriorSuccesses:
             id=uuid4(),
             component_id=uuid4(),
             org_id=uuid4(),
-            status="dispatched",
+            status=RunStatus.DISPATCHED,
             retry_of=retry_of,
             retry_scope="failed",
         )
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(target)
+        store = _RecordingStore(target, run=run)
         executor = _executor(store)
         monkeypatch.setattr(executor, "_prior_successes", lambda _org_id, _retry_of: {component_id})
 
@@ -552,12 +483,11 @@ class TestRetrySkipsPriorSuccesses:
             id=uuid4(),
             component_id=uuid4(),
             org_id=uuid4(),
-            status="dispatched",
+            status=RunStatus.DISPATCHED,
             retry_of=uuid4(),
             retry_scope="all",
         )
-        monkeypatch.setattr(executor_module, "Session", lambda _engine: _FakeSession(run))
-        store = _RecordingStore(target)
+        store = _RecordingStore(target, run=run)
         executor = _executor(store)
         monkeypatch.setattr(
             executor,

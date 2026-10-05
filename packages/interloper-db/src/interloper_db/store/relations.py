@@ -44,11 +44,13 @@ class RelationQuery(PageQuery):
         name: Keep relations filed under this name; ``None`` keeps every name.
         src_kind: Keep relations whose source is of this kind.
         dst_kind: Keep relations whose destination is of this kind.
+        dst_id: Keep relations pointing at any of these components.
     """
 
     name: str | None = None
     src_kind: str | None = None
     dst_kind: str | None = None
+    dst_id: builtins.list[UUID] | None = None
 
 
 class RelationStore:
@@ -88,6 +90,8 @@ class RelationStore:
             statement = statement.where(ComponentRelation.src_kind == query.src_kind)
         if query.dst_kind:
             statement = statement.where(ComponentRelation.dst_kind == query.dst_kind)
+        if query.dst_id:
+            statement = statement.where(col(ComponentRelation.dst_id).in_(query.dst_id))
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
 

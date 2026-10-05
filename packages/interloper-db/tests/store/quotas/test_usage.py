@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from interloper.utils import month_start
 from sqlmodel import Session
 
+from interloper_db import RunStatus
 from interloper_db.models import Component, Run
 from interloper_db.store import Store, UsageDrift, UsageQuery
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
@@ -91,7 +92,7 @@ class TestReconcile:
         with Session(store.engine) as session:
             stored = session.get(Run, run.id)
             assert stored is not None
-            stored.status = "success"
+            stored.status = RunStatus.SUCCESS
             stored.completed_at = datetime.now(timezone.utc)
             session.add(stored)
             session.commit()

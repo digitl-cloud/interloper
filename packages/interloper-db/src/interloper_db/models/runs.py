@@ -1,11 +1,12 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey, Index, event
-from sqlmodel import Column, Relationship, SQLModel, text
+from sqlmodel import AutoString, Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
 from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_column
@@ -16,6 +17,39 @@ _OPERATION_EVENTS = (
     "'operation_completed', 'operation_failed', 'operation_canceled', 'operation_retried')"
 )
 """The events the ``executions`` view derives operation executions from."""
+
+
+class RunStatus(str, Enum):
+    """Where a run stands in its lifecycle.
+
+    ``pending`` holds a backfill's runs beyond its concurrency until a slot
+    frees; the queue claims a ``queued`` run as ``dispatched``, and the
+    executor starts it ``running``. The column stores the value, so a row
+    read back carries the plain string, which compares equal to its member.
+    """
+
+    PENDING = "pending"
+    QUEUED = "queued"
+    DISPATCHED = "dispatched"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class BackfillStatus(str, Enum):
+    """Where a backfill stands: its verdict is its runs' once the last one ends."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+TERMINAL_RUN_STATUSES = frozenset({RunStatus.SUCCESS, RunStatus.FAILED, RunStatus.CANCELED})
+OPEN_RUN_STATUSES = frozenset({RunStatus.QUEUED, RunStatus.DISPATCHED, RunStatus.RUNNING})
+ACTIVE_BACKFILL_STATUSES = frozenset({BackfillStatus.QUEUED, BackfillStatus.RUNNING})
 
 
 class Backfill(SQLModel, table=True):
@@ -49,7 +83,7 @@ class Backfill(SQLModel, table=True):
         sa_column=Column(ForeignKey("components.id", ondelete="SET NULL"), index=True),
     )
     org_id: UUID = SQLField(index=True)
-    status: str = "queued"
+    status: BackfillStatus = SQLField(default=BackfillStatus.QUEUED, sa_type=AutoString)
     start_key: str
     end_key: str
     concurrency: int = 1
@@ -112,7 +146,7 @@ class Run(SQLModel, table=True):
     org_id: UUID
     backfill_id: UUID | None = SQLField(default=None, foreign_key="backfills.id")
     partition_key: str | None = None
-    status: str = "queued"
+    status: RunStatus = SQLField(default=RunStatus.QUEUED, sa_type=AutoString)
     retry_of: UUID | None = SQLField(
         default=None,
         sa_column=Column(ForeignKey("runs.id", ondelete="SET NULL"), index=True),

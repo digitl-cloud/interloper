@@ -23,7 +23,7 @@ from uuid import UUID
 from interloper.partitioning.time import TimePartitionWindow
 from interloper.utils import assume_utc
 
-from interloper_db.models import Component, Run
+from interloper_db.models import Component, Run, RunStatus
 from interloper_db.store.insights.failures import ErrorGroup
 from interloper_db.store.status import ComponentStatus
 
@@ -152,7 +152,7 @@ class Attention:
         """
         items = []
         for run in failed:
-            if run.status != "failed" or run.attempt <= 1 or run.completed_at is None:
+            if run.status != RunStatus.FAILED or run.attempt <= 1 or run.completed_at is None:
                 continue
             finished = assume_utc(run.completed_at)
             if since <= finished <= now:

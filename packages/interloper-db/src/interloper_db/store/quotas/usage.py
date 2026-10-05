@@ -18,7 +18,7 @@ from sqlalchemy import Engine, func
 from sqlalchemy import select as sa_select
 from sqlmodel import col, select
 
-from interloper_db.models import Component, Run, Usage
+from interloper_db.models import Component, Run, RunStatus, Usage
 from interloper_db.session import session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas.metering import METRIC_SUCCESSFUL_RUNS, UsageLedger
@@ -109,7 +109,7 @@ class UsageStore:
         statement = (
             select(Run.org_id, func.count())
             .where(
-                Run.status == "success",
+                Run.status == RunStatus.SUCCESS,
                 col(Run.billable).is_(True),
                 col(Run.completed_at) >= lower,
                 col(Run.completed_at) < upper,
