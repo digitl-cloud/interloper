@@ -18,7 +18,7 @@ const props = defineProps<{
     filter?: (row: TData) => boolean
     /** Extra context-menu / action items per row (prepended before edit & delete). */
     rowActions?: (item: TData) => DropdownMenuItem[][]
-    /** When true, suppresses the built-in actions column and row menus. */
+    /** When true, suppresses the built-in Edit and Delete items; the row menus carry only `rowActions`. */
     noActions?: boolean
     /** When true, rows are read-only: no pointer cursor, since clicking one leads nowhere. */
     noRowClick?: boolean
@@ -119,7 +119,7 @@ function buildRowActions(item: TData): DropdownMenuItem[][] {
 
 const columnsWithActions = computed<TableColumn<TData>[]>(() => {
     const sortable = withSortableHeaders(props.columns)
-    if (props.noActions) return sortable
+    if (props.noActions && !props.rowActions) return sortable
     return [
         ...sortable,
         {
@@ -226,7 +226,7 @@ const showTable = computed(() => !showEmpty.value && !(props.error && props.data
                     @contextmenu="onRowContextMenu">
                 <template #actions-cell="{ row }">
                     <div class="flex justify-end">
-                        <UDropdownMenu :items="buildRowActions(row.original)">
+                        <UDropdownMenu v-if="buildRowActions(row.original).length" :items="buildRowActions(row.original)">
                             <UButton icon="i-lucide-ellipsis-vertical"
                                      color="neutral"
                                      variant="ghost"
