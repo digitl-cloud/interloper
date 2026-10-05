@@ -93,28 +93,21 @@ class TestKindContract:
 
 
 class TestSourceOwnedAssets:
-    """A source's assets are declared inside it, and resolve through parent_key."""
+    """A source's assets are declared inside it, and resolve by their qualified key."""
 
     def test_asset_key_is_not_a_flat_entry(self):
         assert Catalog.discover().get("a") is None
 
-    def test_parent_key_resolves_the_owning_declaration(self):
-        definition = Catalog.discover().get("a", parent_key="demo_source")
+    def test_a_qualified_key_resolves_the_owning_declaration(self):
+        definition = Catalog.discover().get("demo_source.a")
         assert isinstance(definition, AssetDefinition)
         # The composite path is the point: the flat key cannot name it.
         assert definition.path == "interloper_assets.demo.source:DemoSource.a"
         assert definition.partitioning is not None
 
-    def test_unknown_parent_falls_back_to_the_flat_lookup(self):
-        catalog = Catalog.discover()
-        assert catalog.get("a", parent_key="gone_source") is None
-        assert catalog.get("cron_job", parent_key="gone_source") is not None
-
-    def test_parent_that_does_not_declare_the_key_falls_back(self):
-        assert Catalog.discover().get("not_an_asset", parent_key="demo_source") is None
-
-    def test_non_source_parent_falls_back(self):
-        assert Catalog.discover().get("a", parent_key="cron_job") is None
+    @pytest.mark.parametrize("key", ["gone_source.a", "demo_source.not_an_asset", "cron_job.a", "gone_source.cron_job"])
+    def test_a_qualified_key_resolves_only_through_a_source_that_declares_it(self, key: str):
+        assert Catalog.discover().get(key) is None
 
 
 class TestVocabulary:
@@ -146,7 +139,7 @@ class TestVocabulary:
         # asset has comes from the source's own declaration. Their keys are
         # bare, which is what scopes them to the parent source.
         assert set(catalog.vocabulary("asset", "e")) == {"destinations"}
-        relations = catalog.vocabulary("asset", "e", parent_key="demo_source")
+        relations = catalog.vocabulary("asset", "demo_source.e")
         upstreams = {name: relation for name, relation in relations.items() if "asset" in relation.kinds}
         assert {name: relation.keys for name, relation in upstreams.items()} == {
             "b": ["b"],

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import pydantic
 import pytest
+from interloper.errors import ConfigError, HydrationError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
@@ -20,32 +21,80 @@ from interloper_db.models import Component, ComponentRelation
 _ORG = uuid4()
 
 
-class TestParentKey:
-    """A source-owned asset needs its parent's catalog key to resolve."""
+class TestQualifiedKey:
+    """A source-owned asset is named by its source's key and its own, the catalog's form."""
 
-    def test_a_parentless_row_has_none(self, component_db: Engine):
+    def test_a_parentless_row_is_its_bare_key(self):
+        assert Component(org_id=_ORG, kind="source", key="demo_source").qualified_key == "demo_source"
+
+    def test_an_owned_asset_is_qualified_by_its_source(self):
+        source = Component(org_id=_ORG, kind="source", key="demo_source")
+
+        assert Component(org_id=_ORG, kind="asset", key="a", parent=source).qualified_key == "demo_source.a"
+
+
+def _fake_encrypt(data: bytes) -> bytes:
+    return b"ENC:" + data
+
+
+def _fake_decrypt(data: bytes) -> bytes:
+    return data.removeprefix(b"ENC:")
+
+
+class TestConfigPayload:
+    """A sensitive kind's config is stored encrypted unless opted out; any other kind's in plain ``config``."""
+
+    @pytest.mark.parametrize(
+        ("encrypted", "stored"), [(None, b'ENC:{"a": 1}'), (True, b'ENC:{"a": 1}'), (False, b'{"a": 1}')]
+    )
+    def test_a_sensitive_payload_is_encrypted_unless_opted_out(self, encrypted: bool | None, stored: bytes):
+        row = Component(org_id=_ORG, kind="connection", key="shop_connection")
+
+        row.write_config({"a": 1}, encrypt=_fake_encrypt, encrypted=encrypted)
+
+        assert (row.data, row.encrypted, row.config) == (stored, stored.startswith(b"ENC:"), None)
+        assert row.read_config(_fake_decrypt) == {"a": 1}
+
+    @pytest.mark.parametrize("encrypted", [None, True])
+    def test_a_sensitive_payload_never_falls_back_to_plaintext(self, encrypted: bool | None):
+        row = Component(org_id=_ORG, kind="connection", key="shop_connection")
+
+        with pytest.raises(ConfigError, match="INTERLOPER_ENCRYPTION_KEY"):
+            row.write_config({"a": 1}, encrypt=None, encrypted=encrypted)
+
+    def test_an_opted_out_payload_needs_no_key(self):
+        row = Component(org_id=_ORG, kind="connection", key="shop_connection")
+
+        row.write_config({"a": 1}, encrypt=None, encrypted=False)
+
+        assert row.read_config(None) == {"a": 1}
+
+    def test_any_other_kind_is_stored_in_plain_config(self):
         row = Component(org_id=_ORG, kind="source", key="demo_source")
 
-        with Session(component_db) as session:
-            assert row.parent_key(session) is None
+        row.write_config({"a": 1}, encrypt=_fake_encrypt, encrypted=None)
 
-    def test_an_owned_asset_reports_its_sources_key(self, component_db: Engine):
-        with Session(component_db) as session:
-            source = Component(org_id=_ORG, kind="source", key="demo_source")
-            session.add(source)
-            session.commit()
-            asset = Component(org_id=_ORG, kind="asset", key="a", parent_id=source.id)
-            session.add(asset)
-            session.commit()
+        assert (row.config, row.data, row.read_config(None)) == ({"a": 1}, None, {"a": 1})
 
-            assert asset.parent_key(session) == "demo_source"
+    def test_no_payload_reads_empty(self):
+        assert Component(org_id=_ORG, kind="connection", key="shop_connection").read_config(None) == {}
 
-    def test_a_vanished_parent_reports_none(self, component_db: Engine):
-        # Defensive: the foreign key makes this unreachable in practice.
-        row = Component(org_id=_ORG, kind="asset", key="a", parent_id=uuid4())
+    def test_an_encrypted_payload_without_a_key_is_an_actionable_error(self):
+        row = Component(org_id=_ORG, kind="connection", key="shop_connection")
+        row.write_config({"a": 1}, encrypt=_fake_encrypt, encrypted=None)
 
-        with Session(component_db) as session:
-            assert row.parent_key(session) is None
+        with pytest.raises(HydrationError, match="INTERLOPER_ENCRYPTION_KEY is not configured"):
+            row.read_config(None)
+
+    def test_a_payload_the_key_cannot_decrypt_is_an_actionable_error(self):
+        row = Component(org_id=_ORG, kind="connection", key="shop_connection")
+        row.write_config({"a": 1}, encrypt=_fake_encrypt, encrypted=None)
+
+        def wrong_key(data: bytes) -> bytes:
+            raise ValueError("bad key")
+
+        with pytest.raises(HydrationError, match="may be wrong"):
+            row.read_config(wrong_key)
 
 
 class TestStampState:

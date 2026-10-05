@@ -23,6 +23,7 @@ from interloper.partitioning.time import TimeGranularity
 from interloper.utils import assume_utc
 from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
 from interloper_db.models import ACTIVE_BACKFILL_STATUSES, Component, Event, Execution, Run, RunStatus
@@ -95,11 +96,7 @@ class InsightStore:
         """
         day_ago = now - dt.timedelta(hours=24)
         components = self._components.list(org_id, ComponentQuery(roots_only=False, limit=None)).items
-        keys = {component.id: component.key for component in components}
-        statuses = [
-            (component, self._components.read(component, parent_key=keys.get(component.parent_id)).status)
-            for component in components
-        ]
+        statuses = [(component, self._components.read(component).status) for component in components]
         job_rows = [component for component in components if component.kind == "job"]
         jobs = self._job_health(org_id, job_rows, now)
         job_by_id = {job.id: job for job in job_rows}
@@ -482,11 +479,10 @@ class InsightStore:
     def _asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
         """The partitioning of every partitioned asset row of an organisation.
 
-        Partitioning lives on the catalog definition, never on the row: an
-        owned asset resolves through its parent source's definition, a
-        standalone one by its own key. A row whose definition does not resolve
-        the way the row is owned (a drifted key, a disabled or missing source)
-        is skipped, as is an unpartitioned asset.
+        Partitioning lives on the catalog definition, never on the row, which
+        resolves by its qualified key. A row whose key does not resolve (a
+        drifted key, a disabled or missing source) is skipped, as is an
+        unpartitioned asset.
 
         Args:
             org_id: Organisation UUID.
@@ -494,22 +490,17 @@ class InsightStore:
         Returns:
             Each partitioned asset's time partition config by row id.
         """
+        statement = (
+            select(Component)
+            .where(Component.org_id == org_id, Component.kind == "asset")
+            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
+        )
         with session_scope(self._engine) as session:
-            rows = session.exec(
-                select(Component).where(Component.org_id == org_id, col(Component.kind).in_(("source", "asset")))
-            ).all()
-            keys = {row.id: row.key for row in rows}
-            assets = [
-                (row.id, row.key, keys.get(row.parent_id) if row.parent_id else None)
-                for row in rows
-                if row.kind == "asset"
-            ]
+            assets = {row.id: row.qualified_key for row in session.exec(statement).all()}
         partitionings: dict[UUID, il.TimePartitionConfig] = {}
-        for asset_id, key, parent_key in assets:
-            definition = self._catalog.get(key, parent_key=parent_key)
-            if not isinstance(definition, il.AssetDefinition) or (definition.source_key or None) != parent_key:
-                continue
-            if (partitioning := definition.partitioning) is None:
+        for asset_id, key in assets.items():
+            definition = self._catalog.get(key)
+            if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
                 continue
             partitionings[asset_id] = il.TimePartitionConfig(
                 column=partitioning["column"],

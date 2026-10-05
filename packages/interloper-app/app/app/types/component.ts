@@ -4,7 +4,7 @@ import type { UsedByRef } from '~/utils/apiErrors'
 /**
  * Usability state of a persisted component in this deployment.
  *
- * Mirrors `interloper_db.store.status.ComponentStatus` on the backend, derived from
+ * Mirrors `interloper_db.store.components.ComponentStatus` on the backend, derived from
  * the same checks hydration gates on:
  *   - `ok`         — key resolves in the enabled catalog; live and runnable
  *   - `disabled`   — key exists in code but is not exposed by this deployment

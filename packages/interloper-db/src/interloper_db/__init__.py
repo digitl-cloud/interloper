@@ -41,7 +41,7 @@ from interloper_db.store import (
     TokenQuery,
     UsageQuery,
 )
-from interloper_db.store.status import ComponentStatus
+from interloper_db.store.components import ComponentStatus
 
 __all__ = [
     "ACTIVE_BACKFILL_STATUSES",

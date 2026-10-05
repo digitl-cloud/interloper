@@ -161,7 +161,6 @@ class ComponentResponse(BaseModel):
         store: Store,
         *,
         include_config: bool,
-        parent_key: str | None = None,
         with_children: bool = True,
     ) -> ComponentResponse:
         """Convert a component row to its response model.
@@ -181,15 +180,13 @@ class ComponentResponse(BaseModel):
             row: The component row to convert.
             store: The Store instance.
             include_config: Whether a secret kind's decoded config is exposed.
-            parent_key: The owner's key when the caller already knows it,
-                sparing a lookup for an owned row.
             with_children: Whether the components the row owns are nested in
                 the response.
 
         Returns:
             The response model.
         """
-        reading = store.components.read(row, parent_key=parent_key)
+        reading = store.components.read(row)
 
         config = reading.config
         if KINDS[row.kind].sensitive and not include_config:
@@ -209,9 +206,7 @@ class ComponentResponse(BaseModel):
             parent_id=row.parent_id,
             relations=_relations_of(row),
             children=[
-                ComponentResponse.from_row(
-                    child, store, include_config=include_config, parent_key=row.key, with_children=False
-                )
+                ComponentResponse.from_row(child, store, include_config=include_config, with_children=False)
                 for child in row.children
             ]
             if with_children

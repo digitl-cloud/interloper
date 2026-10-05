@@ -22,7 +22,7 @@ from sqlmodel import Session
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import ComponentQuery, RelationQuery, Store
-from interloper_db.store.hydration import Hydrator
+from interloper_db.store.components import Hydrator
 
 _ORG = uuid4()
 
@@ -546,25 +546,6 @@ class TestHydrationErrorSanitisation:
         assert "s3cret-value" not in message
 
 
-class TestDecodeData:
-    """The stored ``data`` payload, decrypted for sensitive kinds."""
-
-    def test_no_data_decodes_to_an_empty_dict(self, store: Store):
-        row = store.components.create(_ORG, kind="source", key="demo_source")
-
-        assert store.components._hydrator.decode_data(row) == {}
-
-    def test_an_encrypted_row_without_a_cipher_is_an_actionable_error(self, component_db: Engine):
-        writer = Store(catalog=_CATALOG, encrypt=lambda b: b, decrypt=lambda b: b)
-        row = writer.components.create(_ORG, kind="connection", key="shop_connection", config={"token": "s3cret"})
-        row.data = row.data or b"payload"
-        row.encrypted = True
-        reader = Store(catalog=_CATALOG)
-
-        with pytest.raises(HydrationError, match="INTERLOPER_ENCRYPTION_KEY"):
-            reader.components._hydrator.decode_data(row)
-
-
 class TestRelationsByName:
     """The grouped relation lookup used while building a spec."""
 
@@ -588,3 +569,16 @@ class TestResolvePath:
             assert db_row is not None
             with pytest.raises(CatalogKeyError, match="Unknown source key: demo_source"):
                 reader.components._hydrator._resolve_path(session, db_row)
+
+
+class TestJobTargets:
+    """A job whose target drifted cannot be hydrated."""
+
+    def test_a_drifted_target_fails_closed(self, component_db: Engine):
+        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        source = writer.components.create(_ORG, kind="source", key="demo_source")
+        job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
+        reader = Store(catalog=il.Catalog.from_assets([]))
+
+        with pytest.raises(ComponentDriftError, match=r"target source 'demo_source' .* does not resolve"):
+            reader.components.load(job.id)

@@ -48,14 +48,15 @@ or one entry per class. Nothing else is needed: installation is registration.
 ```py
 catalog.components                              # key -> ComponentDefinition
 catalog.get("facebook_ads")                     # a SourceDefinition, or None
-catalog.get("ads_stats", parent_key="facebook_ads")   # a source-owned asset's definition
+catalog.get("facebook_ads.ads_stats")          # a source-owned asset's definition
 catalog.vocabulary("hook", "trigger_hook")      # relation name -> Relation
 catalog.to_paths()                              # sorted import paths, for another process
 catalog.dump()                                  # JSON-serializable definitions
 ```
 
 Assets are not top-level entries: they belong to their source and are reached through
-`SourceDefinition.assets` or `get(key, parent_key=...)`.
+`SourceDefinition.assets` or by their qualified key, `get("source.asset")`, the form
+`Component.qualified_key` produces. A qualified key resolves only when that source declares the asset.
 
 ## Definitions
 

@@ -54,36 +54,36 @@ class Catalog(BaseModel):
 
     # -- Lookup & export -------------------------------------------------------
 
-    def get(self, key: str, default: Any = None, *, parent_key: str | None = None) -> ComponentDefinition | None:
+    def get(self, key: str, default: Any = None) -> ComponentDefinition | None:
         """Look up a component definition by key.
 
-        The catalog is flat, but a source's assets are not in it: they are
-        declared inside their source and reachable only through
-        :attr:`SourceDefinition.assets`. Pass *parent_key* to resolve such an
-        asset the way its owner declares it: the concrete
-        :class:`AssetDefinition`, carrying the composite import path, the
-        partitioning and the relations the flat key cannot name. A
-        parent that does not resolve, or does not declare the key, falls back
-        to the flat lookup.
+        A bare key names a catalog entry. A source's assets are not entries:
+        they are declared inside their source, so one is named by its
+        qualified key (``source.asset``, the form ``Component.qualified_key``
+        produces) and resolves only through that source's declaration, to the
+        concrete :class:`AssetDefinition` carrying the composite import path,
+        the partitioning and the relations.
 
         Args:
-            key: The component key.
-            default: Value to return if key is not found.
-            parent_key: Key of the owning source, for a source-owned asset.
-                Defaults to ``None``, a flat lookup.
+            key: The bare or qualified component key.
+            default: Value to return if the key does not resolve.
 
         Returns:
-            The component definition, or *default* if not found.
+            The component definition, or *default* when the key does not
+            resolve, including a qualified key whose source does not resolve
+            or does not declare the asset.
         """
-        if parent_key is not None:
-            parent = self.components.get(parent_key)
-            if isinstance(parent, SourceDefinition):
-                for asset in parent.assets:
-                    if asset.key == key:
-                        return asset
-        return self.components.get(key, default)
+        source_key, dot, asset_key = key.rpartition(".")
+        if not dot:
+            return self.components.get(key, default)
+        source = self.components.get(source_key)
+        if isinstance(source, SourceDefinition):
+            for asset in source.assets:
+                if asset.key == asset_key:
+                    return asset
+        return default
 
-    def vocabulary(self, kind: str, key: str, *, parent_key: str | None = None) -> dict[str, Relation]:
+    def vocabulary(self, kind: str, key: str) -> dict[str, Relation]:
         """The relation vocabulary governing a persisted component row.
 
         The class definition is authoritative; a concrete class may extend
@@ -94,15 +94,13 @@ class Catalog(BaseModel):
 
         Args:
             kind: The row's component kind.
-            key: The row's catalog key.
-            parent_key: Key of the owning source, for a source-owned asset,
-                whose declaration carries the asset's relations. Defaults to
-                ``None``, a flat lookup.
+            key: The row's bare or qualified catalog key; a source-owned
+                asset's declaration carries its relations.
 
         Returns:
             The declared relations keyed by name.
         """
-        definition = self.get(key, parent_key=parent_key)
+        definition = self.get(key)
         if definition is not None and definition.kind == kind:
             return definition.relations
         return KINDS[kind].relations

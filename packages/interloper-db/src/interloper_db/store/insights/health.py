@@ -24,8 +24,8 @@ from interloper.partitioning.time import TimePartitionWindow
 from interloper.utils import assume_utc
 
 from interloper_db.models import Component, Run, RunStatus
+from interloper_db.store.components import ComponentStatus
 from interloper_db.store.insights.failures import ErrorGroup
-from interloper_db.store.status import ComponentStatus
 
 OVERDUE_AFTER = dt.timedelta(minutes=15)
 HOOK_FAILURE_HORIZON = dt.timedelta(days=30)
