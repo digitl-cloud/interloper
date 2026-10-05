@@ -12,36 +12,32 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/reference/settings/">
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-04-run-heartbeat-timeout-cancel-design/">
       
       
-        <link rel="prev" href="../../extending/entry-points/">
-      
-      
-        <link rel="next" href="../cli/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/favicon.png">
+      <link rel="icon" href="../../../assets/favicon.png">
       <meta name="generator" content="zensical-0.0.62">
     
     
       
-        <title>Settings - Interloper</title>
+        <title>Run heartbeat, timeout and cancel - Interloper</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -60,9 +56,9 @@
       
     
     
-      <link rel="stylesheet" href="../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -87,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#settings" class="md-skip">
+        <a href="#run-heartbeat-timeout-and-cancel" class="md-skip">
           Skip to content
         </a>
       
@@ -103,9 +99,9 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
@@ -122,7 +118,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Settings
+              Run heartbeat, timeout and cancel
             
           </span>
         </div>
@@ -210,7 +206,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   Getting started
@@ -226,7 +222,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../tutorial/" class="md-tabs__link">
+      <a href="../../../tutorial/" class="md-tabs__link">
         
   
   Tutorial
@@ -297,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guide/assets/" class="md-tabs__link">
+        <a href="../../../guide/assets/" class="md-tabs__link">
           
   
   Guide
@@ -329,7 +325,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../ui/" class="md-tabs__link">
+        <a href="../../../ui/" class="md-tabs__link">
           
   
   Web UI
@@ -363,7 +359,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../extending/components/" class="md-tabs__link">
+        <a href="../../../extending/components/" class="md-tabs__link">
           
   
   Extending
@@ -378,8 +374,6 @@
   
   
   
-    
-  
   
     
       
@@ -422,8 +416,8 @@
     
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="././" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
           
   
   Reference
@@ -464,9 +458,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../assets/logo.svg" alt="Interloper">
+  <img src="../../../assets/logo.svg" alt="Interloper">
 
     </a>
     Interloper
@@ -493,7 +487,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -519,7 +513,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorial/" class="md-nav__link">
+      <a href="../../../tutorial/" class="md-nav__link">
         
   
   
@@ -645,7 +639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/assets/" class="md-nav__link">
+      <a href="../../../guide/assets/" class="md-nav__link">
         
   
   
@@ -672,7 +666,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/sources/" class="md-nav__link">
+      <a href="../../../guide/sources/" class="md-nav__link">
         
   
   
@@ -699,7 +693,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/decorators/" class="md-nav__link">
+      <a href="../../../guide/decorators/" class="md-nav__link">
         
   
   
@@ -726,7 +720,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/dependencies/" class="md-nav__link">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
         
   
   
@@ -753,7 +747,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/resources/" class="md-nav__link">
+      <a href="../../../guide/resources/" class="md-nav__link">
         
   
   
@@ -780,7 +774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/connections/" class="md-nav__link">
+      <a href="../../../guide/connections/" class="md-nav__link">
         
   
   
@@ -807,7 +801,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/oauth/" class="md-nav__link">
+      <a href="../../../guide/oauth/" class="md-nav__link">
         
   
   
@@ -834,7 +828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/fields/" class="md-nav__link">
+      <a href="../../../guide/fields/" class="md-nav__link">
         
   
   
@@ -861,7 +855,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/destinations/" class="md-nav__link">
+      <a href="../../../guide/destinations/" class="md-nav__link">
         
   
   
@@ -888,7 +882,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/schema/" class="md-nav__link">
+      <a href="../../../guide/schema/" class="md-nav__link">
         
   
   
@@ -915,7 +909,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/normalization/" class="md-nav__link">
+      <a href="../../../guide/normalization/" class="md-nav__link">
         
   
   
@@ -942,7 +936,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/partitioning/" class="md-nav__link">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
         
   
   
@@ -969,7 +963,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/execution/" class="md-nav__link">
+      <a href="../../../guide/execution/" class="md-nav__link">
         
   
   
@@ -996,7 +990,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/backfilling/" class="md-nav__link">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
         
   
   
@@ -1023,7 +1017,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/events/" class="md-nav__link">
+      <a href="../../../guide/events/" class="md-nav__link">
         
   
   
@@ -1050,7 +1044,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/jobs/" class="md-nav__link">
+      <a href="../../../guide/jobs/" class="md-nav__link">
         
   
   
@@ -1077,7 +1071,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/hooks/" class="md-nav__link">
+      <a href="../../../guide/hooks/" class="md-nav__link">
         
   
   
@@ -1104,7 +1098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/specs/" class="md-nav__link">
+      <a href="../../../guide/specs/" class="md-nav__link">
         
   
   
@@ -1131,7 +1125,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/catalog/" class="md-nav__link">
+      <a href="../../../guide/catalog/" class="md-nav__link">
         
   
   
@@ -1158,7 +1152,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/cli/" class="md-nav__link">
+      <a href="../../../guide/cli/" class="md-nav__link">
         
   
   
@@ -1185,7 +1179,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/configuration/" class="md-nav__link">
+      <a href="../../../guide/configuration/" class="md-nav__link">
         
   
   
@@ -1212,7 +1206,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/telemetry/" class="md-nav__link">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
         
   
   
@@ -1239,7 +1233,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/ecosystem/" class="md-nav__link">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
         
   
   
@@ -1266,7 +1260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guide/claude-code/" class="md-nav__link">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
         
   
   
@@ -1327,7 +1321,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../ui/" class="md-nav__link ">
+            <a href="../../../ui/" class="md-nav__link ">
               
   
   
@@ -1369,7 +1363,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ui/definitions/" class="md-nav__link">
+      <a href="../../../ui/definitions/" class="md-nav__link">
         
   
   
@@ -1396,7 +1390,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ui/running/" class="md-nav__link">
+      <a href="../../../ui/running/" class="md-nav__link">
         
   
   
@@ -1492,7 +1486,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/components/" class="md-nav__link">
+      <a href="../../../extending/components/" class="md-nav__link">
         
   
   
@@ -1519,7 +1513,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/representations/" class="md-nav__link">
+      <a href="../../../extending/representations/" class="md-nav__link">
         
   
   
@@ -1546,7 +1540,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/runners/" class="md-nav__link">
+      <a href="../../../extending/runners/" class="md-nav__link">
         
   
   
@@ -1573,7 +1567,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/operations/" class="md-nav__link">
+      <a href="../../../extending/operations/" class="md-nav__link">
         
   
   
@@ -1600,7 +1594,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../extending/entry-points/" class="md-nav__link">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
         
   
   
@@ -1631,10 +1625,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1676,22 +1668,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -1708,7 +1697,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1722,36 +1711,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Settings
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
         
   
   
@@ -1766,203 +1729,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#runner" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>runner</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#otel" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>otel</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#catalog" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>catalog</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#secrets" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>secrets</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#postgres" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>postgres</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>auth</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#server" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>server</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cron" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>cron</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#renewal" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>renewal</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#worker" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>worker</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#reaper" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>reaper</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#launcher" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>launcher</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#smtp" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>smtp</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#agent" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>agent</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mcp" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>mcp</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#quota" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>quota</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1975,7 +1741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../../reference/cli/" class="md-nav__link">
         
   
   
@@ -2002,7 +1768,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/" class="md-nav__link">
+      <a href="../../../reference/components/" class="md-nav__link">
         
   
   
@@ -2029,7 +1795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../assets/" class="md-nav__link">
+      <a href="../../../reference/assets/" class="md-nav__link">
         
   
   
@@ -2056,7 +1822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sources/" class="md-nav__link">
+      <a href="../../../reference/sources/" class="md-nav__link">
         
   
   
@@ -2083,7 +1849,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../destinations/" class="md-nav__link">
+      <a href="../../../reference/destinations/" class="md-nav__link">
         
   
   
@@ -2110,7 +1876,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../connections/" class="md-nav__link">
+      <a href="../../../reference/connections/" class="md-nav__link">
         
   
   
@@ -2137,7 +1903,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../resources/" class="md-nav__link">
+      <a href="../../../reference/resources/" class="md-nav__link">
         
   
   
@@ -2164,7 +1930,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../jobs/" class="md-nav__link">
+      <a href="../../../reference/jobs/" class="md-nav__link">
         
   
   
@@ -2191,7 +1957,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../partitioning/" class="md-nav__link">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
         
   
   
@@ -2218,7 +1984,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../execution/" class="md-nav__link">
+      <a href="../../../reference/execution/" class="md-nav__link">
         
   
   
@@ -2245,7 +2011,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../schema/" class="md-nav__link">
+      <a href="../../../reference/schema/" class="md-nav__link">
         
   
   
@@ -2272,7 +2038,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rest/" class="md-nav__link">
+      <a href="../../../reference/rest/" class="md-nav__link">
         
   
   
@@ -2299,7 +2065,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../catalog/" class="md-nav__link">
+      <a href="../../../reference/catalog/" class="md-nav__link">
         
   
   
@@ -2326,7 +2092,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../events/" class="md-nav__link">
+      <a href="../../../reference/events/" class="md-nav__link">
         
   
   
@@ -2353,7 +2119,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../errors/" class="md-nav__link">
+      <a href="../../../reference/errors/" class="md-nav__link">
         
   
   
@@ -2380,7 +2146,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/" class="md-nav__link">
+      <a href="../../../reference/utils/" class="md-nav__link">
         
   
   
@@ -2425,87 +2191,6 @@
   
 
 
-  <nav class="md-path" aria-label="Navigation" >
-    <ol class="md-path__list">
-      
-        
-  
-  
-    <li class="md-path__item">
-      <a href="../.." class="md-path__link">
-        
-  
-  <span class="md-ellipsis">
-    Getting started
-  </span>
-
-      </a>
-    </li>
-  
-
-      
-      
-        
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-    
-      <li class="md-path__item">
-        <a href="././" class="md-path__link">
-          
-  
-  <span class="md-ellipsis">
-    Reference
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-    </ol>
-  </nav>
-
               
               <article class="md-content__inner md-typeset">
                 
@@ -2514,592 +2199,351 @@
   
 
 
-<h1 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h1>
-<p>Every section of <code>AppSettings</code>, read from <code>interloper.yaml</code> and the environment (see <a href="../../guide/configuration/">Configuration</a>).</p>
-<h3 id="runner"><code>runner</code><a class="headerlink" href="#runner" title="Permanent link">&para;</a></h3>
-<p>Runner settings: the runner type and its own configuration. Prefix <code>INTERLOPER_RUNNER_</code>.</p>
+<h1 id="run-heartbeat-timeout-and-cancel">Run heartbeat, timeout and cancel<a class="headerlink" href="#run-heartbeat-timeout-and-cancel" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-10-04, rebased on the store-owned run lifecycle (<code>2026-10-05-run-lifecycle-design.md</code>)
+on 2026-10-05. Status: implemented on <code>refactor/run-heartbeat-timeout</code>.</p>
+<p>Scope: know when a run is dead, bound how long a run may take, and let an operator stop one. A
+policy for overlapping runs of the same job (allow, skip, queue) is not designed here.</p>
+<hr />
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">&para;</a></h2>
+<p>Run <code>ac209277</code> (job "Amazon SP", backfill <code>bfc9f702</code>, partition 2026-09-29) showed <code>running</code> for
+27 hours. GKE upgraded the <code>default</code> node pool on 2026-10-03 between 06:27 and 06:42 UTC; the run
+pod was killed in the drain, its last event is at 06:38:18, and the Kubernetes Job was deleted
+300s later by <code>ttlSecondsAfterFinished</code>. Nothing marked the run terminal, so its backfill
+(<code>concurrency: 1</code>) left partitions 09-26 to 09-28 <code>pending</code> indefinitely, and its quota
+reservation was never released.</p>
+<p>Gaps:</p>
+<ul>
+<li>The reaper scans <code>runs.dispatched()</code> only. A run that dies after <code>runs.start</code> stays <code>running</code>
+  forever, cannot be retried (retry needs <code>failed</code>) and cannot be cancelled.</li>
+<li>Liveness is inferred from the launcher (<code>describe_run</code> returning a <code>LaunchState</code>). The Kubernetes
+  launcher maps every API error to <code>LaunchStatus.NOT_FOUND</code>, the Job disappears after its TTL, and
+  the in-process launcher has no introspection at all.</li>
+<li>The reaper's timeout counts from <code>created_at</code>, so a backfill run that waited hours in <code>pending</code>
+  can be reaped the moment it is dispatched (the reason the chart overrides <code>reaper.timeout</code> to
+  3600).</li>
+<li>No run has a deadline, and 16 of 20 connector <code>RESTClient</code>s have no HTTP timeout, so a hung
+  call runs forever.</li>
+<li>No single run can be cancelled. <code>backfills.cancel</code> cancels <code>pending</code> and <code>queued</code> runs only;
+  in-flight runs "drain on their own".</li>
+</ul>
+<p>Already fixed on main by the store-owned lifecycle: a late <code>runs.start</code> no longer revives a run
+another writer finished.</p>
+<hr />
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
+<th>Topic</th>
+<th>Decision</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>type</code></td>
-<td><code>str</code></td>
-<td><code>'async'</code></td>
-<td>Registry key of the runner: <code>async</code>, <code>serial</code>, <code>multi_process</code>, or one another package registers.</td>
+<td>Liveness</td>
+<td>The executor records a heartbeat (<code>runs.heartbeat_at</code>); silence past a threshold means dead. The launcher no longer decides liveness.</td>
 </tr>
 <tr>
-<td><code>config</code></td>
-<td><code>dict[str, Any]</code></td>
-<td><code>{}</code></td>
-<td>Keyword arguments for the runner class.</td>
+<td>Authority</td>
+<td>The run row is the only authority, and the store owns every transition (row lock, then the expected status checked). This design adds the transitions below; the scheduler still issues no SQL (ruff <code>TID251</code>).</td>
+</tr>
+<tr>
+<td>Stopping</td>
+<td>One channel for every end: something finishes the row; a live pod sees it on its next heartbeat and exits the process. A dead pod needs nothing.</td>
+</tr>
+<tr>
+<td>Timeout</td>
+<td><code>Job.timeout</code> (seconds, <code>None</code> = instance default); instance <code>run_timeout</code> default 12h (<code>None</code> disables). Derived at sweep time from <code>started_at</code>, not stored.</td>
+</tr>
+<tr>
+<td>Timeout outcome</td>
+<td><code>failed</code> with a "timed out" error; the job's retry policy and failure hooks apply. No new status.</td>
+</tr>
+<tr>
+<td>Cancel</td>
+<td><code>canceled</code>, from any open status, never retried, fires no hooks. API, toolkit/MCP and UI. Backfill cancel also cancels in-flight runs.</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td>Optional <code>Launcher.diagnose(run_id) -&gt; str \| None</code>, used only to enrich a "lost" or "never started" error. It never decides anything.</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>One column, <code>runs.heartbeat_at</code>. No new table. The <code>runs</code> notify trigger skips heartbeat-only updates.</td>
+</tr>
+<tr>
+<td>Out of scope</td>
+<td>Overlap policy; SIGTERM handling (a drain is caught by the heartbeat timeout like any death).</td>
 </tr>
 </tbody>
 </table>
-<h3 id="otel"><code>otel</code><a class="headerlink" href="#otel" title="Permanent link">&para;</a></h3>
-<p>OpenTelemetry settings: OTLP traces and metrics. Prefix <code>INTERLOPER_OTEL_</code>.</p>
+<hr />
+<h2 id="3-run-lifecycle">3. Run lifecycle<a class="headerlink" href="#3-run-lifecycle" title="Permanent link">&para;</a></h2>
+<p><code>RunStatus</code> is unchanged: <code>pending -&gt; queued -&gt; dispatched -&gt; running -&gt; success | failed | canceled</code>.</p>
+<p>Store verbs, each locking the row (<code>_lock</code>) and checking the status it expects:</p>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
+<th>Verb</th>
+<th>Writer</th>
+<th>From</th>
+<th>New in this design</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>False</code></td>
-<td>The single master switch; the SDK is never activated from the standard <code>OTEL_*</code> variables alone.</td>
+<td><code>runs.claim_next()</code></td>
+<td>queue worker</td>
+<td><code>queued</code></td>
+<td>also stamps <code>heartbeat_at</code></td>
 </tr>
 <tr>
-<td><code>endpoint</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>OTLP endpoint; empty falls through to <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>.</td>
+<td><code>runs.start(run_id)</code></td>
+<td>executor</td>
+<td><code>dispatched</code></td>
+<td>requires <code>dispatched</code> (today: not terminal); also stamps <code>heartbeat_at</code></td>
 </tr>
 <tr>
-<td><code>protocol</code></td>
-<td><code>str</code></td>
-<td><code>'grpc'</code></td>
-<td>OTLP protocol: <code>grpc</code> or <code>http/protobuf</code>.</td>
+<td><code>runs.heartbeat(run_id) -&gt; bool</code></td>
+<td>executor heartbeat</td>
+<td><code>running</code></td>
+<td>new</td>
 </tr>
 <tr>
-<td><code>headers</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>OTLP headers as <code>key=value</code> pairs; empty falls through to <code>OTEL_EXPORTER_OTLP_HEADERS</code>.</td>
+<td><code>runs.complete</code> / <code>runs.fail</code></td>
+<td>executor</td>
+<td>not terminal</td>
+<td>unchanged</td>
 </tr>
 <tr>
-<td><code>service_name</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Reported service name; empty reports <code>interloper</code>.</td>
+<td><code>runs.overdue(...)</code></td>
+<td>reaper</td>
+<td></td>
+<td>new named read, replaces <code>runs.dispatched()</code></td>
 </tr>
 <tr>
-<td><code>traces</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Export traces.</td>
+<td><code>runs.reap(run_id, error, *, heartbeat_at)</code></td>
+<td>reaper</td>
+<td>open, heartbeat unchanged</td>
+<td>new</td>
 </tr>
 <tr>
-<td><code>metrics</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Export metrics.</td>
-</tr>
-<tr>
-<td><code>sample_ratio</code></td>
-<td><code>float</code></td>
-<td><code>1.0</code></td>
-<td>Fraction of traces sampled, parent-based.</td>
-</tr>
-<tr>
-<td><code>metric_export_interval</code></td>
-<td><code>int</code></td>
-<td><code>60</code></td>
-<td>Seconds between metric exports.</td>
+<td><code>runs.cancel(run_id)</code></td>
+<td>API, toolkit</td>
+<td><code>pending</code>, <code>queued</code>, <code>dispatched</code>, <code>running</code></td>
+<td>new</td>
 </tr>
 </tbody>
 </table>
-<h3 id="catalog"><code>catalog</code><a class="headerlink" href="#catalog" title="Permanent link">&para;</a></h3>
-<p><code>INTERLOPER_CATALOG</code>, <code>list[str]</code>. Import paths of the enabled components; empty enables everything installed.</p>
-<h3 id="secrets"><code>secrets</code><a class="headerlink" href="#secrets" title="Permanent link">&para;</a></h3>
-<p>Secrets used to protect sensitive data at rest. Prefix <code>INTERLOPER_</code>.</p>
+<p><code>start</code> refuses anything but <code>dispatched</code>, so a run cancelled or reaped before its pod came up is
+never executed: the executor exits on the <code>ConflictError</code> it already handles.</p>
+<h3 id="finishing-step">Finishing step<a class="headerlink" href="#finishing-step" title="Permanent link">&para;</a></h3>
+<p><code>complete</code>'s body becomes a private <code>_finish(db_run, status)</code>, shared by <code>complete</code>, <code>fail</code>,
+<code>reap</code> and <code>cancel</code>. In the transaction that already holds the row it sets the status and
+<code>completed_at</code>, settles quota (a cancel settles as a non-success, releasing the reservation),
+stamps the target's last run on a verdict (a cancel does not, like the existing cancel paths),
+plans the retry (<code>failed</code> only), advances the backfill, stamps <code>hooks_evaluated_at</code> on a cancel
+(<code>Run.cancel()</code>), and closes the run's open executions (<code>EventStore.close_operations</code>): each
+operation's latest attempt without a verdict gets <code>operation_failed</code> carrying the reason when it
+had started, <code>operation_canceled</code> otherwise or on a cancel. The ids come from
+<code>RunState.operation_event_id</code> (made public), so a late event from the pod deduplicates. The
+derivation reads the run's events directly rather than the <code>executions</code> view, which is
+Postgres-only. A cancel also records a <code>Run canceled</code> warning log event.</p>
+<hr />
+<h2 id="4-heartbeat-executor">4. Heartbeat (executor)<a class="headerlink" href="#4-heartbeat-executor" title="Permanent link">&para;</a></h2>
+<p>A <code>RunHeartbeat</code> thread starts after <code>runs.start</code> and stops when <code>execute</code> returns. It is a thread
+rather than an asyncio task so an operation that blocks the event loop cannot silence it.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>every heartbeat_interval:
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    store.runs.heartbeat(run_id)
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>      UPDATE runs SET heartbeat_at = now() WHERE id = :id AND status = 'running'
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    True                                    -&gt; continue
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    False                                   -&gt; finished elsewhere: exit the process
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    DB errors for over heartbeat_timeout/2  -&gt; cannot prove liveness: exit the process
+</span></code></pre></div>
+<ul>
+<li><code>runs.heartbeat</code> is a single conditional update, not a locking read: it must not wait behind a
+  transaction holding the row.</li>
+<li>Exiting is <code>os._exit(1)</code> in a container: <code>RunExecutor(reaper=..., on_lost=...)</code> takes it, and
+  the <code>interloper launch</code> entrypoint passes its process exit. The callback is injected, so tests
+  run without killing the process.</li>
+<li>The in-process launcher shares the scheduler process and cannot exit it: the run is finished
+  correctly in the DB, and a thread blocked in sync code lingers until it returns. Acceptable for
+  the dev launcher.</li>
+<li>The error window is measured from when the last successful update was sent, which precedes its
+  commit, so the pod's clock never runs behind the database's view of the same heartbeat.</li>
+<li>Exiting at half the heartbeat timeout guarantees a pod cut off from the DB is gone before the
+  sweep can fail its run and a retry can start writing the same partitions.</li>
+<li><code>Launcher.from_settings</code> takes the <code>reaper</code> settings beside <code>runner</code>. The Kubernetes and Docker
+  launchers forward <code>heartbeat_interval</code> and <code>heartbeat_timeout</code> into the run's environment
+  (<code>INTERLOPER_REAPER_HEARTBEAT_*</code>), the same way they forward the runner settings.</li>
+</ul>
+<hr />
+<h2 id="5-sweep-reaper">5. Sweep (reaper)<a class="headerlink" href="#5-sweep-reaper" title="Permanent link">&para;</a></h2>
+<p>The <code>Reaper</code> keeps its name, its place in the scheduler singleton, its loop and its hourly usage
+reconciliation. <code>_reap</code> asks the store one named question and acts on the answer.</p>
+<p><code>runs.overdue(*, startup_timeout, heartbeat_timeout, run_timeout)</code> returns every organisation's
+dispatched and running runs matching one of three rules, each with its failure reason. The rules
+are <code>Run.overdue(now, ...)</code> on the model, judged in Python against the database clock
+(<code>session.database_now</code>, shared with quota metering): the set of open runs is small, and the
+arithmetic stays portable to the SQLite test dialect.</p>
 <table>
 <thead>
 <tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
+<th>Rule</th>
+<th>Condition</th>
+<th>Error</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>encryption_key</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Fernet key encrypting stored resource payloads; required by the platform to persist resources.</td>
+<td>Never started</td>
+<td><code>dispatched</code> and <code>heartbeat_at &lt; now() - startup_timeout</code></td>
+<td><code>Run did not start within {startup_timeout}s</code> + diagnosis</td>
+</tr>
+<tr>
+<td>Lost</td>
+<td><code>running</code> and <code>heartbeat_at &lt; now() - heartbeat_timeout</code></td>
+<td><code>No heartbeat since {heartbeat_at}</code> + diagnosis</td>
+</tr>
+<tr>
+<td>Timed out</td>
+<td><code>running</code> and <code>started_at + timeout &lt; now()</code></td>
+<td><code>Timed out after {timeout}s</code></td>
 </tr>
 </tbody>
 </table>
-<h3 id="postgres"><code>postgres</code><a class="headerlink" href="#postgres" title="Permanent link">&para;</a></h3>
-<p>PostgreSQL connection settings. Prefix <code>INTERLOPER_POSTGRES_</code>.</p>
+<ul>
+<li><code>timeout</code> is <code>components.config-&gt;&gt;'timeout'</code> of the run's job, else the instance <code>run_timeout</code>;
+  a run whose job is gone uses the instance default. <code>run_timeout = None</code> disables the rule.</li>
+<li>Heartbeats are written with the database's <code>now()</code>, and the rules read the same clock.</li>
+<li>For each match the reaper calls <code>launcher.diagnose(run_id)</code>, appending its string in
+  parentheses; an exception or <code>None</code> leaves the plain message. A timed-out run's workload is
+  still running, so its diagnosis is <code>None</code>. Then it calls
+  <code>runs.reap(run_id, error, heartbeat_at=&lt;as read&gt;)</code>.</li>
+<li><code>runs.reap</code> locks the row and fails the run (the <code>run_failed</code> event and <code>_finish</code>, as <code>fail</code>
+  does) only if it is still open and its <code>heartbeat_at</code> is the one read. A pod that started or beat
+  between the read and the lock changed it, so the run is left alone and <code>reap</code> returns <code>None</code>.
+  Diagnosis runs outside the lock because it calls the launcher.</li>
+<li>The Kubernetes Job is deleted 300s after failing; the sweep reaches a lost run within about
+  <code>heartbeat_timeout + poll_interval</code> (~105s), well inside that window.</li>
+</ul>
+<hr />
+<h2 id="6-cancel">6. Cancel<a class="headerlink" href="#6-cancel" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>runs.cancel(run_id)</code>: <code>_finish</code> with <code>canceled</code>; <code>ConflictError</code> when the run is already
+  terminal. Cancelling one run of a backfill cancels that run only; the backfill advances.</li>
+<li>API: <code>POST /runs/{run_id}/cancel</code>, editor role, 409 on <code>ConflictError</code> (the API's existing store
+  error mapping).</li>
+<li>Toolkit/MCP: <code>cancel_run</code>, beside <code>retry_run</code>, with <code>Effect.CANCEL</code>.</li>
+<li>UI: Cancel button with confirmation on the run page while the run is open, in the toolbar above
+  Retry. Like Retry and the backfill Cancel, it is not gated client-side: the API answers a viewer
+  with 403.</li>
+<li><code>backfills.cancel(backfill_id, *, in_flight=True)</code> also cancels <code>dispatched</code> and <code>running</code> runs,
+  through <code>runs.cancel</code> (they hold quota reservations), after the backfill is terminal so their
+  endings do not advance it. <code>BackfillStore</code> reads the runs facet through a lazy provider, the
+  pattern <code>QuotaStore</code> already uses for its defaults, since the runs facet is built after it. A
+  quota denial passes <code>in_flight=False</code>: the runs in flight already hold their reservations and
+  drain as before. The backfill page and the toolkit copy follow.</li>
+<li>A live pod exits on its next heartbeat (within <code>heartbeat_interval</code>).</li>
+</ul>
+<hr />
+<h2 id="7-data-model-and-settings">7. Data model and settings<a class="headerlink" href="#7-data-model-and-settings" title="Permanent link">&para;</a></h2>
+<p>Migration 011:</p>
+<ul>
+<li><code>runs.heartbeat_at timestamptz NULL</code>, not indexed (heartbeat updates stay heap-only).</li>
+<li><code>UPDATE runs SET heartbeat_at = now() WHERE status = 'dispatched'</code>, so runs dispatched before the
+  upgrade get the startup rule.</li>
+<li><code>trg_runs_notify</code> split into an <code>INSERT</code> trigger and an <code>UPDATE</code> trigger guarded by
+  <code>WHEN (OLD.heartbeat_at IS NOT DISTINCT FROM NEW.heartbeat_at OR OLD.status IS DISTINCT FROM NEW.status)</code>,
+  both on <code>notify_target_change</code> (<code>OLD</code> is not allowed in an <code>INSERT</code> trigger's <code>WHEN</code>).</li>
+</ul>
+<p>Runs already <code>running</code> at upgrade have <code>heartbeat_at = NULL</code>; <code>NULL &lt; x</code> is false, so only the
+timeout rule applies to them. Old-version pods in flight are never failed for heartbeats they
+cannot send, and the current ghost run is finished on the first sweep after deploy.</p>
+<p><code>Job.timeout: int | None = None</code> (seconds, x-section "Operation", beside <code>retry</code>).</p>
+<p><code>ReaperSettings</code>:</p>
 <table>
 <thead>
 <tr>
 <th>Field</th>
-<th>Type</th>
 <th>Default</th>
-<th>Description</th>
+<th>Note</th>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>host</code></td>
-<td><code>str</code></td>
-<td><code>'localhost'</code></td>
-<td>Database host.</td>
-</tr>
-<tr>
-<td><code>port</code></td>
-<td><code>int</code></td>
-<td><code>5432</code></td>
-<td>Database port.</td>
-</tr>
-<tr>
-<td><code>user</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Database user.</td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Database password.</td>
-</tr>
-<tr>
-<td><code>database</code></td>
-<td><code>str</code></td>
-<td><code>'interloper'</code></td>
-<td>Database name.</td>
-</tr>
-<tr>
-<td><code>statement_timeout</code></td>
-<td><code>float | None</code></td>
-<td><code>None</code></td>
-<td>Seconds after which the server cancels a statement of the process engine, sent as the libpq <code>statement_timeout</code> option; unset leaves the server's own setting untouched.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="auth"><code>auth</code><a class="headerlink" href="#auth" title="Permanent link">&para;</a></h3>
-<p>Authentication settings: Google OAuth and the session cookie. Prefix <code>INTERLOPER_AUTH_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>google_client_id</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Google OAuth web client id.</td>
-</tr>
-<tr>
-<td><code>google_client_secret</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Google OAuth web client secret.</td>
-</tr>
-<tr>
-<td><code>google_redirect_uri</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Redirect URI registered on the Google OAuth client (<code>/api/auth/google/callback</code>).</td>
-</tr>
-<tr>
-<td><code>cookie_secure</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Send the session cookie over HTTPS only.</td>
-</tr>
-<tr>
-<td><code>session_expiry_days</code></td>
-<td><code>int</code></td>
-<td><code>30</code></td>
-<td>Days a session stays valid.</td>
-</tr>
-<tr>
-<td><code>super_admin_emails</code></td>
-<td><code>list[str]</code></td>
-<td><code>[]</code></td>
-<td>Google emails promoted to platform-wide super-admin by <code>interloper db init</code> and on login; promotion only, removing an email never demotes.</td>
-</tr>
-<tr>
-<td><code>allowed_domains</code></td>
-<td><code>list[str]</code></td>
-<td><code>[]</code></td>
-<td>Email domains allowed to sign up; empty keeps signup open. Configured super-admins, pending invitations and existing profiles always pass.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="server"><code>server</code><a class="headerlink" href="#server" title="Permanent link">&para;</a></h3>
-<p>HTTP server settings: the API and the app. Prefix <code>INTERLOPER_SERVER_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Serve the API and the app.</td>
-</tr>
-<tr>
-<td><code>host</code></td>
-<td><code>str</code></td>
-<td><code>'0.0.0.0'</code></td>
-<td>Bind host.</td>
-</tr>
-<tr>
-<td><code>port</code></td>
-<td><code>int</code></td>
-<td><code>3000</code></td>
-<td>Bind port.</td>
-</tr>
-<tr>
-<td><code>external_url</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Public base URL of the app (<code>https://app.example.com</code>), for links built outside a browser request such as the setup hand-off an MCP tool returns; empty means the deployment has none.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="cron"><code>cron</code><a class="headerlink" href="#cron" title="Permanent link">&para;</a></h3>
-<p>Cron controller settings. Prefix <code>INTERLOPER_CRON_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Run the cron controller.</td>
-</tr>
-<tr>
-<td><code>reconcile_interval</code></td>
-<td><code>int</code></td>
-<td><code>10</code></td>
-<td>Seconds between reconciliations.</td>
-</tr>
-<tr>
-<td><code>max_execution_delay</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Seconds a due job may fire late; unset uses the reconcile interval, and it may not be shorter.</td>
-</tr>
-<tr>
-<td><code>batch_size</code></td>
-<td><code>int</code></td>
-<td><code>50</code></td>
-<td>Due jobs dispatched per reconciliation.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="renewal"><code>renewal</code><a class="headerlink" href="#renewal" title="Permanent link">&para;</a></h3>
-<p>Renewal controller settings: connection credential renewal (singleton). Prefix <code>INTERLOPER_RENEWAL_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Run the renewal controller.</td>
-</tr>
-<tr>
-<td><code>reconcile_interval</code></td>
-<td><code>int</code></td>
-<td><code>60</code></td>
-<td>Seconds between reconciliations.</td>
-</tr>
-<tr>
-<td><code>batch_size</code></td>
-<td><code>int</code></td>
-<td><code>50</code></td>
-<td>Connections renewed per reconciliation.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="worker"><code>worker</code><a class="headerlink" href="#worker" title="Permanent link">&para;</a></h3>
-<p>Queue worker settings. Prefix <code>INTERLOPER_WORKER_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Run the queue worker.</td>
-</tr>
 <tr>
 <td><code>poll_interval</code></td>
-<td><code>int</code></td>
-<td><code>5</code></td>
-<td>Seconds between queue polls.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="reaper"><code>reaper</code><a class="headerlink" href="#reaper" title="Permanent link">&para;</a></h3>
-<p>Run liveness: the heartbeat an executing run records, and the reaper that fails silent or overdue runs. Prefix <code>INTERLOPER_REAPER_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Run the reaper.</td>
-</tr>
-<tr>
-<td><code>poll_interval</code></td>
-<td><code>int</code></td>
-<td><code>15</code></td>
-<td>Seconds between sweeps.</td>
+<td>15</td>
+<td>was 60</td>
 </tr>
 <tr>
 <td><code>startup_timeout</code></td>
-<td><code>int</code></td>
-<td><code>600</code></td>
-<td>Seconds a dispatched run may take to start before the reaper fails it.</td>
+<td>600</td>
+<td>renamed from <code>timeout</code>; measured from dispatch</td>
 </tr>
 <tr>
 <td><code>heartbeat_interval</code></td>
-<td><code>int</code></td>
-<td><code>10</code></td>
-<td>Seconds between an executing run's heartbeats.</td>
+<td>10</td>
+<td>forwarded to run pods</td>
 </tr>
 <tr>
 <td><code>heartbeat_timeout</code></td>
-<td><code>int</code></td>
-<td><code>90</code></td>
-<td>Seconds a running run may go without a heartbeat before the reaper fails it as lost; a run that cannot record one for half of it stops itself first.</td>
+<td>90</td>
+<td></td>
 </tr>
 <tr>
 <td><code>run_timeout</code></td>
-<td><code>int | None</code></td>
-<td><code>43200</code></td>
-<td>Seconds a run may take when its job declares no <code>timeout</code>; unset lets those runs run without a deadline.</td>
+<td>43200</td>
+<td><code>None</code> disables</td>
 </tr>
 </tbody>
 </table>
-<h3 id="launcher"><code>launcher</code><a class="headerlink" href="#launcher" title="Permanent link">&para;</a></h3>
-<p>Launcher settings: the launcher type and its own configuration. Prefix <code>INTERLOPER_LAUNCHER_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>type</code></td>
-<td><code>str</code></td>
-<td><code>'in_process'</code></td>
-<td>Registry key of the launcher: <code>in_process</code>, <code>docker</code> or <code>kubernetes</code>.</td>
-</tr>
-<tr>
-<td><code>config</code></td>
-<td><code>dict[str, Any]</code></td>
-<td><code>{}</code></td>
-<td>Keyword arguments for the launcher class.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="smtp"><code>smtp</code><a class="headerlink" href="#smtp" title="Permanent link">&para;</a></h3>
-<p>SMTP settings for sending invitation emails. Prefix <code>INTERLOPER_SMTP_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>host</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>SMTP host; sending is enabled once host, user and password are set.</td>
-</tr>
-<tr>
-<td><code>port</code></td>
-<td><code>int</code></td>
-<td><code>587</code></td>
-<td>SMTP port.</td>
-</tr>
-<tr>
-<td><code>user</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>SMTP user.</td>
-</tr>
-<tr>
-<td><code>password</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>SMTP password.</td>
-</tr>
-<tr>
-<td><code>from_addr</code></td>
-<td><code>str</code></td>
-<td><code>'noreply@interloper.dev'</code></td>
-<td>Sender address of invitation emails.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="agent"><code>agent</code><a class="headerlink" href="#agent" title="Permanent link">&para;</a></h3>
-<p>AI agent settings: the chat assistant the API serves. Prefix <code>INTERLOPER_AGENT_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>enabled</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Serve the agent; off leaves the installation untouched.</td>
-</tr>
-<tr>
-<td><code>model</code></td>
-<td><code>str</code></td>
-<td><code>'google:gemini-2.5-flash'</code></td>
-<td>pydantic-ai <code>provider:model</code> name (<code>google:gemini-2.5-flash</code>, <code>google-cloud:gemini-2.5-flash</code> for Vertex, <code>anthropic:claude-sonnet-4-5</code>, <code>openai:gpt-5</code>); provider credentials come from the provider's standard environment variables.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="mcp"><code>mcp</code><a class="headerlink" href="#mcp" title="Permanent link">&para;</a></h3>
-<p>MCP server settings (<code>interloper-mcp</code>). Prefix <code>INTERLOPER_MCP_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>host</code></td>
-<td><code>str</code></td>
-<td><code>'0.0.0.0'</code></td>
-<td>Bind host.</td>
-</tr>
-<tr>
-<td><code>port</code></td>
-<td><code>int</code></td>
-<td><code>3001</code></td>
-<td>Bind port.</td>
-</tr>
-<tr>
-<td><code>external_url</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Public base URL of the hosted server (<code>https://mcp.example.com</code>), fed to the OAuth protected-resource metadata so clients discover the auth requirements.</td>
-</tr>
-<tr>
-<td><code>token</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Personal access token the stdio transport authenticates with.</td>
-</tr>
-<tr>
-<td><code>org_id</code></td>
-<td><code>str</code></td>
-<td><code>''</code></td>
-<td>Organisation the stdio transport is scoped to without a token; local development only.</td>
-</tr>
-</tbody>
-</table>
-<h3 id="quota"><code>quota</code><a class="headerlink" href="#quota" title="Permanent link">&para;</a></h3>
-<p>Default per-organisation quota limits; unset means unlimited. Prefix <code>INTERLOPER_QUOTA_</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Field</th>
-<th>Type</th>
-<th>Default</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>max_sources</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Sources an organisation may hold.</td>
-</tr>
-<tr>
-<td><code>max_assets_per_source</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Assets a source may enable.</td>
-</tr>
-<tr>
-<td><code>max_successful_runs_per_month</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Successful runs an organisation may complete per UTC month.</td>
-</tr>
-<tr>
-<td><code>max_backfill_partitions</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Partitions one backfill may span.</td>
-</tr>
-</tbody>
-</table>
+<p>The chart's <code>extraConfig.reaper.timeout: 3600</code> override is removed. Settings forbid unknown keys,
+so a deployment still carrying <code>reaper.timeout</code> (a gitops override) fails at startup: the key must
+leave every override with this release. The admin config snapshot (<code>AdminReaperConfig</code>, the
+admin config page) shows the new fields.</p>
+<hr />
+<h2 id="8-removals">8. Removals<a class="headerlink" href="#8-removals" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>Launcher.describe_run</code>, <code>LaunchStatus</code>, <code>LaunchState</code> and their Kubernetes and Docker
+  implementations; the failure-reason code (<code>_pod_failure_reason</code>, the container state mapping)
+  moves into <code>diagnose()</code>.</li>
+<li><code>runs.dispatched()</code>, replaced by <code>runs.overdue()</code>.</li>
+<li>The reaper's launcher decision tree and its <code>created_at</code> timeout.</li>
+</ul>
+<hr />
+<h2 id="9-testing">9. Testing<a class="headerlink" href="#9-testing" title="Permanent link">&para;</a></h2>
+<p>Test files mirror the package layout.</p>
+<ul>
+<li>Store: <code>claim_next</code> and <code>start</code> stamp <code>heartbeat_at</code>; <code>start</code> refuses a non-<code>dispatched</code> run;
+  <code>heartbeat</code> returns <code>False</code> once terminal; <code>overdue</code> for each rule, <code>NULL</code> heartbeats ignored,
+  timeout from job config, instance default, deleted job and <code>run_timeout = None</code>; <code>reap</code> skips a
+  run whose heartbeat moved and a terminal run; <code>cancel</code> from every open status (quota released,
+  hooks stamped, backfill advanced) and on a terminal run; <code>_finish</code> closes open executions and a
+  late pod event deduplicates; backfill cancel of in-flight runs.</li>
+<li>Reaper: diagnosis appended, a raising <code>diagnose</code> tolerated, a skipped <code>reap</code> not counted.</li>
+<li>Executor: heartbeat exits on <code>False</code> and after <code>heartbeat_timeout/2</code> of errors (injected exit).</li>
+<li>Trigger (Postgres, <code>integration</code>): a heartbeat-only update does not notify; a status change does.</li>
+<li>API and toolkit: cancel route (role, 409) and <code>cancel_run</code>.</li>
+<li>Launchers: <code>diagnose</code> for Kubernetes and Docker against mocked clients.</li>
+<li>Live, on a dev instance: cancel a running demo run; kill a run container under the Docker
+  launcher and observe it failed within about two minutes with its diagnosis.</li>
+</ul>
+<hr />
+<h2 id="10-delivery">10. Delivery<a class="headerlink" href="#10-delivery" title="Permanent link">&para;</a></h2>
+<ol>
+<li><code>refactor!: heartbeat-driven run liveness and timeouts</code>: migration, store verbs, <code>_finish</code>,
+   heartbeat, sweep, <code>Job.timeout</code>, settings, <code>diagnose</code>, chart. Carries this spec.</li>
+<li><code>feat: cancel runs</code>: <code>runs.cancel</code>, API route, toolkit/MCP tool, UI, backfill cancel of
+   in-flight runs.</li>
+</ol>
+<p>Follow-ups (Jira ITLPR):</p>
+<ul>
+<li><code>cloud-sql-proxy</code>: two replicas and a PodDisruptionBudget; today a single replica sits on every
+  run's DB path.</li>
+<li>Default HTTP timeouts in <code>RESTClient</code>; 16 of 20 connector clients have none.</li>
+<li>Per-asset <code>KubernetesRunner</code>: delete child Jobs when the run is cancelled.</li>
+</ul>
 
 
 
@@ -3108,9 +2552,6 @@
 
 
 
-
-  
-  
 
 
 
@@ -3137,44 +2578,6 @@
       
         <footer class="md-footer">
   
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-          
-          <a href="../../extending/entry-points/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Entry points &amp; registries">
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
-            </div>
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Previous
-              </span>
-              <div class="md-ellipsis">
-                Entry points & registries
-              </div>
-            </div>
-          </a>
-        
-        
-          
-          <a href="../cli/" class="md-footer__link md-footer__link--next" aria-label="Next: CLI">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                CLI
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </a>
-        
-      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -3211,10 +2614,10 @@
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
       
     
   </body>
