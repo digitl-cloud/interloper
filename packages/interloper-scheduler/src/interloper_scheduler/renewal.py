@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from interloper.catalog.base import Catalog
-from interloper_db import OPEN_RUN_STATUSES, RunQuery, Store
+from interloper_db import Store
 from interloper_db.models import Component
 
 from interloper_scheduler.controller import Controller
@@ -84,7 +84,9 @@ class RenewalController(Controller):
                     continue
 
                 self._store.components.stamp_state(connection.id, next_renewal_at=now + _PENDING_TTL)
-                if self._has_open_run(connection):
+                # An expired pending slot while the original run is still alive must not
+                # queue a second renewal that could rotate a credential out from under it.
+                if self._store.runs.has_open(connection.id):
                     continue
 
                 self._store.runs.create(connection.org_id, component_id=connection.id)
@@ -108,20 +110,3 @@ class RenewalController(Controller):
             logger.warning("Cannot decode config of connection %s; skipping renewal", connection.id)
             return False
         return bool(config.get("auto_renew", True))
-
-    def _has_open_run(self, connection: Component) -> bool:
-        """Whether a run for this connection is already in flight.
-
-        The provisional stamp prevents re-enqueueing in the normal flow;
-        this guards the recovery path (a pending slot that expired while
-        the original run is still alive), where a second concurrent renewal
-        could rotate a credential out from under the first.
-
-        Args:
-            connection: The connection row being considered for renewal.
-
-        Returns:
-            True when a queued, dispatched or running run exists.
-        """
-        query = RunQuery(component_id=connection.id, status=[*OPEN_RUN_STATUSES], all_attempts=True, limit=1)
-        return self._store.runs.list(connection.org_id, query).total > 0

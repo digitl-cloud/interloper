@@ -30,7 +30,7 @@ from sqlmodel import Session, select
 from interloper_db import engine as engine_module
 from interloper_db import provision
 from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
-from interloper_db.store import BackfillQuery, EventQuery, RunQuery, RunStore, Store
+from interloper_db.store import EventQuery, PageQuery, RunQuery, RunStore, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.runs import partition_key_range
 
@@ -1010,8 +1010,7 @@ class TestHooksPending:
 
     @staticmethod
     def _pending(store: Store) -> set[UUID]:
-        query = RunQuery(hooks_pending=True, all_attempts=True, sort="completed_at", limit=None)
-        return {run.id for run in store.runs.list(None, query).items}
+        return {run.id for run in store.runs.hooks_pending()}
 
     @pytest.mark.parametrize("success", [True, False])
     def test_a_verdict_is_pending_until_marked(self, store: Store, success: bool) -> None:
@@ -1044,21 +1043,88 @@ class TestHooksPending:
         store.runs.complete(retry.id, success=True)
         assert self._pending(store) == {retry.id}
 
-    def test_every_organisation_is_read_when_none_is_given(self, store: Store) -> None:
+    def test_every_organisation_is_read(self, store: Store) -> None:
         other = store.runs.create(uuid4())
         store.runs.complete(other.id, success=True)
 
         assert self._pending(store) == {other.id}
-        assert store.runs.list(_ORG_ID, RunQuery(hooks_pending=True)).items == []
 
-    def test_canceled_backfill_runs_are_settled(self, store: Store) -> None:
+    def test_canceled_backfill_runs_and_the_backfill_are_settled(self, store: Store) -> None:
         backfill = _backfill(store)
 
         store.backfills.cancel(backfill.id)
 
         assert self._pending(store) == set()
-        query = BackfillQuery(hooks_pending=True, limit=None)
-        assert store.backfills.list(None, query).items == []
+        assert store.backfills.hooks_pending() == []
+
+    def test_a_finished_backfill_is_pending_until_marked(self, store: Store) -> None:
+        backfill = _backfill(store, days=1, concurrency=1)
+        [run] = store.backfills.attempts(backfill.id)
+        store.runs.complete(run.id, success=True)
+
+        assert [pending.id for pending in store.backfills.hooks_pending()] == [backfill.id]
+        store.backfills.mark_hooks_evaluated(backfill.id)
+        assert store.backfills.hooks_pending() == []
+
+
+class TestNamedReads:
+    """The questions the scheduler, the toolkit and the overview ask by name."""
+
+    def test_recent_lists_completed_stacks_newest_completion_first(self, store: Store) -> None:
+        first, second = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
+        store.runs.create(_ORG_ID)
+        store.runs.complete(first.id, success=True)
+        store.runs.complete(second.id, success=False)
+
+        recent = store.runs.recent(_ORG_ID, until=dt.datetime.now(dt.timezone.utc), limit=5)
+
+        assert [run.id for run in recent] == [second.id, first.id]
+
+    def test_failures_reads_the_stacks_whose_latest_attempt_failed(self, store: Store) -> None:
+        failed, healed = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
+        store.runs.complete(failed.id, success=False)
+        store.runs.complete(healed.id, success=False)
+        store.runs.complete(store.runs.retry(healed.id).id, success=True)
+
+        page = store.runs.failures(_ORG_ID, PageQuery())
+
+        assert ([run.id for run in page.items], page.total) == ([failed.id], 1)
+
+    def test_attempts_lists_a_stack_first_attempt_first(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=False)
+        retry = store.runs.retry(run.id)
+
+        assert [attempt.id for attempt in store.runs.attempts(run.root_run_id)] == [run.id, retry.id]
+
+    @pytest.mark.parametrize(("transition", "is_open"), [(None, True), ("dispatch", True), ("complete", False)])
+    def test_has_open_reads_a_component_s_unfinished_runs(
+        self, store: Store, transition: str | None, is_open: bool
+    ) -> None:
+        component_id = _component(store, "connection")
+        run = store.runs.create(_ORG_ID, component_id=component_id)
+        if transition == "dispatch":
+            store.runs.claim_next()
+        elif transition == "complete":
+            store.runs.complete(run.id, success=True)
+
+        assert store.runs.has_open(component_id) is is_open
+        assert store.runs.has_open(uuid4()) is False
+
+    def test_dispatched_reads_every_organisation_until_a_run_starts(self, store: Store) -> None:
+        waiting, started, theirs = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID), store.runs.create(uuid4())
+        _drain(store)
+        store.runs.start(started.id)
+
+        assert {run.id for run in store.runs.dispatched()} == {waiting.id, theirs.id}
+
+    def test_backfill_attempts_are_in_start_order(self, store: Store) -> None:
+        backfill = _backfill(store, days=3, concurrency=3)
+        queued = store.backfills.attempts(backfill.id)
+        store.runs.start(queued[2].id)
+        store.runs.start(queued[0].id)
+
+        assert [run.id for run in store.backfills.attempts(backfill.id)] == [queued[2].id, queued[0].id, queued[1].id]
 
 
 @pytest.fixture(scope="module")

@@ -28,7 +28,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from interloper.errors import ConflictError
-from interloper_db import RunQuery, RunStatus, Store
+from interloper_db import Store
 from interloper_db.models import Run
 
 from interloper_scheduler.controller import Controller
@@ -122,8 +122,7 @@ class Reaper(Controller):
         now = dt.datetime.now(dt.timezone.utc)
         timeout_cutoff = now - dt.timedelta(seconds=self._timeout)
 
-        query = RunQuery(status=[RunStatus.DISPATCHED], all_attempts=True, limit=None)
-        dispatched_runs = self._store.runs.list(None, query).items
+        dispatched_runs = self._store.runs.dispatched()
 
         reaped = 0
         for run in dispatched_runs:
