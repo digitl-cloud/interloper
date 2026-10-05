@@ -12,6 +12,7 @@ from interloper_db import (
     ComponentQuery,
     EventQuery,
     ExecutionQuery,
+    PageQuery,
     RunQuery,
     RunStatus,
 )
@@ -288,7 +289,7 @@ def list_failures(ctx: ToolkitContext, limit: int = 20, offset: int = 0) -> Fail
     failed runs.
     """
     try:
-        failed_runs = ctx.store.runs.list(ctx.org_id, RunQuery(status=[RunStatus.FAILED], limit=limit, offset=offset))
+        failed_runs = ctx.store.runs.failures(ctx.org_id, PageQuery(limit=limit, offset=offset))
 
         query = EventQuery(event_type=list(FAILURE_EVENT_TYPES), has_error=True, limit=_ERRORS_PER_FAILURE)
         results = []
@@ -464,9 +465,7 @@ def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled |
         bid = UUID(backfill_id)
         ctx.store.backfills.get(bid, org_id=ctx.org_id)
         backfill = ctx.store.backfills.cancel(bid)
-        canceled = ctx.store.runs.list(
-            ctx.org_id, RunQuery(backfill_id=bid, status=[RunStatus.CANCELED], all_attempts=True, limit=1)
-        ).total
+        canceled = ctx.store.backfills.run_counts([bid]).get(bid, {}).get(RunStatus.CANCELED, 0)
         return BackfillCanceled(
             message=f"Backfill canceled, {canceled} run(s) will not execute", backfill=backfill, runs_canceled=canceled
         )
@@ -492,9 +491,8 @@ def backfill_timeline(
     try:
         bid = UUID(backfill_id)
         backfill = ctx.store.backfills.get(bid, org_id=ctx.org_id)
-        runs = ctx.store.runs.list(ctx.org_id, RunQuery(backfill_id=bid, all_attempts=True, limit=None)).items
+        runs = ctx.store.backfills.attempts(bid)
         total = len(runs)
-        runs.sort(key=lambda r: (r.started_at is None, r.started_at or r.created_at or datetime.min))
 
         started = [r for r in runs if r.started_at is not None]
         durations = [_seconds(r.started_at, r.completed_at) for r in started if r.completed_at is not None]

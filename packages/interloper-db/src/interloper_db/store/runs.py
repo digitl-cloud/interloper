@@ -12,7 +12,7 @@ The lifecycle is ``pending`` (a backfill's runs beyond its concurrency) →
 :meth:`RunStore.fail`), or ``canceled`` from any open state. A run whose
 verdict will never reach hooks, canceled or failed and retried, is stamped
 ``hooks_evaluated_at`` at that transition, so ``hooks_pending`` lists
-exactly the verdicts hooks still owe a reaction.
+exactly the verdicts hooks still owe a reaction (:meth:`RunStore.hooks_pending`).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from sqlalchemy import Engine, exists, func
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import Session, col, select
 
-from interloper_db.models import TERMINAL_RUN_STATUSES, Component, Event, Run, RunStatus
+from interloper_db.models import OPEN_RUN_STATUSES, TERMINAL_RUN_STATUSES, Component, Event, Run, RunStatus
 from interloper_db.session import commit, session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QuotaStore, UsageLedger
@@ -107,7 +107,6 @@ class RunQuery(PageQuery):
         component_kind: Keep runs whose target is of this kind.
         component_key: Keep runs whose target is of this type (catalog key).
         all_attempts: Keep every attempt rather than each stack's latest.
-        hooks_pending: Keep terminal runs whose hooks have not been evaluated.
         sort: The order; ``None`` lists newest first (one stack: its latest
             attempt first).
     """
@@ -124,7 +123,6 @@ class RunQuery(PageQuery):
     component_kind: str | None = None
     component_key: str | None = None
     all_attempts: bool = False
-    hooks_pending: bool = False
     sort: RunSort | None = None
 
 
@@ -208,7 +206,7 @@ class RunStore:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
-    def list(self, org_id: UUID | None, query: RunQuery) -> Page[Run]:
+    def list(self, org_id: UUID, query: RunQuery) -> Page[Run]:
         """List one row per stack, one stack's attempts, or every attempt.
 
         A stack is one piece of work, so a listing shows its **latest
@@ -220,9 +218,7 @@ class RunStore:
         and retries read.
 
         Args:
-            org_id: Organisation UUID; ``None`` reads every organisation, for
-                the in-process sweeps that serve them all. An HTTP route
-                always passes the caller's organisation.
+            org_id: Organisation UUID.
             query: The filters, the order, and the window to read.
 
         Returns:
@@ -236,6 +232,90 @@ class RunStore:
         )
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
+
+    def recent(self, org_id: UUID, *, until: datetime, limit: int) -> builtins.list[Run]:
+        """The stacks that completed most recently, newest completion first.
+
+        Args:
+            org_id: Organisation UUID.
+            until: Keep stacks completed by this instant.
+            limit: How many to read.
+
+        Returns:
+            Each stack's latest attempt, its target loaded.
+        """
+        return self.list(org_id, RunQuery(completed_before=until, sort="-completed_at", limit=limit)).items
+
+    def failures(self, org_id: UUID, query: PageQuery) -> Page[Run]:
+        """The stacks whose latest attempt failed, newest first.
+
+        Args:
+            org_id: Organisation UUID.
+            query: The window to read.
+
+        Returns:
+            The page of failed stacks' latest attempts, their targets loaded.
+        """
+        return self.list(org_id, RunQuery(status=[RunStatus.FAILED], limit=query.limit, offset=query.offset))
+
+    def attempts(self, root_run_id: UUID) -> builtins.list[Run]:
+        """A stack's attempts, the first one first.
+
+        Args:
+            root_run_id: The stack's root run.
+
+        Returns:
+            The attempts, their targets loaded.
+        """
+        statement = (
+            select(Run).where(Run.root_run_id == root_run_id).order_by(col(Run.attempt)).options(*RUN_LOAD_OPTIONS)
+        )
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
+
+    def has_open(self, component_id: UUID) -> bool:
+        """Whether a run of a component is queued, dispatched or running.
+
+        Args:
+            component_id: The component UUID.
+
+        Returns:
+            True when one is.
+        """
+        statement = select(Run.id).where(Run.component_id == component_id, col(Run.status).in_(OPEN_RUN_STATUSES))
+        with session_scope(self._engine) as session:
+            return session.exec(statement.limit(1)).first() is not None
+
+    def dispatched(self) -> builtins.list[Run]:
+        """Every organisation's runs claimed by the queue that have not yet started.
+
+        For the reaper, which reconciles them with what the launcher reports.
+
+        Returns:
+            The dispatched runs, their targets loaded.
+        """
+        statement = select(Run).where(Run.status == RunStatus.DISPATCHED).options(*RUN_LOAD_OPTIONS)
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
+
+    def hooks_pending(self) -> builtins.list[Run]:
+        """Every organisation's verdicts whose hooks have not been evaluated, oldest completion first.
+
+        For the hook sweep: a run that will never fire hooks (canceled, or a
+        failure a retry superseded) is stamped at that transition, so what
+        is left is exactly what the sweep owes.
+
+        Returns:
+            The runs, their targets loaded.
+        """
+        statement = (
+            select(Run)
+            .where(col(Run.status).in_(TERMINAL_RUN_STATUSES), col(Run.hooks_evaluated_at).is_(None))
+            .order_by(col(Run.completed_at), col(Run.id))
+            .options(*RUN_LOAD_OPTIONS)
+        )
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
 
     def claim_next(self) -> Run | None:
         """Claim the oldest claimable queued run and dispatch it, reserving its quota.
@@ -670,7 +750,7 @@ class RunStore:
             col(later.attempt) > col(Run.attempt),
         )
 
-    def _filters(self, org_id: UUID | None, query: RunQuery) -> builtins.list[Any]:
+    def _filters(self, org_id: UUID, query: RunQuery) -> builtins.list[Any]:
         """The where-clauses of a runs listing.
 
         ``after``/``before`` select the runs whose execution *overlaps* the window
@@ -685,13 +765,13 @@ class RunStore:
         so a run whose target was deleted matches none of them.
 
         Args:
-            org_id: Organisation whose runs are listed; ``None`` reads every one.
+            org_id: Organisation whose runs are listed; always applied.
             query: The filters to translate; see :class:`RunQuery`.
 
         Returns:
             Filter expressions for the given criteria.
         """
-        filters: builtins.list[Any] = [] if org_id is None else [Run.org_id == org_id]
+        filters: builtins.list[Any] = [Run.org_id == org_id]
         target = col(Run.target)
         if query.q:
             filters.append(
@@ -714,8 +794,6 @@ class RunStore:
             filters.append(self._latest_attempt_only())
         if query.status:
             filters.append(col(Run.status).in_(query.status))
-        if query.hooks_pending:
-            filters.extend((col(Run.status).in_(TERMINAL_RUN_STATUSES), col(Run.hooks_evaluated_at).is_(None)))
         if query.after is not None:
             filters.append(col(Run.completed_at).is_(None) | (col(Run.completed_at) >= query.after))
         if query.before is not None:

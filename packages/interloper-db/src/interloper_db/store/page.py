@@ -27,6 +27,11 @@ class PageQuery(BaseModel):
 
     ``limit=None`` reads every matching row. Query strings cannot carry
     ``None``, so it is an in-process option only.
+
+    This and the query objects extending it carry a reader's own choices,
+    bound from a query string or a tool's parameters and passed through.
+    Outside interloper-db, code never assembles one to ask a question of its
+    own: a question the code asks is a named store method.
     """
 
     limit: int | None = Field(default=50, ge=1, le=MAX_PAGE_SIZE)

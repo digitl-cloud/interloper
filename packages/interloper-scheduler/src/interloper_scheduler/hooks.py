@@ -36,7 +36,7 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import ConfigError, NotFoundError
 from interloper.settings import AppSettings
-from interloper_db import BackfillQuery, BackfillStatus, EventQuery, RelationQuery, RunQuery, RunStatus, Store
+from interloper_db import BackfillStatus, EventQuery, RelationQuery, RunStatus, Store
 from interloper_db.models import Backfill, Component, Run
 
 from interloper_scheduler.controller import Controller
@@ -92,11 +92,10 @@ class HookController(Controller):
 
     def _tick(self) -> None:
         """Evaluate every terminal run and backfill not yet stamped, oldest first."""
-        runs = RunQuery(hooks_pending=True, all_attempts=True, sort="completed_at", limit=None)
-        for run in self._store.runs.list(None, runs).items:
+        for run in self._store.runs.hooks_pending():
             self._evaluate(run)
             self._store.runs.mark_hooks_evaluated(run.id)
-        for backfill in self._store.backfills.list(None, BackfillQuery(hooks_pending=True, limit=None)).items:
+        for backfill in self._store.backfills.hooks_pending():
             self._evaluate_backfill(backfill)
             self._store.backfills.mark_hooks_evaluated(backfill.id)
 
@@ -224,7 +223,7 @@ class HookController(Controller):
             "component_name": target.name or target.key,
             "component_key": target.key,
             "attempt": run.attempt,
-            "attempts": self._store.runs.list(run.org_id, RunQuery(root_run_id=run.root_run_id, limit=1)).total,
+            "attempts": len(self._store.runs.attempts(run.root_run_id)),
         }
         if event_type == "run_failed":
             failures = EventQuery(event_type=[il.EventType.RUN_FAILED.value], has_error=True, limit=None)

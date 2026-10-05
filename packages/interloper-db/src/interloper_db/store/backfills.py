@@ -47,12 +47,9 @@ class BackfillQuery(PageQuery):
     Attributes:
         status: Keep backfills in any of these statuses; ``None`` keeps every
             status.
-        hooks_pending: Keep terminal backfills whose hooks have not been
-            evaluated, oldest completion first.
     """
 
     status: list[BackfillStatus] | None = None
-    hooks_pending: bool = False
 
 
 class BackfillStore:
@@ -89,33 +86,60 @@ class BackfillStore:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             return db_backfill
 
-    def list(self, org_id: UUID | None, query: BackfillQuery) -> Page[Backfill]:
-        """List backfills, newest first, or oldest completion first when reading those whose hooks are pending.
+    def list(self, org_id: UUID, query: BackfillQuery) -> Page[Backfill]:
+        """List an organisation's backfills, newest first.
 
         Args:
-            org_id: Organisation UUID; ``None`` reads every organisation, for
-                the in-process sweeps that serve them all.
+            org_id: Organisation UUID.
             query: Which statuses, and the window to read.
 
         Returns:
             The page of backfills, their targets loaded.
         """
-        order = (
-            (col(Backfill.completed_at).asc(), col(Backfill.id))
-            if query.hooks_pending
-            else (col(Backfill.created_at).desc(), col(Backfill.id))
+        statement = (
+            select(Backfill)
+            .where(Backfill.org_id == org_id)
+            .order_by(col(Backfill.created_at).desc(), col(Backfill.id))
+            .options(*BACKFILL_LOAD_OPTIONS)
         )
-        statement = select(Backfill).order_by(*order).options(*BACKFILL_LOAD_OPTIONS)
-        if org_id is not None:
-            statement = statement.where(Backfill.org_id == org_id)
         if query.status:
             statement = statement.where(col(Backfill.status).in_(query.status))
-        if query.hooks_pending:
-            statement = statement.where(
-                col(Backfill.status).not_in(ACTIVE_BACKFILL_STATUSES), col(Backfill.hooks_evaluated_at).is_(None)
-            )
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
+
+    def hooks_pending(self) -> builtins.list[Backfill]:
+        """Every organisation's finished backfills whose hooks have not been evaluated, oldest completion first.
+
+        For the hook sweep; a canceled backfill is stamped at cancelation.
+
+        Returns:
+            The backfills, their targets loaded.
+        """
+        statement = (
+            select(Backfill)
+            .where(col(Backfill.status).not_in(ACTIVE_BACKFILL_STATUSES), col(Backfill.hooks_evaluated_at).is_(None))
+            .order_by(col(Backfill.completed_at), col(Backfill.id))
+            .options(*BACKFILL_LOAD_OPTIONS)
+        )
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
+
+    def attempts(self, backfill_id: UUID) -> builtins.list[Run]:
+        """Every attempt of a backfill's runs, in the order they started; those that never started last.
+
+        Args:
+            backfill_id: The backfill UUID.
+
+        Returns:
+            The attempts.
+        """
+        statement = (
+            select(Run)
+            .where(Run.backfill_id == backfill_id)
+            .order_by(col(Run.started_at).asc().nulls_last(), col(Run.created_at), col(Run.id))
+        )
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
 
     def create(
         self,

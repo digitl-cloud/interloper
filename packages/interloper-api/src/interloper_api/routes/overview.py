@@ -15,7 +15,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from interloper.utils.time import assume_utc
-from interloper_db import ComponentStatus, RunQuery
+from interloper_db import ComponentStatus
 from interloper_db.store import insights
 from pydantic import BaseModel
 
@@ -233,7 +233,7 @@ def get_overview(
     activity = store.insights.activity(org_id, now=now)
     attention = [AttentionItem.from_attention(item, now) for item in health.attention]
     attention.sort(key=lambda item: (item.severity != "error", -(item.since.timestamp() if item.since else 0)))
-    recent = store.runs.list(org_id, RunQuery(completed_before=now, sort="-completed_at", limit=RECENT_LIMIT))
+    recent = store.runs.recent(org_id, until=now, limit=RECENT_LIMIT)
     return OverviewResponse(
         generated_at=now,
         runs=activity.runs,
@@ -242,7 +242,7 @@ def get_overview(
         jobs=JobsSummary.from_jobs(health.jobs),
         attention=attention,
         upcoming=UpcomingRun.from_jobs(health.jobs),
-        recent=[RunResponse.from_run(run) for run in recent.items],
+        recent=[RunResponse.from_run(run) for run in recent],
         components=health.inventory,
     )
 
