@@ -20,15 +20,17 @@ class Normalizer(Serializable):
     return besides rows (a generator, models, a lone dict) are unwrapped by
     the asset before normalization, so a normalizer only ever reshapes rows.
 
-    Normalizer is :class:`Serializable` so instances round-trip through
+    Normalizer is `Serializable` so instances round-trip through
     ``Spec`` with their concrete subclass intact — e.g. across the
     host → child-pod DAG-spec boundary.
 
-    Usage::
+    Usage:
 
-        @asset(normalizer=Normalizer())
-        def my_asset(context):
-            return [{"UserName": "alice", "Address": {"City": "NYC"}}]
+    ```py
+    @asset(normalizer=Normalizer())
+    def my_asset(context):
+        return [{"UserName": "alice", "Address": {"City": "NYC"}}]
+    ```
 
     Attributes:
         normalize_columns_names: Convert column names to snake_case.

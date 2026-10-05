@@ -1,6 +1,6 @@
 """Console event handler: events rendered through the standard logging stack.
 
-Events are emitted as :class:`logging.LogRecord` instances on the
+Events are emitted as `logging.LogRecord` instances on the
 ``interloper.run`` logger, so they share whatever format, stream, and level
 configuration the application (or CLI) sets up — no second output system to
 keep in sync with regular log lines.
@@ -43,7 +43,7 @@ class ConsoleEventHandler:
     """Forward events to the logging stack (or raw JSON lines on stdout).
 
     Designed to be passed as a runner's ``on_event`` (which subscribes it to
-    the :class:`~interloper.events.bus.EventBus` for the duration of the
+    the `EventBus` for the duration of the
     run).  In the default mode each event becomes a record on the
     ``interloper.run`` logger — its level mapped from the event type, its
     timestamp taken from the event itself (not delivery time) — so events
@@ -101,7 +101,7 @@ class ConsoleEventHandler:
             event: The event to classify.
 
         Returns:
-            A :mod:`logging` level constant.
+            A `logging` level constant.
         """
         if event.type is EventType.LOG:
             level = getattr(logging, str(event.metadata.get("level", "INFO")).upper(), None)

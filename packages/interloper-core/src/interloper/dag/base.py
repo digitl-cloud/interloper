@@ -28,9 +28,9 @@ class DAGSpec(BaseModel):
     """Serializable representation of a DAG.
 
     Holds a flat list of component specs which may be either
-    :class:`~interloper.source.Source` specs (each carrying their
+    `Source` specs (each carrying their
     asset-override map) or individual standalone
-    :class:`~interloper.asset.Asset` specs.  The DAG constructor flattens
+    `Asset` specs.  The DAG constructor flattens
     sources back into their asset lists on reconstruction.
     """
 
@@ -47,7 +47,7 @@ class DAGSpec(BaseModel):
         Each source spec materialises a live source (with its assets
         pre-bound through ``Source.model_post_init`` and ``_resolve``),
         and each standalone asset spec materialises a bare asset.  All
-        reconstructed items are then handed to the :class:`DAG`
+        reconstructed items are then handed to the `DAG`
         constructor which re-infers the dependency graph from the
         preserved asset ids.
 
@@ -82,7 +82,7 @@ class DAG:
 
     Edges come from the nodes' own bindings: whatever fills an
     ``asset``-kind relation (see
-    :meth:`~interloper.operation.base.Operation.upstream_relations`) is a
+    `upstream_relations`) is a
     node this one runs after. The DAG validates every live node's relations
     and provides topological ordering for parallel execution.
     """
@@ -171,15 +171,15 @@ class DAG:
 
         For every materializing asset and every unbound upstream relation that
         declares keys, the candidates are the DAG's other assets the relation
-        :meth:`~interloper.component.relation.Relation.accepts`; a
-        :attr:`~interloper.component.relation.Relation.local` key is
+        `accepts`; a
+        `local` key is
         further restricted to the asset's own source instance, since it names
         a sibling. A ``many`` relation binds every candidate and a
         single-valued one the only candidate there is; no candidate leaves the
-        relation unbound for :meth:`_check_relations` to judge.
+        relation unbound for `_check_relations` to judge.
 
         Binding goes through
-        :meth:`~interloper.component.base.Component.bind`, so an explicit
+        `bind`, so an explicit
         binding is never overwritten, and it writes into the asset instance,
         so one reused across several DAGs keeps its first resolution.
 
@@ -216,7 +216,7 @@ class DAG:
         """Add every bound upstream the run itself does not materialize.
 
         A materializing node reads its upstreams through the DAG's own node
-        (see :meth:`~interloper.asset.base.Asset._read_upstreams`), so an
+        (see `_read_upstreams`), so an
         upstream nobody in the run materializes still has to be one: it joins
         as a disabled copy, same id, same bindings, same parent,
         which the runners skip and the dependent reads. Those copies never
@@ -243,7 +243,7 @@ class DAG:
     def _check_relations(self) -> None:
         """Let every live node check its own relations against the DAG's nodes.
 
-        See :meth:`~interloper.component.base.Component.validate_relations`;
+        See `validate_relations`;
         the DAG is what can answer whether a bound upstream is actually
         running in this graph.
         """
@@ -324,7 +324,7 @@ class DAG:
         Only enabled operations appear in the generations.  Edges from
         disabled operations count as already satisfied, mirroring
         the runners, which mark those nodes as skipped (e.g. the parents
-        in a :meth:`mini_dag`).
+        in a `mini_dag`).
 
         Returns:
             A list of operation groups ordered by dependency level.
@@ -393,12 +393,14 @@ class DAG:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
         Sync entrypoint for scripts, REPLs, and notebooks; drives
-        :meth:`materialize_async` to completion on the bridge loop
-        (see :func:`interloper.run`)::
+        `materialize_async` to completion on the bridge loop
+        (see `interloper.run`):
 
-            result = dag.materialize(partition)
+        ```py
+        result = dag.materialize(partition)
+        ```
 
-        Async code awaits :meth:`materialize_async` instead.
+        Async code awaits `materialize_async` instead.
 
         Args:
             partition_or_window: Partition or PartitionWindow every operation in
@@ -448,7 +450,7 @@ class DAG:
         an item of its own, carrying that one asset and nothing else of the
         source.
 
-        Every item shares one closed :class:`SerializationContext` over the
+        Every item shares one closed `SerializationContext` over the
         DAG's own nodes: a destination bound to several roots is written once
         and referenced everywhere else, a source writes the graph's copies of
         its assets (flagged read-only in a mini-DAG, or only some of them in a
@@ -482,7 +484,7 @@ class DAG:
         """Reconstruct a DAG from a spec.
 
         Args:
-            spec: A DAGSpec produced by :meth:`to_spec`.
+            spec: A DAGSpec produced by `to_spec`.
             catalog: Catalog used to resolve ``key`` references, shared
                 across the spec's items. Defaults to the settings-configured
                 catalog, built lazily.
@@ -504,12 +506,12 @@ class DAG:
     ) -> DAG:
         """Compile a runnable component spec file into a DAG.
 
-        Loads every :class:`~interloper.serializable.base.Spec` document the
+        Loads every `Spec` document the
         file holds (with ``${VAR}`` env interpolation), reconstructs them
         against one shared registry so a reference may cross documents, and
         compiles the DAG over all of them: the file-based counterpart of
         targeting a runnable component by id, and what
-        :meth:`to_spec` writes back.
+        `to_spec` writes back.
 
         Args:
             path: Path to the YAML spec document(s).
@@ -542,7 +544,7 @@ class DAG:
         A DAG over the target alone: its bound upstreams join as
         disabled copies through the very mechanism any run uses for
         an upstream it does not materialize
-        (:meth:`_include_read_only_upstreams`), so the parents are there,
+        (`_include_read_only_upstreams`), so the parents are there,
         under their own ids, read instead of executed.
 
         Args:

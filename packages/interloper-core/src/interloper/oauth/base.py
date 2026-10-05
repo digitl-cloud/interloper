@@ -8,16 +8,18 @@ dialect deviates overrides the request builders (or response parsing) on a
 subclass, so each quirk lives with the provider that has it.
 
 Connections reference providers by key through
-:class:`~interloper.oauth.config.OAuthConfig`, which resolves display
+`OAuthConfig`, which resolves display
 metadata (auth_url, label, icon) from the registry; the API's sign-in
 exchange and connection renewal both send whatever request the provider
 builds.
 
 Every provider — including the built-ins shipped by interloper-core —
-registers through the ``interloper.oauth_providers`` entry-point group::
+registers through the ``interloper.oauth_providers`` entry-point group:
 
-    [project.entry-points."interloper.oauth_providers"]
-    acme = "my_pkg.oauth:ACME_PROVIDER"
+```py
+[project.entry-points."interloper.oauth_providers"]
+acme = "my_pkg.oauth:ACME_PROVIDER"
+```
 
 The registry is loaded lazily from installed-package metadata, so discovery
 works in any process where the package is installed — no import-order
@@ -230,11 +232,12 @@ PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adop
 
 # -- In-house app credentials (environment) ------------------------------------
 
+
 @dataclass(frozen=True)
 class OAuthAppCredentials:
     """The in-house OAuth app credential trio for one provider.
 
-    Resolved from the environment complete-or-nothing: :meth:`from_env`
+    Resolved from the environment complete-or-nothing: `from_env`
     never yields a partial set, so consumers cannot observe a
     half-configured provider.
     """

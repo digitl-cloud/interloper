@@ -103,9 +103,7 @@ def main() -> None:
         store.backfills.create(
             org_id, component_id=flaky.id, start_key="2026-08-28", end_key="2026-09-01", concurrency=2
         )
-        store.backfills.create(
-            org_id, component_id=monthly.id, start_key="2026-05", end_key="2026-08", concurrency=2
-        )
+        store.backfills.create(org_id, component_id=monthly.id, start_key="2026-05", end_key="2026-08", concurrency=2)
         store.runs.create(org_id, component_id=daily_job.id, partition_key="2026-09-02")
         store.runs.create(org_id, component_id=flaky_job.id, partition_key="2026-09-02")
         store.runs.create(org_id, component_id=monthly_job.id, partition_key="2026-08")

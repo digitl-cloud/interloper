@@ -20,6 +20,8 @@ def register(
     launch_parser = subparsers.add_parser(
         "launch",
         help="Execute a single run by ID",
+        description="Execute one persisted run. On any failure before the executor takes over, the run is "
+        "marked failed.",
     )
     launch_parser.add_argument(
         "run_id",

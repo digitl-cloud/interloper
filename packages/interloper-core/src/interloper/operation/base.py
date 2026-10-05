@@ -1,17 +1,17 @@
 """Operation: the unit of work a runner executes.
 
-Two contracts, one hierarchy. A :class:`Workload` is what a run may target:
-it flattens into operations through :meth:`Workload.operations` and declares
-whether its runs bill against quotas. An :class:`Operation` is the node the
+Two contracts, one hierarchy. A `Workload` is what a run may target:
+it flattens into operations through `Workload.operations` and declares
+whether its runs bill against quotas. An `Operation` is the node the
 DAG orders and a runner drives: materializing an asset is one operation,
 renewing a connection's credentials is another, and every operation is
 trivially the workload of itself. Groupings (a source, a job) are workloads
 only: they provide operations, they never execute.
 
 The runner is agnostic of what a node does: it calls
-:meth:`Operation.execute` with an :class:`OperationContext` of plain facts,
-records the returned :class:`OperationResult` effects on the node's
-execution info, and consults :meth:`Operation.failure` for a
+`Operation.execute` with an `OperationContext` of plain facts,
+records the returned `OperationResult` effects on the node's
+execution info, and consults `Operation.failure` for a
 persistence-safe message when execution raises. Effects are values: which
 fields to merge into the component's config, which to stamp onto its state,
 applied by the platform envelope after the run; core never holds a handle
@@ -61,7 +61,7 @@ class OperationResult:
     machine-owned state: how an operation's effects reach the row without
     the operation knowing the store. ``error`` carries the
     persistence-safe message of a failed execution, set by
-    :meth:`Operation.failure`; success paths leave it unset (terminal
+    `Operation.failure`; success paths leave it unset (terminal
     status is the runner's, not the operation's).
     """
 
@@ -95,7 +95,7 @@ class Operation(Component, Workload):
     An operation is a component: the DAG, the runner and the platform all
     address it by its component identity, and its events and executions are
     keyed by its row id. What it adds to a component is the execution
-    contract (:meth:`execute`, :meth:`failure`) and the node attributes the
+    contract (`execute`, `failure`) and the node attributes the
     graph machinery reads, which ``Asset`` (the graph-structured, partitioned
     operation) narrows with its own fields and properties.
 
@@ -217,13 +217,13 @@ class Operation(Component, Workload):
         """Whether another attempt at this operation is worth making.
 
         Consulted by the runner before it spends an attempt from
-        :attr:`retry`. Override to recognise a permanent error, such as a
+        `retry`. Override to recognise a permanent error, such as a
         vendor rejecting a request it will reject identically every time. The
         default is permissive: the budget, not the classifier, is what bounds
         waste.
 
         Args:
-            error: The exception :meth:`execute` raised.
+            error: The exception `execute` raised.
 
         Returns:
             ``True`` when the failure may be transient.
@@ -233,12 +233,12 @@ class Operation(Component, Workload):
     def failure(self, error: Exception) -> OperationResult:
         """Describe a failed execution in terms the platform can persist.
 
-        Consulted by the runner when :meth:`execute` raises. Override to
+        Consulted by the runner when `execute` raises. Override to
         curate the message or attach state effects (e.g. a retry slot); the
         default formats the error with pydantic input values stripped.
 
         Args:
-            error: The exception :meth:`execute` raised.
+            error: The exception `execute` raised.
 
         Returns:
             A result carrying the message and any state effects.

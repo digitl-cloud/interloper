@@ -1,3 +1,7 @@
+---
+render_macros: true
+---
+
 # Settings
 
 `AppSettings` is the runtime configuration the CLI and the platform read. It loads from three
@@ -13,71 +17,11 @@ settings.runner.type
 `AppSettings.activate(settings)` pins an instance for the current process (the CLI does this);
 `clear_active()` releases it.
 
-## Sections the framework uses
+## Sections
 
-### `runner`
+In `interloper.yaml` a section is a mapping under its key; in the environment every field is the section's prefix followed by the field name in upper case (`INTERLOPER_RUNNER_TYPE`). The framework reads `runner`, `otel`, `catalog` and `secrets`; the other sections configure the platform packages.
 
-Prefix `INTERLOPER_RUNNER_`.
-
-| Field | Default | Meaning |
-|-------|---------|---------|
-| `type` | `"async"` | Registry key of the runner: `async`, `serial`, `multi_process`, or one registered by another package. |
-| `config` | `{}` | Keyword arguments for the runner class. |
-
-### `otel`
-
-Prefix `INTERLOPER_OTEL_`. See [Telemetry](../guide/telemetry.md#settings).
-
-| Field | Default |
-|-------|---------|
-| `enabled` | `false` |
-| `endpoint` | `""` |
-| `protocol` | `"grpc"` |
-| `headers` | `""` |
-| `service_name` | `""` (reported as `interloper`) |
-| `traces` | `true` |
-| `metrics` | `true` |
-| `sample_ratio` | `1.0` |
-| `metric_export_interval` | `60` |
-
-### `catalog`
-
-`INTERLOPER_CATALOG`, a list of import paths. Empty enables every installed component. See
-[Catalog](../guide/catalog.md#building-a-catalog).
-
-### `secrets`
-
-Prefix `INTERLOPER_`.
-
-| Field | Default | Meaning |
-|-------|---------|---------|
-| `encryption_key` | `""` | Key for encrypting stored resource configuration. Required by the platform to persist resources; unused by the core alone. |
-
-## Sections used by platform packages
-
-These sections live in the core because `AppSettings` does, but the core does not read them.
-They configure `interloper-db`, `interloper-api`, `interloper-scheduler`, `interloper-agent`
-and `interloper-mcp`.
-
-| Section | Prefix | Fields |
-|---------|--------|--------|
-| `postgres` | `INTERLOPER_POSTGRES_` | `host`, `port`, `user`, `password`, `database`, `statement_timeout`; `dsn` property |
-| `auth` | `INTERLOPER_AUTH_` | `google_client_id`, `google_client_secret`, `google_redirect_uri`, `cookie_secure`, `session_expiry_days`, `super_admin_emails`, `allowed_domains` |
-| `server` | `INTERLOPER_SERVER_` | `enabled`, `host`, `port` |
-| `cron` | `INTERLOPER_CRON_` | `enabled`, `reconcile_interval`, `max_execution_delay`, `batch_size` |
-| `renewal` | `INTERLOPER_RENEWAL_` | `enabled`, `reconcile_interval`, `batch_size` |
-| `worker` | `INTERLOPER_WORKER_` | `enabled`, `poll_interval` |
-| `reaper` | `INTERLOPER_REAPER_` | `enabled`, `timeout`, `poll_interval` |
-| `launcher` | `INTERLOPER_LAUNCHER_` | `type`, `config` |
-| `smtp` | `INTERLOPER_SMTP_` | `host`, `port`, `user`, `password`, `from_addr` |
-| `agent` | `INTERLOPER_AGENT_` | `enabled`, `model` |
-| `mcp` | `INTERLOPER_MCP_` | `host`, `port`, `external_url`, `token`, `org_id` |
-| `quota` | `INTERLOPER_QUOTA_` | `max_sources`, `max_assets_per_source`, `max_successful_runs_per_month`, `max_backfill_partitions` |
-
-`postgres.statement_timeout` (`INTERLOPER_POSTGRES_STATEMENT_TIMEOUT`) is a number of seconds, unset by
-default. When set, `interloper-db` sends it as the libpq `statement_timeout` connection option, so the
-server cancels any statement of the process that runs longer. Unset leaves the server's own setting
-untouched; SQLite ignores it.
+{{ settings_reference() }}
 
 ## YAML example
 

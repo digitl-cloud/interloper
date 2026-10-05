@@ -17,7 +17,7 @@ class Maturity(str, Enum):
     avoid it.
 
     A composite, such as an asset inside its source, shows the
-    :meth:`least` mature of its parts, ``DEPRECATED`` counting as the least:
+    `least` mature of its parts, ``DEPRECATED`` counting as the least:
     a deprecated source deprecates its assets, and a deprecated asset stays
     deprecated whatever its source.
     """

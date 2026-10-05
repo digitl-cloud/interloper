@@ -1,6 +1,6 @@
 """Custom exception hierarchy for the Interloper framework.
 
-All exceptions inherit from :class:`InterloperError`, allowing users to catch
+All exceptions inherit from `InterloperError`, allowing users to catch
 any framework error with a single ``except InterloperError`` clause, or target
 specific domains (``DAGError``, ``ConfigError``, etc.) for finer control.
 
@@ -223,7 +223,7 @@ class ComponentDriftError(InterloperError):
     Raised when hydrating a stored source or asset whose catalog key has
     *drifted*: the underlying class was renamed or removed from the code
     (``missing``), or is not exposed by this deployment's catalog
-    (``disabled``). Distinct from :class:`HydrationError` (which signals a
+    (``disabled``). Distinct from `HydrationError` (which signals a
     reconstruction failure for a key that *does* resolve) so callers and
     the API layer can treat drift as a recoverable, user-resolvable state
     rather than a hard failure.

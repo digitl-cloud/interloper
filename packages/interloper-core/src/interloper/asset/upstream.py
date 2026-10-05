@@ -41,7 +41,7 @@ class Upstream:
         ``list[dict]``, and a leg with nothing materialized comes out empty.
 
         Returns:
-            One mapping per row; ``[]`` when :attr:`data` is ``None``.
+            One mapping per row; ``[]`` when `data` is ``None``.
         """
         if self.data is None:
             return []

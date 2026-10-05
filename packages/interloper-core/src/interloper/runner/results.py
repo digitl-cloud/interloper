@@ -25,12 +25,14 @@ class ExecutionStatus(str, Enum):
     CANCELED = "canceled"
 
 
-_TERMINAL_STATUSES = frozenset({
-    ExecutionStatus.COMPLETED,
-    ExecutionStatus.FAILED,
-    ExecutionStatus.CANCELED,
-    ExecutionStatus.SKIPPED,
-})
+_TERMINAL_STATUSES = frozenset(
+    {
+        ExecutionStatus.COMPLETED,
+        ExecutionStatus.FAILED,
+        ExecutionStatus.CANCELED,
+        ExecutionStatus.SKIPPED,
+    }
+)
 
 
 @dataclass
@@ -38,7 +40,7 @@ class ExecutionInfo:
     """Execution information for a single operation.
 
     ``effects`` carries the executed operation's
-    :class:`~interloper.operation.base.OperationResult` — the config and
+    `OperationResult` — the config and
     state fields the platform envelope persists after the run. ``None``
     until the node reaches a terminal state, and for skipped or canceled
     nodes, which never executed.

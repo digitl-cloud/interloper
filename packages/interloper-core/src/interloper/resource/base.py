@@ -26,16 +26,18 @@ class Resource(BaseSettings, Component):
 
     Extends ``BaseSettings``, so resource values can be loaded from
     environment variables, .env files, or passed directly. Subclass to
-    define a custom resource::
+    define a custom resource:
 
-        class MyCache(Resource):
-            model_config = SettingsConfigDict(env_prefix="my_cache_")
+    ```py
+    class MyCache(Resource):
+        model_config = SettingsConfigDict(env_prefix="my_cache_")
 
-            host: str = "localhost"
-            port: int = 6379
+        host: str = "localhost"
+        port: int = 6379
 
-            def get(self, key: str) -> Any: ...
-            def set(self, key: str, value: Any) -> None: ...
+        def get(self, key: str) -> Any: ...
+        def set(self, key: str, value: Any) -> None: ...
+    ```
 
     Resources are declared on assets via decorator kwargs or type annotations
     and resolved through a cascade: asset → source → auto-instantiate.

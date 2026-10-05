@@ -38,7 +38,7 @@ def validate_key(key: str) -> None:
 def to_identifier(text: str) -> str:
     """Coerce text into a lowercase identifier (letters, digits, underscores).
 
-    Unlike :func:`to_snake_case`, existing underscores are preserved verbatim
+    Unlike `to_snake_case`, existing underscores are preserved verbatim
     (including ``__`` runs used as name separators) — only invalid characters
     are replaced.
 

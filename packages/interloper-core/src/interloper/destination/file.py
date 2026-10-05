@@ -20,9 +20,9 @@ class FileDestination(Destination):
     Data is stored under ``{base_path}/{dataset}/{table}/data.pkl``
     (or ``{base_path}/{table}/data.pkl`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory; the partition
-    dispatch (including window splitting) is :class:`Destination`'s.
+    dispatch (including window splitting) is `Destination`'s.
 
-    Unlike :class:`~interloper.destination.csv.CSVDestination` this stores
+    Unlike `CSVDestination` this stores
     whatever the asset returned, tabular or not — so a window write of a
     non-tabular object, which no representation can split, stores that whole
     object under each partition.

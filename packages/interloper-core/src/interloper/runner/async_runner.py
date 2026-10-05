@@ -32,13 +32,15 @@ class AsyncRunner(Runner):
     Sync ``data()`` functions are automatically offloaded to threads via
     ``asyncio.to_thread``, while async ``data()`` functions run natively
     on the event loop. Either way, exactly one event loop is created per
-    run (not per asset)::
+    run (not per asset):
 
-        # async
-        result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)
+    ```py
+    # async
+    result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)
 
-        # sync edge (scripts, REPL, notebooks)
-        result = il.run(AsyncRunner(on_event=log_event).run(dag))
+    # sync edge (scripts, REPL, notebooks)
+    result = il.run(AsyncRunner(on_event=log_event).run(dag))
+    ```
     """
 
     max_workers: int = 4
@@ -170,7 +172,7 @@ class AsyncRunner(Runner):
     ) -> Any:
         """Execute a single operation with state tracking, retrying in place.
 
-        An operation carrying a :class:`~interloper.retry.base.RetryPolicy`
+        An operation carrying a `RetryPolicy`
         gets another attempt whenever it raises an error it calls retryable
         and its budget allows one: the failure is recorded as retried, the
         backoff is slept, and the same node executes again. An operation
@@ -181,7 +183,7 @@ class AsyncRunner(Runner):
         A node still working through its attempts has not failed, so nothing
         downstream reacts to it.
 
-        On failure the operation's own :meth:`~Operation.failure` hook
+        On failure the operation's own `failure` hook
         curates the recorded message and effects, and the traceback is
         attached only when the operation's class allows it — operations
         whose raw errors embed secrets opt out.
@@ -195,9 +197,7 @@ class AsyncRunner(Runner):
             The execution's effects, or ``None`` if the operation failed.
         """
         effective_partition = operation.effective_partition(partition_or_window)
-        span_attrs = attributes.from_metadata(
-            operation._event_metadata(self.state.metadata, effective_partition)
-        )
+        span_attrs = attributes.from_metadata(operation._event_metadata(self.state.metadata, effective_partition))
         context = OperationContext(
             partition_or_window=effective_partition,
             dag=self.state.dag,

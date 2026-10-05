@@ -1,7 +1,7 @@
 """Registry: the one primitive behind the framework's name → object registries.
 
 Every registry in the framework — kinds, runners, OAuth providers,
-representations — is an instance of :class:`Registry`: a lazily-populated
+representations — is an instance of `Registry`: a lazily-populated
 ``name → object`` mapping, optionally fed by an entry-point group. One
 notion, many instances; each instance's docstring says what it holds and
 who consumes it.
@@ -20,7 +20,7 @@ T = TypeVar("T")
 class Registry(Generic[T]):
     """Name → object registry, optionally fed by an entry-point group.
 
-    Entries register explicitly via :meth:`register`, or are loaded lazily
+    Entries register explicitly via `register`, or are loaded lazily
     from *group* on first lookup. Registration is first-wins and idempotent.
     *adopt* transforms a loaded entry into its ``(name, object)`` pair —
     the default keeps the entry name and object as declared.
@@ -118,10 +118,10 @@ class Registry(Generic[T]):
         return tuple(sorted(self._entries.items()))
 
     def __iter__(self) -> Iterator[str]:
-        """Iterate the registered names, in :meth:`keys` order.
+        """Iterate the registered names, in `keys` order.
 
         Defined so iteration reads as a mapping's does. Without it, the
-        presence of :meth:`__getitem__` makes Python fall back to the legacy
+        presence of `__getitem__` makes Python fall back to the legacy
         sequence protocol and call ``__getitem__(0)``, which raises
         ``KeyError`` — and linters then suggest ``for name in registry``
         over the correct ``registry.keys()``.

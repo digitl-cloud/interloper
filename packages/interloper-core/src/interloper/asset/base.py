@@ -104,17 +104,21 @@ class Asset(Operation):
     injected, and every other parameter declares a relation read off its
     annotation. A component class is filled with whatever is bound to it, and
     ``il.Upstream`` (or ``list[il.Upstream]``) with the data read from an
-    upstream asset of the parameter's name::
+    upstream asset of the parameter's name:
 
-        class Revenue(Asset):
-            def data(self, connection: MyConnection, orders: Upstream) -> Any:
-                return connection.price(orders.data)
-
-    Or use the ``@asset`` decorator for a functional style::
-
-        @asset
-        def revenue(connection: MyConnection, orders: Upstream) -> Any:
+    ```py
+    class Revenue(Asset):
+        def data(self, connection: MyConnection, orders: Upstream) -> Any:
             return connection.price(orders.data)
+    ```
+
+    Or use the ``@asset`` decorator for a functional style:
+
+    ```py
+    @asset
+    def revenue(connection: MyConnection, orders: Upstream) -> Any:
+        return connection.price(orders.data)
+    ```
     """
 
     # Definition
@@ -151,16 +155,16 @@ class Asset(Operation):
         """Collect the declared relations, then infer one per ``data()`` parameter.
 
         The signature is the declaration: a parameter that is neither reserved
-        (see :data:`_RESERVED_PARAMETERS`), variadic (``*args``, ``**extra``:
+        (see `_RESERVED_PARAMETERS`), variadic (``*args``, ``**extra``:
         nothing is passed through them) nor already declared as a relation
-        (by ``relations=``, a :class:`Relation` attribute or an annotation, all
+        (by ``relations=``, a `Relation` attribute or an annotation, all
         of which win) gets a relation inferred from its annotation. An asset
         therefore says what it needs once, where it uses it.
 
         Inference only runs on a class that writes its own ``data()``; a
         subclass that inherits one inherits its relations with it. A parameter
         nothing could ever fill is a definition error, raised from
-        :meth:`_infer_relation` as the class is created.
+        `_infer_relation` as the class is created.
         """
         super()._collect()
         if "data" not in cls.__dict__:
@@ -188,7 +192,7 @@ class Asset(Operation):
 
         Resolving a string annotation needs the globals of the module the
         function was written in. The ``@asset`` decorator's ``data()`` is a
-        wrapper, so :func:`typing.get_type_hints` follows its ``__wrapped__``
+        wrapper, so `typing.get_type_hints` follows its ``__wrapped__``
         to the decorated function, as it does for any wrapper.
 
         Returns:
@@ -253,7 +257,7 @@ class Asset(Operation):
         """The source this asset belongs to, if any.
 
         An asset's owning source *is* its parent (see
-        :attr:`~interloper.component.base.Component.parent`); only a source
+        `parent`); only a source
         ever parents an asset, so the cast is safe.
         """
         return cast("Source | None", self.parent)
@@ -263,7 +267,7 @@ class Asset(Operation):
         """The physical table (or leaf) name this asset materializes to.
 
         Derived, never stored: the owning source composes it (see
-        :meth:`~interloper.source.base.Source.asset_table`) and the result is
+        `asset_table`) and the result is
         coerced to a valid identifier. Standalone assets use their class key.
         """
         source = self.source
@@ -294,7 +298,7 @@ class Asset(Operation):
     def definition(cls) -> AssetDefinition:
         """Produce a structured definition of this asset class.
 
-        The path comes from :meth:`classpath`, so a source-owned asset gets
+        The path comes from `classpath`, so a source-owned asset gets
         the composite ``"module.Source:asset_kind"`` form.
 
         Returns:
@@ -379,8 +383,8 @@ class Asset(Operation):
     async def execute(self, context: OperationContext) -> OperationResult:
         """Materialize this asset: the asset's operation.
 
-        The runner-facing adapter over :meth:`materialize_async`; the manual
-        entry points (:meth:`run`, :meth:`materialize`) stay the authoring
+        The runner-facing adapter over `materialize_async`; the manual
+        entry points (`run`, `materialize`) stay the authoring
         API.
 
         Args:
@@ -402,12 +406,14 @@ class Asset(Operation):
         """Execute the asset and return the result without writing to destination.
 
         Sync entrypoint for scripts, REPLs, and notebooks; drives
-        :meth:`run_async` to completion on the bridge loop
-        (see :func:`interloper.run`)::
+        `run_async` to completion on the bridge loop
+        (see `interloper.run`):
 
-            data = asset.run()
+        ```py
+        data = asset.run()
+        ```
 
-        Async code awaits :meth:`run_async` instead.
+        Async code awaits `run_async` instead.
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
@@ -495,12 +501,14 @@ class Asset(Operation):
         """Execute the asset and write the result to all configured destinations.
 
         Sync entrypoint for scripts, REPLs, and notebooks; drives
-        :meth:`materialize_async` to completion on the bridge loop
-        (see :func:`interloper.run`)::
+        `materialize_async` to completion on the bridge loop
+        (see `interloper.run`):
 
-            asset.materialize()
+        ```py
+        asset.materialize()
+        ```
 
-        Async code awaits :meth:`materialize_async` instead.
+        Async code awaits `materialize_async` instead.
 
         Args:
             partition_or_window: Partition or PartitionWindow for this run.
@@ -554,7 +562,7 @@ class Asset(Operation):
     def partition_row_counts(self) -> dict[str, int]:
         """Return row counts grouped by this asset's partition column.
 
-        Delegates to :meth:`Destination.partition_row_counts` using the
+        Delegates to `Destination.partition_row_counts` using the
         configured default destination.
 
         Returns:
@@ -584,10 +592,10 @@ class Asset(Operation):
 
         One value per parameter: ``context`` and ``source`` are injected
         directly, an ``asset``-kind relation is read through
-        :meth:`_read_upstreams` (every leg when it is many-valued, the single
+        `_read_upstreams` (every leg when it is many-valued, the single
         leg or ``None`` otherwise), and any other relation resolves to what is
         bound to it, or to what it can fill itself with (see
-        :meth:`~interloper.component.base.Component.resolve`).
+        `resolve`).
 
         Args:
             context: The execution context injected as the ``context`` parameter.
@@ -666,7 +674,7 @@ class Asset(Operation):
             metadata: Run-level metadata carried onto the emitted events.
 
         Returns:
-            One :class:`Upstream` per leg present in *dag*, in binding order.
+            One `Upstream` per leg present in *dag*, in binding order.
 
         Raises:
             AssetError: If a leg cannot be read for a reason other than
@@ -1060,7 +1068,7 @@ class Asset(Operation):
         Nothing is resolved here: a source trickles its own destinations into
         every asset that has none of its own at construction, so what is bound
         is the whole answer. The check catches a binding made by something
-        other than :meth:`~interloper.component.base.Component.bind` (a
+        other than `bind` (a
         hydration writing straight into the instance, say).
 
         Returns:

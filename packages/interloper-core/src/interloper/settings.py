@@ -7,7 +7,8 @@ Loads settings from three sources with this priority (highest first):
 3. Field defaults
 
 Each section has its own env prefix so field names with underscores
-are unambiguous.
+are unambiguous. Every field's ``description`` is the settings reference
+the documentation site renders, so it is user-facing copy.
 """
 
 from __future__ import annotations
@@ -26,21 +27,84 @@ from pydantic_settings import (
 PREFIX = "INTERLOPER_"
 
 
-class PostgresSettings(BaseSettings):
-    """PostgreSQL connection settings.
+class RunnerSettings(BaseSettings):
+    """Runner settings: the runner type and its own configuration.
 
-    ``statement_timeout`` caps every statement of the process engine, in seconds.
-    ``None`` (the default) leaves the server's own setting untouched.
+    Built-in types: ``async`` (default, in-process concurrency via ``max_workers``),
+    ``serial`` (``async`` with a single slot), ``multi_process``. The ``docker``
+    and ``kubernetes`` runners register through their own packages.
     """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUNNER_")
+
+    type: str = Field(
+        default="async",
+        description="Registry key of the runner: `async`, `serial`, `multi_process`, or one another package registers.",
+    )
+    config: dict[str, Any] = Field(default_factory=dict, description="Keyword arguments for the runner class.")
+
+
+class TelemetrySettings(BaseSettings):
+    """OpenTelemetry settings: OTLP traces and metrics.
+
+    Exporting requires the ``otel`` extra (``interloper[otel]``); when it is
+    missing, enabling telemetry logs a warning and stays a no-op.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}OTEL_")
+
+    enabled: bool = Field(
+        default=False,
+        description="The single master switch; the SDK is never activated from the standard `OTEL_*` variables alone.",
+    )
+    endpoint: str = Field(
+        default="", description="OTLP endpoint; empty falls through to `OTEL_EXPORTER_OTLP_ENDPOINT`."
+    )
+    protocol: str = Field(default="grpc", description="OTLP protocol: `grpc` or `http/protobuf`.")
+    headers: str = Field(
+        default="",
+        description="OTLP headers as `key=value` pairs; empty falls through to `OTEL_EXPORTER_OTLP_HEADERS`.",
+    )
+    service_name: str = Field(default="", description="Reported service name; empty reports `interloper`.")
+    traces: bool = Field(default=True, description="Export traces.")
+    metrics: bool = Field(default=True, description="Export metrics.")
+    sample_ratio: float = Field(default=1.0, description="Fraction of traces sampled, parent-based.")
+    metric_export_interval: int = Field(default=60, description="Seconds between metric exports.")
+
+
+class SecretsSettings(BaseSettings):
+    """Secrets used to protect sensitive data at rest.
+
+    Encryption is the default, so a key is required to persist resources:
+    with none set, writes fail closed rather than storing plaintext. The
+    Helm chart and the runner launchers forward ``INTERLOPER_ENCRYPTION_KEY``
+    into spawned containers.
+    """
+
+    model_config = SettingsConfigDict(env_prefix=PREFIX)
+
+    encryption_key: str = Field(
+        default="",
+        description="Fernet key encrypting stored resource payloads; required by the platform to persist resources.",
+    )
+
+
+class PostgresSettings(BaseSettings):
+    """PostgreSQL connection settings."""
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}POSTGRES_")
 
-    host: str = "localhost"
-    port: int = 5432
-    user: str = ""
-    password: str = ""
-    database: str = "interloper"
-    statement_timeout: float | None = Field(default=None, gt=0)
+    host: str = Field(default="localhost", description="Database host.")
+    port: int = Field(default=5432, description="Database port.")
+    user: str = Field(default="", description="Database user.")
+    password: str = Field(default="", description="Database password.")
+    database: str = Field(default="interloper", description="Database name.")
+    statement_timeout: float | None = Field(
+        default=None,
+        gt=0,
+        description="Seconds after which the server cancels a statement of the process engine, sent as the libpq "
+        "`statement_timeout` option; unset leaves the server's own setting untouched.",
+    )
 
     @property
     def dsn(self) -> str:
@@ -49,30 +113,32 @@ class PostgresSettings(BaseSettings):
 
 
 class AuthSettings(BaseSettings):
-    """Authentication settings (Google OAuth, cookies).
+    """Authentication settings: Google OAuth and the session cookie.
 
-    ``super_admin_emails`` bootstraps platform-wide super-admins: a user whose
-    Google email is listed gets ``is_super_admin`` set by ``interloper db init``
-    and on login. Promotion only: removing an email never demotes an existing
-    super-admin. The env var takes a
-    comma-separated list (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``).
-
-    ``allowed_domains`` restricts who can sign up (first login creates a
-    profile). Empty (the default) keeps signup open to any Google account. When
-    set, a new profile is only created for emails on a listed domain, configured
-    super-admins, or emails holding a pending invitation; existing profiles
-    always keep signing in. Comma-separated env var, like the emails list.
+    The list fields take a comma-separated string from the environment
+    (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``) or a list from
+    YAML.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}AUTH_")
 
-    google_client_id: str = ""
-    google_client_secret: str = ""
-    google_redirect_uri: str = ""
-    cookie_secure: bool = True
-    session_expiry_days: int = 30
-    super_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
-    allowed_domains: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    google_client_id: str = Field(default="", description="Google OAuth web client id.")
+    google_client_secret: str = Field(default="", description="Google OAuth web client secret.")
+    google_redirect_uri: str = Field(
+        default="", description="Redirect URI registered on the Google OAuth client (`/api/auth/google/callback`)."
+    )
+    cookie_secure: bool = Field(default=True, description="Send the session cookie over HTTPS only.")
+    session_expiry_days: int = Field(default=30, description="Days a session stays valid.")
+    super_admin_emails: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Google emails promoted to platform-wide super-admin by `interloper db init` and on login; "
+        "promotion only, removing an email never demotes.",
+    )
+    allowed_domains: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description="Email domains allowed to sign up; empty keeps signup open. Configured super-admins, pending "
+        "invitations and existing profiles always pass.",
+    )
 
     @field_validator("super_admin_emails", "allowed_domains", mode="before")
     @classmethod
@@ -92,36 +158,19 @@ class AuthSettings(BaseSettings):
         return [entry.strip().lower().lstrip("@") for entry in value if entry and entry.strip()]
 
 
-class SecretsSettings(BaseSettings):
-    """Secrets used to protect sensitive data at rest.
-
-    ``encryption_key`` enables symmetric encryption of resource ``data`` blobs.
-    Encryption is the default, so a key is required to persist resources: with
-    none set, writes fail closed (rejected) rather than storing plaintext. It is
-    read from ``INTERLOPER_ENCRYPTION_KEY``; the Helm chart and runner launchers
-    forward that exact variable into spawned containers.
-    """
-
-    model_config = SettingsConfigDict(env_prefix=PREFIX)
-
-    encryption_key: str = ""
-
-
 class ServerSettings(BaseSettings):
-    """HTTP server settings (API + frontend).
-
-    ``external_url`` is the public base URL of the app (e.g.
-    ``https://app.interloper.dev``), for links built outside a browser
-    request, such as the setup hand-off an MCP tool returns. Empty means
-    the deployment has none.
-    """
+    """HTTP server settings: the API and the app."""
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}SERVER_")
 
-    enabled: bool = True
-    host: str = "0.0.0.0"
-    port: int = 3000
-    external_url: str = ""
+    enabled: bool = Field(default=True, description="Serve the API and the app.")
+    host: str = Field(default="0.0.0.0", description="Bind host.")
+    port: int = Field(default=3000, description="Bind port.")
+    external_url: str = Field(
+        default="",
+        description="Public base URL of the app (`https://app.example.com`), for links built outside a browser "
+        "request such as the setup hand-off an MCP tool returns; empty means the deployment has none.",
+    )
 
 
 class CronSettings(BaseSettings):
@@ -129,10 +178,56 @@ class CronSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}CRON_")
 
-    enabled: bool = True
-    reconcile_interval: int = 10
-    max_execution_delay: int | None = None
-    batch_size: int = 50
+    enabled: bool = Field(default=True, description="Run the cron controller.")
+    reconcile_interval: int = Field(default=10, description="Seconds between reconciliations.")
+    max_execution_delay: int | None = Field(
+        default=None,
+        description="Seconds a due job may fire late; unset uses the reconcile interval, and it may not be shorter.",
+    )
+    batch_size: int = Field(default=50, description="Due jobs dispatched per reconciliation.")
+
+
+class RenewalSettings(BaseSettings):
+    """Renewal controller settings: connection credential renewal (singleton)."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RENEWAL_")
+
+    enabled: bool = Field(default=True, description="Run the renewal controller.")
+    reconcile_interval: int = Field(default=60, description="Seconds between reconciliations.")
+    batch_size: int = Field(default=50, description="Connections renewed per reconciliation.")
+
+
+class WorkerSettings(BaseSettings):
+    """Queue worker settings."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}WORKER_")
+
+    enabled: bool = Field(default=True, description="Run the queue worker.")
+    poll_interval: int = Field(default=5, description="Seconds between queue polls.")
+
+
+class ReaperSettings(BaseSettings):
+    """Reaper settings: timed-out run cleanup (singleton)."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}REAPER_")
+
+    enabled: bool = Field(default=True, description="Run the reaper.")
+    timeout: int = Field(
+        default=600,
+        description="Seconds a run the launcher cannot introspect may stay running before the reaper fails it.",
+    )
+    poll_interval: int = Field(default=60, description="Seconds between sweeps.")
+
+
+class LauncherSettings(BaseSettings):
+    """Launcher settings: the launcher type and its own configuration."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}LAUNCHER_")
+
+    type: str = Field(
+        default="in_process", description="Registry key of the launcher: `in_process`, `docker` or `kubernetes`."
+    )
+    config: dict[str, Any] = Field(default_factory=dict, description="Keyword arguments for the launcher class.")
 
 
 class SmtpSettings(BaseSettings):
@@ -140,11 +235,11 @@ class SmtpSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}SMTP_")
 
-    host: str = ""
-    port: int = 587
-    user: str = ""
-    password: str = ""
-    from_addr: str = "noreply@interloper.dev"
+    host: str = Field(default="", description="SMTP host; sending is enabled once host, user and password are set.")
+    port: int = Field(default=587, description="SMTP port.")
+    user: str = Field(default="", description="SMTP user.")
+    password: str = Field(default="", description="SMTP password.")
+    from_addr: str = Field(default="noreply@interloper.dev", description="Sender address of invitation emails.")
 
     @property
     def enabled(self) -> bool:
@@ -153,120 +248,48 @@ class SmtpSettings(BaseSettings):
 
 
 class AgentSettings(BaseSettings):
-    """AI agent settings (chat assistant served by the API).
+    """AI agent settings: the chat assistant the API serves.
 
     The agent is only available when the ``agent`` extra is installed
-    (interloper-api[agent]); ``enabled`` switches it off without changing
-    the installation. ``model`` is a pydantic-ai ``provider:model`` name
-    (``google:gemini-2.5-flash``, ``google-cloud:gemini-2.5-flash`` for
-    Vertex, ``anthropic:claude-sonnet-4-5``, ``openai:gpt-5``); provider
-    credentials are read from the provider's standard environment variables.
+    (``interloper-api[agent]``).
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}AGENT_")
 
-    enabled: bool = True
-    model: str = "google:gemini-2.5-flash"
+    enabled: bool = Field(default=True, description="Serve the agent; off leaves the installation untouched.")
+    model: str = Field(
+        default="google:gemini-2.5-flash",
+        description="pydantic-ai `provider:model` name (`google:gemini-2.5-flash`, `google-cloud:gemini-2.5-flash` "
+        "for Vertex, `anthropic:claude-sonnet-4-5`, `openai:gpt-5`); provider credentials come from the provider's "
+        "standard environment variables.",
+    )
 
 
 class McpSettings(BaseSettings):
-    """MCP server settings (interloper-mcp).
+    """MCP server settings (``interloper-mcp``).
 
-    ``external_url`` is the public base URL of the hosted server (e.g.
-    ``https://mcp.interloper.app``); it feeds the OAuth protected-resource
-    metadata so clients can discover the auth requirements. ``token`` and
-    ``org_id`` only apply to the stdio transport, which authenticates once
-    at startup: a personal access token, or — for local development only —
-    a direct organisation scope without a token.
+    ``token`` and ``org_id`` only apply to the stdio transport, which
+    authenticates once at startup.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}MCP_")
 
-    host: str = "0.0.0.0"
-    port: int = 3001
-    external_url: str = ""
-    token: str = ""
-    org_id: str = ""
-
-
-class LauncherSettings(BaseSettings):
-    """Launcher settings (type + launcher-specific config)."""
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}LAUNCHER_")
-
-    type: str = "in_process"
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
-class RunnerSettings(BaseSettings):
-    """Runner settings (type + runner-specific config).
-
-    Built-in types: ``async`` (default, in-process concurrency via ``max_workers``),
-    ``serial`` (``async`` with a single slot), ``multi_process``. The ``docker``
-    and ``kubernetes`` runners register through their own packages.
-    """
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUNNER_")
-
-    type: str = "async"
-    config: dict[str, Any] = Field(default_factory=dict)
-
-
-class WorkerSettings(BaseSettings):
-    """Queue worker settings."""
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}WORKER_")
-
-    enabled: bool = True
-    poll_interval: int = 5
-
-
-class TelemetrySettings(BaseSettings):
-    """OpenTelemetry settings (OTLP traces + metrics).
-
-    ``enabled`` is the single master switch — the SDK is never activated
-    from the standard ``OTEL_*`` environment variables alone. Exporting
-    requires the ``otel`` extra (``interloper[otel]``); when it is missing,
-    enabling telemetry logs a warning and stays a no-op. Fields left empty
-    (``endpoint``, ``headers``) fall through to the SDK's own
-    ``OTEL_EXPORTER_OTLP_*`` environment variables.
-    """
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}OTEL_")
-
-    enabled: bool = False
-    endpoint: str = ""
-    protocol: str = "grpc"
-    headers: str = ""
-    service_name: str = ""
-    traces: bool = True
-    metrics: bool = True
-    sample_ratio: float = 1.0
-    metric_export_interval: int = 60
-
-
-class RenewalSettings(BaseSettings):
-    """Renewal controller settings (connection credential renewal; singleton)."""
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RENEWAL_")
-
-    enabled: bool = True
-    reconcile_interval: int = 60
-    batch_size: int = 50
-
-
-class ReaperSettings(BaseSettings):
-    """Reaper settings (timed-out run cleanup; singleton)."""
-
-    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}REAPER_")
-
-    enabled: bool = True
-    timeout: int = 600
-    poll_interval: int = 60
+    host: str = Field(default="0.0.0.0", description="Bind host.")
+    port: int = Field(default=3001, description="Bind port.")
+    external_url: str = Field(
+        default="",
+        description="Public base URL of the hosted server (`https://mcp.example.com`), fed to the OAuth "
+        "protected-resource metadata so clients discover the auth requirements.",
+    )
+    token: str = Field(default="", description="Personal access token the stdio transport authenticates with.")
+    org_id: str = Field(
+        default="",
+        description="Organisation the stdio transport is scoped to without a token; local development only.",
+    )
 
 
 class QuotaSettings(BaseSettings):
-    """Default per-organisation quota limits; null means unlimited.
+    """Default per-organisation quota limits; unset means unlimited.
 
     Per-organisation overrides live in the ``quotas`` table and win over
     these defaults.
@@ -274,14 +297,22 @@ class QuotaSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}QUOTA_")
 
-    max_sources: int | None = None
-    max_assets_per_source: int | None = None
-    max_successful_runs_per_month: int | None = None
-    max_backfill_partitions: int | None = None
+    max_sources: int | None = Field(default=None, description="Sources an organisation may hold.")
+    max_assets_per_source: int | None = Field(default=None, description="Assets a source may enable.")
+    max_successful_runs_per_month: int | None = Field(
+        default=None, description="Successful runs an organisation may complete per UTC month."
+    )
+    max_backfill_partitions: int | None = Field(default=None, description="Partitions one backfill may span.")
 
 
 class AppSettings(BaseSettings):
-    """Top-level runtime settings for the CLI."""
+    """Top-level runtime settings for the CLI.
+
+    The framework reads ``runner``, ``otel``, ``catalog`` and ``secrets``;
+    the other sections live here because ``AppSettings`` does, and configure
+    the platform packages (``interloper-db``, ``interloper-api``,
+    ``interloper-scheduler``, ``interloper-agent``, ``interloper-mcp``).
+    """
 
     model_config = SettingsConfigDict(
         env_prefix=PREFIX,
@@ -289,25 +320,25 @@ class AppSettings(BaseSettings):
         yaml_file_encoding="utf-8",
     )
 
-    postgres: PostgresSettings = Field(default_factory=PostgresSettings)
+    runner: RunnerSettings = Field(default_factory=RunnerSettings)
+    otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
+    catalog: list[str] = Field(
+        default_factory=list,
+        description="Import paths of the enabled components; empty enables everything installed.",
+    )
     secrets: SecretsSettings = Field(default_factory=SecretsSettings)
+    postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     cron: CronSettings = Field(default_factory=CronSettings)
     renewal: RenewalSettings = Field(default_factory=RenewalSettings)
-    smtp: SmtpSettings = Field(default_factory=SmtpSettings)
-    agent: AgentSettings = Field(default_factory=AgentSettings)
-    mcp: McpSettings = Field(default_factory=McpSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)
-    runner: RunnerSettings = Field(default_factory=RunnerSettings)
-    otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
+    smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
+    mcp: McpSettings = Field(default_factory=McpSettings)
     quota: QuotaSettings = Field(default_factory=QuotaSettings)
-    catalog: list[str] = Field(
-        default_factory=list,
-        description="Import paths of the enabled components; empty enables everything installed",
-    )
 
     _active: ClassVar[AppSettings | None] = None
 

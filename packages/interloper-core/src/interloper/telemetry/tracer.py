@@ -2,7 +2,7 @@
 
 Only depends on ``opentelemetry-api``: before (or without) SDK
 initialization the returned instruments are no-op proxies that pick up
-the real providers once :func:`interloper.telemetry.init_telemetry`
+the real providers once `interloper.telemetry.init_telemetry`
 installs them.
 """
 

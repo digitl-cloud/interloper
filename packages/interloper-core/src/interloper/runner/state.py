@@ -312,9 +312,7 @@ class RunState:
                     EventType.OPERATION_CANCELED,
                     {
                         **self._operation_event_metadata(canceled_operation),
-                        "message": (
-                            f"Operation '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)"
-                        ),
+                        "message": (f"Operation '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)"),
                     },
                 )
 

@@ -3,13 +3,15 @@
 Used inside Docker / K8s containers so that the host-side runner can
 parse structured events back from the container's log stream.  The
 ``@EVENT:`` prefix makes event lines reliably distinguishable from
-regular application log output in the multiplexed stream::
+regular application log output in the multiplexed stream:
 
-    @EVENT:{"type":"asset_data_started","timestamp":"...","component_key":"..."}
+```py
+@EVENT:{"type":"asset_data_started","timestamp":"...","component_key":"..."}
+```
 
 Enable by setting the ``INTERLOPER_EVENTS_TO_STDERR=true`` environment
 variable — the CLI ``run`` command detects it and subscribes this
-handler to the global :class:`~interloper.events.EventBus`.
+handler to the global `EventBus`.
 """
 
 from __future__ import annotations
@@ -25,10 +27,10 @@ EVENT_LINE_PREFIX = "@EVENT:"
 class StderrEventHandler:
     """Write each event as a ``@EVENT:{json}`` line to stderr.
 
-    Designed to be passed to :meth:`EventBus.subscribe` inside a
+    Designed to be passed to `EventBus.subscribe` inside a
     container process.  The host-side runner's log-streaming thread
     recognises the prefix via
-    :meth:`~interloper.events.event.Event.from_log_line` and
+    `from_log_line` and
     re-emits the event on the host EventBus.
     """
 

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class IOContext:
-    """Immutable context passed to :meth:`Destination.read` and :meth:`Destination.write`.
+    """Immutable context passed to `Destination.read` and `Destination.write`.
 
     Carries the target asset, optional partition or window, and arbitrary metadata
     so that destination implementations can resolve the correct storage location.
@@ -26,7 +26,7 @@ class IOContext:
     types on read. ``None`` when no schema could be resolved.
 
     A destination stores data per **partition**, ``None`` standing for the
-    unpartitioned whole; :attr:`partitions` and :meth:`slices` spell that out
+    unpartitioned whole; `partitions` and `slices` spell that out
     for the three shapes ``partition_or_window`` can take, so no destination
     branches on them itself.
     """
@@ -70,7 +70,7 @@ class IOContext:
             data: The data being written, in its native representation.
 
         Returns:
-            ``(partition, slice)`` pairs, one per partition, in :attr:`partitions` order.
+            ``(partition, slice)`` pairs, one per partition, in `partitions` order.
 
         Raises:
             ConfigError: If a window is written for an asset that declares no

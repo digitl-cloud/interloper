@@ -11,14 +11,16 @@ class Config(Resource):
     """A resource for arbitrary configuration values.
 
     Like every ``Resource``, config values can be loaded from environment
-    variables, .env files, or passed directly::
+    variables, .env files, or passed directly:
 
-        class MyConfig(Config):
-            api_key: str
-            base_url: str = "https://api.example.com"
+    ```py
+    class MyConfig(Config):
+        api_key: str
+        base_url: str = "https://api.example.com"
 
-        # Loads API_KEY from environment if not passed explicitly
-        config = MyConfig()
+    # Loads API_KEY from environment if not passed explicitly
+    config = MyConfig()
+    ```
     """
 
     kind: ClassVar[str] = "config"

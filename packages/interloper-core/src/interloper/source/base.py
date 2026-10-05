@@ -78,9 +78,7 @@ class AssetRef(IgnoredDescriptor):
         for asset in instance.assets:
             if asset.key == self.asset_cls.key:
                 return asset
-        raise AttributeError(
-            f"Source '{type(instance).__name__}' has no asset with key '{self.asset_cls.key}'"
-        )
+        raise AttributeError(f"Source '{type(instance).__name__}' has no asset with key '{self.asset_cls.key}'")
 
 
 class SourceDefinition(ComponentDefinition):
@@ -107,16 +105,20 @@ class Source(Component, Workload):
 
     Define a source by subclassing: an annotation naming a component class
     declares a relation the source's assets inherit, and ``asset_types``
-    (or asset classes written in the body) names what it materializes::
+    (or asset classes written in the body) names what it materializes:
 
-        class MySource(Source):
-            connection: MyConnection
-            asset_types = [Users, Orders]
+    ```py
+    class MySource(Source):
+        connection: MyConnection
+        asset_types = [Users, Orders]
+    ```
 
-    Access assets by key via attribute access::
+    Access assets by key via attribute access:
 
-        source = MySource()
-        source.users  # returns the Asset with key "users"
+    ```py
+    source = MySource()
+    source.users  # returns the Asset with key "users"
+    ```
     """
 
     # Definition
@@ -172,7 +174,7 @@ class Source(Component, Workload):
         Asset classes defined in the source body (via ``@asset`` on
         methods) appear as class attributes.  We collect them into
         ``asset_types`` and replace each class attribute with an
-        :class:`AssetRef` descriptor that exposes the class at class
+        `AssetRef` descriptor that exposes the class at class
         level and the live instance at instance level.
 
         Args:
@@ -200,7 +202,7 @@ class Source(Component, Workload):
         ``Spec.reconstruct()`` hands back in after the walker has resolved
         any nested component specs inside the overrides and held back any
         ``{"ref": id}`` they carried (see
-        :class:`~interloper.serializable.base.SerializationContext`).
+        `SerializationContext`).
 
         Args:
             data: The raw model input. Anything that is not a dict, or whose
@@ -229,7 +231,7 @@ class Source(Component, Workload):
         The assets are incomplete when built here: this source's own relation
         kwargs are bound, and trickled into them, only after
         ``model_post_init`` returns. That is why nothing is validated at
-        construction; :meth:`validate_relations` cascades into each asset
+        construction; `validate_relations` cascades into each asset
         when the DAG or reconstruction asks, with everything this source can
         fill already bound.
 
@@ -250,7 +252,7 @@ class Source(Component, Workload):
 
         An asset this source does not materialize is only ever read, so what
         fills its own relations is nothing any run needs: it is left
-        unchecked, the same position :meth:`~interloper.dag.base.DAG._check_relations`
+        unchecked, the same position `_check_relations`
         takes on a node it only reads. That is what keeps a source
         reconstructible from a partial set of assets, where a read-only asset
         names a sibling the document does not carry.
@@ -258,7 +260,7 @@ class Source(Component, Workload):
         Args:
             nodes: Every node materializing in the same run, keyed by id,
                 forwarded to each asset's own check; see
-                :meth:`~interloper.component.base.Component.validate_relations`.
+                `validate_relations`.
                 ``None`` skips the DAG-membership check.
         """
         super().validate_relations(nodes)
@@ -287,9 +289,9 @@ class Source(Component, Workload):
 
         Unselected assets stay in the list so intra-source dependency wiring
         can still resolve them by key and their outputs stay readable, but
-        only the selected assets execute, and :meth:`validate_relations`
+        only the selected assets execute, and `validate_relations`
         checks only those: the same position as
-        :meth:`~interloper.dag.base.DAG.mini_dag` on a node it only reads.
+        `mini_dag` on a node it only reads.
 
         Raises:
             SourceError: If a selected key matches no asset of this source.
@@ -319,7 +321,7 @@ class Source(Component, Workload):
         """Physical table name for one of this source's assets.
 
         Defaults to suffixing the asset key with the instance's
-        :attr:`~interloper.component.base.Component.discriminator` (the config
+        `discriminator` (the config
         field marked ``discriminator=True``), so instances of a multi-account
         source materialize side by side in one dataset instead of overwriting
         each other's data. Without a discriminator the asset key is used as-is.
@@ -327,7 +329,7 @@ class Source(Component, Workload):
         Override for full control over the composition; keep the
         ``{asset.key}__{suffix}`` shape so tables stay wildcard-queryable per
         asset. The return value is coerced to a valid identifier by
-        :attr:`Asset.table`.
+        `Asset.table`.
 
         Args:
             asset: The asset to name a table for; only its ``key`` is read.
@@ -342,17 +344,17 @@ class Source(Component, Workload):
         """Instance-level asset lookup fallback.
 
         At runtime, source-owned asset access is normally served by the
-        :class:`AssetRef` descriptor installed on the class by
-        :meth:`_collect_asset_types`, so Python never reaches this
+        `AssetRef` descriptor installed on the class by
+        `_collect_asset_types`, so Python never reaches this
         method.  It exists for two reasons:
 
         1. **Static analysis**: it tells type checkers that
-           ``source.<asset_key>`` yields an :class:`~interloper.Asset`,
+           ``source.<asset_key>`` yields an `Asset`,
            since the dynamically-installed descriptors aren't visible to
            them.
         2. **Safety net**: sources built imperatively (e.g. in tests)
            that populate ``asset_types`` without going through
-           :meth:`_collect_asset_types` still get ergonomic attribute
+           `_collect_asset_types` still get ergonomic attribute
            access.
 
         Args:
@@ -475,7 +477,7 @@ class Source(Component, Workload):
         When ``@asset`` decorates a method in the source body, it
         transforms the method into an Asset class and sets it as a class
         attribute.  This method collects those into ``asset_types`` and
-        replaces each entry with an :class:`AssetRef` descriptor, which
+        replaces each entry with an `AssetRef` descriptor, which
         exposes the class at class-level access and the live asset
         instance at instance-level access.
         """
@@ -552,11 +554,13 @@ class Source(Component, Workload):
 
         Public for platform code that holds a key; connector code never needs it.
 
-        Returns an :class:`AssetDefinition` with ``source_key`` set,
-        so callers can use ``.qualified_key`` for cross-source references::
+        Returns an `AssetDefinition` with ``source_key`` set,
+        so callers can use ``.qualified_key`` for cross-source references:
 
-            FacebookAds.asset_def("campaigns").qualified_key
-            # → "facebook_ads.campaigns"
+        ```py
+        FacebookAds.asset_def("campaigns").qualified_key
+        # → "facebook_ads.campaigns"
+        ```
 
         Args:
             key: The asset key (snake_cased class name).

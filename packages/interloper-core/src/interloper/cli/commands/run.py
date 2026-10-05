@@ -2,17 +2,17 @@
 
 Framework-level execution with no database or persistence layer.  Used
 both for direct user invocation and as the entry point that
-:class:`interloper_docker.DockerRunner` calls inside spawned containers.
+`interloper_docker.DockerRunner` calls inside spawned containers.
 
 Input formats
 -------------
 
 * ``--file/-f <spec.yaml>`` — a component spec document
-  (:class:`~interloper.component.base.Spec`, ``{key|path, init}``)
+  (`Spec`, ``{key|path, init}``)
   for any **runnable** component: the run is literally "reconstruct the
   component and run its DAG".  A Job spec is the composite form — targets
   with workload-level default destinations and resources.
-* ``--format inline <json>`` — a serialized :class:`DAGSpec` as JSON.
+* ``--format inline <json>`` — a serialized `DAGSpec` as JSON.
   This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
   child container.
 * ``--format paths <path>...`` — one or more dotted import paths that
@@ -29,7 +29,7 @@ useful for checking a curated set of workload files.
 
 During execution, run/operation lifecycle events and ``context.logger``
 messages flow through the standard logging stack (via
-:class:`~interloper.events.console.ConsoleEventHandler`), sharing one
+`ConsoleEventHandler`), sharing one
 format and stream with regular log lines.  Verbosity is the logging
 level: ``-v`` shows DEBUG (execution / destination-I/O events), ``-q``
 shows only warnings and errors.  ``--events json`` streams raw event
@@ -63,6 +63,8 @@ def register(
     run_parser = subparsers.add_parser(
         "run",
         help="Execute a DAG directly with the configured runner (no persistence)",
+        description="Execute a DAG directly with the configured runner, without persistence. "
+        "The exit status is non-zero on invalid input, an import failure, or a run that did not complete.",
     )
     run_parser.add_argument(
         "--format",

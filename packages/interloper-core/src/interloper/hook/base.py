@@ -63,14 +63,16 @@ class Hook(Component):
     A hook declares *what to observe* (``watches``), *which outcomes matter*
     (``events``), and, like an asset's partitioning or a job's cron, the
     declaration is inert intent: the framework carries it, and an operator
-    (the scheduler) evaluates events and calls :meth:`fire`. Concrete hook
-    classes own the side effect::
+    (the scheduler) evaluates events and calls `fire`. Concrete hook
+    classes own the side effect:
 
-        class SlackHook(Hook):
-            channel: str = InputField(description="Channel to notify")
+    ```py
+    class SlackHook(Hook):
+        channel: str = InputField(description="Channel to notify")
 
-            def fire(self, context: HookContext) -> None:
-                post_message(self.channel, context.metadata)
+        def fire(self, context: HookContext) -> None:
+            post_message(self.channel, context.metadata)
+    ```
 
     The base hook is only an observer. Hooks that *act on* other components
     (``TriggerHook``) extend the vocabulary with a ``targets`` relation, so

@@ -32,23 +32,25 @@ def source(
     A decorated class declares its configuration fields, its assets (methods
     carrying ``@asset``) and its helpers; a decorated function returns the
     asset classes and turns its own annotated parameters into configuration
-    fields::
+    fields:
 
-        @source(tags=["Advertising"], dataset="raw_shop", relations={"connection": ShopConnection})
-        class Shop(Source): ...
+    ```py
+    @source(tags=["Advertising"], dataset="raw_shop", relations={"connection": ShopConnection})
+    class Shop(Source): ...
+    ```
 
     Args:
         target: The decorated class or function when used bare; ``None`` when
             used with arguments, in which case a decorator is returned.
         relations: Relation name to a
-            :class:`~interloper.component.relation.Relation`, a component class
+            `Relation`, a component class
             (the shorthand for a relation on it), or a list of component
             classes narrowing the relation
-            :class:`~interloper.source.base.Source` declares under that name.
+            `Source` declares under that name.
             Explicit declarations win over the ones read from the class
             annotations.
         **overrides: Definition metadata and behaviour: the public ClassVars
-            and field defaults :class:`~interloper.source.base.Source` declares
+            and field defaults `Source` declares
             (``key``, ``name``, ``icon``, ``tags``, ``dataset``,
             ``default_destination_key``, ``normalizer``,
             ``materialization_strategy``, ...); see the class. An unknown name

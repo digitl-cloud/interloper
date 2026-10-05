@@ -25,17 +25,19 @@ def schema(
 ) -> type[Schema] | Callable[[type], type[Schema]]:
     """Create a Schema subclass from a decorated class.
 
-    Can be used bare or with arguments::
+    Can be used bare or with arguments:
 
-        @schema
-        class UserSchema:
-            id: int
-            name: str
-            email: str
+    ```py
+    @schema
+    class UserSchema:
+        id: int
+        name: str
+        email: str
 
-        @schema(key="custom", name="Custom Schema")
-        class OtherSchema:
-            value: float
+    @schema(key="custom", name="Custom Schema")
+    class OtherSchema:
+        value: float
+    ```
 
     The decorated class's annotations and attributes become the Schema
     subclass body.

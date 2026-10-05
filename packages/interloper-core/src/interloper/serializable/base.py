@@ -1,14 +1,14 @@
 """Serializable: class-plus-configuration objects and their wire format.
 
 Anything whose instances are "a class plus its configuration" extends
-:class:`Serializable`; :class:`Spec` is its serialized form, an envelope
+`Serializable`; `Spec` is its serialized form, an envelope
 of ``path`` (or catalog ``key``), optional ``id``, and the ``init``
 payload. ``to_spec()`` / ``from_spec()`` round-trip between the two.
 
 A ``Spec`` document is also a graph, not just a tree: a component appears
 in full once and as a ``{"ref": id}`` reference everywhere else, so
 reconstruction runs in two passes, building every inline component before
-binding what the references name (see :meth:`Spec.reconstruct`).
+binding what the references name (see `Spec.reconstruct`).
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class Spec(BaseModel):
     def from_file(cls, path: str | Path) -> Spec:
         """Load the single spec a YAML file holds, interpolating ``${VAR}`` placeholders.
 
-        Delegates to :meth:`all_from_file`, which documents the
+        Delegates to `all_from_file`, which documents the
         interpolation and the ``SpecError`` cases a malformed file raises.
 
         Args:
@@ -181,7 +181,7 @@ class Spec(BaseModel):
 
     @classmethod
     def dump_value(cls, value: Any) -> Any:
-        """Serialize a component field value for a :class:`Spec` init payload.
+        """Serialize a component field value for a `Spec` init payload.
 
         The wire format is uniform: **anything with class identity is
         Serializable** and serializes via its own spec; lists and dicts are
@@ -247,15 +247,15 @@ class Spec(BaseModel):
 
         ``key`` references resolve through the catalog and must name
         components; ``path`` references import directly and accept any
-        :class:`Serializable` class (a normalizer nested in an asset's config,
+        `Serializable` class (a normalizer nested in an asset's config,
         for example).
 
         Reconstruction runs in two passes over one
-        :class:`SerializationContext`. This method is the first: every inline
+        `SerializationContext`. This method is the first: every inline
         component is built and added to the context, and a ``{"ref": id}``
         relation value is held back rather than constructed with, so a
         component is only ever built from the targets the document carries
-        inline. The second pass, :meth:`SerializationContext.bind`, binds
+        inline. The second pass, `SerializationContext.bind`, binds
         those references and validates what they complete. Without a
         *context* this call owns one and runs both passes; with one it
         contributes to a document the caller finishes.
@@ -312,13 +312,13 @@ class SerializationContext:
     other occurrence as ``{"ref": id}``, so writing has to know what it has
     already written and reading has to know what it has already built. Both
     are the components the context carries. Writing consults them through
-    :meth:`emit`, which decides between a full spec, a reference and nothing
-    at all; reading fills them through :meth:`hold` and :meth:`add` and
-    settles the references with :meth:`bind`.
+    `emit`, which decides between a full spec, a reference and nothing
+    at all; reading fills them through `hold` and `add` and
+    settles the references with `bind`.
 
     A context started with components is **closed**: it carries exactly those
     (a graph's nodes), writes the carried instance in place of any other copy
-    of it (:meth:`carried`), and drops a reference to an owned component it
+    of it (`carried`), and drops a reference to an owned component it
     does not carry, since nothing in the document could answer it. A context
     started empty is **open** and writes such a reference for whoever reads
     the document to resolve. Every public entry point (``to_spec()``,
@@ -421,12 +421,12 @@ class SerializationContext:
         whole, in its original order (an inline target it mixes with stays
         in place, so what the document put first stays first), and the
         mapping is pinned to an id, generated when it declares none, so the
-        component built from it can be found again by :meth:`bind`. A source's
+        component built from it can be found again by `bind`. A source's
         assets are such nested mappings, which is how an asset's reference
         travels without the source knowing references exist.
 
         Args:
-            init: Constructor keyword arguments as :meth:`Spec.reconstruct`
+            init: Constructor keyword arguments as `Spec.reconstruct`
                 loaded them, every nested spec already an instance and every
                 ``{"ref": id}`` still a mapping.
 
@@ -500,11 +500,11 @@ class Serializable(BaseModel):
     """A class-identified, serializable configuration object.
 
     Anything whose instances are "a class plus its configuration" extends
-    ``Serializable``: it round-trips through :class:`Spec`
+    ``Serializable``: it round-trips through `Spec`
     (``to_spec()`` / ``from_spec()``), resolves back from its import path,
     exposes a JSON Schema of its user-configurable fields, and rejects
     unknown constructor kwargs loudly. Runners, schemas and normalizers are
-    ``Serializable``; catalog citizens extend :class:`Component`, which adds
+    ``Serializable``; catalog citizens extend `Component`, which adds
     kind, identity and relations on top.
     """
 
@@ -518,14 +518,14 @@ class Serializable(BaseModel):
     def __init_subclass__(cls, *, rebuild: bool = False, **kwargs: Any) -> None:
         """Auto-derive ``key`` as the snake_cased class name unless declared.
 
-        A class :meth:`build_class` builds over an existing declaration (to
+        A class `build_class` builds over an existing declaration (to
         apply a decorator's field defaults) is that same declaration, not a
         new one: it keeps the key it inherits, so a key declared in the class
         body survives the decorator.
 
         Args:
             rebuild: Whether the class rebuilds an existing declaration rather
-                than declaring a new one; set only by :meth:`build_class`.
+                than declaring a new one; set only by `build_class`.
             **kwargs: Class-creation keyword arguments, forwarded untouched to
                 ``super().__init_subclass__``.
         """
@@ -607,7 +607,7 @@ class Serializable(BaseModel):
 
         - The decorated class already extends the receiving class: field
           defaults (when present) produce a new subclass via
-          :func:`pydantic.create_model` with the parent's annotations;
+          `pydantic.create_model` with the parent's annotations;
           ClassVars are stamped on the result (plain class attributes, no
           pydantic machinery involved).
         - The decorated class does **not** extend it: a new class is
@@ -755,7 +755,7 @@ class Serializable(BaseModel):
         """Fully qualified import path for this instance's class.
 
         Returns:
-            The class's :meth:`classpath`.
+            The class's `classpath`.
         """
         return type(self).classpath()
 
@@ -886,9 +886,9 @@ class Serializable(BaseModel):
     ) -> Self:
         """Reconstruct an instance from a spec file.
 
-        Loads a :class:`Spec` document from YAML (with ``${VAR}``
+        Loads a `Spec` document from YAML (with ``${VAR}``
         env interpolation) and reconstructs it, with the same
-        subclass-scoped check as :meth:`from_spec`: invalid documents
+        subclass-scoped check as `from_spec`: invalid documents
         surface as ``SpecError``, mismatched kinds as ``TypeError``.
 
         Args:
@@ -929,5 +929,3 @@ class Serializable(BaseModel):
         order = list(dict.fromkeys([*(name for name in properties if name not in declared), *declared]))
         schema["properties"] = {name: properties[name] for name in order}
         return schema
-
-

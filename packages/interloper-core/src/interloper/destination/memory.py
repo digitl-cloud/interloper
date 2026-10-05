@@ -17,7 +17,7 @@ class MemoryDestination(Destination):
 
     All instances share a single ``_storage`` dict so data written by one
     asset is visible to others.  The partition dispatch (including window
-    splitting) is :class:`Destination`'s.  Call :meth:`clear` between test
+    splitting) is `Destination`'s.  Call `clear` between test
     runs.
     """
 

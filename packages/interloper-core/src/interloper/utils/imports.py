@@ -24,7 +24,7 @@ def import_from_path(path: str, target_type: type[T] | None = None) -> Any:
       marks the module / attribute boundary explicitly.  Everything before
       ``:`` is imported as a module, everything after is a chain of
       ``getattr`` calls on the imported object.  This is the form emitted by
-      :meth:`Asset.classpath` for source-owned assets so that the asset
+      `Asset.classpath` for source-owned assets so that the asset
       class can be reached via a class-level descriptor without
       instantiating its parent source.
 

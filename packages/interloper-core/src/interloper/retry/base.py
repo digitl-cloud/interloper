@@ -17,7 +17,7 @@ class RetryPolicy(BaseModel):
 
     The policy carries numbers only. Whether a given error is worth another
     attempt is behaviour rather than configuration, and lives on
-    :meth:`~interloper.operation.base.Operation.retryable`.
+    `retryable`.
     """
 
     max_attempts: int = Field(

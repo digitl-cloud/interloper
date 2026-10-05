@@ -136,7 +136,7 @@ class Services:
         dev_mode: bool,
         api_port: int,
     ) -> None:
-        """Store the configuration; services are built when :meth:`run` starts.
+        """Store the configuration; services are built when `run` starts.
 
         Args:
             settings: Loaded AppSettings with CLI overrides applied.

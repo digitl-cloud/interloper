@@ -27,8 +27,8 @@ class HTTPBearerAuth(httpx2.Auth):
         """Authenticate the request with a Bearer token.
 
         Defining ``auth_flow`` (rather than ``sync_auth_flow``) lets httpx2 drive
-        the same generator for :class:`~interloper.rest.client.RESTClient` and
-        :class:`~interloper.rest.client.AsyncRESTClient`; a sync-only flow leaves
+        the same generator for `RESTClient` and
+        `AsyncRESTClient`; a sync-only flow leaves
         the async client's requests unauthenticated.
 
         Args:
@@ -45,9 +45,9 @@ class OAuth2Auth(httpx2.Auth):
     """OAuth2 authentication with automatic token acquisition and 401 refresh.
 
     Async-native: the token request is *yielded into the active client's flow*
-    rather than performed inline, so a single :meth:`auth_flow` drives both
-    :class:`~interloper.rest.client.RESTClient` and
-    :class:`~interloper.rest.client.AsyncRESTClient` — the token exchange runs
+    rather than performed inline, so a single `auth_flow` drives both
+    `RESTClient` and
+    `AsyncRESTClient` — the token exchange runs
     sync on one and async on the other, with no blocking I/O on the event loop.
     """
 

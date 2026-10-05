@@ -33,9 +33,7 @@ def coerce_to_date(value: object) -> dt.date:
             raise TypeError(
                 f"Could not parse value {value!r} as a date: expected an ISO-8601 date string (YYYY-MM-DD)."
             ) from e
-    raise TypeError(
-        f"Expected a `datetime.date` or an ISO-8601 date string, got {type(value).__name__}: {value!r}."
-    )
+    raise TypeError(f"Expected a `datetime.date` or an ISO-8601 date string, got {type(value).__name__}: {value!r}.")
 
 
 def coerce_to_datetime(value: object) -> dt.datetime:

@@ -2,7 +2,8 @@ name: Docs
 
 # Publishes the documentation site to GitHub Pages on every change to main.
 #
-# The site is built with zensical from docs/ + zensical.toml and pushed into
+# The site is built with zensical from docs/ + zensical.toml (the reference
+# pages render from the source, so core changes publish too) and pushed into
 # the gh-pages branch, which the CNAME file makes Pages serve at
 # docs.interloper.dev.
 
@@ -12,7 +13,10 @@ on:
       - main
     paths:
       - "docs/**"
+      - "dev/docs_macros.py"
+      - "packages/interloper-core/src/**"
       - "zensical.toml"
+      - "uv.lock"
       - ".github/workflows/docs.yaml"
   workflow_dispatch:
 
@@ -36,10 +40,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: UV sync
+        # The reference pages read settings, the CLI parser and docstrings
+        # from the installed workspace.
+        run: uv sync
+
       - name: Build site
-        # Same isolated invocation the docs image used: zensical alone, no
-        # workspace sync. Keep the version in step with pyproject's dev group.
-        run: uv run --no-project --with "zensical>=0.0.24" zensical build
+        run: uv run zensical build --strict
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4

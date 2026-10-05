@@ -69,7 +69,7 @@ class JSONLFormat(FileFormat):
         """Serialize records as one JSON object per line.
 
         Non-finite floats become ``null`` (invalid JSON otherwise); dates and
-        decimals serialize via :func:`json_default`.
+        decimals serialize via `json_default`.
 
         Args:
             rows: The records to serialize.

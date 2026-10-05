@@ -58,17 +58,57 @@ nav = [
     { "Reference" = [
         { "Decorator options" = "reference/decorators.md" },
         { "Settings" = "reference/settings.md" },
-        { "CLI flags" = "reference/cli.md" },
-        { "Event types" = "reference/events.md" },
-        { "Spans & metrics" = "reference/telemetry.md" },
+        { "CLI" = "reference/cli.md" },
+        { "Events" = "reference/events.md" },
         { "Errors" = "reference/errors.md" },
         { "Utilities" = "reference/utils.md" },
+        { "Spans & metrics" = "reference/telemetry.md" },
         { "Ecosystem" = "reference/ecosystem.md" },
         { "Claude Code plugin" = "reference/claude-code.md" },
+        { "API" = [
+            { "Components" = "reference/api/components.md" },
+            { "Assets" = "reference/api/assets.md" },
+            { "Sources" = "reference/api/sources.md" },
+            { "Destinations" = "reference/api/destinations.md" },
+            { "Connections & OAuth" = "reference/api/connections.md" },
+            { "Resources & fields" = "reference/api/resources.md" },
+            { "Jobs & hooks" = "reference/api/jobs.md" },
+            { "Partitioning" = "reference/api/partitioning.md" },
+            { "Execution" = "reference/api/execution.md" },
+            { "Schemas & normalization" = "reference/api/schema.md" },
+            { "REST client" = "reference/api/rest.md" },
+            { "Catalog & specs" = "reference/api/catalog.md" },
+        ] },
     ] },
 ]
 
 extra_css = ["stylesheets/extra.css"]
+
+[project.plugins.macros]
+module_name = "dev/docs_macros"
+render_by_default = false
+on_error_fail = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["packages/interloper-core/src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+docstring_section_style = "table"
+show_source = false
+show_root_heading = true
+show_root_full_path = false
+heading_level = 2
+members_order = "source"
+filters = ["!^_"]
+merge_init_into_class = true
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+separate_signature = true
+show_signature_annotations = true
+signature_crossrefs = true
+show_bases = true
+show_labels = false
 
 # ----------------------------------------------------------------------------
 # Theme

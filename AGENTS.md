@@ -22,6 +22,7 @@ chart/                       Helm chart
 docker/                      uv-sync.sh helper and nginx template
 dockerfile                   multi-target build (core / scheduler / worker / api / frontend)
 docs/                        documentation site (zensical), published to GitHub Pages at docs.interloper.dev
+dev/docs_macros.py           macros the reference pages render settings and CLI tables with
 ```
 
 The frontend lives at `packages/interloper-app/app/` and has its own toolchain (pnpm + Nuxt) and its own [AGENTS.md](packages/interloper-app/app/AGENTS.md). `make build-app` builds the SPA and copies it into `packages/interloper-app/src/interloper_app/static/`.

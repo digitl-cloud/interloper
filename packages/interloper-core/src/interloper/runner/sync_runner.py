@@ -22,13 +22,13 @@ class SyncRunner(Runner):
     """Base class for ``concurrent.futures``-backed, out-of-process runners.
 
     Backs the runners whose unit of execution is a separate process or
-    container — :class:`MultiProcessRunner`, ``DockerRunner``,
+    container — `MultiProcessRunner`, ``DockerRunner``,
     ``KubernetesRunner`` — where the event loop lives at the process/pod
     boundary, not in this scheduler. In-process DAG walking is handled by
-    the async-native :class:`~interloper.runner.async_runner.AsyncRunner`.
+    the async-native `AsyncRunner`.
 
     These runners are inherently blocking (they poll futures / Jobs), so the
-    async-native :meth:`~interloper.runner.base.Runner.run` contract is
+    async-native `run` contract is
     satisfied by offloading the blocking DAG walk to a worker thread. Subclasses
     implement ``_submit_operation`` to submit work to their executor and
     ``_handle_completed`` to interpret what the future returned.

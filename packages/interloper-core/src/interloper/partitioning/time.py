@@ -1,10 +1,10 @@
 """Time-based partitioning.
 
 A time partition is a **period identified by its start**: the value is the
-period's first instant, and the :class:`TimeGranularity` says how long the
+period's first instant, and the `TimeGranularity` says how long the
 period lasts. The granularities an asset may declare are the ones BigQuery
 time partitioning offers — hourly, daily, monthly, yearly (see
-:data:`SUPPORTED_GRANULARITIES`) — and every piece of time arithmetic goes
+`SUPPORTED_GRANULARITIES`) — and every piece of time arithmetic goes
 through the granularity, so nothing outside this module hardcodes a period
 length.
 """
@@ -27,18 +27,18 @@ from interloper.utils import add_months, coerce_to_date, coerce_to_datetime
 class TimeGranularity(str, Enum):
     """The length of the period one time partition covers.
 
-    The arithmetic (:meth:`truncate`, :meth:`advance`, :meth:`bounds`,
-    :meth:`periods_between`) is implemented for every member: it is pure and
+    The arithmetic (`truncate`, `advance`, `bounds`,
+    `periods_between`) is implemented for every member: it is pure and
     fully testable, and it is what makes the granularity a real seam rather
     than a placeholder.
 
-    Partition *identity* (:meth:`format` / :meth:`parse`) exists for the
+    Partition *identity* (`format` / `parse`) exists for the
     declarable granularities. An id is a storage contract — it lands in hive
     paths, object prefixes and ``DELETE`` predicates — so ``WEEK`` and
     ``QUARTER``, which nothing may declare, deliberately have none.
 
-    Only the granularities in :data:`SUPPORTED_GRANULARITIES` may be declared
-    on a :class:`TimePartitionConfig`.
+    Only the granularities in `SUPPORTED_GRANULARITIES` may be declared
+    on a `TimePartitionConfig`.
     """
 
     HOUR = "hour"
@@ -171,7 +171,7 @@ class TimeGranularity(str, Enum):
         Ids are ISO-8601 prefixes — ``2026``, ``2026-08``, ``2026-08-21``,
         ``2026-08-21T13`` — so they sort chronologically as strings, embed in
         hive paths and object prefixes unchanged, and each shape names its
-        granularity unambiguously (see :meth:`TimePartition.from_key`).
+        granularity unambiguously (see `TimePartition.from_key`).
 
         Args:
             value: Any value inside the period the id names.
@@ -192,7 +192,7 @@ class TimeGranularity(str, Enum):
         """Parse a partition id back into the period's start.
 
         Args:
-            key: A partition id in this granularity's own format (see :attr:`key_format`).
+            key: A partition id in this granularity's own format (see `key_format`).
 
         Returns:
             The period's first instant.
@@ -264,7 +264,7 @@ class TimePartitionConfig(PartitionConfig):
 
     Attributes:
         granularity: The period one partition covers. Must be one of
-            :data:`SUPPORTED_GRANULARITIES`.
+            `SUPPORTED_GRANULARITIES`.
         start: Optional lower bound. Partitions before it are rejected, and
             windows built against this asset are clamped to it.
     """
@@ -336,7 +336,7 @@ class TimePartition(Partition):
 
     @property
     def id(self) -> str:
-        """The partition's canonical id (see :meth:`TimeGranularity.format`)."""
+        """The partition's canonical id (see `TimeGranularity.format`)."""
         return self.granularity.format(self.value)
 
     @property
@@ -444,7 +444,7 @@ class TimePartitionWindow(PartitionWindow):
         aware datetime localized to a zone makes DAY/MONTH/YEAR windows
         follow that zone's calendar (its "yesterday"). HOUR windows are the
         deliberate exception — an aware *now* is normalized back to UTC (see
-        :func:`coerce_to_datetime`), because hour partition ids are naive-UTC
+        `coerce_to_datetime`), because hour partition ids are naive-UTC
         labels and zones on a fractional offset (e.g. UTC+05:45) don't align
         to UTC hour boundaries at all.
 
