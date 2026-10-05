@@ -21,7 +21,16 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.sql import Subquery
 from sqlmodel import Session, col, func, select
 
-from interloper_db.models import Backfill, Component, Event, Run
+from interloper_db.models import (
+    ACTIVE_BACKFILL_STATUSES,
+    OPEN_RUN_STATUSES,
+    Backfill,
+    BackfillStatus,
+    Component,
+    Event,
+    Run,
+    RunStatus,
+)
 from interloper_db.session import commit, session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_BACKFILL_PARTITIONS, QuotaStore
@@ -31,18 +40,19 @@ from interloper_db.store.runs import RunStore
 # not mapped on the relationship, since FOR UPDATE rejects outer joins.
 BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
 
-ACTIVE_BACKFILL_STATUSES = ("running", "queued")
-
 
 class BackfillQuery(PageQuery):
     """Which of an organisation's backfills a listing reads.
 
     Attributes:
         status: Keep backfills in any of these statuses; ``None`` keeps every
-            status. ``["queued", "running"]`` is the active ones.
+            status.
+        hooks_pending: Keep terminal backfills whose hooks have not been
+            evaluated, oldest completion first.
     """
 
-    status: list[str] | None = None
+    status: list[BackfillStatus] | None = None
+    hooks_pending: bool = False
 
 
 class BackfillStore:
@@ -79,24 +89,31 @@ class BackfillStore:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             return db_backfill
 
-    def list(self, org_id: UUID, query: BackfillQuery) -> Page[Backfill]:
-        """List an organisation's backfills, newest first.
+    def list(self, org_id: UUID | None, query: BackfillQuery) -> Page[Backfill]:
+        """List backfills, newest first, or oldest completion first when reading those whose hooks are pending.
 
         Args:
-            org_id: Organisation UUID.
+            org_id: Organisation UUID; ``None`` reads every organisation, for
+                the in-process sweeps that serve them all.
             query: Which statuses, and the window to read.
 
         Returns:
             The page of backfills, their targets loaded.
         """
-        statement = (
-            select(Backfill)
-            .where(Backfill.org_id == org_id)
-            .order_by(col(Backfill.created_at).desc(), col(Backfill.id))
-            .options(*BACKFILL_LOAD_OPTIONS)
+        order = (
+            (col(Backfill.completed_at).asc(), col(Backfill.id))
+            if query.hooks_pending
+            else (col(Backfill.created_at).desc(), col(Backfill.id))
         )
+        statement = select(Backfill).order_by(*order).options(*BACKFILL_LOAD_OPTIONS)
+        if org_id is not None:
+            statement = statement.where(Backfill.org_id == org_id)
         if query.status:
             statement = statement.where(col(Backfill.status).in_(query.status))
+        if query.hooks_pending:
+            statement = statement.where(
+                col(Backfill.status).not_in(ACTIVE_BACKFILL_STATUSES), col(Backfill.hooks_evaluated_at).is_(None)
+            )
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
 
@@ -161,7 +178,7 @@ class BackfillStore:
                 end_key=end_key,
                 concurrency=concurrency,
                 fail_fast=fail_fast,
-                status="running",
+                status=BackfillStatus.RUNNING,
                 started_at=datetime.now(timezone.utc),
             )
             session.add(db_backfill)
@@ -175,7 +192,7 @@ class BackfillStore:
     def cancel(self, backfill_id: UUID) -> Backfill:
         """Cancel a backfill: runs not yet dispatched will never execute.
 
-        Pending and queued runs flip to ``"canceled"``; runs already
+        Pending and queued runs flip to ``canceled``; runs already
         dispatched or running drain to their own terminal state (their late
         completions are no-ops on the now-terminal backfill).
 
@@ -195,11 +212,28 @@ class BackfillStore:
                 raise NotFoundError(f"Backfill {backfill_id} not found")
             if db_backfill.status not in ACTIVE_BACKFILL_STATUSES:
                 raise ConflictError(f"Backfill {backfill_id} is already {db_backfill.status}")
-            cancel_backfill_runs(session, db_backfill)
+            self._cancel(session, db_backfill)
             commit(session)
             session.refresh(db_backfill)
             _ = db_backfill.target  # load before the session closes; readers reach it detached
             return db_backfill
+
+    def mark_hooks_evaluated(self, backfill_id: UUID) -> None:
+        """Stamp a backfill's hooks as evaluated, so the hook sweep moves past it.
+
+        Args:
+            backfill_id: The backfill UUID.
+
+        Raises:
+            NotFoundError: If the backfill is not found.
+        """
+        with session_scope(self._engine) as session:
+            db_backfill = session.get(Backfill, backfill_id)
+            if not db_backfill:
+                raise NotFoundError(f"Backfill {backfill_id} not found")
+            db_backfill.hooks_evaluated_at = datetime.now(timezone.utc)
+            session.add(db_backfill)
+            commit(session)
 
     def run_counts(self, backfill_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each backfill's partitions by their latest attempt's status, in one query.
@@ -247,7 +281,7 @@ class BackfillStore:
         statement = (
             select(Run)
             .join(latest, onclause=self._is_latest(latest))
-            .where(Run.backfill_id == backfill_id, Run.status == "failed")
+            .where(Run.backfill_id == backfill_id, Run.status == RunStatus.FAILED)
             .order_by(col(Run.partition_key).desc())
         )
         with session_scope(self._engine) as session:
@@ -279,11 +313,10 @@ class BackfillStore:
 
         if db_backfill.fail_fast and failed:
             for pending_run in session.exec(
-                select(Run).where(Run.backfill_id == backfill_id, Run.status == "pending")
+                select(Run).where(Run.backfill_id == backfill_id, Run.status == RunStatus.PENDING)
             ).all():
-                pending_run.status = "canceled"
-                session.add(pending_run)
-            db_backfill.status = "failed"
+                self._cancel_run(session, pending_run)
+            db_backfill.status = BackfillStatus.FAILED
             db_backfill.completed_at = datetime.now(timezone.utc)
             session.add(db_backfill)
             return
@@ -291,13 +324,13 @@ class BackfillStore:
         in_flight_count = session.exec(
             select(func.count())
             .select_from(Run)
-            .where(Run.backfill_id == backfill_id, col(Run.status).in_(["queued", "dispatched", "running"]))
+            .where(Run.backfill_id == backfill_id, col(Run.status).in_(OPEN_RUN_STATUSES))
         ).one()
         # Newest partition first, matching the initial fan-out. A backfill is
         # single-granularity, so the string order is the time order.
         pending_runs = session.exec(
             select(Run)
-            .where(Run.backfill_id == backfill_id, Run.status == "pending")
+            .where(Run.backfill_id == backfill_id, Run.status == RunStatus.PENDING)
             .order_by(col(Run.partition_key).desc())
         ).all()
 
@@ -306,15 +339,15 @@ class BackfillStore:
             any_failed = session.exec(
                 select(Run.id)
                 .join(latest, onclause=self._is_latest(latest))
-                .where(Run.backfill_id == backfill_id, Run.status == "failed")
+                .where(Run.backfill_id == backfill_id, Run.status == RunStatus.FAILED)
             ).first()
-            db_backfill.status = "failed" if any_failed else "success"
+            db_backfill.status = BackfillStatus.FAILED if any_failed else BackfillStatus.SUCCESS
             db_backfill.completed_at = datetime.now(timezone.utc)
             session.add(db_backfill)
             return
 
         for pending_run in pending_runs[: max(0, db_backfill.concurrency - in_flight_count)]:
-            pending_run.status = "queued"
+            pending_run.status = RunStatus.QUEUED
             session.add(pending_run)
 
     @staticmethod
@@ -364,6 +397,52 @@ class BackfillStore:
             .order_by(col(Event.timestamp).desc())
         ).first()
 
+    def _cancel_active(self, session: Session, backfill_id: UUID) -> None:
+        """Cancel a backfill if it is still active, in the caller's transaction.
+
+        Args:
+            session: Active database session (the caller commits).
+            backfill_id: The backfill UUID.
+        """
+        db_backfill = session.get(Backfill, backfill_id)
+        if db_backfill and db_backfill.status in ACTIVE_BACKFILL_STATUSES:
+            self._cancel(session, db_backfill)
+
+    def _cancel(self, session: Session, db_backfill: Backfill) -> None:
+        """Cancel a backfill's not-yet-dispatched runs and terminalize it.
+
+        ``skip_locked`` leaves runs the worker is claiming right now to the
+        worker: they are effectively dispatched and drain like any other
+        in-flight run. A canceled backfill fires no hooks, so it is stamped
+        evaluated with its runs.
+
+        Args:
+            session: Active database session (the caller commits).
+            db_backfill: The backfill row to cancel, mutated in place along with
+                its pending and queued runs.
+        """
+        for db_run in session.exec(
+            select(Run)
+            .where(Run.backfill_id == db_backfill.id, col(Run.status).in_([RunStatus.PENDING, RunStatus.QUEUED]))
+            .with_for_update(skip_locked=True)
+        ).all():
+            self._cancel_run(session, db_run)
+        db_backfill.status = BackfillStatus.CANCELED
+        db_backfill.completed_at = db_backfill.hooks_evaluated_at = datetime.now(timezone.utc)
+        session.add(db_backfill)
+
+    @staticmethod
+    def _cancel_run(session: Session, db_run: Run) -> None:
+        """Cancel one run that never dispatched; a canceled run fires no hooks, so it is stamped evaluated.
+
+        Args:
+            session: Active database session (the caller commits).
+            db_run: The run row to cancel, mutated in place.
+        """
+        db_run.status = RunStatus.CANCELED
+        db_run.hooks_evaluated_at = datetime.now(timezone.utc)
+        session.add(db_run)
+
     @staticmethod
     def _create_runs(session: Session, db_backfill: Backfill, window: TimePartitionWindow, *, billable: bool) -> None:
         """Create a backfill's runs: one per partition, the newest ``concurrency`` of them queued.
@@ -393,35 +472,9 @@ class BackfillStore:
                     component_id=db_backfill.component_id,
                     backfill_id=db_backfill.id,
                     partition_key=window.granularity.format(value),
-                    status="queued" if index >= first_queued else "pending",
+                    status=RunStatus.QUEUED if index >= first_queued else RunStatus.PENDING,
                     billable=billable,
                 )
             )
         db_backfill.partitions = span
         session.add(db_backfill)
-
-
-def cancel_backfill_runs(session: Session, db_backfill: Backfill) -> None:
-    """Cancel a backfill's not-yet-dispatched runs and terminalize it.
-
-    Part of the caller's transaction (the caller commits). ``skip_locked``
-    leaves runs the worker is claiming right now to the worker — they are
-    effectively dispatched and drain like any other in-flight run. Shared with
-    the queue's over-quota cancellation, until the run lifecycle moves into
-    the store.
-
-    Args:
-        session: Active database session (the caller commits).
-        db_backfill: The backfill row to cancel, mutated in place along with
-            its pending and queued runs.
-    """
-    for db_run in session.exec(
-        select(Run)
-        .where(Run.backfill_id == db_backfill.id, col(Run.status).in_(["pending", "queued"]))
-        .with_for_update(skip_locked=True)
-    ).all():
-        db_run.status = "canceled"
-        session.add(db_run)
-    db_backfill.status = "canceled"
-    db_backfill.completed_at = datetime.now(timezone.utc)
-    session.add(db_backfill)

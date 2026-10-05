@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class RunStatus(str, Enum):
+class LaunchStatus(str, Enum):
     """Authoritative status of a launched run, reported by the launcher."""
 
     RUNNING = "running"
@@ -32,10 +32,10 @@ class RunStatus(str, Enum):
 
 
 @dataclass
-class RunState:
+class LaunchState:
     """Authoritative state of a launched run, as reported by its launcher."""
 
-    status: RunStatus
+    status: LaunchStatus
     error: str | None = None
 
 
@@ -122,7 +122,7 @@ class Launcher(ABC):
             run_id: The run UUID to execute.
         """
 
-    def describe_run(self, run_id: UUID) -> RunState | None:
+    def describe_run(self, run_id: UUID) -> LaunchState | None:
         """Return the authoritative state of a launched run.
 
         Args:

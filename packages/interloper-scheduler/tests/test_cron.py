@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
-from interloper_db import Store
+from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
 from sqlalchemy import event
@@ -155,7 +155,7 @@ class TestScheduling:
         assert backfill.concurrency == 1
         statuses = {run.partition_key: run.status for run in _runs(store)}
         assert statuses[backfill.end_key] == "queued"
-        assert list(statuses.values()).count("pending") == 2
+        assert list(statuses.values()).count(RunStatus.PENDING) == 2
 
     def test_a_concurrency_covering_the_window_queues_every_partition(self, store: Store) -> None:
         store = _catalog_store()

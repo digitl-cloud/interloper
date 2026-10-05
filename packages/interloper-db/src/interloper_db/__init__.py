@@ -2,8 +2,12 @@
 
 from interloper_db.engine import get_engine, init_engine
 from interloper_db.models import (
+    ACTIVE_BACKFILL_STATUSES,
+    OPEN_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
     AuthSession,
     Backfill,
+    BackfillStatus,
     Component,
     ComponentRelation,
     Event,
@@ -15,6 +19,7 @@ from interloper_db.models import (
     Quota,
     Role,
     Run,
+    RunStatus,
     Usage,
     UserOrganisation,
 )
@@ -38,9 +43,13 @@ from interloper_db.store import (
 from interloper_db.store.status import ComponentStatus
 
 __all__ = [
+    "ACTIVE_BACKFILL_STATUSES",
+    "OPEN_RUN_STATUSES",
+    "TERMINAL_RUN_STATUSES",
     "AuthSession",
     "Backfill",
     "BackfillQuery",
+    "BackfillStatus",
     "Component",
     "ComponentQuery",
     "ComponentReading",
@@ -63,6 +72,7 @@ __all__ = [
     "Role",
     "Run",
     "RunQuery",
+    "RunStatus",
     "Store",
     "TokenQuery",
     "Usage",

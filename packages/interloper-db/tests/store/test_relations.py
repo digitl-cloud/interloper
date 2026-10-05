@@ -437,6 +437,15 @@ class TestList:
         assert len(store.relations.list(_ORG, RelationQuery(name="connection", limit=None)).items) == 1
         assert store.relations.list(_ORG, RelationQuery(name="up", limit=None)).items == []
 
+    def test_filters_by_destination(self, store: Store, connection: Component):
+        upstream = store.components.create(_ORG, kind="asset", key="guard_upstream")
+        store.components.create(_ORG, kind="asset", key="guard_required", relations={"up": [upstream.id]})
+        store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
+
+        rows = store.relations.list(_ORG, RelationQuery(dst_id=[connection.id], limit=None)).items
+
+        assert [(row.name, row.dst_id) for row in rows] == [("connection", connection.id)]
+
     def test_is_scoped_to_the_organisation(self, store: Store, connection: Component):
         store.components.create(_ORG, kind="source", key="wire_down_source", relations={"connection": [connection.id]})
 

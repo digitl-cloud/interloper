@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from interloper_db import RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Run
 from interloper_db.store import ComponentQuery, RunQuery, Store
@@ -273,7 +274,7 @@ class TestBackfillTimeline:
                 run.created_at = t0
                 run.started_at = t0 + datetime.timedelta(minutes=i)
                 run.completed_at = t0 + datetime.timedelta(minutes=10 + i * 10)
-                run.status = "success"
+                run.status = RunStatus.SUCCESS
                 session.add(run)
             session.commit()
 

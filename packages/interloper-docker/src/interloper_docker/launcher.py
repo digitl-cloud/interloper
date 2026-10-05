@@ -15,7 +15,7 @@ from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
     from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
-from interloper_scheduler.launcher import Launcher, RunState, RunStatus
+from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class DockerLauncher(Launcher):
             logger.exception("Failed to start container for run %s", run_id)
             raise
 
-    def describe_run(self, run_id: UUID) -> RunState:
+    def describe_run(self, run_id: UUID) -> LaunchState:
         """Return the authoritative state of a run's container.
 
         Used by the reaper to catch failed runs as soon as the
@@ -168,31 +168,31 @@ class DockerLauncher(Launcher):
             run_id: The run UUID to describe.
 
         Returns:
-            A :class:`RunState` indicating whether the container is
+            A :class:`LaunchState` indicating whether the container is
             still running, has succeeded, has failed, or is gone.
         """
         container_name = f"interloper_run_{str(run_id)[:8]}"
         try:
             container = self._client.containers.get(container_name)
         except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return RunState(status=RunStatus.NOT_FOUND)
+            return LaunchState(status=LaunchStatus.NOT_FOUND)
 
         try:
             container.reload()
         except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return RunState(status=RunStatus.NOT_FOUND)
+            return LaunchState(status=LaunchStatus.NOT_FOUND)
 
         state = container.attrs.get("State", {}) if container.attrs else {}
         docker_status = (state.get("Status") or container.status or "").lower()
 
         # "running", "created", "restarting", "paused" — still alive
         if docker_status in ("running", "created", "restarting", "paused"):
-            return RunState(status=RunStatus.RUNNING)
+            return LaunchState(status=LaunchStatus.RUNNING)
 
         # Terminal states: "exited", "dead", "removing"
         exit_code = state.get("ExitCode")
         if exit_code == 0:
-            return RunState(status=RunStatus.SUCCEEDED)
+            return LaunchState(status=LaunchStatus.SUCCEEDED)
 
         # Anything else is a failure
         parts = [f"Container {container.short_id} status={docker_status}"]
@@ -203,7 +203,7 @@ class DockerLauncher(Launcher):
         error = state.get("Error") or ""
         if error:
             parts.append(f"error={error}")
-        return RunState(status=RunStatus.FAILED, error=" ".join(parts))
+        return LaunchState(status=LaunchStatus.FAILED, error=" ".join(parts))
 
     def _build_environment(self) -> dict[str, str]:
         """Build environment variables for the container.

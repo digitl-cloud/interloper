@@ -25,7 +25,7 @@ from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
 from sqlmodel import col, func, select
 
-from interloper_db.models import Component, Event, Execution, Run
+from interloper_db.models import ACTIVE_BACKFILL_STATUSES, Component, Event, Execution, Run, RunStatus
 from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentQuery, ComponentStore
@@ -121,10 +121,10 @@ class InsightStore:
             ):
                 failing.add(component.id)
 
-        failed_stacks = self._runs.list(
-            org_id,
-            RunQuery(status="failed", component_kind="job", completed_after=day_ago, completed_before=now, limit=None),
-        ).items
+        failed = RunQuery(
+            status=[RunStatus.FAILED], component_kind="job", completed_after=day_ago, completed_before=now, limit=None
+        )
+        failed_stacks = self._runs.list(org_id, failed).items
         errors = self.error_groups(org_id, since=day_ago, until=now, group_by=("job", "cause"))
         connections = [component for component in components if component.kind == "connection"]
         attention = [
@@ -153,13 +153,13 @@ class InsightStore:
             The activity.
         """
         day_ago = now - dt.timedelta(hours=24)
-        backfills = self._backfills.list(org_id, BackfillQuery(status=["queued", "running"], limit=None)).items
+        backfills = self._backfills.list(org_id, BackfillQuery(status=[*ACTIVE_BACKFILL_STATUSES], limit=None)).items
         return Activity.from_runs(
             completed=self._runs.list(
                 org_id, RunQuery(completed_after=day_ago, completed_before=now, all_attempts=True, limit=None)
             ).items,
-            running=self._runs.list(org_id, RunQuery(status="running", limit=None)).items,
-            queued=self._runs.list(org_id, RunQuery(status="queued", limit=1)).total,
+            running=self._runs.list(org_id, RunQuery(status=[RunStatus.RUNNING], limit=None)).items,
+            queued=self._runs.list(org_id, RunQuery(status=[RunStatus.QUEUED], limit=1)).total,
             backfills=backfills,
             backfill_counts=self._backfills.run_counts([backfill.id for backfill in backfills]),
             now=now,
@@ -294,7 +294,7 @@ class InsightStore:
             health.append(
                 JobHealth(
                     job=job,
-                    failing=job.enabled and run is not None and run.status == "failed",
+                    failing=job.enabled and run is not None and run.status == RunStatus.FAILED,
                     latest_run=run,
                     last_success_at=last_success.get(job.id),
                     next_run_at=next_run,
@@ -352,7 +352,7 @@ class InsightStore:
         """
         statement = (
             select(col(Run.component_id), func.max(col(Run.completed_at)))
-            .where(Run.org_id == org_id, Run.status == "success", col(Run.component_id).is_not(None))
+            .where(Run.org_id == org_id, Run.status == RunStatus.SUCCESS, col(Run.component_id).is_not(None))
             .group_by(col(Run.component_id))
         )
         with session_scope(self._engine) as session:

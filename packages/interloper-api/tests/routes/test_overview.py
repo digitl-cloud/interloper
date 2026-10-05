@@ -18,6 +18,7 @@ import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from interloper_db import RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import (
     Backfill,
@@ -433,7 +434,7 @@ class TestHealthStrip:
         )
         with Session(store.engine) as session:
             run = session.exec(select(Run).where(Run.backfill_id == backfill.id).limit(1)).one()
-            run.status = "success"
+            run.status = RunStatus.SUCCESS
             session.add(run)
             session.commit()
 

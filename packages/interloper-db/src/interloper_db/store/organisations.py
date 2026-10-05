@@ -30,6 +30,7 @@ from interloper_db.models import (
     Quota,
     Role,
     Run,
+    RunStatus,
     UserOrganisation,
 )
 from interloper_db.session import commit, session_scope
@@ -253,7 +254,7 @@ class OrganisationStore:
             day = func.date(col(Run.completed_at)).label("day")
             run_days = session.exec(
                 select(day, func.count(), func.max(col(Run.completed_at)))
-                .where(col(Run.org_id) == org_id, col(Run.status) == "success")
+                .where(col(Run.org_id) == org_id, col(Run.status) == RunStatus.SUCCESS)
                 .group_by(day)
             ).all()
             for _day, count, latest in run_days:

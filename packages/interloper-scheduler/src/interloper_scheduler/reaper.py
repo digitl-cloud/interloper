@@ -27,13 +27,12 @@ import datetime as dt
 import logging
 from typing import TYPE_CHECKING
 
-import interloper as il
-from interloper_db import Store
-from interloper_db.models import Component, Run
-from sqlmodel import Session, select
+from interloper.errors import ConflictError
+from interloper_db import RunQuery, RunStatus, Store
+from interloper_db.models import Run
 
 from interloper_scheduler.controller import Controller
-from interloper_scheduler.launcher import RunStatus
+from interloper_scheduler.launcher import LaunchStatus
 
 if TYPE_CHECKING:
     from interloper_scheduler.launcher import Launcher
@@ -123,8 +122,8 @@ class Reaper(Controller):
         now = dt.datetime.now(dt.timezone.utc)
         timeout_cutoff = now - dt.timedelta(seconds=self._timeout)
 
-        with Session(self._store.engine) as session:
-            dispatched_runs = list(session.exec(select(Run).where(Run.status == "dispatched")).all())
+        query = RunQuery(status=[RunStatus.DISPATCHED], all_attempts=True, limit=None)
+        dispatched_runs = self._store.runs.list(None, query).items
 
         reaped = 0
         for run in dispatched_runs:
@@ -154,15 +153,15 @@ class Reaper(Controller):
                 logger.exception("Failed to describe run %s", run.id)
 
         if state is not None:
-            if state.status == RunStatus.RUNNING:
+            if state.status == LaunchStatus.RUNNING:
                 return False  # Trust the launcher — still alive
 
-            if state.status == RunStatus.SUCCEEDED:
+            if state.status == LaunchStatus.SUCCEEDED:
                 error = "Run container reported SUCCEEDED but never updated the DB. Possible connectivity issue."
                 self._fail_run(run, error)
                 return True
 
-            if state.status == RunStatus.FAILED:
+            if state.status == LaunchStatus.FAILED:
                 error = state.error or "Run failed (no error reported by launcher)"
                 self._fail_run(run, error)
                 return True
@@ -180,29 +179,16 @@ class Reaper(Controller):
         return False
 
     def _fail_run(self, run: Run, error: str) -> None:
-        """Mark a run as failed and emit a ``RUN_FAILED`` event.
+        """Fail a run with the reason the reaper found, unless another writer completed it first.
 
         Args:
             run: The run to fail.
-            error: The reason, logged and carried on the event.
+            error: The reason, logged and carried on the ``run_failed`` event.
         """
-        assert run.id is not None
         logger.warning("Reaping run %s: %s", run.id, error)
-
         try:
-            target = None
-            if run.component_id:
-                with Session(self._store.engine) as session:
-                    target = session.get(Component, run.component_id)
-            event = il.Event(
-                type=il.EventType.RUN_FAILED,
-                metadata={**run.event_metadata(target), "error": error},
-            )
-            self._store.events.save(event, org_id=run.org_id, run_id=run.id)
-        except Exception:
-            logger.exception("Failed to save RUN_FAILED event for run %s", run.id)
-
-        try:
-            self._store.runs.complete(run.id, success=False)
+            self._store.runs.fail(run.id, error)
+        except ConflictError:
+            logger.info("Run %s completed before it could be reaped", run.id)
         except Exception:
             logger.exception("Failed to mark run %s as failed", run.id)

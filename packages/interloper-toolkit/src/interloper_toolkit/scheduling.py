@@ -6,7 +6,15 @@ from datetime import datetime
 from uuid import UUID
 
 from interloper.utils import percentile
-from interloper_db import BackfillQuery, ComponentQuery, EventQuery, ExecutionQuery, RunQuery
+from interloper_db import (
+    ACTIVE_BACKFILL_STATUSES,
+    BackfillQuery,
+    ComponentQuery,
+    EventQuery,
+    ExecutionQuery,
+    RunQuery,
+    RunStatus,
+)
 from interloper_db.store.insights import GROUP_KEYS
 
 from interloper_toolkit.authz import requires_role
@@ -121,7 +129,7 @@ def toggle_asset(ctx: ToolkitContext, asset_id: str, enabled: bool) -> Component
 def list_recent_runs(
     ctx: ToolkitContext,
     component_id: str | None = None,
-    status: str | None = None,
+    status: RunStatus | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> RunList | ToolError:
@@ -129,7 +137,7 @@ def list_recent_runs(
 
     Args:
         component_id: Filter by job UUID (optional).
-        status: Filter by status: 'queued', 'running', 'success', 'failed', 'canceled' (optional).
+        status: Filter by status (optional).
         limit: Maximum number of runs to return (default 20).
         offset: Number of runs to skip, for paging past the first page.
 
@@ -137,7 +145,8 @@ def list_recent_runs(
     """
     try:
         jid = UUID(component_id) if component_id else None
-        runs = ctx.store.runs.list(ctx.org_id, RunQuery(component_id=jid, status=status, limit=limit, offset=offset))
+        query = RunQuery(component_id=jid, status=[status] if status else None, limit=limit, offset=offset)
+        runs = ctx.store.runs.list(ctx.org_id, query)
         return RunList(count=len(runs.items), total=runs.total, runs=runs.items)
     except Exception as e:
         return ToolError(error=str(e))
@@ -279,7 +288,7 @@ def list_failures(ctx: ToolkitContext, limit: int = 20, offset: int = 0) -> Fail
     failed runs.
     """
     try:
-        failed_runs = ctx.store.runs.list(ctx.org_id, RunQuery(status="failed", limit=limit, offset=offset))
+        failed_runs = ctx.store.runs.list(ctx.org_id, RunQuery(status=[RunStatus.FAILED], limit=limit, offset=offset))
 
         query = EventQuery(event_type=list(FAILURE_EVENT_TYPES), has_error=True, limit=_ERRORS_PER_FAILURE)
         results = []
@@ -398,7 +407,7 @@ def list_backfills(
     partition progress, plus the total number matching the filter.
     """
     try:
-        query = BackfillQuery(status=["queued", "running"] if active_only else None, limit=limit, offset=offset)
+        query = BackfillQuery(status=[*ACTIVE_BACKFILL_STATUSES] if active_only else None, limit=limit, offset=offset)
         backfills = ctx.store.backfills.list(ctx.org_id, query)
         return BackfillList(count=len(backfills.items), total=backfills.total, backfills=backfills.items)
     except Exception as e:
@@ -456,7 +465,7 @@ def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled |
         ctx.store.backfills.get(bid, org_id=ctx.org_id)
         backfill = ctx.store.backfills.cancel(bid)
         canceled = ctx.store.runs.list(
-            ctx.org_id, RunQuery(backfill_id=bid, status="canceled", all_attempts=True, limit=1)
+            ctx.org_id, RunQuery(backfill_id=bid, status=[RunStatus.CANCELED], all_attempts=True, limit=1)
         ).total
         return BackfillCanceled(
             message=f"Backfill canceled, {canceled} run(s) will not execute", backfill=backfill, runs_canceled=canceled

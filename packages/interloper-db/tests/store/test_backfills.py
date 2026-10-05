@@ -18,6 +18,7 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
+from interloper_db import BackfillStatus, RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import BackfillQuery, Store
@@ -146,7 +147,7 @@ def _mark_dispatched(store: Store, backfill_id: UUID) -> UUID:
     with Session(store.engine) as session:
         run = session.exec(select(Run).where(Run.backfill_id == backfill_id, Run.status == "queued")).first()
         assert run is not None and run.id is not None
-        run.status = "dispatched"
+        run.status = RunStatus.DISPATCHED
         session.add(run)
         session.commit()
         return run.id
@@ -445,7 +446,7 @@ class TestListActive:
         with Session(store.engine) as session:
             row = session.get(Backfill, backfill.id)
             assert row is not None
-            row.status = "success"
+            row.status = BackfillStatus.SUCCESS
             session.add(row)
             session.commit()
 
@@ -481,7 +482,7 @@ class TestRunCounts:
         backfill = _backfill(store, days=1, concurrency=1)
         with Session(store.engine) as session:
             first = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
-            first.status = "failed"
+            first.status = RunStatus.FAILED
             session.add(first)
             session.add(
                 Run(

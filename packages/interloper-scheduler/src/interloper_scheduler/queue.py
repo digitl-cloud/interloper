@@ -3,16 +3,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
 
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
-from interloper_db.models import Backfill, Event, Run
-from interloper_db.store.backfills import cancel_backfill_runs
-from sqlalchemy import func
-from sqlmodel import Session, col, select
 
 from interloper_scheduler.controller import Controller
 from interloper_scheduler.launcher import InProcessLauncher, Launcher
@@ -21,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class QueueController(Controller):
-    """Polls the runs table for queued runs and dispatches them.
+    """Claims queued runs and launches them.
 
-    Uses ``SELECT FOR UPDATE SKIP LOCKED`` for safe concurrent polling.
-    Each tick drains the queue: runs are claimed and launched one at a
-    time until none are left, then the controller sleeps.
+    Each tick drains the queue: runs are claimed (:meth:`RunStore.claim_next`,
+    safe for concurrent workers) and launched one at a time until none are
+    left, then the controller sleeps.
     """
 
     def __init__(
@@ -53,9 +47,10 @@ class QueueController(Controller):
     def _tick(self) -> None:
         """Dispatch queued runs until the queue is drained."""
         while not self._stop_event.is_set():
-            run_id = self._claim_next()
-            if run_id is None:
+            run = self._store.runs.claim_next()
+            if run is None:
                 return
+            run_id = run.id
             try:
                 logger.info("Launching run %s", run_id)
                 # Dispatch trace root; the launched run starts its own trace
@@ -76,76 +71,3 @@ class QueueController(Controller):
                 # component state and advances the backfill, so a failed
                 # dispatch never wedges its backfill.
                 self._store.runs.complete(run_id, success=False)
-
-    def _claim_next(self) -> UUID | None:
-        """Claim the oldest claimable queued run, reserve its quota, and dispatch it.
-
-        A run carrying a schedule is not claimable until it has passed, which
-        is how a retry serves its backoff without needing a status of its own.
-        It is skipped rather than waited on, so a run backing off never holds
-        the head of the queue.
-
-        This is the authoritative run-quota gate: dispatch requires an atomic
-        reservation, so an exhausted organisation can never execute past its
-        limit. Denied runs are canceled (their whole backfill with them) and
-        the loop moves on to the next queued run — canceling rather than
-        skipping keeps an exhausted org from head-of-line-blocking the queue.
-
-        Returns:
-            The claimed run id, or ``None`` when the queue is empty.
-        """
-        while True:
-            with self._store.transaction() as session:
-                statement = (
-                    select(Run)
-                    .where(Run.status == "queued")
-                    .where(col(Run.scheduled_for).is_(None) | (col(Run.scheduled_for) <= func.now()))
-                    .order_by(col(Run.created_at).asc())
-                    .limit(1)
-                    .with_for_update(skip_locked=True)
-                )
-                run = session.exec(statement).first()
-                if not run or not run.id:
-                    return None
-
-                if self._store.quotas.try_reserve_run(run):
-                    run.status = "dispatched"
-                    session.add(run)
-                    session.commit()
-                    logger.info("Dispatched run %s", run.id)
-                    return run.id
-
-                self._cancel_over_quota(session, run)
-                session.commit()
-                logger.warning(
-                    "Canceled run %s: monthly successful-run quota exhausted for org %s", run.id, run.org_id
-                )
-
-    @staticmethod
-    def _cancel_over_quota(session: Session, run: Run) -> None:
-        """Cancel a quota-denied run (and its backfill), with an explanatory event.
-
-        A canceled run is never claimed again, so the event cannot double-write.
-
-        Args:
-            session: Open session the cancellation is written through.
-            run: The run the quota denied.
-        """
-        run.status = "canceled"
-        session.add(run)
-        if run.backfill_id:
-            backfill = session.get(Backfill, run.backfill_id)
-            if backfill and backfill.status in ("running", "queued"):
-                cancel_backfill_runs(session, backfill)
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=run.org_id,
-                run_id=run.id,
-                component_id=run.component_id,
-                event_type="log",
-                level="warning",
-                message="Run canceled: the organisation's monthly successful-run quota is exhausted",
-                timestamp=datetime.now(timezone.utc),
-            )
-        )

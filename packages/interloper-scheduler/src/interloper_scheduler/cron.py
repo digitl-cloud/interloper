@@ -18,16 +18,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, tzinfo
 from typing import Any, cast
-from uuid import uuid4
 
+import interloper as il
 from croniter import croniter
 from interloper.errors import ConfigError, QuotaExceededError
 from interloper.job.cron import CronJob
 from interloper.partitioning.time import TimePartitionWindow
 from interloper_db import Store
-from interloper_db.models import Component, Event
-from sqlalchemy import or_
-from sqlmodel import Session, select
+from interloper_db.models import Component
 
 from interloper_scheduler.controller import Controller
 
@@ -37,12 +35,9 @@ logger = logging.getLogger(__name__)
 class CronController(Controller):
     """Evaluates cron jobs and creates queued runs.
 
-    Each tick:
-    1. ``SELECT FOR UPDATE SKIP LOCKED`` (lock due job rows)
-    2. update ``state.next_run_at`` (calculate next)
-    3. create the firing's backfill (or single run) through the store,
-       quota-checked like any other
-    4. ``COMMIT`` (release locks)
+    Each tick, in one transaction: lock the due job rows, advance each
+    one's ``state.next_run_at``, and create its firing's backfill (or single
+    run), quota-checked like any other.
     """
 
     def __init__(
@@ -75,21 +70,11 @@ class CronController(Controller):
 
     def _tick(self) -> None:
         """Process a batch of due jobs in a single transaction."""
-        with self._store.transaction() as session:
-            now = datetime.now(timezone.utc)
-
-            next_run_at = Component.state["next_run_at"].as_string()  # ty: ignore[not-subscriptable]
-            statement = (
-                select(Component)
-                .where(Component.kind == "job")
-                .where(Component.config["enabled"].as_boolean())  # ty: ignore[not-subscriptable]
-                .where(or_(next_run_at <= now.isoformat(), next_run_at.is_(None)))
-                .order_by(next_run_at.asc().nulls_last())
-                .limit(self._batch_size)
-                .with_for_update(skip_locked=True)
+        now = datetime.now(timezone.utc)
+        with self._store.transaction():
+            jobs = self._store.components.lock_due(
+                "job", "next_run_at", now=now, limit=self._batch_size, enabled_only=True
             )
-
-            jobs = session.exec(statement).all()
             if not jobs:
                 return
 
@@ -107,7 +92,7 @@ class CronController(Controller):
 
                 # New job: schedule for the future, don't run yet
                 if scheduled_time is None:
-                    self._set_state(session, job, next_run_at=next_run)
+                    self._store.components.stamp_state(job.id, next_run_at=next_run)
                     logger.info("Scheduling new job '%s' for %s", job.name, next_run)
                     continue
 
@@ -120,13 +105,13 @@ class CronController(Controller):
                         int(delay_seconds),
                         self._max_execution_delay,
                     )
-                    self._set_state(session, job, next_run_at=next_run)
+                    self._store.components.stamp_state(job.id, next_run_at=next_run)
                     continue
 
-                self._set_state(session, job, next_run_at=next_run)
+                self._store.components.stamp_state(job.id, next_run_at=next_run)
 
                 try:
-                    window = self._backfill_window(session, job, config, now.astimezone(zone))
+                    window = self._backfill_window(job, config, now.astimezone(zone))
                 except ValueError as exc:
                     # Targets disagree on granularity: skip rather than
                     # backfill a window that is wrong for some of them.
@@ -150,41 +135,37 @@ class CronController(Controller):
                     else:
                         self._store.runs.create(job.org_id, component_id=job.id)
                 except QuotaExceededError as exc:
-                    self._skip_over_quota(session, job, exc)
+                    self._skip_over_quota(job, exc)
 
-            session.commit()
             logger.info("Processed %d job(s)", len(jobs))
 
     # -- Internals -------------------------------------------------------------
 
-    @staticmethod
-    def _skip_over_quota(session: Session, job: Component, error: QuotaExceededError) -> None:
+    def _skip_over_quota(self, job: Component, error: QuotaExceededError) -> None:
         """Record a firing the organisation's quotas rejected, on the job itself.
 
         Args:
-            session: Open session the event is written through.
             job: The job whose firing was rejected.
             error: The rejection, carrying the quota and its message.
         """
         logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, error)
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=job.org_id,
-                component_id=job.id,
-                component_kind=job.kind,
-                component_key=job.key,
-                event_type="log",
-                level="warning",
-                message=f"Scheduled firing skipped: {error}",
-                data={"quota": error.quota, "limit": error.limit, "used": error.used},
-                timestamp=datetime.now(timezone.utc),
-            )
+        event = il.Event(
+            type=il.EventType.LOG,
+            metadata={
+                "component_id": str(job.id),
+                "component_kind": job.kind,
+                "component_key": job.key,
+                "level": "warning",
+                "message": f"Scheduled firing skipped: {error}",
+                "quota": error.quota,
+                "limit": error.limit,
+                "used": error.used,
+            },
         )
+        self._store.events.save(event, org_id=job.org_id)
 
     def _backfill_window(
         self,
-        session: Session,
         job: Component,
         config: dict[str, Any],
         now: datetime,
@@ -205,7 +186,6 @@ class CronController(Controller):
         on one, since a window would be wrong for some of them.
 
         Args:
-            session: Open session the targets are resolved in.
             job: The job row being evaluated.
             config: The job's raw config payload.
             now: The tick instant, on the job's wall clock.
@@ -216,21 +196,8 @@ class CronController(Controller):
         """
         if not config.get("lookback", 1):
             return None
-        granularity = self._store.components.job_partition_granularity(session, job.id)
+        granularity = self._store.components.job_partition_granularity(job.id)
         return CronJob.window(config, fires_at=now, granularity=granularity)
-
-    @staticmethod
-    def _set_state(session: Session, job: Component, **timestamps: datetime) -> None:
-        """Merge timestamps into the job's machine-owned state (spec untouched).
-
-        Args:
-            session: Open session the write joins.
-            job: The job row to stamp.
-            **timestamps: State fields to set, merged over the existing payload.
-        """
-        job.stamp_state(**timestamps)
-        session.add(job)
-        session.flush()
 
     def _calculate_next_run(self, cron_expression: str, base_time: datetime, zone: tzinfo) -> datetime:
         """Calculate the next run time from a cron expression.

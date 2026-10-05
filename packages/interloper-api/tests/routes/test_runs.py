@@ -17,7 +17,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import ConfigError, ConflictError, NotFoundError, QuotaExceededError
-from interloper_db import EventQuery, ExecutionQuery, Page, RunQuery
+from interloper_db import EventQuery, ExecutionQuery, Page, RunQuery, RunStatus
 
 from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
@@ -319,6 +319,7 @@ def test_list_runs_forwards_every_query_field(store: FakeStore) -> None:
         "component_kind": "job",
         "component_key": "facebook_ads",
         "all_attempts": "true",
+        "hooks_pending": "true",
         "sort": "-partition_key",
         "limit": "25",
         "offset": "75",
@@ -332,7 +333,7 @@ def test_list_runs_forwards_every_query_field(store: FakeStore) -> None:
         component_id=component_id,
         backfill_id=backfill_id,
         root_run_id=root_run_id,
-        status="failed",
+        status=[RunStatus.FAILED],
         after=dt.datetime(2026, 2, 4, tzinfo=dt.timezone.utc),
         before=dt.datetime(2026, 2, 5, tzinfo=dt.timezone.utc),
         completed_after=dt.datetime(2026, 2, 4, 6, tzinfo=dt.timezone.utc),
@@ -341,6 +342,7 @@ def test_list_runs_forwards_every_query_field(store: FakeStore) -> None:
         component_kind="job",
         component_key="facebook_ads",
         all_attempts=True,
+        hooks_pending=True,
         sort="-partition_key",
         limit=25,
         offset=75,

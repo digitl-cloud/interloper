@@ -100,8 +100,8 @@ class Store:
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.usage = UsageStore(self._engine)
         self.backfills = BackfillStore(self._engine, self.quotas)
-        self.runs = RunStore(self._engine, self.quotas, self.backfills)
         self.events = EventStore(self._engine)
+        self.runs = RunStore(self._engine, self.quotas, self.backfills, self.events)
         self.executions = ExecutionStore(self._engine)
         self.components = ComponentStore(
             self._engine, catalog, self._hydrator, encrypt, self.quotas, self.relations
@@ -158,8 +158,8 @@ class Store:
     def engine(self) -> Engine:
         """The engine this store operates on.
 
-        Exposed so co-located machinery (the scheduler's claim/sweep SQL) runs
-        against the same engine as the store, not an ambient global.
+        Exposed for provisioning and tests; everything else reads and writes
+        through the facets.
 
         Returns:
             The engine.

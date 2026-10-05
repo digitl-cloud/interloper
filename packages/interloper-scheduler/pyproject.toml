@@ -39,11 +39,18 @@ line-length = 120
 
 [tool.ruff.lint]
 preview = true
-extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D"]
+extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202", "DOC", "D", "TID251"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+# Raw database access lives in interloper-db alone; this package reads and
+# writes through the store's facets.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlalchemy".msg = "Database access goes through interloper_db.Store facets"
+"sqlmodel".msg = "Database access goes through interloper_db.Store facets"
+"interloper_db.session".msg = "Database access goes through interloper_db.Store facets"
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"tests/**" = ["ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]
+"tests/**" = ["TID251", "ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]

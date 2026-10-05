@@ -26,6 +26,7 @@ import functools
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -43,7 +44,7 @@ from interloper.errors import (
 from interloper.partitioning.time import TimeGranularity
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
-from sqlalchemy import Engine
+from sqlalchemy import Engine, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
@@ -778,6 +779,51 @@ class ComponentStore:
             session.refresh(db_component)
             return db_component
 
+    def lock_due(
+        self,
+        kind: str,
+        state_key: str,
+        *,
+        now: datetime,
+        limit: int,
+        keys: Sequence[str] | None = None,
+        enabled_only: bool = False,
+    ) -> builtins.list[Component]:
+        """Lock the rows whose machine-owned *state_key* instant has come, most overdue first.
+
+        A row that never carried the instant is due too, after every overdue
+        one. Rows another process holds are skipped (``SKIP LOCKED``), so
+        concurrent schedulers split the work. The locks last as long as the
+        enclosing :meth:`Store.transaction`, which is where a caller advances
+        the instant before the rows are released.
+
+        Args:
+            kind: The component kind to scan.
+            state_key: The state field holding each row's next due instant.
+            now: The instant rows are due by.
+            limit: The most rows to lock.
+            keys: Keep rows of these catalog keys; ``None`` keeps every key.
+            enabled_only: Keep only rows whose config enables them.
+
+        Returns:
+            The locked rows.
+        """
+        due = Component.state[state_key].as_string()  # ty: ignore[not-subscriptable]
+        statement = (
+            select(Component)
+            .where(Component.kind == kind)
+            .where(or_(due <= now.isoformat(), due.is_(None)))
+            .order_by(due.asc().nulls_last())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        if keys is not None:
+            statement = statement.where(col(Component.key).in_(keys))
+        if enabled_only:
+            statement = statement.where(Component.config["enabled"].as_boolean())  # ty: ignore[not-subscriptable]
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
+
     # -- Kind semantics --------------------------------------------------------
 
     def _apply_config(self, db_component: Component, config: dict[str, Any] | None, encrypted: bool | None) -> None:
@@ -1022,7 +1068,7 @@ class ComponentStore:
 
         self._relations._bind_siblings(session, source_cls, children)
 
-    def job_partition_granularity(self, session: Session, job_id: UUID) -> TimeGranularity | None:
+    def job_partition_granularity(self, job_id: UUID) -> TimeGranularity | None:
         """Resolve the granularity a job's partitioned targets share.
 
         Granularity lives on the target assets' catalog definitions, never on
@@ -1032,7 +1078,6 @@ class ComponentStore:
         parent source's definition.
 
         Args:
-            session: Open session to resolve the targets in.
             job_id: UUID of the job component.
 
         Returns:
@@ -1043,7 +1088,8 @@ class ComponentStore:
             ConfigError: If the targets disagree on granularity — scheduling a
                 window would be wrong for some of them, so fail closed.
         """
-        granularities = self._job_target_granularities(session, [job_id]).get(job_id, set())
+        with session_scope(self._engine) as session:
+            granularities = self._job_target_granularities(session, [job_id]).get(job_id, set())
         if len(granularities) > 1:
             names = ", ".join(sorted(g.value for g in granularities))
             raise ConfigError(f"Job targets disagree on partition granularity ({names})")

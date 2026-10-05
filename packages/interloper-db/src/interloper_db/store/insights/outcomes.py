@@ -16,9 +16,7 @@ from uuid import UUID
 
 from interloper.utils import assume_utc, percentile
 
-from interloper_db.models import Backfill, Run
-
-TERMINAL_STATUSES = frozenset({"success", "failed", "canceled"})
+from interloper_db.models import TERMINAL_RUN_STATUSES, Backfill, Run, RunStatus
 
 
 @dataclass(frozen=True)
@@ -130,13 +128,13 @@ class Activity:
         start = now.replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=23)
         counts: dict[dt.datetime, Counter[str]] = defaultdict(Counter)
         for run in completed:
-            if run.completed_at is None or run.status not in ("success", "failed"):
+            if run.completed_at is None or run.status not in (RunStatus.SUCCESS, RunStatus.FAILED):
                 continue
             finished = assume_utc(run.completed_at).astimezone(dt.timezone.utc)
             if start <= finished <= now:
                 counts[finished.replace(minute=0, second=0, microsecond=0)][run.status] += 1
         hours = (start + dt.timedelta(hours=i) for i in range(24))
-        hourly = [HourBucket(hour, counts[hour]["success"], counts[hour]["failed"]) for hour in hours]
+        hourly = [HourBucket(hour, counts[hour][RunStatus.SUCCESS], counts[hour][RunStatus.FAILED]) for hour in hours]
         succeeded, failed = sum(bucket.succeeded for bucket in hourly), sum(bucket.failed for bucket in hourly)
         return cls(
             runs=FinishedRuns(succeeded + failed, succeeded, failed, hourly),
@@ -154,7 +152,7 @@ class Activity:
                     count
                     for backfill in backfills
                     for status, count in backfill_counts.get(backfill.id, {}).items()
-                    if status in TERMINAL_STATUSES
+                    if status in TERMINAL_RUN_STATUSES
                 ),
                 partitions_total=sum(backfill.partitions for backfill in backfills),
             ),
@@ -224,13 +222,13 @@ class JobOutcome:
                     if run.started_at and run.completed_at:
                         seconds = (assume_utc(run.completed_at) - assume_utc(run.started_at)).total_seconds()
                         durations.append(round(seconds, 1))
-                    if run.status == "success" and run.completed_at:
+                    if run.status == RunStatus.SUCCESS and run.completed_at:
                         finished = assume_utc(run.completed_at)
                         last_success = finished if last_success is None else max(last_success, finished)
                 if len(chain) > 1:
                     retried += 1
-                    healed += latest.status == "success"
-                    still_failing += latest.status == "failed"
+                    healed += latest.status == RunStatus.SUCCESS
+                    still_failing += latest.status == RunStatus.FAILED
             outcomes.append(
                 cls(
                     job_id=job_id,
@@ -246,4 +244,4 @@ class JobOutcome:
                     last_success_at=last_success,
                 )
             )
-        return sorted(outcomes, key=lambda outcome: (-outcome.stacks.get("failed", 0), outcome.job_name or ""))
+        return sorted(outcomes, key=lambda outcome: (-outcome.stacks.get(RunStatus.FAILED, 0), outcome.job_name or ""))
