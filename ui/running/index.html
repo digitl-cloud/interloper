@@ -2142,7 +2142,8 @@ singletons. <code>--dev</code> runs the Nuxt dev server with hot reload instead 
 <p>The file is not interpolated: a field left out of a block is read from its <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are
 encrypted at rest. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
-bootstraps platform administrators. In-house OAuth app credentials for connectors live in
+bootstraps platform administrators, promoted by <code>interloper db init</code> and at login (promote-only). Once
+one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 <code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code> and <code>_REDIRECT_URI</code>; a provider without them
 has no sign-in tab, only manual credential entry. The full settings list is in
 <a href="../../reference/settings/">Settings</a>.</p>
