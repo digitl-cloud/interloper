@@ -370,6 +370,10 @@ class TestGet:
         with pytest.raises(NotFoundError, match=f"Backfill {missing} not found"):
             store.backfills.get(missing)
 
+    def test_marking_a_missing_backfills_hooks_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.backfills.mark_hooks_evaluated(uuid4())
+
     def test_another_orgs_backfill_reads_as_missing(self, store: Store):
         backfill = _backfill(store, days=1)
 

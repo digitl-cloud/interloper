@@ -300,6 +300,15 @@ class TestFailureReportingIsBestEffort:
         assert f"Failed to mark run {run_id} as failed" in caplog.text
         assert _status(store, run_id) == "dispatched"
 
+    def test_a_run_completed_before_it_is_reaped_keeps_its_verdict(self, store: Store) -> None:
+        run_id = _dispatched_run(store, age_seconds=7200)
+        run = store.runs.get(run_id)
+        store.runs.complete(run_id, success=True)
+
+        Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)._fail_run(run, "late reap")
+
+        assert _status(store, run_id) == "success"
+
     def test_a_failed_completion_is_logged_and_survived(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:

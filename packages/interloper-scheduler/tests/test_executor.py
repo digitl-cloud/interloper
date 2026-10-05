@@ -312,6 +312,16 @@ class TestAlreadyTerminal:
         assert [record.levelname for record in caplog.records] == ["WARNING"]
         assert str(run.id) in caplog.records[0].getMessage()
 
+    def test_a_failure_another_writer_completed_first_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        run = _dispatched()
+        store = _RecordingStore(_NotAWorkload(), run=run, already_terminal=True)
+
+        with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
+            assert _executor(store).execute(run.id) is False
+
+        assert store.failures == []
+        assert "completed by another writer first" in caplog.text
+
 
 class TestEmptyWorkload:
     """A workload that resolves to no operations succeeds without a DAG run."""
