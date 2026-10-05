@@ -247,9 +247,7 @@ class CheckResponse(BaseModel):
             status = exception.response.status_code
             if status in (401, 403):
                 return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
-            return cls(
-                ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}."
-            )
+            return cls(ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}.")
         if isinstance(exception, (TimeoutError, httpx2.TimeoutException)):
             return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
         if isinstance(exception, httpx2.TransportError):
@@ -300,8 +298,7 @@ async def check_connection(
         connection = connection_cls(**config)
     except ValidationError as exception:
         errors = [
-            FieldError(field=".".join(str(loc) for loc in e["loc"]), message=e["msg"])
-            for e in exception.errors()
+            FieldError(field=".".join(str(loc) for loc in e["loc"]), message=e["msg"]) for e in exception.errors()
         ]
         return CheckResponse(
             ok=False, live=False, category="config", message="The configuration is invalid.", errors=errors

@@ -118,9 +118,7 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
                                 "event": payload["op"],
                                 "record": payload.get("record"),
                             }
-                            asyncio.run_coroutine_threadsafe(
-                                _manager.broadcast(org_id, message), loop
-                            )
+                            asyncio.run_coroutine_threadsafe(_manager.broadcast(org_id, message), loop)
                         except (json.JSONDecodeError, KeyError) as e:
                             logger.warning("[Realtime] Invalid NOTIFY payload: %s", e)
         except Exception as e:  # noqa: BLE001
@@ -129,6 +127,7 @@ def _start_notify_listener(dsn: str, loop: asyncio.AbstractEventLoop) -> None:
             # logged and the connection retried instead.
             logger.error("[Realtime] NOTIFY listener error: %s, reconnecting in 5s...", e)
             import time
+
             time.sleep(5)
 
 

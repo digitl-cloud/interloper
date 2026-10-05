@@ -41,6 +41,25 @@ def commit(session: Session) -> None:
         session.commit()
 
 
+def save(session: Session, row: Any, *loads: str) -> None:
+    """End a store method's write: add the row, commit, and read it back whole.
+
+    The row comes back refreshed, so server defaults (its id, its creation
+    time) are set, and with every relationship in *loads* loaded, so a
+    reader reaching it detached finds what it needs.
+
+    Args:
+        session: The session the calling method is working in.
+        row: The row to persist.
+        *loads: Relationship names to load before the session closes.
+    """
+    session.add(row)
+    commit(session)
+    session.refresh(row)
+    for name in loads:
+        getattr(row, name)
+
+
 @contextmanager
 def transaction(engine: Engine) -> Iterator[Session]:
     """Run several store calls as one atomic unit of work.

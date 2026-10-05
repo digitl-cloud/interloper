@@ -16,7 +16,7 @@ from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.models import Conversation
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 TITLE_LENGTH = 80
@@ -45,9 +45,7 @@ class ConversationStore:
         """
         with session_scope(self._engine) as session:
             row = Conversation(org_id=org_id, user_id=user_id)
-            session.add(row)
-            commit(session)
-            session.refresh(row)
+            save(session, row)
             return row
 
     def get(self, conversation_id: UUID, *, org_id: UUID, user_id: UUID) -> Conversation:
@@ -104,21 +102,14 @@ class ConversationStore:
 
         Returns:
             The updated row.
-
-        Raises:
-            NotFoundError: If the conversation is not found.
         """
         with session_scope(self._engine) as session:
-            row = session.get(Conversation, conversation_id)
-            if row is None:
-                raise NotFoundError(f"Conversation {conversation_id} not found")
+            row = self._lock(conversation_id)
             if messages is not None:
                 row.messages = [*messages]
             if title and not row.title:
                 row.title = title[:TITLE_LENGTH]
-            session.add(row)
-            commit(session)
-            session.refresh(row)
+            save(session, row)
             return row
 
     def delete(self, conversation_id: UUID) -> None:
@@ -126,13 +117,25 @@ class ConversationStore:
 
         Args:
             conversation_id: The conversation UUID.
+        """
+        with session_scope(self._engine) as session:
+            session.delete(self._lock(conversation_id))
+            commit(session)
+
+    def _lock(self, conversation_id: UUID) -> Conversation:
+        """Load a conversation for a write, holding its row for the rest of the transaction.
+
+        Args:
+            conversation_id: The conversation UUID.
+
+        Returns:
+            The row.
 
         Raises:
             NotFoundError: If the conversation is not found.
         """
         with session_scope(self._engine) as session:
-            row = session.get(Conversation, conversation_id)
+            row = session.get(Conversation, conversation_id, with_for_update=True)
             if row is None:
                 raise NotFoundError(f"Conversation {conversation_id} not found")
-            session.delete(row)
-            commit(session)
+            return row

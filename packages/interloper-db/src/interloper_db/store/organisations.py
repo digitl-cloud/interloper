@@ -10,14 +10,12 @@ statements, ordered children-first, and no other method here crosses over.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from interloper.utils import assume_utc
 from sqlalchemy import Engine, delete, update
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, select
 
 from interloper_db.models import (
     AuthSession,
@@ -29,11 +27,9 @@ from interloper_db.models import (
     Profile,
     Quota,
     Role,
-    Run,
-    RunStatus,
     UserOrganisation,
 )
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 
@@ -48,23 +44,6 @@ class OrganisationQuery(PageQuery):
 
     user_id: UUID | None = None
     include_deleted: bool = False
-
-
-@dataclass(frozen=True)
-class ActivityEntry:
-    """One event in an organisation's derived activity feed.
-
-    Attributes:
-        kind: What happened (``org_created``, ``member_joined``, …).
-        when: When it happened, aware UTC.
-        subject: Who or what it happened to, when the kind names one.
-        extra: A detail the kind carries (a role, an inviter), or ``None``.
-    """
-
-    kind: str
-    when: datetime
-    subject: str | None = None
-    extra: str | None = None
 
 
 class OrganisationStore:
@@ -86,9 +65,15 @@ class OrganisationStore:
 
         Returns:
             The organisation row.
+
+        Raises:
+            NotFoundError: If no live organisation carries that id.
         """
         with session_scope(self._engine) as session:
-            return self._get_live(session, org_id)
+            organisation = session.get(Organisation, org_id)
+            if not organisation or organisation.deleted_at is not None:
+                raise NotFoundError(f"Organisation {org_id} not found")
+            return organisation
 
     def list(self, query: OrganisationQuery) -> Page[Organisation]:
         """List organisations, oldest first.
@@ -129,8 +114,7 @@ class OrganisationStore:
                 session.add(
                     UserOrganisation(user_id=creator_id, organisation_id=db_organisation.id, role=Role.ADMIN.value)
                 )
-            commit(session)
-            session.refresh(db_organisation)
+            save(session, db_organisation)
             return db_organisation
 
     def update(self, org_id: UUID, *, name: str) -> Organisation:
@@ -144,11 +128,9 @@ class OrganisationStore:
             The updated Organisation.
         """
         with session_scope(self._engine) as session:
-            db_organisation = self._get_live(session, org_id)
+            db_organisation = self.get(org_id)
             db_organisation.name = name
-            session.add(db_organisation)
-            commit(session)
-            session.refresh(db_organisation)
+            save(session, db_organisation)
             return db_organisation
 
     def delete(self, org_id: UUID) -> None:
@@ -169,7 +151,7 @@ class OrganisationStore:
             org_id: Organisation UUID.
         """
         with session_scope(self._engine) as session:
-            db_organisation = self._get_live(session, org_id)
+            db_organisation = self.get(org_id)
             for statement in (
                 delete(ComponentRelation).where(col(ComponentRelation.org_id) == org_id),
                 delete(Component).where(col(Component.org_id) == org_id),
@@ -184,106 +166,3 @@ class OrganisationStore:
             db_organisation.deleted_at = datetime.now(timezone.utc)
             session.add(db_organisation)
             commit(session)
-
-    def activity(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
-        """A derived activity feed for one organisation, newest first.
-
-        Composed purely from existing records — the organisation row,
-        memberships, pending invitations, source components, and daily
-        successful-run aggregates. There is no audit table, so events whose
-        source rows are gone (accepted invitations' inviters, quota-change
-        history) are not reconstructible and deliberately absent.
-
-        Args:
-            org_id: Organisation UUID; a soft-deleted organisation still has
-                its feed, ending in its deletion.
-            query: The window to read.
-
-        Returns:
-            The page of entries, ``when`` always an aware UTC datetime.
-
-        Raises:
-            NotFoundError: If the organisation is not found.
-        """
-        entries: list[ActivityEntry] = []
-        with session_scope(self._engine) as session:
-            organisation = session.get(Organisation, org_id)
-            if not organisation:
-                raise NotFoundError(f"Organisation {org_id} not found")
-            if organisation.created_at:
-                entries.append(ActivityEntry("org_created", organisation.created_at))
-            if organisation.deleted_at:
-                entries.append(ActivityEntry("org_deleted", organisation.deleted_at))
-
-            memberships = session.exec(
-                select(UserOrganisation, Profile).where(
-                    UserOrganisation.organisation_id == org_id, col(Profile.id) == UserOrganisation.user_id
-                )
-            ).all()
-            for membership, profile in memberships:
-                if membership.created_at:
-                    subject = profile.name or profile.email
-                    entries.append(ActivityEntry("member_joined", membership.created_at, subject, membership.role))
-
-            invitations = session.exec(select(Invitation).where(Invitation.organisation_id == org_id)).all()
-            inviter_ids = {invitation.invited_by for invitation in invitations}
-            inviters = {
-                profile.id: profile
-                for profile in session.exec(select(Profile).where(col(Profile.id).in_(inviter_ids))).all()
-            }
-            for invitation in invitations:
-                if invitation.created_at:
-                    inviter = inviters.get(invitation.invited_by)
-                    entries.append(
-                        ActivityEntry(
-                            "invitation_sent",
-                            invitation.created_at,
-                            invitation.email,
-                            (inviter.name or inviter.email) if inviter else None,
-                        )
-                    )
-
-            sources = session.exec(
-                select(Component).where(col(Component.org_id) == org_id, col(Component.kind) == "source")
-            ).all()
-            for source in sources:
-                if source.created_at:
-                    entries.append(ActivityEntry("source_added", source.created_at, source.name or source.key))
-
-            # func.date() buckets per calendar day on both Postgres and SQLite.
-            day = func.date(col(Run.completed_at)).label("day")
-            run_days = session.exec(
-                select(day, func.count(), func.max(col(Run.completed_at)))
-                .where(col(Run.org_id) == org_id, col(Run.status) == RunStatus.SUCCESS)
-                .group_by(day)
-            ).all()
-            for _day, count, latest in run_days:
-                if latest is not None:
-                    entries.append(ActivityEntry("runs_completed", latest, str(count)))
-
-        normalized = [
-            ActivityEntry(entry.kind, assume_utc(entry.when), entry.subject, entry.extra) for entry in entries
-        ]
-        normalized.sort(key=lambda entry: entry.when, reverse=True)
-        return Page.window(normalized, query)
-
-    # -- Internals -------------------------------------------------------------
-
-    @staticmethod
-    def _get_live(session: Session, org_id: UUID) -> Organisation:
-        """Fetch an organisation that has not been soft-deleted.
-
-        Args:
-            session: Open session to read through.
-            org_id: Organisation UUID.
-
-        Returns:
-            The organisation row.
-
-        Raises:
-            NotFoundError: If no live organisation carries that id.
-        """
-        organisation = session.get(Organisation, org_id)
-        if not organisation or organisation.deleted_at is not None:
-            raise NotFoundError(f"Organisation {org_id} not found")
-        return organisation

@@ -12,12 +12,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from interloper.utils import assume_utc
 from sqlalchemy import Engine
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, func, select
 
 from interloper_db.models import Invitation, Organisation, Role, UserOrganisation
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 INVITATION_EXPIRY_DAYS = 7
@@ -52,20 +51,6 @@ class InvitationStore:
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
 
-    def get(self, invitation_id: UUID, *, org_id: UUID) -> Invitation:
-        """Get one of an organisation's invitations by ID.
-
-        Args:
-            invitation_id: Invitation UUID.
-            org_id: Organisation the invitation must belong to; a mismatch
-                reads as missing, so an id cannot be probed across tenants.
-
-        Returns:
-            The Invitation row.
-        """
-        with session_scope(self._engine) as session:
-            return self._get(session, invitation_id, org_id)
-
     def create(self, org_id: UUID, *, email: str, role: str, invited_by: UUID) -> Invitation:
         """Invite an email address to join an organisation.
 
@@ -80,9 +65,8 @@ class InvitationStore:
             The created Invitation row.
         """
         with session_scope(self._engine) as session:
-            invitation = self._insert(session, org_id, email=email, role=role, invited_by=invited_by)
-            commit(session)
-            session.refresh(invitation)
+            invitation = self._new(org_id, email=email, role=role, invited_by=invited_by)
+            save(session, invitation)
             return invitation
 
     def reissue(self, invitation_id: UUID, *, org_id: UUID, invited_by: UUID) -> Invitation:
@@ -100,12 +84,11 @@ class InvitationStore:
             The new Invitation row.
         """
         with session_scope(self._engine) as session:
-            previous = self._get(session, invitation_id, org_id)
+            previous = self._lock(invitation_id, org_id)
             session.delete(previous)
             session.flush()
-            invitation = self._insert(session, org_id, email=previous.email, role=previous.role, invited_by=invited_by)
-            commit(session)
-            session.refresh(invitation)
+            invitation = self._new(org_id, email=previous.email, role=previous.role, invited_by=invited_by)
+            save(session, invitation)
             return invitation
 
     def delete(self, invitation_id: UUID, *, org_id: UUID) -> None:
@@ -117,7 +100,7 @@ class InvitationStore:
                 reads as missing.
         """
         with session_scope(self._engine) as session:
-            session.delete(self._get(session, invitation_id, org_id))
+            session.delete(self._lock(invitation_id, org_id))
             commit(session)
 
     def accept(self, token: str, user_id: UUID) -> Organisation | None:
@@ -138,7 +121,7 @@ class InvitationStore:
             invitation = session.exec(select(Invitation).where(Invitation.token == token)).first()
             if not invitation:
                 return None
-            if assume_utc(invitation.expires_at) < datetime.now(timezone.utc):
+            if invitation.expires_at < datetime.now(timezone.utc):
                 session.delete(invitation)
                 commit(session)
                 return None
@@ -163,25 +146,24 @@ class InvitationStore:
         now = datetime.now(timezone.utc)
         with session_scope(self._engine) as session:
             invitations = session.exec(select(Invitation).where(func.lower(Invitation.email) == email.lower())).all()
-            return any(assume_utc(invitation.expires_at) > now for invitation in invitations)
+            return any(invitation.expires_at > now for invitation in invitations)
 
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def _insert(session: Session, org_id: UUID, *, email: str, role: str, invited_by: UUID) -> Invitation:
-        """Add a new invitation row with a fresh token and expiry.
+    def _new(org_id: UUID, *, email: str, role: str, invited_by: UUID) -> Invitation:
+        """A new invitation row with a fresh token and expiry, not yet persisted.
 
         Args:
-            session: Open session the row is added to; not committed here.
             org_id: Organisation UUID.
             email: Address to invite.
             role: Role granted on acceptance, validated against :class:`Role`.
             invited_by: Profile UUID of the inviter.
 
         Returns:
-            The pending row.
+            The row.
         """
-        invitation = Invitation(
+        return Invitation(
             organisation_id=org_id,
             email=email,
             role=Role.parse(role).value,
@@ -189,15 +171,11 @@ class InvitationStore:
             invited_by=invited_by,
             expires_at=datetime.now(timezone.utc) + timedelta(days=INVITATION_EXPIRY_DAYS),
         )
-        session.add(invitation)
-        return invitation
 
-    @staticmethod
-    def _get(session: Session, invitation_id: UUID, org_id: UUID) -> Invitation:
-        """Fetch an invitation row, scoped to its organisation.
+    def _lock(self, invitation_id: UUID, org_id: UUID) -> Invitation:
+        """Load one of an organisation's invitations for a write, holding its row for the transaction.
 
         Args:
-            session: Open session to read through.
             invitation_id: Invitation UUID.
             org_id: Organisation the invitation must belong to.
 
@@ -207,7 +185,8 @@ class InvitationStore:
         Raises:
             NotFoundError: If no invitation carries that id in that organisation.
         """
-        invitation = session.get(Invitation, invitation_id)
-        if not invitation or invitation.organisation_id != org_id:
-            raise NotFoundError(f"Invitation {invitation_id} not found")
-        return invitation
+        with session_scope(self._engine) as session:
+            invitation = session.get(Invitation, invitation_id, with_for_update=True)
+            if not invitation or invitation.organisation_id != org_id:
+                raise NotFoundError(f"Invitation {invitation_id} not found")
+            return invitation

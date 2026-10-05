@@ -23,7 +23,7 @@ from interloper_db.models import (
     Run,
     UserOrganisation,
 )
-from interloper_db.store import ActivityEntry, OrganisationQuery, PageQuery, Store
+from interloper_db.store import OrganisationQuery, Store
 
 
 class TestDeleteOrganisation:
@@ -82,8 +82,7 @@ class TestDeleteOrganisation:
             for model in (Component, ComponentRelation):
                 assert session.exec(select(model).where(model.org_id == org.id)).first() is None
             assert (
-                session.exec(select(UserOrganisation).where(UserOrganisation.organisation_id == org.id)).first()
-                is None
+                session.exec(select(UserOrganisation).where(UserOrganisation.organisation_id == org.id)).first() is None
             )
             assert session.exec(select(Invitation).where(Invitation.organisation_id == org.id)).first() is None
             assert (
@@ -116,83 +115,6 @@ class TestDeleteOrganisation:
     def test_missing_organisation_raises(self, store: Store):
         with pytest.raises(NotFoundError):
             store.organisations.delete(uuid4())
-
-
-class TestActivity:
-    def test_composes_and_sorts_the_derived_feed(self, store: Store, auth_db: Engine):
-        admin = store.profiles.upsert(google_id="g-act", email="act@example.com", name="Act Min")
-        org = store.organisations.create(name="Busy", creator_id=admin.id)
-        store.members.add(org.id, admin.id, "admin")
-        store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
-        with SQLSession(auth_db) as session:
-            session.add(Component(org_id=org.id, kind="source", key="bing_ads", name="Bing"))
-            session.add(
-                Run(
-                    id=uuid4(),
-                    org_id=org.id,
-                    status="success",
-                    completed_at=datetime(2026, 8, 10, 12, 0, tzinfo=timezone.utc),
-                )
-            )
-            session.add(
-                Run(
-                    id=uuid4(),
-                    org_id=org.id,
-                    status="success",
-                    completed_at=datetime(2026, 8, 10, 13, 0, tzinfo=timezone.utc),
-                )
-            )
-            session.add(Run(id=uuid4(), org_id=org.id, status="failed"))
-            session.commit()
-
-        entries = store.organisations.activity(org.id, PageQuery()).items
-
-        assert all(isinstance(entry, ActivityEntry) for entry in entries)
-        kinds = [entry.kind for entry in entries]
-        assert set(kinds) == {"org_created", "member_joined", "invitation_sent", "source_added", "runs_completed"}
-        whens = [entry.when for entry in entries]
-        assert whens == sorted(whens, reverse=True)
-        assert all(when.tzinfo is not None for when in whens)
-        joined = next(entry for entry in entries if entry.kind == "member_joined")
-        assert joined.subject == "Act Min" and joined.extra == "admin"
-        invited = next(entry for entry in entries if entry.kind == "invitation_sent")
-        assert invited.subject == "new@example.com" and invited.extra == "Act Min"
-        runs = next(entry for entry in entries if entry.kind == "runs_completed")
-        assert runs.subject == "2"  # only the successful runs, aggregated per day
-
-    def test_limit_caps_the_feed(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-cap", email="cap@example.com", name="Cap")
-        org = store.organisations.create(name="Capped", creator_id=admin.id)
-        store.members.add(org.id, admin.id, "admin")
-
-        assert len(store.organisations.activity(org.id, PageQuery(limit=1)).items) == 1
-
-    def test_the_feed_is_windowed_over_its_whole_length(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-page", email="page@example.com", name="Pager")
-        org = store.organisations.create(name="Paged", creator_id=admin.id)
-        store.invitations.create(org.id, email="a@example.com", role="viewer", invited_by=admin.id)
-        store.invitations.create(org.id, email="b@example.com", role="viewer", invited_by=admin.id)
-        whole = store.organisations.activity(org.id, PageQuery(limit=None))
-
-        second = store.organisations.activity(org.id, PageQuery(limit=2, offset=1))
-
-        assert whole.total == 4
-        assert second.total == 4
-        assert second.items == whole.items[1:3]
-
-    def test_a_deleted_organisation_keeps_its_feed_ending_in_the_deletion(self, store: Store):
-        admin = store.profiles.upsert(google_id="g-gone", email="gone@example.com", name="Gone")
-        org = store.organisations.create(name="Gone", creator_id=admin.id)
-        store.organisations.delete(org.id)
-
-        entries = store.organisations.activity(org.id, PageQuery()).items
-
-        assert entries[0].kind == "org_deleted"
-        assert entries[0].when.tzinfo is not None
-
-    def test_unknown_org_raises(self, store: Store):
-        with pytest.raises(NotFoundError):
-            store.organisations.activity(uuid4(), PageQuery())
 
 
 class TestUpdate:

@@ -19,7 +19,6 @@ from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
-from interloper_db.store.events import EventStore
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -52,15 +51,6 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
     store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
 
-    def sqlite_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(**EventStore._event_values(event, org_id, run_id))
-        with Session(eng) as session:
-            if session.get(EventRow, row.id) is None:
-                session.add(row)
-                session.commit()
-        return row
-
-    monkeypatch.setattr(store.events, "save", sqlite_save)
     try:
         yield store
     finally:
@@ -134,7 +124,10 @@ class TestHookEvaluation:
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
         hook = store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="Cascade",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="Cascade",
             config={"events": ["run_completed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
@@ -160,7 +153,10 @@ class TestHookEvaluation:
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
         store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="Cascade",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="Cascade",
             config={"events": ["run_completed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
@@ -186,7 +182,10 @@ class TestHookEvaluation:
         leaf = next(c for c in source.children if c.key == "e")
         root = next(c for c in source.children if c.key == "a")
         store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="OnFailureOnly",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="OnFailureOnly",
             config={"events": ["run_failed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
@@ -212,7 +211,10 @@ class TestHookEvaluation:
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         child = next(c for c in source.children if c.key == "a")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="OnAnyAsset",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="OnAnyAsset",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -232,7 +234,10 @@ class TestHookEvaluation:
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/x"},
             relations={"watches": [source.id]},
         )
@@ -258,7 +263,10 @@ class TestHookEvaluation:
         monkeypatch.setattr(httpx2, "post", boom)
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/x"},
             relations={"watches": [source.id]},
         )
@@ -280,7 +288,10 @@ class TestHookEvaluation:
         monkeypatch.setattr(httpx2, "post", boom)
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/x"},
             relations={"watches": [source.id]},
         )
@@ -302,7 +313,10 @@ class TestHookEvaluation:
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         # Watches the source AND targets it: would loop forever without the guard.
         store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="Ouroboros",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="Ouroboros",
             config={"events": ["run_completed"]},
             relations={"watches": [source.id], "targets": [source.id]},
         )
@@ -321,7 +335,10 @@ class TestHookEvaluation:
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -343,7 +360,10 @@ class TestHookEvaluation:
         organisation = store.organisations.create("Swarovski")
         source = store.components.create(organisation.id, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            organisation.id, kind="hook", key="webhook_hook", name="Notify",
+            organisation.id,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -359,7 +379,10 @@ class TestHookEvaluation:
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -382,7 +405,10 @@ class TestHookEvaluation:
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_failed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -399,7 +425,10 @@ class TestHookEvaluation:
 
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
@@ -417,7 +446,10 @@ class TestHookEvaluation:
         # through this hook (the triggered run never matches its watch set...
         # except via the shared parent — which is exactly what the guard checks).
         store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="Chain",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="Chain",
             config={"events": ["run_completed"]},
             relations={"watches": [leaf.id], "targets": [root.id]},
         )
@@ -458,7 +490,10 @@ class TestVerdictGating:
 
     def _watching_hook(self, store: Store, component_id: UUID) -> UUID:
         hook = store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed", "run_failed"], "url": "https://example.invalid/hook"},
             relations={"watches": [component_id]},
         )
@@ -528,9 +563,7 @@ class TestVerdictGating:
         assert self._fired(first.id) == []
         assert len(self._fired(successor.id)) == 1
 
-    def test_the_context_carries_the_stacks_position(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_context_carries_the_stacks_position(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         payloads = _capture_posts(monkeypatch)
         job = self._job(max_attempts=1)
         self._watching_hook(store, job)
@@ -549,7 +582,10 @@ class TestDeliveryCursor:
     def _watched_source(self, store: Store) -> UUID:
         source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": ["run_completed", "run_failed"], "url": "https://example.invalid/hook"},
             relations={"watches": [source.id]},
         )
@@ -613,7 +649,10 @@ class TestBackfillEvents:
 
     def _hook(self, store: Store, component_id: UUID, *events: str) -> UUID:
         return store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": list(events), "url": "https://example.invalid/hook"},
             relations={"watches": [component_id]},
         ).id
@@ -713,7 +752,10 @@ class TestBackfillEvents:
             _ORG, kind="job", key="cron_job", name="Downstream", config={"cron": "0 7 * * *", "concurrency": 2}
         )
         store.components.create(
-            _ORG, kind="hook", key="trigger_hook", name="Cascade",
+            _ORG,
+            kind="hook",
+            key="trigger_hook",
+            name="Cascade",
             config={"events": ["backfill_completed"]},
             relations={"watches": [job], "targets": [downstream.id]},
         )
@@ -754,7 +796,10 @@ class TestSubjectUrl:
 
     def _watch(self, store: Store, component_id: UUID, event: str) -> None:
         store.components.create(
-            _ORG, kind="hook", key="webhook_hook", name="Notify",
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
             config={"events": [event], "url": "https://example.invalid/hook"},
             relations={"watches": [component_id]},
         )

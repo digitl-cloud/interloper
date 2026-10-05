@@ -1,10 +1,12 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
-from datetime import datetime
+import json
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
+import interloper as il
 from sqlalchemy import ForeignKey, Index, event
 from sqlmodel import AutoString, Column, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
@@ -17,6 +19,14 @@ _OPERATION_EVENTS = (
     "'operation_completed', 'operation_failed', 'operation_canceled', 'operation_retried')"
 )
 """The events the ``executions`` view derives operation executions from."""
+
+MAX_EVENT_TEXT = 60_000
+"""Defensive cap for free-text event fields (well under Postgres limits)."""
+
+PROMOTED_METADATA_KEYS = frozenset(
+    {"run_id", "org_id", "component_id", "component_kind", "component_key", "error", "traceback", "message", "level"}
+)
+"""Metadata keys promoted to their own ``events`` columns; everything else spills into ``data``."""
 
 
 class RunStatus(str, Enum):
@@ -168,6 +178,19 @@ class Run(SQLModel, table=True):
     backfill: Backfill | None = Relationship(back_populates="runs")
     target: Optional["Component"] = Relationship()
 
+    def cancel(self) -> None:
+        """Cancel a run that never dispatched; it fires no hooks, so they are settled here."""
+        self.status = RunStatus.CANCELED
+        self.hooks_evaluated_at = datetime.now(timezone.utc)
+
+    def supersede(self) -> None:
+        """Settle a failed run's hooks once a retry supersedes it: its failure is not the stack's verdict.
+
+        A failure whose hooks already ran stays stamped as it was.
+        """
+        if self.hooks_evaluated_at is None:
+            self.hooks_evaluated_at = datetime.now(timezone.utc)
+
     def event_metadata(self, target: Component | None) -> dict[str, Any]:
         """This run's ids plus its target's identity, for the events it emits.
 
@@ -275,6 +298,102 @@ class Event(SQLModel, table=True):
     level: str | None = None
     data: dict[str, Any] | None = SQLField(default=None, sa_column=Column(PortableJSON))
     timestamp: datetime = SQLField(sa_column=Column(TZDateTime))
+
+    @classmethod
+    def from_event(cls, event: il.Event, org_id: UUID, run_id: UUID | None) -> "Event":
+        """Build the row a framework event persists as.
+
+        The component reference comes from the ``component_id``,
+        ``component_kind`` and ``component_key`` metadata every core emitter
+        stamps. Metadata not covered by a structured column lands losslessly
+        in ``data``. Free text is sanitised so a stray NUL byte or an
+        oversized traceback cannot fail the write.
+
+        Args:
+            event: The framework event. A non-UUID ``id`` is replaced by a
+                fresh one, which forfeits the upsert's idempotency.
+            org_id: Organisation UUID.
+            run_id: Run UUID, or ``None`` for an event emitted outside any run.
+
+        Returns:
+            The row, not yet persisted.
+        """
+        metadata = event.metadata
+        try:
+            event_id = UUID(event.id)
+        except (ValueError, TypeError):
+            event_id = uuid4()
+        component_id = metadata.get("component_id")
+        # None values are the absence of a key, not payload: producers emit
+        # them unconditionally (backfill_id on non-backfill runs, ...).
+        data = {k: v for k, v in metadata.items() if k not in PROMOTED_METADATA_KEYS and v is not None}
+        return cls(
+            id=event_id,
+            org_id=org_id,
+            run_id=run_id,
+            event_type=event.type.value,
+            component_id=UUID(str(component_id)) if component_id else None,
+            component_kind=cls._sanitize_text(metadata.get("component_kind")),
+            component_key=cls._sanitize_text(metadata.get("component_key")),
+            error=cls._sanitize_text(metadata.get("error")),
+            traceback=cls._sanitize_text(metadata.get("traceback")),
+            message=cls._sanitize_text(metadata.get("message")),
+            level=cls._sanitize_text(metadata.get("level")),
+            data=cls._sanitize_data(data),
+            timestamp=event.timestamp,
+        )
+
+    @staticmethod
+    def _sanitize_text(value: str | None, *, max_len: int = MAX_EVENT_TEXT) -> str | None:
+        """Make a free-text event field safe to persist.
+
+        Postgres ``text`` columns cannot store NUL bytes: a single one makes
+        the whole INSERT raise, which, because event persistence is best
+        effort, would silently drop the event. NULs are stripped and the
+        length capped so an oversized traceback cannot fail the write either.
+
+        Args:
+            value: The raw field value, or ``None`` when the producer omitted it.
+            max_len: Maximum characters to keep before truncating.
+
+        Returns:
+            The cleaned string, or ``None`` if *value* is ``None``.
+        """
+        if value is None:
+            return None
+        cleaned = value.replace("\x00", "")
+        if len(cleaned) > max_len:
+            cleaned = cleaned[:max_len] + "…[truncated]"
+        return cleaned
+
+    @staticmethod
+    def _sanitize_data(metadata: dict[str, Any]) -> dict[str, Any] | None:
+        """Make a metadata dict safe to persist as JSONB, best effort.
+
+        Non-JSON values are coerced through ``str``; a dict that still cannot
+        be encoded (circular refs, NaN) is dropped rather than failing the
+        event write. Postgres ``jsonb`` rejects NUL escapes the way ``text``
+        rejects NUL bytes, so they are stripped from the encoded form; an
+        oversized payload is replaced by a marker.
+
+        Args:
+            metadata: The event metadata left over once the promoted keys are
+                stripped; an empty dict means there is nothing to store.
+
+        Returns:
+            The cleaned dict, or ``None`` when there is nothing worth storing.
+        """
+        if not metadata:
+            return None
+        try:
+            encoded = json.dumps(metadata, default=str, allow_nan=False)
+        except (TypeError, ValueError):
+            return None
+        if len(encoded) > MAX_EVENT_TEXT:
+            return {"truncated": True}
+        if "\\u0000" in encoded:
+            encoded = encoded.replace("\\u0000", "")
+        return json.loads(encoded) or None
 
 
 class Execution(SQLModel, table=True):

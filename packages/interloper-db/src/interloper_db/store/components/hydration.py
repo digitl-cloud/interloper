@@ -24,7 +24,6 @@ within the same call.
 
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
@@ -37,7 +36,7 @@ from interloper.source.base import SourceDefinition
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
-from sqlmodel import Session, select
+from sqlmodel import select
 
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import session_scope
@@ -87,17 +86,10 @@ class Hydrator:
         ):
             return self._load(component_id, {})
 
-    def build_component_spec(
-        self,
-        session: Session,
-        db_component: Component,
-        *,
-        seen: set[str] | None = None,
-    ) -> Spec:
+    def build_component_spec(self, db_component: Component, *, seen: set[str] | None = None) -> Spec:
         """Build a spec for a component row of any kind.
 
         Args:
-            session: Active DB session (used to walk relations and children).
             db_component: The component row.
             seen: Ids the walk has already written out in full, extended with
                 this row's own. One set is shared by every spec of a document,
@@ -108,9 +100,11 @@ class Hydrator:
             A ``Spec`` with the row's ``id`` and a fully resolved
             init payload (nested components as nested specs).
         """
-        init = self._build_init(session, db_component, seen=seen)
+        with session_scope(self._engine):
+            init = self._build_init(db_component, seen=seen)
+            path = self._resolve_path(db_component)
         return Spec(
-            path=self._resolve_path(session, db_component),
+            path=path,
             id=str(db_component.id) if db_component.id else "",
             init=init or None,
         )
@@ -169,8 +163,8 @@ class Hydrator:
             if not owned_asset:
                 self._check_resolves(db_component)
                 if db_component.kind == "job":
-                    self._check_job_targets(session, db_component)
-                spec = self.build_component_spec(session, db_component)
+                    self._check_job_targets(db_component)
+                spec = self.build_component_spec(db_component)
 
         # Reconstruction happens outside the session: it imports classes and,
         # for owned assets, recursively loads the parent source.
@@ -178,7 +172,10 @@ class Hydrator:
         if owned_asset:
             component = self._load_owned_asset(db_component.parent_id, db_component.key, component_id, cache, chain)
         else:
-            resolve = functools.partial(self._resolve_reference, cache=cache, chain=chain)
+
+            def resolve(reference: str) -> il.Component:
+                return self._load(UUID(reference), cache, chain)
+
             try:
                 component = il.Component.from_spec(spec, resolve=resolve)
             except (ComponentDriftError, NotFoundError):
@@ -196,28 +193,6 @@ class Hydrator:
                 ) from e
         cache[component_id] = component
         return component
-
-    def _resolve_reference(
-        self,
-        reference: str,
-        *,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...],
-    ) -> il.Component:
-        """Hydrate the component a spec reference names from outside its document.
-
-        Args:
-            reference: Id of the referenced component, as the spec carries it.
-            cache: Components already hydrated within the enclosing
-                :meth:`load` call, consulted (and extended) instead of
-                hydrating a fresh instance for a component reached again.
-            chain: Ids currently being hydrated in the enclosing call, for
-                :meth:`_load`'s cycle check.
-
-        Returns:
-            The referenced component, hydrated through the store.
-        """
-        return self._load(UUID(reference), cache, chain)
 
     def _load_owned_asset(
         self,
@@ -257,22 +232,20 @@ class Hydrator:
             f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
         )
 
-    def _check_job_targets(self, session: Session, db_job: Component) -> None:
+    def _check_job_targets(self, db_job: Component) -> None:
         """Fail closed when any job target's catalog key no longer resolves.
 
         Args:
-            session: Open session to resolve the targets in.
             db_job: The job row being hydrated.
         """
-        targets = session.exec(
-            select(ComponentRelation).where(
-                ComponentRelation.src_id == db_job.id, ComponentRelation.name == "targets"
-            )
-        ).all()
-        for relation in targets:
-            target = session.get(Component, relation.dst_id)
-            if target is not None:
-                self._check_resolves(target, subject=f"Job '{db_job.name}' ({db_job.id})")
+        statement = select(ComponentRelation).where(
+            ComponentRelation.src_id == db_job.id, ComponentRelation.name == "targets"
+        )
+        with session_scope(self._engine) as session:
+            for relation in session.exec(statement).all():
+                target = session.get(Component, relation.dst_id)
+                if target is not None:
+                    self._check_resolves(target, subject=f"Job '{db_job.name}' ({db_job.id})")
 
     def _check_resolves(self, db_component: Component, *, subject: str | None = None) -> None:
         """Fail closed when a row's key does not resolve in this deployment's catalog.
@@ -294,13 +267,7 @@ class Hydrator:
             )
         raise ComponentDriftError(f"{subject} cannot be hydrated: target {row} does not resolve in this deployment.")
 
-    def _build_init(
-        self,
-        session: Session,
-        db_component: Component,
-        *,
-        seen: set[str] | None = None,
-    ) -> dict[str, Any]:
+    def _build_init(self, db_component: Component, *, seen: set[str] | None = None) -> dict[str, Any]:
         """Build the init payload for a component row.
 
         Each relation name the row holds edges under sits in the payload
@@ -314,7 +281,6 @@ class Hydrator:
         the parent's drift as an undeclared relation name on the child.
 
         Args:
-            session: Active DB session, used to read relations and children.
             db_component: The component row whose init payload is built.
             seen: Ids the walk has already written out in full, extended with
                 this row's own before anything else runs (so a cycle back
@@ -334,14 +300,14 @@ class Hydrator:
         seen.add(str(db_component.id) if db_component.id else "")
         init = db_component.read_config(self._decrypt)
         vocabulary = self._catalog.vocabulary(db_component.kind, db_component.qualified_key)
-        for name, rows in self._relations_by_name(session, db_component.id).items():
+        for name, rows in self._relations_by_name(db_component.id).items():
             relation = vocabulary.get(name)
             if relation is None:
                 raise HydrationError(
                     f"Component {db_component.id} ({db_component.kind}) has '{name}' relations "
                     "its class does not declare"
                 )
-            values = [self._dst_value(session, row, seen) for row in rows]
+            values = [self._dst_value(row, seen) for row in rows]
             if relation.many:
                 init[name] = values
             elif len(values) > 1:
@@ -352,13 +318,14 @@ class Hydrator:
             else:
                 init[name] = values[0]
 
-        children = session.exec(
+        children_statement = (
             select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
-        ).all()
+        )
         assets: dict[str, Any] = {}
-        for child in children:
-            self._check_declared(db_component, child)
-            assets[child.key] = {"id": str(child.id), **self._build_init(session, child, seen=seen)}
+        with session_scope(self._engine) as session:
+            for child in session.exec(children_statement).all():
+                self._check_declared(db_component, child)
+                assets[child.key] = {"id": str(child.id), **self._build_init(child, seen=seen)}
         if assets:
             init["assets"] = assets
 
@@ -391,11 +358,10 @@ class Hydrator:
                 f"'{db_parent.key}' ({db_parent.id}); its catalog key has drifted."
             )
 
-    def _relations_by_name(self, session: Session, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
+    def _relations_by_name(self, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
         """Group a component's outgoing relations by name, ordered stably.
 
         Args:
-            session: Active DB session used to read the relation rows.
             src_id: The source component's id, or ``None`` for an unflushed row.
 
         Returns:
@@ -404,21 +370,22 @@ class Hydrator:
         """
         if src_id is None:
             return {}
-        rows = session.exec(
+        statement = (
             select(ComponentRelation)
             .where(ComponentRelation.src_id == src_id)
             .order_by(ComponentRelation.name, ComponentRelation.dst_id)  # ty: ignore[invalid-argument-type]
-        ).all()
+        )
+        with session_scope(self._engine) as session:
+            rows = session.exec(statement).all()
         grouped: dict[str, list[ComponentRelation]] = {}
         for row in rows:
             grouped.setdefault(row.name, []).append(row)
         return grouped
 
-    def _dst_value(self, session: Session, row: ComponentRelation, seen: set[str]) -> dict[str, Any]:
+    def _dst_value(self, row: ComponentRelation, seen: set[str]) -> dict[str, Any]:
         """Write out one edge's destination, in full or as a reference.
 
         Args:
-            session: Active DB session used to load the destination row.
             row: The edge whose ``dst_id`` is written out.
             seen: Ids the walk has already written out in full, extended with
                 the destination's own when it is written out here.
@@ -431,14 +398,17 @@ class Hydrator:
             HydrationError: If the edge points at a component row that does
                 not exist.
         """
-        db_dst = session.get(Component, row.dst_id)
-        if db_dst is None:  # defensive: FKs make this unreachable
-            raise HydrationError(f"Relation {row.src_id} -[{row.name}]-> {row.dst_id} points at a missing component")
-        if db_dst.parent_id is not None or str(db_dst.id) in seen:
-            return Spec.reference(str(db_dst.id))
-        return self.build_component_spec(session, db_dst, seen=seen).model_dump(mode="json")
+        with session_scope(self._engine) as session:
+            db_dst = session.get(Component, row.dst_id)
+            if db_dst is None:  # defensive: FKs make this unreachable
+                raise HydrationError(
+                    f"Relation {row.src_id} -[{row.name}]-> {row.dst_id} points at a missing component"
+                )
+            if db_dst.parent_id is not None or str(db_dst.id) in seen:
+                return Spec.reference(str(db_dst.id))
+            return self.build_component_spec(db_dst, seen=seen).model_dump(mode="json")
 
-    def _resolve_path(self, session: Session, db_component: Component) -> str:
+    def _resolve_path(self, db_component: Component) -> str:
         """Look up a component's import path via the catalog.
 
         A source-owned asset resolves through its parent, whose declaration
@@ -447,7 +417,6 @@ class Hydrator:
         target, a hook watch) therefore builds a reconstructible spec.
 
         Args:
-            session: Active DB session used to look up the parent source row.
             db_component: The component row whose import path is resolved.
 
         Returns:

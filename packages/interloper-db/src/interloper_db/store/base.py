@@ -110,9 +110,7 @@ class Store:
             self.quotas,
             self.relations,
         )
-        self.insights = InsightStore(
-            self._engine, catalog, self.components, self.runs, self.backfills, self.executions
-        )
+        self.insights = InsightStore(self._engine, catalog, self.components, self.runs, self.backfills, self.executions)
 
     @classmethod
     def from_settings(cls, catalog: Catalog | None = None) -> Store:

@@ -42,13 +42,6 @@ class TestCreateListGetDelete:
     def test_an_organisation_with_no_invitations_lists_nothing(self, store: Store):
         assert store.invitations.list(uuid4(), PageQuery()).items == []
 
-    def test_an_invitation_is_read_within_its_organisation(self, store: Store):
-        ada = store.profiles.upsert(google_id="g1", email="ada@x")
-        org = store.organisations.create(name="Acme", creator_id=ada.id)
-        invitation = store.invitations.create(org.id, email="new@x", role="viewer", invited_by=ada.id)
-
-        assert store.invitations.get(invitation.id, org_id=org.id).email == "new@x"
-
     def test_another_organisations_invitation_reads_as_missing(self, store: Store):
         ada = store.profiles.upsert(google_id="g1", email="ada@x")
         mine = store.organisations.create(name="Mine", creator_id=ada.id)
@@ -56,8 +49,6 @@ class TestCreateListGetDelete:
         invitation = store.invitations.create(theirs.id, email="new@x", role="viewer", invited_by=ada.id)
 
         with pytest.raises(NotFoundError, match=f"Invitation {invitation.id} not found"):
-            store.invitations.get(invitation.id, org_id=mine.id)
-        with pytest.raises(NotFoundError):
             store.invitations.delete(invitation.id, org_id=mine.id)
         assert len(store.invitations.list(theirs.id, PageQuery()).items) == 1
 
@@ -114,8 +105,6 @@ class TestReissue:
         assert reissued.role == "editor"
         assert reissued.invited_by == carol.id
         assert [invitation.id for invitation in store.invitations.list(org.id, PageQuery()).items] == [reissued.id]
-        with pytest.raises(NotFoundError):
-            store.invitations.get(original.id, org_id=org.id)
 
     def test_another_organisations_invitation_reads_as_missing(self, store: Store):
         ada = store.profiles.upsert(google_id="g1", email="ada@x")
@@ -125,7 +114,7 @@ class TestReissue:
 
         with pytest.raises(NotFoundError, match=f"Invitation {invitation.id} not found"):
             store.invitations.reissue(invitation.id, org_id=mine.id, invited_by=ada.id)
-        assert store.invitations.get(invitation.id, org_id=theirs.id).token == invitation.token
+        assert [kept.token for kept in store.invitations.list(theirs.id, PageQuery()).items] == [invitation.token]
 
 
 class TestAccept:

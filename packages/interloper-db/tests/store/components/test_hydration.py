@@ -159,7 +159,7 @@ def _init(store: Store, component_id: UUID) -> dict[str, Any]:
     with Session(store.engine) as session:
         row = session.get(Component, component_id)
         assert row is not None
-        return store.components._hydrator._build_init(session, row)
+        return store.components._hydrator._build_init(row)
 
 
 class TestBuildInit:
@@ -369,10 +369,10 @@ class TestCrossSourceUpstream:
         original_build = Hydrator.build_component_spec
         shop_hydrations: list[UUID] = []
 
-        def spy(self: Hydrator, session: Session, db_component: Component, *, seen: set[str] | None = None) -> Spec:
+        def spy(self: Hydrator, db_component: Component, *, seen: set[str] | None = None) -> Spec:
             if db_component.key == "shop":
                 shop_hydrations.append(db_component.id)
-            return original_build(self, session, db_component, seen=seen)
+            return original_build(self, db_component, seen=seen)
 
         monkeypatch.setattr(Hydrator, "build_component_spec", spy)
 
@@ -550,8 +550,7 @@ class TestRelationsByName:
     """The grouped relation lookup used while building a spec."""
 
     def test_a_row_with_no_id_has_no_relations(self, store: Store):
-        with Session(store.engine) as session:
-            assert store.components._hydrator._relations_by_name(session, None) == {}
+        assert store.components._hydrator._relations_by_name(None) == {}
 
 
 class TestResolvePath:
@@ -568,7 +567,7 @@ class TestResolvePath:
             db_row = session.get(type(row), row.id)
             assert db_row is not None
             with pytest.raises(CatalogKeyError, match="Unknown source key: demo_source"):
-                reader.components._hydrator._resolve_path(session, db_row)
+                reader.components._hydrator._resolve_path(db_row)
 
 
 class TestJobTargets:

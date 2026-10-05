@@ -2,8 +2,7 @@
 
 A unit of work is a run *stack* (an attempt and its retries), and its outcome
 is its latest attempt's status; durations and attempt counts span every
-attempt. Timestamps pass through ``assume_utc`` before any arithmetic: SQLite
-hands timestamp columns back naive.
+attempt.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
-from interloper.utils import assume_utc, percentile
+from interloper.utils import percentile
 
 from interloper_db.models import TERMINAL_RUN_STATUSES, Backfill, Run, RunStatus
 
@@ -130,7 +129,7 @@ class Activity:
         for run in completed:
             if run.completed_at is None or run.status not in (RunStatus.SUCCESS, RunStatus.FAILED):
                 continue
-            finished = assume_utc(run.completed_at).astimezone(dt.timezone.utc)
+            finished = run.completed_at.astimezone(dt.timezone.utc)
             if start <= finished <= now:
                 counts[finished.replace(minute=0, second=0, microsecond=0)][run.status] += 1
         hours = (start + dt.timedelta(hours=i) for i in range(24))
@@ -142,7 +141,7 @@ class Activity:
                 running=len(running),
                 queued=queued,
                 longest_running_seconds=max(
-                    ((now - assume_utc(run.started_at)).total_seconds() for run in running if run.started_at),
+                    ((now - run.started_at).total_seconds() for run in running if run.started_at),
                     default=None,
                 ),
             ),
@@ -220,10 +219,10 @@ class JobOutcome:
                 attempts += len(chain)
                 for run in chain:
                     if run.started_at and run.completed_at:
-                        seconds = (assume_utc(run.completed_at) - assume_utc(run.started_at)).total_seconds()
+                        seconds = (run.completed_at - run.started_at).total_seconds()
                         durations.append(round(seconds, 1))
                     if run.status == RunStatus.SUCCESS and run.completed_at:
-                        finished = assume_utc(run.completed_at)
+                        finished = run.completed_at
                         last_success = finished if last_success is None else max(last_success, finished)
                 if len(chain) > 1:
                     retried += 1

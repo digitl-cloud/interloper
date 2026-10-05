@@ -7,6 +7,9 @@ inferred from a table that happens to work.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import pytest
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
@@ -17,7 +20,20 @@ from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_col
 
 def test_datetimes_are_timezone_aware() -> None:
     """TIMESTAMPTZ, so SQLAlchemy hands back aware values rather than naive ones."""
-    assert TZDateTime.timezone is True
+    assert TZDateTime.impl.timezone is True
+
+
+@pytest.mark.parametrize(
+    ("stored", "read"),
+    [
+        (datetime(2026, 8, 5, 12), datetime(2026, 8, 5, 12, tzinfo=timezone.utc)),
+        (datetime(2026, 8, 5, 12, tzinfo=timezone.utc), datetime(2026, 8, 5, 12, tzinfo=timezone.utc)),
+        (None, None),
+    ],
+)
+def test_a_naive_value_reads_back_as_utc(stored: datetime | None, read: datetime | None) -> None:
+    """SQLite drops the offset; every stored instant is UTC, so the column restores it."""
+    assert TZDateTime().process_result_value(stored, sqlite_dialect()) == read
 
 
 def test_json_is_jsonb_on_postgres() -> None:
@@ -44,7 +60,8 @@ class TestTimestampColumn:
     def test_it_is_a_timezone_aware_datetime(self) -> None:
         column = timestamp_column().sa_column
 
-        assert column.type.timezone is True
+        assert isinstance(column.type, TZDateTime)
+        assert TZDateTime.impl.timezone is True
 
     def test_extra_kwargs_reach_the_column(self) -> None:
         column = timestamp_column(index=True).sa_column

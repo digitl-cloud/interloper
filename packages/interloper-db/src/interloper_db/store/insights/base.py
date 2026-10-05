@@ -15,24 +15,33 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-import interloper as il
 from interloper.catalog.base import Catalog
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, NotFoundError
 from interloper.job.cron import CronJob
-from interloper.partitioning.time import TimeGranularity
-from interloper.utils import assume_utc
+from interloper.partitioning.time import TimeGranularity, TimePartition
 from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
-from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
-from interloper_db.models import ACTIVE_BACKFILL_STATUSES, Component, Event, Execution, Run, RunStatus
+from interloper_db.models import (
+    ACTIVE_BACKFILL_STATUSES,
+    Component,
+    Event,
+    Execution,
+    Invitation,
+    Organisation,
+    Profile,
+    Run,
+    RunStatus,
+    UserOrganisation,
+)
 from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentQuery, ComponentStore
 from interloper_db.store.executions import ExecutionQuery, ExecutionStore
 from interloper_db.store.insights.coverage import AssetEvidence, CoverageGroup, CoverageRow, JobCoverage
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
+from interloper_db.store.insights.feed import ActivityEntry
 from interloper_db.store.insights.health import (
     HOOK_FAILURE_HORIZON,
     OVERDUE_AFTER,
@@ -42,7 +51,8 @@ from interloper_db.store.insights.health import (
     OrgHealth,
 )
 from interloper_db.store.insights.outcomes import Activity, JobOutcome
-from interloper_db.store.runs import RUN_LOAD_OPTIONS, RunQuery, RunStore, partition_key_range
+from interloper_db.store.page import Page, PageQuery
+from interloper_db.store.runs import RunQuery, RunStore, partition_key_range
 
 # Every attempt that failed, retried ones included; step-level failures
 # (dest_write_failed and the like) repeat their operation's own verdict.
@@ -213,9 +223,7 @@ class InsightStore:
         """
         if unknown := set(group_by) - set(GROUP_KEYS):
             raise ConfigError(f"Unknown group_by key(s): {sorted(unknown)}; expected any of {list(GROUP_KEYS)}")
-        rows = self._error_rows(
-            org_id, since=since, until=until, job_id=job_id, backfill_id=backfill_id, run_id=run_id
-        )
+        rows = self._error_rows(org_id, since=since, until=until, job_id=job_id, backfill_id=backfill_id, run_id=run_id)
         kept = rows[:MAX_ERROR_ROWS]
         return ErrorGroups(ErrorGroup.merge(kept, group_by), rows=len(kept), truncated=len(rows) > MAX_ERROR_ROWS)
 
@@ -234,7 +242,9 @@ class InsightStore:
         """
         query = ComponentQuery(kind=["source", "asset", "job"], roots_only=False, limit=None)
         assets = AssetEvidence.from_components(
-            self._components.list(org_id, query).items, self._asset_partitionings(org_id), self._coverage_rows(org_id)
+            self._components.list(org_id, query).items,
+            self._components.asset_partitionings(org_id),
+            self._coverage_rows(org_id),
         )
         return CoverageGroup.from_assets(assets, since, until, now)
 
@@ -253,14 +263,88 @@ class InsightStore:
         Raises:
             ConfigError: If the keys are of different granularities.
         """
-        job = self._components.get(job_id, kind="job", org_id=org_id)
-        first, last = RunStore.parse_partition(start_key), RunStore.parse_partition(end_key)
+        job = self._components.get(job_id, org_id=org_id, kind="job")
+        first, last = TimePartition.from_key(start_key), TimePartition.from_key(end_key)
         if first.granularity is not last.granularity:
             raise ConfigError(f"{start_key!r} and {end_key!r} are keys of different granularities")
         keys = [first.granularity.format(value) for value in first.granularity.period_range(first.value, last.value)]
-        assets = self._target_assets(job)
+        assets = self._components.target_assets(job)
         rows = self._coverage_rows(org_id, asset_ids=list(assets), start_key=start_key, end_key=end_key)
         return JobCoverage.from_rows(job.id, keys, assets, rows)
+
+    def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
+        """A derived activity feed for one organisation, newest first.
+
+        Composed purely from existing records: the organisation row,
+        memberships, pending invitations, source components, and daily
+        successful-run aggregates. There is no audit table, so events whose
+        source rows are gone (accepted invitations' inviters, quota-change
+        history) are not reconstructible and deliberately absent.
+
+        Args:
+            org_id: Organisation UUID; a soft-deleted organisation still has
+                its feed, ending in its deletion.
+            query: The window to read.
+
+        Returns:
+            The page of entries.
+
+        Raises:
+            NotFoundError: If the organisation is not found.
+        """
+        entries: list[ActivityEntry] = []
+        with session_scope(self._engine) as session:
+            organisation = session.get(Organisation, org_id)
+            if not organisation:
+                raise NotFoundError(f"Organisation {org_id} not found")
+            if organisation.created_at:
+                entries.append(ActivityEntry("org_created", organisation.created_at))
+            if organisation.deleted_at:
+                entries.append(ActivityEntry("org_deleted", organisation.deleted_at))
+            memberships = session.exec(
+                select(UserOrganisation, Profile).where(
+                    UserOrganisation.organisation_id == org_id, col(Profile.id) == UserOrganisation.user_id
+                )
+            ).all()
+            for membership, profile in memberships:
+                if membership.created_at:
+                    subject = profile.name or profile.email
+                    entries.append(ActivityEntry("member_joined", membership.created_at, subject, membership.role))
+            invitations = session.exec(select(Invitation).where(Invitation.organisation_id == org_id)).all()
+            inviter_ids = {invitation.invited_by for invitation in invitations}
+            inviters = {
+                profile.id: profile
+                for profile in session.exec(select(Profile).where(col(Profile.id).in_(inviter_ids))).all()
+            }
+            for invitation in invitations:
+                if invitation.created_at:
+                    inviter = inviters.get(invitation.invited_by)
+                    entries.append(
+                        ActivityEntry(
+                            "invitation_sent",
+                            invitation.created_at,
+                            invitation.email,
+                            (inviter.name or inviter.email) if inviter else None,
+                        )
+                    )
+            sources = session.exec(
+                select(Component).where(col(Component.org_id) == org_id, col(Component.kind) == "source")
+            ).all()
+            for source in sources:
+                if source.created_at:
+                    entries.append(ActivityEntry("source_added", source.created_at, source.name or source.key))
+            # func.date() buckets per calendar day on both Postgres and SQLite.
+            day = func.date(col(Run.completed_at)).label("day")
+            run_days = session.exec(
+                select(day, func.count(), func.max(col(Run.completed_at)))
+                .where(col(Run.org_id) == org_id, col(Run.status) == RunStatus.SUCCESS)
+                .group_by(day)
+            ).all()
+            for _day, count, latest in run_days:
+                if latest is not None:
+                    entries.append(ActivityEntry("runs_completed", latest, str(count)))
+        entries.sort(key=lambda entry: entry.when, reverse=True)
+        return Page.window(entries, query)
 
     # -- Internals -------------------------------------------------------------
 
@@ -275,17 +359,19 @@ class InsightStore:
         Returns:
             One entry per job, in the order of *jobs*.
         """
-        latest = {run.component_id: run for run in self._latest_by_target(org_id, kind="job")}
-        last_success = self._last_successes(org_id)
+        latest = {run.component_id: run for run in self._runs.latest_by_target(org_id, kind="job")}
+        last_success = self._runs.last_successes(org_id)
         granularities = self._components.job_partition_granularities([job.id for job in jobs if job.enabled])
         health = []
         for job in jobs:
             next_run = job.state_datetime("next_run_at")
             run = latest.get(job.id)
             window = None
+            shared = granularities.get(job.id, set())
+            granularity = next(iter(shared)) if len(shared) == 1 else None
             if job.enabled and next_run is not None:
                 try:
-                    window = CronJob.window(job.config or {}, fires_at=next_run, granularity=granularities.get(job.id))
+                    window = CronJob.window(job.config or {}, fires_at=next_run, granularity=granularity)
                 except ValueError:
                     window = None
             health.append(
@@ -300,64 +386,6 @@ class InsightStore:
                 )
             )
         return health
-
-    def _latest_by_target(self, org_id: UUID, *, kind: str | None = None) -> list[Run]:
-        """The most recent attempt of every target.
-
-        What a reader means by "the last time this job ran": the most recently
-        created attempt targeting the component, whatever stack it belongs to.
-        The runs of one backfill share their creation instant, so a tie goes
-        to the later partition key, then to the greater id. Runs whose target
-        was deleted are left out.
-
-        Args:
-            org_id: Organisation UUID.
-            kind: Keep targets of this kind; ``None`` keeps every kind.
-
-        Returns:
-            One run per target, newest first, with the target loaded.
-        """
-        rank = (
-            func.row_number()
-            .over(
-                partition_by=col(Run.component_id),
-                order_by=(col(Run.created_at).desc(), col(Run.partition_key).desc().nulls_last(), col(Run.id).desc()),
-            )
-            .label("rank")
-        )
-        ranked = select(col(Run.id), rank).where(Run.org_id == org_id, col(Run.component_id).is_not(None)).subquery()
-        statement = (
-            select(Run)
-            .where(col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1)))
-            .order_by(col(Run.created_at).desc())
-            .options(*RUN_LOAD_OPTIONS)
-        )
-        if kind:
-            statement = statement.where(col(Run.target).has(col(Component.kind) == kind))
-        with session_scope(self._engine) as session:
-            return [*session.exec(statement).all()]
-
-    def _last_successes(self, org_id: UUID) -> dict[UUID, dt.datetime]:
-        """When each target last completed a successful run.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            The latest successful completion by target id; a target that never
-            succeeded is absent.
-        """
-        statement = (
-            select(col(Run.component_id), func.max(col(Run.completed_at)))
-            .where(Run.org_id == org_id, Run.status == RunStatus.SUCCESS, col(Run.component_id).is_not(None))
-            .group_by(col(Run.component_id))
-        )
-        with session_scope(self._engine) as session:
-            return {
-                component_id: assume_utc(completed)
-                for component_id, completed in session.exec(statement).all()
-                if component_id is not None and completed is not None
-            }
 
     def _error_rows(
         self,
@@ -475,58 +503,3 @@ class InsightStore:
                 )
                 for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
             ]
-
-    def _asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
-        """The partitioning of every partitioned asset row of an organisation.
-
-        Partitioning lives on the catalog definition, never on the row, which
-        resolves by its qualified key. A row whose key does not resolve (a
-        drifted key, a disabled or missing source) is skipped, as is an
-        unpartitioned asset.
-
-        Args:
-            org_id: Organisation UUID.
-
-        Returns:
-            Each partitioned asset's time partition config by row id.
-        """
-        statement = (
-            select(Component)
-            .where(Component.org_id == org_id, Component.kind == "asset")
-            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
-        )
-        with session_scope(self._engine) as session:
-            assets = {row.id: row.qualified_key for row in session.exec(statement).all()}
-        partitionings: dict[UUID, il.TimePartitionConfig] = {}
-        for asset_id, key in assets.items():
-            definition = self._catalog.get(key)
-            if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
-                continue
-            partitionings[asset_id] = il.TimePartitionConfig(
-                column=partitioning["column"],
-                allow_window=partitioning.get("allow_window", False),
-                granularity=TimeGranularity(partitioning.get("granularity", TimeGranularity.DAY)),
-                start=partitioning.get("start"),
-            )
-        return partitionings
-
-    def _target_assets(self, job: Component) -> dict[UUID, str]:
-        """The assets a job targets, directly or through a source it targets.
-
-        Args:
-            job: The job row, its relations loaded.
-
-        Returns:
-            The assets' keys by id, oldest first.
-        """
-        targets = [relation.dst_id for relation in job.out_relations if relation.name == "targets"]
-        statement = (
-            select(col(Component.id), col(Component.key))
-            .where(
-                Component.kind == "asset",
-                col(Component.id).in_(targets) | col(Component.parent_id).in_(targets),
-            )
-            .order_by(col(Component.created_at), col(Component.id))
-        )
-        with session_scope(self._engine) as session:
-            return dict(session.exec(statement).all())

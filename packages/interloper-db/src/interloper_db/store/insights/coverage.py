@@ -396,9 +396,7 @@ class JobCoverage:
     assets: list[AssetKeyCoverage]
 
     @classmethod
-    def from_rows(
-        cls, job_id: UUID, keys: list[str], assets: dict[UUID, str], rows: list[CoverageRow]
-    ) -> JobCoverage:
+    def from_rows(cls, job_id: UUID, keys: list[str], assets: dict[UUID, str], rows: list[CoverageRow]) -> JobCoverage:
         """Read each target asset's covered and failed keys off the evidence rows.
 
         Args:

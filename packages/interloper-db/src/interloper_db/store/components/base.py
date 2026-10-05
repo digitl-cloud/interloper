@@ -45,7 +45,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
 from interloper_db.models import Component, ComponentRelation
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.components.hydration import Hydrator
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_ASSETS_PER_SOURCE, QuotaStore
@@ -56,8 +56,7 @@ from interloper_db.store.relations import RelationStore
 # the whole unit reads off a detached row.
 COMPONENT_LOAD_OPTIONS = [
     selectinload(Component.parent),  # ty: ignore[invalid-argument-type]
-    selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
-    .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
+    selectinload(Component.out_relations).selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
     selectinload(Component.children)  # ty: ignore[invalid-argument-type]
     .selectinload(Component.out_relations)  # ty: ignore[invalid-argument-type]
     .selectinload(ComponentRelation.dst),  # ty: ignore[invalid-argument-type]
@@ -128,6 +127,26 @@ class DeleteImpact:
 
     blocking: list[dict[str, str | None]]
     detaching: list[dict[str, str | None]]
+
+    @classmethod
+    def from_referrers(cls, blocking: Iterable[Component], detaching: Iterable[Component]) -> DeleteImpact:
+        """Describe each referrer the way :class:`InUseError` reports one, in display order.
+
+        Args:
+            blocking: The referrers whose relations block the deletion.
+            detaching: The referrers whose relations detach instead.
+
+        Returns:
+            The impact.
+        """
+
+        def refs(components: Iterable[Component]) -> list[dict[str, str | None]]:
+            return [
+                {"id": str(c.id), "kind": c.kind, "key": c.key, "name": c.name}
+                for c in sorted(components, key=lambda c: ((c.name or c.key).lower(), str(c.id)))
+            ]
+
+        return cls(blocking=refs(blocking), detaching=refs(detaching))
 
 
 class ComponentStore:
@@ -206,32 +225,46 @@ class ComponentStore:
             session.add(db_component)
             session.flush()
             if kind == "source":
-                self._check_source_collision(session, db_component)
-                self._ensure_children(session, db_component, children)
+                self._check_source_collision(db_component)
+                self._sync_children(db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{kind}' have no children")
-            self._relations._sync_relations(session, db_component, relations)
-            self._relations._require_bound(session, db_component)
+            self._relations.sync(db_component, relations)
+            self._relations.check_bound(db_component)
             commit(session)
-            return self._load_component(session, db_component.id)
+            return self.get(db_component.id, org_id=org_id)
 
-    def get(self, component_id: UUID, *, kind: str | None = None, org_id: UUID | None = None) -> Component:
-        """Load a component row by ID with relations eager-loaded.
+    def get(self, component_id: UUID, *, org_id: UUID | None = None, kind: str | None = None) -> Component:
+        """Load a component row by ID, its relations and children eager-loaded.
 
         Args:
             component_id: The component UUID.
+            org_id: Organisation the row must belong to; a mismatch raises
+                ``NotFoundError`` like an absent row, so a caller cannot learn
+                that an id exists in another tenant. ``None`` accepts any
+                organisation, for a caller that authorizes by the row's own
+                ``org_id`` afterwards (the API) or serves every organisation
+                (the scheduler).
             kind: Kind the row must have (``None`` accepts any kind); a
-                mismatch raises ``NotFoundError`` like an absent row, so a
-                caller cannot learn that an id exists under another kind.
-            org_id: Organisation the row must belong to (``None`` accepts
-                any); a mismatch raises ``NotFoundError`` like an absent row,
-                so a caller cannot learn that an id exists in another tenant.
+                mismatch raises ``NotFoundError`` the same way.
 
         Returns:
-            The component row, eager-loaded and safe to hand out detached.
+            The component row, safe to hand out detached.
+
+        Raises:
+            NotFoundError: If no row exists, or it has a different kind or
+                organisation.
         """
+        statement = select(Component).where(Component.id == component_id).options(*COMPONENT_LOAD_OPTIONS)
         with session_scope(self._engine) as session:
-            return self._load_component(session, component_id, kind=kind, org_id=org_id)
+            db_component = session.exec(statement).first()
+        if (
+            db_component is None
+            or (org_id is not None and db_component.org_id != org_id)
+            or (kind is not None and db_component.kind != kind)
+        ):
+            raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
+        return db_component
 
     def list(self, org_id: UUID, query: ComponentQuery) -> Page[Component]:
         """List an organisation's components, oldest first.
@@ -297,31 +330,34 @@ class ComponentStore:
             The updated component row, eager-loaded.
 
         Raises:
-            NotFoundError: If the component is not found.
             ConfigError: If ``children`` is passed for a kind that has none.
         """
         with session_scope(self._engine) as session:
-            db_component = session.get(Component, component_id)
-            if not db_component:
-                raise NotFoundError(f"Component {component_id} not found")
+            db_component = self._lock(component_id)
             if name is not None:
                 db_component.name = name
             if config is not None:
-                self._refresh_derived_name(db_component, new_config=config, explicit_rename=name is not None)
+                # A name equal to the old config's derived default (or blank) is
+                # system-owned and follows the config; anything else, a rename in
+                # this same call included, is user-owned and untouched.
+                if name is None:
+                    old_default = self._derived_name(db_component, self._current_config(db_component))
+                    if db_component.name is None or db_component.name == old_default:
+                        db_component.name = self._derived_name(db_component, config) or db_component.name
                 spec_changed = config != (db_component.config or {})
                 db_component.write_config(config, encrypt=self._encrypt, encrypted=encrypted)
                 if db_component.kind == "job" and spec_changed:
                     db_component.stamp_state(next_run_at=None)
             if db_component.kind == "source":
-                self._check_source_collision(session, db_component)
+                self._check_source_collision(db_component)
                 if children is not None:
-                    self._ensure_children(session, db_component, children)
+                    self._sync_children(db_component, children)
             elif children is not None:
                 raise ConfigError(f"Components of kind '{db_component.kind}' have no children")
-            self._relations._sync_relations(session, db_component, relations)
-            self._relations._require_bound(session, db_component)
+            self._relations.sync(db_component, relations)
+            self._relations.check_bound(db_component)
             commit(session)
-            return self._load_component(session, component_id)
+            return self.get(component_id, org_id=db_component.org_id)
 
     def delete(self, component_id: UUID) -> None:
         """Delete a component. Children and out-bound relations cascade via FK.
@@ -338,19 +374,16 @@ class ComponentStore:
             component_id: The component UUID.
 
         Raises:
-            NotFoundError: If the component is not found.
             InUseError: If other components hold blocking relations into this
-                one or its children — those must be unbound or deleted first.
+                one or its children, which must be unbound or deleted first.
             ConfigError: If the component is source-owned (delete or update
                 the parent source instead).
         """
         with session_scope(self._engine) as session:
-            db_component = session.get(Component, component_id)
-            if not db_component:
-                raise NotFoundError(f"Component {component_id} not found")
+            db_component = self._lock(component_id)
             if db_component.parent_id is not None:
                 raise ConfigError("Cannot delete a source-owned asset directly. Delete or update the source instead.")
-            if referrers := self._blocking_referrers(session, db_component):
+            if referrers := self._blocking_referrers(db_component):
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
                     f"Cannot delete {db_component.kind} '{db_component.name or db_component.key}': in use by {names}",
@@ -359,7 +392,7 @@ class ComponentStore:
             session.delete(db_component)
             commit(session)
 
-    def _blocking_referrers(self, session: Session, db_component: Component) -> builtins.list[dict[str, str | None]]:
+    def _blocking_referrers(self, db_component: Component) -> builtins.list[dict[str, str | None]]:
         """Components outside a component's subtree whose relations into it block deletion.
 
         Deleting a relation destination cascades the edge row, which would
@@ -372,7 +405,6 @@ class ComponentStore:
         user can act on.
 
         Args:
-            session: Open session the deletion is being staged in.
             db_component: The row about to be deleted.
 
         Returns:
@@ -382,9 +414,10 @@ class ComponentStore:
         # Child ids via a bare SELECT, not the ORM relationship: loading the
         # children into the session that is about to delete their parent
         # invites the unit of work to manage them.
-        child_ids = session.exec(select(Component.id).where(Component.parent_id == db_component.id)).all()
+        with session_scope(self._engine) as session:
+            child_ids = session.exec(select(Component.id).where(Component.parent_id == db_component.id)).all()
         subtree_ids = {db_component.id} | set(child_ids)
-        return self._referrers_into(session, subtree_ids, subtree_ids).blocking
+        return self._referrers_into(subtree_ids, subtree_ids).blocking
 
     def delete_impact(self, component_ids: Sequence[UUID]) -> DeleteImpact:
         """Preview what deleting *component_ids* does to the components bound to them.
@@ -406,13 +439,11 @@ class ComponentStore:
             for component_id in component_ids:
                 if session.get(Component, component_id) is None:
                     raise NotFoundError(f"Component {component_id} not found")
-            child_ids = session.exec(
-                select(Component.id).where(col(Component.parent_id).in_(component_ids))
-            ).all()
+            child_ids = session.exec(select(Component.id).where(col(Component.parent_id).in_(component_ids))).all()
             subtree_ids = set(component_ids) | set(child_ids)
-            return self._referrers_into(session, subtree_ids, subtree_ids)
+            return self._referrers_into(subtree_ids, subtree_ids)
 
-    def _referrers_into(self, session: Session, target_ids: set[UUID], subtree_ids: set[UUID]) -> DeleteImpact:
+    def _referrers_into(self, target_ids: set[UUID], subtree_ids: set[UUID]) -> DeleteImpact:
         """Referrers whose relations point into *target_ids* from outside *subtree_ids*, by outcome.
 
         An edge whose name the referrer declares ``on_delete="detach"``
@@ -421,7 +452,6 @@ class ComponentStore:
         blocks through any edge is reported as blocking alone.
 
         Args:
-            session: Open session to query in.
             target_ids: Component IDs whose in-bound relations are inspected.
             subtree_ids: Component IDs that count as "inside" — relations
                 originating there are ignored.
@@ -429,43 +459,23 @@ class ComponentStore:
         Returns:
             The blocking and detaching referrers, each sorted by display name.
         """
-        rows = session.exec(
-            select(ComponentRelation).where(
-                col(ComponentRelation.dst_id).in_(target_ids),
-                col(ComponentRelation.src_id).not_in(subtree_ids),
-            )
-        ).all()
+        statement = select(ComponentRelation).where(
+            col(ComponentRelation.dst_id).in_(target_ids), col(ComponentRelation.src_id).not_in(subtree_ids)
+        )
         blocking: dict[UUID, Component] = {}
         detaching: dict[UUID, Component] = {}
-        for relation in rows:
-            src = session.get(Component, relation.src_id)
-            if src is None:
-                continue
-            detaches = self._relations._relation_detaches(session, src, relation)
-            if src.parent_id is not None and src.parent_id not in subtree_ids:
-                src = session.get(Component, src.parent_id) or src
-            (detaching if detaches else blocking)[src.id] = src
+        with session_scope(self._engine) as session:
+            for relation in session.exec(statement).all():
+                src = session.get(Component, relation.src_id)
+                if src is None:
+                    continue
+                detaches = self._relations.detaches(src, relation)
+                if src.parent_id is not None and src.parent_id not in subtree_ids:
+                    src = session.get(Component, src.parent_id) or src
+                (detaching if detaches else blocking)[src.id] = src
         for component_id in blocking:
             detaching.pop(component_id, None)
-        return DeleteImpact(
-            blocking=self._referrer_refs(blocking.values()),
-            detaching=self._referrer_refs(detaching.values()),
-        )
-
-    @staticmethod
-    def _referrer_refs(components: Iterable[Component]) -> builtins.list[dict[str, str | None]]:
-        """``{id, kind, key, name}`` mappings for *components*, sorted by display name.
-
-        Args:
-            components: The referrer rows.
-
-        Returns:
-            One mapping per component, in display order.
-        """
-        return [
-            {"id": str(c.id), "kind": c.kind, "key": c.key, "name": c.name}
-            for c in sorted(components, key=lambda c: ((c.name or c.key).lower(), str(c.id)))
-        ]
+        return DeleteImpact.from_referrers(blocking.values(), detaching.values())
 
     # -- Reading ---------------------------------------------------------------
 
@@ -566,14 +576,12 @@ class ComponentStore:
             The updated component row.
         """
         with session_scope(self._engine) as session:
-            db_component = self._load_component(session, component_id)
+            db_component = self._lock(component_id)
             payload = {**db_component.read_config(self._decrypt), **fields}
             encrypted = db_component.encrypted if il.KINDS[db_component.kind].sensitive else None
             db_component.write_config(payload, encrypt=self._encrypt, encrypted=encrypted)
-            session.add(db_component)
-            commit(session)
-            session.refresh(db_component)
-            return db_component
+            save(session, db_component)
+            return self.get(component_id)
 
     def stamp_state(self, component_id: UUID, **fields: Any) -> Component:
         """Merge machine-owned state fields onto a component row, by id.
@@ -590,12 +598,10 @@ class ComponentStore:
             The updated component row.
         """
         with session_scope(self._engine) as session:
-            db_component = self._load_component(session, component_id)
+            db_component = self._lock(component_id)
             db_component.stamp_state(**fields)
-            session.add(db_component)
-            commit(session)
-            session.refresh(db_component)
-            return db_component
+            save(session, db_component)
+            return self.get(component_id)
 
     def lock_due(
         self,
@@ -681,28 +687,7 @@ class ComponentStore:
             return None
         return instance.instance_name()
 
-    def _refresh_derived_name(
-        self, db_component: Component, *, new_config: dict[str, Any], explicit_rename: bool
-    ) -> None:
-        """Let a never-customized display name follow a config change.
-
-        A name equal to the old config's derived default (or blank) is
-        system-owned and follows along; anything else — including a rename in
-        this same call — is user-owned and untouched.
-
-        Args:
-            db_component: The row, still carrying its old config and name.
-            new_config: The configuration about to replace the stored one.
-            explicit_rename: Whether the same update also sets ``name``, which
-                makes the name user-owned and stops it from following.
-        """
-        if explicit_rename:
-            return
-        old_default = self._derived_name(db_component, self._current_config(db_component))
-        if db_component.name is None or db_component.name == old_default:
-            db_component.name = self._derived_name(db_component, new_config) or db_component.name
-
-    def _check_source_collision(self, session: Session, db_source: Component) -> None:
+    def _check_source_collision(self, db_source: Component) -> None:
         """Reject a source instance whose materialization target collides with a sibling.
 
         Two instances of the same source class write to the same physical
@@ -716,7 +701,6 @@ class ComponentStore:
         either, and the check re-fires on every update.
 
         Args:
-            session: Open session the source is being written in.
             db_source: The source row being created or updated.
 
         Raises:
@@ -737,14 +721,14 @@ class ComponentStore:
         mine = targets(db_source.config)
         if not mine:
             return
-        siblings = session.exec(
-            select(Component).where(
-                Component.org_id == db_source.org_id,
-                Component.kind == "source",
-                Component.key == db_source.key,
-                Component.id != db_source.id,
-            )
-        ).all()
+        statement = select(Component).where(
+            Component.org_id == db_source.org_id,
+            Component.kind == "source",
+            Component.key == db_source.key,
+            Component.id != db_source.id,
+        )
+        with session_scope(self._engine) as session:
+            siblings = session.exec(statement).all()
         for sibling in siblings:
             overlap = mine & (targets(sibling.config) or set())
             if overlap:
@@ -754,7 +738,7 @@ class ComponentStore:
                     f"Configure a distinct discriminator (or dataset) so the two don't overwrite each other's data."
                 )
 
-    def _ensure_children(self, session: Session, db_source: Component, child_keys: Sequence[str] | None) -> None:
+    def _sync_children(self, db_source: Component, child_keys: Sequence[str] | None) -> None:
         """Sync a source's child asset rows to match the desired set.
 
         When ``child_keys`` is provided, only those assets will exist —
@@ -767,7 +751,6 @@ class ComponentStore:
         references, and per-asset overrides).
 
         Args:
-            session: Open session the source is being written in.
             db_source: The source row whose children are synced.
             child_keys: The exact asset keys to keep enabled, or ``None`` to
                 enable every asset the catalog class declares.
@@ -775,7 +758,6 @@ class ComponentStore:
         Raises:
             CatalogKeyError: If the source key does not resolve in the catalog.
             ConfigError: If ``child_keys`` names assets the source doesn't declare.
-            InUseError: If a removed asset is referenced from outside the source.
         """
         try:
             source_cls = il.Source.resolve_key(db_source.key, self._catalog)
@@ -787,6 +769,29 @@ class ComponentStore:
                 f"Source '{db_source.key}' declares no asset(s) {sorted(unknown)} (available: {sorted(all_keys)})"
             )
 
+        with session_scope(self._engine) as session:
+            self._sync_children_in(session, db_source, source_cls, all_keys, child_keys)
+
+    def _sync_children_in(
+        self,
+        session: Session,
+        db_source: Component,
+        source_cls: type[il.Source],
+        all_keys: set[str],
+        child_keys: Sequence[str] | None,
+    ) -> None:
+        """Reshape the child rows in the session :meth:`_sync_children` opened.
+
+        Args:
+            session: The open session.
+            db_source: The source row whose children are synced.
+            source_cls: The source's catalog class.
+            all_keys: Every asset key the class declares.
+            child_keys: The exact asset keys to keep enabled, or ``None`` for all.
+
+        Raises:
+            InUseError: If a removed asset is referenced from outside the source.
+        """
         existing = {
             child.key: child
             for child in session.exec(select(Component).where(Component.parent_id == db_source.id)).all()
@@ -808,7 +813,7 @@ class ComponentStore:
             # child set is exactly what this call is for.
             subtree_ids = {db_source.id} | {child.id for child in existing.values()}
             removed_ids = {existing[key].id for key in to_remove}
-            if referrers := self._referrers_into(session, removed_ids, subtree_ids).blocking:
+            if referrers := self._referrers_into(removed_ids, subtree_ids).blocking:
                 names = ", ".join(str(r["name"] or r["key"]) for r in referrers)
                 raise InUseError(
                     f"Cannot remove asset(s) {sorted(to_remove)} from source "
@@ -825,91 +830,44 @@ class ComponentStore:
             session.add(children[key])
         session.flush()
 
-        self._relations._bind_siblings(session, source_cls, children)
+        self._relations.bind_siblings(source_cls, children)
 
-    def job_partition_granularity(self, job_id: UUID) -> TimeGranularity | None:
-        """Resolve the granularity a job's partitioned targets share.
+    def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
+        """The granularities each job's partitioned targets declare, in three queries.
 
         Granularity lives on the target assets' catalog definitions, never on
         the job's config (a denormalized copy could silently drift from the
-        catalog). A source target contributes the granularities of its
-        partitioned assets; an owned-asset target is looked up inside its
-        parent source's definition.
-
-        Args:
-            job_id: UUID of the job component.
-
-        Returns:
-            The single granularity, or ``None`` when no partitioned target
-            resolves (the caller decides the fallback).
-
-        Raises:
-            ConfigError: If the targets disagree on granularity — scheduling a
-                window would be wrong for some of them, so fail closed.
-        """
-        with session_scope(self._engine) as session:
-            granularities = self._job_target_granularities(session, [job_id]).get(job_id, set())
-        if len(granularities) > 1:
-            names = ", ".join(sorted(g.value for g in granularities))
-            raise ConfigError(f"Job targets disagree on partition granularity ({names})")
-        return next(iter(granularities), None)
-
-    def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, TimeGranularity | None]:
-        """Resolve :meth:`job_partition_granularity` for several jobs in one session.
-
-        A read-side view, for callers that describe windows rather than
-        schedule them: a job whose targets disagree reads as unpartitioned
-        instead of failing the whole batch.
+        catalog). A source target contributes its partitioned assets'
+        granularities, an asset target its own; a target whose key does not
+        resolve contributes nothing (drift is the run path's problem, not the
+        scheduler's). The jobs' target relations, the target rows and their
+        parents are each read in one query, whatever the number of jobs.
 
         Args:
             job_ids: UUIDs of the job components.
 
         Returns:
-            Each job's granularity by id, ``None`` when no partitioned target
-            resolves or the targets disagree.
+            Per job, the distinct granularities its targets resolve to; a job
+            with no partitioned target maps to an empty set. The caller
+            decides what more than one granularity means.
         """
         if not job_ids:
             return {}
+        relations_statement = select(ComponentRelation).where(
+            col(ComponentRelation.src_id).in_(job_ids), ComponentRelation.name == "targets"
+        )
         with session_scope(self._engine) as session:
-            granularities = self._job_target_granularities(session, job_ids)
-        return {
-            job_id: next(iter(shared)) if len(shared := granularities.get(job_id, set())) == 1 else None
-            for job_id in job_ids
-        }
-
-    def _job_target_granularities(self, session: Session, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
-        """The granularities each job's partitioned targets declare, in three queries.
-
-        The jobs' target relations, the target rows and their parents are each
-        read in one query, whatever the number of jobs. A source target
-        contributes its partitioned assets' granularities, an asset target
-        its own; a target whose key does not resolve contributes nothing
-        (drift is the run path's problem, not the scheduler's).
-
-        Args:
-            session: Open session to resolve the targets in.
-            job_ids: UUIDs of the job components.
-
-        Returns:
-            Per job with at least one target relation, the distinct
-            granularities its targets resolve to.
-        """
-        relations = session.exec(
-            select(ComponentRelation).where(
-                col(ComponentRelation.src_id).in_(job_ids), ComponentRelation.name == "targets"
-            )
-        ).all()
-        targets = {
-            row.id: row
-            for row in session.exec(
-                select(Component)
-                .where(col(Component.id).in_({relation.dst_id for relation in relations}))
-                .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
-            ).all()
-        }
-        granularities: dict[UUID, set[TimeGranularity]] = {}
+            relations = session.exec(relations_statement).all()
+            targets = {
+                row.id: row
+                for row in session.exec(
+                    select(Component)
+                    .where(col(Component.id).in_({relation.dst_id for relation in relations}))
+                    .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
+                ).all()
+            }
+        granularities: dict[UUID, set[TimeGranularity]] = {job_id: set() for job_id in job_ids}
         for relation in relations:
-            shared = granularities.setdefault(relation.src_id, set())
             if (target := targets.get(relation.dst_id)) is None:
                 continue
             definition = self._catalog.get(target.qualified_key)
@@ -919,42 +877,87 @@ class ComponentStore:
                 partitionings = [definition.partitioning]
             else:
                 partitionings = []
-            shared.update(
+            granularities[relation.src_id].update(
                 TimeGranularity(partitioning["granularity"])
                 for partitioning in partitionings
                 if partitioning.get("granularity") is not None
             )
         return granularities
 
-    # -- Internals -------------------------------------------------------------
+    def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
+        """The partitioning of every partitioned asset row of an organisation.
 
-    @staticmethod
-    def _load_component(
-        session: Session, component_id: UUID, *, kind: str | None = None, org_id: UUID | None = None
-    ) -> Component:
-        """Fetch a component row with children and relations eager-loaded.
+        Partitioning lives on the catalog definition, never on the row, which
+        resolves by its qualified key. A row whose key does not resolve (a
+        drifted key, a disabled or missing source) is skipped, as is an
+        unpartitioned asset.
 
         Args:
-            session: Open session to query in.
-            component_id: The component UUID.
-            kind: Kind the row must have (``None`` accepts any kind); a
-                mismatch is reported as a missing row.
-            org_id: Organisation the row must belong to (``None`` accepts
-                any); a mismatch is reported as a missing row.
+            org_id: Organisation UUID.
 
         Returns:
-            The component row, safe to hand out detached.
+            Each partitioned asset's time partition config by row id.
+        """
+        statement = (
+            select(Component)
+            .where(Component.org_id == org_id, Component.kind == "asset")
+            .options(selectinload(Component.parent))  # ty: ignore[invalid-argument-type]
+        )
+        with session_scope(self._engine) as session:
+            assets = {row.id: row.qualified_key for row in session.exec(statement).all()}
+        partitionings: dict[UUID, il.TimePartitionConfig] = {}
+        for asset_id, key in assets.items():
+            definition = self._catalog.get(key)
+            if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
+                continue
+            partitionings[asset_id] = il.TimePartitionConfig(
+                column=partitioning["column"],
+                allow_window=partitioning.get("allow_window", False),
+                granularity=TimeGranularity(partitioning.get("granularity", TimeGranularity.DAY)),
+                start=partitioning.get("start"),
+            )
+        return partitionings
+
+    def target_assets(self, job: Component) -> dict[UUID, str]:
+        """The assets a job targets, directly or through a source it targets.
+
+        Args:
+            job: The job row, its relations loaded.
+
+        Returns:
+            The assets' keys by id, oldest first.
+        """
+        targets = [relation.dst_id for relation in job.out_relations if relation.name == "targets"]
+        statement = (
+            select(col(Component.id), col(Component.key))
+            .where(
+                Component.kind == "asset",
+                col(Component.id).in_(targets) | col(Component.parent_id).in_(targets),
+            )
+            .order_by(col(Component.created_at), col(Component.id))
+        )
+        with session_scope(self._engine) as session:
+            return dict(session.exec(statement).all())
+
+    # -- Internals -------------------------------------------------------------
+
+    def _lock(self, component_id: UUID) -> Component:
+        """Load a component row for a write, holding it for the rest of the transaction.
+
+        Args:
+            component_id: The component UUID.
+
+        Returns:
+            The component row alone: a write reshapes its relations and
+            children, so it reads them fresh afterwards rather than through
+            collections loaded here.
 
         Raises:
-            NotFoundError: If no row exists, or it has a different kind or
-                organisation.
+            NotFoundError: If no row exists.
         """
-        statement = select(Component).where(Component.id == component_id).options(*COMPONENT_LOAD_OPTIONS)
-        db_component = session.exec(statement).first()
-        if (
-            not db_component
-            or (kind is not None and db_component.kind != kind)
-            or (org_id is not None and db_component.org_id != org_id)
-        ):
-            raise NotFoundError(f"{kind or 'component'} {component_id} not found".capitalize())
-        return db_component
+        statement = select(Component).where(Component.id == component_id).with_for_update()
+        with session_scope(self._engine) as session:
+            db_component = session.exec(statement).first()
+            if db_component is None:
+                raise NotFoundError(f"Component {component_id} not found")
+            return db_component

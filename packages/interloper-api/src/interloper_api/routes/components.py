@@ -156,7 +156,8 @@ class ComponentResponse(BaseModel):
     updated_at: datetime | None = None
 
     @classmethod
-    def from_row(cls, 
+    def from_row(
+        cls,
         row: Component,
         store: Store,
         *,

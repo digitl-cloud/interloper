@@ -91,7 +91,7 @@ class _RetryStore:
 
     def __init__(self, executions: dict[UUID, list[dict[str, Any]]], lineage: dict[UUID, UUID | None]) -> None:
         self.executions = _FakeExecutionStore(executions)
-        self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(retry_of=lineage[run_id]))
+        self.runs = SimpleNamespace(get=lambda run_id, org_id=None: SimpleNamespace(retry_of=lineage[run_id]))
 
 
 def test_succeeded_operations_are_reported() -> None:
@@ -282,9 +282,7 @@ class TestWorkloadValidation:
         (error,) = store.failures
         assert "declares no workload" in error
 
-    def test_a_store_that_cannot_record_the_failure_still_returns_false(
-        self
-    ) -> None:
+    def test_a_store_that_cannot_record_the_failure_still_returns_false(self) -> None:
         # Otherwise the launcher would read the raise as a crash, not a failed run.
         run = _dispatched()
         store = _RecordingStore(_NotAWorkload(), run=run, complete_raises=True)
@@ -428,9 +426,7 @@ class TestUpstreamJoinsReadOnly:
     def test_a_bound_upstream_is_joined_and_made_non_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         il.MemoryDestination.clear()
         upstream = _UpstreamFixture(id=str(uuid4()), destinations=[il.MemoryDestination()])
-        target = _DownstreamFixture(
-            id=str(uuid4()), destinations=[il.MemoryDestination()], upstream=upstream
-        )
+        target = _DownstreamFixture(id=str(uuid4()), destinations=[il.MemoryDestination()], upstream=upstream)
 
         run = _dispatched()
 

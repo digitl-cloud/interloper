@@ -105,9 +105,13 @@ def upgrade() -> None:
     op.execute(
         _EXECUTIONS_VIEW.format(partition="e.org_id, e.run_id, e.component_id", operation_events=_OPERATION_EVENTS)
     )
-    invalid = op.get_bind().exec_driver_sql(
-        "SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('ix_events_executions') AND NOT indisvalid"
-    ).scalar()
+    invalid = (
+        op.get_bind()
+        .exec_driver_sql(
+            "SELECT 1 FROM pg_index WHERE indexrelid = to_regclass('ix_events_executions') AND NOT indisvalid"
+        )
+        .scalar()
+    )
     with op.get_context().autocommit_block():
         if invalid:
             op.execute("DROP INDEX CONCURRENTLY ix_events_executions")

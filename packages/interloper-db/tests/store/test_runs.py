@@ -21,7 +21,6 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError, ConflictError, NotFoundError
-from interloper.partitioning.time import TimeGranularity
 from pydantic import ValidationError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
@@ -30,7 +29,7 @@ from sqlmodel import Session, select
 from interloper_db import engine as engine_module
 from interloper_db import provision
 from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
-from interloper_db.store import EventQuery, PageQuery, RunQuery, RunStore, Store
+from interloper_db.store import EventQuery, PageQuery, RunQuery, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.runs import partition_key_range
 
@@ -663,22 +662,6 @@ class TestPartitionKeyValidation:
         with pytest.raises(ConfigError):
             store.runs.create(_ORG_ID, partition_key="not-a-key")
 
-    @pytest.mark.parametrize(
-        ("key", "granularity"),
-        [
-            ("2026-08-21", TimeGranularity.DAY),
-            ("2026-08", TimeGranularity.MONTH),
-            ("2026", TimeGranularity.YEAR),
-            ("2026-08-21T13", TimeGranularity.HOUR),
-        ],
-    )
-    def test_parse_partition_reads_the_granularity_off_the_shape(self, key: str, granularity: TimeGranularity):
-        assert RunStore.parse_partition(key).granularity is granularity
-
-    def test_parse_partition_refuses_an_unknown_shape_as_a_config_error(self):
-        with pytest.raises(ConfigError):
-            RunStore.parse_partition("not-a-key")
-
 
 class TestRetryValidation:
     """Only a failed run can be retried, and only with a known scope."""
@@ -1125,6 +1108,82 @@ class TestNamedReads:
         store.runs.start(queued[0].id)
 
         assert [run.id for run in store.backfills.attempts(backfill.id)] == [queued[2].id, queued[0].id, queued[1].id]
+
+
+_T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
+
+
+def _attempt(
+    target: UUID | None = None,
+    *,
+    status: str = "failed",
+    created: dt.datetime = _T0,
+    partition_key: str | None = None,
+    org_id: UUID = _ORG_ID,
+    root: UUID | None = None,
+    attempt: int = 1,
+) -> UUID:
+    run_id = uuid4()
+    run = Run(
+        id=run_id,
+        org_id=org_id,
+        component_id=target,
+        status=status,
+        created_at=created,
+        partition_key=partition_key,
+        attempt=attempt,
+    )
+    if root is not None:
+        run.root_run_id = root
+    with Session(engine_module.get_engine()) as session:
+        session.add(run)
+        session.commit()
+    return run_id
+
+
+class TestLatestByTarget:
+    """One run per target: its most recently created attempt, whatever its stack."""
+
+    def test_the_most_recently_created_attempt_wins(self, store: Store) -> None:
+        job = _component(store, "job")
+        _attempt(job, status="success")
+        first = _attempt(job, created=_T0 + dt.timedelta(hours=1))
+        retry = _attempt(job, status="success", created=_T0 + dt.timedelta(hours=2), root=first, attempt=2)
+
+        assert [(run.id, run.status) for run in store.runs.latest_by_target(_ORG_ID)] == [(retry, "success")]
+
+    def test_an_interleaved_retry_is_the_most_recent_attempt(self, store: Store) -> None:
+        job = _component(store, "job")
+        first = _attempt(job)
+        _attempt(job, status="success", created=_T0 + dt.timedelta(hours=1))
+        retry = _attempt(job, created=_T0 + dt.timedelta(hours=2), root=first, attempt=2)
+
+        assert [run.id for run in store.runs.latest_by_target(_ORG_ID)] == [retry]
+
+    def test_kind_filter_and_org_scoping(self, store: Store) -> None:
+        job, source = _component(store, "job"), _component(store, "source")
+        _attempt(job)
+        _attempt(source, status="success")
+        _attempt(job, created=_T0 + dt.timedelta(hours=1), org_id=uuid4())
+
+        jobs_only = store.runs.latest_by_target(_ORG_ID, kind="job")
+
+        assert [(run.component_id, run.status) for run in jobs_only] == [(job, "failed")]
+        assert {run.org_id for run in store.runs.latest_by_target(_ORG_ID)} == {_ORG_ID}
+        assert store.runs.latest_by_target(uuid4()) == []
+
+    def test_a_creation_tie_goes_to_the_later_partition(self, store: Store) -> None:
+        job = _component(store, "job")
+        later = _attempt(job, partition_key="2026-01-02")
+        _attempt(job, status="success", partition_key="2026-01-01")
+        _attempt(job, status="success")
+
+        assert [run.id for run in store.runs.latest_by_target(_ORG_ID)] == [later]
+
+    def test_a_deleted_target_is_left_out(self, store: Store) -> None:
+        _attempt(None)
+
+        assert store.runs.latest_by_target(_ORG_ID) == []
 
 
 @pytest.fixture(scope="module")
