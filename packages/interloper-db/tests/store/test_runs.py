@@ -997,9 +997,12 @@ class TestStartAndFail:
         assert store.events.list(_ORG_ID, EventQuery(), run_id=run.id).items == []
         assert store.runs.get(run.id).status == RunStatus.SUCCESS
 
-    def test_failing_a_missing_run_is_not_found(self, store: Store) -> None:
+    @pytest.mark.parametrize("verb", ["start", "fail", "mark_hooks_evaluated"])
+    def test_a_missing_run_is_not_found(self, store: Store, verb: str) -> None:
+        arguments = (uuid4(), "gone") if verb == "fail" else (uuid4(),)
+
         with pytest.raises(NotFoundError):
-            store.runs.fail(uuid4(), "gone")
+            getattr(store.runs, verb)(*arguments)
 
 
 class TestHooksPending:
