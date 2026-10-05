@@ -61,7 +61,7 @@ from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
 from interloper_db.store.organisations import ActivityEntry, OrganisationQuery, OrganisationStore
 from interloper_db.store.page import Page, PageQuery
-from interloper_db.store.profiles import ProfileStore
+from interloper_db.store.profiles import ProfileQuery, ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageDrift, UsageQuery, UsageStore
 from interloper_db.store.relations import RelationQuery, RelationStore
 from interloper_db.store.runs import RunQuery, RunStore
@@ -88,6 +88,7 @@ __all__ = [
     "OrganisationStore",
     "Page",
     "PageQuery",
+    "ProfileQuery",
     "ProfileStore",
     "QuotaStore",
     "RelationQuery",

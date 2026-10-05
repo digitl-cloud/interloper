@@ -105,7 +105,8 @@ catalog:
 The file is not interpolated: a field left out of a block is read from its `INTERLOPER_<SECTION>_<FIELD>`
 variable, which is where secrets go. `INTERLOPER_ENCRYPTION_KEY` is required: resource configs are
 encrypted at rest. Login is Google OAuth. `allowed_domains` restricts who may sign up; `super_admin_emails`
-bootstraps platform administrators. In-house OAuth app credentials for connectors live in
+bootstraps platform administrators, promoted by `interloper db init` and at login (promote-only). Once
+one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET` and `_REDIRECT_URI`; a provider without them
 has no sign-in tab, only manual credential entry. The full settings list is in
 [Settings](../reference/settings.md).

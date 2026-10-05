@@ -52,8 +52,9 @@ class AuthSettings(BaseSettings):
     """Authentication settings (Google OAuth, cookies).
 
     ``super_admin_emails`` bootstraps platform-wide super-admins: a user whose
-    Google email is listed gets ``is_super_admin`` set on login. Promotion only —
-    removing an email never demotes an existing super-admin. The env var takes a
+    Google email is listed gets ``is_super_admin`` set by ``interloper db init``
+    and on login. Promotion only: removing an email never demotes an existing
+    super-admin. The env var takes a
     comma-separated list (``INTERLOPER_AUTH_SUPER_ADMIN_EMAILS=a@x.com,b@x.com``).
 
     ``allowed_domains`` restricts who can sign up (first login creates a

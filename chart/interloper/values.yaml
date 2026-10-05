@@ -264,8 +264,9 @@ smtp: {}
 
 # Auth config (OAuth client ID; the client secret goes in
 # secrets.googleClientSecret). super_admin_emails bootstraps the first
-# platform super-admin(s): listed users are promoted when they log in
-# (promote-only — removing an email never demotes). allowed_domains
+# platform super-admin(s): listed users are promoted by the db-init Job on
+# every release and when they log in (promote-only: removing an email never
+# demotes). allowed_domains
 # restricts signup to the listed email domains (plus super-admins and
 # invited emails); empty keeps signup open. Existing profiles always
 # keep signing in.

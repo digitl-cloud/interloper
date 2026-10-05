@@ -1,7 +1,7 @@
 {{/*
-Schema bootstrap: runs `interloper db init` once per release. Application
-deployments are launched with --no-create-tables, so this Job is the sole
-writer of schema. The Job and the deployments come up together; deployments
+Schema bootstrap: runs `interloper db init` once per release, which also
+promotes the configured super-admins. Application deployments are launched
+with --no-create-tables, so this Job is the sole writer of schema. The Job and the deployments come up together; deployments
 crash-loop briefly until the Job completes (~one backoff cycle).
 
 Not a Helm hook on purpose — hooks can't reference the chart's Secret
@@ -42,9 +42,17 @@ spec:
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}
           {{- end }}
-          # No config mount: pre-install hooks run before the ConfigMap is
-          # created. Postgres connection comes from env vars (commonEnv).
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
+          # The config carries auth.super_admin_emails, which `db init` applies.
+          volumeMounts:
+            - name: config
+              mountPath: /etc/interloper
+              readOnly: true
+          workingDir: /etc/interloper
           resources: {{- toYaml .Values.dbInit.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "interloper.fullname" . }}-config
 {{- end }}

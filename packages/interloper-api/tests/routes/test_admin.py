@@ -16,12 +16,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
-from interloper_db import OrganisationQuery, Page, PageQuery, UsageQuery
+from interloper_db import OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
 from interloper_db.store import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_admin_config, get_current_user, get_store
+from interloper_api.dependencies import get_admin_config, get_auth_config, get_current_user, get_store
+from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes import admin as admin_module
 
 
@@ -30,19 +31,20 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.org = SimpleNamespace(id=uuid4(), name="Acme", created_at=datetime.now(timezone.utc), deleted_at=None)
-        self.member = SimpleNamespace(
-            id=uuid4(), email="member@acme.test", name="Member", avatar_url=None
-        )
+        self.profile_rows: dict[UUID, SimpleNamespace] = {}
+        self.member = self.add_profile("member@acme.test", name="Member")
         self.deleted_profiles: list[UUID] = []
         self.quota_updates: list[tuple[UUID, dict]] = []
         self.listed_orgs: list[OrganisationQuery] = []
-        self.listed_profiles: list[PageQuery] = []
+        self.listed_profiles: list[ProfileQuery] = []
         self.counted_orgs: list[list[UUID]] = []
         self.activity_calls: list[tuple[UUID, PageQuery]] = []
         self.activity: list[ActivityEntry] = []
         self.profiles = SimpleNamespace(
             delete=self._delete_profile,
+            get=self._get_profile,
             list=self._list_profiles,
+            set_super_admin=self._set_super_admin,
         )
         self.organisations = SimpleNamespace(
             list=self._list_organisations,
@@ -67,18 +69,47 @@ class FakeStore:
         self.deleted_profiles.append(user_id)
 
     # -- users --
-    def _list_profiles(self, query: PageQuery) -> Page:
+    def _get_profile(self, user_id: UUID) -> SimpleNamespace:
+        if user_id not in self.profile_rows:
+            raise NotFoundError(f"Profile {user_id} not found")
+        return self.profile_rows[user_id]
+
+    def _list_profiles(self, query: ProfileQuery) -> Page:
         self.listed_profiles.append(query)
-        profile = SimpleNamespace(
-            id=self.member.id,
-            email=self.member.email,
-            name=self.member.name,
+        rows = [
+            row
+            for row in self.profile_rows.values()
+            if query.super_admin is None or row.is_super_admin is query.super_admin
+        ]
+        return Page.window(rows, query)
+
+    def _set_super_admin(self, user_id: UUID, *, value: bool) -> SimpleNamespace:
+        row = self._get_profile(user_id)
+        row.is_super_admin = value
+        return row
+
+    def add_profile(self, email: str, *, name: str | None = None, is_super_admin: bool = False) -> SimpleNamespace:
+        """Store a profile row the user routes can read and change.
+
+        Args:
+            email: The profile's email.
+            name: The profile's display name.
+            is_super_admin: Whether the profile starts as a super-admin.
+
+        Returns:
+            The stored row.
+        """
+        row = SimpleNamespace(
+            id=uuid4(),
+            email=email,
+            name=name,
             avatar_url=None,
-            is_super_admin=False,
+            is_super_admin=is_super_admin,
             created_at=datetime.now(timezone.utc),
             organisations=[self.org],
         )
-        return Page.window([profile], query)
+        self.profile_rows[row.id] = row
+        return row
 
     # -- organisations --
     def _list_organisations(self, query: OrganisationQuery) -> Page:
@@ -314,13 +345,13 @@ def test_super_admin_lists_all_users(store: FakeStore) -> None:
     assert user["email"] == "member@acme.test"
     assert user["organisations"] == [{"id": str(store.org.id), "name": "Acme"}]
     assert user["is_super_admin"] is False
-    assert store.listed_profiles == [PageQuery()]
+    assert store.listed_profiles == [ProfileQuery()]
 
 
 def test_list_users_forwards_the_page_window(store: FakeStore) -> None:
     resp = _client(store, is_super_admin=True).get("/admin/users", params={"limit": 20, "offset": 40})
     assert resp.status_code == 200
-    assert store.listed_profiles == [PageQuery(limit=20, offset=40)]
+    assert store.listed_profiles == [ProfileQuery(limit=20, offset=40)]
 
 
 def test_list_users_rejects_a_page_larger_than_the_cap(store: FakeStore) -> None:
@@ -351,6 +382,123 @@ def test_cannot_delete_own_account(store: FakeStore) -> None:
     resp = client.delete(f"/admin/users/{me.id}")
     assert resp.status_code == 400
     assert store.deleted_profiles == []
+
+
+class TestUpdateUser:
+    """``PATCH /admin/users/{id}`` grants and revokes super-admin access."""
+
+    @pytest.fixture
+    def mailer(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[SuperAdminPromotionEmail, str]]:
+        """Configure SMTP and record every promotion email instead of sending it.
+
+        Args:
+            monkeypatch: Fixture used to swap the SMTP config and the transport.
+
+        Returns:
+            The recorded ``(email, recipient)`` pairs.
+        """
+        sent: list[tuple[SuperAdminPromotionEmail, str]] = []
+        monkeypatch.setattr(admin_module, "get_smtp_config", lambda: SimpleNamespace(enabled=True))
+        monkeypatch.setattr(SuperAdminPromotionEmail, "send", lambda email, smtp_config, to: sent.append((email, to)))
+        return sent
+
+    @staticmethod
+    def _client(store: FakeStore, *, configured: list[str] | None = None) -> tuple[TestClient, SimpleNamespace]:
+        """A client signed in as a stored super-admin.
+
+        Args:
+            store: The fake store the routes resolve against.
+            configured: The emails ``auth.super_admin_emails`` lists.
+
+        Returns:
+            The client and the calling super-admin's row.
+        """
+        me = store.add_profile("me@test", name="Me", is_super_admin=True)
+        app = _app(store, is_super_admin=True)
+        app.dependency_overrides[get_current_user] = lambda: me
+        app.dependency_overrides[get_auth_config] = lambda: SimpleNamespace(super_admin_emails=configured or [])
+        return TestClient(app), me
+
+    def test_non_super_admin_is_forbidden(self, store: FakeStore) -> None:
+        resp = _client(store, is_super_admin=False).patch(
+            f"/admin/users/{store.member.id}", json={"is_super_admin": True}
+        )
+        assert resp.status_code == 403
+        assert store.member.is_super_admin is False
+
+    def test_promotion_emails_every_super_admin(
+        self, store: FakeStore, mailer: list[tuple[SuperAdminPromotionEmail, str]]
+    ) -> None:
+        client, _ = self._client(store)
+        store.add_profile("other@test", is_super_admin=True)
+
+        resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": True})
+
+        assert resp.status_code == 200
+        assert resp.json()["is_super_admin"] is True
+        assert resp.json()["organisations"] == [{"id": str(store.org.id), "name": "Acme"}]
+        assert sorted(to for _, to in mailer) == ["me@test", "member@acme.test", "other@test"]
+        email = mailer[0][0]
+        assert (email.promoted_email, email.promoted_by) == ("member@acme.test", "Me")
+        assert email.admin_url == "http://testserver/admin/users"
+
+    def test_promoting_a_super_admin_again_sends_nothing(
+        self, store: FakeStore, mailer: list[tuple[SuperAdminPromotionEmail, str]]
+    ) -> None:
+        client, _ = self._client(store)
+        store.member.is_super_admin = True
+
+        resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": True})
+
+        assert resp.status_code == 200
+        assert mailer == []
+
+    def test_revocation_demotes_without_email(
+        self, store: FakeStore, mailer: list[tuple[SuperAdminPromotionEmail, str]]
+    ) -> None:
+        client, _ = self._client(store)
+        store.member.is_super_admin = True
+
+        resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": False})
+
+        assert resp.status_code == 200
+        assert resp.json()["is_super_admin"] is False
+        assert store.member.is_super_admin is False
+        assert mailer == []
+
+    def test_a_configured_super_admin_cannot_be_revoked(self, store: FakeStore) -> None:
+        client, _ = self._client(store, configured=["member@acme.test"])
+        store.member.is_super_admin = True
+
+        resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": False})
+
+        assert resp.status_code == 409
+        assert "auth.super_admin_emails" in resp.json()["detail"]
+        assert store.member.is_super_admin is True
+
+    def test_cannot_change_own_access(self, store: FakeStore) -> None:
+        client, me = self._client(store)
+
+        resp = client.patch(f"/admin/users/{me.id}", json={"is_super_admin": False})
+
+        assert resp.status_code == 400
+        assert me.is_super_admin is True
+
+    def test_an_unknown_user_is_not_found(self, store: FakeStore) -> None:
+        client, _ = self._client(store)
+
+        resp = client.patch(f"/admin/users/{uuid4()}", json={"is_super_admin": True})
+
+        assert resp.status_code == 404
+
+    def test_promotion_succeeds_without_smtp(self, store: FakeStore, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(admin_module, "get_smtp_config", lambda: None)
+        client, _ = self._client(store)
+
+        resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": True})
+
+        assert resp.status_code == 200
+        assert store.member.is_super_admin is True
 
 
 def test_super_admin_lists_all_organisations(store: FakeStore) -> None:

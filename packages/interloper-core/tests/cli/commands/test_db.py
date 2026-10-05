@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+from types import SimpleNamespace
 from typing import Any
 
 import interloper_db
 import interloper_db.provision
+import interloper_db.store
 import pytest
 
 from interloper.cli.commands import db as db_command
+from interloper.settings import AppSettings, AuthSettings
 
 
 @pytest.fixture
@@ -29,8 +32,32 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         "drop_database": [],
         "upgrade": [],
         "downgrade": [],
+        "promote_super_admins": [],
     }
     engine = object()
+
+    class RecordingProfileStore:
+        """Profile store stand-in recording the emails it is asked to promote."""
+
+        def __init__(self, bound_engine: object) -> None:
+            """Check the store is bound to the command's engine.
+
+            Args:
+                bound_engine: The engine the command built the store on.
+            """
+            assert bound_engine is engine
+
+        def promote_super_admins(self, emails: list[str]) -> list[SimpleNamespace]:
+            """Record the emails and promote every one of them.
+
+            Args:
+                emails: The configured super-admin emails.
+
+            Returns:
+                One promoted profile stand-in per email.
+            """
+            recorded["promote_super_admins"].append(list(emails))
+            return [SimpleNamespace(email=email) for email in emails]
 
     monkeypatch.setattr(interloper_db, "ensure_database", lambda dsn: recorded["ensure_database"].append(dsn))
     monkeypatch.setattr(interloper_db, "init_engine", lambda dsn: (recorded["init_engine"].append(dsn), engine)[1])
@@ -40,6 +67,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
     monkeypatch.setattr(
         interloper_db.provision, "drop_database", lambda dsn: recorded["drop_database"].append(dsn)
     )
+    monkeypatch.setattr(interloper_db.store, "ProfileStore", RecordingProfileStore)
     recorded["engine"] = [engine]
     return recorded
 
@@ -97,6 +125,22 @@ class TestInit:
         assert calls["create_all"] == [(calls["engine"][0],)]
         assert "Done." in capsys.readouterr().out
 
+    def test_promotes_the_configured_super_admins(
+        self,
+        calls: dict[str, list[Any]],
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        settings = AppSettings(auth=AuthSettings(super_admin_emails=["ada@example.com", "bob@example.com"]))
+        monkeypatch.setattr(AppSettings, "_active", settings)
+
+        db_command._cmd_init(_parse("db", "init"))
+
+        assert calls["promote_super_admins"] == [["ada@example.com", "bob@example.com"]]
+        out = capsys.readouterr().out
+        assert "Promoted ada@example.com to super-admin." in out
+        assert "Promoted bob@example.com to super-admin." in out
+
 
 class TestReset:
     """``interloper db reset``."""
@@ -110,6 +154,22 @@ class TestReset:
         assert len(calls["ensure_database"]) == 1
         assert calls["create_all"] == [(calls["engine"][0],)]
         assert "Done." in capsys.readouterr().out
+
+    def test_promotes_the_configured_super_admins(
+        self,
+        calls: dict[str, list[Any]],
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        settings = AppSettings(auth=AuthSettings(super_admin_emails=["ada@example.com", "bob@example.com"]))
+        monkeypatch.setattr(AppSettings, "_active", settings)
+
+        db_command._cmd_init(_parse("db", "init"))
+
+        assert calls["promote_super_admins"] == [["ada@example.com", "bob@example.com"]]
+        out = capsys.readouterr().out
+        assert "Promoted ada@example.com to super-admin." in out
+        assert "Promoted bob@example.com to super-admin." in out
 
     @pytest.mark.parametrize("answer", ["y", "YES", "Yes"])
     def test_prompt_accepts_affirmative_answers(
