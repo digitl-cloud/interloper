@@ -67,7 +67,7 @@ code already on that loop raises `RuntimeError`; `await` there instead.
 | `MultiProcessRunner(max_workers=4)` | a process pool | child processes; the DAG is shipped as a spec and reconstructed there |
 
 Companion packages register Docker and Kubernetes runners under the same interface; see
-[Ecosystem](../reference/ecosystem.md).
+[Ecosystem](ecosystem.md).
 
 Operations are scheduled dynamically: as soon as every predecessor has completed, an operation
 becomes ready and is submitted while a slot is free. A failed operation cancels everything

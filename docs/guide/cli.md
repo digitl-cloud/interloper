@@ -2,7 +2,8 @@
 
 The `interloper` command runs DAGs directly and operates a deployed instance. This page covers
 `run`, the framework-level command; the others exist when platform packages are installed and
-are listed at the end.
+are listed at the end. Without a command, the help is printed. A `.env` file in the working directory
+is loaded when `python-dotenv` is installed, and telemetry is initialized from settings for every command.
 
 ## Running a DAG
 
@@ -114,4 +115,4 @@ printed; see [Events](events.md#events-across-processes).
 | `interloper launch <run_id>` | `interloper-db`, `interloper-scheduler` | Execute one persisted run. |
 
 A command whose packages are missing exits with a message naming them. Every flag is listed in
-[CLI flags](../reference/cli.md).
+[CLI](../reference/cli.md).

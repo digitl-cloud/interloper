@@ -31,6 +31,10 @@ Failures log at `ERROR`, cancellations at `WARNING`, run and operation lifecycle
 the high-frequency `data()` and destination I/O events at `DEBUG`.
 `ConsoleEventHandler(json_lines=True)` writes raw JSON lines to stdout instead.
 
+`ConsoleEventHandler` maps types to logging levels: failures at `ERROR`, `operation_canceled`
+at `WARNING`, `operation_queued` and all asset-data and destination I/O events at `DEBUG`,
+everything else at `INFO`. `log` events use their own `level`.
+
 To observe everything in the process, subscribe to the bus directly:
 
 ```py
@@ -74,8 +78,8 @@ collapses to one when persisted.
 | Hooks | `HOOK_FIRED`, `HOOK_FAILED` |
 | User | `LOG` |
 
-Backfill and hook events are emitted by the platform, not by the core runners. The full table
-with metadata per type is in [Event types](../reference/events.md).
+Backfill and hook events are emitted by the platform, not by the core runners. Every type, with when it fires, is in
+[Events](../reference/events.md).
 
 ## Logging from assets
 
