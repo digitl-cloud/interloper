@@ -12,36 +12,36 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/reference/telemetry/">
+        <link rel="canonical" href="https://docs.interloper.dev/guide/ecosystem/">
       
       
-        <link rel="prev" href="../events/">
+        <link rel="prev" href="../telemetry/">
       
       
-        <link rel="next" href="../errors/">
+        <link rel="next" href="../claude-code/">
       
       
         
       
       
       <link rel="icon" href="../../assets/favicon.png">
-      <meta name="generator" content="zensical-0.0.68">
+      <meta name="generator" content="zensical-0.0.62">
     
     
       
-        <title>Spans & metrics - Interloper</title>
+        <title>Ecosystem - Interloper</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.595f2bf5.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.b27955a4.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -83,11 +83,14 @@
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
     <div data-md-component="skip">
-      <a href="#__skip" class="md-skip">
-        Skip to content
-      </a>
+      
+        
+        <a href="#ecosystem" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -119,7 +122,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Spans & metrics
+              Ecosystem
             
           </span>
         </div>
@@ -237,6 +240,8 @@
   
   
   
+    
+  
   
     
       
@@ -281,12 +286,20 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
     
-      <li class="md-tabs__item">
-        <a href="../../guide/assets/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../assets/" class="md-tabs__link">
           
   
   Guide
@@ -367,8 +380,6 @@
   
   
   
-    
-  
   
     
       
@@ -391,12 +402,28 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../decorators/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../reference/settings/" class="md-tabs__link">
           
   
   Reference
@@ -515,8 +542,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -560,23 +589,34 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -593,25 +633,24 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-            <label class="md-nav__title" for="__nav_3">
-              <span class="md-nav__icon md-icon"></span>
-              
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
   
   Guide
 
-            </label>
-            <ul class="md-nav__list" data-md-scrollfix>
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/assets/" class="md-nav__link">
+      <a href="../assets/" class="md-nav__link">
         
   
   
@@ -629,16 +668,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/sources/" class="md-nav__link">
+      <a href="../sources/" class="md-nav__link">
         
   
   
@@ -656,16 +695,43 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/dependencies/" class="md-nav__link">
+      <a href="../decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
         
   
   
@@ -683,16 +749,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/resources/" class="md-nav__link">
+      <a href="../resources/" class="md-nav__link">
         
   
   
@@ -710,16 +776,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/connections/" class="md-nav__link">
+      <a href="../connections/" class="md-nav__link">
         
   
   
@@ -737,16 +803,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/oauth/" class="md-nav__link">
+      <a href="../oauth/" class="md-nav__link">
         
   
   
@@ -764,16 +830,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/fields/" class="md-nav__link">
+      <a href="../fields/" class="md-nav__link">
         
   
   
@@ -791,16 +857,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/destinations/" class="md-nav__link">
+      <a href="../destinations/" class="md-nav__link">
         
   
   
@@ -818,16 +884,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/schema/" class="md-nav__link">
+      <a href="../schema/" class="md-nav__link">
         
   
   
@@ -845,16 +911,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/normalization/" class="md-nav__link">
+      <a href="../normalization/" class="md-nav__link">
         
   
   
@@ -872,16 +938,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/partitioning/" class="md-nav__link">
+      <a href="../partitioning/" class="md-nav__link">
         
   
   
@@ -899,16 +965,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/execution/" class="md-nav__link">
+      <a href="../execution/" class="md-nav__link">
         
   
   
@@ -926,16 +992,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/backfilling/" class="md-nav__link">
+      <a href="../backfilling/" class="md-nav__link">
         
   
   
@@ -953,16 +1019,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/events/" class="md-nav__link">
+      <a href="../events/" class="md-nav__link">
         
   
   
@@ -980,16 +1046,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/jobs/" class="md-nav__link">
+      <a href="../jobs/" class="md-nav__link">
         
   
   
@@ -1007,16 +1073,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/hooks/" class="md-nav__link">
+      <a href="../hooks/" class="md-nav__link">
         
   
   
@@ -1034,16 +1100,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/specs/" class="md-nav__link">
+      <a href="../specs/" class="md-nav__link">
         
   
   
@@ -1061,16 +1127,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/catalog/" class="md-nav__link">
+      <a href="../catalog/" class="md-nav__link">
         
   
   
@@ -1088,16 +1154,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/cli/" class="md-nav__link">
+      <a href="../cli/" class="md-nav__link">
         
   
   
@@ -1115,16 +1181,43 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../../guide/telemetry/" class="md-nav__link">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../telemetry/" class="md-nav__link">
         
   
   
@@ -1142,11 +1235,144 @@
     </li>
   
 
-                
               
-            </ul>
-          </nav>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
         
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#extras-of-the-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Extras of the core
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#framework-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Framework extensions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The platform
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -1209,21 +1435,20 @@
             
           </div>
         
-        
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-            <label class="md-nav__title" for="__nav_4">
-              <span class="md-nav__icon md-icon"></span>
-              
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
   
   Web UI
 
-            </label>
-            <ul class="md-nav__list" data-md-scrollfix>
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
               
                 
-              
-                
-                  
   
   
   
@@ -1247,10 +1472,10 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
@@ -1274,11 +1499,10 @@
     </li>
   
 
-                
               
-            </ul>
-          </nav>
-        
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -1336,19 +1560,18 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-            <label class="md-nav__title" for="__nav_5">
-              <span class="md-nav__icon md-icon"></span>
-              
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
   
   Extending
 
-            </label>
-            <ul class="md-nav__list" data-md-scrollfix>
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
-                  
   
   
   
@@ -1372,10 +1595,10 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
@@ -1399,10 +1622,10 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
@@ -1426,10 +1649,10 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
@@ -1453,10 +1676,10 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
@@ -1480,11 +1703,10 @@
     </li>
   
 
-                
               
-            </ul>
-          </nav>
-        
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -1494,10 +1716,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1519,26 +1739,39 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
         
           
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
             
   
   
@@ -1555,52 +1788,24 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        
-          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-            <label class="md-nav__title" for="__nav_6">
-              <span class="md-nav__icon md-icon"></span>
-              
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
   
   Reference
 
-            </label>
-            <ul class="md-nav__list" data-md-scrollfix>
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../decorators/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Decorator options
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-                
-              
-                
-                  
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../settings/" class="md-nav__link">
+      <a href="../../reference/settings/" class="md-nav__link">
         
   
   
@@ -1618,23 +1823,23 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../../reference/cli/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  CLI flags
+  CLI
 
     
   </span>
@@ -1645,23 +1850,23 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../events/" class="md-nav__link">
+      <a href="../../reference/components/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Event types
+  Components
 
     
   </span>
@@ -1672,49 +1877,23 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
-  
-  
-    
   
   
   
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
   
-  
-  <span class="md-ellipsis">
-    
-  
-  Spans & metrics
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../reference/assets/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-  Spans & metrics
+  Assets
 
     
   </span>
@@ -1722,95 +1901,316 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#spans" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Spans
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#attributes" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Attributes
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#metrics" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Metrics
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#propagation-helpers" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Propagation helpers
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#setup-functions" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Setup functions
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../errors/" class="md-nav__link">
+      <a href="../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/errors/" class="md-nav__link">
         
   
   
@@ -1828,16 +2228,16 @@
     </li>
   
 
-                
+              
+            
               
                 
-                  
   
   
   
   
     <li class="md-nav__item">
-      <a href="../utils/" class="md-nav__link">
+      <a href="../../reference/utils/" class="md-nav__link">
         
   
   
@@ -1855,65 +2255,10 @@
     </li>
   
 
-                
               
-                
-                  
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../ecosystem/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Ecosystem
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-                
-              
-                
-                  
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../claude-code/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Claude Code plugin
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-                
-              
-            </ul>
-          </nav>
-        
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -1981,16 +2326,46 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
     
       <li class="md-path__item">
-        <a href="../decorators/" class="md-path__link">
+        <a href="../assets/" class="md-path__link">
           
   
   <span class="md-ellipsis">
-    Reference
+    Guide
   </span>
 
         </a>
@@ -2004,272 +2379,183 @@
 
               
               <article class="md-content__inner md-typeset">
-                <a id="__skip" tabindex="-1"></a>
                 
                   
-
   
   
 
 
-<h1 id="spans-metrics">Spans &amp; metrics<a class="headerlink" href="#spans-metrics" title="Permanent link">&para;</a></h1>
-<h2 id="spans">Spans<a class="headerlink" href="#spans" title="Permanent link">&para;</a></h2>
+<h1 id="ecosystem">Ecosystem<a class="headerlink" href="#ecosystem" title="Permanent link">&para;</a></h1>
+<p><code>interloper-core</code> is the framework. The packages below build on it; each is documented in its
+own README. All are versioned and released together.</p>
+<h2 id="extras-of-the-core">Extras of the core<a class="headerlink" href="#extras-of-the-core" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Span</th>
-<th>Wraps</th>
-<th>Notes</th>
+<th>Extra</th>
+<th>Adds</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>interloper.runner.run</code></td>
-<td><code>Runner.run()</code></td>
-<td>Root of a run. Attributes: run metadata, <code>interloper.runner.type</code>, <code>interloper.partition</code>. Status error when the result is failed.</td>
+<td><code>interloper-core[otel]</code></td>
+<td>The OpenTelemetry SDK, OTLP exporters (gRPC and HTTP) and httpx2 instrumentation.</td>
 </tr>
 <tr>
-<td><code>interloper.operation.execute</code></td>
-<td><code>Operation.execute()</code></td>
-<td>One per operation.</td>
+<td><code>interloper-core[aws]</code></td>
+<td>Pulls in <code>interloper-aws</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.asset.resolve_resource</code></td>
-<td>resource lookup</td>
-<td>One per resource relation; adds <code>interloper.resource.name</code>.</td>
+<td><code>interloper-core[azure]</code></td>
+<td>Pulls in <code>interloper-azure</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.destination.read</code></td>
-<td><code>Destination.read()</code></td>
-<td>One per upstream dependency; adds <code>interloper.destination.key</code>, <code>interloper.upstream.key</code>.</td>
+<td><code>interloper-core[google-cloud]</code></td>
+<td>Pulls in <code>interloper-google-cloud</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.asset.data</code></td>
-<td><code>data()</code></td>
-<td></td>
+<td><code>interloper-core[duckdb]</code></td>
+<td>Pulls in <code>interloper-duckdb</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.normalizer.normalize</code></td>
-<td><code>Normalizer.normalize()</code></td>
-<td>Only when a normalizer is configured.</td>
+<td><code>interloper-core[slack]</code></td>
+<td>Pulls in <code>interloper-slack</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.asset.conform</code></td>
-<td>the conform step</td>
-<td></td>
+<td><code>interloper-core[sql]</code></td>
+<td>Pulls in <code>interloper-sql</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.asset.infer_schema</code></td>
-<td>schema inference</td>
-<td>Only under <code>AUTO</code> without a declared schema.</td>
+<td><code>interloper-core[snowflake]</code></td>
+<td>Pulls in <code>interloper-snowflake</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.representation.reconcile</code></td>
-<td><code>Representation.reconcile()</code></td>
-<td>Only with a declared schema under <code>AUTO</code> or <code>RECONCILE</code>.</td>
+<td><code>interloper-core[clickhouse]</code></td>
+<td>Pulls in <code>interloper-clickhouse</code>.</td>
 </tr>
 <tr>
-<td><code>interloper.destination.write</code></td>
-<td><code>Destination.write()</code></td>
-<td>One per destination; adds <code>interloper.destination.key</code>.</td>
-</tr>
-<tr>
-<td><code>interloper.dag.materialize</code></td>
-<td><code>DAG.materialize_async()</code></td>
-<td>Root when a DAG is driven directly. Attribute <code>interloper.dag.operation_count</code>.</td>
-</tr>
-<tr>
-<td><code>interloper.dag_spec.reconstruct</code></td>
-<td><code>DAGSpec.reconstruct()</code></td>
-<td>Attribute <code>interloper.dag.spec_items</code>.</td>
+<td><code>interloper-core[databricks]</code></td>
+<td>Pulls in <code>interloper-databricks</code>.</td>
 </tr>
 </tbody>
 </table>
-<h2 id="attributes">Attributes<a class="headerlink" href="#attributes" title="Permanent link">&para;</a></h2>
+<h2 id="framework-extensions">Framework extensions<a class="headerlink" href="#framework-extensions" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Attribute</th>
-<th>Source metadata key</th>
+<th>Package</th>
+<th>Provides</th>
+<th>Registers</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>interloper.run.id</code></td>
-<td><code>run_id</code></td>
+<td><code>interloper-pandas</code></td>
+<td><code>DataFrameRepresentation</code>, <code>DataFrameNormalizer</code>: assets may return pandas DataFrames, normalized and conformed natively.</td>
+<td><code>interloper.representations</code>: <code>dataframe</code></td>
 </tr>
 <tr>
-<td><code>interloper.backfill.id</code></td>
-<td><code>backfill_id</code></td>
+<td><code>interloper-google-cloud</code></td>
+<td><code>GoogleCloudConnection</code>, <code>BigQueryDestination</code> (a <code>DatabaseDestination</code> with typed Parquet loads and time partitioning), <code>GCSDestination</code> (an <code>ObjectStoreDestination</code> over Cloud Storage: hive-partitioned Parquet, JSONL or CSV), <code>GoogleSheetsDestination</code> (a <code>DatabaseDestination</code> writing one tab per asset).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.component.id</code></td>
-<td><code>component_id</code></td>
+<td><code>interloper-duckdb</code></td>
+<td><code>DuckDBConnection</code>, <code>DuckDBDestination</code> (a <code>DatabaseDestination</code> writing typed tables to a local DuckDB file or a MotherDuck database, one schema per dataset).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.component.kind</code></td>
-<td><code>component_kind</code></td>
+<td><code>interloper-aws</code></td>
+<td><code>AWSConnection</code> (an access key pair, or boto3's default credential chain), <code>S3Destination</code> (an <code>ObjectStoreDestination</code> over Amazon S3: hive-partitioned Parquet, JSONL or CSV).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.component.key</code></td>
-<td><code>component_key</code></td>
+<td><code>interloper-azure</code></td>
+<td><code>AzureConnection</code> (a Microsoft Entra service principal), <code>FabricWarehouseDestination</code> (a <code>DatabaseDestination</code> over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.component.qualified_key</code></td>
-<td><code>qualified_key</code></td>
+<td><code>interloper-slack</code></td>
+<td><code>SlackConnection</code>, <code>SlackHook</code>: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when <code>server.external_url</code> is set.</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.source.id</code></td>
-<td><code>source_id</code></td>
+<td><code>interloper-sql</code></td>
+<td><code>SQLConnection</code>, <code>SQLDestination</code>: a <code>DatabaseDestination</code> over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed.</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.partition</code></td>
-<td><code>partition_or_window</code></td>
+<td><code>interloper-snowflake</code></td>
+<td><code>SnowflakeConnection</code>, <code>SnowflakeDestination</code> (a <code>DatabaseDestination</code> with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet <code>COPY INTO</code>).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.destination.key</code></td>
-<td><code>destination_key</code></td>
+<td><code>interloper-clickhouse</code></td>
+<td><code>ClickHouseConnection</code>, <code>ClickHouseDestination</code> (a <code>DatabaseDestination</code> writing <code>MergeTree</code> tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and <code>REPLACE PARTITION</code>; self-hosted servers and ClickHouse Cloud).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.upstream.key</code></td>
-<td>set directly on read spans</td>
+<td><code>interloper-databricks</code></td>
+<td><code>DatabricksConnection</code> (an OAuth service principal or a personal access token), <code>DatabricksDestination</code> (a <code>DatabaseDestination</code> writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic <code>INSERT ... REPLACE WHERE</code>).</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.resource.name</code></td>
-<td>set directly on resolve spans</td>
+<td><code>interloper-assets</code></td>
+<td>Ready-made sources and connections for advertising, analytics and commerce platforms (Facebook Ads, Google Ads, Bing Ads, Amazon Ads, LinkedIn, TikTok, Pinterest, Snapchat, Criteo, Search Console, and more), plus the <code>demo</code> source.</td>
+<td><code>interloper.components</code></td>
 </tr>
 <tr>
-<td><code>interloper.runner.type</code></td>
-<td>set directly on the run span</td>
+<td><code>interloper-docker</code></td>
+<td><code>DockerRunner</code>: each operation runs in a container, events stream back to the host.</td>
+<td><code>interloper.runners</code>: <code>docker</code>; <code>interloper.launchers</code>: <code>docker</code></td>
 </tr>
 <tr>
-<td><code>interloper.dag.operation_count</code>, <code>interloper.dag.spec_items</code></td>
-<td>set directly on DAG spans</td>
-</tr>
-<tr>
-<td><code>interloper.org.id</code>, <code>interloper.target.id</code>, <code>interloper.target.kind</code>, <code>interloper.target.key</code>, <code>interloper.target.name</code></td>
-<td><code>org_id</code>, <code>target_*</code> when the platform supplies them</td>
-</tr>
-<tr>
-<td><code>interloper.launcher.type</code></td>
-<td>set by platform launchers</td>
+<td><code>interloper-k8s</code></td>
+<td><code>KubernetesRunner</code>: each operation runs as a Kubernetes Job.</td>
+<td><code>interloper.runners</code>: <code>kubernetes</code>; <code>interloper.launchers</code>: <code>kubernetes</code></td>
 </tr>
 </tbody>
 </table>
-<p><code>interloper.telemetry.attributes.from_metadata(metadata)</code> performs the mapping, dropping <code>None</code>
-values and stringifying the rest.</p>
-<h2 id="metrics">Metrics<a class="headerlink" href="#metrics" title="Permanent link">&para;</a></h2>
-<p>All instruments are recorded by <code>OtelMetricsHandler</code>, an event-bus subscriber, and deduped on
-event id.</p>
+<h2 id="the-platform">The platform<a class="headerlink" href="#the-platform" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Instrument</th>
-<th>Kind</th>
-<th>Unit</th>
-<th>Attributes</th>
+<th>Package</th>
+<th>Role</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>interloper.runs</code></td>
-<td>counter</td>
-<td><code>{run}</code></td>
-<td><code>status</code> (<code>completed</code>, <code>failed</code>); <code>org_id</code>, <code>target_kind</code>, <code>target_key</code> when present</td>
+<td><code>interloper-db</code></td>
+<td>Persistence: components, relations, runs, events, organisations. Migrations and the store the CLI's <code>db</code> commands operate.</td>
 </tr>
 <tr>
-<td><code>interloper.run.duration</code></td>
-<td>histogram</td>
-<td><code>s</code></td>
-<td>same</td>
+<td><code>interloper-scheduler</code></td>
+<td>Cron controller, hook evaluator, credential renewal, queue worker, reaper and launchers. Acts on the jobs, hooks and connections the core declares.</td>
 </tr>
 <tr>
-<td><code>interloper.operations</code></td>
-<td>counter</td>
-<td><code>{execution}</code></td>
-<td><code>status</code> (<code>completed</code>, <code>failed</code>, <code>canceled</code>), <code>component_key</code></td>
+<td><code>interloper-api</code></td>
+<td>FastAPI backend reading catalog metadata and persisted state.</td>
 </tr>
 <tr>
-<td><code>interloper.operation.duration</code></td>
-<td>histogram</td>
-<td><code>s</code></td>
-<td>same</td>
+<td><code>interloper-app</code></td>
+<td>The web UI (Nuxt SPA), served by the API image or standalone.</td>
 </tr>
 <tr>
-<td><code>interloper.destination.io</code></td>
-<td>counter</td>
-<td><code>{operation}</code></td>
-<td><code>operation</code> (<code>read</code>, <code>write</code>), <code>status</code> (<code>completed</code>, <code>failed</code>), <code>destination_key</code></td>
+<td><code>interloper-mcp</code></td>
+<td>An MCP server exposing the catalog, lineage and run history to agents.</td>
+</tr>
+<tr>
+<td><code>interloper-agent</code></td>
+<td>The assistant (pydantic-ai) over the same data.</td>
+</tr>
+<tr>
+<td><code>interloper-toolkit</code></td>
+<td>Shared tooling for the agent and MCP server.</td>
 </tr>
 </tbody>
 </table>
-<p>Durations are measured between the start and terminal events' timestamps. Counters and
-histograms export with delta temporality; up-down counters and gauges stay cumulative.</p>
-<h2 id="propagation-helpers">Propagation helpers<a class="headerlink" href="#propagation-helpers" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>inject_metadata(metadata)</code></td>
-<td>Write the current span context into a metadata dict (<code>traceparent</code>).</td>
-</tr>
-<tr>
-<td><code>extract_metadata(metadata)</code></td>
-<td>Read a parent context back from it.</td>
-</tr>
-<tr>
-<td><code>traceparent_env()</code></td>
-<td><code>{"TRACEPARENT": ..., "TRACESTATE": ...}</code> for the current span.</td>
-</tr>
-<tr>
-<td><code>child_process_env()</code></td>
-<td><code>INTERLOPER_OTEL_*</code> plus the trace context, with <code>INTERLOPER_OTEL_SERVICE_NAME=interloper-run</code>.</td>
-</tr>
-<tr>
-<td><code>context_from_env()</code></td>
-<td>A parent context from <code>TRACEPARENT</code> / <code>TRACESTATE</code>.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="setup-functions">Setup functions<a class="headerlink" href="#setup-functions" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>init_telemetry(settings)</code></td>
-<td>Install providers and exporters. Idempotent; returns whether the SDK is active.</td>
-</tr>
-<tr>
-<td><code>shutdown_telemetry()</code></td>
-<td>Flush and shut the providers down.</td>
-</tr>
-<tr>
-<td><code>force_flush()</code></td>
-<td>Flush without shutting down.</td>
-</tr>
-<tr>
-<td><code>instrument_fastapi(app)</code></td>
-<td>Add request spans to a FastAPI app when telemetry is active.</td>
-</tr>
-<tr>
-<td><code>tracer()</code>, <code>meter()</code></td>
-<td>The framework's cached tracer and meter.</td>
-</tr>
-</tbody>
-</table>
-<p><code>init_telemetry</code> sets <code>OTEL_SEMCONV_STABILITY_OPT_IN=http</code> unless already set, so HTTP spans use
-the stable semantic conventions. Contrib instrumentors for httpx2 and SQLAlchemy are activated
-when installed.</p>
+<p>Deployment artifacts (Docker images, a Helm chart) are described in the repository README.</p>
 
 
 
@@ -2309,7 +2595,7 @@ when installed.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../events/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Event types">
+          <a href="../telemetry/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Telemetry">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
@@ -2319,20 +2605,20 @@ when installed.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Event types
+                Telemetry
               </div>
             </div>
           </a>
         
         
           
-          <a href="../errors/" class="md-footer__link md-footer__link--next" aria-label="Next: Errors">
+          <a href="../claude-code/" class="md-footer__link md-footer__link--next" aria-label="Next: Claude Code plugin">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Errors
+                Claude Code plugin
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2366,7 +2652,7 @@ when installed.</p>
 </footer>
       
     </div>
-    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+    <div class="md-dialog" data-md-component="dialog">
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
@@ -2378,10 +2664,10 @@ when installed.</p>
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.3c842f4c.min.js"></script>
+      <script src="../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
       
     
   </body>
