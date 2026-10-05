@@ -72,10 +72,57 @@ async function deleteUser(user: AdminUser) {
     }
 }
 
+async function setSuperAdmin(user: AdminUser, isSuperAdmin: boolean) {
+    const confirmed = await confirm(isSuperAdmin
+        ? {
+                title: 'Make super admin',
+                description: '{subject} will manage every organisation, user and quota on this instance. '
+                    + 'Every super admin is notified by email.',
+                subject: { name: user.name || user.email, icon: 'i-lucide-user' },
+                confirmLabel: 'Make super admin',
+                confirmColor: 'primary',
+            }
+        : {
+                title: 'Remove super admin',
+                description: '{subject} loses access to the admin portal. Their organisation memberships are kept.',
+                subject: { name: user.name || user.email, icon: 'i-lucide-user' },
+                confirmLabel: 'Remove super admin',
+                confirmColor: 'error',
+            })
+    if (!confirmed) return
+
+    try {
+        const updated = await adminStore.setSuperAdmin(user.id, isSuperAdmin)
+        rows.value = rows.value.map(row => row.id === updated.id ? updated : row)
+        toast.add({
+            title: isSuperAdmin
+                ? `${user.name || user.email} is now a super admin`
+                : `${user.name || user.email} is no longer a super admin`,
+            color: 'success',
+        })
+    }
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to update super admin access'))
+    }
+}
+
 function rowActions(user: AdminUser): DropdownMenuItem[][] {
-    // No self-service deletion — the backend rejects it too.
+    // No self-service changes: the backend rejects them too.
     if (user.id === userStore.user?.id) return []
     return [
+        [
+            user.is_super_admin
+                ? {
+                        label: 'Remove super admin',
+                        icon: 'i-lucide-shield-minus',
+                        onSelect: () => setSuperAdmin(user, false),
+                    }
+                : {
+                        label: 'Make super admin',
+                        icon: 'i-lucide-shield-plus',
+                        onSelect: () => setSuperAdmin(user, true),
+                    },
+        ],
         [
             {
                 label: 'Delete user',

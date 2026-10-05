@@ -36,6 +36,13 @@ export const useAdminStore = defineStore('admin', () => {
         return fetchAll<AdminUser>('/admin/users')
     }
 
+    function setSuperAdmin(userId: string, isSuperAdmin: boolean) {
+        return apiFetch<AdminUser>(`/admin/users/${userId}`, {
+            method: 'PATCH',
+            body: { is_super_admin: isSuperAdmin },
+        })
+    }
+
     function deleteUser(userId: string) {
         return apiFetch(`/admin/users/${userId}`, { method: 'DELETE' })
     }
@@ -57,6 +64,7 @@ export const useAdminStore = defineStore('admin', () => {
         getOrgActivity,
         updateOrgQuota,
         listUsers,
+        setSuperAdmin,
         deleteUser,
         listOrganisations,
         createOrganisation,

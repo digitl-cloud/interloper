@@ -17,18 +17,21 @@ from importlib import metadata
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Response
-from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, UsageQuery
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
 from interloper_db.store import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
 from interloper_api.dependencies import (
     AdminConfigDep,
+    AuthConfigDep,
     QuotaDefaultsDep,
     StoreDep,
     SuperAdminDep,
+    get_smtp_config,
 )
+from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes.organisations import CreateOrganisationRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -107,6 +110,12 @@ class AdminUserResponse(BaseModel):
             organisations=[AdminUserOrganisation(id=org.id, name=org.name) for org in profile.organisations],
             created_at=profile.created_at,
         )
+
+
+class AdminUserUpdateRequest(BaseModel):
+    """Platform-wide privileges a super-admin may change on another user."""
+
+    is_super_admin: bool
 
 
 class AdminLauncherConfig(BaseModel):
@@ -787,19 +796,69 @@ def get_organisation_activity(
 def list_users(
     user: SuperAdminDep,
     store: StoreDep,
-    query: Annotated[PageQuery, Query()],
+    query: Annotated[ProfileQuery, Query()],
 ) -> Page[AdminUserResponse]:
     """List every user profile with the organisations it belongs to.
 
     Args:
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
-        query: The window to read.
+        query: Whether to keep super-admins only, and the window to read.
 
     Returns:
         The page of profiles, each with its memberships.
     """
     return store.profiles.list(query).map(AdminUserResponse.from_profile)
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: UUID,
+    body: AdminUserUpdateRequest,
+    user: SuperAdminDep,
+    store: StoreDep,
+    auth_config: AuthConfigDep,
+    request: Request,
+) -> AdminUserResponse:
+    """Grant or revoke a user's super-admin access.
+
+    A promotion emails every super-admin, the new one included, so a grant
+    never goes unnoticed. A revocation is refused for an email listed in
+    ``auth.super_admin_emails``: the next login or ``db init`` would promote
+    it straight back.
+
+    Args:
+        user_id: The profile to change.
+        body: Whether the profile is a super-admin.
+        user: The calling super-admin, resolved from the session.
+        store: The database store backing the request.
+        auth_config: The resolved auth configuration, read for the configured
+            super-admin emails.
+        request: The incoming request, whose base URL the email links back to.
+
+    Returns:
+        The updated user.
+
+    Raises:
+        HTTPException: 400 when the caller targets their own account, 409 when
+            revoking a super-admin the configuration lists.
+    """
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own super-admin access")
+    target = store.profiles.get(user_id)
+    if not body.is_super_admin and target.email.lower() in auth_config.super_admin_emails:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{target.email} is listed in auth.super_admin_emails; remove it there to revoke access",
+        )
+
+    promoted = body.is_super_admin and not target.is_super_admin
+    updated = store.profiles.set_super_admin(user_id, value=body.is_super_admin)
+    if promoted:
+        email = SuperAdminPromotionEmail.from_promotion(updated, promoted_by=user, base_url=str(request.base_url))
+        for recipient in store.profiles.list(ProfileQuery(super_admin=True, limit=None)).items:
+            email.deliver(get_smtp_config(), recipient.email)
+    return AdminUserResponse.from_profile(updated)
 
 
 @router.delete("/users/{user_id}", status_code=204)

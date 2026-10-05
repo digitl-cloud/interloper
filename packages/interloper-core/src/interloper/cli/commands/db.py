@@ -18,7 +18,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     init_parser = db_sub.add_parser(
         "init",
-        help="Ensure database exists, create tables, and migrate to head (idempotent)",
+        help="Ensure database, create tables, migrate to head, promote configured super-admins (idempotent)",
     )
     init_parser.set_defaults(handler=_cmd_init, requires=["interloper_db"])
 
@@ -38,12 +38,17 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
 
 def _cmd_init(args: argparse.Namespace) -> None:
-    """Ensure database, create tables, and migrate. Idempotent and concurrent-safe.
+    """Ensure database, create tables, migrate, and promote configured super-admins.
+
+    Idempotent and concurrent-safe. ``auth.super_admin_emails`` is applied here
+    as well as at login, so a deployment shipping a new list promotes the
+    profiles that already exist without waiting for them to sign in again.
 
     Args:
         args: Parsed CLI arguments; this subcommand takes none of its own.
     """
     from interloper_db import create_all, ensure_database, init_engine
+    from interloper_db.store import ProfileStore
 
     from interloper.settings import AppSettings
 
@@ -55,6 +60,8 @@ def _cmd_init(args: argparse.Namespace) -> None:
     engine = init_engine(dsn)
     print("Creating tables and running migrations...")
     create_all(engine)
+    for profile in ProfileStore(engine).promote_super_admins(settings.auth.super_admin_emails):
+        print(f"Promoted {profile.email} to super-admin.")
     print("Done.")
 
 

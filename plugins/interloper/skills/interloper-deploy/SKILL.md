@@ -96,7 +96,7 @@ and https://docs.interloper.dev/ui/running/
 | Containers | `ghcr.io/digitl-cloud/interloper-<role>:<version>` (loaded) or `:<version>-slim` (core + the role's own packages), for `api`, `frontend`, `core`, `scheduler`, `mcp` |
 | Kubernetes | `helm repo add interloper https://docs.interloper.dev` then `helm install interloper interloper/interloper`; the loaded scheduler carries every launcher, so `launcher.type` is a runtime setting |
 | Runner for in-process runs | `runner: {type: async, config: {max_workers: 8}}`; types `async`, `serial`, `multi_process`, plus registered keys such as `k8s` |
-| Who can sign up | `auth.allowed_domains`; first login of a listed `super_admin_emails` address is promoted |
+| Who can sign up | `auth.allowed_domains`; listed `super_admin_emails` addresses are promoted by `interloper db init` and at login |
 | Local http | `INTERLOPER_AUTH_COOKIE_SECURE=false` |
 | Every section prefix | `INTERLOPER_POSTGRES_`, `_AUTH_`, `_SERVER_`, `_CRON_`, `_WORKER_`, `_REAPER_`, `_RENEWAL_`, `_LAUNCHER_`, `_RUNNER_`, `_OTEL_`, `_SMTP_`, `_AGENT_`, `_MCP_`, `_QUOTA_`; the encryption key is `INTERLOPER_ENCRYPTION_KEY` |
 

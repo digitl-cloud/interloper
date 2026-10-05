@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from interloper.errors import NotFoundError
 
-from interloper_db.store import PageQuery, Store
+from interloper_db.store import ProfileQuery, Store
 
 
 class TestList:
@@ -19,7 +19,7 @@ class TestList:
         store.members.add(org_a.id, admin.id, "admin")
         store.members.add(org_b.id, admin.id, "admin")
 
-        page = store.profiles.list(PageQuery(limit=None))
+        page = store.profiles.list(ProfileQuery(limit=None))
         orgs = {profile.id: profile.organisations for profile in page.items}
 
         assert sorted(org.name for org in orgs[admin.id]) == ["Acme", "Beta"]
@@ -30,10 +30,21 @@ class TestList:
         for index in range(3):
             store.profiles.upsert(google_id=f"g-{index}", email=f"user{index}@example.com")
 
-        page = store.profiles.list(PageQuery(limit=2))
+        page = store.profiles.list(ProfileQuery(limit=2))
 
         assert len(page.items) == 2
         assert page.total == 3
+
+    def test_filters_on_the_super_admin_flag(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-admin", email="admin@example.com")
+        member = store.profiles.upsert(google_id="g-member", email="member@example.com")
+        store.profiles.set_super_admin(admin.id, value=True)
+
+        super_admins = store.profiles.list(ProfileQuery(super_admin=True, limit=None))
+        others = store.profiles.list(ProfileQuery(super_admin=False, limit=None))
+
+        assert [profile.id for profile in super_admins.items] == [admin.id]
+        assert [profile.id for profile in others.items] == [member.id]
 
 
 class TestDelete:
@@ -129,11 +140,49 @@ class TestSetSuperAdmin:
 
         assert store.profiles.get(profile.id).is_super_admin is False
 
+    def test_returns_the_profile_with_its_organisations(self, store: Store):
+        profile = store.profiles.upsert(google_id="g1", email="ada@x")
+        org = store.organisations.create(name="Acme", creator_id=profile.id)
+
+        promoted = store.profiles.set_super_admin(profile.id, value=True)
+
+        assert [organisation.id for organisation in promoted.organisations] == [org.id]
+
     def test_a_missing_profile_raises(self, store: Store):
         missing = uuid4()
 
         with pytest.raises(NotFoundError, match=f"Profile {missing} not found"):
             store.profiles.set_super_admin(missing, value=True)
+
+
+class TestPromoteSuperAdmins:
+    """Bulk, promote-only bootstrap from a list of emails."""
+
+    def test_promotes_the_listed_profiles_case_insensitively(self, store: Store):
+        ada = store.profiles.upsert(google_id="g-ada", email="Ada@Example.com")
+        bob = store.profiles.upsert(google_id="g-bob", email="bob@example.com")
+        eve = store.profiles.upsert(google_id="g-eve", email="eve@example.com")
+
+        promoted = store.profiles.promote_super_admins(["ada@example.com", "BOB@example.com"])
+
+        assert {profile.id for profile in promoted} == {ada.id, bob.id}
+        assert all(profile.is_super_admin for profile in promoted)
+        assert store.profiles.get(eve.id).is_super_admin is False
+
+    def test_returns_only_the_profiles_it_promoted(self, store: Store):
+        ada = store.profiles.upsert(google_id="g-ada", email="ada@example.com")
+        store.profiles.set_super_admin(ada.id, value=True)
+
+        assert store.profiles.promote_super_admins(["ada@example.com"]) == []
+        assert store.profiles.get(ada.id).is_super_admin is True
+
+    def test_emails_without_a_profile_are_ignored(self, store: Store):
+        assert store.profiles.promote_super_admins(["ghost@example.com"]) == []
+
+    def test_an_empty_list_promotes_nobody(self, store: Store):
+        store.profiles.upsert(google_id="g-ada", email="ada@example.com")
+
+        assert store.profiles.promote_super_admins([]) == []
 
 
 class TestUpsertAvatar:
