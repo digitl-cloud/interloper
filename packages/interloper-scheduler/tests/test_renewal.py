@@ -155,9 +155,9 @@ class TestRenewalController:
 
 
 class TestRenewalRuns:
-    def _queued_run(self, store: Store, conn_id: UUID) -> UUID:
+    def _dispatched_run(self, store: Store, conn_id: UUID) -> UUID:
         with Session(store.engine) as session:
-            run = Run(component_id=conn_id, org_id=_ORG, status="queued")
+            run = Run(component_id=conn_id, org_id=_ORG, status="dispatched")
             session.add(run)
             session.commit()
             assert run.id is not None
@@ -165,7 +165,7 @@ class TestRenewalRuns:
 
     def test_successful_renewal_persists_and_schedules(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store, config={"token": "old"})
-        run_id = self._queued_run(store, conn_id)
+        run_id = self._dispatched_run(store, conn_id)
         monkeypatch.setattr(
             RenewableConn, "renew", lambda self: il.Renewal(fields={"token": "NEW"}, expires_in=7200)
         )
@@ -190,7 +190,7 @@ class TestRenewalRuns:
         self, store: Store, monkeypatch: pytest.MonkeyPatch
     ):
         conn_id = _connection(store)
-        run_id = self._queued_run(store, conn_id)
+        run_id = self._dispatched_run(store, conn_id)
 
         def boom(self: RenewableConn) -> il.Renewal:
             request = httpx2.Request("GET", "https://provider/exchange?client_secret=SECRET")

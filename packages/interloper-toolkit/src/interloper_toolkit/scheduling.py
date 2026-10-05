@@ -35,6 +35,7 @@ from interloper_toolkit.models import (
     EventRecord,
     FailureList,
     JobList,
+    RunCanceled,
     RunDetail,
     RunErrorEvent,
     RunFailure,
@@ -190,6 +191,25 @@ def retry_run(ctx: ToolkitContext, run_id: str, scope: str = "all") -> RunRetrie
         ctx.store.runs.get(UUID(run_id), org_id=ctx.org_id)
         run = ctx.store.runs.retry(UUID(run_id), scope=scope)
         return RunRetried(message=f"Retry queued as attempt {run.attempt}", run=run)
+    except Exception as e:
+        return ToolError(error=str(e))
+
+
+@requires_role("editor")
+def cancel_run(ctx: ToolkitContext, run_id: str) -> RunCanceled | ToolError:
+    """Cancel a run that has not ended, wherever it stands.
+
+    Args:
+        run_id: UUID of the run.
+
+    Returns the canceled run. A run not yet executing never will; one that is
+    executing stops within seconds. A canceled run is not retried. A run that
+    already ended cannot be canceled.
+    """
+    try:
+        ctx.store.runs.get(UUID(run_id), org_id=ctx.org_id)
+        ctx.store.runs.cancel(UUID(run_id))
+        return RunCanceled(message="Run canceled", run=ctx.store.runs.get(UUID(run_id), org_id=ctx.org_id))
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -452,14 +472,14 @@ def trigger_backfill(
 
 @requires_role("editor")
 def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled | ToolError:
-    """Cancel a backfill: its runs not yet dispatched will never execute.
+    """Cancel a backfill and every run of it that has not ended.
 
     Args:
         backfill_id: UUID of the backfill, from list_backfills.
 
     Returns the backfill in its terminal state and how many runs were
-    canceled. Runs already dispatched or running drain to their own verdict.
-    A backfill that already finished cannot be canceled.
+    canceled. Runs already executing stop within seconds. A backfill that
+    already finished cannot be canceled.
     """
     try:
         bid = UUID(backfill_id)
@@ -467,7 +487,7 @@ def cancel_backfill(ctx: ToolkitContext, backfill_id: str) -> BackfillCanceled |
         backfill = ctx.store.backfills.cancel(bid)
         canceled = ctx.store.backfills.run_counts([bid]).get(bid, {}).get(RunStatus.CANCELED, 0)
         return BackfillCanceled(
-            message=f"Backfill canceled, {canceled} run(s) will not execute", backfill=backfill, runs_canceled=canceled
+            message=f"Backfill canceled, {canceled} run(s) canceled", backfill=backfill, runs_canceled=canceled
         )
     except Exception as e:
         return ToolError(error=str(e))

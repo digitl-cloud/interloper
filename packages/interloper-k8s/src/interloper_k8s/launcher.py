@@ -13,8 +13,8 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
-from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
+    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+from interloper_scheduler.launcher import Launcher
 from kubernetes import client, config
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ class KubernetesLauncher(Launcher):
         *,
         postgres: PostgresSettings,
         runner: RunnerSettings,
+        reaper: ReaperSettings,
         catalog: Catalog | None,
         store: Any | None = None,
     ) -> KubernetesLauncher:
@@ -53,6 +54,8 @@ class KubernetesLauncher(Launcher):
             settings: The launcher settings block (image, namespace, resources).
             postgres: Postgres credentials forwarded into the spawned pod.
             runner: Runner settings the spawned process builds its runner from.
+            reaper: Run liveness settings whose heartbeat fields the spawned
+                process follows.
             catalog: Catalog forwarded as import paths; required, since a pod
                 cannot see the caller's.
             store: Accepted for the registry's uniform hook and unused — a pod
@@ -76,6 +79,8 @@ class KubernetesLauncher(Launcher):
             postgres_database=postgres.database,
             runner_type=runner.type,
             runner_config=runner.config,
+            heartbeat_interval=reaper.heartbeat_interval,
+            heartbeat_timeout=reaper.heartbeat_timeout,
             **settings.config,
         )
 
@@ -99,6 +104,8 @@ class KubernetesLauncher(Launcher):
         tolerations: list[dict[str, Any]] | None = None,
         ttl_seconds_after_finished: int = 300,
         env_from: list[str] | None = None,
+        heartbeat_interval: int = 10,
+        heartbeat_timeout: int = 90,
     ) -> None:
         """Initialize the Kubernetes launcher.
 
@@ -125,10 +132,16 @@ class KubernetesLauncher(Launcher):
                 Runs hydrate connections, so they need the same
                 runtime-resolved credentials (e.g. the in-house OAuth
                 provider trio) the API resolves from its environment.
+            heartbeat_interval: Seconds between a run's heartbeats, forwarded
+                to the container.
+            heartbeat_timeout: The reaper's heartbeat timeout in seconds,
+                forwarded to the container.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._catalog = catalog
         self._image = image
+        self._heartbeat_interval = heartbeat_interval
+        self._heartbeat_timeout = heartbeat_timeout
         self._namespace = namespace
         self._postgres_host = postgres_host
         self._postgres_port = postgres_port
@@ -211,87 +224,46 @@ class KubernetesLauncher(Launcher):
             logger.exception("Failed to create Job for run %s", run_id)
             raise
 
-    def describe_run(self, run_id: UUID) -> LaunchState:
-        """Return the authoritative state of a Job/pod.
-
-        Used by the reaper to catch failed runs as soon as the Job
-        terminates, without waiting for the fallback timeout.
+    def diagnose(self, run_id: UUID) -> str | None:
+        """Say why a run's pod stopped, from its termination state.
 
         Args:
-            run_id: The run UUID to describe.
+            run_id: The run UUID.
 
         Returns:
-            A :class:`LaunchState` indicating whether the Job is still
-            running, has succeeded, has failed, or is gone.
-        """
-        from typing import cast
-
-        from kubernetes.client import V1Job
-
-        job_name = f"interloper-run-{str(run_id)[:8]}"
-
-        try:
-            job = cast(
-                V1Job,
-                self._batch_v1.read_namespaced_job_status(name=job_name, namespace=self._namespace),
-            )
-        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return LaunchState(status=LaunchStatus.NOT_FOUND)
-
-        status = job.status
-        if status is None:
-            return LaunchState(status=LaunchStatus.RUNNING)
-
-        if status.succeeded and status.succeeded > 0:
-            return LaunchState(status=LaunchStatus.SUCCEEDED)
-
-        if status.failed and status.failed > 0:
-            return LaunchState(status=LaunchStatus.FAILED, error=self._pod_failure_reason(job_name))
-
-        # active / no terminal condition yet
-        return LaunchState(status=LaunchStatus.RUNNING)
-
-    def _pod_failure_reason(self, job_name: str) -> str:
-        """Build a short failure description from the pod's termination state.
-
-        Args:
-            job_name: The Job whose pod is inspected.
-
-        Returns:
-            A one-line reason, falling back to a generic message when the
-            pod's state is unavailable.
-
+            The pod's eviction reason and its container's termination reason,
+            exit code and message, or ``None`` when its pod is still running,
+            already deleted, or unreadable.
         """
         from typing import cast
 
         from kubernetes.client import V1PodList
 
+        job_name = f"interloper-run-{str(run_id)[:8]}"
         try:
             pods = cast(
                 V1PodList,
-                self._core_v1.list_namespaced_pod(
-                    namespace=self._namespace,
-                    label_selector=f"job-name={job_name}",
-                ),
+                self._core_v1.list_namespaced_pod(namespace=self._namespace, label_selector=f"job-name={job_name}"),
             )
-        except Exception:  # noqa: BLE001 — the reason is best-effort detail on an already-failed job
-            return f"Job {job_name} failed"
+        except Exception:  # noqa: BLE001 - a diagnosis is best-effort detail on a run already found dead
+            return None
+        if not pods.items or pods.items[0].status is None:
+            return None
 
-        if not pods.items:
-            return f"Job {job_name} failed (no pod found)"
-
-        pod = pods.items[0]
-        parts = [f"Job {job_name} failed"]
-        if pod.status is not None:
-            for cs in pod.status.container_statuses or []:
-                if cs.state and cs.state.terminated:
-                    term = cs.state.terminated
-                    parts.append(f"reason={term.reason}")
-                    if term.exit_code is not None:
-                        parts.append(f"exit_code={term.exit_code}")
-                    if term.message:
-                        parts.append(f"message={term.message}")
-        return " ".join(parts)
+        status = pods.items[0].status
+        parts = [f"pod {status.reason}"] if status.reason else []
+        if status.message:
+            parts.append(status.message)
+        for container in status.container_statuses or []:
+            terminated = container.state.terminated if container.state else None
+            if terminated is None:
+                continue
+            parts.append(f"reason={terminated.reason}")
+            if terminated.exit_code is not None:
+                parts.append(f"exit_code={terminated.exit_code}")
+            if terminated.message:
+                parts.append(f"message={terminated.message}")
+        return " ".join(parts) or None
 
     # -- Helpers ---------------------------------------------------------------
 
@@ -311,6 +283,8 @@ class KubernetesLauncher(Launcher):
             "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
+            "INTERLOPER_REAPER_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
+            "INTERLOPER_REAPER_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
         }
         encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:

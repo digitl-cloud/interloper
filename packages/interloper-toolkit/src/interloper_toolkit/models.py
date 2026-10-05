@@ -488,14 +488,22 @@ class BackfillQueued(BaseModel):
 class BackfillCanceled(BaseModel):
     """One backfill canceled by ``cancel_backfill``.
 
-    ``runs_canceled`` counts the runs that will now never execute; runs
-    already dispatched or running drain to their own verdict.
+    ``runs_canceled`` counts the backfill's canceled runs, executing ones
+    included: those stop on their next heartbeat.
     """
 
     status: Literal["success"] = "success"
     message: str
     backfill: Backfill
     runs_canceled: int
+
+
+class RunCanceled(BaseModel):
+    """The run ``cancel_run`` canceled."""
+
+    status: Literal["success"] = "success"
+    message: str
+    run: Run
 
 
 class RunRetried(BaseModel):

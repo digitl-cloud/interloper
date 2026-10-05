@@ -32,7 +32,14 @@ class TestTable:
     def test_creates_and_cancels_need_approval(self):
         approved = {tool.name for tool in TOOLS if tool.needs_approval}
 
-        assert approved == {"create_connections", "create_source", "create_sources", "create_job", "cancel_backfill"}
+        assert approved == {
+            "create_connections",
+            "create_source",
+            "create_sources",
+            "create_job",
+            "cancel_run",
+            "cancel_backfill",
+        }
 
     def test_the_credential_taking_tool_carries_secrets(self):
         assert {tool.name for tool in TOOLS if tool.carries_secrets} == {"create_connections"}

@@ -1,38 +1,30 @@
-"""Reaper: detects terminated runs via the launcher and marks them failed.
+"""Reaper: fails the runs that will never end on their own.
 
-The reaper is a single background thread that periodically checks every
-``dispatched`` run's authoritative state via
-:meth:`~interloper_scheduler.launcher.Launcher.describe_run`:
+A running run renews its heartbeat (:mod:`~interloper_scheduler.heartbeat`),
+so the reaper needs no launcher to know it is alive. Each poll it asks the
+store which dispatched and running runs are overdue
+(:meth:`~interloper_db.store.runs.RunStore.overdue`):
 
-- ``RUNNING`` → leave alone
-- ``SUCCEEDED`` → weird (container said it succeeded but didn't update
-  the DB) — mark as failed with a descriptive error
-- ``FAILED`` → mark as failed immediately with the launcher's error
-- ``NOT_FOUND`` → the launcher can't see it (gone, or not visible yet)
-  — leave it to the ``timeout`` fallback below
+- a dispatched run whose pod has not started within ``startup_timeout``;
+- a running run whose heartbeat has been silent for ``heartbeat_timeout``;
+- a running run past its deadline: its job's ``timeout``, else ``run_timeout``.
 
-A ``timeout`` fallback catches runs the launcher can't see (e.g. when
-the launcher itself doesn't implement ``describe_run``, or the
-infrastructure API is unreachable).  Runs older than ``timeout``
-seconds in ``dispatched`` status are reaped regardless.
-
-The pattern scales flat: one SQL query per poll cycle, plus one
-launcher API call per dispatched run (which K8s/Docker can serve
-from their local daemon cheaply).
+Each is failed with its reason, the launcher's diagnosis of its workload
+appended when it has one (an OOM kill, an exit code), through
+:meth:`~interloper_db.store.runs.RunStore.reap`, which leaves alone a run that
+started or renewed its heartbeat since it was read. A failed run's executor,
+if it is still alive, learns on its next heartbeat and stops.
 """
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
 from typing import TYPE_CHECKING
+from uuid import UUID
 
-from interloper.errors import ConflictError
 from interloper_db import Store
-from interloper_db.models import Run
 
 from interloper_scheduler.controller import Controller
-from interloper_scheduler.launcher import LaunchStatus
 
 if TYPE_CHECKING:
     from interloper_scheduler.launcher import Launcher
@@ -41,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class Reaper(Controller):
-    """Periodically reconciles dispatched runs with the launcher's truth.
+    """Periodically fails the dispatched and running runs that are overdue.
 
     Designed to run in a background thread alongside the
     :class:`~interloper_scheduler.queue.QueueController`::
@@ -55,25 +47,30 @@ class Reaper(Controller):
         self,
         store: Store,
         launcher: Launcher | None = None,
-        timeout: int = 600,
-        poll_interval: int = 10,
+        *,
+        startup_timeout: int = 600,
+        heartbeat_timeout: int = 90,
+        run_timeout: int | None = 43200,
+        poll_interval: int = 15,
     ) -> None:
         """Initialize the reaper.
 
         Args:
-            store: Store used to persist the failure event and update
-                the run status.
-            launcher: Optional launcher consulted each poll cycle for
-                authoritative run state.  Launchers without
-                introspection (e.g. in-process) fall back to timeout.
-            timeout: Fallback: seconds after which a ``dispatched`` run
-                is reaped regardless of what the launcher says.
+            store: Store the overdue runs are read and failed through.
+            launcher: Optional launcher asked to diagnose a dead run's
+                workload; ``None`` records the reaper's reason alone.
+            startup_timeout: Seconds a dispatched run may take to start.
+            heartbeat_timeout: Seconds a running run may stay silent.
+            run_timeout: Seconds a run may take when its job declares no
+                ``timeout``; ``None`` sets no deadline for those runs.
             poll_interval: Seconds between reaper scans.
         """
         super().__init__(poll_interval=poll_interval)
         self._store = store
         self._launcher = launcher
-        self._timeout = timeout
+        self._startup_timeout = startup_timeout
+        self._heartbeat_timeout = heartbeat_timeout
+        self._run_timeout = run_timeout
         # Usage reconciliation rides the reaper's loop (the singleton
         # housekeeping process) roughly hourly.
         self._reconcile_every = max(1, 3600 // max(1, poll_interval))
@@ -83,7 +80,7 @@ class Reaper(Controller):
         """Scan once and log when anything was reaped."""
         reaped = self._reap()
         if reaped:
-            logger.info("Reaped %d dispatched run(s)", reaped)
+            logger.info("Reaped %d overdue run(s)", reaped)
 
         self._ticks_since_reconcile += 1
         if self._ticks_since_reconcile >= self._reconcile_every:
@@ -114,80 +111,43 @@ class Reaper(Controller):
             )
 
     def _reap(self) -> int:
-        """Scan dispatched runs and reap any that have terminated.
+        """Fail every overdue run that has not moved since it was read.
 
         Returns:
             Number of runs reaped this cycle.
         """
-        now = dt.datetime.now(dt.timezone.utc)
-        timeout_cutoff = now - dt.timedelta(seconds=self._timeout)
-
-        dispatched_runs = self._store.runs.dispatched()
-
+        overdue = self._store.runs.overdue(
+            startup_timeout=self._startup_timeout,
+            heartbeat_timeout=self._heartbeat_timeout,
+            run_timeout=self._run_timeout,
+        )
         reaped = 0
-        for run in dispatched_runs:
-            if self._reap_run(run, now, timeout_cutoff):
-                reaped += 1
+        for run, reason in overdue:
+            error = self._explain(run.id, reason)
+            logger.warning("Reaping run %s: %s", run.id, error)
+            try:
+                if self._store.runs.reap(run.id, error, heartbeat_at=run.heartbeat_at) is not None:
+                    reaped += 1
+            except Exception:
+                logger.exception("Failed to reap run %s", run.id)
         return reaped
 
-    def _reap_run(self, run: Run, now: dt.datetime, timeout_cutoff: dt.datetime) -> bool:
-        """Decide whether to reap a single run and do so if needed.
+    def _explain(self, run_id: UUID, reason: str) -> str:
+        """Append the launcher's diagnosis of a run's workload to the reaper's reason.
 
         Args:
-            run: The run being considered.
-            now: The tick instant.
-            timeout_cutoff: Runs started before this are past their timeout.
+            run_id: The overdue run.
+            reason: Why the reaper fails it.
 
         Returns:
-            ``True`` if the run was reaped.
+            The reason, followed by the diagnosis in parentheses when the
+            launcher has one.
         """
-        assert run.id is not None
-
-        # 1. Authoritative launcher state (preferred)
-        state = None
-        if self._launcher is not None:
-            try:
-                state = self._launcher.describe_run(run.id)
-            except Exception:
-                logger.exception("Failed to describe run %s", run.id)
-
-        if state is not None:
-            if state.status == LaunchStatus.RUNNING:
-                return False  # Trust the launcher — still alive
-
-            if state.status == LaunchStatus.SUCCEEDED:
-                error = "Run container reported SUCCEEDED but never updated the DB. Possible connectivity issue."
-                self._fail_run(run, error)
-                return True
-
-            if state.status == LaunchStatus.FAILED:
-                error = state.error or "Run failed (no error reported by launcher)"
-                self._fail_run(run, error)
-                return True
-
-        # 2. Timeout fallback — for launchers without introspection,
-        # NOT_FOUND runs, or anything else. Naive timestamps (SQLite test
-        # databases drop the offset) are treated as UTC.
-        created_at = run.created_at
-        if created_at is not None and created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=dt.timezone.utc)
-        if created_at and created_at < timeout_cutoff:
-            self._fail_run(run, f"Run timed out after {self._timeout}s (still 'dispatched')")
-            return True
-
-        return False
-
-    def _fail_run(self, run: Run, error: str) -> None:
-        """Fail a run with the reason the reaper found, unless another writer completed it first.
-
-        Args:
-            run: The run to fail.
-            error: The reason, logged and carried on the ``run_failed`` event.
-        """
-        logger.warning("Reaping run %s: %s", run.id, error)
+        if self._launcher is None:
+            return reason
         try:
-            self._store.runs.fail(run.id, error)
-        except ConflictError:
-            logger.info("Run %s completed before it could be reaped", run.id)
+            diagnosis = self._launcher.diagnose(run_id)
         except Exception:
-            logger.exception("Failed to mark run %s as failed", run.id)
+            logger.warning("Could not diagnose run %s", run_id, exc_info=True)
+            return reason
+        return f"{reason} ({diagnosis})" if diagnosis else reason

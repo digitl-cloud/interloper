@@ -228,7 +228,7 @@ def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None
         assert secret not in payload
     assert snapshot.auth.google_oauth_configured is True
     assert snapshot.data.encryption_configured is True
-    assert snapshot.services.reaper.timeout == 3600
+    assert (snapshot.services.reaper.heartbeat_timeout, snapshot.services.reaper.run_timeout) == (90, 43200)
     assert snapshot.services.telemetry.enabled is True
     assert snapshot.services.telemetry.endpoint_configured is True
 

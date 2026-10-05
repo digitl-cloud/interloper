@@ -17,6 +17,7 @@ const executionsStore = useExecutionsStore()
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 const appConfig = useAppConfig()
 
 const initialRun = ref<Run | null>(null)
@@ -146,6 +147,34 @@ async function onRetry(scope: 'all' | 'failed') {
     }
 }
 
+const cancellable = computed(() =>
+    !mismatch.value && run.value != null && ['pending', 'queued', 'dispatched', 'running'].includes(run.value.status),
+)
+const cancelling = ref(false)
+
+async function onCancel() {
+    const confirmed = await confirm({
+        title: 'Cancel run',
+        description: 'The run stops within seconds and is not retried. Operations still in flight are canceled.',
+        confirmLabel: 'Cancel run',
+        confirmColor: 'error',
+        icon: 'i-lucide-ban',
+    })
+    if (!confirmed) return
+
+    cancelling.value = true
+    try {
+        await runsStore.cancelRun(runId)
+        toast.add({ title: 'Run canceled', color: 'success' })
+    }
+    catch (e) {
+        toast.add(errorToast(e, 'Failed to cancel run'))
+    }
+    finally {
+        cancelling.value = false
+    }
+}
+
 const fetchError = ref<unknown>(null)
 
 onMounted(async () => {
@@ -195,6 +224,17 @@ onUnmounted(() => {
                                 :spinner="run.status === 'running' || run.status === 'dispatched'" />
                 </template>
             </AppNavbar>
+            <UDashboardToolbar v-if="cancellable">
+                <template #right>
+                    <UButton color="error"
+                             variant="subtle"
+                             icon="i-lucide-ban"
+                             :loading="cancelling"
+                             @click="onCancel">
+                        Cancel
+                    </UButton>
+                </template>
+            </UDashboardToolbar>
             <UDashboardToolbar v-if="retryable">
                 <template #right>
                     <UButton label="Retry failed"

@@ -9,11 +9,12 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import NotFoundError
+from interloper.runner.state import RunState
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Event
+from interloper_db.models import Event, Run
 from interloper_db.store import EventQuery, Page, Store
 
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
@@ -329,3 +330,85 @@ class TestHasError:
 
         assert [e.error for e in page.items] == ["boom"]
         assert page.total == 1
+
+
+class TestCloseOperations:
+    """Ending a run outside its executor records a verdict for every operation it left open."""
+
+    @staticmethod
+    def _operation(component_id: UUID, event_type: str, *, second: int, attempt: int = 1) -> Event:
+        return Event(
+            id=uuid4(),
+            org_id=_ORG_ID,
+            run_id=_RUN_ID,
+            component_id=component_id,
+            component_kind="asset",
+            component_key=f"asset_{component_id.hex[:4]}",
+            event_type=event_type,
+            data={"attempt": attempt, "qualified_key": "source.asset"},
+            timestamp=_BASE_TS + timedelta(seconds=second),
+        )
+
+    @staticmethod
+    def _run() -> Run:
+        return Run(id=_RUN_ID, org_id=_ORG_ID, root_run_id=_RUN_ID)
+
+    def _verdicts(self, store: Store) -> dict[UUID, tuple[str, str | None]]:
+        query = EventQuery(event_type=["operation_failed", "operation_canceled"], limit=None)
+        return {
+            event.component_id: (event.event_type, event.error)
+            for event in store.events.list(_ORG_ID, query, run_id=_RUN_ID).items
+            if event.component_id is not None
+        }
+
+    def test_started_operations_fail_and_queued_ones_are_canceled(self, store: Store) -> None:
+        done, started, queued = uuid4(), uuid4(), uuid4()
+        _seed(
+            [
+                self._operation(done, "operation_started", second=0),
+                self._operation(done, "operation_completed", second=1),
+                self._operation(started, "operation_started", second=2),
+                self._operation(queued, "operation_queued", second=3),
+            ]
+        )
+
+        store.events.close_operations(self._run(), error="Timed out after 60s")
+
+        assert self._verdicts(store) == {
+            started: ("operation_failed", "Timed out after 60s"),
+            queued: ("operation_canceled", None),
+        }
+
+    def test_a_cancel_cancels_every_open_operation(self, store: Store) -> None:
+        started = uuid4()
+        _seed([self._operation(started, "operation_started", second=0)])
+
+        store.events.close_operations(self._run(), error=None)
+
+        assert self._verdicts(store) == {started: ("operation_canceled", None)}
+
+    def test_only_the_latest_attempt_is_judged(self, store: Store) -> None:
+        retried = uuid4()
+        _seed(
+            [
+                self._operation(retried, "operation_started", second=0),
+                self._operation(retried, "operation_failed", second=1),
+                self._operation(retried, "operation_started", second=2, attempt=2),
+            ]
+        )
+
+        store.events.close_operations(self._run(), error="lost")
+
+        closing = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
+        assert sorted(int((event.data or {})["attempt"]) for event in closing) == [1, 2]
+
+    def test_the_verdict_takes_the_runners_id_so_a_late_one_dedups(self, store: Store) -> None:
+        started = uuid4()
+        _seed([self._operation(started, "operation_started", second=0)])
+
+        store.events.close_operations(self._run(), error="lost")
+        store.events.close_operations(self._run(), error="lost")
+
+        expected = RunState.operation_event_id(str(_RUN_ID), str(started), il.EventType.OPERATION_FAILED)
+        [closing] = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
+        assert str(closing.id) == expected

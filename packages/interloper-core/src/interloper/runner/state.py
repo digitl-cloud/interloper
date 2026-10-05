@@ -396,13 +396,14 @@ class RunState:
         return meta
 
     @staticmethod
-    def _operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:
+    def operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:
         """Derive a deterministic event id from a run/component/type triple.
 
         Both the host and the in-container child run this same code with the
         same ``run_id`` (passed via ``--run-id``) and ``component_id`` (carried
         in the mini-DAG spec), so they compute identical ids and their events
-        dedup.
+        dedup. The store derives the same ids when it closes the operations a
+        run left open, so a late event from a stopping pod dedups too.
 
         Args:
             run_id: Id of the run the event belongs to.
@@ -438,7 +439,7 @@ class RunState:
         event = Event(
             type=event_type,
             metadata=metadata,
-            id=self._operation_event_id(
+            id=self.operation_event_id(
                 self.run_id,
                 str(metadata["component_id"]),
                 event_type,

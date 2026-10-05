@@ -1,6 +1,6 @@
 """Tests for ``interloper_api.routes.runs``.
 
-Covers the retry endpoint, org-membership scoping, run creation, the
+Covers the retry and cancel endpoints, org-membership scoping, run creation, the
 listing's query and page contract, the execution listing, and the
 event-pagination contract. A lightweight fake
 store stands in for persistence so these stay pure unit tests, matching the
@@ -52,6 +52,7 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.retry_calls: list[tuple[UUID, str]] = []
+        self.cancel_calls: list[UUID] = []
         self.list_calls: list[tuple[UUID, RunQuery]] = []
         self.execution_calls: list[tuple[UUID, ExecutionQuery, UUID | None]] = []
         self.raise_not_found = False
@@ -65,6 +66,7 @@ class FakeStore:
             get=self._get_run,
             list=self._list_runs,
             retry=self._retry_run,
+            cancel=self._cancel_run,
         )
         self.components = SimpleNamespace()
         self.executions = SimpleNamespace(counts=lambda run_ids: {}, list=self._list_executions)
@@ -96,6 +98,12 @@ class FakeStore:
         retried.attempt = 2
         retried.retry_scope = scope
         return retried
+
+    def _cancel_run(self, run_id: UUID):
+        self.cancel_calls.append(run_id)
+        if self.raise_conflict is not None:
+            raise ConflictError(self.raise_conflict)
+        return _fake_run(run_id)
 
 
 def _app(store: FakeStore) -> FastAPI:
@@ -193,6 +201,36 @@ def test_retry_a_missing_run_is_a_404(store: FakeStore) -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == f"Run {run_id} not found"
+
+
+# -- Cancel -------------------------------------------------------------------
+
+
+def test_cancel_cancels_the_run(store: FakeStore) -> None:
+    run_id = uuid4()
+
+    resp = _client(store).post(f"/runs/{run_id}/cancel")
+
+    assert resp.status_code == 200
+    assert store.cancel_calls == [run_id]
+    assert resp.json()["id"] == str(run_id)
+
+
+def test_cancel_an_ended_run_returns_409(store: FakeStore) -> None:
+    store.raise_conflict = "Run is already success"
+
+    resp = _client(store).post(f"/runs/{uuid4()}/cancel")
+
+    assert resp.status_code == 409
+
+
+def test_cancel_requires_editor_in_owning_org(store: FakeStore) -> None:
+    store.role = "viewer"
+
+    resp = _client(store).post(f"/runs/{uuid4()}/cancel")
+
+    assert resp.status_code == 403
+    assert store.cancel_calls == []
 
 
 # -- Org-membership scoping ---------------------------------------------------

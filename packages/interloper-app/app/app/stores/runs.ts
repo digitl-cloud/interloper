@@ -198,6 +198,12 @@ export const useRunsStore = defineStore('runs', () => {
         return run.id
     }
 
+    async function cancelRun(id: string): Promise<Run> {
+        const run = await apiFetch<Run>(`/runs/${id}/cancel`, { method: 'POST' })
+        _upsert(run)
+        return run
+    }
+
     async function goToPage(page: number) {
         pageIndex.value = page
         await fetch()
@@ -255,6 +261,7 @@ export const useRunsStore = defineStore('runs', () => {
         stacks,
         loadStack,
         retryRun,
+        cancelRun,
         goToPage,
         setFilters,
         clearFilters,

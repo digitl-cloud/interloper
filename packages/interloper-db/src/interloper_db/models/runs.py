@@ -1,7 +1,7 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
@@ -124,6 +124,12 @@ class Run(SQLModel, table=True):
 
     ``quota_reserved_at`` is set when a dispatch-time quota reservation was
     taken; its month tells settlement which usage period to release.
+
+    ``heartbeat_at`` is the run's proof of life: the queue stamps it at
+    dispatch and the executing run renews it, so a run silent for too long is
+    dead whatever became of its pod. It is never cleared, so a finished run
+    still shows when it was last alive.
+
     ``billable`` records the operation's declaration at creation time, so
     quota decisions survive the component (``component_id`` nulls on
     deletion and runs are kept as history). ``target`` resolves the
@@ -171,6 +177,7 @@ class Run(SQLModel, table=True):
     billable: bool = True
     quota_reserved_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    heartbeat_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     hooks_evaluated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()
@@ -179,9 +186,51 @@ class Run(SQLModel, table=True):
     target: Optional["Component"] = Relationship()
 
     def cancel(self) -> None:
-        """Cancel a run that never dispatched; it fires no hooks, so they are settled here."""
+        """Cancel a run; a canceled run fires no hooks, so they are settled here."""
         self.status = RunStatus.CANCELED
         self.hooks_evaluated_at = datetime.now(timezone.utc)
+
+    def overdue(
+        self,
+        now: datetime,
+        *,
+        startup_timeout: int,
+        heartbeat_timeout: int,
+        run_timeout: int | None,
+    ) -> str | None:
+        """Why this run should be failed at *now*, if it should.
+
+        A dispatched run whose pod has not started within the startup timeout
+        never will. A running run whose heartbeat went silent is dead, whatever
+        became of its pod. A running run past its deadline (its job's
+        ``timeout``, else *run_timeout*) has taken too long. A run without a
+        heartbeat (started before heartbeats existed) is judged by its deadline
+        alone.
+
+        Args:
+            now: The database clock's current time.
+            startup_timeout: Seconds a dispatched run may take to start.
+            heartbeat_timeout: Seconds a running run may stay silent.
+            run_timeout: Seconds a run may take when its job declares no
+                ``timeout``; ``None`` sets no deadline for those runs. The
+                target must be loaded for the job's own to apply.
+
+        Returns:
+            The failure reason, or ``None`` while the run is in good standing.
+        """
+        heartbeat = self.heartbeat_at
+        if self.status == RunStatus.DISPATCHED:
+            if heartbeat is not None and heartbeat < now - timedelta(seconds=startup_timeout):
+                return f"Run did not start within {startup_timeout}s"
+            return None
+        if self.status != RunStatus.RUNNING:
+            return None
+        if heartbeat is not None and heartbeat < now - timedelta(seconds=heartbeat_timeout):
+            return f"No heartbeat since {heartbeat:%Y-%m-%d %H:%M:%S} UTC"
+        timeout = (self.target.run_timeout if self.target is not None else None) or run_timeout
+        if timeout is not None and self.started_at is not None and self.started_at < now - timedelta(seconds=timeout):
+            return f"Timed out after {timeout}s"
+        return None
 
     def supersede(self) -> None:
         """Settle a failed run's hooks once a retry supersedes it: its failure is not the stack's verdict.

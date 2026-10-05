@@ -11,16 +11,29 @@ The row the framework event becomes, text and payload sanitised, is
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 import interloper as il
 from interloper.errors import NotFoundError
+from interloper.runner.state import RunState
 from sqlalchemy import Engine
 from sqlmodel import col, select
 
-from interloper_db.models import Event
+from interloper_db.models import Event, Run
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery
+
+_OPERATION_EVENT_TYPES = (
+    "operation_queued",
+    "operation_started",
+    "operation_retried",
+    "operation_completed",
+    "operation_failed",
+    "operation_canceled",
+    "operation_skipped",
+)
+_OPERATION_VERDICTS = frozenset({"operation_completed", "operation_failed", "operation_canceled", "operation_skipped"})
 
 
 class EventQuery(PageQuery):
@@ -137,3 +150,56 @@ class EventStore:
             if not db_event or (org_id is not None and db_event.org_id != org_id):
                 raise NotFoundError(f"Event {event_id} not found")
             return db_event
+
+    def close_operations(self, db_run: Run, *, error: str | None) -> None:
+        """Record a verdict for every operation a run left without one.
+
+        A run that ends outside its executor (reaped, timed out, canceled)
+        leaves its in-flight and queued operations open, and the executions
+        view would read them as running forever. Each operation's latest
+        attempt that has no verdict gets one: ``operation_failed`` carrying
+        *error* when it had started, ``operation_canceled`` otherwise or when
+        no *error* is given. The ids are the ones the runner derives, so the
+        same verdict arriving late from a stopping pod dedups.
+
+        Args:
+            db_run: The run being ended, in the caller's transaction.
+            error: Why the run ended as a failure, or ``None`` for a cancel.
+        """
+        statement = (
+            select(Event)
+            .where(Event.run_id == db_run.id, col(Event.event_type).in_(_OPERATION_EVENT_TYPES))
+            .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
+        )
+        with session_scope(self._engine) as session:
+            latest: dict[UUID, tuple[int, list[Event]]] = {}
+            for event in session.exec(statement).all():
+                if event.component_id is None:
+                    continue
+                attempt = int((event.data or {}).get("attempt", 1))
+                current = latest.get(event.component_id)
+                if current is None or attempt > current[0]:
+                    latest[event.component_id] = (attempt, [event])
+                elif attempt == current[0]:
+                    current[1].append(event)
+
+            for component_id, (attempt, events) in latest.items():
+                types = {event.event_type for event in events}
+                if types & _OPERATION_VERDICTS:
+                    continue
+                failed = "operation_started" in types and error is not None
+                event_type = il.EventType.OPERATION_FAILED if failed else il.EventType.OPERATION_CANCELED
+                last = events[-1]
+                metadata: dict[str, Any] = {
+                    **(last.data or {}),
+                    "component_id": str(component_id),
+                    "component_kind": last.component_kind,
+                    "component_key": last.component_key,
+                    "attempt": attempt,
+                    "message": f"Operation '{last.component_key}' {'failed' if failed else 'canceled'}",
+                }
+                if failed:
+                    metadata["error"] = error
+                event_id = RunState.operation_event_id(str(db_run.id), str(component_id), event_type, attempt=attempt)
+                self.save(il.Event(type=event_type, metadata=metadata, id=event_id), db_run.org_id, db_run.id)
+            commit(session)

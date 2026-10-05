@@ -47,6 +47,7 @@ WRITES = {
     "toggle_asset",
     "trigger_run",
     "retry_run",
+    "cancel_run",
     "trigger_backfill",
     "cancel_backfill",
 }

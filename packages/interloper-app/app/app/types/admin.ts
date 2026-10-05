@@ -39,7 +39,14 @@ export interface AdminConfig {
     services: {
         cron: { enabled: boolean, reconcile_interval: number, batch_size: number, max_execution_delay: number | null }
         worker: { enabled: boolean, poll_interval: number }
-        reaper: { enabled: boolean, timeout: number, poll_interval: number }
+        reaper: {
+            enabled: boolean
+            poll_interval: number
+            startup_timeout: number
+            heartbeat_interval: number
+            heartbeat_timeout: number
+            run_timeout: number | null
+        }
         smtp: { enabled: boolean, host: string, from_addr: string }
         app_external_url: string
         mcp_external_url: string

@@ -207,16 +207,30 @@ class WorkerSettings(BaseSettings):
 
 
 class ReaperSettings(BaseSettings):
-    """Reaper settings: timed-out run cleanup (singleton)."""
+    """Run liveness: the heartbeat an executing run records, and the reaper that fails silent or overdue runs.
+
+    The reaper is a singleton. A run's executor reads the heartbeat fields
+    too, so the container launchers forward them into every run's environment.
+    """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}REAPER_")
 
     enabled: bool = Field(default=True, description="Run the reaper.")
-    timeout: int = Field(
-        default=600,
-        description="Seconds a run the launcher cannot introspect may stay running before the reaper fails it.",
+    poll_interval: int = Field(default=15, description="Seconds between sweeps.")
+    startup_timeout: int = Field(
+        default=600, description="Seconds a dispatched run may take to start before the reaper fails it."
     )
-    poll_interval: int = Field(default=60, description="Seconds between sweeps.")
+    heartbeat_interval: int = Field(default=10, description="Seconds between an executing run's heartbeats.")
+    heartbeat_timeout: int = Field(
+        default=90,
+        description="Seconds a running run may go without a heartbeat before the reaper fails it as lost; a run "
+        "that cannot record one for half of it stops itself first.",
+    )
+    run_timeout: int | None = Field(
+        default=43200,
+        description="Seconds a run may take when its job declares no `timeout`; unset lets those runs run without "
+        "a deadline.",
+    )
 
 
 class LauncherSettings(BaseSettings):

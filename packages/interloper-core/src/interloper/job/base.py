@@ -64,6 +64,13 @@ class Job(Component, Workload):
         description="Attempt budget for this job's runs",
         json_schema_extra={"x-section": "Operation"},
     )
+    timeout: int | None = Field(
+        default=None,
+        gt=0,
+        title="Timeout",
+        description="Seconds a run may take before it is failed; empty uses the instance default",
+        json_schema_extra={"x-section": "Operation"},
+    )
 
     def operations(self) -> list[Operation]:
         """The targets' operations, flattened.

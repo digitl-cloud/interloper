@@ -97,7 +97,7 @@ class Store:
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
         self.usage = UsageStore(self._engine)
-        self.backfills = BackfillStore(self._engine, self.quotas)
+        self.backfills = BackfillStore(self._engine, self.quotas, lambda: self.runs)
         self.events = EventStore(self._engine)
         self.runs = RunStore(self._engine, self.quotas, self.backfills, self.events)
         self.executions = ExecutionStore(self._engine)

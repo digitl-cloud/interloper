@@ -180,7 +180,7 @@ def cancel_backfill(
     user: CurrentUserDep,
     store: StoreDep,
 ) -> BackfillResponse:
-    """Cancel a backfill: pending and queued runs are canceled, in-flight runs drain.
+    """Cancel a backfill and every run of it that has not ended; executing runs stop on their next heartbeat.
 
     A backfill already terminal answers 409.
 

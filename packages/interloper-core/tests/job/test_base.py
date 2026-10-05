@@ -59,6 +59,7 @@ class TestDefinition:
             "timezone",
             "enabled",
             "retry",
+            "timeout",
             "tags",
             "lookback",
             "offset",
@@ -79,6 +80,7 @@ class TestDefinition:
             "tags",
             "enabled",
             "retry",
+            "timeout",
         ]
         assert properties["lookback"]["x-section"] == "Partitioning"
         assert {name for name, prop in properties.items() if prop.get("x-section") == "Operation"} == {
@@ -87,11 +89,12 @@ class TestDefinition:
             "concurrency",
             "enabled",
             "retry",
+            "timeout",
         }
 
     def test_anchor_carries_the_workload_only(self):
         defn = il.Job.definition()
-        assert set(defn.config_schema["properties"]) == {"enabled", "retry", "tags"}
+        assert set(defn.config_schema["properties"]) == {"enabled", "retry", "timeout", "tags"}
         assert il.CronJob.kind == "job"
 
     def test_defaults(self):

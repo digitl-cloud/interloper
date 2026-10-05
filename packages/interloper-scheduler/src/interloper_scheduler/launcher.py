@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -17,26 +15,9 @@ from opentelemetry import context as otel_context
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
-    from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
+    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
 
 logger = logging.getLogger(__name__)
-
-
-class LaunchStatus(str, Enum):
-    """Authoritative status of a launched run, reported by the launcher."""
-
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    NOT_FOUND = "not_found"
-
-
-@dataclass
-class LaunchState:
-    """Authoritative state of a launched run, as reported by its launcher."""
-
-    status: LaunchStatus
-    error: str | None = None
 
 
 #: Launcher classes by type key (``LauncherSettings.type``), fed by the
@@ -51,7 +32,9 @@ class Launcher(ABC):
 
     A launcher decides *where* a run executes: in-process, Docker, Kubernetes, etc.
     Every launcher carries a runner configuration that determines *how* the
-    DAG is executed once it reaches the execution environment.
+    DAG is executed once it reaches the execution environment. Whether a run
+    is still alive is not the launcher's to say: the run's heartbeat says it
+    (see :mod:`~interloper_scheduler.heartbeat`).
     """
 
     @classmethod
@@ -61,6 +44,7 @@ class Launcher(ABC):
         *,
         postgres: PostgresSettings,
         runner: RunnerSettings,
+        reaper: ReaperSettings,
         catalog: Catalog | None,
         store: Any | None = None,
     ) -> Launcher:
@@ -77,6 +61,8 @@ class Launcher(ABC):
             postgres: Postgres settings forwarded to launchers that spawn
                 isolated processes (e.g. Docker).
             runner: Runner settings forwarded to every launcher.
+            reaper: Run liveness settings, whose heartbeat every run's
+                executor follows.
             catalog: Catalog forwarded to launchers that spawn isolated
                 processes so they can reproduce an identical catalog
                 (``None`` is accepted by launchers that don't consume it).
@@ -98,7 +84,9 @@ class Launcher(ABC):
                 f"Unknown launcher: {settings.type!r} (available: {list(LAUNCHERS.keys())}). "
                 f"Is the matching interloper package installed?"
             )
-        return launcher_cls.from_settings(settings, postgres=postgres, runner=runner, catalog=catalog, store=store)
+        return launcher_cls.from_settings(
+            settings, postgres=postgres, runner=runner, reaper=reaper, catalog=catalog, store=store
+        )
 
     def __init__(
         self,
@@ -122,15 +110,19 @@ class Launcher(ABC):
             run_id: The run UUID to execute.
         """
 
-    def describe_run(self, run_id: UUID) -> LaunchState | None:
-        """Return the authoritative state of a launched run.
+    def diagnose(self, run_id: UUID) -> str | None:
+        """Say why a launched run's workload stopped, when the launcher can tell.
+
+        The reaper has already concluded the run is dead from its silent
+        heartbeat; this only adds what the infrastructure saw (an OOM kill,
+        an exit code) to the reason it records. It decides nothing.
 
         Args:
-            run_id: The run UUID to describe.
+            run_id: The run UUID.
 
         Returns:
-            The run's authoritative state, or ``None`` if the launcher
-            cannot introspect its runs.
+            A one-line reason, or ``None`` when the workload has not stopped,
+            is gone, or the launcher cannot introspect its runs.
         """
         return None
 
@@ -147,6 +139,7 @@ class InProcessLauncher(Launcher):
         runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
         store: Store | None = None,
+        reaper: ReaperSettings | None = None,
     ) -> None:
         """Initialize the launcher.
 
@@ -154,9 +147,12 @@ class InProcessLauncher(Launcher):
             runner_type: Runner type name (``async``, ``serial``, ``multi_process``).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
             store: Optional Store instance to share with executors.
+            reaper: Run liveness settings the executors' heartbeat follows;
+                ``None`` reads them from the app settings.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
         self._store = store
+        self._reaper = reaper
 
     @classmethod
     def from_settings(
@@ -165,15 +161,17 @@ class InProcessLauncher(Launcher):
         *,
         postgres: PostgresSettings,
         runner: RunnerSettings,
+        reaper: ReaperSettings,
         catalog: Catalog | None,
         store: Any | None = None,
     ) -> InProcessLauncher:
-        """Construct from settings; uses only the runner config and the shared store.
+        """Construct from settings; uses the runner config, the liveness settings and the shared store.
 
         Args:
             settings: The launcher settings block, unused by this launcher.
             postgres: Postgres settings, unused: the store is shared in-process.
             runner: Runner settings the executor's runner is built from.
+            reaper: Run liveness settings the executors' heartbeat follows.
             catalog: Catalog the store hydrates against.
             store: An existing Store to reuse. Defaults to ``None``, which
                 builds one from settings.
@@ -181,7 +179,7 @@ class InProcessLauncher(Launcher):
         Returns:
             The configured in-process launcher.
         """
-        return cls(runner_type=runner.type, runner_config=runner.config, store=store)
+        return cls(runner_type=runner.type, runner_config=runner.config, store=store, reaper=reaper)
 
     def launch(self, run_id: UUID) -> None:
         """Launch a run in a background thread.
@@ -195,7 +193,9 @@ class InProcessLauncher(Launcher):
         from interloper_scheduler.executor import RunExecutor
 
         runner = Runner.from_settings(RunnerSettings(type=self._runner_type, config=self._runner_config))
-        executor = RunExecutor(store=self._store, runner=runner)
+        # The run shares this process, so a lost heartbeat cannot exit it:
+        # the run is ended in the database and its thread runs to its end.
+        executor = RunExecutor(store=self._store, runner=runner, reaper=self._reaper)
 
         # A bare thread does not inherit contextvars — carry the launch-time
         # OTel context across so the run's spans parent under the launch span.

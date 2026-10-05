@@ -14,8 +14,8 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.settings import LauncherSettings, PostgresSettings, RunnerSettings
-from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
+    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+from interloper_scheduler.launcher import Launcher
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ class DockerLauncher(Launcher):
         *,
         postgres: PostgresSettings,
         runner: RunnerSettings,
+        reaper: ReaperSettings,
         catalog: Catalog | None,
         store: Any | None = None,
     ) -> DockerLauncher:
@@ -57,6 +58,8 @@ class DockerLauncher(Launcher):
             settings: The launcher settings block (image, network, volumes).
             postgres: Postgres credentials forwarded into the spawned container.
             runner: Runner settings the spawned process builds its runner from.
+            reaper: Run liveness settings whose heartbeat fields the spawned
+                process follows.
             catalog: Catalog forwarded as import paths; required, since a container
                 cannot see the caller's.
             store: Accepted for the registry's uniform hook and unused — a
@@ -80,6 +83,8 @@ class DockerLauncher(Launcher):
             postgres_database=postgres.database,
             runner_type=runner.type,
             runner_config=runner.config,
+            heartbeat_interval=reaper.heartbeat_interval,
+            heartbeat_timeout=reaper.heartbeat_timeout,
             **settings.config,
         )
 
@@ -96,6 +101,8 @@ class DockerLauncher(Launcher):
         runner_config: dict[str, Any] | None = None,
         volumes: dict[str, dict[str, str]] | None = None,
         forward_env: list[str] | None = None,
+        heartbeat_interval: int = 10,
+        heartbeat_timeout: int = 90,
     ) -> None:
         """Initialize the Docker launcher.
 
@@ -117,8 +124,14 @@ class DockerLauncher(Launcher):
                 Runs hydrate connections, so they need the same
                 runtime-resolved credentials (e.g. the in-house OAuth
                 provider trio) the API resolves from its environment.
+            heartbeat_interval: Seconds between a run's heartbeats, forwarded
+                to the container.
+            heartbeat_timeout: The reaper's heartbeat timeout in seconds,
+                forwarded to the container.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
+        self._heartbeat_interval = heartbeat_interval
+        self._heartbeat_timeout = heartbeat_timeout
         self._client = docker.from_env()
         self._catalog = catalog
         self._image = image
@@ -158,52 +171,35 @@ class DockerLauncher(Launcher):
             logger.exception("Failed to start container for run %s", run_id)
             raise
 
-    def describe_run(self, run_id: UUID) -> LaunchState:
-        """Return the authoritative state of a run's container.
-
-        Used by the reaper to catch failed runs as soon as the
-        container terminates, without waiting for the fallback timeout.
+    def diagnose(self, run_id: UUID) -> str | None:
+        """Say why a run's container stopped, from its exit state.
 
         Args:
-            run_id: The run UUID to describe.
+            run_id: The run UUID.
 
         Returns:
-            A :class:`LaunchState` indicating whether the container is
-            still running, has succeeded, has failed, or is gone.
+            The container's status, exit code, OOM kill and error, or ``None``
+            when it is still running, gone, or unreadable.
         """
-        container_name = f"interloper_run_{str(run_id)[:8]}"
         try:
-            container = self._client.containers.get(container_name)
-        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return LaunchState(status=LaunchStatus.NOT_FOUND)
-
-        try:
+            container = self._client.containers.get(f"interloper_run_{str(run_id)[:8]}")
             container.reload()
-        except Exception:  # noqa: BLE001 — any client error means the run is no longer observable
-            return LaunchState(status=LaunchStatus.NOT_FOUND)
+        except Exception:  # noqa: BLE001 - a diagnosis is best-effort detail on a run already found dead
+            return None
 
         state = container.attrs.get("State", {}) if container.attrs else {}
         docker_status = (state.get("Status") or container.status or "").lower()
-
-        # "running", "created", "restarting", "paused" — still alive
         if docker_status in ("running", "created", "restarting", "paused"):
-            return LaunchState(status=LaunchStatus.RUNNING)
+            return None
 
-        # Terminal states: "exited", "dead", "removing"
-        exit_code = state.get("ExitCode")
-        if exit_code == 0:
-            return LaunchState(status=LaunchStatus.SUCCEEDED)
-
-        # Anything else is a failure
-        parts = [f"Container {container.short_id} status={docker_status}"]
-        if exit_code is not None:
-            parts.append(f"exit_code={exit_code}")
+        parts = [f"container status={docker_status}"]
+        if state.get("ExitCode") is not None:
+            parts.append(f"exit_code={state['ExitCode']}")
         if state.get("OOMKilled"):
             parts.append("OOMKilled")
-        error = state.get("Error") or ""
-        if error:
-            parts.append(f"error={error}")
-        return LaunchState(status=LaunchStatus.FAILED, error=" ".join(parts))
+        if state.get("Error"):
+            parts.append(f"error={state['Error']}")
+        return " ".join(parts)
 
     def _build_environment(self) -> dict[str, str]:
         """Build environment variables for the container.
@@ -221,6 +217,8 @@ class DockerLauncher(Launcher):
             "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
+            "INTERLOPER_REAPER_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
+            "INTERLOPER_REAPER_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
         }
         encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
         if encryption_key:
