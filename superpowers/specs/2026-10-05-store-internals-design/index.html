@@ -12,7 +12,7 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-09-16-components-list-performance-design/">
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-05-store-internals-design/">
       
       
       
@@ -25,7 +25,7 @@
     
     
       
-        <title>Components list performance - Interloper</title>
+        <title>Store internals: one way to read, lock, save and derive - Interloper</title>
       
     
     
@@ -115,7 +115,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Components list performance
+              Store internals: one way to read, lock, save and derive
             
           </span>
         </div>
@@ -1834,81 +1834,42 @@
   
 
 
-<h1 id="components-list-performance">Components list performance<a class="headerlink" href="#components-list-performance" title="Permanent link">&para;</a></h1>
-<p><strong>Date:</strong> 2026-09-16
-<strong>Status:</strong> approved
-<strong>Scope:</strong> <code>interloper-db</code> (component store), <code>interloper-api</code> (components router), <code>interloper-app</code> (components store and collection pages)</p>
+<h1 id="store-internals-one-way-to-read-lock-save-and-derive">Store internals: one way to read, lock, save and derive<a class="headerlink" href="#store-internals-one-way-to-read-lock-save-and-derive" title="Permanent link">&para;</a></h1>
+<p>Review pass over interloper-db after the simplification programme (#423 to #429). The public surface had settled; this pass makes the private one read the same way in every facet and moves logic that belongs to the rows onto the rows.</p>
 <h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
-<p><code>GET /components</code> takes several seconds on large organisations, and every app page requests the whole collection regardless of what it renders.</p>
-<p>The list query itself is cheap: one <code>SELECT</code> plus four <code>selectinload</code> batches. The cost sits in the per-row response build and in the shape of the result:</p>
+<p>Each store facet had grown its own private idiom:</p>
+<ul>
+<li>Private helpers took a <code>session</code> parameter although <code>session_scope</code> already joins the ambient open session, so every write threaded a session it never needed to.</li>
+<li>Reads and writes fetched rows through different private helpers per facet (<code>_load_component</code>, <code>_lock_run</code>, <code>_identity</code>, <code>_latest_attempts</code>), some with eager loads that a <code>FOR UPDATE</code> select rejects on Postgres and that go stale once the write reshapes the row.</li>
+<li>Logic that only reads a row lived in the store: cancelling a run, superseding a retry head, sanitising an event payload, deriving a component's identity or retry policy.</li>
+<li>Naive SQLite datetimes were patched with <code>assume_utc</code> at every read instead of at the column.</li>
+<li>The same anti-join ("is this the latest attempt of its stack?") was written three times.</li>
+<li>Named catalog and run questions sat in <code>insights</code> because that is where they were first asked (<code>latest_by_target</code>, <code>asset_partitionings</code>, <code>activity</code>), not where their entity lives.</li>
+<li>Two methods answered the job-granularity question (singular and plural) with different drift rules.</li>
+</ul>
+<h2 id="decisions">Decisions<a class="headerlink" href="#decisions" title="Permanent link">&para;</a></h2>
 <ol>
-<li><strong>Owned assets are returned twice.</strong> Every asset row has an <code>org_id</code>, so it is a top-level row, and it is nested again under its source's <code>children</code>. Payload and serialisation double.</li>
-<li><strong>One query per top-level asset.</strong> <code>ComponentStore.status()</code> needs the owning source's key for an owned asset. Nested children receive it from the caller, but top-level asset rows do not, so each one opens a session and runs a primary-key lookup. That is the N+1, and on Cloud SQL through the proxy it is the bulk of the wall time.</li>
-<li><strong>Three decrypts per secret row.</strong> <code>status()</code>, <code>discriminator()</code> and <code>public_config()</code> each decode the payload independently.</li>
-<li><strong>Pages load everything.</strong> The five kind pages call <code>fetchAll()</code> unfiltered because the client-side delete preview (<code>deleteImpact</code>) mirrors the server's referrer rule and needs referrers of every kind, and because relation targets are rendered by looking up their record in the store.</li>
+<li><strong>No session parameters.</strong> A private helper runs inside <code>session_scope()</code>, which joins the transaction the public method opened. The few helpers that recurse or iterate within one scope take the session explicitly and carry an <code>_in</code> suffix (<code>_advance_in</code>, <code>_sync_children_in</code>).</li>
+<li><strong>One fetch idiom per facet.</strong> Public <code>get(id, *, org_id=None, ...)</code> reads a row with its load options; <code>org_id=None</code> means the caller authorises after the read (the API's <code>load_authorized</code> fetches first and checks <code>entity.org_id</code>; the scheduler reads across organisations). Private <code>_lock(id)</code> selects the bare row <code>FOR UPDATE</code> for a write (runs add <code>populate_existing</code>), with no eager options. A write that returns the row returns <code>self.get(...)</code> so the caller sees the reshaped unit.</li>
+<li><strong><code>session.save(session, row, *loads)</code></strong> adds, commits, refreshes and touches the named relationships, replacing the add/commit/refresh triplet in every <code>create</code>.</li>
+<li><strong>The row owns what only reads the row.</strong> <code>Run.cancel()</code>, <code>Run.supersede()</code>, <code>Event.from_event(event, org_id, run_id)</code> with the text and payload sanitisers, <code>Component.retry_policy</code>, <code>Component.identity</code>. <code>Component.qualified_key</code> reads the loaded parent and only lazy-loads when the row has a parent to load, so detached roots never touch the session.</li>
+<li><strong>Naive datetimes are a test concern, handled in the tests.</strong> Postgres hands <code>TIMESTAMPTZ</code> values back aware; only SQLite, which the suites run on, returns them naive. The repo-root <code>conftest.py</code> teaches the SQLite dialect to read datetimes back as aware UTC, once per process, so <code>assume_utc</code> leaves the store and no production type exists for a test dialect.</li>
+<li><strong>One <code>latest_attempt()</code> expression</strong> in <code>store/runs.py</code>, used by the run filters and the backfill counts.</li>
+<li><strong>Questions live with their entity.</strong> <code>runs.latest_by_target</code>, <code>runs.last_successes</code>, <code>components.asset_partitionings</code>, <code>components.target_assets</code>. The organisation feed becomes <code>insights.feed(org_id, PageQuery) -&gt; Page[ActivityEntry]</code>, with <code>ActivityEntry</code> in <code>store/insights/feed.py</code>.</li>
+<li><strong>One granularity question.</strong> <code>components.job_partition_granularities(job_ids) -&gt; dict[UUID, set[TimeGranularity]]</code>. The cron raises <code>ConfigError</code> when a job's assets disagree; insights pick the single granularity or none.</li>
+<li><strong><code>TimePartition.from_key</code> raises <code>ConfigError</code></strong> (a <code>ValueError</code>), so the store no longer wraps it in <code>parse_partition</code>.</li>
+<li><strong>Events save through <code>dialect_insert</code></strong> on every dialect, so tests stop monkeypatching a SQLite path.</li>
+<li><strong>Backfills expose <code>advance(backfill_id, *, failed)</code></strong> and the relations facet exposes its sibling API (<code>sync</code>, <code>check_bound</code>, <code>bind_siblings</code>, <code>detaches</code>) since the component store calls them across the module boundary.</li>
+<li><strong>Exports narrow.</strong> <code>interloper_db.store</code> exports <code>transaction</code> from the session module and nothing else from it; <code>ActivityEntry</code> comes from <code>interloper_db.store.insights</code>.</li>
 </ol>
-<h2 id="principle">Principle<a class="headerlink" href="#principle" title="Permanent link">&para;</a></h2>
-<p>Follow the core framework's component model rather than the app's current habits:</p>
+<h2 id="breaking">Breaking<a class="headerlink" href="#breaking" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>The owner is the unit.</strong> In the core an owned component never has a spec of its own; it travels inside its owner, and the owner is the unit of hydration. The catalog applies the same rule: it is flat over roots, and owned definitions are reached through their owner. The collection endpoint adopts it too.</li>
-<li><strong>Ownership, not kind.</strong> The store keys owned behaviour on <code>parent_id</code>, never on <code>kind == "asset"</code>, so a future owner kind gets the same treatment.</li>
-<li><strong>Logic has an owner.</strong> The server owns relation acceptance and delete rules; the client stops mirroring them.</li>
-<li><strong>A row describes itself for display.</strong> A relation ref carries its target's identity, so a page of one kind never needs another kind loaded just to label a badge.</li>
+<li><code>RunStore.parse_partition</code>, <code>InvitationStore.get</code>, <code>OrganisationStore.activity</code>, <code>ComponentStore.job_partition_granularity</code> (singular) and <code>InsightStore.latest_by_target</code> / <code>asset_partitionings</code> are removed in favour of the methods above.</li>
+<li><code>interloper_db.store</code> no longer re-exports <code>commit</code>, <code>session_scope</code> or <code>ActivityEntry</code>.</li>
+<li><code>TimePartition.from_key</code> raises <code>ConfigError</code> instead of <code>ValueError</code> (still a <code>ValueError</code> subclass).</li>
 </ul>
-<h2 id="design">Design<a class="headerlink" href="#design" title="Permanent link">&para;</a></h2>
-<h3 id="1-collection-roots">1. Collection = roots<a class="headerlink" href="#1-collection-roots" title="Permanent link">&para;</a></h3>
-<p><code>GET /components</code> returns rows with <code>parent_id IS NULL</code>. Each root carries its owned components under <code>children</code>, recursively as the response model already allows (eager-loading stays one level deep, which is the only depth that exists today). <code>?kind=</code> filters roots by kind, so <code>?kind=asset</code> returns standalone assets only. An owned component is reached through its owner in the list, or directly by id on the detail endpoint.</p>
-<p>Store: a new <code>ComponentStore.list_roots(org_id, *, kinds=None)</code> alongside the existing flat <code>list_all</code>, which the toolkit and agent keep using for row-level questions. <code>status()</code> branches on <code>parent_id is not None</code> instead of <code>kind == "asset"</code>; the owner's key is always in hand when walking children, so the per-row lookup only ever runs for a detail request on an owned component.</p>
-<p>This is a breaking API change (<code>feat!</code>): the unfiltered list no longer repeats owned assets at top level.</p>
-<h3 id="2-one-reading-per-row">2. One reading per row<a class="headerlink" href="#2-one-reading-per-row" title="Permanent link">&para;</a></h3>
-<p><code>ComponentStore.read(row, *, parent_key=None) -&gt; ComponentReading</code> decodes the payload once and derives everything the response needs from it:</p>
-<ul>
-<li><code>status</code>: catalog resolution, then readability for encrypted rows.</li>
-<li><code>config</code>: the decoded payload, <code>None</code> when unreadable or undecodable.</li>
-<li><code>public_config</code>: the schema's <code>x-public</code> subset of that payload.</li>
-<li><code>discriminator</code>: the class's discriminator field read off that payload.</li>
-</ul>
-<p><code>status()</code>, <code>decode_config()</code>, <code>public_config()</code> and <code>discriminator()</code> stay as thin views over <code>read()</code> for existing callers and tests. <code>ComponentResponse.from_row</code> uses <code>read()</code> and picks <code>config</code> or <code>public_config</code> by <code>include_config</code>.</p>
-<h3 id="3-server-side-delete-impact">3. Server-side delete impact<a class="headerlink" href="#3-server-side-delete-impact" title="Permanent link">&para;</a></h3>
-<p><code>GET /components/delete-impact?id=&lt;uuid&gt;&amp;id=&lt;uuid&gt;</code> returns:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"blocking"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}],</span><span class="w"> </span><span class="nt">"detaching"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p>Both lists use the <code>{id, kind, key, name}</code> shape the 409 <code>used_by</code> payload already carries. The store's <code>_blocking_referrers_into</code> becomes <code>_referrers_into(session, target_ids, subtree_ids) -&gt; tuple[blocking, detaching]</code>; the delete guard keeps using the blocking half. A referrer that blocks through any relation is reported only as blocking. Each requested id is authorised with <code>load_authorized</code> (viewer), so a bulk preview costs one lookup per id, which is fine for the handful a table selection holds.</p>
-<p>Frontend: <code>componentsStore.deleteImpact(ids)</code> becomes <code>async</code> and calls the endpoint. <code>DataTable</code>'s <code>deleteImpact</code> prop becomes a promise-returning function; the collection table and the graph source node <code>await</code> it. <code>_relationDetaches</code> and the client-side mirror are deleted.</p>
-<h3 id="4-relation-refs-describe-their-target">4. Relation refs describe their target<a class="headerlink" href="#4-relation-refs-describe-their-target" title="Permanent link">&para;</a></h3>
-<p><code>RelationRef</code> gains <code>dst_key</code> and <code>dst_name</code>. <code>ComponentRelation</code> gets a view-only <code>dst</code> relationship, and the component load options add one <code>selectinload</code> for it (for the row's relations and the children's). <code>_relations_of</code> reads the target's key and name off the loaded row. The org-wide <code>/components/relations</code> response is unchanged.</p>
-<p>Frontend: <code>RelationRef</code> in <code>types/component.ts</code> mirrors the new fields. Pages label relation targets from the ref (<code>componentIcon(ref.dst_key)</code>, <code>ref.dst_name ?? ref.dst_key</code>) instead of <code>byId(ref.dst_id)</code>.</p>
-<h3 id="5-pages-fetch-what-they-render">5. Pages fetch what they render<a class="headerlink" href="#5-pages-fetch-what-they-render" title="Permanent link">&para;</a></h3>
-<ul>
-<li><code>pages/components/[kind].vue</code>, <code>hooks.vue</code>, <code>jobs.vue</code>, <code>destinations.vue</code>: fetch their own kind only. Relations are fetched only where a page reads <code>upstreams</code> or <code>relations</code>.</li>
-<li><code>pages/components/sources.vue</code>: fetches <code>source</code> and <code>job</code> plus relations, because the warning rollup (<code>useAssetWarnings</code>) reads job targets and asset upstreams.</li>
-<li><code>collection.vue</code>, <code>graph.vue</code>, the command palette: unchanged, they are about the whole graph.</li>
-<li><code>timeline.vue</code>, <code>executions/runs/[run].vue</code>, <code>RunsTable.vue</code>: keep their kind filters; owned assets arrive inside <code>source</code>.</li>
-</ul>
-<p>A page that reads more than identity from a relation target (status, config) keeps fetching that kind explicitly. The audit of each page happens during implementation and any such case is noted in the plan.</p>
-<h3 id="6-store-index">6. Store index<a class="headerlink" href="#6-store-index" title="Permanent link">&para;</a></h3>
-<p>The app store holds roots and derives a flat index:</p>
-<ul>
-<li><code>index</code> (computed <code>Map&lt;id, record&gt;</code>) walks roots and their <code>children</code> recursively.</li>
-<li><code>byId</code> reads the index. <code>byKind(kind)</code> returns every indexed record of that kind, owned or not; <code>graphModel</code> already filters <code>parent_id === null</code> where it wants standalone assets.</li>
-<li><code>search</code> runs over the index for an unfiltered query and over <code>byKind</code> otherwise.</li>
-<li><code>_upsert(record)</code>: a record with <code>parent_id</code> is placed inside its parent's <code>children</code>; a root replaces its root entry (merged as today).</li>
-<li><code>_remove(id)</code>: removes a root and its children, or a child from its parent's <code>children</code>.</li>
-<li>Realtime: a change notification refetches the owner (<code>record.parent_id ?? record.id</code>), since the owner's detail carries its children.</li>
-</ul>
-<h2 id="out-of-scope">Out of scope<a class="headerlink" href="#out-of-scope" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Pagination of the list endpoint. Roots are two orders of magnitude fewer than rows; if a collection grows past that, pagination is a separate change.</li>
-<li>Changing <code>list_all</code> semantics for the toolkit and agent.</li>
-<li>Deeper than one level of eager-loaded ownership.</li>
-</ul>
-<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
-<ul>
-<li><code>interloper-db</code>: <code>list_roots</code> excludes owned rows, honours <code>kinds</code>, carries children; <code>read()</code> decrypts once per row (count calls on the decrypt callable) and its views agree with the existing <code>status</code>/<code>discriminator</code>/<code>public_config</code> tests; <code>_referrers_into</code> splits blocking and detaching with blocking winning; the <code>dst</code> relationship loads with the row.</li>
-<li><code>interloper-api</code>: the list route calls <code>list_roots</code>; <code>RelationRef</code> carries <code>dst_key</code>/<code>dst_name</code>; <code>delete-impact</code> authorises every id, 404s an unknown one and returns both lists; <code>from_row</code> reads once per row.</li>
-<li><code>interloper-app</code>: <code>pnpm run lint</code> and <code>pnpm exec nuxt typecheck</code>; manual check of each collection page, the graph and the timeline against the seeded dev instance.</li>
-<li>Benchmark: a synthetic organisation with a few hundred owned assets, timing <code>list_roots</code> plus <code>from_row</code> before and after, to confirm the per-asset query is gone and note the speedup in the PR.</li>
-</ul>
+<h2 id="size">Size<a class="headerlink" href="#size" title="Permanent link">&para;</a></h2>
+<p>Source net −231 lines (interloper-db −237, api −6, toolkit +6, scheduler +6); tests +49.</p>
 
 
 
