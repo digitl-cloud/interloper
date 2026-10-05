@@ -7,6 +7,15 @@ specific domains (``DAGError``, ``ConfigError``, etc.) for finer control.
 Each domain exception also inherits from the built-in exception it replaces
 (e.g., ``DAGError(InterloperError, ValueError)``), preserving backward
 compatibility with existing ``except ValueError:`` handlers.
+
+Some validation raises built-ins directly: unknown constructor keyword
+arguments, a ``FetchField`` provider reference that does not resolve, an
+``oauth=`` decorator option on a non-OAuth connection, and multiple
+discriminator fields raise ``TypeError``; an invalid key or identifier, a
+window ending before it starts, an unsupported granularity, and
+``bounded_gather(limit=0)`` raise ``ValueError``; ``Registry[...]`` on a
+missing name raises ``KeyError``. Binding a component a relation does not
+accept raises ``ConfigError`` instead.
 """
 
 from __future__ import annotations

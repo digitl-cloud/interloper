@@ -157,4 +157,4 @@ Calling an instance returns a copy; omitted keywords mean "unchanged".
 
 ## Normalizer options
 
-See [Normalization](../guide/normalization.md#options).
+See [Normalization](normalization.md#options).

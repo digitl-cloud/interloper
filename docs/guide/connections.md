@@ -27,7 +27,7 @@ Exposing the client as a `cached_property` means every asset sharing the connect
 configured client.
 
 The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
-[decorators reference](../reference/decorators.md).
+[decorators reference](decorators.md).
 
 ## Using a connection
 

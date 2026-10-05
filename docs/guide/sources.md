@@ -62,7 +62,7 @@ keeps type checkers informed.
 class FacebookAds(il.Source): ...
 ```
 
-All options are in [Decorator options](../reference/decorators.md).
+All options are in [Decorator options](decorators.md).
 
 ### Functional form
 

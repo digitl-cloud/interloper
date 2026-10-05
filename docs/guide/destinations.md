@@ -79,7 +79,7 @@ il.MemoryDestination.clear()      # between tests
 
 Reading a key that was never written raises `DataNotFoundError`.
 
-Other destinations come from companion packages; see [Ecosystem](../reference/ecosystem.md).
+Other destinations come from companion packages; see [Ecosystem](ecosystem.md).
 
 ## IOContext
 
@@ -141,7 +141,7 @@ destination written this way is partition-correct by construction, and `CSVDesti
 itself, `context.partitions` and `context.slices(data)`, for a backend that needs them.
 
 The decorator accepts the class's public ClassVars and field defaults, plus `relations=`; see the
-[decorators reference](../reference/decorators.md). A destination's own connection is a relation,
+[decorators reference](decorators.md). A destination's own connection is a relation,
 declared as an annotation or through `relations=`; see
 [Resources](resources.md#relations-on-sources-and-destinations).
 

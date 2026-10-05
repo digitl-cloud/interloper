@@ -124,7 +124,7 @@ def ads_stats(
     ...
 ```
 
-The three channels are described in [Decorator options](../reference/decorators.md). A list of
+The three channels are described in [Decorator options](decorators.md). A list of
 classes under `relations["destinations"]` restricts the destination **classes** an asset accepts;
 instances are supplied at construction.
 

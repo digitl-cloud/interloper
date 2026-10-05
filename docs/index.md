@@ -14,7 +14,7 @@ uv add interloper-core
 
 Interloper requires Python 3.10 or newer. The core package depends only on pydantic,
 pydantic-settings, httpx2, PyYAML and the OpenTelemetry API. Optional extras and companion
-packages are listed in [Ecosystem](reference/ecosystem.md).
+packages are listed in [Ecosystem](guide/ecosystem.md).
 
 ## Your first asset
 
