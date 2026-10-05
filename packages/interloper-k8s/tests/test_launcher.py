@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from interloper.catalog.base import Catalog
+from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
 from kubernetes import client, config
 
 from interloper_k8s.launcher import KubernetesLauncher
@@ -72,6 +73,18 @@ def test_the_heartbeat_settings_reach_the_run_container(
     assert (env["INTERLOPER_REAPER_HEARTBEAT_INTERVAL"], env["INTERLOPER_REAPER_HEARTBEAT_TIMEOUT"]) == ("5", "45")
 
 
+def test_from_settings_forwards_the_heartbeat_settings(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
+    launcher = KubernetesLauncher.from_settings(
+        LauncherSettings(type="kubernetes", config={"image": "img"}),
+        postgres=PostgresSettings(),
+        runner=RunnerSettings(),
+        reaper=ReaperSettings(heartbeat_interval=5, heartbeat_timeout=45),
+        catalog=Catalog(),
+    )
+
+    assert (launcher._heartbeat_interval, launcher._heartbeat_timeout) == (5, 45)
+
+
 class _PodsCoreV1:
     def __init__(self, pods: list[client.V1Pod] | None) -> None:
         self._pods = pods
@@ -82,7 +95,12 @@ class _PodsCoreV1:
         return client.V1PodList(items=self._pods)
 
 
-def _pod(*, terminated: client.V1ContainerStateTerminated | None = None, reason: str | None = None) -> client.V1Pod:
+def _pod(
+    *,
+    terminated: client.V1ContainerStateTerminated | None = None,
+    reason: str | None = None,
+    message: str | None = None,
+) -> client.V1Pod:
     container = client.V1ContainerStatus(
         name="run",
         image="img",
@@ -91,7 +109,7 @@ def _pod(*, terminated: client.V1ContainerStateTerminated | None = None, reason:
         restart_count=0,
         state=client.V1ContainerState(terminated=terminated),
     )
-    return client.V1Pod(status=client.V1PodStatus(reason=reason, container_statuses=[container]))
+    return client.V1Pod(status=client.V1PodStatus(reason=reason, message=message, container_statuses=[container]))
 
 
 @pytest.mark.parametrize(
@@ -104,7 +122,7 @@ def _pod(*, terminated: client.V1ContainerStateTerminated | None = None, reason:
             [_pod(terminated=client.V1ContainerStateTerminated(reason="OOMKilled", exit_code=137, message="oom"))],
             "reason=OOMKilled exit_code=137 message=oom",
         ),
-        ([_pod(reason="Evicted")], "pod Evicted"),
+        ([_pod(reason="Evicted", message="The node was low on memory.")], "pod Evicted The node was low on memory."),
     ],
 )
 def test_diagnose_reads_the_pods_termination_state(

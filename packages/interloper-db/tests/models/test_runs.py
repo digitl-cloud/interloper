@@ -58,6 +58,16 @@ _ORG_ID = uuid4()
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
 
 
+@pytest.mark.parametrize("status", ["queued", "success", "failed", "canceled"])
+def test_a_run_neither_dispatched_nor_running_is_never_overdue(status: str) -> None:
+    long_ago = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    run = Run(org_id=uuid4(), status=status, heartbeat_at=long_ago, started_at=long_ago)
+
+    overdue = run.overdue(long_ago + dt.timedelta(days=30), startup_timeout=1, heartbeat_timeout=1, run_timeout=1)
+
+    assert overdue is None
+
+
 def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, object]:
     return Event.from_event(event, org_id, run_id).model_dump()
 

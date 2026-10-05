@@ -169,7 +169,5 @@ def database_now(session: Session) -> datetime:
         returns a naive value).
     """
     value = session.scalar(select(func.current_timestamp()))
-    if isinstance(value, str):  # SQLite returns text
-        value = datetime.fromisoformat(value)
     assert value is not None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
