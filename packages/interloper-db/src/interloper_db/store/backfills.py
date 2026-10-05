@@ -9,7 +9,7 @@ failed list, and in the batch's own verdict.
 from __future__ import annotations
 
 import builtins
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -32,7 +32,7 @@ from interloper_db.models import (
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_BACKFILL_PARTITIONS, QuotaStore
-from interloper_db.store.runs import latest_attempt
+from interloper_db.store.runs import RunStore, latest_attempt
 
 # Reader queries eagerly join the target so its identity survives the session;
 # not mapped on the relationship, since FOR UPDATE rejects outer joins.
@@ -53,15 +53,18 @@ class BackfillQuery(PageQuery):
 class BackfillStore:
     """Store methods for backfills and the batch accounting of their runs."""
 
-    def __init__(self, engine: Engine, quotas: QuotaStore) -> None:
+    def __init__(self, engine: Engine, quotas: QuotaStore, runs: Callable[[], RunStore]) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
             quotas: Quota gates it enforces through.
+            runs: The run facet a cancel ends in-flight runs through, read
+                lazily: that facet advances backfills, so it is built after this one.
         """
         self._engine = engine
         self._quotas = quotas
+        self._runs = runs
 
     def get(self, backfill_id: UUID, *, org_id: UUID | None = None) -> Backfill:
         """Load a backfill by ID.
@@ -213,15 +216,21 @@ class BackfillStore:
             save(session, db_backfill, "target")
             return db_backfill
 
-    def cancel(self, backfill_id: UUID) -> Backfill:
-        """Cancel a backfill: runs not yet dispatched will never execute.
+    def cancel(self, backfill_id: UUID, *, in_flight: bool = True) -> Backfill:
+        """Cancel a backfill: none of its runs executes past this.
 
-        Pending and queued runs flip to ``canceled``; runs already
-        dispatched or running drain to their own terminal state (their late
-        completions are no-ops on the now-terminal backfill).
+        Pending and queued runs flip to ``canceled``. Dispatched and running
+        runs are canceled through :meth:`RunStore.cancel`, which settles each
+        one like any other ending; an executing run stops on its next
+        heartbeat. The backfill is terminal first, so those endings do not
+        advance it.
 
         Args:
             backfill_id: The backfill UUID.
+            in_flight: Whether dispatched and running runs are canceled too;
+                ``False`` lets them drain to their own verdict, for a cancel
+                that only stops new work (a quota denial: the runs in flight
+                already hold their reservations).
 
         Returns:
             The updated Backfill row, its target loaded.
@@ -234,6 +243,14 @@ class BackfillStore:
             if db_backfill.status not in ACTIVE_BACKFILL_STATUSES:
                 raise ConflictError(f"Backfill {backfill_id} is already {db_backfill.status}")
             self._cancel(db_backfill)
+            session.flush()
+            if in_flight:
+                executing = select(Run.id).where(
+                    Run.backfill_id == backfill_id,
+                    col(Run.status).in_([RunStatus.DISPATCHED, RunStatus.RUNNING]),
+                )
+                for run_id in session.exec(executing).all():
+                    self._runs().cancel(run_id)
             save(session, db_backfill, "target")
             return db_backfill
 
@@ -416,9 +433,8 @@ class BackfillStore:
         """Cancel a backfill's not-yet-dispatched runs and terminalize it.
 
         ``skip_locked`` leaves runs the worker is claiming right now to the
-        worker: they are effectively dispatched and drain like any other
-        in-flight run. A canceled backfill fires no hooks, so it is stamped
-        evaluated with its runs.
+        worker: they are effectively dispatched. A canceled backfill fires no
+        hooks, so it is stamped evaluated with its runs.
 
         Args:
             db_backfill: The backfill row to cancel, mutated in place along with

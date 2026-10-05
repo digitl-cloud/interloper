@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import Store
 
 _ORG_ID = uuid4()
@@ -34,7 +34,7 @@ def org_id() -> UUID:
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over a fresh in-memory SQLite database carrying the quota tables.
+    """A store over a fresh in-memory SQLite database carrying the quota tables and the run events an ending writes.
 
     Yields:
         The store bound to that database, disposed once the test finishes.
@@ -49,7 +49,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, Backfill, Run, Quota, Usage):
+    for model in (Component, Backfill, Run, Event, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)

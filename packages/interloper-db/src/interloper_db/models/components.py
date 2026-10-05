@@ -262,6 +262,16 @@ class Component(SQLModel, table=True):
         return il.RetryPolicy.model_validate(declared) if declared else None
 
     @property
+    def run_timeout(self) -> int | None:
+        """The seconds a job's config allows each of its runs.
+
+        Returns:
+            The declared timeout, or ``None`` when the row is not a job or its
+            job declares none, which leaves the instance default to apply.
+        """
+        return (self.config or {}).get("timeout") if self.kind == "job" else None
+
+    @property
     def identity(self) -> il.ComponentIdentity:
         """What the row is, for relation matching: its owning source's key and its own.
 

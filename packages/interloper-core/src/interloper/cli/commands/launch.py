@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import sys
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ def _cmd_launch(args: argparse.Namespace) -> None:
         from interloper_scheduler import RunExecutor
 
         runner = Runner.from_settings(settings.runner)
-        executor = RunExecutor(store=store, runner=runner)
+        executor = RunExecutor(store=store, runner=runner, reaper=settings.reaper, on_lost=_exit_process_lost)
         success = executor.execute(args.run_id)
     except Exception as e:
         logger.exception("Launch failed for run %s", args.run_id)
@@ -78,3 +80,16 @@ def _cmd_launch(args: argparse.Namespace) -> None:
 
     if not success:
         raise SystemExit(1)
+
+
+def _exit_process_lost() -> None:
+    """Exit this run's process at once: its run was ended elsewhere, or can no longer prove it is alive.
+
+    The process exists for this one run, and an operation blocked in sync code
+    cannot be interrupted any other way. Exiting without unwinding is what a
+    pod eviction does anyway, and a retry rewrites whatever partition was
+    being written.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(1)

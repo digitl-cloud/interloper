@@ -873,6 +873,21 @@ def _schedule(store: Store, run_id: UUID, *, seconds: float) -> None:
         session.commit()
 
 
+def _stamp(store: Store, run_id: UUID, **fields: Any) -> None:
+    """Overwrite a run's columns directly, to stage a lifecycle state."""
+    with Session(store.engine) as session:
+        db_run = session.get(Run, run_id)
+        assert db_run is not None
+        for name, value in fields.items():
+            setattr(db_run, name, value)
+        session.add(db_run)
+        session.commit()
+
+
+def _ago(seconds: float) -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+
+
 def _drain(store: Store) -> list[UUID]:
     claimed = []
     while (run := store.runs.claim_next()) is not None:
@@ -949,11 +964,19 @@ class TestStartAndFail:
 
     def test_start_marks_the_run_running_with_its_target(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))
+        _drain(store)
 
         started = store.runs.start(run.id)
 
         assert (started.status, started.started_at is not None) == (RunStatus.RUNNING, True)
+        assert started.heartbeat_at is not None
         assert started.target is not None and started.target.name == "Nightly"
+
+    def test_a_run_not_dispatched_cannot_start(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        with pytest.raises(ConflictError, match="not dispatched"):
+            store.runs.start(run.id)
 
     def test_a_terminal_run_cannot_start(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
@@ -986,6 +1009,181 @@ class TestStartAndFail:
 
         with pytest.raises(NotFoundError):
             getattr(store.runs, verb)(*arguments)
+
+
+class TestHeartbeat:
+    """A run proves it is alive by renewing its heartbeat, and learns from it whether to stop."""
+
+    def test_dispatch_stamps_the_first_heartbeat(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        _drain(store)
+
+        assert store.runs.get(run.id).heartbeat_at is not None
+
+    def test_a_running_run_renews_its_heartbeat(self, store: Store) -> None:
+        run = _running(store)
+        _stamp(store, run, heartbeat_at=_ago(60))
+
+        assert store.runs.heartbeat(run) is True
+        heartbeat = store.runs.get(run).heartbeat_at
+        assert heartbeat is not None and heartbeat > _ago(30)
+
+    def test_a_run_ended_elsewhere_is_told_to_stop(self, store: Store) -> None:
+        run = _running(store)
+        store.runs.cancel(run)
+
+        assert store.runs.heartbeat(run) is False
+
+
+class TestOverdue:
+    """The reaper's question: which dispatched or running runs should be failed now, and why."""
+
+    @staticmethod
+    def _overdue(store: Store, *, run_timeout: int | None = 3600) -> dict[UUID, str]:
+        found = store.runs.overdue(startup_timeout=600, heartbeat_timeout=90, run_timeout=run_timeout)
+        return {run.id: reason for run, reason in found}
+
+    def test_a_dispatched_run_that_never_started_is_overdue(self, store: Store) -> None:
+        stuck, fresh = store.runs.create(_ORG_ID), store.runs.create(uuid4())
+        _drain(store)
+        _stamp(store, stuck.id, heartbeat_at=_ago(700))
+
+        overdue = self._overdue(store)
+
+        assert overdue == {stuck.id: "Run did not start within 600s"}
+        assert fresh.id not in overdue
+
+    def test_a_silent_running_run_is_lost(self, store: Store) -> None:
+        silent, beating = _running(store), _running(store)
+        _stamp(store, silent, heartbeat_at=_ago(200))
+
+        overdue = self._overdue(store)
+
+        assert list(overdue) == [silent]
+        assert overdue[silent].startswith("No heartbeat since ")
+        assert beating not in overdue
+
+    def test_a_run_without_a_heartbeat_is_judged_by_its_deadline_alone(self, store: Store) -> None:
+        within, past = _running(store), _running(store)
+        _stamp(store, within, heartbeat_at=None, started_at=_ago(100))
+        _stamp(store, past, heartbeat_at=None, started_at=_ago(4000))
+
+        assert self._overdue(store) == {past: "Timed out after 3600s"}
+
+    def test_the_jobs_own_timeout_wins_over_the_instance_default(self, store: Store) -> None:
+        job = _component(store, "job")
+        with Session(store.engine) as session:
+            row = session.get(Component, job)
+            assert row is not None
+            row.config = {"timeout": 60}
+            session.add(row)
+            session.commit()
+        run = _running(store, component_id=job)
+        _stamp(store, run, started_at=_ago(120))
+
+        assert self._overdue(store) == {run: "Timed out after 60s"}
+
+    def test_no_instance_default_leaves_undeclared_runs_without_a_deadline(self, store: Store) -> None:
+        run = _running(store)
+        _stamp(store, run, started_at=_ago(10**6))
+
+        assert self._overdue(store, run_timeout=None) == {}
+
+
+class TestReap:
+    """The reaper fails an overdue run unless it moved after being read."""
+
+    def test_reap_fails_the_run_with_its_reason(self, store: Store) -> None:
+        run = _running(store)
+        heartbeat = store.runs.get(run).heartbeat_at
+
+        reaped = store.runs.reap(run, "No heartbeat since then", heartbeat_at=heartbeat)
+
+        assert reaped is not None and reaped.status == RunStatus.FAILED
+        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["run_failed"]), run_id=run).items
+        assert event.error == "No heartbeat since then"
+
+    def test_a_run_whose_heartbeat_moved_is_left_alone(self, store: Store) -> None:
+        run = _running(store)
+        stale = _ago(200)
+        _stamp(store, run, heartbeat_at=stale)
+        store.runs.heartbeat(run)
+
+        assert store.runs.reap(run, "lost", heartbeat_at=stale) is None
+        assert store.runs.get(run).status == RunStatus.RUNNING
+
+    def test_a_run_that_ended_is_left_alone(self, store: Store) -> None:
+        run = _running(store)
+        heartbeat = store.runs.get(run).heartbeat_at
+        store.runs.complete(run, success=True)
+
+        assert store.runs.reap(run, "lost", heartbeat_at=heartbeat) is None
+        assert store.runs.get(run).status == RunStatus.SUCCESS
+
+
+class TestCancel:
+    """Cancel ends a run wherever it stands, and settles it like any other ending."""
+
+    @pytest.mark.parametrize("stage", ["queued", "dispatched", "running"])
+    def test_an_open_run_is_canceled_and_its_hooks_settled(self, store: Store, stage: str) -> None:
+        run = store.runs.create(_ORG_ID)
+        if stage != "queued":
+            _drain(store)
+        if stage == "running":
+            store.runs.start(run.id)
+
+        canceled = store.runs.cancel(run.id)
+
+        assert canceled.status == RunStatus.CANCELED
+        assert canceled.completed_at is not None and canceled.hooks_evaluated_at is not None
+        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["log"]), run_id=run.id).items
+        assert event.message == "Run canceled"
+
+    def test_cancel_releases_the_quota_reservation(self, store: Store) -> None:
+        store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
+        run = store.runs.create(_ORG_ID)
+        _drain(store)
+
+        store.runs.cancel(run.id)
+
+        with Session(store.engine) as session:
+            usage = session.exec(select(Usage)).one()
+        assert (usage.used, usage.reserved) == (0, 0)
+
+    def test_a_canceled_run_is_never_retried(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_job_with_retry(store, max_attempts=3, delay=0))
+
+        store.runs.cancel(run.id)
+
+        assert len(store.runs.attempts(run.root_run_id)) == 1
+
+    def test_canceling_a_backfill_run_frees_its_slot(self, store: Store) -> None:
+        backfill = _backfill(store, days=2, concurrency=1)
+        [queued] = [run for run in store.backfills.attempts(backfill.id) if run.status == RunStatus.QUEUED]
+
+        store.runs.cancel(queued.id)
+
+        statuses = {run.id: run.status for run in store.backfills.attempts(backfill.id)}
+        assert statuses.pop(queued.id) == RunStatus.CANCELED
+        assert list(statuses.values()) == [RunStatus.QUEUED]
+
+    def test_a_terminal_run_cannot_be_canceled(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=True)
+
+        with pytest.raises(ConflictError):
+            store.runs.cancel(run.id)
+
+
+def _running(store: Store, *, component_id: UUID | None = None) -> UUID:
+    """Create a run and take it through dispatch and start.
+
+    Returns:
+        The running run's id.
+    """
+    run = store.runs.create(_ORG_ID, component_id=component_id)
+    _stamp(store, run.id, status=RunStatus.DISPATCHED)
+    return store.runs.start(run.id).id
 
 
 class TestHooksPending:
@@ -1094,16 +1292,10 @@ class TestNamedReads:
         assert store.runs.has_open(component_id) is is_open
         assert store.runs.has_open(uuid4()) is False
 
-    def test_dispatched_reads_every_organisation_until_a_run_starts(self, store: Store) -> None:
-        waiting, started, theirs = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID), store.runs.create(uuid4())
-        _drain(store)
-        store.runs.start(started.id)
-
-        assert {run.id for run in store.runs.dispatched()} == {waiting.id, theirs.id}
-
     def test_backfill_attempts_are_in_start_order(self, store: Store) -> None:
         backfill = _backfill(store, days=3, concurrency=3)
         queued = store.backfills.attempts(backfill.id)
+        _drain(store)
         store.runs.start(queued[2].id)
         store.runs.start(queued[0].id)
 

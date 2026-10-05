@@ -69,12 +69,14 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """
     store = FakeStore()
     executed: list[UUID] = []
+    built: list[Any] = []
     outcome = {"success": True}
 
     class FakeExecutor:
-        def __init__(self, store: Any, runner: Any) -> None:
+        def __init__(self, store: Any, runner: Any, *, reaper: Any, on_lost: Any) -> None:
             self.store = store
             self.runner = runner
+            built.append(on_lost)
 
         def execute(self, run_id: UUID) -> bool:
             executed.append(run_id)
@@ -83,7 +85,7 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(Catalog, "from_settings", classmethod(lambda cls: Catalog()))
     monkeypatch.setattr(interloper_db.Store, "from_settings", classmethod(lambda cls, catalog: store))
     monkeypatch.setattr(interloper_scheduler, "RunExecutor", FakeExecutor)
-    return {"store": store, "executed": executed, "outcome": outcome}
+    return {"store": store, "executed": executed, "outcome": outcome, "on_lost": built}
 
 
 def _args(run_id: UUID = RUN_ID) -> argparse.Namespace:
@@ -119,6 +121,16 @@ class TestLaunch:
 
         assert wiring["executed"] == [RUN_ID]
         assert wiring["store"].runs.completed == []
+
+    def test_a_lost_run_exits_the_process(self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+        exits: list[int] = []
+        monkeypatch.setattr(launch_command.os, "_exit", exits.append)
+        launch_command._cmd_launch(_args())
+
+        [on_lost] = wiring["on_lost"]
+        on_lost()
+
+        assert exits == [1]
 
     def test_unsuccessful_run_exits_nonzero(self, wiring: dict[str, Any]) -> None:
         wiring["outcome"]["success"] = False

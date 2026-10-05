@@ -56,7 +56,7 @@ def test_host_authors_asset_failed_when_job_fails() -> None:
 
     failed = [e for e in events if e.type == EventType.OPERATION_FAILED]
     assert len(failed) == 1
-    assert failed[0].id == RunState._operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
+    assert failed[0].id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
 
 
 def test_host_authors_asset_completed_when_job_succeeds() -> None:
@@ -70,7 +70,7 @@ def test_host_authors_asset_completed_when_job_succeeds() -> None:
 
     completed = [e for e in events if e.type == EventType.OPERATION_COMPLETED]
     assert len(completed) == 1
-    assert completed[0].id == RunState._operation_event_id("run-1", "asset-2", EventType.OPERATION_COMPLETED)
+    assert completed[0].id == RunState.operation_event_id("run-1", "asset-2", EventType.OPERATION_COMPLETED)
 
 
 def test_host_does_not_reauthor_when_asset_already_terminal() -> None:

@@ -1,4 +1,4 @@
-"""Runs API: queue, inspect and retry runs, and read their executions and events."""
+"""Runs API: queue, inspect, retry and cancel runs, and read their executions and events."""
 
 from __future__ import annotations
 
@@ -255,6 +255,30 @@ def retry_run(
     """
     load_authorized(store.runs.get, run_id, user, store, label="Run", minimum="editor")
     return RunResponse.from_run(store.runs.retry(run_id, scope=body.scope if body else "all"))
+
+
+@router.post("/{run_id}/cancel")
+def cancel_run(
+    run_id: UUID,
+    user: CurrentUserDep,
+    store: StoreDep,
+) -> RunResponse:
+    """Cancel a run that has not ended, wherever it stands.
+
+    A run not yet executing never will; an executing one stops on its next
+    heartbeat. A canceled run is not retried. A run already ended answers 409.
+
+    Args:
+        run_id: The run UUID.
+        user: The authenticated user.
+        store: The Store instance.
+
+    Returns:
+        The canceled run.
+    """
+    load_authorized(store.runs.get, run_id, user, store, label="Run", minimum="editor")
+    store.runs.cancel(run_id)
+    return RunResponse.from_run(store.runs.get(run_id))
 
 
 @router.get("/{run_id}/executions")

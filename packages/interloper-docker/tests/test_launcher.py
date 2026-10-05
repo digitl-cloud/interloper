@@ -13,7 +13,6 @@ from uuid import uuid4
 
 import pytest
 from interloper.catalog.base import Catalog
-from interloper_scheduler.launcher import LaunchStatus
 
 import interloper_docker.launcher as launcher_module
 from interloper_docker.launcher import DockerLauncher
@@ -68,7 +67,7 @@ class _Container:
             raise RuntimeError("daemon unreachable")
 
 
-def _describe(monkeypatch: pytest.MonkeyPatch, container: _Container | None) -> Any:
+def _diagnose(monkeypatch: pytest.MonkeyPatch, container: _Container | None) -> str | None:
     launcher = _launcher(monkeypatch)
 
     def get(_name: str) -> _Container:
@@ -77,30 +76,30 @@ def _describe(monkeypatch: pytest.MonkeyPatch, container: _Container | None) -> 
         return container
 
     launcher._client = SimpleNamespace(containers=SimpleNamespace(get=get))
-    return launcher.describe_run(uuid4())
+    return launcher.diagnose(uuid4())
 
 
 @pytest.mark.parametrize(
-    ("container", "status"),
-    [
-        (None, LaunchStatus.NOT_FOUND),
-        (_Container({"Status": "running"}, reload_fails=True), LaunchStatus.NOT_FOUND),
-        (_Container({"Status": "running"}), LaunchStatus.RUNNING),
-        (_Container({"Status": "exited", "ExitCode": 0}), LaunchStatus.SUCCEEDED),
-        (_Container({"Status": "exited", "ExitCode": 137}), LaunchStatus.FAILED),
-    ],
+    "container",
+    [None, _Container({"Status": "running"}, reload_fails=True), _Container({"Status": "running"})],
 )
-def test_describe_run_maps_the_container_state(
-    monkeypatch: pytest.MonkeyPatch, container: _Container | None, status: LaunchStatus
+def test_a_running_or_unreadable_container_has_no_diagnosis(
+    monkeypatch: pytest.MonkeyPatch, container: _Container | None
 ) -> None:
-    """The reaper reads the container's state as one launch status."""
-    assert _describe(monkeypatch, container).status is status
+    assert _diagnose(monkeypatch, container) is None
 
 
-def test_a_failed_container_reports_why(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The failure carries the exit code, the OOM kill and the daemon's error."""
+def test_a_stopped_container_reports_why(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The diagnosis carries the exit code, the OOM kill and the daemon's error."""
     container = _Container({"Status": "dead", "ExitCode": 137, "OOMKilled": True, "Error": "killed"})
 
-    error = _describe(monkeypatch, container).error
+    diagnosis = _diagnose(monkeypatch, container)
 
-    assert error == "Container abc123 status=dead exit_code=137 OOMKilled error=killed"
+    assert diagnosis == "container status=dead exit_code=137 OOMKilled error=killed"
+
+
+def test_the_heartbeat_settings_reach_the_run_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    environment = _launcher(monkeypatch, heartbeat_interval=5, heartbeat_timeout=45)._build_environment()
+
+    assert environment["INTERLOPER_REAPER_HEARTBEAT_INTERVAL"] == "5"
+    assert environment["INTERLOPER_REAPER_HEARTBEAT_TIMEOUT"] == "45"

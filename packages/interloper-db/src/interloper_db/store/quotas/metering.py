@@ -13,15 +13,14 @@ decides what a count means.
 from __future__ import annotations
 
 import datetime as dt
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
 from interloper.utils import month_start
-from sqlalchemy import func, select
 from sqlmodel import Session
 
 from interloper_db.models import Run, Usage
-from interloper_db.session import dialect_insert
+from interloper_db.session import database_now, dialect_insert
 
 METRIC_SUCCESSFUL_RUNS = "successful_runs"
 
@@ -56,14 +55,9 @@ class UsageLedger:
         wall clock is not trusted for month attribution.
 
         Returns:
-            The server time, always tz-aware (UTC is assumed when the dialect
-            returns a naive value).
+            The server time, always tz-aware.
         """
-        value = self._session.scalar(select(func.current_timestamp()))
-        if isinstance(value, str):  # SQLite returns text
-            value = datetime.fromisoformat(value)
-        assert value is not None
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return database_now(self._session)
 
     def current_period(self) -> dt.date:
         """The period charges are currently landing in, per the database clock.

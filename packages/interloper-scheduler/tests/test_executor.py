@@ -7,6 +7,7 @@ tests; the DAG itself runs for real through an ``AsyncRunner``.
 from __future__ import annotations
 
 import builtins
+import threading
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -15,6 +16,7 @@ import interloper as il
 import pytest
 from interloper.errors import ConflictError, NotFoundError
 from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
+from interloper.settings import ReaperSettings
 from interloper.telemetry.tracer import tracer
 from interloper_db import RunStatus, Store
 from interloper_db.models import Run
@@ -334,6 +336,28 @@ class TestEmptyWorkload:
 
         assert _executor(store).execute(run.id) is True
         assert store.completed == [(run.id, True)]
+
+
+class TestHeartbeat:
+    """The run beats while it executes, and a run ended elsewhere is handed to ``on_lost``."""
+
+    def test_a_run_ended_elsewhere_is_handed_to_on_lost(self) -> None:
+        run = _dispatched()
+        lost = threading.Event()
+
+        @il.asset()
+        def slow() -> list[dict[str, Any]]:
+            lost.wait(2)
+            return []
+
+        store = _RecordingStore(slow(id=str(uuid4()), destinations=[il.MemoryDestination()]), run=run)
+        store.runs.heartbeat = lambda run_id: False
+        reaper = ReaperSettings.model_construct(heartbeat_interval=0.01, heartbeat_timeout=1)
+        executor = RunExecutor(store=cast(Store, store), runner=il.AsyncRunner(), reaper=reaper, on_lost=lost.set)
+
+        executor.execute(run.id)
+
+        assert lost.is_set()
 
 
 class TestApplyEffects:

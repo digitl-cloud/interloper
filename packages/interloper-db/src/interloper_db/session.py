@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, func, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
@@ -151,3 +152,24 @@ def dialect_insert(session: Session) -> Any:
         dialect (the tests run on in-memory SQLite).
     """
     return postgresql_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
+
+
+def database_now(session: Session) -> datetime:
+    """The database server's current time, as an aware UTC datetime.
+
+    Processes on different hosts (the scheduler, every run's pod) write and
+    compare instants, so whatever must agree across them reads this clock
+    rather than its own.
+
+    Args:
+        session: The session whose server is asked.
+
+    Returns:
+        The server time, always tz-aware (UTC is assumed when the dialect
+        returns a naive value).
+    """
+    value = session.scalar(select(func.current_timestamp()))
+    if isinstance(value, str):  # SQLite returns text
+        value = datetime.fromisoformat(value)
+    assert value is not None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)

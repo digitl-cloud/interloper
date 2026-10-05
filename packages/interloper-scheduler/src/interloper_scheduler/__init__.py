@@ -3,7 +3,7 @@
 Four controllers share one :class:`Controller` loop skeleton and run as
 cluster singletons: cron creates runs from job schedules, hooks fires them in
 reaction to terminal runs, the queue worker dispatches queued runs through a
-:class:`Launcher`, and the reaper reconciles runs the launcher lost. The
+:class:`Launcher`, and the reaper fails the runs that will never end on their own. The
 executor is the other half — it runs inside whatever the launcher started.
 """
 

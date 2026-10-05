@@ -180,11 +180,14 @@ class AdminWorkerConfig(BaseModel):
 
 
 class AdminReaperConfig(BaseModel):
-    """Reaper tuning."""
+    """Run liveness tuning: the heartbeat and the reaper that fails silent or overdue runs."""
 
     enabled: bool
-    timeout: int
     poll_interval: int
+    startup_timeout: int
+    heartbeat_interval: int
+    heartbeat_timeout: int
+    run_timeout: int | None
 
 
 class AdminSmtpConfig(BaseModel):
@@ -423,8 +426,11 @@ class AdminConfigResponse(BaseModel):
                 ),
                 reaper=AdminReaperConfig(
                     enabled=settings.reaper.enabled,
-                    timeout=settings.reaper.timeout,
                     poll_interval=settings.reaper.poll_interval,
+                    startup_timeout=settings.reaper.startup_timeout,
+                    heartbeat_interval=settings.reaper.heartbeat_interval,
+                    heartbeat_timeout=settings.reaper.heartbeat_timeout,
+                    run_timeout=settings.reaper.run_timeout,
                 ),
                 smtp=AdminSmtpConfig(
                     enabled=settings.smtp.enabled,

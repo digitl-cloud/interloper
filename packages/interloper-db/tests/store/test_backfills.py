@@ -382,7 +382,7 @@ class TestGet:
 
 
 class TestCancel:
-    def test_cancels_pending_and_queued_runs_only(self, store: Store):
+    def test_cancels_every_run_in_flight_ones_included(self, store: Store):
         backfill = _backfill(store)  # 2 queued + 2 pending
         dispatched_id = _mark_dispatched(store, backfill.id)
 
@@ -390,14 +390,13 @@ class TestCancel:
 
         assert canceled.status == "canceled"
         assert canceled.completed_at is not None
-        statuses = _run_statuses(store, backfill.id)
-        assert statuses.pop(dispatched_id) == "dispatched"
-        assert set(statuses.values()) == {"canceled"}
+        assert set(_run_statuses(store, backfill.id).values()) == {"canceled"}
+        assert store.runs.get(dispatched_id).completed_at is not None
 
-    def test_late_completion_does_not_resurrect_canceled_backfill(self, store: Store):
+    def test_a_cancel_that_stops_new_work_lets_in_flight_runs_drain(self, store: Store):
         backfill = _backfill(store)
         dispatched_id = _mark_dispatched(store, backfill.id)
-        store.backfills.cancel(backfill.id)
+        store.backfills.cancel(backfill.id, in_flight=False)
 
         completed = store.runs.complete(dispatched_id, success=True)
 

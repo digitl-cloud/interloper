@@ -372,6 +372,16 @@ class TestWrites:
         assert not_failed.status == "error"
         assert scheduling.retry_run(ctx, str(failed.id), scope="sometimes").status == "error"
 
+    def test_cancels_a_run_that_has_not_ended(self, ctx: ToolkitContext, store: Store):
+        run = store.runs.create(ctx.org_id, component_id=self._job(ctx, store).id)
+
+        result = scheduling.cancel_run(ctx, str(run.id))
+        again = scheduling.cancel_run(ctx, str(run.id))
+
+        assert result.status == "success"
+        assert result.run.status == "canceled"
+        assert again.status == "error"
+
     def test_cancels_a_backfills_undispatched_runs(self, ctx: ToolkitContext, store: Store):
         backfill = store.backfills.create(
             ctx.org_id, component_id=_job_id(ctx.org_id), start_key="2026-07-01", end_key="2026-07-03", concurrency=1
@@ -395,8 +405,10 @@ class TestWrites:
         )
 
         assert isinstance(scheduling.retry_run(viewer, str(run.id)), ToolError)
+        assert isinstance(scheduling.cancel_run(viewer, str(run.id)), ToolError)
         assert isinstance(scheduling.cancel_backfill(viewer, str(backfill.id)), ToolError)
         assert scheduling.retry_run(ctx, str(run.id)).status == "error"
+        assert scheduling.cancel_run(ctx, str(run.id)).status == "error"
         assert scheduling.cancel_backfill(ctx, str(backfill.id)).status == "error"
         assert store.runs.list(theirs, RunQuery(all_attempts=True)).total == 2
         assert store.backfills.get(backfill.id).status == "running"

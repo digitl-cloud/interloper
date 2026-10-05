@@ -297,9 +297,7 @@ otel:
 # runner, catalog, smtp, auth) are rejected here, as are secret-bearing
 # ones (postgres, secrets): a YAML-provided field beats the env var the
 # chart injects, so allowing them would silently override credentials.
-extraConfig:
-  reaper:
-    timeout: 3600  # generous for long data loads; the app default (600s) reaps too eagerly
+extraConfig: {}
 
 # =============================================================================
 # Secrets

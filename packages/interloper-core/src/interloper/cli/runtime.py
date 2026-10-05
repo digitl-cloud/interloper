@@ -118,7 +118,7 @@ class Services:
         run_api: Whether to start the API.
         run_cron: Whether to start the cron controller.
         run_worker: Whether to start the queue worker.
-        run_reaper: Whether to start the reaper (timed-out run cleanup).
+        run_reaper: Whether to start the reaper (fails silent and overdue runs).
         dev_mode: Whether to run Nuxt in development mode.
         api_port: Effective API port to bind.
     """
@@ -145,7 +145,7 @@ class Services:
             run_api: Whether to start the API.
             run_cron: Whether to start the cron controller.
             run_worker: Whether to start the queue worker.
-            run_reaper: Whether to start the reaper (timed-out run cleanup).
+            run_reaper: Whether to start the reaper (fails silent and overdue runs).
             dev_mode: Whether to run Nuxt in development mode.
             api_port: Effective API port to bind.
         """
@@ -266,6 +266,7 @@ class Services:
             self.settings.launcher,
             postgres=self.settings.postgres,
             runner=self.settings.runner,
+            reaper=self.settings.reaper,
             catalog=self.catalog,
             store=self.store,
         )
@@ -285,7 +286,9 @@ class Services:
             self._reaper = Reaper(
                 store=self.store,
                 launcher=launcher,
-                timeout=self.settings.reaper.timeout,
+                startup_timeout=self.settings.reaper.startup_timeout,
+                heartbeat_timeout=self.settings.reaper.heartbeat_timeout,
+                run_timeout=self.settings.reaper.run_timeout,
                 poll_interval=self.settings.reaper.poll_interval,
             )
 

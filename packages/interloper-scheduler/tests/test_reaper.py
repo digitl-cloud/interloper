@@ -18,23 +18,23 @@ from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
-from interloper_scheduler.launcher import Launcher, LaunchState, LaunchStatus
+from interloper_scheduler.launcher import Launcher
 from interloper_scheduler.reaper import Reaper
 
 _ORG = uuid4()
 
 
 class _FakeLauncher(Launcher):
-    """Answers ``describe_run`` with one canned state."""
+    """Answers ``diagnose`` with one canned reason."""
 
-    def __init__(self, state: LaunchState | None) -> None:
-        self._state = state
+    def __init__(self, diagnosis: str | None) -> None:
+        self._diagnosis = diagnosis
 
     def launch(self, run_id: UUID) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
-    def describe_run(self, run_id: UUID) -> LaunchState | None:
-        return self._state
+    def diagnose(self, run_id: UUID) -> str | None:
+        return self._diagnosis
 
 
 @pytest.fixture
@@ -66,14 +66,23 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
         engine_module._engine = None
 
 
-def _dispatched_run(store: Store, *, age_seconds: int = 0) -> UUID:
-    run = store.runs.create(_ORG)
-    assert run.id is not None
+def _ago(seconds: float) -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+
+
+def _run(store: Store, status: RunStatus, *, component_id: UUID | None = None, **fields: Any) -> UUID:
+    """Stage a run in *status*, its columns overwritten with *fields*.
+
+    Returns:
+        The run's id.
+    """
+    run = store.runs.create(_ORG, component_id=component_id)
     with Session(store.engine) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
-        db_run.status = RunStatus.DISPATCHED
-        db_run.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=age_seconds)
+        db_run.status = status
+        for name, value in {"heartbeat_at": _ago(0), "started_at": _ago(0), **fields}.items():
+            setattr(db_run, name, value)
         session.add(db_run)
         session.commit()
     return run.id
@@ -83,42 +92,64 @@ def _status(store: Store, run_id: UUID) -> str:
     return store.runs.get(run_id).status
 
 
-class TestLauncherTruth:
-    def test_running_is_left_alone(self, store: Store) -> None:
-        run_id = _dispatched_run(store)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(LaunchState(status=LaunchStatus.RUNNING)))
-        assert reaper._reap() == 0
-        assert _status(store, run_id) == "dispatched"
-
-    def test_failed_is_reaped_with_the_launcher_error(self, store: Store) -> None:
-        run_id = _dispatched_run(store)
-        state = LaunchState(status=LaunchStatus.FAILED, error="OOMKilled")
-        assert Reaper(store=store, launcher=_FakeLauncher(state))._reap() == 1
-        assert _status(store, run_id) == "failed"
-
-    def test_succeeded_without_db_update_is_reaped(self, store: Store) -> None:
-        run_id = _dispatched_run(store)
-        state = LaunchState(status=LaunchStatus.SUCCEEDED)
-        assert Reaper(store=store, launcher=_FakeLauncher(state))._reap() == 1
-        assert _status(store, run_id) == "failed"
-
-    def test_not_found_waits_for_the_timeout(self, store: Store) -> None:
-        fresh = _dispatched_run(store)
-        stale = _dispatched_run(store, age_seconds=1200)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(LaunchState(status=LaunchStatus.NOT_FOUND)), timeout=600)
-        assert reaper._reap() == 1
-        assert _status(store, fresh) == "dispatched"
-        assert _status(store, stale) == "failed"
+def _error(store: Store, run_id: UUID) -> str | None:
+    with Session(store.engine) as session:
+        failure = select(EventRow.error).where(EventRow.run_id == run_id, EventRow.event_type == "run_failed")
+        return session.exec(failure).one()
 
 
-class TestTimeoutFallback:
-    def test_blind_launcher_reaps_on_timeout_only(self, store: Store) -> None:
-        fresh = _dispatched_run(store)
-        stale = _dispatched_run(store, age_seconds=1200)
-        reaper = Reaper(store=store, launcher=None, timeout=600)
-        assert reaper._reap() == 1
-        assert _status(store, fresh) == "dispatched"
-        assert _status(store, stale) == "failed"
+class TestRules:
+    """Each overdue run is failed with its reason; runs in good standing are left alone."""
+
+    def test_a_run_that_never_started_is_reaped(self, store: Store) -> None:
+        stuck = _run(store, RunStatus.DISPATCHED, heartbeat_at=_ago(700))
+        fresh = _run(store, RunStatus.DISPATCHED)
+
+        assert Reaper(store=store, startup_timeout=600)._reap() == 1
+        assert (_status(store, stuck), _status(store, fresh)) == ("failed", "dispatched")
+        assert _error(store, stuck) == "Run did not start within 600s"
+
+    def test_a_silent_run_is_reaped_as_lost(self, store: Store) -> None:
+        silent = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(200))
+        beating = _run(store, RunStatus.RUNNING)
+
+        assert Reaper(store=store, heartbeat_timeout=90)._reap() == 1
+        assert (_status(store, silent), _status(store, beating)) == ("failed", "running")
+        assert (_error(store, silent) or "").startswith("No heartbeat since ")
+
+    def test_a_run_past_its_deadline_is_reaped(self, store: Store) -> None:
+        run_id = _run(store, RunStatus.RUNNING, started_at=_ago(4000))
+
+        assert Reaper(store=store, run_timeout=3600)._reap() == 1
+        assert _error(store, run_id) == "Timed out after 3600s"
+
+
+class TestDiagnosis:
+    """The launcher's diagnosis is detail on the reason, never a decision."""
+
+    def test_the_diagnosis_is_appended(self, store: Store) -> None:
+        run_id = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(200))
+
+        Reaper(store=store, launcher=_FakeLauncher("reason=OOMKilled exit_code=137"))._reap()
+
+        assert (_error(store, run_id) or "").endswith("(reason=OOMKilled exit_code=137)")
+
+    def test_a_failing_diagnosis_leaves_the_plain_reason(
+        self, store: Store, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        class BrokenLauncher(_FakeLauncher):
+            """Launcher whose ``diagnose`` always raises."""
+
+            def diagnose(self, run_id: UUID) -> str | None:
+                raise RuntimeError("api unreachable")
+
+        run_id = _run(store, RunStatus.DISPATCHED, heartbeat_at=_ago(700))
+
+        with caplog.at_level("WARNING", logger="interloper_scheduler.reaper"):
+            assert Reaper(store=store, launcher=BrokenLauncher(None))._reap() == 1
+
+        assert f"Could not diagnose run {run_id}" in caplog.text
+        assert _error(store, run_id) == "Run did not start within 600s"
 
 
 class TestTargetContext:
@@ -128,21 +159,14 @@ class TestTargetContext:
             session.add(target)
             session.commit()
             target_id = target.id
-        run = store.runs.create(_ORG, component_id=target_id)
-        assert run.id is not None
-        with Session(store.engine) as session:
-            db_run = session.get(Run, run.id)
-            assert db_run is not None
-            db_run.status = RunStatus.DISPATCHED
-            db_run.created_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=1200)
-            session.add(db_run)
-            session.commit()
+        run_id = _run(store, RunStatus.DISPATCHED, component_id=target_id, heartbeat_at=_ago(1200))
 
-        assert Reaper(store=store, launcher=None, timeout=600)._reap() == 1
+        assert Reaper(store=store)._reap() == 1
 
         with Session(store.engine) as session:
-            reaped_event = session.exec(select(EventRow).where(EventRow.run_id == run.id)).one()
-            assert reaped_event.event_type == "run_failed"
+            reaped_event = session.exec(
+                select(EventRow).where(EventRow.run_id == run_id, EventRow.event_type == "run_failed")
+            ).one()
             assert reaped_event.data == {
                 "target_id": str(target_id),
                 "target_kind": "job",
@@ -155,16 +179,16 @@ class TestTick:
     """One scan, plus the hourly usage reconciliation that rides the loop."""
 
     def test_a_reaped_run_is_logged(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
-        _dispatched_run(store, age_seconds=7200)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+        _run(store, RunStatus.RUNNING, heartbeat_at=_ago(7200))
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
 
         with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
             reaper._tick()
 
-        assert "Reaped 1 dispatched run(s)" in caplog.text
+        assert "Reaped 1 overdue run(s)" in caplog.text
 
     def test_nothing_to_reap_logs_nothing(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
-        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
         reaper._ticks_since_reconcile = 0
 
         with caplog.at_level("INFO", logger="interloper_scheduler.reaper"):
@@ -244,29 +268,6 @@ class TestReconcileUsage:
         assert "Usage reconciliation failed" in caplog.text
 
 
-class TestLauncherFailure:
-    """A launcher that cannot answer falls through to the timeout."""
-
-    def test_a_describe_failure_is_logged_and_survived(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
-        class BrokenLauncher(Launcher):
-            """Launcher whose ``describe_run`` always raises."""
-
-            def launch(self, run_id: UUID) -> None:  # pragma: no cover - unused
-                raise NotImplementedError
-
-            def describe_run(self, run_id: UUID) -> LaunchState | None:
-                raise RuntimeError("api unreachable")
-
-        run_id = _dispatched_run(store, age_seconds=7200)
-        reaper = Reaper(store=store, launcher=BrokenLauncher(), timeout=3600)
-
-        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
-            assert reaper._reap() == 1
-
-        assert f"Failed to describe run {run_id}" in caplog.text
-        assert _status(store, run_id) == "failed"
-
-
 class TestFailureReportingIsBestEffort:
     """A failure that cannot be recorded never takes the reaper down."""
 
@@ -274,43 +275,33 @@ class TestFailureReportingIsBestEffort:
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         # The reason and the verdict commit together, so a run is never failed
-        # without saying why; one the reaper could not record stays dispatched
+        # without saying why; one the reaper could not record stays as it was
         # and is reaped again on the next tick.
-        run_id = _dispatched_run(store, age_seconds=7200)
+        run_id = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(7200))
 
         def broken_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> None:
             raise RuntimeError("events table unreachable")
 
         monkeypatch.setattr(store.events, "save", broken_save)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
 
         with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
-            assert reaper._reap() == 1
+            assert Reaper(store=store)._reap() == 0
 
-        assert f"Failed to mark run {run_id} as failed" in caplog.text
-        assert _status(store, run_id) == "dispatched"
+        assert f"Failed to reap run {run_id}" in caplog.text
+        assert _status(store, run_id) == "running"
 
-    def test_a_run_completed_before_it_is_reaped_keeps_its_verdict(self, store: Store) -> None:
-        run_id = _dispatched_run(store, age_seconds=7200)
-        run = store.runs.get(run_id)
-        store.runs.complete(run_id, success=True)
-
-        Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)._fail_run(run, "late reap")
-
-        assert _status(store, run_id) == "success"
-
-    def test_a_failed_completion_is_logged_and_survived(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    def test_a_run_that_moved_after_the_read_is_left_alone(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        run_id = _dispatched_run(store, age_seconds=7200)
+        run_id = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(7200))
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+        diagnose = reaper._explain
 
-        def broken_complete(run_id: UUID, success: bool) -> None:
-            raise RuntimeError("runs table unreachable")
+        def beat_then_explain(run: UUID, reason: str) -> str:
+            store.runs.heartbeat(run)
+            return diagnose(run, reason)
 
-        monkeypatch.setattr(store.runs, "complete", broken_complete)
-        reaper = Reaper(store=store, launcher=_FakeLauncher(None), timeout=3600)
+        monkeypatch.setattr(reaper, "_explain", beat_then_explain)
 
-        with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
-            assert reaper._reap() == 1
-
-        assert f"Failed to mark run {run_id} as failed" in caplog.text
+        assert reaper._reap() == 0
+        assert _status(store, run_id) == "running"

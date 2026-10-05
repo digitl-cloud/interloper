@@ -73,7 +73,7 @@ const cancelling = ref(false)
 async function onCancel() {
     const confirmed = await confirm({
         title: 'Cancel backfill',
-        description: 'Runs that have not started yet will be canceled. Runs already in flight finish on their own.',
+        description: 'Every run that has not finished is canceled. Runs already in flight stop within seconds.',
         confirmLabel: 'Cancel backfill',
         confirmColor: 'error',
         icon: 'i-lucide-ban',

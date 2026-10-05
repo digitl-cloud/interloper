@@ -43,7 +43,14 @@ def fake_settings() -> SimpleNamespace:
         ),
         cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=None),
         worker=SimpleNamespace(enabled=True, poll_interval=5),
-        reaper=SimpleNamespace(enabled=True, timeout=3600, poll_interval=60),
+        reaper=SimpleNamespace(
+            enabled=True,
+            poll_interval=15,
+            startup_timeout=600,
+            heartbeat_interval=10,
+            heartbeat_timeout=90,
+            run_timeout=43200,
+        ),
         smtp=SimpleNamespace(enabled=True, host="smtp.example.com", from_addr="noreply@x", password="smtp-secret"),
         otel=SimpleNamespace(
             enabled=True,

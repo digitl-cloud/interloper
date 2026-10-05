@@ -133,8 +133,10 @@ const sections = computed<ConfigSection[]>(() => {
             label: 'Reaper',
             pill: enabledPill(services.reaper.enabled),
             attrs: [
-                { key: 'timeout', value: `${services.reaper.timeout}s` },
                 { key: 'poll', value: `${services.reaper.poll_interval}s` },
+                { key: 'startup', value: `${services.reaper.startup_timeout}s` },
+                { key: 'heartbeat', value: `${services.reaper.heartbeat_interval}s / ${services.reaper.heartbeat_timeout}s` },
+                { key: 'run_timeout', value: services.reaper.run_timeout == null ? 'none' : `${services.reaper.run_timeout}s` },
             ],
         },
         {

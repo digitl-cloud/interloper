@@ -143,6 +143,7 @@ TOOLS: tuple[Tool, ...] = (
     Tool(scheduling.error_breakdown, Effect.READ),
     Tool(scheduling.trigger_run, Effect.LAUNCH),
     Tool(scheduling.retry_run, Effect.LAUNCH),
+    Tool(scheduling.cancel_run, Effect.CANCEL),
     Tool(scheduling.list_backfills, Effect.READ),
     Tool(scheduling.backfill_timeline, Effect.READ),
     Tool(scheduling.trigger_backfill, Effect.LAUNCH),
