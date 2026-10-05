@@ -2,6 +2,82 @@
 
 <!-- version list -->
 
+## v0.101.0 (2026-10-05)
+
+### Bug Fixes
+
+- **api**: Answer a resolve with unusable credentials with a 400
+  ([`cce82a5`](https://github.com/digitl-cloud/interloper/commit/cce82a53c9455c14211a9419148876341ddafd82))
+
+- **app**: Hold collection table rows at the virtualized height
+  ([`d43a451`](https://github.com/digitl-cloud/interloper/commit/d43a4514a2894a8b5b68182ad02c06835c7a074c))
+
+- **app**: Show the row actions button whenever a table has row actions
+  ([`478867a`](https://github.com/digitl-cloud/interloper/commit/478867ad155afd55d1c3d20778c5ba66cbe07c86))
+
+- **db**: Keep a run stack a linear chain of attempts
+  ([`73f3988`](https://github.com/digitl-cloud/interloper/commit/73f3988795fce4d74e81ceaaab40591fec9df901))
+
+### Documentation
+
+- Keep the reference to generated content only
+  ([`e9516fc`](https://github.com/digitl-cloud/interloper/commit/e9516fcf74dd93ffd8277c09148709c0feb3e29b))
+
+- Render the reference pages from the source
+  ([`1bc06ef`](https://github.com/digitl-cloud/interloper/commit/1bc06ef760b7f4295e78c8813aa180ca124bd71a))
+
+### Features
+
+- Grant and revoke super-admin access from the admin portal
+  ([`f706450`](https://github.com/digitl-cloud/interloper/commit/f7064505f5cb2cac8696b7153e0cc9c703c9bfdb))
+
+### Refactoring
+
+- Drop the unreachable branches the coverage report flagged
+  ([`596d261`](https://github.com/digitl-cloud/interloper/commit/596d261971457f587e230b815755551855c97833))
+
+- Drop the unreachable branches the coverage report flagged
+  ([`8f75192`](https://github.com/digitl-cloud/interloper/commit/8f75192bb84db01715f7847c45ea66d22746844a))
+
+- Give every store facet one way to read, lock, save and derive
+  ([`246671a`](https://github.com/digitl-cloud/interloper/commit/246671a2b9cb5760f74b6ae00d5bba3eef732c5e))
+
+- Heartbeat-driven run liveness, job timeouts and run cancel
+  ([`8a13664`](https://github.com/digitl-cloud/interloper/commit/8a13664387669202c48a8388180708c503fa1f32))
+
+- Map store errors once and tidy the db and api surfaces
+  ([`f992717`](https://github.com/digitl-cloud/interloper/commit/f992717f99c86592d0364d89e8d97656e47fb833))
+
+- Name the questions the scheduler, toolkit and overview ask the store
+  ([`b0e9ca2`](https://github.com/digitl-cloud/interloper/commit/b0e9ca207b1333f178b59810f9e47df054255e14))
+
+- One owner for derived reads in store.insights
+  ([`f827b41`](https://github.com/digitl-cloud/interloper/commit/f827b41a2c435f1fb1d3425abdf335045f34a70f))
+
+- One store facet per entity, paged listings, uniform HTTP conventions
+  ([`1364299`](https://github.com/digitl-cloud/interloper/commit/136429971a3951f6626474e94b615dc9e6441954))
+
+- Split the components store by concept and resolve by qualified key
+  ([`539a026`](https://github.com/digitl-cloud/interloper/commit/539a0268139f213dc5934d8054afad8ced398d3b))
+
+- The store owns every run state transition
+  ([`d42fe81`](https://github.com/digitl-cloud/interloper/commit/d42fe81826b4dd3507dc1e1c99a96c0622ea742f))
+
+### Testing
+
+- Cover the launch-state mapping and the lifecycle edge cases the coverage report flagged
+  ([`0200cc7`](https://github.com/digitl-cloud/interloper/commit/0200cc7ea0bc785e02ff04a88af14ae9b5c7640d))
+
+- Read SQLite datetimes back aware from the test dialect, not a production type
+  ([`f80fa50`](https://github.com/digitl-cloud/interloper/commit/f80fa50c6caeb7eef17f1d5276b4d8fcadeca9a0))
+
+- **db**: Cover a retry whose head was superseded while it waited
+  ([`14088a9`](https://github.com/digitl-cloud/interloper/commit/14088a9e39b9a9ad2c4d6903e6ee34009f08d7d5))
+
+- **db**: Cover the insights edge cases the coverage report flagged
+  ([`ab098ef`](https://github.com/digitl-cloud/interloper/commit/ab098efeb7fb27c7ca18ed700cf3000c3d825244))
+
+
 ## v0.100.0 (2026-10-03)
 
 ### Bug Fixes

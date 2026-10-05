@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-google-cloud"
-version = "0.100.0"
+version = "0.101.0"
 description = "Interloper Google Cloud integration: BigQuery, Cloud Storage and Google Sheets destinations"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
