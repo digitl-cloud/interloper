@@ -168,14 +168,17 @@ class EventStore:
         """
         statement = (
             select(Event)
-            .where(Event.run_id == db_run.id, col(Event.event_type).in_(_OPERATION_EVENT_TYPES))
+            .where(
+                Event.run_id == db_run.id,
+                col(Event.event_type).in_(_OPERATION_EVENT_TYPES),
+                col(Event.component_id).is_not(None),
+            )
             .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
         )
         with session_scope(self._engine) as session:
             latest: dict[UUID, tuple[int, list[Event]]] = {}
             for event in session.exec(statement).all():
-                if event.component_id is None:
-                    continue
+                assert event.component_id is not None
                 attempt = int((event.data or {}).get("attempt", 1))
                 current = latest.get(event.component_id)
                 if current is None or attempt > current[0]:
