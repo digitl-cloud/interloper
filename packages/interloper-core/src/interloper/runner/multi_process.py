@@ -97,15 +97,17 @@ class MultiProcessRunner(SyncRunner):
     """Process-based parallel runner.
 
     Executes independent operations concurrently using a process pool.
-    Each operation is serialized via :class:`~interloper.dag.base.DAGSpec`,
+    Each operation is serialized via `DAGSpec`,
     reconstructed in a child process, and executed there.  State
     tracking remains in the main process.
 
     Use this runner when operations perform CPU-bound work or when
-    you need true parallelism (bypassing the GIL)::
+    you need true parallelism (bypassing the GIL):
 
-        result = await MultiProcessRunner(max_workers=2, on_event=log_event).run(dag)
-        # or, from a sync edge: il.run(MultiProcessRunner().run(dag))
+    ```py
+    result = await MultiProcessRunner(max_workers=2, on_event=log_event).run(dag)
+    # or, from a sync edge: il.run(MultiProcessRunner().run(dag))
+    ```
     """
 
     max_workers: int = 4

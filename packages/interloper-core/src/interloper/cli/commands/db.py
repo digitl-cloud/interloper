@@ -12,7 +12,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     Args:
         subparsers: The root subparsers action to attach to.
     """
-    db_parser = subparsers.add_parser("db", help="Database operations")
+    db_parser = subparsers.add_parser("db", help="Database operations", description="Database operations.")
     db_sub = db_parser.add_subparsers(dest="db_command")
     db_parser.set_defaults(requires=["interloper_db"])
 

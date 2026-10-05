@@ -44,7 +44,7 @@ class ConnectionState(BaseModel):
 
 
 class Renewal(BaseModel):
-    """The outcome of a successful :meth:`Connection.renew`.
+    """The outcome of a successful `Connection.renew`.
 
     ``fields`` maps connection field names to their renewed values — the
     platform persists them into the stored (encrypted) config, so a rotated
@@ -65,16 +65,18 @@ class Connection(Resource, Operation):
     """A resource for database/service connection credentials.
 
     Like every ``Resource``, connection values can be loaded from
-    environment variables, .env files, or passed directly::
+    environment variables, .env files, or passed directly:
 
-        class MyConnection(Connection):
-            host: str = "localhost"
-            port: int = 5432
-            username: str
-            password: str
+    ```py
+    class MyConnection(Connection):
+        host: str = "localhost"
+        port: int = 5432
+        username: str
+        password: str
 
-        # Loads USERNAME, PASSWORD from environment if not passed explicitly
-        connection = MyConnection()
+    # Loads USERNAME, PASSWORD from environment if not passed explicitly
+    connection = MyConnection()
+    ```
 
     Connections that support OAuth subclass ``OAuthConnection`` (custom token
     shape) or ``RefreshTokenOAuthConnection`` (standard refresh-token trio);
@@ -116,14 +118,14 @@ class Connection(Resource, Operation):
         Returns ``True`` when the connection works, ``False`` when it
         provably doesn't. Exceptions are also failures: ``httpx2`` errors are
         categorised by the caller (401/403 → bad credentials, timeouts →
-        network); raise :class:`~interloper.errors.ConnectionCheckError` to
+        network); raise `ConnectionCheckError` to
         surface a curated message instead.
         """
         raise NotImplementedError
 
     @classmethod
     def checkable(cls) -> bool:
-        """Whether this connection class implements :meth:`check`.
+        """Whether this connection class implements `check`.
 
         Returns:
             True when the class overrides the base hook.
@@ -135,11 +137,11 @@ class Connection(Resource, Operation):
 
         Override in a subclass (sync or ``async``) to exchange the stored
         credential for a fresh one — same execution contract as
-        :meth:`check`: lightweight HTTP (``httpx2``), never a heavy provider
+        `check`: lightweight HTTP (``httpx2``), never a heavy provider
         SDK. OAuth connections need no override: ``OAuthConnection`` derives
         the whole flow from the provider and the ``oauth.fields`` mapping.
 
-        The renewal pipeline persists the returned :class:`Renewal.fields`
+        The renewal pipeline persists the returned `Renewal.fields`
         into the stored config and schedules the next renewal; a raised
         exception marks the renewal failed (surfaced on the connection's
         state), typically meaning the credential is dead and a human must
@@ -149,7 +151,7 @@ class Connection(Resource, Operation):
 
     @classmethod
     def renewable(cls) -> bool:
-        """Whether this connection class implements :meth:`renew`.
+        """Whether this connection class implements `renew`.
 
         Returns:
             True when the class overrides the base hook.
@@ -164,11 +166,11 @@ class Connection(Resource, Operation):
         httpx2 error strings embed the request URL — so raw messages must
         never reach the connection's state or the run's error event.
         HTTP-layer failures collapse to their category; anything else formats
-        through :func:`~interloper.errors.format_exception` (which already
+        through `format_exception` (which already
         strips pydantic input values).
 
         Args:
-            error: The exception :meth:`renew` raised.
+            error: The exception `renew` raised.
 
         Returns:
             A short, curated message.
@@ -184,7 +186,7 @@ class Connection(Resource, Operation):
     async def execute(self, context: OperationContext) -> OperationResult:
         """Renew this connection's credentials: the connection's operation.
 
-        The template over :meth:`renew`: caps the exchange at
+        The template over `renew`: caps the exchange at
         ``_RENEWAL_TIMEOUT``, returns any rotated credential fields as
         config effects, and stamps the next due time — half the reported
         validity when the provider gives one (floored at 15 minutes), the
@@ -215,13 +217,13 @@ class Connection(Resource, Operation):
     def failure(self, error: Exception) -> OperationResult:
         """Describe a failed renewal: a curated message plus a retry slot.
 
-        The message comes from :meth:`renewal_failure_message`, so raw
+        The message comes from `renewal_failure_message`, so raw
         provider errors (which embed credentials in URLs) never reach the
         connection's state or the run's failure event; the retry slot makes
         the connection due again without waiting a full interval.
 
         Args:
-            error: The exception :meth:`execute` raised.
+            error: The exception `execute` raised.
 
         Returns:
             A failed result stamping the curated error and the retry slot.
@@ -235,7 +237,7 @@ class Connection(Resource, Operation):
 
     @classmethod
     def definition(cls) -> ResourceDefinition:
-        """Advertise :meth:`check` / :meth:`renew` support so UIs can offer them.
+        """Advertise `check` / `renew` support so UIs can offer them.
 
         Returns:
             The resource definition with ``checkable`` and ``renewable`` set.
@@ -259,11 +261,13 @@ class OAuthConnection(Connection):
     Carries the ``oauth`` config but **no credential fields**. Subclass this
     directly when the connection's credential fields are named differently from
     the standard trio, declaring its own fields and a matching
-    ``OAuthConfig.fields`` mapping::
+    ``OAuthConfig.fields`` mapping:
 
-        @connection(oauth=OAuthConfig("tiktok", fields={"refresh_token": "access_token"}))
-        class TiktokAdsConnection(OAuthConnection):
-            access_token: str = SecretField()
+    ```py
+    @connection(oauth=OAuthConfig("tiktok", fields={"refresh_token": "access_token"}))
+    class TiktokAdsConnection(OAuthConnection):
+        access_token: str = SecretField()
+    ```
 
     ``OAuthConfig.fields`` maps the OAuth roles (``client_id`` /
     ``client_secret`` / ``refresh_token``) to the connection's field names, and
@@ -375,7 +379,7 @@ class OAuthConnection(Connection):
 
         Raises:
             NotImplementedError: When the connection is not renewable (see
-                :meth:`renewable`).
+                `renewable`).
         """
         if not (self.renewable() and isinstance(self.oauth, OAuthConfig)):
             raise NotImplementedError(f"{type(self).__name__} has no renewal flow to derive")
@@ -405,15 +409,17 @@ class RefreshTokenOAuthConnection(OAuthConnection):
     Declares the credential trio — ``client_id`` / ``client_secret`` (in-house
     OAuth credentials resolved from env) and ``refresh_token`` (filled on
     sign-in) — which the default ``OAuthConfig.fields`` mapping targets, so the
-    standard connections only add their own fields::
+    standard connections only add their own fields:
 
-        @connection(oauth=OAuthConfig("linkedin", scope="r_ads"))
-        class LinkedinAdsConnection(RefreshTokenOAuthConnection):
-            account_id: str
+    ```py
+    @connection(oauth=OAuthConfig("linkedin", scope="r_ads"))
+    class LinkedinAdsConnection(RefreshTokenOAuthConnection):
+        account_id: str
+    ```
 
     Connections whose credential fields are named differently subclass
     ``OAuthConnection`` directly, declare their own fields, and inject them from
-    env with a ``mode="before"`` validator calling :meth:`env_credential`.
+    env with a ``mode="before"`` validator calling `env_credential`.
 
     All three fields are **required**. ``client_id`` / ``client_secret`` may be
     supplied by the in-house per-provider credentials
@@ -447,4 +453,3 @@ class RefreshTokenOAuthConnection(OAuthConnection):
             cls.resolve_field(data, "client_id", cls.env_credential("CLIENT_ID"))
             cls.resolve_field(data, "client_secret", cls.env_credential("CLIENT_SECRET"))
         return data
-

@@ -52,18 +52,19 @@ class OAuthConfig:
         ConfigError: If the provider is unregistered and no ``auth_url``
             is given.
 
-    Example::
-
-        @connection(
-            name="Facebook Ads",
-            oauth=OAuthConfig(
-                "facebook",
-                scope="ads_read",
-                fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
-            ),
-        )
-        class FacebookAdsConnection(OAuthConnection):
-            ...
+    Example:
+    ```py
+    @connection(
+        name="Facebook Ads",
+        oauth=OAuthConfig(
+            "facebook",
+            scope="ads_read",
+            fields={"client_id": "app_id", "client_secret": "app_secret", "refresh_token": "access_token"},
+        ),
+    )
+    class FacebookAdsConnection(OAuthConnection):
+        ...
+    ```
     """
 
     def __init__(

@@ -30,6 +30,8 @@ def register(
     app_parser = subparsers.add_parser(
         "app",
         help="Run the interloper application services",
+        description="Run the interloper application services. Flags left unset fall back to the server, cron, "
+        "worker and reaper settings; at least one service must be enabled.",
     )
     app_parser.add_argument(
         "--host",

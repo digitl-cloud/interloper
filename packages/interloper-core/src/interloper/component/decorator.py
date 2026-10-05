@@ -1,7 +1,7 @@
 """The decorator engine: the three channels every component decorator carries.
 
 A decorator is the function form of a class body, and a class body says three
-kinds of thing, so :func:`decorate` carries exactly three channels and nothing
+kinds of thing, so `decorate` carries exactly three channels and nothing
 else:
 
 1. **Definition metadata and behaviour**, as plain keyword arguments: the
@@ -9,10 +9,10 @@ else:
    ``tags``, ``schema``, ``partitioning``, ``oauth``,
    ...) and its Pydantic field defaults (``dataset``,
    ``default_destination_key``, ``normalizer``, ``materialization_strategy``,
-   ...). :func:`_route` sorts them by introspecting the anchor, so nothing is
+   ...). `_route` sorts them by introspecting the anchor, so nothing is
    hand-maintained per kind and an unknown name is refused at decoration.
 2. **Relations**, as ``relations=``, the only relation channel:
-   :func:`_relations` reads a :class:`~interloper.component.relation.Relation`,
+   `_relations` reads a `Relation`,
    a component class, or a list of component classes narrowing a relation the
    anchor already declares.
 3. **The kind's own build step**, as ``build=``: how a function becomes
@@ -58,7 +58,7 @@ def decorate(
         build: The kind's build step, called as
             ``build(target, classvars=..., fields=..., relations=...)``.
         relations: The ``relations=`` channel, name to
-            :class:`~interloper.component.relation.Relation`, component class,
+            `Relation`, component class,
             or list of component classes. ``None`` declares none.
         **overrides: Definition metadata and behaviour: the anchor's public
             ClassVars and field defaults (see the anchor class for what it
@@ -138,8 +138,7 @@ def _route(anchor: type[Component], overrides: dict[str, Any]) -> tuple[dict[str
             fields[name] = value
         elif name in anchor.relations:
             raise TypeError(
-                f"{anchor.__name__} declares '{name}' as a relation; "
-                f'pass it through relations={{"{name}": ...}}'
+                f"{anchor.__name__} declares '{name}' as a relation; pass it through relations={{\"{name}\": ...}}"
             )
         else:
             accepted = sorted(classvar_names | field_names)
@@ -150,7 +149,7 @@ def _route(anchor: type[Component], overrides: dict[str, Any]) -> tuple[dict[str
 def _relations(anchor: type[Component], relations: dict[str, Any]) -> dict[str, Relation]:
     """Read the ``relations=`` channel into the relations it declares.
 
-    Three value forms: a :class:`~interloper.component.relation.Relation`,
+    Three value forms: a `Relation`,
     kept as written; a component class, the same shorthand the annotation form
     is (``Relation(cls)``); a non-empty list or tuple of component classes,
     meaning "the relation the anchor already declares under this name, its key
@@ -186,14 +185,11 @@ def _relations(anchor: type[Component], relations: dict[str, Any]) -> dict[str, 
         relation = anchor.relations.get(name)
         if relation is None:
             raise TypeError(
-                f"{anchor.__name__} declares no relation named '{name}' to narrow; "
-                f"declared: {sorted(anchor.relations)}"
+                f"{anchor.__name__} declares no relation named '{name}' to narrow; declared: {sorted(anchor.relations)}"
             )
         for cls in classes:
             if cls.kind not in relation.kinds:
-                raise TypeError(
-                    f"Relation '{name}' accepts kinds {relation.kinds}, not '{cls.kind}' ({cls.__name__})"
-                )
+                raise TypeError(f"Relation '{name}' accepts kinds {relation.kinds}, not '{cls.kind}' ({cls.__name__})")
         declared[name] = relation.model_copy(update={"key": [cls.key for cls in classes]})
     return declared
 
@@ -205,6 +201,6 @@ def _is_component(value: Any) -> bool:
         value: The value to test.
 
     Returns:
-        True when the value is a subclass of :class:`~interloper.component.base.Component`.
+        True when the value is a subclass of `Component`.
     """
     return isinstance(value, type) and issubclass(value, Component)

@@ -10,10 +10,12 @@ class SerialRunner(AsyncRunner):
 
     The simplest runner — deterministic, easy to debug. It is the async
     engine with a single concurrency slot, so there is never more than one
-    operation in flight::
+    operation in flight:
 
-        result = await SerialRunner(on_event=log_event).run(dag)
-        # or, from a sync edge: il.run(SerialRunner().run(dag))
+    ```py
+    result = await SerialRunner(on_event=log_event).run(dag)
+    # or, from a sync edge: il.run(SerialRunner().run(dag))
+    ```
     """
 
     max_workers: int = 1

@@ -1,7 +1,7 @@
 """OTel metrics derived from the event bus.
 
 Counters and durations are order-insensitive, so they ride the
-:class:`~interloper.events.bus.EventBus` (which already carries the full
+`EventBus` (which already carries the full
 lifecycle taxonomy with timestamps) instead of the execution hot path.
 Metric attributes stay low-cardinality by design: ``component_key`` is
 bounded by the catalog, while ids and partitions are deliberately

@@ -35,16 +35,18 @@ def config(
 ) -> type[Config] | Callable[[type], type[Config]]:
     """Create a Config subclass from a decorated class.
 
-    Can be used bare or with arguments::
+    Can be used bare or with arguments:
 
-        @config
-        class MyConfig:
-            api_key: str
-            base_url: str = "https://api.example.com"
+    ```py
+    @config
+    class MyConfig:
+        api_key: str
+        base_url: str = "https://api.example.com"
 
-        @config(key="custom", name="Custom Config")
-        class OtherConfig(Config):
-            timeout: int = 30
+    @config(key="custom", name="Custom Config")
+    class OtherConfig(Config):
+        timeout: int = 30
+    ```
 
     The decorated class's annotations and attributes become the Config
     subclass body.  Since Config extends ``BaseSettings``, fields can
@@ -54,13 +56,13 @@ def config(
         cls: The decorated class when used bare; ``None`` when called with
             arguments, which returns the decorator instead.
         relations: Relation name to a
-            :class:`~interloper.component.relation.Relation`, a component class
+            `Relation`, a component class
             (the shorthand for a relation on it), or a list of component
             classes narrowing the relation the decorated class declares under
             that name. Explicit declarations win over the class annotations.
         **overrides: Definition metadata and behaviour: the public ClassVars
             and field defaults the decorated class declares, or
-            :class:`~interloper.config.base.Config` itself for a plain class
+            `Config` itself for a plain class
             (``key``, ``name``, ``icon``, ``tags``); see the class. An unknown
             name is a ``TypeError`` at decoration.
 

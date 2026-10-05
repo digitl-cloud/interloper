@@ -37,22 +37,24 @@ class StoredObject:
 class ObjectStoreDestination(Destination):
     """A destination whose partitions are objects in a bucket.
 
-    Writes one object per partition in a hive-partitioned layout::
+    Writes one object per partition in a hive-partitioned layout:
 
-        {prefix}/{dataset}/{table}/data.{ext}
-        {prefix}/{dataset}/{table}/{column}={partition}/data.{ext}
+    ```py
+    {prefix}/{dataset}/{table}/data.{ext}
+    {prefix}/{dataset}/{table}/{column}={partition}/data.{ext}
+    ```
 
     Following the hive convention, the partition column lives in the *path
     only*: it is dropped from partitioned file contents on write (external
     readers like BigQuery external tables and DuckDB reject a duplicate
     partition column) and re-injected from the partition on read, so
     interloper round-trips stay lossless. Each object carries its row count
-    as ``row_count`` metadata, so :meth:`partition_row_counts` needs one
+    as ``row_count`` metadata, so `partition_row_counts` needs one
     listing and no downloads.
 
     A backend implements storage and nothing else, in four hooks:
-    :meth:`put_object`, :meth:`get_object`, :meth:`list_objects` and
-    :meth:`object_uri`. The destination instance holds no table identity and
+    `put_object`, `get_object`, `list_objects` and
+    `object_uri`. The destination instance holds no table identity and
     is shared across assets: ``asset.table`` and ``asset.dataset`` name the
     target at call time.
     """

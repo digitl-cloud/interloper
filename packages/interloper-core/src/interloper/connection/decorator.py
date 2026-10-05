@@ -34,28 +34,32 @@ def connection(
 ) -> type[Connection] | Callable[[type], type[Connection]]:
     """Create a Connection subclass from a decorated class.
 
-    Can be used bare or with arguments::
+    Can be used bare or with arguments:
 
-        @connection
-        class MyConnection:
-            host: str = "localhost"
-            port: int = 5432
-            username: str
-            password: str
+    ```py
+    @connection
+    class MyConnection:
+        host: str = "localhost"
+        port: int = 5432
+        username: str
+        password: str
 
-        @connection(key="custom", name="Custom Connection")
-        class OtherConnection:
-            url: str
+    @connection(key="custom", name="Custom Connection")
+    class OtherConnection:
+        url: str
+    ```
 
     Class-level traits, identity (key, name, icon, tags) and behavior
-    (oauth), belong in the decorator; the class body declares fields::
+    (oauth), belong in the decorator; the class body declares fields:
 
-        @connection(
-            name="Amazon Ads",
-            oauth=OAuthConfig("amazon", scope="advertising::campaign_management"),
-        )
-        class AmazonAdsConnection(OAuthConnection):
-            location: str = SelectField(...)
+    ```py
+    @connection(
+        name="Amazon Ads",
+        oauth=OAuthConfig("amazon", scope="advertising::campaign_management"),
+    )
+    class AmazonAdsConnection(OAuthConnection):
+        location: str = SelectField(...)
+    ```
 
     The decorated class's annotations and attributes become the Connection
     subclass body.  Since Connection extends ``BaseSettings``, fields can
@@ -65,16 +69,16 @@ def connection(
         cls: The decorated class when used bare; ``None`` when called with
             arguments, which returns the decorator instead.
         relations: Relation name to a
-            :class:`~interloper.component.relation.Relation`, a component class
+            `Relation`, a component class
             (the shorthand for a relation on it), or a list of component
             classes narrowing the relation the decorated class declares under
             that name. Explicit declarations win over the class annotations.
         **overrides: Definition metadata and behaviour: the public ClassVars
             and field defaults the decorated class declares, or
-            :class:`~interloper.connection.base.Connection` itself for a plain
+            `Connection` itself for a plain
             class (``key``, ``name``, ``icon``, ``tags``, ``auto_renew``, and
             ``oauth`` on an
-            :class:`~interloper.connection.base.OAuthConnection`); see the
+            `OAuthConnection`); see the
             class. An unknown name is a ``TypeError`` at decoration.
 
     Returns:

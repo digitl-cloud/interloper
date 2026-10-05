@@ -31,22 +31,24 @@ def asset(
 
     The decorated function may be sync or ``async``. Sync functions are
     offloaded to a worker thread at materialization time; ``async`` functions
-    are awaited natively on the event loop::
+    are awaited natively on the event loop:
 
-        @asset
-        def users(**kwargs):
-            return fetch_users()
+    ```py
+    @asset
+    def users(**kwargs):
+        return fetch_users()
 
-        @asset
-        async def events(**kwargs):
-            return await fetch_events()
+    @asset
+    async def events(**kwargs):
+        return await fetch_events()
 
-        @asset(tags=["Report"], schema=UsersStats, relations={"destinations": [BigQueryDestination]})
-        def users_stats(config: MyConfig, connection: MyConn) -> Any:
-            return fetch_stats()
+    @asset(tags=["Report"], schema=UsersStats, relations={"destinations": [BigQueryDestination]})
+    def users_stats(config: MyConfig, connection: MyConn) -> Any:
+        return fetch_stats()
+    ```
 
     Every parameter of the decorated function declares a relation, inferred
-    from its annotation (see :meth:`~interloper.asset.base.Asset._collect`);
+    from its annotation (see `_collect`);
     ``relations`` is for the declarations an annotation cannot express, such as
     a cross-source or many-valued upstream.
 
@@ -55,13 +57,13 @@ def asset(
             decorator is used bare. ``None`` in the parenthesised form, which
             returns a decorator instead.
         relations: Relation name, keyed by ``data()`` parameter name, to a
-            :class:`~interloper.component.relation.Relation`, a component class
+            `Relation`, a component class
             (the shorthand for a relation on it), or a list of component
-            classes narrowing the relation :class:`~interloper.asset.base.Asset`
+            classes narrowing the relation `Asset`
             declares under that name. Explicit declarations win over the ones
             inferred from the annotations.
         **overrides: Definition metadata and behaviour: the public ClassVars
-            and field defaults :class:`~interloper.asset.base.Asset` declares
+            and field defaults `Asset` declares
             (``key``, ``name``, ``icon``, ``tags``, ``schema``,
             ``partitioning``, ``dataset``, ``normalizer``,
             ``materialization_strategy``, ...); see the class. An unknown name
@@ -97,9 +99,9 @@ def _build_asset_class(
 
     The generated ``data()`` is a ``**kwargs`` wrapper that translates ``self``
     (the asset) into what the function expects, so it wraps the function in
-    the :func:`functools.wraps` sense: relation inference resolves the
+    the `functools.wraps` sense: relation inference resolves the
     original's annotations through ``__wrapped__`` (see
-    :meth:`~interloper.asset.base.Asset._collect`), and the stamped
+    `_collect`), and the stamped
     ``__signature__`` is what the parameters read as.
 
     Args:

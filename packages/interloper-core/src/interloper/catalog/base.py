@@ -3,7 +3,7 @@
 Registration is two entry-point groups, and nothing else:
 
 - ``interloper.kinds``: what kinds exist, one entry per kind, naming its
-  anchor class (consumed by :data:`interloper.KINDS`).
+  anchor class (consumed by `interloper.KINDS`).
 - ``interloper.components``: what component classes exist, every concrete
   component an installed package provides, framework classes included
   (core declares ``cron_job``/``trigger_hook``/``webhook_hook`` here, the
@@ -18,12 +18,14 @@ present in every catalog). No configured paths means the whole universe.
 Kind anchors are framework, not content: they live in the registry and never
 appear in the catalog.
 
-Usage::
+Usage:
 
-    import interloper as il
+```py
+import interloper as il
 
-    catalog = il.Catalog.from_settings()   # the enabled subset, or the universe
-    catalog = il.Catalog.discover()        # the declared universe
+catalog = il.Catalog.from_settings()   # the enabled subset, or the universe
+catalog = il.Catalog.discover()        # the declared universe
+```
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ class Catalog(BaseModel):
         they are declared inside their source, so one is named by its
         qualified key (``source.asset``, the form ``Component.qualified_key``
         produces) and resolves only through that source's declaration, to the
-        concrete :class:`AssetDefinition` carrying the composite import path,
+        concrete `AssetDefinition` carrying the composite import path,
         the partitioning and the relations.
 
         Args:

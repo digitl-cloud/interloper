@@ -1,19 +1,21 @@
 """Representation: the seam between core and concrete table types.
 
-A :class:`Representation` answers "what kind of table is this, and how do I
+A `Representation` answers "what kind of table is this, and how do I
 view it generically?" for exactly one data representation. It bundles the
 generic table views (records, columns, partition filtering) with the schema
 operations on that type (validate, reconcile, infer), so core never names a
 concrete dataframe library anywhere. ``Representation.of(data)``
-binds the matching representation to the data as a :class:`View`, whose
+binds the matching representation to the data as a `View`, whose
 ``to(key)`` converts between registered representations through records.
 
 Every representation — the rows built-in (``list[dict]``) included — is
 declared as a package entry point under the ``interloper.representations``
-group (core declares rows in its own ``pyproject.toml``)::
+group (core declares rows in its own ``pyproject.toml``):
 
-    [project.entry-points."interloper.representations"]
-    dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
+```py
+[project.entry-points."interloper.representations"]
+dataframe = "interloper_pandas.representation:DATAFRAME_REPRESENTATION"
+```
 
 The registry is loaded lazily from installed-package metadata, so discovery
 works in any process where the integration is installed — no import-order
@@ -131,7 +133,7 @@ class Representation(ABC):
         """Return the rows whose *column* falls in ``[start, end)``.
 
         Values and bounds are compared as ISO-8601 strings (see
-        :func:`iso_label`): the scoping primitive for time partitions, whose
+        `iso_label`): the scoping primitive for time partitions, whose
         rows may carry values anywhere inside the period rather than the
         period's start.
 
@@ -149,7 +151,7 @@ class Representation(ABC):
         Non-strict repairs the shape: extra columns are dropped, missing
         nullable columns are filled, values are coerced. Strict refuses
         instead: an extra column, a missing required column or a value the
-        schema rejects is a :class:`SchemaError`. Either way the result
+        schema rejects is a `SchemaError`. Either way the result
         carries the declared types, so destinations never re-check it.
 
         Args:
@@ -160,7 +162,7 @@ class Representation(ABC):
 
     @abstractmethod
     def infer(self, data: Any) -> type[Schema]:
-        """Infer a :class:`Schema` from *data*.
+        """Infer a `Schema` from *data*.
 
         Args:
             data: The table to infer from, in this representation's own type.
@@ -196,7 +198,7 @@ class Representation(ABC):
 class View:
     """A representation bound to the data it views.
 
-    What :meth:`Representation.of` returns: the generic table views with the
+    What `Representation.of` returns: the generic table views with the
     data already applied, so a caller reads ``view.records`` or converts with
     ``view.to("dataframe")`` without naming the data twice.
 
@@ -236,7 +238,7 @@ class View:
         return self.representation.columns(self.data)
 
     def reconcile(self, schema: type[Schema], *, strict: bool = False) -> Any:
-        """Return the data in *schema*'s canonical types (see :meth:`Representation.reconcile`).
+        """Return the data in *schema*'s canonical types (see `Representation.reconcile`).
 
         Args:
             schema: The schema to align the data to.
@@ -248,7 +250,7 @@ class View:
         return self.representation.reconcile(self.data, schema, strict=strict)
 
     def infer(self) -> type[Schema]:
-        """Infer a :class:`Schema` from the data.
+        """Infer a `Schema` from the data.
 
         Returns:
             A dynamically created Schema subclass.
@@ -365,9 +367,7 @@ class RowsRepresentation(Representation):
         """
         return [row for row in data if str(row.get(column)) == str(value)]
 
-    def filter_range(
-        self, data: list[dict[str, Any]], column: str, start: Any, end: Any
-    ) -> list[dict[str, Any]]:
+    def filter_range(self, data: list[dict[str, Any]], column: str, start: Any, end: Any) -> list[dict[str, Any]]:
         """Return the rows whose *column* falls in ``[start, end)``.
 
         Args:

@@ -34,10 +34,10 @@ class Job(Component, Workload):
     """A materialization workload: the anchor of the ``job`` kind.
 
     A job declares *what* to materialize (``targets``); concrete job classes
-    add *when*: :class:`~interloper.job.cron.CronJob` carries a cron trigger.
+    add *when*: `CronJob` carries a cron trigger.
     Trigger fields are inert declarative intent: the framework carries them,
     and an operator (the scheduler) acts on them. The workload itself
-    compiles to the same :class:`~interloper.dag.base.DAG` that every other
+    compiles to the same `DAG` that every other
     entry point executes.
 
     A job also carries workload-level defaults, cascading to its targets the

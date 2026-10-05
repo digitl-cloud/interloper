@@ -74,7 +74,7 @@ class Event:
         """Deserialize an Event from a dict.
 
         Args:
-            data: Flat mapping as produced by :meth:`to_dict` — ``type`` and
+            data: Flat mapping as produced by `to_dict` — ``type`` and
                 ``timestamp`` are required, ``event_id`` is optional (a fresh
                 id is generated when absent), and every other key becomes
                 metadata.
@@ -118,7 +118,7 @@ class Event:
         """Deserialize an Event from a JSON string.
 
         Args:
-            json_str: JSON object as produced by :meth:`to_json`.
+            json_str: JSON object as produced by `to_json`.
 
         Returns:
             The deserialized Event instance.
@@ -127,12 +127,12 @@ class Event:
 
     @classmethod
     def from_log_line(cls, line: str) -> Event | None:
-        """Try to parse an :class:`Event` from a log line.
+        """Try to parse an `Event` from a log line.
 
         Recognises two formats:
 
         1. **Prefixed** — ``@EVENT:{...}`` (written by
-           :class:`~interloper.events.StderrEventHandler`).
+           `StderrEventHandler`).
         2. **Bare JSON** — ``{...}`` (legacy / testing convenience).
 
         Lines that match neither pattern, or whose JSON is malformed, are
@@ -151,7 +151,7 @@ class Event:
             return None
 
         if line.startswith(EVENT_LINE_PREFIX):
-            line = line[len(EVENT_LINE_PREFIX):]
+            line = line[len(EVENT_LINE_PREFIX) :]
         elif not line.startswith("{"):
             return None
 

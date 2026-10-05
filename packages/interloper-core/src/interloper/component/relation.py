@@ -18,7 +18,7 @@ def unwrap_optional(hint: Any, namespace: dict[str, Any]) -> tuple[Any, bool]:
     """Strip an annotation's ``None`` arm and resolve a forward reference.
 
     The single reading of ``X | None`` in the framework: both
-    :meth:`Relation.from_annotation` and the asset layer's ``data()``
+    `Relation.from_annotation` and the asset layer's ``data()``
     parameter inference go through it.
 
     Args:
@@ -135,7 +135,7 @@ class Relation(BaseModel):
 
     ``kind`` and ``key`` name the acceptable targets: ``kind`` names one or
     several component kinds, ``key`` (when non-empty) narrows to specific
-    keys within those kinds, matched through :meth:`ComponentIdentity.satisfies`.
+    keys within those kinds, matched through `ComponentIdentity.satisfies`.
     ``many`` marks a relation that binds several components at once;
     ``optional`` marks one that may stay unbound or be left empty, and says
     nothing else: ``on_delete`` alone decides what deleting a bound target
@@ -144,7 +144,7 @@ class Relation(BaseModel):
     ``default`` and ``has_fallback`` together describe a relation that can be
     resolved without an explicit binding.
 
-    A relation is also its own descriptor: :meth:`Component._collect` installs
+    A relation is also its own descriptor: `Component._collect` installs
     the stamped copy under the relation's name, so the class attribute reads
     as the declaration and the instance attribute as what is bound to it, and
     assignment rebinds it.
@@ -155,7 +155,7 @@ class Relation(BaseModel):
     The ``TYPE_CHECKING`` ``__new__`` is what makes that form check: the type
     checker reads a Pydantic field of the annotated type, so the constructor
     kwarg and the instance attribute are both typed, while the runtime sees a
-    ``Relation`` (Pydantic ignores it, and :meth:`Component._collect` drops the
+    ``Relation`` (Pydantic ignores it, and `Component._collect` drops the
     annotation before fields are collected).
 
     Two attributes are not declared but derived. ``name`` is stamped from the
@@ -191,8 +191,8 @@ class Relation(BaseModel):
             reads as a field of the annotated type instead of a type error.
 
             Args:
-                *args: Positional arguments, forwarded to :meth:`__init__`.
-                **kwargs: Keyword arguments, forwarded to :meth:`__init__`.
+                *args: Positional arguments, forwarded to `__init__`.
+                **kwargs: Keyword arguments, forwarded to `__init__`.
 
             Returns:
                 The new relation, typed ``Any`` so it satisfies any annotation.
@@ -346,7 +346,7 @@ class Relation(BaseModel):
         ``target`` (besides ``id``) is optional, so the class constructs bare.
 
         Returns:
-            True when :meth:`fallback` would produce a value.
+            True when `fallback` would produce a value.
         """
         if self.default is not None:
             return True
@@ -384,7 +384,7 @@ class Relation(BaseModel):
     def __get__(self, instance: Component | None, owner: type | None = None) -> Any:
         """Resolve to the relation itself on class access, to bound value(s) on an instance.
 
-        A relation is its own descriptor: :meth:`Component._collect` installs
+        A relation is its own descriptor: `Component._collect` installs
         the stamped copy under the relation's name, so ``Widget.connection`` is
         the declaration and ``widget.connection`` what is bound to it.
 
@@ -397,7 +397,7 @@ class Relation(BaseModel):
         Returns:
             This relation on class access; otherwise the instance's bound
             value(s) for this relation's name (see
-            :meth:`Component.bound`).
+            `Component.bound`).
         """
         if instance is None:
             return self
@@ -407,7 +407,7 @@ class Relation(BaseModel):
         """Replace what is bound to this relation on *instance*, atomically.
 
         Assignment is one of the two ways a binding is written, and it goes
-        through the same write path as :meth:`Component.bind`: the same rules
+        through the same write path as `Component.bind`: the same rules
         apply (a rejected assignment leaves the previous binding exactly as it
         was, duplicates collapse, a non-optional relation cannot be emptied)
         and whatever the owner cascades into its children is re-cascaded.

@@ -77,10 +77,16 @@ def _enforce_requires(args: argparse.Namespace) -> None:
         raise SystemExit(f"Error: command '{args.command}' requires package(s): {formatted}")
 
 
-def main() -> None:
-    """CLI entry point for interloper."""
-    _load_dotenv()
+def build_parser() -> argparse.ArgumentParser:
+    """Assemble the ``interloper`` parser with every command registered.
 
+    The documentation site renders the CLI reference from this parser, so
+    every flag's ``help`` and every command's ``description`` is user-facing
+    copy.
+
+    Returns:
+        The root parser.
+    """
     parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -93,7 +99,14 @@ def main() -> None:
     register_db(subparsers)
     register_app(subparsers)
     register_launch(subparsers)
+    return parser
 
+
+def main() -> None:
+    """CLI entry point for interloper."""
+    _load_dotenv()
+
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.command is None:

@@ -22,12 +22,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 # -- Fetch providers -----------------------------------------------------------
 
 
-#: Attribute stamped on a method by :func:`fetch_field_provider`.
+#: Attribute stamped on a method by `fetch_field_provider`.
 FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
 
 
 def fetch_field_provider(fn: F) -> F:
-    """Mark a resource method as a :func:`FetchField` data source.
+    """Mark a resource method as a `FetchField` data source.
 
     A ``FetchField(provider="<name>.<method>")`` resolves its options by
     instantiating the resource bound to the relation ``<name>`` (from the credentials the
@@ -40,12 +40,14 @@ def fetch_field_provider(fn: F) -> F:
     use lightweight HTTP (``httpx2``), never ``self.api`` (the SDK client).
 
     It returns a ``list[dict]``; the ``FetchField`` picks ``label_key`` /
-    ``value_key`` out of each item::
+    ``value_key`` out of each item:
 
-        class FacebookAdsConnection(il.Connection):
-            @il.fetch_field_provider
-            async def accounts(self) -> list[dict]:
-                ...
+    ```py
+    class FacebookAdsConnection(il.Connection):
+        @il.fetch_field_provider
+        async def accounts(self) -> list[dict]:
+            ...
+    ```
 
     Args:
         fn: The resource method to mark as an options provider.
@@ -73,7 +75,7 @@ def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Re
     must name a declared relation, that relation must have been declared from
     a component class (a relation declared by kind and key names no class to
     read the method off), and that class must expose ``<method>`` marked with
-    :func:`fetch_field_provider`. Fails loudly at catalog-build time rather
+    `fetch_field_provider`. Fails loudly at catalog-build time rather
     than letting the form silently fail at runtime.
 
     Args:
@@ -173,8 +175,8 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
       short.
     - ``discriminator=True`` becomes ``x-discriminator``: it marks the config
       field whose value distinguishes instances of a component, driving the
-      derived display name (:meth:`Component.instance_name`) and, for
-      sources, the per-instance asset table names (:meth:`Source.asset_table`).
+      derived display name (`Component.instance_name`) and, for
+      sources, the per-instance asset table names (`Source.asset_table`).
     - ``section`` becomes ``x-section``: the labelled group of the form the
       field renders under; fields without one lead the form.
 
@@ -217,9 +219,10 @@ def InputField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        account_id: str = InputField(description="Your account ID")
+    Example:
+    ```py
+    account_id: str = InputField(description="Your account ID")
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "text"), **kwargs)
 
@@ -234,9 +237,10 @@ def SecretField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        api_key: str = SecretField(description="API key")
+    Example:
+    ```py
+    api_key: str = SecretField(description="API key")
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "password"), **kwargs)
 
@@ -251,9 +255,10 @@ def TextField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        query: str = TextField(description="SQL query")
+    Example:
+    ```py
+    query: str = TextField(description="SQL query")
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "textarea"), **kwargs)
 
@@ -268,9 +273,10 @@ def CronField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        cron: str = CronField(description="When the job runs")
+    Example:
+    ```py
+    cron: str = CronField(description="When the job runs")
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "cron"), **kwargs)
 
@@ -285,9 +291,10 @@ def TimezoneField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        timezone: str = TimezoneField(default="UTC", description="Timezone the cron is evaluated in")
+    Example:
+    ```py
+    timezone: str = TimezoneField(default="UTC", description="Timezone the cron is evaluated in")
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "timezone"), **kwargs)
 
@@ -302,9 +309,10 @@ def JsonField(default: Any = ..., **kwargs: Any) -> Any:
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        config: dict = JsonField(default_factory=dict)
+    Example:
+    ```py
+    config: dict = JsonField(default_factory=dict)
+    ```
     """
     return Field(default, json_schema_extra=_extra(kwargs, "json"), **kwargs)
 
@@ -332,14 +340,15 @@ def SelectField(
     Returns:
         A Pydantic Field descriptor.
 
-    Example::
-
-        region: str = SelectField(
-            options=[
-                {"label": "US", "value": "us"},
-                {"label": "EU", "value": "eu"},
-            ],
-        )
+    Example:
+    ```py
+    region: str = SelectField(
+        options=[
+            {"label": "US", "value": "us"},
+            {"label": "EU", "value": "eu"},
+        ],
+    )
+    ```
     """
     extra = _extra(kwargs, "select")
     if options is not None:
@@ -361,7 +370,7 @@ def FetchField(
 
     The backend instantiates the resource bound to the relation ``<name>``
     (from the credentials the form already holds) and calls the
-    :func:`fetch_field_provider` method ``<method>`` on it. The lookup logic lives next to the credentials
+    `fetch_field_provider` method ``<method>`` on it. The lookup logic lives next to the credentials
     it uses; there is no per-provider API route to hand-write.
 
     The dependency is the provider's own relation (the ``<name>`` part): the
@@ -384,13 +393,14 @@ def FetchField(
     Raises:
         ValueError: If ``provider`` is not of the form ``"<name>.<method>"``.
 
-    Example::
-
-        account_id: str = FetchField(
-            provider="connection.accounts",
-            label_key="name",
-            value_key="account_id",
-        )
+    Example:
+    ```py
+    account_id: str = FetchField(
+        provider="connection.accounts",
+        label_key="name",
+        value_key="account_id",
+    )
+    ```
     """
     name, _, method = provider.partition(".")
     if not name or not method:

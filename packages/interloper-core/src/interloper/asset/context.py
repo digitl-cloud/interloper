@@ -121,7 +121,7 @@ class ExecutionContext:
         ``Any`` on the base class: this is the only accessor that hands an
         asset a real ``date`` without narrowing a type first, and it asserts
         the daily granularity rather than assuming it. Any other granularity
-        reads :attr:`partition` (or :attr:`window`) and asks the partition
+        reads `partition` (or `window`) and asks the partition
         itself.
 
         Raises:
@@ -184,8 +184,7 @@ class ExecutionContext:
 
         if isinstance(self._partition_or_window, PartitionWindow):
             raise AttributeError(  # noqa: TRY004
-                f"`context.{accessor}` is not available. "
-                "Context currently holds a partition window, not a partition."
+                f"`context.{accessor}` is not available. Context currently holds a partition window, not a partition."
             )
 
         return self._partition_or_window

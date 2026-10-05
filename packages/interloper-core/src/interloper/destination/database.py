@@ -39,15 +39,15 @@ class PartitionFilter:
 class DatabaseDestination(Destination):
     """A destination whose partitions are rows selected by a filter in a table.
 
-    A backend writes its SQL dialect and nothing else: :meth:`insert`,
-    :meth:`delete`, :meth:`select` and :meth:`count`, each receiving the
+    A backend writes its SQL dialect and nothing else: `insert`,
+    `delete`, `select` and `count`, each receiving the
     table and the dataset the asset resolves to and, where a partition is
-    involved, a :class:`PartitionFilter` the base has already resolved
+    involved, a `PartitionFilter` the base has already resolved
     (half-open bounds for a time partition, equality otherwise). The base
     owns replacing: a partition's rows are deleted before its data is
     inserted, a window in one batch. Reads come back in whatever
     representation the backend holds natively; a consumer that wants records
-    asks :attr:`~interloper.asset.upstream.Upstream.records`.
+    asks `records`.
 
     The destination instance holds no table identity and is shared across
     assets: ``asset.table`` and ``asset.dataset`` name the target at call time.
@@ -128,9 +128,9 @@ class DatabaseDestination(Destination):
 
         Rows carry the partition column, so a database need not store per
         partition: a window deletes every partition it covers and inserts the
-        whole batch once, instead of one :meth:`write_partition` per partition
+        whole batch once, instead of one `write_partition` per partition
         (one load job rather than one per day). A single partition, or the
-        whole, is one :meth:`write_partition`. The write-time schema strategy
+        whole, is one `write_partition`. The write-time schema strategy
         is applied to the data once, before either path.
 
         Args:
@@ -262,4 +262,3 @@ class DatabaseDestination(Destination):
                 UserWarning,
                 stacklevel=3,
             )
-

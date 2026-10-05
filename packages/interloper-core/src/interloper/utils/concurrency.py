@@ -141,11 +141,13 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
     entrypoints — ``asset.run()``, ``asset.materialize()``,
     ``dag.materialize()`` — and can be called directly to drive any other
     framework coroutine (e.g. a configured runner) from a script, a REPL,
-    or a notebook cell without touching ``asyncio``::
+    or a notebook cell without touching ``asyncio``:
 
-        import interloper as il
+    ```py
+    import interloper as il
 
-        result = il.run(il.AsyncRunner(max_workers=8).run(dag))
+    result = il.run(il.AsyncRunner(max_workers=8).run(dag))
+    ```
 
     Unlike ``asyncio.run``, this works where an event loop is already
     running (Jupyter) and reuses one persistent background loop across
@@ -169,9 +171,7 @@ def run(coro: Coroutine[Any, Any, _T]) -> _T:
     loop = _ensure_loop()
     if threading.current_thread() is _loop_thread:
         coro.close()
-        raise RuntimeError(
-            "il.run() called from code already running on its own event loop; use 'await' instead."
-        )
+        raise RuntimeError("il.run() called from code already running on its own event loop; use 'await' instead.")
 
     # run_coroutine_threadsafe binds the task to the loop thread's context,
     # not the caller's — carry it across or spans go parentless.

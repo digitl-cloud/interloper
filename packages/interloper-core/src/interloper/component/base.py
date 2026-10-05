@@ -1,8 +1,8 @@
 """Base component: the fundamental building block of the interloper framework.
 
-Two layers: :class:`Serializable` is anything that is "a class plus its
-configuration", serializable through :class:`Spec` and resolvable from its
-import path; :class:`Component` extends it into a catalog citizen with kind,
+Two layers: `Serializable` is anything that is "a class plus its
+configuration", serializable through `Spec` and resolvable from its
+import path; `Component` extends it into a catalog citizen with kind,
 identity and relations. ``KINDS`` maps each kind to its anchor class, the
 single per-kind authority every kind-level question reads from.
 """
@@ -90,17 +90,17 @@ class Component(Serializable):
     """Fundamental building block: identifiable, composable, serializable.
 
     Every catalog citizen extends ``Component``. On top of
-    :class:`Serializable` it provides:
+    `Serializable` it provides:
 
     - **Identity**: ``kind`` (class-level category), ``id`` (instance-level,
       overridable) and ``identity``, the pair relation matching reads.
     - **Relations**: one ``relations`` map, name to
-      :class:`~interloper.component.relation.Relation`, collected from the
+      `Relation`, collected from the
       class body and bound per instance.
     - **Definition**: ``definition()`` exposes class metadata for API consumers.
 
     A relation written in a class body is a ``Relation`` value, so ``Relation``
-    joins :class:`~interloper.serializable.base.IgnoredDescriptor` in
+    joins `IgnoredDescriptor` in
     ``ignored_types``: Pydantic never mistakes a declared relation for a field.
     """
 
@@ -126,7 +126,7 @@ class Component(Serializable):
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation comes from :class:`Serializable`.) The settings
+        (``key`` derivation comes from `Serializable`.) The settings
         the class body declares are checked against their types here, so a
         wrong one fails where it is written.
 
@@ -144,10 +144,10 @@ class Component(Serializable):
         """Check the discriminator fields and the annotations Pydantic kept as fields.
 
         Runs once Pydantic has built the fields, which is the only moment the
-        two collectors can be compared: :meth:`_collect` reads the annotations
+        two collectors can be compared: `_collect` reads the annotations
         against the declaring module, Pydantic reads them against the full
         defining scope. An annotation naming a component class that
-        :meth:`_collect` did not turn into a relation therefore became a plain
+        `_collect` did not turn into a relation therefore became a plain
         field, silently: no trickle, no ``{ref}``, and two classes differing
         only in declaration order behaving differently. Both that and an
         annotation Pydantic could not resolve at all are refused here.
@@ -186,11 +186,11 @@ class Component(Serializable):
         A kwarg named after a declared relation binds that relation instead of
         reaching Pydantic, which knows nothing about relations: a list or tuple
         binds every element, ``None`` binds nothing. Each binding is checked
-        as it is made (see :meth:`bind`); whether every relation that must be
+        as it is made (see `bind`); whether every relation that must be
         bound is bound is a question for whoever assembles the graph, since
         components are wired piecewise (a source trickles into its assets,
         reconstruction binds references once the document is whole), so
-        :meth:`validate_relations` is called at those boundaries, not here.
+        `validate_relations` is called at those boundaries, not here.
 
         Unknown kwargs are a loud error rather than pydantic's silent
         ``extra="ignore"`` drop: a misnamed field would otherwise vanish, and a
@@ -229,12 +229,12 @@ class Component(Serializable):
 
         Pydantic's own ``__setattr__`` bypasses descriptors other than
         ``property``, so a relation name is handed to ``object.__setattr__``,
-        which runs :meth:`Relation.__set__` and rebinds. The rebinding logic
+        which runs `Relation.__set__` and rebinds. The rebinding logic
         lives there and only there.
 
         Args:
             name: The attribute being set.
-            value: For a relation name, whatever :meth:`Relation.__set__`
+            value: For a relation name, whatever `Relation.__set__`
                 accepts; any other name is forwarded to Pydantic as a field
                 assignment.
         """
@@ -251,7 +251,7 @@ class Component(Serializable):
 
         A source owns its assets; a connection, a config or a standalone asset
         has no owner. Ownership scopes the bare keys a relation declares, so it
-        is what :attr:`identity` reads.
+        is what `identity` reads.
         """
         return self._parent
 
@@ -269,7 +269,7 @@ class Component(Serializable):
         """The components this one owns, which travel inside its own spec.
 
         Ownership is not declared: a component held in one of this
-        component's fields whose :attr:`parent` is this component is owned.
+        component's fields whose `parent` is this component is owned.
         A source's assets are the one case today.
 
         Returns:
@@ -294,7 +294,7 @@ class Component(Serializable):
 
         The value of the config field marked ``discriminator=True``: what
         distinguishes instances of the same component class (an ad account
-        id, a site URL, ...). Drives the derived :meth:`instance_name` and,
+        id, a site URL, ...). Drives the derived `instance_name` and,
         for sources, the per-instance asset table names.
         """
         field = self.discriminator_field()
@@ -356,12 +356,12 @@ class Component(Serializable):
 
         A ``many`` relation accumulates, skipping targets it already holds; a
         single-valued one replaces what it holds, so repointing it is a second
-        :meth:`bind` and needs no :meth:`unbind` first.
+        `bind` and needs no `unbind` first.
 
         A target whose kind or key the relation does not accept, this
         component itself, and more than one target at once on a single-valued
         relation are all refused with a ``ConfigError`` from
-        :meth:`_replace_binding`, which every write path goes through.
+        `_replace_binding`, which every write path goes through.
 
         Args:
             name: The relation name as declared on the class.
@@ -378,9 +378,9 @@ class Component(Serializable):
         """Detach components from one of this component's declared relations.
 
         Detaching nothing the relation holds is a no-op; otherwise what remains
-        goes through the same write path as :meth:`bind`, so the same checks
+        goes through the same write path as `bind`, so the same checks
         apply (a non-optional relation cannot be emptied, ``ConfigError``) and
-        :meth:`on_rebind` runs.
+        `on_rebind` runs.
 
         Args:
             name: The relation name as declared on the class.
@@ -398,9 +398,9 @@ class Component(Serializable):
         """React to one of this component's relations having been rebound.
 
         Called once after every write to a binding, whichever way it was
-        written: a constructor kwarg, :meth:`bind`, :meth:`unbind`, attribute
-        assignment, or a parent's :meth:`trickle`. The new binding is already
-        in place, so :meth:`bound` reads it. The base does nothing; override
+        written: a constructor kwarg, `bind`, `unbind`, attribute
+        assignment, or a parent's `trickle`. The new binding is already
+        in place, so `bound` reads it. The base does nothing; override
         it to cascade, the way a source trickles its bindings into its assets
         and destinations and a job into its targets.
 
@@ -430,7 +430,7 @@ class Component(Serializable):
     def resolve(self, name: str) -> Any:
         """What one of this component's declared relations actually resolves to.
 
-        Unlike :meth:`bound`, this falls back to what the relation can fill
+        Unlike `bound`, this falls back to what the relation can fill
         itself with when nothing is bound, so a relation with a fallback (a config
         whose every field is defaulted, say) works without a binding.
 
@@ -453,7 +453,7 @@ class Component(Serializable):
 
         For every relation the child declares under a name this component has
         itself bound, and that the child leaves unbound, this binds whichever
-        of the parent's targets the child's relation :meth:`~Relation.accepts`
+        of the parent's targets the child's relation `accepts`
         (every accepted target for a ``many`` relation, the first accepted one
         otherwise). A binding the child already holds is never touched.
 
@@ -472,7 +472,7 @@ class Component(Serializable):
 
         Three checks per relation: it is bound, unless it is optional or
         has a fallback; a single-valued relation holds at most one target; every
-        bound target is one the relation :meth:`~Relation.accepts`. When
+        bound target is one the relation `accepts`. When
         *nodes* is given, a bound non-optional ``asset``-kind target must also
         be one of *nodes*.
 
@@ -481,7 +481,7 @@ class Component(Serializable):
         without *nodes* on every root of a document once its references are
         bound. Without *nodes* an unbound ``asset``-kind relation only the
         graph can fill is left alone: one reaching outside the owner's own
-        source (:attr:`~Relation.local`), or any one on an owner that
+        source (`local`), or any one on an owner that
         has no source to fill it from. Nothing before the graph can fill such
         a relation, so nothing before the graph can call it unfilled either.
 
@@ -501,9 +501,7 @@ class Component(Serializable):
             targets = self._bound.get(name, [])
             if not targets:
                 graph_filled = (
-                    nodes is None
-                    and "asset" in relation.kinds
-                    and (not relation.local or self.parent is None)
+                    nodes is None and "asset" in relation.kinds and (not relation.local or self.parent is None)
                 )
                 if not relation.optional and not relation.has_fallback and not graph_filled:
                     problems.append(f"'{name}' is unbound and non-optional")
@@ -531,9 +529,9 @@ class Component(Serializable):
 
         What a relation holds sits in ``init`` under the relation's name, a
         list for a ``many`` relation and a single value otherwise, each target
-        written as :meth:`SerializationContext.emit` decides; a relation with
+        written as `SerializationContext.emit` decides; a relation with
         nothing bound is left out. The components this one owns (see
-        :attr:`children`) travel inside this spec, under the field that holds
+        `children`) travel inside this spec, under the field that holds
         them, as a map of key to init carrying the child's id: an owned
         component never has a spec of its own. A binding a child holds that
         is identical to this component's own is left out of the child's
@@ -642,7 +640,7 @@ class Component(Serializable):
 
         Every name some class in the MRO annotates ``ClassVar``, neither
         private nor reserved: what a decorator may set, and what
-        :meth:`_validate_classvars` checks. The type comes from the most
+        `_validate_classvars` checks. The type comes from the most
         derived annotation; it is ``None`` when that annotation is a bare or
         unresolvable ``ClassVar``, or redeclares the name as a field, and such
         a name is not validated.
@@ -691,7 +689,7 @@ class Component(Serializable):
         - an annotation naming a component class
           (``connection: PostgresConnection``), the shorthand for a relation
           that needs nothing said beyond what fills it;
-        - a :class:`Relation` value, which is where anything else the relation
+        - a `Relation` value, which is where anything else the relation
           declares is written. Annotate it with what fills it
           (``destinations: list[Destination] = Relation("destination", many=True)``)
           so both the constructor kwarg and the attribute are typed; the
@@ -706,7 +704,7 @@ class Component(Serializable):
         is ever lost.
 
         Each entry is copied, stamped with its name and installed under that
-        name: a :class:`~interloper.component.relation.Relation` is its own
+        name: a `Relation` is its own
         descriptor, so the class attribute reads as the declaration and the
         instance attribute as what is bound to it. The copy is what keeps a
         subclass's redeclaration off its parent's map.
@@ -783,12 +781,12 @@ class Component(Serializable):
     def _check_targets(self, name: str, relation: Relation, targets: tuple[Component, ...]) -> None:
         """Check that *targets* are legal for one of this component's relations.
 
-        Every target must be one the relation :meth:`~Relation.accepts` and
+        Every target must be one the relation `accepts` and
         must be another component: a relation whose declared keys match the
         declaring component's own key (a wildcard, or an asset named after
         the key it reads) would otherwise let it fill itself. A single-valued
         relation may not receive more than one target at once. Performs no
-        mutation, so :meth:`_replace_binding` can call it before touching
+        mutation, so `_replace_binding` can call it before touching
         ``_bound`` and a rejected replacement leaves the existing binding
         untouched.
 
@@ -817,11 +815,11 @@ class Component(Serializable):
     def _replace_binding(self, name: str, targets: tuple[Component, ...]) -> None:
         """Replace what is bound to one of this component's relations, atomically.
 
-        The one write path: :meth:`bind` and :meth:`Relation.__set__` both
+        The one write path: `bind` and `Relation.__set__` both
         land here, so the rules hold whichever way a binding is written.
         Everything is checked before ``_bound`` is touched, so a rejected
         write leaves the previous binding exactly as it was, and
-        :meth:`on_rebind` runs once the new binding is in place.
+        `on_rebind` runs once the new binding is in place.
 
         Args:
             name: The relation name as declared on the class.
@@ -880,7 +878,7 @@ class Component(Serializable):
     def _trickled(self, child: Component) -> set[str]:
         """The relation names a child holds exactly as this component holds them.
 
-        A child receives a relation's binding only through :meth:`trickle`,
+        A child receives a relation's binding only through `trickle`,
         which passes this component's own targets through unchanged; the
         target ids are what tell that binding apart from one the child bound
         on its own. Ids and not object identity, because a deep copy rebuilds

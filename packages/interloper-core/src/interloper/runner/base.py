@@ -34,13 +34,15 @@ RUNNERS: Registry[type[Runner]] = Registry("interloper.runners")
 class Runner(Serializable):
     """Abstract base class for all runners.
 
-    Async-native: :meth:`run` is a coroutine. It owns the ``on_event``
+    Async-native: `run` is a coroutine. It owns the ``on_event``
     subscription lifecycle and delegates the actual DAG walk to the
-    subclass :meth:`_run`. ``await`` it from async code, or drive it from a
-    sync entrypoint with :func:`interloper.run`::
+    subclass `_run`. ``await`` it from async code, or drive it from a
+    sync entrypoint with `interloper.run`:
 
-        result = await runner.run(dag)     # async
-        result = il.run(runner.run(dag))   # sync edge
+    ```py
+    result = await runner.run(dag)     # async
+    result = il.run(runner.run(dag))   # sync edge
+    ```
     """
 
     fail_fast: bool = False
@@ -104,7 +106,7 @@ class Runner(Serializable):
         """Materialize the DAG and return the result.
 
         Subscribes the ``on_event`` handler (if any) for the duration of the
-        run, delegates to :meth:`_run`, then flushes pending events and
+        run, delegates to `_run`, then flushes pending events and
         unsubscribes — so every emitted event is delivered before returning.
 
         The subscription is scoped to this run: the EventBus is a
@@ -289,9 +291,7 @@ class Runner(Serializable):
             unsupported = [
                 operation.key
                 for operation in dag.operations
-                if operation.enabled
-                and operation.partitioning is not None
-                and not operation.partitioning.allow_window
+                if operation.enabled and operation.partitioning is not None and not operation.partitioning.allow_window
             ]
             if unsupported:
                 raise PartitionError(

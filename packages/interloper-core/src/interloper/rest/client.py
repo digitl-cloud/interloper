@@ -58,7 +58,7 @@ class RESTClient(httpx2.Client):
 
         Sequential by nature; each next request is derived from the previous
         response per ``paginator``. (The async client additionally fans out
-        :class:`~interloper.rest.paginator.RangePaginator` pages concurrently.)
+        `RangePaginator` pages concurrently.)
 
         Args:
             path: The resource path.
@@ -86,12 +86,12 @@ class RESTClient(httpx2.Client):
 
 
 class AsyncRESTClient(httpx2.AsyncClient):
-    """Async counterpart to :class:`RESTClient` for IO-bound extraction.
+    """Async counterpart to `RESTClient` for IO-bound extraction.
 
-    Same construction surface as :class:`RESTClient`; a connection exposes it as
+    Same construction surface as `RESTClient`; a connection exposes it as
     ``client`` and uses it from an ``async def data()`` to overlap independent
-    requests (paginated pages via :meth:`paginate`, per-entity calls via
-    :func:`interloper.utils.bounded_gather`).
+    requests (paginated pages via `paginate`, per-entity calls via
+    `interloper.utils.bounded_gather`).
     """
 
     def __init__(
@@ -147,7 +147,7 @@ class AsyncRESTClient(httpx2.AsyncClient):
     ) -> AsyncIterator[Any]:
         """Walk a paginated resource, yielding one page of selected data at a time.
 
-        For a :class:`~interloper.rest.paginator.RangePaginator` whose total is
+        For a `RangePaginator` whose total is
         known after the first response, pages 2..N are fetched concurrently
         (bounded by ``concurrency``). Otherwise — cursor/link paginators, or an
         unknown total — it walks sequentially like the sync client.

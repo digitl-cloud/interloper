@@ -217,3 +217,23 @@ class TestMain:
         assert isolated_process_state["init"] == [True]
         assert isolated_process_state["shutdown"] == [True]
         assert AppSettings._active is None
+
+
+class TestBuildParser:
+    """The parser the CLI runs on, and the documentation renders from."""
+
+    def test_registers_every_command(self) -> None:
+        parser = cli_main.build_parser()
+        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+
+        assert list(subparsers.choices) == ["run", "db", "app", "launch"]
+
+    def test_every_command_and_flag_carries_user_facing_copy(self) -> None:
+        parser = cli_main.build_parser()
+        commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices
+
+        for name, command in commands.items():
+            assert command.description, f"{name} has no description"
+            for action in command._actions:
+                if not isinstance(action, argparse._HelpAction | argparse._SubParsersAction):
+                    assert action.help, f"{name} {action.dest} has no help"

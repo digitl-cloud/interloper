@@ -15,30 +15,32 @@ class Destination(Component):
 
     A destination stores data per **partition**, ``None`` standing for the
     whole of an unpartitioned asset. The contract is three hooks:
-    :meth:`write_partition` and :meth:`read_partition` for a single
-    partition, and :meth:`partition_row_counts` for the coverage view.
-    :meth:`write` and :meth:`read` own the rest, splitting a window write into
+    `write_partition` and `read_partition` for a single
+    partition, and `partition_row_counts` for the coverage view.
+    `write` and `read` own the rest, splitting a window write into
     one call per partition and gathering a window read into one result per
     partition, so a destination is partition-correct by construction. A
     backend that does not store per partition (a database that clears each
-    partition and inserts a window in one batch) overrides :meth:`write` or
-    :meth:`read` instead.
+    partition and inserts a window in one batch) overrides `write` or
+    `read` instead.
 
     The hooks may be plain sync methods (the common case: most warehouse and
     file clients are sync) or ``async def`` for native async I/O. The engine
     is async-native: it awaits async implementations directly and offloads
     sync ones to a worker thread, so a destination never blocks the event
     loop either way. An annotation naming a component class declares a
-    relation, which the destination resolves by name::
+    relation, which the destination resolves by name:
 
-        class JSONDestination(Destination):
-            connection: BucketConnection
+    ```py
+    class JSONDestination(Destination):
+        connection: BucketConnection
 
-            def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-                self.connection.put(self._path(context, partition), json.dumps(data, default=str))
+        def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
+            self.connection.put(self._path(context, partition), json.dumps(data, default=str))
 
-            def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
-                return json.loads(self.connection.get(self._path(context, partition)))
+        def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+            return json.loads(self.connection.get(self._path(context, partition)))
+    ```
     """
 
     tags: ClassVar[list[str]] = []
@@ -67,7 +69,7 @@ class Destination(Component):
     def write(self, context: IOContext, data: Any) -> None:
         """Write data, one partition at a time.
 
-        A window is split into one :meth:`write_partition` call per partition,
+        A window is split into one `write_partition` call per partition,
         each receiving its slice of the data; a single partition or the
         unpartitioned whole is one call receiving the data as is.
 

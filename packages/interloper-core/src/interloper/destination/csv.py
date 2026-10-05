@@ -21,7 +21,7 @@ class CSVDestination(Destination):
     Data is stored under ``{base_path}/{dataset}/{table}/data.csv``
     (or ``{base_path}/{table}/data.csv`` when no dataset is set).
     Partitioned assets add a ``{column}={id}`` subdirectory; the partition
-    dispatch (including window splitting) is :class:`Destination`'s.
+    dispatch (including window splitting) is `Destination`'s.
 
     Data is viewed as ``list[dict]`` records through its registered
     representation on write (each dict is a row; the keys of the first dict

@@ -28,7 +28,7 @@ class CronJob(Job):
     spans. With daily targets, the defaults (``offset=1``, ``lookback=1``) mean
     "yesterday only" — the job timezone's yesterday. Hourly windows are always
     UTC-derived regardless of ``timezone`` (hour partition ids are UTC labels,
-    see :class:`~interloper.partitioning.time.TimePartitionWindow.lookback`).
+    see `lookback`).
     Each firing is a backfill over that window, and ``concurrency`` is how many
     of its partitions are in flight at once, newest first.
     """
@@ -111,7 +111,7 @@ class CronJob(Job):
 
         The window is read on the job timezone's clock at the firing instant,
         so a daily job's "yesterday" is its timezone's yesterday; hourly
-        windows normalize back to UTC (see :meth:`TimePartitionWindow.lookback`).
+        windows normalize back to UTC (see `TimePartitionWindow.lookback`).
 
         Args:
             config: The job's stored config payload. A missing ``lookback``

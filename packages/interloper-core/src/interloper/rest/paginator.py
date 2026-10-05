@@ -1,14 +1,14 @@
 """Pagination strategies for the REST clients.
 
 Pagination is sequential by nature — each next request is derived from the
-previous response — so the base protocol (:class:`BasePaginator`) advances a
-request page-by-page and works on both :class:`~interloper.rest.client.RESTClient`
-and :class:`~interloper.rest.client.AsyncRESTClient`.
+previous response — so the base protocol (`BasePaginator`) advances a
+request page-by-page and works on both `RESTClient`
+and `AsyncRESTClient`.
 
 Where the full page set is knowable after the first response (page-number or
-offset bounded by a total), :class:`RangePaginator` exposes every remaining
-request at once, and :meth:`AsyncRESTClient.paginate` fetches them concurrently
-via :func:`interloper.utils.bounded_gather`. The same paginator runs sequentially
+offset bounded by a total), `RangePaginator` exposes every remaining
+request at once, and `AsyncRESTClient.paginate` fetches them concurrently
+via `interloper.utils.bounded_gather`. The same paginator runs sequentially
 on the sync client; concurrency is an opt-in capability, not a requirement.
 """
 
@@ -85,8 +85,8 @@ def select(response: httpx2.Response, selector: DataSelector) -> Any:
 class BasePaginator(ABC):
     """Sequential paginator: advance one request per page off each response.
 
-    The client calls :meth:`init_request` once, then loops:
-    send → :meth:`update_state` → (:attr:`has_next`?) → :meth:`update_request`.
+    The client calls `init_request` once, then loops:
+    send → `update_state` → (`has_next`?) → `update_request`.
     """
 
     def init_request(self, request: httpx2.Request) -> None:  # noqa: B027 - an optional hook, no-op by default
@@ -147,7 +147,7 @@ class RangePaginator(BasePaginator):
     """A paginator whose complete page set is known after the first response.
 
     Adds the seam the async client uses to fetch pages 2..N concurrently. When
-    the total can't be determined up front, :meth:`remaining_requests` returns
+    the total can't be determined up front, `remaining_requests` returns
     ``None`` and the client falls back to the sequential walk.
     """
 

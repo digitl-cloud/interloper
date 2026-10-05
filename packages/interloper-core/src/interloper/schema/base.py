@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 class FieldSpec:
     """Backend-agnostic description of a single schema field.
 
-    This is the canonical type contract extracted from a :class:`Schema` via
-    :meth:`Schema.field_specs`.  Integration packages map specs to their native
+    This is the canonical type contract extracted from a `Schema` via
+    `Schema.field_specs`.  Integration packages map specs to their native
     type systems (BigQuery ``SchemaField``, pandas dtypes, ...) so that the
     type-mapping knowledge lives in exactly one place per backend.
 
@@ -98,18 +98,22 @@ class FieldSpec:
 class Schema(Serializable):
     """Defines the expected output structure of an asset.
 
-    Subclass to declare output fields::
+    Subclass to declare output fields:
 
-        class UserSchema(Schema):
-            id: int
-            name: str
-            email: str
+    ```py
+    class UserSchema(Schema):
+        id: int
+        name: str
+        email: str
+    ```
 
-    Class methods provide schema operations on ``list[dict]`` data::
+    Class methods provide schema operations on ``list[dict]`` data:
 
-        Schema.infer(rows)
-        UserSchema.validate_rows(rows)
-        UserSchema.reconcile(rows)
+    ```py
+    Schema.infer(rows)
+    UserSchema.validate_rows(rows)
+    UserSchema.reconcile(rows)
+    ```
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -120,14 +124,14 @@ class Schema(Serializable):
     def field_specs(cls) -> list[FieldSpec]:
         """Extract backend-agnostic field specs from this schema.
 
-        Fields declared by :class:`Schema` itself (framework plumbing, if
+        Fields declared by `Schema` itself (framework plumbing, if
         any) are excluded — only the subclass's data columns count.  Fields
-        come out in declaration order: :class:`Serializable` normalizes
+        come out in declaration order: `Serializable` normalizes
         ``model_fields`` so a column shadowing a parent ClassVar (``name``,
         ``key``) is not hoisted out of place.
 
         Returns:
-            One :class:`FieldSpec` per declared data field, in declaration order.
+            One `FieldSpec` per declared data field, in declaration order.
         """
         data_fields = cls._data_fields()
         return [
@@ -140,9 +144,9 @@ class Schema(Serializable):
     def json_schema(cls) -> dict[str, Any]:
         """JSON Schema for this schema's data fields only.
 
-        Like :meth:`pydantic.BaseModel.model_json_schema` but restricted to
+        Like `pydantic.BaseModel.model_json_schema` but restricted to
         the subclass's data columns, in declaration order (see
-        :meth:`field_specs`).
+        `field_specs`).
 
         Returns:
             A JSON Schema dict whose ``properties`` are the data columns.
@@ -258,7 +262,7 @@ class Schema(Serializable):
         for nullable fields), and scalar ``str`` fields are stringified
         up front since pydantic's lax mode never coerces *to* ``str``.
 
-        This is more permissive than :meth:`validate` — it actively
+        This is more permissive than `validate` — it actively
         transforms data to match the schema rather than rejecting mismatches.
 
         Args:
@@ -342,7 +346,7 @@ class Schema(Serializable):
     def _data_fields(cls) -> set[str]:
         """Return the names of the schema's data fields.
 
-        Excludes any field declared by :class:`Schema` itself — framework
+        Excludes any field declared by `Schema` itself — framework
         plumbing must not appear in reconciled rows or count as schema
         columns.
 
@@ -377,4 +381,3 @@ def _coerce_str_value(value: Any) -> Any:
 RECONCILERS: dict[type, Callable[[Any], Any]] = {
     str: _coerce_str_value,
 }
-

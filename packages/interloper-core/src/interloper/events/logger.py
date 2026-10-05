@@ -14,12 +14,14 @@ class EventLogger:
 
     Provides a familiar logging interface (debug/info/warning/error) where
     each call emits an ``EventType.LOG`` event visible to all event handlers.
-    Log levels use the standard :mod:`logging` module constants.
+    Log levels use the standard `logging` module constants.
 
-    Usage::
+    Usage:
 
-        context.logger.info("Fetched 142 records")
-        context.logger.warning("Rate limited, retrying...")
+    ```py
+    context.logger.info("Fetched 142 records")
+    context.logger.warning("Rate limited, retrying...")
+    ```
     """
 
     def __init__(
@@ -51,7 +53,7 @@ class EventLogger:
         """Emit a ``LOG`` event with the given level and message.
 
         Args:
-            level: Standard :mod:`logging` level constant, carried on the event
+            level: Standard `logging` level constant, carried on the event
                 as its level name.
             message: The log message.
         """

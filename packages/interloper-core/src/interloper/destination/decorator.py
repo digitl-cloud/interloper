@@ -35,21 +35,25 @@ def destination(
 ) -> type[Destination] | Callable[[type], type[Destination]]:
     """Create a Destination subclass from a decorated class.
 
-    Relations can be declared via annotations::
+    Relations can be declared via annotations:
 
-        @destination
-        class MyDest:
-            connection: PostgresConnection
+    ```py
+    @destination
+    class MyDest:
+        connection: PostgresConnection
 
-            def read(self, context): ...
-            def write(self, context, data): ...
+        def read(self, context): ...
+        def write(self, context, data): ...
+    ```
 
-    Or through the ``relations`` channel::
+    Or through the ``relations`` channel:
 
-        @destination(name="My destination", relations={"connection": PostgresConnection})
-        class MyDest:
-            def read(self, context): ...
-            def write(self, context, data): ...
+    ```py
+    @destination(name="My destination", relations={"connection": PostgresConnection})
+    class MyDest:
+        def read(self, context): ...
+        def write(self, context, data): ...
+    ```
 
     An annotation naming a component class declares a relation rather than a
     Pydantic model field.
@@ -59,13 +63,13 @@ def destination(
             ``None`` when used with keyword arguments, in which case a
             decorator is returned instead.
         relations: Relation name to a
-            :class:`~interloper.component.relation.Relation`, a component class
+            `Relation`, a component class
             (the shorthand for a relation on it), or a list of component
             classes narrowing the relation the decorated class declares under
             that name. Explicit declarations win over the class annotations.
         **overrides: Definition metadata and behaviour: the public ClassVars
             and field defaults the decorated class declares, or
-            :class:`~interloper.destination.base.Destination` itself for a
+            `Destination` itself for a
             plain class (``key``, ``name``, ``icon``, ``tags``); see the
             class. An unknown name is a ``TypeError`` at decoration.
 
