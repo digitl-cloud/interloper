@@ -193,11 +193,17 @@ class CronController(Controller):
         Returns:
             The window, or ``None`` for an unpartitioned job (or one whose
             lookback is explicitly null).
+
+        Raises:
+            ConfigError: If the job's targets disagree on granularity.
         """
         if not config.get("lookback", 1):
             return None
-        granularity = self._store.components.job_partition_granularity(job.id)
-        return CronJob.window(config, fires_at=now, granularity=granularity)
+        shared = self._store.components.job_partition_granularities([job.id])[job.id]
+        if len(shared) > 1:
+            names = ", ".join(sorted(granularity.value for granularity in shared))
+            raise ConfigError(f"Job targets disagree on partition granularity ({names})")
+        return CronJob.window(config, fires_at=now, granularity=next(iter(shared), None))
 
     def _calculate_next_run(self, cron_expression: str, base_time: datetime, zone: tzinfo) -> datetime:
         """Calculate the next run time from a cron expression.

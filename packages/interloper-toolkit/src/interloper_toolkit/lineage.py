@@ -41,13 +41,15 @@ def get_upstream(ctx: ToolkitContext, asset_id: str) -> UpstreamResult | ToolErr
         upstream = []
         for dep in deps:
             if dep.src_id == target:
-                asset = ctx.store.components.get(dep.dst_id, kind="asset")
-                upstream.append(RelationEdge(
-                    asset_id=str(dep.dst_id),
-                    param_name=dep.name,
-                    asset_key=asset.key,
-                    source_id=str(asset.parent_id),
-                ))
+                asset = ctx.store.components.get(dep.dst_id, org_id=ctx.org_id, kind="asset")
+                upstream.append(
+                    RelationEdge(
+                        asset_id=str(dep.dst_id),
+                        param_name=dep.name,
+                        asset_key=asset.key,
+                        source_id=str(asset.parent_id),
+                    )
+                )
 
         return UpstreamResult(asset_id=asset_id, upstream=upstream)
     except Exception as e:
@@ -69,13 +71,15 @@ def get_downstream(ctx: ToolkitContext, asset_id: str) -> DownstreamResult | Too
         downstream = []
         for dep in deps:
             if dep.dst_id == target:
-                asset = ctx.store.components.get(dep.src_id, kind="asset")
-                downstream.append(RelationEdge(
-                    asset_id=str(dep.src_id),
-                    param_name=dep.name,
-                    asset_key=asset.key,
-                    source_id=str(asset.parent_id),
-                ))
+                asset = ctx.store.components.get(dep.src_id, org_id=ctx.org_id, kind="asset")
+                downstream.append(
+                    RelationEdge(
+                        asset_id=str(dep.src_id),
+                        param_name=dep.name,
+                        asset_key=asset.key,
+                        source_id=str(asset.parent_id),
+                    )
+                )
 
         return DownstreamResult(asset_id=asset_id, downstream=downstream)
     except Exception as e:
@@ -186,13 +190,15 @@ def cross_source_dependencies(ctx: ToolkitContext) -> CrossSourceDependencies | 
             src_down = asset_source.get(dep.src_id)
             src_up = asset_source.get(dep.dst_id)
             if src_down and src_up and src_down != src_up:
-                cross_deps.append(CrossSourceEdge(
-                    downstream_asset_id=str(dep.src_id),
-                    downstream=asset_info.get(dep.src_id, AssetRef()),
-                    upstream_asset_id=str(dep.dst_id),
-                    upstream=asset_info.get(dep.dst_id, AssetRef()),
-                    param_name=dep.name,
-                ))
+                cross_deps.append(
+                    CrossSourceEdge(
+                        downstream_asset_id=str(dep.src_id),
+                        downstream=asset_info.get(dep.src_id, AssetRef()),
+                        upstream_asset_id=str(dep.dst_id),
+                        upstream=asset_info.get(dep.dst_id, AssetRef()),
+                        param_name=dep.name,
+                    )
+                )
 
         return CrossSourceDependencies(cross_source_count=len(cross_deps), dependencies=cross_deps)
     except Exception as e:

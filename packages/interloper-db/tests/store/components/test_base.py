@@ -18,7 +18,7 @@ from interloper.errors import (
     NotFoundError,
 )
 from interloper.partitioning.time import TimeGranularity
-from interloper_assets.demo.source import DemoMonthlySource, DemoSource
+from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, event
 from sqlmodel import Session, select
@@ -1285,6 +1285,54 @@ class TestEnsureChildrenDrift:
             reader.components.update(row.id, children=["a"])
 
 
+class HourlySource(il.Source):
+    """Source whose hourly asset declares where its partitions start."""
+
+    @il.asset(
+        partitioning=il.TimePartitionConfig(
+            column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
+        )
+    )
+    def clicks(self) -> list[dict]:
+        return []
+
+    @il.asset
+    def accounts(self) -> list[dict]:
+        return []
+
+
+class TestAssetPartitionings:
+    """Every partitioned asset row resolves its catalog partitioning."""
+
+    def test_owned_and_standalone_assets_resolve_their_partitioning(self, component_db: Engine) -> None:
+        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, HourlySource, demo_asset]))
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
+        hourly = store.components.create(_ORG, kind="source", key="hourly_source")
+        standalone = store.components.create(_ORG, kind="asset", key="demo_asset")
+        store.components.create(uuid4(), kind="source", key="demo_source")
+
+        day = il.TimePartitionConfig(column="date")
+        assert store.components.asset_partitionings(_ORG) == {
+            **{child.id: day for child in daily.children},
+            monthly.children[0].id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
+            next(child for child in hourly.children if child.key == "clicks").id: il.TimePartitionConfig(
+                column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
+            ),
+            standalone.id: day,
+        }
+
+    def test_a_drifted_asset_is_skipped(self, component_db: Engine) -> None:
+        store = Store(catalog=il.Catalog.from_assets([DemoSource, demo_asset]))
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        # A key the source does not declare must not fall back to the standalone asset of that key.
+        with Session(component_db) as session:
+            session.add(Component(org_id=_ORG, kind="asset", key="demo_asset", parent_id=daily.id))
+            session.commit()
+
+        assert set(store.components.asset_partitionings(_ORG)) == {child.id for child in daily.children}
+
+
 class TestLockDue:
     """Rows whose state instant has come, most overdue first, never-scheduled last."""
 
@@ -1320,71 +1368,53 @@ class TestLockDue:
         assert due(limit=10, keys=["other_job"]) == []
 
 
-class TestJobPartitionGranularity:
-    """The scheduler reads one granularity off a job's targets, or fails closed."""
+class TestJobPartitionGranularities:
+    """Each job's targets resolve to the granularities they declare, in three queries."""
 
-    def test_a_job_with_no_targets_has_none(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+    @staticmethod
+    def _store(*sources: type[il.Source]) -> Store:
+        return Store(catalog=il.Catalog.from_assets([*sources]))
+
+    def test_a_job_with_no_targets_declares_none(self, component_db: Engine):
+        store = self._store(DemoSource)
         job = store.components.create(_ORG, kind="job", key="cron_job")
 
-        assert store.components.job_partition_granularity(job.id) is None
+        assert store.components.job_partition_granularities([job.id]) == {job.id: set()}
 
-    def test_a_partitioned_source_target_reports_its_granularity(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+    def test_a_source_target_contributes_its_assets_granularities(self, component_db: Engine):
+        store = self._store(DemoSource)
         source = store.components.create(_ORG, kind="source", key="demo_source")
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
 
-        assert store.components.job_partition_granularity(job.id) is TimeGranularity.DAY
+        assert store.components.job_partition_granularities([job.id]) == {job.id: {TimeGranularity.DAY}}
 
-    def test_a_partitioned_asset_target_reports_its_granularity(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource]))
+    def test_an_asset_target_contributes_its_own(self, component_db: Engine):
+        store = self._store(DemoSource)
         source = store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
-        with Session(component_db) as session:
-            asset = session.exec(select(Component).where(Component.parent_id == source.id)).one()
-            asset_id = asset.id
-        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [asset_id]})
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.children[0].id]})
 
-        assert store.components.job_partition_granularity(job.id) is TimeGranularity.DAY
+        assert store.components.job_partition_granularities([job.id]) == {job.id: {TimeGranularity.DAY}}
 
-    def test_targets_disagreeing_on_granularity_fail_closed(self, component_db: Engine):
-        # Scheduling one window would be wrong for at least one target.
-        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
+    def test_disagreeing_targets_read_as_more_than_one(self, component_db: Engine):
+        store = self._store(DemoSource, DemoMonthlySource)
         daily = store.components.create(_ORG, kind="source", key="demo_source")
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]})
 
-        with pytest.raises(ConfigError, match="Job targets disagree on partition granularity"):
-            store.components.job_partition_granularity(job.id)
+        granularities = store.components.job_partition_granularities([job.id])
+
+        assert granularities == {job.id: {TimeGranularity.DAY, TimeGranularity.MONTH}}
 
     def test_a_drifted_target_contributes_nothing(self, component_db: Engine):
         # Drift is the run path's problem, not the scheduler's.
-        writer = Store(catalog=il.Catalog.from_assets([DemoSource]))
+        writer = self._store(DemoSource)
         source = writer.components.create(_ORG, kind="source", key="demo_source")
         job = writer.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
-        reader = Store(catalog=il.Catalog(components={}))
 
-        assert reader.components.job_partition_granularity(job.id) is None
-
-
-class TestJobPartitionGranularities:
-    """Many jobs resolve in one read, a disagreeing one as unpartitioned."""
-
-    def test_each_job_maps_to_its_granularity_or_none(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
-        daily = store.components.create(_ORG, kind="source", key="demo_source")
-        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
-        daily_job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [daily.id]})
-        plain_job = store.components.create(_ORG, kind="job", key="cron_job")
-        mixed_job = store.components.create(
-            _ORG, kind="job", key="cron_job", relations={"targets": [daily.id, monthly.id]}
-        )
-
-        granularities = store.components.job_partition_granularities([daily_job.id, plain_job.id, mixed_job.id])
-
-        assert granularities == {daily_job.id: TimeGranularity.DAY, plain_job.id: None, mixed_job.id: None}
+        assert self._store().components.job_partition_granularities([job.id]) == {job.id: set()}
 
     def test_the_query_count_does_not_grow_with_jobs_or_targets(self, component_db: Engine):
-        store = Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource]))
+        store = self._store(DemoSource, DemoMonthlySource)
         monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
         jobs = []
         for i in range(3):
@@ -1400,8 +1430,8 @@ class TestJobPartitionGranularities:
         granularities = store.components.job_partition_granularities([job.id for job in jobs])
 
         assert granularities == {
-            **{job.id: TimeGranularity.DAY for job in jobs[:3]},
-            jobs[3].id: TimeGranularity.MONTH,
+            **{job.id: {TimeGranularity.DAY} for job in jobs[:3]},
+            jobs[3].id: {TimeGranularity.MONTH},
         }
         assert len(statements) == 3
 
@@ -1409,5 +1439,5 @@ class TestJobPartitionGranularities:
         statements: list[str] = []
         event.listen(component_db, "before_cursor_execute", lambda *args: statements.append(args[2]))
 
-        assert Store(catalog=il.Catalog(components={})).components.job_partition_granularities([]) == {}
+        assert self._store().components.job_partition_granularities([]) == {}
         assert statements == []

@@ -49,7 +49,7 @@ A mutation that is deliberately idempotent (clearing a session's org, re-adding
 an existing member) says so in its own docstring.
 """
 
-from interloper_db.session import commit, session_scope, transaction
+from interloper_db.session import transaction
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.base import Store
 from interloper_db.store.components import ComponentQuery, ComponentReading, ComponentStore, DeleteImpact
@@ -59,7 +59,7 @@ from interloper_db.store.executions import ExecutionQuery, ExecutionStore
 from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
-from interloper_db.store.organisations import ActivityEntry, OrganisationQuery, OrganisationStore
+from interloper_db.store.organisations import OrganisationQuery, OrganisationStore
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.profiles import ProfileQuery, ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageDrift, UsageQuery, UsageStore
@@ -69,7 +69,6 @@ from interloper_db.store.sessions import SessionStore
 from interloper_db.store.tokens import TokenQuery, TokenStore
 
 __all__ = [
-    "ActivityEntry",
     "BackfillQuery",
     "BackfillStore",
     "ComponentQuery",
@@ -102,7 +101,5 @@ __all__ = [
     "UsageDrift",
     "UsageQuery",
     "UsageStore",
-    "commit",
-    "session_scope",
     "transaction",
 ]

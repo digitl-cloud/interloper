@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from interloper.errors import ConfigError
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
 from interloper.utils import add_months, coerce_to_date, coerce_to_datetime
 
@@ -309,7 +310,7 @@ class TimePartition(Partition):
             The partition the key names.
 
         Raises:
-            ValueError: If *key* matches no known id shape.
+            ConfigError: If *key* matches no known id shape.
         """
         for granularity in TimeGranularity:
             if granularity.key_format is None:
@@ -318,10 +319,8 @@ class TimePartition(Partition):
                 return cls(granularity.parse(key), granularity)
             except ValueError:
                 continue
-        shapes = ", ".join(
-            repr(g.key_format) for g in TimeGranularity if g.key_format is not None
-        )
-        raise ValueError(f"Partition key {key!r} matches no granularity (known shapes: {shapes}).")
+        shapes = ", ".join(repr(g.key_format) for g in TimeGranularity if g.key_format is not None)
+        raise ConfigError(f"Partition key {key!r} matches no granularity (known shapes: {shapes}).")
 
     def __post_init__(self) -> None:
         """Normalize the value to the start of its period."""
@@ -480,4 +479,3 @@ class TimePartitionWindow(PartitionWindow):
             first = max(first, bound)
 
         return cls(first, end, granularity)
-

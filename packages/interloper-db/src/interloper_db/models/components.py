@@ -10,6 +10,7 @@ import interloper as il
 from interloper.errors import ConfigError, HydrationError, format_exception
 from interloper.utils.time import assume_utc
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
+from sqlalchemy.orm.base import NO_VALUE, instance_state
 from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text
 from sqlmodel import Field as SQLField
 
@@ -97,12 +98,16 @@ class Component(SQLModel, table=True):
         The framework's own form (``Component.qualified_key``), and the one
         ``Catalog.get`` resolves: an owned asset is declared inside its
         source, so its bare key names nothing on its own. Reads the parent
-        row, which the store's listings load alongside.
+        row the store's listings load alongside, and only reaches for an
+        unloaded one when the row has a parent to load.
 
         Returns:
             ``source.asset`` for an owned asset, the bare key otherwise.
         """
-        return f"{self.parent.key}.{self.key}" if self.parent is not None else self.key
+        parent = instance_state(self).attrs.parent.loaded_value
+        if parent is NO_VALUE:
+            parent = self.parent if self.parent_id is not None else None
+        return self.key if parent is None else f"{parent.key}.{self.key}"
 
     def write_config(
         self, config: dict[str, Any] | None, *, encrypt: Callable[[bytes], bytes] | None, encrypted: bool | None
@@ -240,6 +245,30 @@ class Component(SQLModel, table=True):
         if not issubclass(anchor, il.Workload):
             raise ConfigError(f"Components of kind '{self.kind}' cannot be run")
         return anchor.billable
+
+    @property
+    def retry_policy(self) -> il.RetryPolicy | None:
+        """The run-level retry policy a job's config declares.
+
+        A job's declared policy governs its runs, and nothing else does: a
+        source's or an asset's own ``retry`` is an operation budget, and no
+        instance-wide default exists, so a row of any other kind, or a job
+        declaring nothing, is attempted once.
+
+        Returns:
+            The policy, or ``None`` when the row declares none.
+        """
+        declared = (self.config or {}).get("retry") if self.kind == "job" else None
+        return il.RetryPolicy.model_validate(declared) if declared else None
+
+    @property
+    def identity(self) -> il.ComponentIdentity:
+        """What the row is, for relation matching: its owning source's key and its own.
+
+        Returns:
+            The identity, the framework's own for a live component.
+        """
+        return il.ComponentIdentity.resolve(self.qualified_key, own_source_key=None)
 
     @property
     def enabled(self) -> bool:

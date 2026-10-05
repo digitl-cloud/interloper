@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper.errors import NotFoundError
 from interloper_db import OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
-from interloper_db.store import ActivityEntry
+from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.app import install_error_handlers
@@ -50,8 +50,8 @@ class FakeStore:
             list=self._list_organisations,
             create=self._create_organisation,
             get=self._get_organisation,
-            activity=self._activity,
         )
+        self.insights = SimpleNamespace(feed=self._activity)
         self.members = SimpleNamespace(count_by_org=self._count_by_org)
         self.quotas = SimpleNamespace(
             all_overrides=self._all_quota_overrides,
@@ -213,9 +213,16 @@ def test_config_snapshot_redacts_secrets(fake_settings: SimpleNamespace) -> None
     snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
     payload = snapshot.model_dump_json()
     secrets = (
-        "oauth-secret", "smtp-secret", "pg-secret", "key-material",
-        "l-secret", "nested-secret", "r-secret", "pull-secret",
-        "secret-header", "collector:4317",
+        "oauth-secret",
+        "smtp-secret",
+        "pg-secret",
+        "key-material",
+        "l-secret",
+        "nested-secret",
+        "r-secret",
+        "pull-secret",
+        "secret-header",
+        "collector:4317",
     )
     for secret in secrets:
         assert secret not in payload
@@ -570,9 +577,7 @@ def test_update_quota_passes_only_provided_fields(store: FakeStore) -> None:
         json={"max_sources": 5, "max_successful_runs_per_month": None},
     )
     assert resp.status_code == 200
-    assert store.quota_updates == [
-        (store.org.id, {"max_sources": 5, "max_successful_runs_per_month": None})
-    ]
+    assert store.quota_updates == [(store.org.id, {"max_sources": 5, "max_successful_runs_per_month": None})]
     body = resp.json()
     assert body["max_sources"] == 5
     assert body["max_successful_runs_per_month"] is None
@@ -748,5 +753,3 @@ class TestRegistryDefaults:
         snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, {"agent": True})
 
         assert snapshot.deployment.version is None
-
-

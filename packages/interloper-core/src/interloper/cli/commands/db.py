@@ -48,8 +48,9 @@ def _cmd_init(args: argparse.Namespace) -> None:
         args: Parsed CLI arguments; this subcommand takes none of its own.
     """
     from interloper_db import create_all, ensure_database, init_engine
-    from interloper_db.store import ProfileStore
+    from interloper_db.store import Store
 
+    from interloper.catalog.base import Catalog
     from interloper.settings import AppSettings
 
     settings = AppSettings.get()
@@ -60,7 +61,8 @@ def _cmd_init(args: argparse.Namespace) -> None:
     engine = init_engine(dsn)
     print("Creating tables and running migrations...")
     create_all(engine)
-    for profile in ProfileStore(engine).promote_super_admins(settings.auth.super_admin_emails):
+    store = Store(catalog=Catalog(components={}), engine=engine)
+    for profile in store.profiles.promote_super_admins(settings.auth.super_admin_emails):
         print(f"Promoted {profile.email} to super-admin.")
     print("Done.")
 

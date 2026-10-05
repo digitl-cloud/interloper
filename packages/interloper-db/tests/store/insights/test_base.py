@@ -13,36 +13,35 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError
-from interloper.partitioning.time import TimeGranularity
+from interloper.errors import ConfigError, NotFoundError
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
-from interloper_db.store import Store
+from interloper_db.models import (
+    AuthSession,
+    Backfill,
+    Component,
+    ComponentRelation,
+    Event,
+    Execution,
+    Invitation,
+    Organisation,
+    PersonalAccessToken,
+    Profile,
+    Quota,
+    Run,
+    Usage,
+    UserOrganisation,
+)
+from interloper_db.store import PageQuery, Store
+from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.insights import base as insights_base
 
 _ORG = uuid4()
 _T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
-
-
-class HourlySource(il.Source):
-    """Source whose hourly asset declares where its partitions start."""
-
-    @il.asset(
-        partitioning=il.TimePartitionConfig(
-            column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
-        )
-    )
-    def clicks(self) -> list[dict]:
-        return []
-
-    @il.asset
-    def accounts(self) -> list[dict]:
-        return []
 
 
 @pytest.fixture
@@ -58,10 +57,11 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
+    tenant = (Organisation, Profile, UserOrganisation, Invitation, AuthSession, PersonalAccessToken)
+    for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, HourlySource, demo_asset]))
+        yield Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, demo_asset]))
     finally:
         engine.dispose()
         engine_module._engine = None
@@ -120,51 +120,6 @@ def _error(run_id: UUID, event_type: str, error: str | None, *, second: int = 0,
 
 def _execution(run_id: UUID, asset_id: UUID, status: str) -> None:
     _add(Execution(run_id=run_id, component_id=asset_id, org_id=_ORG, component_key="orders", status=status))
-
-
-class TestLatestByTarget:
-    """One run per target: its most recently created attempt, whatever its stack."""
-
-    def test_the_most_recently_created_attempt_wins(self, store: Store) -> None:
-        job = _component("job")
-        _run(job, status="success")
-        first = _run(job, created=_T0 + dt.timedelta(hours=1))
-        retry = _run(job, status="success", created=_T0 + dt.timedelta(hours=2), root=first, attempt=2)
-
-        assert [(run.id, run.status) for run in store.insights._latest_by_target(_ORG)] == [(retry, "success")]
-
-    def test_an_interleaved_retry_is_the_most_recent_attempt(self, store: Store) -> None:
-        job = _component("job")
-        first = _run(job)
-        _run(job, status="success", created=_T0 + dt.timedelta(hours=1))
-        retry = _run(job, created=_T0 + dt.timedelta(hours=2), root=first, attempt=2)
-
-        assert [run.id for run in store.insights._latest_by_target(_ORG)] == [retry]
-
-    def test_kind_filter_and_org_scoping(self, store: Store) -> None:
-        job, source = _component("job"), _component("source")
-        _run(job)
-        _run(source, status="success")
-        _run(job, created=_T0 + dt.timedelta(hours=1), org_id=uuid4())
-
-        jobs_only = store.insights._latest_by_target(_ORG, kind="job")
-
-        assert [(run.component_id, run.status) for run in jobs_only] == [(job, "failed")]
-        assert {run.org_id for run in store.insights._latest_by_target(_ORG)} == {_ORG}
-        assert store.insights._latest_by_target(uuid4()) == []
-
-    def test_a_creation_tie_goes_to_the_later_partition(self, store: Store) -> None:
-        job = _component("job")
-        later = _run(job, partition_key="2026-01-02")
-        _run(job, status="success", partition_key="2026-01-01")
-        _run(job, status="success")
-
-        assert [run.id for run in store.insights._latest_by_target(_ORG)] == [later]
-
-    def test_a_deleted_target_is_left_out(self, store: Store) -> None:
-        _run(None)
-
-        assert store.insights._latest_by_target(_ORG) == []
 
 
 class TestErrorGroups:
@@ -285,34 +240,6 @@ class TestCoverageByKey:
             store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07")
 
 
-class TestAssetPartitionings:
-    """Every partitioned asset row resolves its catalog partitioning."""
-
-    def test_owned_and_standalone_assets_resolve_their_partitioning(self, store: Store) -> None:
-        daily = store.components.create(_ORG, kind="source", key="demo_source")
-        monthly = store.components.create(_ORG, kind="source", key="demo_monthly_source")
-        hourly = store.components.create(_ORG, kind="source", key="hourly_source")
-        standalone = store.components.create(_ORG, kind="asset", key="demo_asset")
-        store.components.create(uuid4(), kind="source", key="demo_source")
-
-        day = il.TimePartitionConfig(column="date")
-        assert store.insights._asset_partitionings(_ORG) == {
-            **{child.id: day for child in daily.children},
-            monthly.children[0].id: il.TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH),
-            next(child for child in hourly.children if child.key == "clicks").id: il.TimePartitionConfig(
-                column="date", granularity=TimeGranularity.HOUR, start=dt.datetime(2026, 1, 15)
-            ),
-            standalone.id: day,
-        }
-
-    def test_a_drifted_asset_is_skipped(self, store: Store) -> None:
-        daily = store.components.create(_ORG, kind="source", key="demo_source")
-        # A key the source does not declare must not fall back to the standalone asset of that key.
-        _add(Component(org_id=_ORG, kind="asset", key="demo_asset", parent_id=daily.id))
-
-        assert set(store.insights._asset_partitionings(_ORG)) == {child.id for child in daily.children}
-
-
 class TestHealth:
     """Each job's state and next firing."""
 
@@ -330,3 +257,68 @@ class TestHealth:
         [health] = store.insights.health(_ORG, now=_T0).jobs
 
         assert (health.next_run_at, health.window) == (_T0, None)
+
+
+class TestFeed:
+    """The organisation's activity feed, derived from the rows that exist."""
+
+    def test_composes_and_sorts_the_derived_feed(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-act", email="act@example.com", name="Act Min")
+        org = store.organisations.create(name="Busy", creator_id=admin.id)
+        store.members.add(org.id, admin.id, "admin")
+        store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        _add(
+            Component(org_id=org.id, kind="source", key="bing_ads", name="Bing"),
+            Run(id=uuid4(), org_id=org.id, status="success", completed_at=_T0),
+            Run(id=uuid4(), org_id=org.id, status="success", completed_at=_T0 + dt.timedelta(hours=1)),
+            Run(id=uuid4(), org_id=org.id, status="failed"),
+        )
+
+        entries = store.insights.feed(org.id, PageQuery()).items
+
+        assert all(isinstance(entry, ActivityEntry) for entry in entries)
+        kinds = [entry.kind for entry in entries]
+        assert set(kinds) == {"org_created", "member_joined", "invitation_sent", "source_added", "runs_completed"}
+        whens = [entry.when for entry in entries]
+        assert whens == sorted(whens, reverse=True)
+        assert all(when.tzinfo is not None for when in whens)
+        joined = next(entry for entry in entries if entry.kind == "member_joined")
+        assert joined.subject == "Act Min" and joined.extra == "admin"
+        invited = next(entry for entry in entries if entry.kind == "invitation_sent")
+        assert invited.subject == "new@example.com" and invited.extra == "Act Min"
+        runs = next(entry for entry in entries if entry.kind == "runs_completed")
+        assert runs.subject == "2"  # only the successful runs, aggregated per day
+
+    def test_limit_caps_the_feed(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-cap", email="cap@example.com", name="Cap")
+        org = store.organisations.create(name="Capped", creator_id=admin.id)
+        store.members.add(org.id, admin.id, "admin")
+
+        assert len(store.insights.feed(org.id, PageQuery(limit=1)).items) == 1
+
+    def test_the_feed_is_windowed_over_its_whole_length(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-page", email="page@example.com", name="Pager")
+        org = store.organisations.create(name="Paged", creator_id=admin.id)
+        store.invitations.create(org.id, email="a@example.com", role="viewer", invited_by=admin.id)
+        store.invitations.create(org.id, email="b@example.com", role="viewer", invited_by=admin.id)
+        whole = store.insights.feed(org.id, PageQuery(limit=None))
+
+        second = store.insights.feed(org.id, PageQuery(limit=2, offset=1))
+
+        assert whole.total == 4
+        assert second.total == 4
+        assert second.items == whole.items[1:3]
+
+    def test_a_deleted_organisation_keeps_its_feed_ending_in_the_deletion(self, store: Store):
+        admin = store.profiles.upsert(google_id="g-gone", email="gone@example.com", name="Gone")
+        org = store.organisations.create(name="Gone", creator_id=admin.id)
+        store.organisations.delete(org.id)
+
+        entries = store.insights.feed(org.id, PageQuery()).items
+
+        assert entries[0].kind == "org_deleted"
+        assert entries[0].when.tzinfo is not None
+
+    def test_unknown_org_raises(self, store: Store):
+        with pytest.raises(NotFoundError):
+            store.insights.feed(uuid4(), PageQuery())

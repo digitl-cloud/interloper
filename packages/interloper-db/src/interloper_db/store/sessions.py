@@ -10,7 +10,6 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from interloper.utils import assume_utc
 from sqlalchemy import Engine, delete
 from sqlmodel import col, select
 
@@ -71,7 +70,7 @@ class SessionStore:
             db_session = session.exec(select(AuthSession).where(AuthSession.token_hash == hash_token(token))).first()
             if not db_session:
                 return None
-            if assume_utc(db_session.expires_at) < datetime.now(timezone.utc):
+            if db_session.expires_at < datetime.now(timezone.utc):
                 session.delete(db_session)
                 commit(session)
                 return None

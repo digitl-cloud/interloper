@@ -14,10 +14,10 @@ from uuid import UUID
 from interloper.errors import NotFoundError
 from sqlalchemy import Engine, delete, func
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, select
+from sqlmodel import col, select
 
 from interloper_db.models import AuthSession, Invitation, PersonalAccessToken, Profile, UserOrganisation
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 
@@ -51,9 +51,15 @@ class ProfileStore:
 
         Returns:
             The profile row.
+
+        Raises:
+            NotFoundError: If no profile carries that id.
         """
         with session_scope(self._engine) as session:
-            return self._get(session, profile_id)
+            db_profile = session.get(Profile, profile_id)
+            if not db_profile:
+                raise NotFoundError(f"Profile {profile_id} not found")
+            return db_profile
 
     def get_by_google_id(self, google_id: str) -> Profile | None:
         """Get a profile by its Google OAuth subject identifier.
@@ -119,9 +125,7 @@ class ProfileStore:
                     db_profile.avatar_url = avatar_url
             else:
                 db_profile = Profile(email=email, name=name, google_id=google_id, avatar_url=avatar_url)
-            session.add(db_profile)
-            commit(session)
-            session.refresh(db_profile)
+            save(session, db_profile)
             return db_profile
 
     def update(self, profile_id: UUID, *, name: str | None = None, timezone: str | None = None) -> Profile:
@@ -136,14 +140,12 @@ class ProfileStore:
             The updated Profile.
         """
         with session_scope(self._engine) as session:
-            db_profile = self._get(session, profile_id)
+            db_profile = self.get(profile_id)
             if name is not None:
                 db_profile.name = name
             if timezone is not None:
                 db_profile.timezone = timezone
-            session.add(db_profile)
-            commit(session)
-            session.refresh(db_profile)
+            save(session, db_profile)
             return db_profile
 
     def set_super_admin(self, profile_id: UUID, *, value: bool) -> Profile:
@@ -157,11 +159,9 @@ class ProfileStore:
             The updated Profile, its ``organisations`` loaded.
         """
         with session_scope(self._engine) as session:
-            db_profile = self._get(session, profile_id)
+            db_profile = self.get(profile_id)
             db_profile.is_super_admin = value
-            session.add(db_profile)
-            commit(session)
-            session.refresh(db_profile, attribute_names=["is_super_admin", "organisations"])
+            save(session, db_profile, "organisations")
             return db_profile
 
     def promote_super_admins(self, emails: Iterable[str]) -> builtins.list[Profile]:
@@ -202,7 +202,7 @@ class ProfileStore:
             profile_id: Profile UUID.
         """
         with session_scope(self._engine) as session:
-            db_profile = self._get(session, profile_id)
+            db_profile = self.get(profile_id)
             for statement in (
                 delete(AuthSession).where(col(AuthSession.user_id) == profile_id),
                 delete(PersonalAccessToken).where(col(PersonalAccessToken.user_id) == profile_id),
@@ -212,22 +212,3 @@ class ProfileStore:
                 session.connection().execute(statement)
             session.delete(db_profile)
             commit(session)
-
-    @staticmethod
-    def _get(session: Session, profile_id: UUID) -> Profile:
-        """Fetch a profile row.
-
-        Args:
-            session: Open session to read through.
-            profile_id: Profile UUID.
-
-        Returns:
-            The profile row.
-
-        Raises:
-            NotFoundError: If no profile carries that id.
-        """
-        db_profile = session.get(Profile, profile_id)
-        if not db_profile:
-            raise NotFoundError(f"Profile {profile_id} not found")
-        return db_profile

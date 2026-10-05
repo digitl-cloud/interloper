@@ -13,10 +13,10 @@ from uuid import UUID
 from interloper.errors import NotFoundError
 from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, col, func, select
+from sqlmodel import col, func, select
 
 from interloper_db.models import Role, UserOrganisation
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 
@@ -118,12 +118,9 @@ class MemberStore:
         """
         role = Role.parse(role).value
         with session_scope(self._engine) as session:
-            membership = self._get(session, org_id, user_id)
+            membership = self._lock(org_id, user_id)
             membership.role = role
-            session.add(membership)
-            commit(session)
-            session.refresh(membership)
-            _ = membership.profile  # load before the session closes; readers reach it detached
+            save(session, membership, "profile")
             return membership
 
     def delete(self, org_id: UUID, user_id: UUID) -> None:
@@ -134,15 +131,13 @@ class MemberStore:
             user_id: Profile UUID to remove.
         """
         with session_scope(self._engine) as session:
-            session.delete(self._get(session, org_id, user_id))
+            session.delete(self._lock(org_id, user_id))
             commit(session)
 
-    @staticmethod
-    def _get(session: Session, org_id: UUID, user_id: UUID) -> UserOrganisation:
-        """Fetch a membership row.
+    def _lock(self, org_id: UUID, user_id: UUID) -> UserOrganisation:
+        """Load a membership row for a write, holding it for the rest of the transaction.
 
         Args:
-            session: Open session to read through.
             org_id: Organisation UUID.
             user_id: Profile UUID.
 
@@ -152,7 +147,8 @@ class MemberStore:
         Raises:
             NotFoundError: If the profile is not a member of the organisation.
         """
-        membership = session.get(UserOrganisation, (user_id, org_id))
-        if not membership:
-            raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
-        return membership
+        with session_scope(self._engine) as session:
+            membership = session.get(UserOrganisation, (user_id, org_id), with_for_update=True)
+            if not membership:
+                raise NotFoundError(f"User {user_id} is not a member of organisation {org_id}")
+            return membership

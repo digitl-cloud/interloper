@@ -5,48 +5,22 @@ container, the reaper authoring a terminal event on a run's behalf — and read
 back for the timeline the UI shows. Producers assign each event a stable id,
 so the same logical event dedups when it arrives twice.
 
-Text and payloads are sanitised on the way in: Postgres rejects NUL bytes,
-and an oversized payload is replaced rather than allowed to bloat the row.
+The row the framework event becomes, text and payload sanitised, is
+:meth:`Event.from_event`'s; the store only upserts it.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import interloper as il
 from interloper.errors import NotFoundError
 from sqlalchemy import Engine
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import col, select
 
 from interloper_db.models import Event
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery
-
-_MAX_EVENT_TEXT = 60_000
-"""Defensive cap for free-text event fields (well under Postgres limits)."""
-
-_PROMOTED_METADATA_KEYS = frozenset(
-    {
-        "run_id",
-        "org_id",
-        "component_id",
-        "component_kind",
-        "component_key",
-        "error",
-        "traceback",
-        "message",
-        "level",
-    }
-)
-"""Metadata keys promoted to their own columns rather than spilled into ``data``.
-
-Everything else spills into the ``data`` JSONB column. ``run_id`` and ``org_id``
-also arrive via run metadata, but the columns filled from
-:meth:`EventStore.save`'s own arguments are the authoritative ones.
-"""
 
 
 class EventQuery(PageQuery):
@@ -74,8 +48,6 @@ class EventStore:
         """
         self._engine = engine
 
-    # -- Events ----------------------------------------------------------------
-
     def save(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
         """Persist a framework event to the database, idempotently.
 
@@ -99,15 +71,16 @@ class EventStore:
             RuntimeError: If the row is gone right after the upsert, which only
                 a concurrent delete can cause.
         """
-        values = self._event_values(event, org_id, run_id)
-
+        row = Event.from_event(event, org_id, run_id)
+        values = {name: getattr(row, name) for name in Event.model_fields}
         with session_scope(self._engine) as session:
-            stmt = pg_insert(Event).values(**values).on_conflict_do_nothing(index_elements=["id"])
-            session.execute(stmt)  # ty: ignore[deprecated]
+            table = Event.__table__  # ty: ignore[unresolved-attribute]
+            statement = dialect_insert(session)(table).values(**values).on_conflict_do_nothing(index_elements=["id"])
+            session.execute(statement)  # ty: ignore[deprecated]
             commit(session)
-            saved = session.get(Event, values["id"])
+            saved = session.get(Event, row.id)
             if saved is None:  # pragma: no cover - only if the row was concurrently deleted
-                raise RuntimeError(f"Event {values['id']} missing immediately after upsert")
+                raise RuntimeError(f"Event {row.id} missing immediately after upsert")
             return saved
 
     def list(self, org_id: UUID, query: EventQuery, *, run_id: UUID | None = None) -> Page[Event]:
@@ -127,9 +100,7 @@ class EventStore:
             The page of events.
         """
         statement = (
-            select(Event)
-            .where(Event.org_id == org_id)
-            .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
+            select(Event).where(Event.org_id == org_id).order_by(col(Event.timestamp).asc(), col(Event.id).asc())
         )
         if run_id is not None:
             statement = statement.where(Event.run_id == run_id)
@@ -147,8 +118,12 @@ class EventStore:
 
         Args:
             event_id: The event UUID.
-            org_id: Organisation the event must belong to (``None`` accepts
-                any); a mismatch raises ``NotFoundError`` like an absent row.
+            org_id: Organisation the row must belong to; a mismatch raises
+                ``NotFoundError`` like an absent row, so a caller cannot learn
+                that an id exists in another tenant. ``None`` accepts any
+                organisation, for a caller that authorizes by the row's own
+                ``org_id`` afterwards (the API) or serves every organisation
+                (the scheduler).
 
         Returns:
             The Event row.
@@ -162,108 +137,3 @@ class EventStore:
             if not db_event or (org_id is not None and db_event.org_id != org_id):
                 raise NotFoundError(f"Event {event_id} not found")
             return db_event
-
-    # -- Internals -------------------------------------------------------------
-
-    @staticmethod
-    def _sanitize_text(value: str | None, *, max_len: int = _MAX_EVENT_TEXT) -> str | None:
-        """Make a free-text event field safe to persist.
-
-        Postgres ``text`` columns cannot store NUL bytes (``0x00``) — a single
-        one makes the whole INSERT raise, which (because event persistence is
-        best-effort) would silently drop the event.  Strip NULs and cap the
-        length so an oversized traceback can't fail the write either.
-
-        Args:
-            value: The raw field value, or ``None`` when the producer omitted it.
-            max_len: Maximum characters to keep before truncating, defaulting to
-                ``_MAX_EVENT_TEXT``. Longer values are cut and marked truncated.
-
-        Returns:
-            The cleaned string, or ``None`` if *value* is ``None``.
-        """
-        if value is None:
-            return None
-        cleaned = value.replace("\x00", "")
-        if len(cleaned) > max_len:
-            cleaned = cleaned[:max_len] + "…[truncated]"
-        return cleaned
-
-    @staticmethod
-    def _sanitize_data(metadata: dict[str, Any]) -> dict[str, Any] | None:
-        """Make a metadata dict safe to persist as JSONB, best-effort.
-
-        Non-JSON values are coerced through ``str``; a dict that still can't be
-        encoded (circular refs, NaN) is dropped rather than failing the event
-        write. Postgres ``jsonb`` rejects NUL escapes the same way ``text``
-        rejects NUL bytes, so they are stripped from the encoded form; an
-        oversized payload is replaced by a marker so the write can't fail on
-        size either.
-
-        Args:
-            metadata: The event metadata left over once the promoted keys are
-                stripped; an empty dict means there is nothing to store.
-
-        Returns:
-            The cleaned dict, or ``None`` when there is nothing worth storing.
-        """
-        if not metadata:
-            return None
-        try:
-            encoded = json.dumps(metadata, default=str, allow_nan=False)
-        except (TypeError, ValueError):
-            return None
-        if len(encoded) > _MAX_EVENT_TEXT:
-            return {"truncated": True}
-        if "\\u0000" in encoded:
-            encoded = encoded.replace("\\u0000", "")
-        return json.loads(encoded) or None
-
-    @staticmethod
-    def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, Any]:
-        """Map a framework event onto ``events`` column values.
-
-        The component reference comes from ``component_id``/``component_kind``/
-        ``component_key`` metadata — the identity keys every core emitter
-        stamps. Metadata not covered by a structured column lands losslessly
-        in ``data``.
-
-        Args:
-            event: The framework Event to map. A non-UUID ``id`` is replaced by
-                a fresh one, which forfeits the upsert's idempotency.
-            org_id: Organisation UUID for the ``org_id`` column.
-            run_id: Run UUID for the ``run_id`` column, or ``None`` for an event
-                emitted outside any run.
-
-        Returns:
-            Column values for an ``events`` insert.
-        """
-        metadata = event.metadata
-        try:
-            event_id = UUID(event.id)
-        except (ValueError, TypeError):
-            event_id = uuid4()
-
-        component_id = metadata.get("component_id")
-        component_kind = metadata.get("component_kind")
-        component_key = metadata.get("component_key")
-
-        return {
-            "id": event_id,
-            "org_id": org_id,
-            "run_id": run_id,
-            "event_type": event.type.value,
-            "component_id": UUID(str(component_id)) if component_id else None,
-            "component_kind": EventStore._sanitize_text(component_kind),
-            "component_key": EventStore._sanitize_text(component_key),
-            "error": EventStore._sanitize_text(metadata.get("error")),
-            "traceback": EventStore._sanitize_text(metadata.get("traceback")),
-            "message": EventStore._sanitize_text(metadata.get("message")),
-            "level": EventStore._sanitize_text(metadata.get("level")),
-            # None values are the absence of a key, not payload — producers emit
-            # them unconditionally (backfill_id on non-backfill runs, …).
-            "data": EventStore._sanitize_data(
-                {k: v for k, v in metadata.items() if k not in _PROMOTED_METADATA_KEYS and v is not None}
-            ),
-            "timestamp": event.timestamp,
-        }

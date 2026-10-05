@@ -19,7 +19,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Profile, ProfileQuery, UsageQuery
-from interloper_db.store import ActivityEntry
+from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
@@ -591,10 +591,7 @@ def _effective_limits(overrides: AdminQuotaLimits, defaults: AdminQuotaLimits) -
     Returns:
         The effective limit of every registered quota.
     """
-    return {
-        key: override if (override := overrides.get(key)) is not None else defaults.get(key)
-        for key in QUOTAS
-    }
+    return {key: override if (override := overrides.get(key)) is not None else defaults.get(key) for key in QUOTAS}
 
 
 def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
@@ -786,7 +783,7 @@ def get_organisation_activity(
     Returns:
         The page of activity entries, newest first.
     """
-    return store.organisations.activity(org_id, query).map(AdminActivityEntry.from_entry)
+    return store.insights.feed(org_id, query).map(AdminActivityEntry.from_entry)
 
 
 # -- Users ---------------------------------------------------------------------

@@ -22,7 +22,6 @@ from interloper_db import BackfillStatus, RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import BackfillQuery, Store
-from interloper_db.store.backfills import BackfillStore
 
 _ORG_ID = uuid4()
 
@@ -290,14 +289,14 @@ class TestCreateRuns:
 
     def test_queues_the_newest_partitions_and_leaves_the_rest_pending(self, store: Store):
         window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 4))
-        with Session(store.engine) as session:
+        with store.transaction() as session:
             db_backfill = Backfill(
                 org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-04", concurrency=2, status="running"
             )
             session.add(db_backfill)
             session.flush()
 
-            BackfillStore._create_runs(session, db_backfill, window, billable=True)
+            store.backfills._create_runs(db_backfill, window, billable=True)
             session.commit()
             backfill_id = db_backfill.id
 
@@ -311,13 +310,13 @@ class TestCreateRuns:
 
     def test_creates_rows_oldest_first(self, store: Store):
         window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
-        with Session(store.engine) as session:
+        with store.transaction() as session:
             db_backfill = Backfill(
                 org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-03", concurrency=1, status="running"
             )
             session.add(db_backfill)
             session.flush()
-            BackfillStore._create_runs(session, db_backfill, window, billable=True)
+            store.backfills._create_runs(db_backfill, window, billable=True)
             session.commit()
             runs = session.exec(
                 select(Run).where(Run.backfill_id == db_backfill.id).order_by(col(Run.created_at))
@@ -326,13 +325,13 @@ class TestCreateRuns:
 
     def test_stamps_the_billability_it_is_handed(self, store: Store):
         window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 2))
-        with Session(store.engine) as session:
+        with store.transaction() as session:
             db_backfill = Backfill(
                 org_id=_ORG_ID, start_key="2026-01-01", end_key="2026-01-02", concurrency=1, status="running"
             )
             session.add(db_backfill)
             session.flush()
-            BackfillStore._create_runs(session, db_backfill, window, billable=False)
+            store.backfills._create_runs(db_backfill, window, billable=False)
             session.commit()
             backfill_id = db_backfill.id
 

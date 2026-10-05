@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import builtins
 import logging
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
@@ -28,10 +29,10 @@ from interloper.errors import ConfigError, ConflictError, NotFoundError
 from interloper.partitioning.time import TimePartition
 from sqlalchemy import Engine, exists, func
 from sqlalchemy.orm import aliased, joinedload
-from sqlmodel import Session, col, select
+from sqlmodel import col, select
 
 from interloper_db.models import OPEN_RUN_STATUSES, TERMINAL_RUN_STATUSES, Component, Event, Run, RunStatus
-from interloper_db.session import commit, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QuotaStore, UsageLedger
 
@@ -62,6 +63,9 @@ RunSort = Literal[
     "-completed_at",
 ]
 """A runs listing's sort: a column, ``-``-prefixed for descending."""
+
+
+# -- Expressions ---------------------------------------------------------------
 
 
 def partition_key_range(start_key: str, end_key: str) -> list[Any]:
@@ -126,6 +130,23 @@ class RunQuery(PageQuery):
     sort: RunSort | None = None
 
 
+def latest_attempt() -> Any:
+    """Keep only each stack's latest attempt.
+
+    An attempt is its stack's latest when no attempt of the same stack
+    carries a higher number: a per-row probe of the stack's unique
+    ``(root_run_id, attempt)`` index, never an aggregate the planner has to
+    estimate. The probe takes none of the caller's filters on purpose:
+    narrowing it would answer "the latest *failed* attempt" rather than "the
+    stacks whose latest attempt failed".
+
+    Returns:
+        A filter expression selecting the latest attempt of each stack.
+    """
+    later = aliased(Run)
+    return ~exists().where(col(later.root_run_id) == col(Run.root_run_id), col(later.attempt) > col(Run.attempt))
+
+
 class RunStore:
     """Store methods for runs."""
 
@@ -165,11 +186,19 @@ class RunStore:
 
         Returns:
             The created Run row.
+
+        Raises:
+            NotFoundError: If the target component does not exist.
         """
         if partition_key is not None:
-            self.parse_partition(partition_key)
+            TimePartition.from_key(partition_key)
         with session_scope(self._engine) as session:
-            billable = self._target_billable(session, component_id)
+            billable = True
+            if component_id is not None:
+                target = session.get(Component, component_id)
+                if target is None:
+                    raise NotFoundError(f"Component {component_id} not found")
+                billable = target.run_billable()
             self._quotas.admit_run(org_id, billable=billable)
             db_run = Run(
                 org_id=org_id,
@@ -178,10 +207,7 @@ class RunStore:
                 status=RunStatus.QUEUED,
                 billable=billable,
             )
-            session.add(db_run)
-            commit(session)
-            session.refresh(db_run)
-            _ = db_run.target  # load before the session closes; readers reach it detached
+            save(session, db_run, "target")
             return db_run
 
     def get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
@@ -189,12 +215,15 @@ class RunStore:
 
         Args:
             run_id: The run UUID.
-            org_id: Organisation the run must belong to (``None`` accepts
-                any); a mismatch raises ``NotFoundError`` like an absent row,
-                so a caller cannot learn that an id exists in another tenant.
+            org_id: Organisation the row must belong to; a mismatch raises
+                ``NotFoundError`` like an absent row, so a caller cannot learn
+                that an id exists in another tenant. ``None`` accepts any
+                organisation, for a caller that authorizes by the row's own
+                ``org_id`` afterwards (the API) or serves every organisation
+                (the scheduler).
 
         Returns:
-            The Run row.
+            The Run row, its target loaded.
 
         Raises:
             NotFoundError: If the run is not found, or belongs to another
@@ -225,10 +254,7 @@ class RunStore:
             The page of runs, their targets loaded.
         """
         statement = (
-            select(Run)
-            .where(*self._filters(org_id, query))
-            .order_by(*self._order(query))
-            .options(*RUN_LOAD_OPTIONS)
+            select(Run).where(*self._filters(org_id, query)).order_by(*self._order(query)).options(*RUN_LOAD_OPTIONS)
         )
         with session_scope(self._engine) as session:
             return Page.read(session, statement, query)
@@ -317,6 +343,64 @@ class RunStore:
         with session_scope(self._engine) as session:
             return [*session.exec(statement).all()]
 
+    def latest_by_target(self, org_id: UUID, *, kind: str | None = None) -> builtins.list[Run]:
+        """The most recent attempt of every target.
+
+        What a reader means by "the last time this job ran": the most recently
+        created attempt targeting the component, whatever stack it belongs to.
+        The runs of one backfill share their creation instant, so a tie goes
+        to the later partition key, then to the greater id. Runs whose target
+        was deleted are left out.
+
+        Args:
+            org_id: Organisation UUID.
+            kind: Keep targets of this kind; ``None`` keeps every kind.
+
+        Returns:
+            One run per target, newest first, with the target loaded.
+        """
+        rank = (
+            func.row_number()
+            .over(
+                partition_by=col(Run.component_id),
+                order_by=(col(Run.created_at).desc(), col(Run.partition_key).desc().nulls_last(), col(Run.id).desc()),
+            )
+            .label("rank")
+        )
+        ranked = select(col(Run.id), rank).where(Run.org_id == org_id, col(Run.component_id).is_not(None)).subquery()
+        statement = (
+            select(Run)
+            .where(col(Run.id).in_(select(ranked.c.id).where(ranked.c.rank == 1)))
+            .order_by(col(Run.created_at).desc())
+            .options(*RUN_LOAD_OPTIONS)
+        )
+        if kind:
+            statement = statement.where(col(Run.target).has(col(Component.kind) == kind))
+        with session_scope(self._engine) as session:
+            return [*session.exec(statement).all()]
+
+    def last_successes(self, org_id: UUID) -> dict[UUID, datetime]:
+        """When each target last completed a successful run.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            The latest successful completion by target id; a target that never
+            succeeded is absent.
+        """
+        statement = (
+            select(col(Run.component_id), func.max(col(Run.completed_at)))
+            .where(Run.org_id == org_id, Run.status == RunStatus.SUCCESS, col(Run.component_id).is_not(None))
+            .group_by(col(Run.component_id))
+        )
+        with session_scope(self._engine) as session:
+            return {
+                component_id: completed
+                for component_id, completed in session.exec(statement).all()
+                if component_id is not None and completed is not None
+            }
+
     def claim_next(self) -> Run | None:
         """Claim the oldest claimable queued run and dispatch it, reserving its quota.
 
@@ -354,7 +438,7 @@ class RunStore:
                     commit(session)
                     logger.info("Dispatched run %s", db_run.id)
                     return db_run
-                self._cancel_over_quota(session, db_run)
+                self._cancel_over_quota(db_run)
                 commit(session)
                 logger.warning(
                     "Canceled run %s: monthly successful-run quota exhausted for org %s", db_run.id, db_run.org_id
@@ -370,21 +454,16 @@ class RunStore:
             The running Run row, its target loaded.
 
         Raises:
-            NotFoundError: If the run is not found.
             ConflictError: If the run is already terminal, as when the reaper
                 failed it while its pod was still being scheduled.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id, with_for_update=True, populate_existing=True)
-            if not db_run:
-                raise NotFoundError(f"Run {run_id} not found")
+            db_run = self._lock(run_id)
             if db_run.status in TERMINAL_RUN_STATUSES:
                 raise ConflictError(f"Run {run_id} is already {db_run.status}")
             db_run.status = RunStatus.RUNNING
             db_run.started_at = datetime.now(timezone.utc)
-            session.add(db_run)
-            commit(session)
-            _ = db_run.target  # load before the session closes; readers reach it detached
+            save(session, db_run, "target")
             return db_run
 
     def fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> Run:
@@ -404,17 +483,11 @@ class RunStore:
 
         Returns:
             The failed Run row.
-
-        Raises:
-            NotFoundError: If the run is not found.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id)
-            if not db_run:
-                raise NotFoundError(f"Run {run_id} not found")
+            db_run = self._lock(run_id)
             if metadata is None:
-                target = session.get(Component, db_run.component_id) if db_run.component_id else None
-                metadata = db_run.event_metadata(target)
+                metadata = db_run.event_metadata(db_run.target)
             event = il.Event(type=il.EventType.RUN_FAILED, metadata={**metadata, "error": error})
             self._events.save(event, org_id=db_run.org_id, run_id=db_run.id)
             failed = self.complete(run_id, success=False)
@@ -426,17 +499,11 @@ class RunStore:
 
         Args:
             run_id: The run UUID.
-
-        Raises:
-            NotFoundError: If the run is not found.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id)
-            if not db_run:
-                raise NotFoundError(f"Run {run_id} not found")
+            db_run = self._lock(run_id)
             db_run.hooks_evaluated_at = datetime.now(timezone.utc)
-            session.add(db_run)
-            commit(session)
+            save(session, db_run)
 
     def complete(self, run_id: UUID, *, success: bool) -> Run:
         """Mark a run as completed and advance its backfill if applicable.
@@ -460,15 +527,12 @@ class RunStore:
             The updated Run row.
 
         Raises:
-            NotFoundError: If the run is not found.
             ConflictError: If the run is already terminal, so a late completion
                 (the reaper's, after a pod finally started) cannot overwrite
                 the verdict or queue a retry of work that succeeded.
         """
         with session_scope(self._engine) as session:
-            db_run = session.get(Run, run_id, with_for_update=True, populate_existing=True)
-            if not db_run:
-                raise NotFoundError(f"Run {run_id} not found")
+            db_run = self._lock(run_id)
             if db_run.status in TERMINAL_RUN_STATUSES:
                 raise ConflictError(f"Run {run_id} is already {db_run.status}")
 
@@ -478,17 +542,15 @@ class RunStore:
 
             UsageLedger(session).settle_run(db_run, success=success)
 
-            if db_run.component_id:
-                db_component = session.get(Component, db_run.component_id)
-                if db_component:
-                    db_component.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
-                    session.add(db_component)
+            if db_run.target is not None:
+                db_run.target.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
+                session.add(db_run.target)
 
             if not success:
-                self._plan_retry(session, db_run)
+                self._plan_retry(db_run)
 
             if db_run.backfill_id:
-                self._backfills._advance(session, db_run.backfill_id, failed=not success)
+                self._backfills.advance(db_run.backfill_id, failed=not success)
 
             commit(session)
             return db_run
@@ -518,7 +580,6 @@ class RunStore:
             The newly created, queued Run row.
 
         Raises:
-            NotFoundError: If the run is not found.
             ConfigError: If ``scope`` is invalid.
             ConflictError: If the run has not failed, the stack's latest
                 attempt is not a failure, or another retry of the stack
@@ -528,9 +589,7 @@ class RunStore:
             raise ConfigError(f"Invalid retry scope: {scope!r} (expected 'all' or 'failed')")
 
         with session_scope(self._engine) as session:
-            src = session.get(Run, run_id)
-            if not src:
-                raise NotFoundError(f"Run {run_id} not found")
+            src = self.get(run_id)
             if src.status != RunStatus.FAILED:
                 raise ConflictError(
                     f"Run {run_id} is not failed (status={src.status!r}); only failed runs can be retried"
@@ -560,86 +619,35 @@ class RunStore:
                 retry_scope=scope,
                 billable=head.billable,
             )
-            session.add(db_run)
-            self._supersede(session, head)
-            commit(session)
-            session.refresh(db_run)
-            _ = db_run.target  # load before the session closes; readers reach it detached
+            head.supersede()
+            session.add(head)
+            save(session, db_run, "target")
             return db_run
-
-    @staticmethod
-    def parse_partition(key: str) -> TimePartition:
-        """Parse a caller-supplied partition key, rejecting one of no known shape.
-
-        Args:
-            key: The key, whose shape carries its granularity (``2026-08-21``,
-                ``2026-08``, ``2026``, ``2026-08-21T13``).
-
-        Returns:
-            The partition the key names.
-
-        Raises:
-            ConfigError: If the key matches no known shape.
-        """
-        try:
-            return TimePartition.from_key(key)
-        except ValueError as error:
-            raise ConfigError(str(error)) from error
 
     # -- Internals -------------------------------------------------------------
 
-    @staticmethod
-    def _target_billable(session: Session, component_id: UUID | None) -> bool:
-        """Resolve whether runs of a target count against the run quota.
-
-        An untargeted run is billable; a targeted one follows what its kind's
-        workload declares (:meth:`Component.run_billable`).
+    def _lock(self, run_id: UUID) -> Run:
+        """Load a run for a write, holding its row for the rest of the transaction.
 
         Args:
-            session: Open session the component row is read through.
-            component_id: The target component UUID, or None for an
-                untargeted run.
+            run_id: The run UUID.
 
         Returns:
-            The billability.
+            The run row, its state read fresh. Its target is not loaded: a
+            locking select rejects the outer join, so a caller that needs it
+            reaches it while the session is open.
 
         Raises:
-            NotFoundError: If the component does not exist.
+            NotFoundError: If the run is not found.
         """
-        if component_id is None:
-            return True
-        db_component = session.get(Component, component_id)
-        if not db_component:
-            raise NotFoundError(f"Component {component_id} not found")
-        return db_component.run_billable()
+        statement = select(Run).where(Run.id == run_id).with_for_update().execution_options(populate_existing=True)
+        with session_scope(self._engine) as session:
+            db_run = session.exec(statement).first()
+            if db_run is None:
+                raise NotFoundError(f"Run {run_id} not found")
+            return db_run
 
-    @staticmethod
-    def _retry_policy(session: Session, db_run: Run) -> il.RetryPolicy | None:
-        """The run-level policy in force for a run.
-
-        A job's declared policy governs its runs, and nothing else does: a
-        source's or an asset's own ``retry`` is an operation budget, and
-        reading it here would spend an operation's attempts on whole runs.
-        There is no instance-wide default either, so a run whose target
-        declares nothing is attempted once. ``config`` is a plain JSON
-        column, so this is one row read and no hydration.
-
-        Args:
-            session: Open session the target row is read through.
-            db_run: The run whose policy is resolved.
-
-        Returns:
-            The policy, or ``None`` when the target declares none.
-        """
-        if db_run.component_id is None:
-            return None
-        db_component = session.get(Component, db_run.component_id)
-        if db_component is None or db_component.kind != "job":
-            return None
-        declared = (db_component.config or {}).get("retry")
-        return il.RetryPolicy.model_validate(declared) if declared else None
-
-    def _plan_retry(self, session: Session, db_run: Run) -> Run | None:
+    def _plan_retry(self, db_run: Run) -> Run | None:
         """Queue the next attempt of a failed run, when its budget allows one.
 
         Called from the single terminal path, in the transaction that marks
@@ -654,13 +662,12 @@ class RunStore:
         any other run.
 
         Args:
-            session: Open session the successor is written through.
-            db_run: The run that just failed.
+            db_run: The run that just failed, its target loaded.
 
         Returns:
             The queued successor, or ``None`` when nothing is retried.
         """
-        policy = self._retry_policy(session, db_run)
+        policy = db_run.target.retry_policy if db_run.target is not None else None
         if policy is None or not policy.allows(db_run.attempt + 1):
             return None
 
@@ -677,78 +684,37 @@ class RunStore:
             retry_scope="failed",
             billable=db_run.billable,
         )
-        session.add(successor)
-        self._supersede(session, db_run)
-        session.flush()
+        db_run.supersede()
+        with session_scope(self._engine) as session:
+            session.add_all((successor, db_run))
+            session.flush()
         logger.info("Queued attempt %d of run stack %s", successor.attempt, successor.root_run_id)
         return successor
 
-    @staticmethod
-    def _supersede(session: Session, db_run: Run) -> None:
-        """Settle a failed run's hooks once a retry supersedes it: its failure is not the stack's verdict.
-
-        A failure whose hooks already ran stays stamped as it was.
-
-        Args:
-            session: Open session the stamp joins.
-            db_run: The failed run being retried.
-        """
-        if db_run.hooks_evaluated_at is None:
-            db_run.hooks_evaluated_at = datetime.now(timezone.utc)
-            session.add(db_run)
-
-    def _cancel_over_quota(self, session: Session, db_run: Run) -> None:
+    def _cancel_over_quota(self, db_run: Run) -> None:
         """Cancel a quota-denied run, its backfill with it, and record why.
 
         A canceled run is never claimed again, so the event cannot double-write.
 
         Args:
-            session: Open session the cancelation is written through.
             db_run: The run the quota denied.
         """
-        now = datetime.now(timezone.utc)
-        db_run.status = RunStatus.CANCELED
-        db_run.hooks_evaluated_at = now
-        session.add(db_run)
+        db_run.cancel()
         if db_run.backfill_id:
-            self._backfills._cancel_active(session, db_run.backfill_id)
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=db_run.org_id,
-                run_id=db_run.id,
-                component_id=db_run.component_id,
-                event_type="log",
-                level="warning",
-                message="Run canceled: the organisation's monthly successful-run quota is exhausted",
-                timestamp=now,
-            )
+            with suppress(ConflictError):
+                self._backfills.cancel(db_run.backfill_id)
+        reason = Event(
+            id=uuid4(),
+            org_id=db_run.org_id,
+            run_id=db_run.id,
+            component_id=db_run.component_id,
+            event_type="log",
+            level="warning",
+            message="Run canceled: the organisation's monthly successful-run quota is exhausted",
+            timestamp=datetime.now(timezone.utc),
         )
-
-    @staticmethod
-    def _latest_attempt_only() -> Any:
-        """Keep only each stack's latest attempt.
-
-        An attempt is its stack's latest when no attempt of the same stack
-        carries a higher number: a per-row probe of ``ix_runs_root_run_id``
-        for a narrow listing, one anti-join over the organisation's runs for a
-        wide one, and never an aggregate the planner has to estimate.
-
-        The probe matches the organisation, which keeps it inside the tenant,
-        but none of the caller's other filters on purpose: every attempt of a
-        stack shares its org and its target, and narrowing the probe would
-        answer "the latest *failed* attempt" rather than "the stacks whose
-        latest attempt failed".
-
-        Returns:
-            A filter expression selecting the latest attempt of each stack.
-        """
-        later = aliased(Run)
-        return ~exists().where(
-            col(later.org_id) == col(Run.org_id),
-            col(later.root_run_id) == col(Run.root_run_id),
-            col(later.attempt) > col(Run.attempt),
-        )
+        with session_scope(self._engine) as session:
+            session.add_all((db_run, reason))
 
     def _filters(self, org_id: UUID, query: RunQuery) -> builtins.list[Any]:
         """The where-clauses of a runs listing.
@@ -791,7 +757,7 @@ class RunStore:
         if query.root_run_id:
             filters.append(Run.root_run_id == query.root_run_id)
         elif not query.all_attempts:
-            filters.append(self._latest_attempt_only())
+            filters.append(latest_attempt())
         if query.status:
             filters.append(col(Run.status).in_(query.status))
         if query.after is not None:

@@ -470,7 +470,7 @@ class TestList:
 
 
 class TestSyncRelations:
-    """``_sync_relations`` replaces each listed name wholesale."""
+    """``sync`` replaces each listed name wholesale."""
 
     def test_replaces_a_many_valued_relation_wholesale(self, store: Store, component_db: Engine):
         first = store.components.create(_ORG, kind="source", key="first_campaign_source")

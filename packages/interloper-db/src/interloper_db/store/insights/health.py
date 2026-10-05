@@ -21,7 +21,6 @@ from typing import Literal
 from uuid import UUID
 
 from interloper.partitioning.time import TimePartitionWindow
-from interloper.utils import assume_utc
 
 from interloper_db.models import Component, Run, RunStatus
 from interloper_db.store.components import ComponentStatus
@@ -101,7 +100,7 @@ class Attention:
         return [
             cls(
                 "error_group",
-                assume_utc(group.last_seen),
+                group.last_seen,
                 component=jobs.get(group.job_id) if group.job_id else None,
                 run_id=group.sample_run_id,
                 error_group=group,
@@ -154,7 +153,7 @@ class Attention:
         for run in failed:
             if run.status != RunStatus.FAILED or run.attempt <= 1 or run.completed_at is None:
                 continue
-            finished = assume_utc(run.completed_at)
+            finished = run.completed_at
             if since <= finished <= now:
                 job = jobs.get(run.component_id) if run.component_id else None
                 items.append(

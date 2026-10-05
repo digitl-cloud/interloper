@@ -34,18 +34,20 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         "downgrade": [],
         "promote_super_admins": [],
     }
-    engine = object()
+    engine_ = object()
 
-    class RecordingProfileStore:
-        """Profile store stand-in recording the emails it is asked to promote."""
+    class RecordingStore:
+        """Store stand-in whose profiles facet records the emails it is asked to promote."""
 
-        def __init__(self, bound_engine: object) -> None:
+        def __init__(self, *, catalog: object, engine: object) -> None:
             """Check the store is bound to the command's engine.
 
             Args:
-                bound_engine: The engine the command built the store on.
+                catalog: The empty catalog the command builds.
+                engine: The engine the command built the store on.
             """
-            assert bound_engine is engine
+            assert engine is engine_
+            self.profiles = self
 
         def promote_super_admins(self, emails: list[str]) -> list[SimpleNamespace]:
             """Record the emails and promote every one of them.
@@ -60,15 +62,13 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
             return [SimpleNamespace(email=email) for email in emails]
 
     monkeypatch.setattr(interloper_db, "ensure_database", lambda dsn: recorded["ensure_database"].append(dsn))
-    monkeypatch.setattr(interloper_db, "init_engine", lambda dsn: (recorded["init_engine"].append(dsn), engine)[1])
+    monkeypatch.setattr(interloper_db, "init_engine", lambda dsn: (recorded["init_engine"].append(dsn), engine_)[1])
     monkeypatch.setattr(interloper_db, "create_all", lambda *a: recorded["create_all"].append(a))
     monkeypatch.setattr(interloper_db, "upgrade", lambda revision: recorded["upgrade"].append(revision))
     monkeypatch.setattr(interloper_db, "downgrade", lambda revision: recorded["downgrade"].append(revision))
-    monkeypatch.setattr(
-        interloper_db.provision, "drop_database", lambda dsn: recorded["drop_database"].append(dsn)
-    )
-    monkeypatch.setattr(interloper_db.store, "ProfileStore", RecordingProfileStore)
-    recorded["engine"] = [engine]
+    monkeypatch.setattr(interloper_db.provision, "drop_database", lambda dsn: recorded["drop_database"].append(dsn))
+    monkeypatch.setattr(interloper_db.store, "Store", RecordingStore)
+    recorded["engine"] = [engine_]
     return recorded
 
 

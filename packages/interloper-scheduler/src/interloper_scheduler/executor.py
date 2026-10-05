@@ -185,7 +185,7 @@ class RunExecutor:
             for row in self._store.executions.list(org_id, ExecutionQuery(limit=None), run_id=parent_id).items:
                 # Closest ancestor wins: only record a node the first time we see it.
                 statuses.setdefault(row.component_id, row.status)
-            parent_id = self._store.runs.get(parent_id).retry_of
+            parent_id = self._store.runs.get(parent_id, org_id=org_id).retry_of
         return {asset_id for asset_id, status in statuses.items() if status == "success"}
 
     def _apply_effects(self, result: il.RunResult) -> None:

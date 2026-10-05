@@ -61,9 +61,7 @@ class RenewalController(Controller):
         # Renewability is a class property, so the key set is static for the
         # process lifetime — computing it once keeps the tick query narrow
         # (non-renewable connections are never scanned or stamped).
-        self._renewable_keys = [
-            key for key, defn in catalog.components.items() if getattr(defn, "renewable", False)
-        ]
+        self._renewable_keys = [key for key, defn in catalog.components.items() if getattr(defn, "renewable", False)]
 
     def _tick(self) -> None:
         """Process a batch of due connections in a single transaction."""

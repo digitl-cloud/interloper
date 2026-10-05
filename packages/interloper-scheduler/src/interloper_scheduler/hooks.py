@@ -191,7 +191,7 @@ class HookController(Controller):
         matches: list[tuple[Component, il.Hook, str]] = []
         for hook_row in self._matching_hooks(org_id, target):
             claim = _claim_id(hook_row.id, subject_id)
-            if self._claimed(claim):
+            if self._claimed(claim, org_id):
                 continue
             hook = self._store.components.load(hook_row.id)
             if not isinstance(hook, il.Hook) or not hook.enabled or event_type not in hook.events:
@@ -275,17 +275,18 @@ class HookController(Controller):
         except NotFoundError:
             return None
 
-    def _claimed(self, claim: str) -> bool:
+    def _claimed(self, claim: str, org_id: UUID) -> bool:
         """Whether a firing's claim is already recorded.
 
         Args:
             claim: The deterministic claim id.
+            org_id: The subject's organisation, which owns the claim.
 
         Returns:
             True when the claim event exists.
         """
         try:
-            self._store.events.get(UUID(claim))
+            self._store.events.get(UUID(claim), org_id=org_id)
         except NotFoundError:
             return False
         return True
@@ -303,7 +304,7 @@ class HookController(Controller):
         watched_ids = [target.id] + ([target.parent_id] if target.parent_id else [])
         query = RelationQuery(name="watches", src_kind="hook", dst_id=watched_ids, limit=None)
         hook_ids = dict.fromkeys(relation.src_id for relation in self._store.relations.list(org_id, query).items)
-        return [self._store.components.get(hook_id) for hook_id in hook_ids]
+        return [self._store.components.get(hook_id, org_id=org_id) for hook_id in hook_ids]
 
     def _fire(
         self,
@@ -373,7 +374,7 @@ class HookController(Controller):
             component_id: The component the hook asks to run.
             watched_ids: Ids the hook watches, which bound what it may trigger.
         """
-        self._refuse_reentry(component_id, watched_ids)
+        self._refuse_reentry(run.org_id, component_id, watched_ids)
         self._store.runs.create(run.org_id, component_id=UUID(component_id), partition_key=run.partition_key)
 
     def _trigger_backfill(self, backfill: Backfill, component_id: str, watched_ids: set[str]) -> None:
@@ -387,7 +388,7 @@ class HookController(Controller):
             component_id: The component the hook asks to backfill.
             watched_ids: Ids the hook watches, which bound what it may trigger.
         """
-        target = self._refuse_reentry(component_id, watched_ids)
+        target = self._refuse_reentry(backfill.org_id, component_id, watched_ids)
         concurrency = (target.config or {}).get("concurrency", 1) if target.kind == "job" else 1
         self._store.backfills.create(
             backfill.org_id,
@@ -397,7 +398,7 @@ class HookController(Controller):
             concurrency=concurrency,
         )
 
-    def _refuse_reentry(self, component_id: str, watched_ids: set[str]) -> Component:
+    def _refuse_reentry(self, org_id: UUID, component_id: str, watched_ids: set[str]) -> Component:
         """Refuse a trigger that would re-enter the firing hook's own watch set.
 
         Triggering a component the hook watches (directly or through the
@@ -406,6 +407,7 @@ class HookController(Controller):
         responsibility, like any recursive schedule.
 
         Args:
+            org_id: The organisation the hook fires in.
             component_id: The component the hook asks to run.
             watched_ids: Ids the hook watches.
 
@@ -415,7 +417,7 @@ class HookController(Controller):
         Raises:
             ConfigError: If the trigger would re-enter the hook's own watch set.
         """
-        target = self._store.components.get(UUID(component_id))
+        target = self._store.components.get(UUID(component_id), org_id=org_id)
         target_closure = {component_id} | ({str(target.parent_id)} if target.parent_id else set())
         if target_closure & watched_ids:
             raise ConfigError(

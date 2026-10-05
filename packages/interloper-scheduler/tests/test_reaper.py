@@ -13,7 +13,7 @@ from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Quota, Run, Usage
 from interloper_db.models import Event as EventRow
-from interloper_db.store import EventStore, UsageDrift
+from interloper_db.store import UsageDrift
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -59,14 +59,6 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
     store = Store(catalog=il.Catalog(components={}))
 
-    def sqlite_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> EventRow:
-        row = EventRow(**EventStore._event_values(event, org_id, run_id))
-        with Session(eng) as session:
-            session.add(row)
-            session.commit()
-        return row
-
-    monkeypatch.setattr(store.events, "save", sqlite_save)
     try:
         yield store
     finally:
@@ -255,9 +247,7 @@ class TestReconcileUsage:
 class TestLauncherFailure:
     """A launcher that cannot answer falls through to the timeout."""
 
-    def test_a_describe_failure_is_logged_and_survived(
-        self, store: Store, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_describe_failure_is_logged_and_survived(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
         class BrokenLauncher(Launcher):
             """Launcher whose ``describe_run`` always raises."""
 

@@ -13,13 +13,12 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from interloper.errors import NotFoundError
-from interloper.utils import assume_utc
 from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
 from interloper_db.models import PersonalAccessToken, Profile
-from interloper_db.session import commit, session_scope
+from interloper_db.session import save, session_scope
 from interloper_db.store.members import MemberStore
 from interloper_db.store.page import Page, PageQuery
 
@@ -88,9 +87,7 @@ class TokenStore:
                 token_hash=hash_token(raw),
                 expires_at=expires_at,
             )
-            session.add(db_token)
-            commit(session)
-            session.refresh(db_token)
+            save(session, db_token)
             return db_token, raw
 
     def resolve(self, raw: str) -> tuple[Profile, PersonalAccessToken, str] | None:
@@ -117,7 +114,7 @@ class TokenStore:
 
             if db_token.revoked_at is not None:
                 return None
-            if db_token.expires_at is not None and assume_utc(db_token.expires_at) < now:
+            if db_token.expires_at is not None and db_token.expires_at < now:
                 return None
 
             db_profile = session.get(Profile, db_token.user_id)
@@ -129,11 +126,9 @@ class TokenStore:
                 return None
 
             last_used = db_token.last_used_at
-            if last_used is None or assume_utc(last_used) < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
+            if last_used is None or last_used < now - timedelta(seconds=LAST_USED_THROTTLE_SECONDS):
                 db_token.last_used_at = now
-                session.add(db_token)
-                commit(session)
-                session.refresh(db_token)
+                save(session, db_token)
 
             return db_profile, db_token, role
 
@@ -184,17 +179,10 @@ class TokenStore:
 
         Returns:
             The revoked row. Revoking an already-revoked token is a no-op.
-
-        Raises:
-            NotFoundError: If the token does not exist.
         """
         with session_scope(self._engine) as session:
-            db_token = session.get(PersonalAccessToken, token_id)
-            if not db_token:
-                raise NotFoundError(f"Token {token_id} not found")
+            db_token = self.get(token_id)
             if db_token.revoked_at is None:
                 db_token.revoked_at = datetime.now(timezone.utc)
-                session.add(db_token)
-                commit(session)
-                session.refresh(db_token)
+                save(session, db_token)
             return db_token
