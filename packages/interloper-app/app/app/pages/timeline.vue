@@ -35,7 +35,7 @@ function onBarClick(bar: TimelineBar) {
     navigateTo(`/executions/runs/${bar.id}`)
 }
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null
+useIntervalFn(() => timelineStore.fetch(), REFRESH_INTERVAL)
 
 onMounted(async () => {
     await Promise.all([
@@ -44,13 +44,9 @@ onMounted(async () => {
         componentsStore.fetchAll(['job', 'source', 'asset']),
         catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
     ])
-    refreshTimer = setInterval(() => timelineStore.fetch(), REFRESH_INTERVAL)
 })
 
-onUnmounted(() => {
-    if (refreshTimer) clearInterval(refreshTimer)
-    timelineStore.$reset()
-})
+onUnmounted(() => timelineStore.$reset())
 </script>
 
 <template>
