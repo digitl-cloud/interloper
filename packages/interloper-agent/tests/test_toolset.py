@@ -6,7 +6,7 @@ from interloper_db.store import ComponentQuery, Store
 from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, RunContext
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.usage import RunUsage
@@ -76,3 +76,18 @@ class TestDeferral:
         assert isinstance(result.output, DeferredToolRequests)
         assert [call.tool_name for call in result.output.calls] == ["request_connection_setup"]
 
+
+class TestResults:
+    def test_a_result_reaches_the_model_without_its_empty_fields(self, ctx: ToolkitContext):
+        agent = agent_calling("request_connection_setup", {"connection_key": "nope"})
+
+        result = agent.run_sync("connect", deps=ctx)
+
+        returned = [p.content for m in result.all_messages() for p in m.parts if isinstance(p, ToolReturnPart)]
+        assert returned == [
+            {
+                "status": "error",
+                "error": "Connection definition 'nope' not found in catalog",
+                "valid_values": ["demo_connection"],
+            }
+        ]

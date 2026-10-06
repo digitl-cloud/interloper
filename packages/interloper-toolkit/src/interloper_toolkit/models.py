@@ -28,7 +28,17 @@ from typing import Any, Literal
 from uuid import UUID
 
 from interloper_db.models import Backfill, Component, Event, Execution, Run
-from interloper_db.store.insights import AssetKeyCoverage, ErrorCause, JobCoverage, JobHealth, JobOutcome
+from interloper_db.store.insights import (
+    Activity,
+    AssetKeyCoverage,
+    Attention,
+    ErrorCause,
+    JobCoverage,
+    JobHealth,
+    JobOutcome,
+    KindInventory,
+    OrgHealth,
+)
 from pydantic import BaseModel
 
 _MISSING_RANGES_LIMIT = 20
@@ -738,6 +748,122 @@ class JobHealthReport(BaseModel):
     count: int
     total: int
     jobs: list[JobHealthRow]
+
+
+class AttentionRow(BaseModel):
+    """One thing that needs a person.
+
+    ``kind`` is ``error_group`` (failures sharing a cause: ``error`` is the
+    cause, ``runs`` how many runs it failed), ``renewal_error`` (a connection
+    whose credentials could not be renewed: ``error`` says why),
+    ``still_failing`` (a run stack still failing after ``attempt`` attempts),
+    ``drift`` (a component the catalog no longer serves as configured:
+    ``error`` is its status) or ``overdue`` (a scheduled firing late since
+    ``since``).
+    """
+
+    kind: str
+    since: datetime | None = None
+    component_id: UUID | None = None
+    component_kind: str | None = None
+    component_name: str | None = None
+    run_id: UUID | None = None
+    error: str | None = None
+    runs: int | None = None
+    attempt: int | None = None
+    partition_key: str | None = None
+
+    @classmethod
+    def from_attention(cls, item: Attention) -> AttentionRow:
+        """Project an attention fact.
+
+        Args:
+            item: The fact.
+
+        Returns:
+            The row.
+        """
+        component = item.component
+        group = item.error_group
+        if group is not None:
+            error = group.cause.summary if group.cause else group.sample
+        else:
+            error = item.status.value if item.status is not None else item.detail
+        return cls(
+            kind=item.kind,
+            since=item.since,
+            component_id=component.id if component else None,
+            component_kind=component.kind if component else None,
+            component_name=(component.name or component.key) if component else None,
+            run_id=item.run_id,
+            error=error,
+            runs=len(group.runs) if group is not None else None,
+            attempt=item.attempt,
+            partition_key=item.partition_key,
+        )
+
+
+class PipelineOverview(BaseModel):
+    """The organisation at a glance, as its overview page shows it.
+
+    Run counts cover the last 24 hours; ``failing_jobs`` holds the failing and
+    overdue jobs, ``upcoming`` the next scheduled firings, and ``attention``
+    everything that needs a person, errors first and newest first.
+    """
+
+    status: Literal["success"] = "success"
+    runs_succeeded_24h: int
+    runs_failed_24h: int
+    running: int
+    queued: int
+    backfills_active: int
+    backfill_partitions_done: int
+    backfill_partitions_total: int
+    jobs: int
+    jobs_failing: int
+    jobs_overdue: int
+    failing_jobs: list[JobHealthRow]
+    upcoming: list[JobHealthRow]
+    attention: list[AttentionRow]
+    inventory: list[KindInventory]
+
+    @classmethod
+    def from_insights(cls, health: OrgHealth, activity: Activity, upcoming: int) -> PipelineOverview:
+        """Compose the overview from the organisation's health and activity.
+
+        Args:
+            health: The organisation's health.
+            activity: The last 24 hours of attempts, what runs now and backfill progress.
+            upcoming: How many of the next scheduled firings to include.
+
+        Returns:
+            The overview.
+        """
+        rows = [JobHealthRow.from_health(job) for job in health.jobs]
+        scheduled = sorted(
+            (row for row in rows if row.enabled and row.next_run_at),
+            key=lambda row: row.next_run_at.timestamp() if row.next_run_at else 0,
+        )
+        attention = sorted(
+            (AttentionRow.from_attention(item) for item in health.attention),
+            key=lambda row: (row.kind in ("drift", "overdue"), -(row.since.timestamp() if row.since else 0)),
+        )
+        return cls(
+            runs_succeeded_24h=activity.runs.succeeded,
+            runs_failed_24h=activity.runs.failed,
+            running=activity.in_flight.running,
+            queued=activity.in_flight.queued,
+            backfills_active=activity.backfills.active,
+            backfill_partitions_done=activity.backfills.partitions_done,
+            backfill_partitions_total=activity.backfills.partitions_total,
+            jobs=len(rows),
+            jobs_failing=sum(row.failing for row in rows),
+            jobs_overdue=sum(row.overdue for row in rows),
+            failing_jobs=[row for row in rows if row.failing or row.overdue],
+            upcoming=scheduled[:upcoming],
+            attention=attention,
+            inventory=health.inventory,
+        )
 
 
 class PartitionRange(BaseModel):

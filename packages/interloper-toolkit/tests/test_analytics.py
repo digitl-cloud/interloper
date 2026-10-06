@@ -14,6 +14,30 @@ from sqlmodel import Session
 from interloper_toolkit import ToolkitContext, analytics
 
 
+class TestPipelineOverview:
+    def test_one_call_carries_the_day_the_jobs_and_what_needs_a_person(self, ctx: ToolkitContext):
+        green = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="Green job")
+        red = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="Red job")
+        red_id = red.id
+        finished = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+        runs = [
+            Run(id=uuid4(), org_id=ctx.org_id, component_id=green.id, status="success", completed_at=finished),
+            Run(id=uuid4(), org_id=ctx.org_id, component_id=red_id, status="failed", completed_at=finished),
+            Run(id=uuid4(), org_id=ctx.org_id, component_id=green.id, status="queued"),
+        ]
+        with Session(engine_module.get_engine()) as session:
+            session.add_all([green, red, *runs])
+            session.commit()
+
+        result = analytics.pipeline_overview(ctx)
+
+        assert result.status == "success"
+        assert (result.runs_succeeded_24h, result.runs_failed_24h, result.running, result.queued) == (1, 1, 0, 1)
+        assert (result.jobs, result.jobs_failing, result.jobs_overdue) == (2, 1, 0)
+        assert [(job.job_id, job.latest_status) for job in result.failing_jobs] == [(red_id, "failed")]
+        assert {row.kind: row.failing for row in result.inventory}["job"] == 1
+
+
 class TestJobHealth:
     def test_failing_jobs_come_first_with_their_latest_run(self, ctx: ToolkitContext):
         green = Component(org_id=ctx.org_id, kind="job", key="cron_job", name="A green job")

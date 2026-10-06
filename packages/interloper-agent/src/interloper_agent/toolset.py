@@ -2,11 +2,11 @@
 
 pydantic-ai hands a tool its :class:`~pydantic_ai.RunContext`, whose
 ``deps`` is the :class:`~interloper_toolkit.ToolkitContext`; binding
-supplies it in the context's place. Two behaviours follow from the table
+supplies it in the context's place. Three behaviours follow from the table
 and the results rather than from per-tool code: a create or a cancel waits
-for the user's approval in the app, and a result that awaits the user (a
+for the user's approval in the app, a result that awaits the user (a
 :class:`~interloper_toolkit.UserRequest`) stops the run for the app to
-answer.
+answer, and every other result reaches the model without its empty fields.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 
 from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from interloper_toolkit import Effect, Tool, ToolkitContext, UserRequest
+from pydantic import BaseModel
 from pydantic_ai import CallDeferred, RunContext
 from pydantic_ai.toolsets import AbstractToolset, FunctionToolset, WrapperToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
@@ -66,13 +67,35 @@ class Deferring(WrapperToolset[ToolkitContext]):
         return result
 
 
+class Compacting(WrapperToolset[ToolkitContext]):
+    """Hand the model each result without its empty fields: every null is tokens the model reads for nothing."""
+
+    async def call_tool(
+        self, name: str, tool_args: dict[str, Any], ctx: RunContext[ToolkitContext], tool: ToolsetTool[ToolkitContext]
+    ) -> Any:
+        """Call the tool and drop the null fields from a typed result.
+
+        Args:
+            name: The tool's name.
+            tool_args: The validated arguments.
+            ctx: The run context.
+            tool: The tool definition being called.
+
+        Returns:
+            The result, as JSON without its nulls when it is a model.
+        """
+        result = await super().call_tool(name, tool_args, ctx, tool)
+        return result.model_dump(mode="json", exclude_none=True) if isinstance(result, BaseModel) else result
+
+
 def toolset() -> AbstractToolset[ToolkitContext]:
     """Build the agent's toolset from :data:`TOOLS`.
 
     Returns:
-        The toolset, one tool per entry, with deferral on results that await the user.
+        The toolset, one tool per entry, with deferral on results that await
+        the user and compaction on the others.
     """
     functions: FunctionToolset[ToolkitContext] = FunctionToolset()
     for tool in TOOLS:
         functions.add_function(tool.bind(deps, RUN_CONTEXT), takes_ctx=True, requires_approval=tool.needs_approval)
-    return Deferring(functions)
+    return Compacting(Deferring(functions))
