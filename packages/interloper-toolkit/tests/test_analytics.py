@@ -7,11 +7,13 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
 from interloper_db import engine as engine_module
 from interloper_db.models import Component, Execution, Run
 from sqlmodel import Session
 
 from interloper_toolkit import ToolkitContext, analytics
+from interloper_toolkit.models import ToolError
 
 
 class TestPipelineOverview:
@@ -36,6 +38,17 @@ class TestPipelineOverview:
         assert (result.jobs, result.jobs_failing, result.jobs_overdue) == (2, 1, 0)
         assert [(job.job_id, job.latest_status) for job in result.failing_jobs] == [(red_id, "failed")]
         assert {row.kind: row.failing for row in result.inventory}["job"] == 1
+
+    def test_a_failed_read_comes_back_as_a_tool_error(self, ctx: ToolkitContext, monkeypatch: pytest.MonkeyPatch):
+        def unavailable(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(ctx.store.insights, "health", unavailable)
+
+        result = analytics.pipeline_overview(ctx)
+
+        assert isinstance(result, ToolError)
+        assert result.error == "database unavailable"
 
 
 class TestJobHealth:
