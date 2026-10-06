@@ -2553,7 +2553,7 @@ four forms:</p>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        <span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">],</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"*.campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Relation</span><span class="p">(</span><span class="s2">"asset"</span><span class="p">,</span> <span class="s2">"*.dim_campaigns"</span><span class="p">,</span> <span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)},</span>
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">)</span>
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">campaign_matches</span><span class="p">(</span>
 </span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="bp">self</span><span class="p">,</span>
@@ -2567,32 +2567,40 @@ four forms:</p>
 </span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">leg</span><span class="o">.</span><span class="n">data</span>
 </span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>        <span class="p">]</span>
 </span></code></pre></div>
-<p>The DAG binds every <code>campaigns</code> asset it holds, so the set of legs is decided by wiring, not by
+<p>The DAG binds every <code>dim_campaigns</code> asset it holds, so the set of legs is decided by wiring, not by
 the class. <code>list[il.Upstream]</code> on its own infers the same relation on the parameter's bare key,
 which is a many-valued sibling; <code>relations=</code> is what reaches outside the source.</p>
 <h3 id="fan-in-across-sources">Fan-in across sources<a class="headerlink" href="#fan-in-across-sources" title="Permanent link">&para;</a></h3>
 <p>The relation above is not hypothetical: <code>interloper_assets.CampaignMatcher</code> declares exactly this
 wildcard (same <code>campaign_matches</code> decorator shown above, plus <code>schema=schemas.CampaignMatches</code>),
-matching campaigns across every advertising connector into one lookup table: each row names the
+matching campaigns across every advertising platform into one lookup table. It reads each
+platform's star schema rather than its connector: not every connector collects a <code>campaigns</code>
+entity, so a star schema's <code>dim_campaigns</code> is built from whatever carries the campaigns (a
+snapshot, a campaign report, the ad facts), and the matcher always finds them under one key.
+Each row names the
 campaign's <code>platform</code> and <code>account</code>, the normalised <code>canonical_name</code> it is matched on and the
 <code>match_id</code> shared by every campaign matched to it. A <code>key_pattern</code> on the source selects the part
 of a name that identifies the campaign under a naming convention, and a <code>similarity_threshold</code>
 below <code>1.0</code> also merges names that merely resemble each other.</p>
-<p>Building a DAG over both connectors and the matcher wires every <code>campaigns</code> asset held into the
-<code>campaigns</code> relation, one leg per connector:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">fb</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>   <span class="c1"># declares a campaigns asset</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">tt</span> <span class="o">=</span> <span class="n">TiktokAds</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>     <span class="c1"># declares a campaigns asset</span>
+<p>A star schema fans in one level below, with a qualified key: <code>FacebookAdsStarSchema</code> declares
+<code>facebook_ads.ads_stats</code> with <code>many=True</code> on its <code>fact_ad_performance</code>, one leg per Facebook Ads
+account. The star schemas are placeholders for now: they declare their wiring but materialize no
+rows.</p>
+<p>Building a DAG over the star schemas and the matcher wires every <code>dim_campaigns</code> asset held into
+the <code>campaigns</code> relation, one leg per platform:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">fb</span> <span class="o">=</span> <span class="n">FacebookAdsStarSchema</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>   <span class="c1"># declares a dim_campaigns asset</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">tt</span> <span class="o">=</span> <span class="n">TiktokAdsStarSchema</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>     <span class="c1"># declares a dim_campaigns asset</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">matcher</span> <span class="o">=</span> <span class="n">CampaignMatcher</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">dest</span><span class="p">])</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="n">tt</span><span class="p">,</span> <span class="n">matcher</span><span class="p">)</span>   <span class="c1"># binds matcher.campaign_matches.campaigns to [fb.campaigns, tt.campaigns]</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">fb</span><span class="p">,</span> <span class="n">tt</span><span class="p">,</span> <span class="n">matcher</span><span class="p">)</span>   <span class="c1"># binds matcher.campaign_matches.campaigns to [fb.dim_campaigns, tt.dim_campaigns]</span>
 </span></code></pre></div>
 <p>A matcher built against upstreams already materialized elsewhere reads them read-only instead of
 running them, the same explicit-bind pattern as any other relation:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">matcher</span><span class="o">.</span><span class="n">campaign_matches</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">fb</span><span class="o">.</span><span class="n">campaigns</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">matcher</span><span class="p">)</span>   <span class="c1"># fb.campaigns joins the DAG as enabled=False</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">matcher</span><span class="o">.</span><span class="n">campaign_matches</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="n">fb</span><span class="o">.</span><span class="n">dim_campaigns</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">matcher</span><span class="p">)</span>   <span class="c1"># fb.dim_campaigns joins the DAG as enabled=False</span>
 </span></code></pre></div>
-<p><code>examples/campaign_matcher.yaml</code> is the same wiring written as a manifest: two connectors each
-override their <code>campaigns</code> asset to <code>enabled: false</code>, and <code>campaign_matches</code> names both by
+<p><code>examples/campaign_matcher.yaml</code> is the same wiring written as a manifest: two star schemas each
+override their <code>dim_campaigns</code> asset to <code>enabled: false</code>, and <code>campaign_matches</code> names both by
 <code>{ref: ...}</code> since an asset always travels under its own source. See <a href="../specs/">Specs</a> for the
 manifest format.</p>
 <h2 id="how-wiring-works">How wiring works<a class="headerlink" href="#how-wiring-works" title="Permanent link">&para;</a></h2>
