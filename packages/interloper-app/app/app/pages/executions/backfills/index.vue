@@ -4,9 +4,7 @@
             <AppNavbar title="Executions" />
             <UDashboardToolbar>
                 <template #left>
-                    <UNavigationMenu :items="EXECUTION_VIEWS"
-                                     highlight
-                                     class="-mx-1 flex-1" />
+                    <PageTabs :items="EXECUTION_VIEWS" />
                 </template>
             </UDashboardToolbar>
         </template>

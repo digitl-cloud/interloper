@@ -172,10 +172,11 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                     </UCard>
                 </SplitterPanel>
 
+                <!-- The page's panel gap, less the 1px each pane pads its card with so the ring isn't clipped. -->
                 <SplitterResizeHandle class="group flex justify-center transition-[width] duration-200"
-                                      :class="panelOpen ? 'w-3' : 'w-0'"
+                                      :class="panelOpen ? 'w-3.5 sm:w-5.5' : 'w-0'"
                                       :disabled="!panelOpen || panelAnimating">
-                    <div class="h-full w-px transition-colors group-data-[state=hover]:bg-accented group-data-[state=drag]:bg-accented" />
+                    <div class="h-full w-0.5 transition-colors group-data-[state=hover]:bg-accented group-data-[state=drag]:bg-accented" />
                 </SplitterResizeHandle>
 
                 <SplitterPanel ref="assetPaneRef"

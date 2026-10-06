@@ -1,9 +1,19 @@
+import type { RouteLocationRaw } from 'vue-router'
+
 export interface NavPage {
     label: string
     icon: string
     to: string
     /** Aliases the command palette also matches on (e.g. "DAG" → Graph). Not rendered. */
     keywords?: string[]
+}
+
+/** A view in a page's tab group: a route, or a `?tab=` query with its own `active` flag. */
+export interface PageTab {
+    label: string
+    to: RouteLocationRaw
+    active?: boolean
+    badge?: string | number
 }
 
 /** A sidebar destination; a hub also carries its routed views, shown in its page toolbar and as its sidebar submenu. */

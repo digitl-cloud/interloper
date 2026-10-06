@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import type { NavigationMenuItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import { UBadge } from '#components'
 import type { AdminActivityEntry, AdminOrganisation, AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
 import type { Organisation, OrgMember } from '~/types/organisation'
@@ -60,7 +60,7 @@ const tab = computed(() => {
     const value = route.query.tab as string
     return TAB_VALUES.includes(value) ? value : 'usage'
 })
-const tabs = computed<NavigationMenuItem[]>(() => [
+const tabs = computed<PageTab[]>(() => [
     { label: 'Usage & quotas', icon: 'i-lucide-gauge', to: { query: { tab: 'usage' } }, active: tab.value === 'usage' },
     {
         label: 'Members',
@@ -314,9 +314,7 @@ watch(orgId, loadData)
             </AppNavbar>
             <UDashboardToolbar>
                 <template #left>
-                    <UNavigationMenu :items="tabs"
-                                     highlight
-                                     class="-mx-1 flex-1" />
+                    <PageTabs :items="tabs" />
                 </template>
                 <template #right>
                     <UButton v-if="isMember"

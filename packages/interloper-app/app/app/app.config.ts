@@ -3,7 +3,7 @@ export default defineAppConfig({
     colors: {
       primary: 'blue',
       secondary: 'gray',
-      success: 'green',
+      success: 'emerald',
       warning: 'amber',
       error: 'red',
       info: 'blue',
@@ -53,6 +53,26 @@ export default defineAppConfig({
         root: 'bg-muted',
         // The mobile slideover renders through `content`, not `root`.
         content: 'bg-muted'
+      }
+    },
+    // The body ends as close to the window's bottom edge as the agent card (AGENT_PANEL_INSET), so their bottoms line up.
+    dashboardPanel: {
+      slots: {
+        body: 'pb-2 sm:pb-2'
+      }
+    },
+    // Borderless, the navbar keeps no space under its controls: the page's content sits as far below them as
+    // it sits from the panel's sides. The top padding keeps the controls centred on the sidebar header's line.
+    dashboardNavbar: {
+      slots: {
+        root: 'h-auto border-b-0 pt-2.5'
+      }
+    },
+    // A page's toolbar (its view tabs, a run's actions) reads as part of the header, not a band of its own:
+    // it sits as far below the header as the body's content sits below it. Its content scrolls itself.
+    dashboardToolbar: {
+      slots: {
+        root: 'min-h-0 overflow-visible border-b-0 pt-4 sm:pt-6'
       }
     },
     navigationMenu: {
@@ -182,7 +202,7 @@ export default defineAppConfig({
         label: 'eyebrow text-dimmed'
       }
     },
-    // Segmented control: the active pill takes the panel tone on the grey track
+    // Segmented control: the active pill takes the panel tone on a card-toned track
     // (theme default is a solid primary pill).
     tabs: {
       compoundVariants: [
@@ -190,8 +210,9 @@ export default defineAppConfig({
           color: 'primary',
           variant: 'pill',
           class: {
-            indicator: 'bg-default',
-            trigger: 'data-[state=active]:text-highlighted'
+            list: 'bg-muted ring ring-default',
+            indicator: 'bg-default shadow-xs dark:bg-inverted',
+            trigger: 'data-[state=active]:text-highlighted dark:data-[state=active]:text-inverted'
           }
         }
       ]

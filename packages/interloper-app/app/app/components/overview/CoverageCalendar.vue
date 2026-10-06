@@ -161,7 +161,7 @@ watch(coverage, (value) => {
     <UCard>
         <template #header>
             <CardHeader title="Partition coverage"
-                        :description="coverage ? summary : undefined"
+                        :description="coverage && !coverageError ? summary : undefined"
                         :loading="!coverage && !coverageError">
                 <UIcon v-if="switching"
                        name="i-lucide-loader-circle"
@@ -179,27 +179,30 @@ watch(coverage, (value) => {
         </template>
         <div ref="frame"
              class="overflow-x-auto">
-            <UAlert v-if="coverageError"
-                    color="error"
-                    icon="i-lucide-triangle-alert"
-                    title="Couldn't load coverage"
-                    :description="errorDetail(coverageError) ?? GENERIC_ERROR"
-                    :actions="[{
-                        label: 'Try again',
-                        icon: 'i-lucide-refresh-cw',
-                        color: 'neutral',
-                        variant: 'outline',
-                        onClick: () => overviewStore.fetchCoverage(),
-                    }]"
-                    class="mb-3.5" />
-            <VChart v-if="coverage"
+            <div v-if="coverageError"
+                 class="flex items-center"
+                 :style="{ minHeight: `${chartHeight}px` }">
+                <UAlert color="error"
+                        icon="i-lucide-triangle-alert"
+                        title="Couldn't load coverage"
+                        :description="errorDetail(coverageError) ?? GENERIC_ERROR"
+                        :actions="[{
+                            label: 'Try again',
+                            icon: 'i-lucide-refresh-cw',
+                            color: 'neutral',
+                            variant: 'outline',
+                            onClick: () => overviewStore.fetchCoverage(),
+                        }]"
+                        class="mx-auto w-full max-w-xl" />
+            </div>
+            <VChart v-else-if="coverage"
                     :option="option"
                     class="mx-auto transition-opacity"
                     :class="switching ? 'opacity-50' : ''"
                     :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
                     autoresize
                     @click="onClick" />
-            <div v-else-if="weeks && !coverageError"
+            <div v-else-if="weeks"
                  class="mx-auto"
                  :style="{ height: `${chartHeight}px`, width: `${chartWidth}px`, padding: `${CALENDAR_TOP}px ${CALENDAR_LEFT}px 0` }">
                 <div class="grid grid-flow-col grid-rows-7"
@@ -211,7 +214,7 @@ watch(coverage, (value) => {
                 </div>
             </div>
         </div>
-        <OverviewCoverageDayDetail v-if="coverage && selected"
+        <OverviewCoverageDayDetail v-if="coverage && selected && !coverageError"
                                    :date="selected"
                                    :coverage="coverage"
                                    :source-filter="sourceFilter" />

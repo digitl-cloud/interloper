@@ -208,9 +208,7 @@ const typeKey = ref<string | null>(null)
             <AppNavbar title="Components" />
             <UDashboardToolbar>
                 <template #left>
-                    <UNavigationMenu :items="views"
-                                     highlight
-                                     class="-mx-1 flex-1" />
+                    <PageTabs :items="views" />
                 </template>
             </UDashboardToolbar>
         </template>

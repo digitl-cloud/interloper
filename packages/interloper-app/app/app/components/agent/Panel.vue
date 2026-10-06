@@ -79,19 +79,29 @@ const SUGGESTIONS = [
 </script>
 
 <template>
-    <aside class="fixed top-0 right-0 h-full z-40 bg-muted border-l border-default flex flex-col min-h-0 transition-transform duration-300"
-           :class="open ? 'translate-x-0' : 'translate-x-full'"
-           :style="{ width: `${width}px` }">
-        <UDashboardResizeHandle class="absolute left-0 inset-y-0 z-10 w-1 -ml-px transition-colors hover:bg-primary/30"
-                                :class="dragging && 'bg-primary/30'"
-                                @mousedown.prevent="startResize"
-                                @touchstart.prevent="startResize"
-                                @dblclick="resetWidth" />
-
+    <UDashboardResizeHandle v-if="open"
+                            class="fixed z-40 w-0.5 transition-colors hover:bg-accented"
+                            :class="dragging && 'bg-accented'"
+                            :style="{
+                                top: `${AGENT_PANEL_INSET}px`,
+                                bottom: `${AGENT_PANEL_INSET}px`,
+                                right: `${width + AGENT_PANEL_INSET + AGENT_PANEL_GUTTER / 2 - 1}px`,
+                            }"
+                            @mousedown.prevent="startResize"
+                            @touchstart.prevent="startResize"
+                            @dblclick="resetWidth" />
+    <aside class="fixed z-40 flex min-h-0 flex-col overflow-hidden rounded-lg bg-muted ring ring-default transition-transform duration-300"
+           :style="{
+               width: `${width}px`,
+               top: `${AGENT_PANEL_INSET}px`,
+               right: `${AGENT_PANEL_INSET}px`,
+               bottom: `${AGENT_PANEL_INSET}px`,
+               transform: open ? 'none' : `translateX(calc(100% + ${AGENT_PANEL_INSET}px))`,
+           }">
         <!-- Header -->
-        <div class="flex items-center gap-3 px-[18px] h-(--ui-header-height) border-b border-default shrink-0">
+        <div class="flex items-center gap-3 px-[18px] h-(--ui-header-height) shrink-0">
             <div class="size-8 rounded-md bg-primary text-inverted flex items-center justify-center">
-                <UIcon name="i-lucide-sparkles"
+                <UIcon name="icon:agent"
                        class="size-4" />
             </div>
             <div class="flex-1 min-w-0">
@@ -138,23 +148,24 @@ const SUGGESTIONS = [
                                :assistant="{ ui: { body: 'flex-1', content: 'text-[13.5px]' } }"
                                :user="{ ui: { content: 'text-[13.5px]' } }"
                                :auto-scroll="{ size: 'md', color: 'neutral', variant: 'outline' }"
-                               :ui="{ viewport: 'top-auto bottom-3' }"
+                               :ui="{ root: 'px-0', viewport: 'top-auto bottom-3' }"
                                class="pb-2">
                     <template #indicator>
                         <AgentThinking />
-                    </template>
-
-                    <template #leading="{ message }">
-                        <AgentAvatar v-if="message.role === 'assistant'"
-                                     :live="message.id === chat.liveMessageId.value"
-                                     size="sm" />
                     </template>
 
                     <template #content="{ message }">
                         <AgentParts :message="message"
                                     :live="message.id === chat.liveMessageId.value"
                                     @approve="(id, approved) => chat?.addToolApprovalResponse({ id, approved })"
-                                    @output="(tool, toolCallId, output) => chat?.addToolOutput({ tool, toolCallId, output })" />
+                                    @output="(tool, toolCallId, output) => chat?.addToolOutput({ tool, toolCallId, output })">
+                            <!-- The avatar opens the message's first row, so the message runs edge to edge between the panel's padding. -->
+                            <template #leading>
+                                <AgentAvatar v-if="message.role === 'assistant'"
+                                             :live="message.id === chat.liveMessageId.value"
+                                             size="sm" />
+                            </template>
+                        </AgentParts>
                     </template>
                 </UChatMessages>
 
@@ -186,7 +197,7 @@ const SUGGESTIONS = [
         </div>
 
         <!-- Composer -->
-        <div class="border-t border-default p-3.5 shrink-0">
+        <div class="border-t border-default px-[18px] py-3.5 shrink-0">
             <UChatPrompt v-model="input"
                          variant="outline"
                          placeholder="Ask about your workspace…"

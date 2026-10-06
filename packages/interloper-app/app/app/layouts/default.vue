@@ -47,7 +47,7 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
 <template>
     <div>
         <UDashboardGroup storage-key="dashboard-data"
-                         :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth}px` : '0px' }"
+                         :style="{ right: agentOpen && userStore.agentAvailable ? `${agentWidth + AGENT_PANEL_INSET}px` : '0px' }"
                          :ui="{ base: `fixed top-0 bottom-0 left-0 flex overflow-hidden ${agentDragging ? '' : 'transition-[right] duration-300'}` }">
             <UDashboardSidebar collapsible
                                resizable
@@ -59,8 +59,6 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
                 </template>
 
                 <template #default="{ collapsed }">
-                    <UDashboardSearchButton :collapsed="collapsed"
-                                            class="bg-transparent ring-default" />
                     <UNavigationMenu v-model="openMenus"
                                      :collapsed="collapsed"
                                      :items="navItems(collapsed)"

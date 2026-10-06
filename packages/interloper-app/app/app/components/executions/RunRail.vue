@@ -80,7 +80,7 @@ function outcome(attempt: RunAttempt): string {
                 :items="sections"
                 :ui="{
                     root: 'flex w-full flex-col gap-3',
-                    item: 'overflow-hidden rounded-lg border-0 bg-default ring ring-default',
+                    item: 'overflow-hidden rounded-lg border-0 bg-muted ring ring-default',
                     trigger: 'px-4 py-3 text-sm font-semibold',
                     content: 'flex flex-col',
                 }">

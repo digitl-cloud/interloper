@@ -21,7 +21,7 @@ defineProps<{ text: string }>()
         <template #content>
             <div class="mt-2 rounded-lg border border-default bg-elevated/50 px-3 py-2.5 text-[13px] text-toned">
                 <Markdown :value="text"
-                          class="*:first:mt-0 *:last:mb-0" />
+                          class="chat-prose *:first:mt-0 *:last:mb-0" />
             </div>
         </template>
     </UCollapsible>

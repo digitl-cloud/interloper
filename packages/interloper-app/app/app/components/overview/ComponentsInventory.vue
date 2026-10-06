@@ -14,12 +14,15 @@ const KIND_META: Record<string, { label: string, icon: string, to: string }> = {
     hook: { label: 'Hooks', icon: 'i-carbon-lightning', to: kindPath('hook') },
 }
 
+/** In bar and legend order: from healthy to failing, then the inactive ones. */
 const STATES = [
-    { key: 'failing', label: 'failing', legend: 'Failing', class: 'bg-error' },
-    { key: 'attention', label: 'needs attention', legend: 'Needs attention', class: 'bg-warning' },
     { key: 'healthy', label: 'healthy', legend: 'Healthy', class: 'bg-success' },
+    { key: 'attention', label: 'needs attention', legend: 'Needs attention', class: 'bg-warning' },
+    { key: 'failing', label: 'failing', legend: 'Failing', class: 'bg-error' },
     { key: 'disabled', label: 'disabled', legend: 'Disabled', class: 'bg-accented' },
 ] as const
+/** The issues read worst first. */
+const ISSUES = ['failing', 'attention', 'disabled'] as const
 
 const table = computed(() => (props.rows ?? []).map(row => ({
     ...row,
@@ -29,7 +32,7 @@ const table = computed(() => (props.rows ?? []).map(row => ({
         pct: (100 * row[s.key]) / row.total,
         title: `${row[s.key]} ${s.label}`,
     })),
-    issues: STATES.filter(s => s.key !== 'healthy' && row[s.key]).map(s => `${row[s.key]} ${s.label}`).join(' · ') || 'all healthy',
+    issues: ISSUES.filter(key => row[key]).map(key => `${row[key]} ${STATES.find(s => s.key === key)!.label}`).join(' · ') || 'all healthy',
     issuesClass: row.failing ? 'text-error' : row.attention ? 'text-warning' : 'text-dimmed',
 })))
 

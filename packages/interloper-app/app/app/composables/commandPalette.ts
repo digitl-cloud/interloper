@@ -74,7 +74,7 @@ export function useCommandPalette() {
         if (userStore.agentAvailable) {
             actionItems.push({
                 label: agentOpen.value ? 'Close agent panel' : 'Open agent panel',
-                icon: 'i-lucide-sparkles',
+                icon: 'icon:agent',
                 onSelect: () => {
                     agentOpen.value = !agentOpen.value
                     close()

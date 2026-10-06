@@ -15,7 +15,7 @@ interface StatusMeta {
 
 /** Bucket order also drives the proportion-bar segment order and the legend. */
 const STATUS_META: StatusMeta[] = [
-    { key: 'success', label: 'Success', statuses: ['success'], colorClass: 'bg-green-500', color: 'var(--color-green-500)' },
+    { key: 'success', label: 'Success', statuses: ['success'], colorClass: 'bg-emerald-500', color: 'var(--color-emerald-500)' },
     { key: 'running', label: 'Running', statuses: ['running', 'dispatched'], colorClass: 'bg-blue-500', color: 'var(--color-blue-500)' },
     { key: 'failed', label: 'Failed', statuses: ['failed'], colorClass: 'bg-red-500', color: 'var(--color-red-500)' },
     { key: 'canceled', label: 'Canceled', statuses: ['canceled'], colorClass: 'bg-amber-500', color: 'var(--color-amber-500)' },

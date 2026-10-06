@@ -10,7 +10,7 @@ const props = withDefaults(defineProps<{
 }>(), { color: 'neutral', dot: true, spinner: false })
 
 const COLOR_CLASSES: Record<NonNullable<typeof props.color>, string> = {
-    success: 'bg-green-500/10 text-green-700 dark:bg-green-400/10 dark:text-green-400',
+    success: 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400',
     warning: 'bg-amber-500/15 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
     error: 'bg-red-500/10 text-red-700 dark:bg-red-400/10 dark:text-red-400',
     neutral: 'bg-elevated text-muted',

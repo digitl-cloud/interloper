@@ -40,7 +40,7 @@ function useSuggestion(text: string) {
         <template #body>
             <UContainer class="flex-1 flex flex-col items-center justify-center gap-6 py-12">
                 <div class="flex flex-col items-center gap-1">
-                    <UIcon name="i-lucide-sparkles"
+                    <UIcon name="icon:agent"
                            class="size-10 text-primary mb-2" />
                     <h1 class="text-2xl font-semibold">
                         How can I help you?

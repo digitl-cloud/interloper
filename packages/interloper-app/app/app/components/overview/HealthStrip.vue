@@ -118,15 +118,15 @@ const jobs = computed(() => {
             <template #detail>of {{ overview?.jobs.enabled }} enabled</template>
             <template #footer>
                 <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">
+                    <div class="bg-success"
+                         :style="{ width: `${jobs.healthyPct}%` }" />
                     <div v-if="jobs.failing"
                          class="bg-error"
                          :style="{ width: `${jobs.failingPct}%` }" />
-                    <div class="bg-success"
-                         :style="{ width: `${jobs.healthyPct}%` }" />
                 </div>
                 <div class="flex justify-between text-xs text-dimmed">
-                    <span>{{ jobs.failing ? `${jobs.failing} failing` : 'none failing' }}</span>
                     <span>{{ jobs.healthy }} healthy</span>
+                    <span>{{ jobs.failing ? `${jobs.failing} failing` : 'none failing' }}</span>
                 </div>
             </template>
         </OverviewHealthTile>

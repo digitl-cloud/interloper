@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
-import type { TableColumn, NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { PersonalAccessToken } from '~/types/token'
 
 definePageMeta({ layout: 'settings' })
@@ -28,7 +28,7 @@ onMounted(() => {
     loadTokens()
 })
 
-const tabs = computed<NavigationMenuItem[]>(() => [
+const tabs = computed<PageTab[]>(() => [
     { label: 'Sign in', icon: 'i-lucide-log-in', to: { query: { tab: 'signin' } }, active: activeTab.value === 'signin' },
     {
         label: 'Personal Access Tokens',
@@ -153,9 +153,7 @@ const columns: TableColumn<PersonalAccessToken>[] = [
             <AppNavbar title="Authentication" />
             <UDashboardToolbar>
                 <template #left>
-                    <UNavigationMenu :items="tabs"
-                                     highlight
-                                     class="-mx-1 flex-1" />
+                    <PageTabs :items="tabs" />
                 </template>
             </UDashboardToolbar>
         </template>

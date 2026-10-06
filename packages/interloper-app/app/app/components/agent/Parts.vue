@@ -7,6 +7,8 @@
  * `output`), and a tool row waiting for Approve/Deny. Everything between,
  * the reasoning and the tool calls, folds into an `AgentSteps` trail, which
  * names the step in progress while the turn is still running (`live`).
+ * A `leading` slot (the message's avatar) opens the first row: the trail's
+ * own row when the message starts with one, a row of its own otherwise.
  */
 import type { UIMessage } from 'ai'
 import { getToolName, isReasoningUIPart, isTextUIPart, isToolUIPart } from 'ai'
@@ -65,11 +67,18 @@ function onCreated(part: Part, result: ConnectionSetupResult) {
 </script>
 
 <template>
+    <slot v-if="segments[0]?.kind !== 'steps'"
+          name="leading" />
     <template v-for="(segment, index) in segments"
               :key="`${message.id}-${index}`">
         <AgentSteps v-if="segment.kind === 'steps'"
                     :parts="segment.parts"
-                    :live="live && index === segments.length - 1" />
+                    :live="live && index === segments.length - 1">
+            <template v-if="index === 0"
+                      #leading>
+                <slot name="leading" />
+            </template>
+        </AgentSteps>
 
         <AgentSelectCard v-else-if="isToolUIPart(segment.part) && card(segment.part) === 'select'"
                          :request="segment.part.input as SelectionRequest"
@@ -89,7 +98,7 @@ function onCreated(part: Part, result: ConnectionSetupResult) {
             <Markdown v-if="message.role === 'assistant'"
                       :value="segment.part.text"
                       :streaming="isPartStreaming(segment.part)"
-                      class="*:first:mt-0 *:last:mb-0" />
+                      class="chat-prose *:first:mt-0 *:last:mb-0" />
             <p v-else
                class="whitespace-pre-wrap">
                 {{ segment.part.text }}
