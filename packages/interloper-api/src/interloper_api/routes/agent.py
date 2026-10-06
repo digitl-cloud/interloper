@@ -3,9 +3,9 @@
 A conversation is a member's own: its history lives in the store and the
 server, not the client, is its source of truth. Each turn is one
 :meth:`~pydantic_ai.ui.vercel_ai.VercelAIAdapter.dispatch_request`: the
-client's request carries the new message (and any tool approvals or answers
-the app collected), the stored history is passed as ``message_history``, and
-the whole history is saved back when the run completes.
+stored history is passed as ``message_history``, the client's request adds
+the new prompt (or the tool approvals and answers the app collected), and the
+whole history is saved back when the run completes.
 
 Available when ``interloper-agent`` is installed.
 """
@@ -13,7 +13,8 @@ Available when ``interloper-agent`` is installed.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -24,8 +25,17 @@ from interloper_db import Page, PageQuery
 from interloper_db.models import Conversation
 from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
+from pydantic_ai import DeferredToolResults
 from pydantic_ai.agent import AgentRunResult
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    RetryPromptPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.ui import UIEventStream
 from pydantic_ai.ui.vercel_ai import VercelAIAdapter, VercelAIEventStream
 from pydantic_ai.ui.vercel_ai.request_types import RequestData, UIMessage
@@ -62,8 +72,73 @@ class LoggedEventStream(VercelAIEventStream[ToolkitContext, Any]):
             yield chunk
 
 
-class LoggedAdapter(VercelAIAdapter[ToolkitContext, Any]):
-    """The Vercel adapter, building :class:`LoggedEventStream`."""
+@dataclass
+class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
+    """The Vercel adapter for a stored conversation.
+
+    The app sends its whole message list on every turn, while the stored
+    ``history`` already holds all of it but what the turn adds. Taking the
+    client's copies too would store every earlier message again, so only the
+    additions are kept: the final message's prompt, and the answers to calls
+    the history leaves pending. Approvals reach the run as deferred results.
+    It also builds :class:`LoggedEventStream`.
+    """
+
+    history: Sequence[ModelMessage] = ()
+
+    def sanitize_messages(
+        self, messages: Sequence[ModelMessage], *, deferred_tool_results: DeferredToolResults | None = None
+    ) -> list[ModelMessage]:
+        """Keep what the client's messages add to the stored history, sanitized.
+
+        Args:
+            messages: The client's messages, loaded from the request.
+            deferred_tool_results: The approvals the request carries, if any.
+
+        Returns:
+            One request holding the new answers and prompt, or nothing when the
+            client added neither.
+        """
+        additions = self._additions(messages)
+        return super().sanitize_messages(additions, deferred_tool_results=deferred_tool_results)
+
+    def _additions(self, messages: Sequence[ModelMessage]) -> list[ModelMessage]:
+        """The client's answers to pending calls, then its new prompt.
+
+        Args:
+            messages: The client's messages, loaded from the request.
+
+        Returns:
+            One request holding the additions, or an empty list.
+        """
+        called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
+        answered = {part.tool_call_id for part in self._parts(self.history, (ToolReturnPart, RetryPromptPart))}
+        answers = [
+            part
+            for part in self._parts(messages, (ToolReturnPart, RetryPromptPart))
+            if part.tool_call_id in called - answered
+        ]
+        final = messages[-1] if messages else None
+        prompts = (
+            [part for part in final.parts if isinstance(part, UserPromptPart)]
+            if isinstance(final, ModelRequest)
+            else []
+        )
+        parts = [*answers, *prompts]
+        return [ModelRequest(parts=parts)] if parts else []
+
+    @staticmethod
+    def _parts(messages: Sequence[ModelMessage], part_type: type | tuple[type, ...]) -> list[Any]:
+        """The parts of a type, across the messages.
+
+        Args:
+            messages: The messages to read.
+            part_type: The part class, or classes, to collect.
+
+        Returns:
+            The matching parts, in order.
+        """
+        return [part for message in messages for part in message.parts if isinstance(part, part_type)]
 
     def build_event_stream(self) -> UIEventStream[RequestData, BaseChunk, ToolkitContext, Any]:
         """Build the event stream that also logs failures.
@@ -253,12 +328,14 @@ async def chat(
             len(messages),
         )
 
-    return await LoggedAdapter.dispatch_request(
+    history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
+    return await ConversationAdapter.dispatch_request(
         request,
         agent=agent,
         sdk_version=SDK_VERSION,
         deps=context,
-        message_history=ModelMessagesTypeAdapter.validate_python(conversation.messages),
+        history=history,
+        message_history=history,
         conversation_id=str(conversation.id),
         usage_limits=TURN_LIMITS,
         on_complete=save,
