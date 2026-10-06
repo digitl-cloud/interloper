@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
 import { UIcon } from '#components'
 import type { UpcomingRun } from '~/types/overview'
 
-const props = defineProps<{ items: UpcomingRun[] }>()
+const props = defineProps<{ items: UpcomingRun[] | null }>()
 const LIMIT = 4
 
 const userStore = useUserStore()
 const timezone = computed(() => userStore.user?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
 
-const rows = computed(() => props.items.slice(0, LIMIT).map((item) => {
+const rows = computed(() => (props.items ?? []).slice(0, LIMIT).map((item) => {
     const at = new Date(item.next_run_at)
     return {
         ...item,
@@ -21,7 +20,7 @@ const rows = computed(() => props.items.slice(0, LIMIT).map((item) => {
 
 type Row = (typeof rows.value)[number]
 
-const columns: TableColumn<Row>[] = [
+const columns = withSkeletons<Row>([
     {
         id: 'job',
         header: 'Job',
@@ -41,7 +40,7 @@ const columns: TableColumn<Row>[] = [
         meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-dimmed' } },
         cell: ({ row }) => row.original.at,
     },
-]
+])
 </script>
 
 <template>
@@ -56,10 +55,10 @@ const columns: TableColumn<Row>[] = [
                          size="sm" />
             </CardHeader>
         </template>
-        <UTable :data="rows"
+        <UTable :data="items ? rows : skeletonRows(LIMIT)"
                 :columns="columns"
                 empty="Nothing scheduled."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="() => navigateTo(kindPath('job'))" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(kindPath('job'))" />
     </UCard>
 </template>

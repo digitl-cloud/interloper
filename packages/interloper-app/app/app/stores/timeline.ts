@@ -37,6 +37,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     const rangeEnd = ref(Date.now())
     const total = ref(0)
     const loading = ref(false)
+    /** Whether a fetch has completed since the last reset, so a view can tell its first load from a refresh. */
+    const loaded = ref(false)
     const error = ref<Error | null>(null)
 
     /**********************
@@ -123,6 +125,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         }
         finally {
             loading.value = false
+            loaded.value = true
         }
     }
 
@@ -135,6 +138,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         runs.value = []
         total.value = 0
         loading.value = false
+        loaded.value = false
         error.value = null
     }
 
@@ -148,6 +152,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         total,
         truncated,
         loading,
+        loaded,
         error,
         fetch,
         setSpan,

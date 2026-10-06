@@ -9,7 +9,12 @@ import type { CoverageMonths } from '~/types/overview'
 use([CanvasRenderer, HeatmapChart, ScatterChart, CalendarComponent, TooltipComponent, VisualMapComponent])
 
 const overviewStore = useOverviewStore()
-const { coverage, coverageMonths, coverageLoading, coverageError } = storeToRefs(overviewStore)
+const { coverage, coverageMonths, coverageWindow, coverageLoading, coverageError } = storeToRefs(overviewStore)
+/** The calendar draws the requested window before its answer arrives, so it never changes size on load. */
+const calendarWindow = computed(() => coverage.value ?? coverageWindow.value)
+/** A window the user picked is loading: the calendar on screen still shows the previous one. */
+const switching = computed(() => !!coverage.value && coverageLoading.value && coverageWindow.value?.since !== coverage.value.since)
+const SKELETON_DETAIL_ROWS = 3
 const colorMode = useColorMode()
 
 const sourceFilter = ref('all')
@@ -37,9 +42,9 @@ const { width: frameWidth } = useElementSize(frame)
 
 /** Monday-start week columns the calendar draws for the window. */
 const weeks = computed(() => {
-    if (!coverage.value) return 0
-    const since = new Date(`${coverage.value.since}T00:00:00Z`)
-    const until = new Date(`${coverage.value.until}T00:00:00Z`)
+    if (!calendarWindow.value) return 0
+    const since = new Date(`${calendarWindow.value.since}T00:00:00Z`)
+    const until = new Date(`${calendarWindow.value.until}T00:00:00Z`)
     const days = Math.round((until.getTime() - since.getTime()) / 86_400_000) + 1
     const leadingDays = (since.getUTCDay() + 6) % 7
     return Math.ceil((leadingDays + days) / 7)
@@ -156,7 +161,11 @@ watch(coverage, (value) => {
     <UCard>
         <template #header>
             <CardHeader title="Partition coverage"
-                        :description="summary">
+                        :description="coverage ? summary : undefined"
+                        :loading="!coverage && !coverageError">
+                <UIcon v-if="switching"
+                       name="i-lucide-loader-circle"
+                       class="size-4 animate-spin text-dimmed" />
                 <USelect v-model="sourceFilter"
                          :items="sourceOptions"
                          size="sm"
@@ -185,18 +194,33 @@ watch(coverage, (value) => {
                     class="mb-3.5" />
             <VChart v-if="coverage"
                     :option="option"
-                    class="mx-auto"
+                    class="mx-auto transition-opacity"
+                    :class="switching ? 'opacity-50' : ''"
                     :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
                     autoresize
                     @click="onClick" />
-            <div v-else
-                 class="flex h-[140px] items-center justify-center text-sm text-muted">
-                {{ coverageLoading ? 'Loading coverage…' : coverageError ? 'Coverage unavailable' : 'No coverage yet' }}
+            <div v-else-if="weeks && !coverageError"
+                 class="mx-auto"
+                 :style="{ height: `${chartHeight}px`, width: `${chartWidth}px`, padding: `${CALENDAR_TOP}px ${CALENDAR_LEFT}px 0` }">
+                <div class="grid grid-flow-col grid-rows-7"
+                     :style="{ gap: `${gap}px`, gridAutoColumns: `${cell - gap}px` }">
+                    <USkeleton v-for="i in weeks * 7"
+                               :key="i"
+                               class="rounded-[2px]"
+                               :style="{ height: `${cell - gap}px` }" />
+                </div>
             </div>
         </div>
         <OverviewCoverageDayDetail v-if="coverage && selected"
                                    :date="selected"
                                    :coverage="coverage"
                                    :source-filter="sourceFilter" />
+        <div v-else-if="!coverage && !coverageError"
+             class="mt-5 flex flex-col gap-2.5">
+            <USkeleton class="h-4 w-48" />
+            <USkeleton v-for="i in SKELETON_DETAIL_ROWS"
+                       :key="i"
+                       class="h-8 w-full" />
+        </div>
     </UCard>
 </template>

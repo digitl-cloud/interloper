@@ -8,13 +8,16 @@ const LABEL_WIDTH = 250
 const ROW_HEIGHT = 40
 const AXIS_HEIGHT = 30
 const MAX_ROWS = 10
+const SKELETON_ROWS = 3
 const REFRESH_INTERVAL = 60_000
 /** The window's share that lies ahead of now, so scheduled firings appear as ghosts. */
 const FUTURE_RATIO = 1 / 3
 
 const timelineStore = useTimelineStore()
 const userStore = useUserStore()
-const { runs, span, rangeStart, rangeEnd, loading } = storeToRefs(timelineStore)
+const { runs, span, rangeStart, rangeEnd, loading, loaded } = storeToRefs(timelineStore)
+/** A window the user picked is loading: the bars on screen still show the previous one. */
+const switching = ref(false)
 
 const runRows = useRunTimelineRows(runs)
 const now = ref(new Date())
@@ -40,9 +43,11 @@ const rows = computed<TimelineRow[]>(() => runRows.value.map((row) => {
 const spanItems = TIMELINE_SPANS.map(s => ({ label: s.label, value: String(s.value) }))
 const activeSpan = computed({
     get: () => String(span.value),
-    set: (value: string) => {
+    set: async (value: string) => {
         span.value = Number(value)
-        timelineStore.fetch({ futureRatio: FUTURE_RATIO })
+        switching.value = true
+        await timelineStore.fetch({ futureRatio: FUTURE_RATIO })
+        switching.value = false
     },
 })
 
@@ -51,7 +56,7 @@ const rangeLabel = computed(() => {
     const format = (ms: number) => `${formatShortDay(new Date(ms))} ${formatClockTime(new Date(ms))}`
     return `${format(rangeStart.value)} → ${format(rangeEnd.value)}`
 })
-const height = computed(() => AXIS_HEIGHT + Math.min(rows.value.length, MAX_ROWS) * ROW_HEIGHT + 1)
+const height = computed(() => AXIS_HEIGHT + (loaded.value ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
 
 function onBarClick(bar: TimelineBar) {
     if (bar.status === 'scheduled') navigateTo(kindPath('job'))
@@ -81,6 +86,9 @@ onUnmounted(() => {
         <template #header>
             <CardHeader title="Timeline"
                         :description="`${timezone} · ${rangeLabel}`">
+                <UIcon v-if="switching"
+                       name="i-lucide-loader-circle"
+                       class="size-4 animate-spin text-dimmed" />
                 <span class="text-sm text-muted">Window</span>
                 <UTabs v-model="activeSpan"
                        :items="spanItems"
@@ -94,7 +102,22 @@ onUnmounted(() => {
                          size="sm" />
             </CardHeader>
         </template>
-        <div :style="{ height: `${height}px` }">
+        <div v-if="!loaded"
+             class="flex flex-col"
+             :style="{ height: `${height}px`, paddingTop: `${AXIS_HEIGHT}px` }">
+            <div v-for="i in SKELETON_ROWS"
+                 :key="i"
+                 class="flex items-center gap-4"
+                 :style="{ height: `${ROW_HEIGHT}px` }">
+                <USkeleton class="h-4 shrink-0"
+                           :style="{ width: `${LABEL_WIDTH - 60}px` }" />
+                <USkeleton class="h-3 flex-1" />
+            </div>
+        </div>
+        <div v-else
+             class="transition-opacity"
+             :class="switching ? 'opacity-50' : ''"
+             :style="{ height: `${height}px` }">
             <ChartExecutionTimeline :rows="rows"
                                     :range-start="rangeStart"
                                     :range-end="rangeEnd"
@@ -104,7 +127,7 @@ onUnmounted(() => {
                                     axis="clock"
                                     :label-width="LABEL_WIDTH"
                                     label-title="Target"
-                                    :empty-message="loading ? 'Loading…' : 'No runs in this window'"
+                                    :empty-message="loading ? '' : 'No runs in this window'"
                                     @bar-click="onBarClick" />
         </div>
         <div class="mt-2.5 flex items-center gap-4 text-xs text-dimmed">

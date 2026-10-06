@@ -40,20 +40,21 @@ onUnmounted(() => overviewStore.$reset())
                         onClick: refresh,
                     }]" />
 
-            <OverviewHealthStrip v-if="overview"
-                                 :overview="overview" />
-            <OverviewAttentionList v-if="overview"
-                                   :items="overview.attention"
-                                   :generated-at="overview.generated_at" />
+            <!-- Every section is drawn from the first frame and fills in as its data arrives; only a failed overview drops the ones it feeds. -->
+            <template v-if="overview || !error">
+                <OverviewHealthStrip :overview="overview" />
+                <OverviewAttentionList :items="overview?.attention ?? null"
+                                       :generated-at="overview?.generated_at ?? null" />
+            </template>
             <OverviewTimelineSection :upcoming="overview?.upcoming ?? []" />
             <OverviewCoverageCalendar />
-            <div v-if="overview"
-                 class="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-                <OverviewUpcomingList :items="overview.upcoming" />
-                <OverviewRecentList :runs="overview.recent" />
-            </div>
-            <OverviewComponentsInventory v-if="overview"
-                                         :rows="overview.components" />
+            <template v-if="overview || !error">
+                <div class="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
+                    <OverviewUpcomingList :items="overview?.upcoming ?? null" />
+                    <OverviewRecentList :runs="overview?.recent ?? null" />
+                </div>
+                <OverviewComponentsInventory :rows="overview?.components ?? null" />
+            </template>
         </template>
     </UDashboardPanel>
 </template>

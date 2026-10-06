@@ -2,9 +2,11 @@
 import type { AttentionItem } from '~/types/overview'
 
 defineProps<{
-    items: AttentionItem[]
-    generatedAt: string
+    items: AttentionItem[] | null
+    generatedAt: string | null
 }>()
+
+const SKELETON_ROWS = 3
 
 const editor = useCanEdit()
 
@@ -47,10 +49,26 @@ function when(item: AttentionItem): string {
 </script>
 
 <template>
-    <UCard title="Needs attention"
-           :description="items.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined"
-           :ui="{ body: 'p-0 sm:p-0' }">
-        <div v-if="items.length"
+    <UCard :ui="{ body: 'p-0 sm:p-0' }">
+        <template #header>
+            <CardHeader title="Needs attention"
+                        :description="items?.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : undefined"
+                        :loading="!items" />
+        </template>
+        <div v-if="!items"
+             class="divide-y divide-default border-t border-default">
+            <div v-for="i in SKELETON_ROWS"
+                 :key="i"
+                 class="flex items-center gap-3.5 px-4 py-3 sm:px-6">
+                <USkeleton class="size-8 shrink-0 rounded-full" />
+                <div class="flex min-w-0 flex-1 flex-col gap-1.5 py-0.5">
+                    <USkeleton class="h-4 w-2/3" />
+                    <USkeleton class="h-3.5 w-1/3" />
+                </div>
+                <USkeleton class="h-8 w-24 shrink-0" />
+            </div>
+        </div>
+        <div v-else-if="items.length"
              class="divide-y divide-default border-t border-default">
             <div v-for="item in items"
                  :key="`${item.kind}:${item.run_id ?? item.component_id ?? ''}:${item.title}`"
@@ -99,7 +117,7 @@ function when(item: AttentionItem): string {
             </span>
             <div class="flex flex-col gap-0.5">
                 <div class="text-sm font-semibold text-highlighted">All clear</div>
-                <div class="text-sm text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt)) }}.</div>
+                <div class="text-sm text-muted">No failures, drift or overdue jobs. Last checked {{ formatClockTime(new Date(generatedAt ?? Date.now())) }}.</div>
             </div>
         </div>
     </UCard>
