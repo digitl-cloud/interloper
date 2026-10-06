@@ -27,8 +27,9 @@ type Segment = { kind: 'steps', parts: Part[] } | { kind: 'part', part: Part }
 
 const CARDS = { request_user_selection: 'select', request_connection_setup: 'connect' } as const
 
+/** A card is the app's side of a call that waits for the user; a call that failed instead is a step. */
 function card(part: Part) {
-    return isToolUIPart(part) ? CARDS[getToolName(part) as keyof typeof CARDS] : undefined
+    return isToolUIPart(part) && !isFailedToolCall(part) ? CARDS[getToolName(part) as keyof typeof CARDS] : undefined
 }
 
 /** A step is work the user only watches: reasoning, or a tool call that is neither a card nor awaiting approval. */
@@ -41,6 +42,8 @@ const segments = computed<Segment[]>(() => {
     const result: Segment[] = []
     for (const part of props.message.parts) {
         const last = result[result.length - 1]
+        // A card renders from its call's input, which is undefined until the stream has delivered it.
+        if (card(part) && isToolUIPart(part) && part.state === 'input-streaming') continue
         if (isStep(part)) {
             if (last?.kind === 'steps') last.parts.push(part)
             else result.push({ kind: 'steps', parts: [part] })
