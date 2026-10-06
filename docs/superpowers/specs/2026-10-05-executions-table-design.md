@@ -18,11 +18,11 @@ The performance step of the interloper-db / interloper-api simplification, after
 6. **Latest per asset drives from components:** one index probe per component of the organisation for its newest execution, so the cost follows the number of components, not history. A deleted component no longer appears in the latest list.
 7. **`Page.read` counts only when the page cannot tell:** a page that came back short ends the matching set, so its total is its offset plus its rows.
 8. **The app applies pushed rows.** `executions` notifies on insert and on any update that changes the row; the executions store upserts pushed rows into its latest map and the open run's list instead of refetching on event bursts.
-9. **CI runs the Postgres tests.** The checks job gets a Postgres service, so the migration tests, including the fold equivalence test, run on every push instead of skipping.
+9. **The suite is unit tests only.** The tests that needed a Postgres server (migrations, triggers, row-lock races) are removed; the suite runs on in-memory SQLite. The fold is a Postgres trigger, so no automated test exercises it: it was verified by hand, below.
 
-## Verification
+## Verification (by hand, on Postgres)
 
-- An equivalence test on Postgres: realistic lifecycles and arbitrary event mixes over several attempts, shuffled with repeated deliveries, must fold to exactly the rows migration 008's view computes over the same events. Five mutants of the fold (each merge rule and the ranking) are each caught.
+- An equivalence check: realistic lifecycles and arbitrary event mixes over several attempts, shuffled with repeated deliveries, folded to exactly the rows migration 008's view computes over the same events; five mutants of the fold (each merge rule and the ranking) were each caught. Upgrade with backfill and downgrade were checked the same way. The check was removed with the other Postgres-server tests.
 - Live on a dev instance: the backfilled table matched the view on every row, new runs folded identically, the websocket carried 15 execution messages for a five-asset run, and the collection and run pages updated with no execution refetches.
 
 ## Measured effect (perf database, 10M events)

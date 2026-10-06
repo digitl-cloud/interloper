@@ -33,7 +33,7 @@ Python (uv workspace, run from repo root):
 
 - Lint: `uv run ruff check`
 - Type check: `uv run ty check`
-- Test: `uv run pytest` (markers: `integration`, `functional` — `functional` is excluded by default)
+- Test: `uv run pytest` (marker: `functional`, excluded by default)
 
 Frontend (run from `packages/interloper-app/app/`):
 
