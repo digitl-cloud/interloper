@@ -33,7 +33,6 @@ interface Props {
      * the axis, so leave it at 0 for wall-clock windows.
      */
     minBarRatio?: number
-    refreshRate?: number
     markerTime?: Date | null
     /** Epoch ms from which the plot is the future: hatched, and scheduled bars live there. */
     futureFrom?: number | null
@@ -51,9 +50,6 @@ const props = withDefaults(defineProps<Props>(), {
     labelWidth: 0,
     labelTitle: '',
     minBarRatio: 0,
-    // 0 → advance every animation frame (display refresh rate). A positive value
-    // throttles the layout updates to at most once per `refreshRate` ms.
-    refreshRate: 0,
     markerTime: null,
     futureFrom: null,
     markerLabel: null,
@@ -482,11 +478,18 @@ function onRulerPointerUp() {
 }
 
 /**********************
- * Live ticking — advance running bars on requestAnimationFrame
+ * Live ticking: advance running bars a pixel at a time
  **********************/
+/**
+ * Time a running bar takes to grow by one pixel. Re-rendering any sooner
+ * changes nothing on screen, and a tab left open on a wall-clock window would
+ * otherwise re-render its bars every frame for hours.
+ */
+const msPerPixel = computed(() => view.value.span / Math.max(plotWidth.value, 1))
+
 function frame(timestamp: number) {
     if (!hasRunning.value) return
-    if (timestamp - lastTick >= props.refreshRate) {
+    if (timestamp - lastTick >= msPerPixel.value) {
         now.value = Date.now()
         lastTick = timestamp
     }

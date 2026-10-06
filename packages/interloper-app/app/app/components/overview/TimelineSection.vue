@@ -67,18 +67,12 @@ watch(rangeEnd, () => {
     now.value = new Date()
 })
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-onMounted(async () => {
-    await timelineStore.fetch({ futureRatio: FUTURE_RATIO })
-    refreshTimer = setInterval(() => {
-        now.value = new Date()
-        timelineStore.fetch({ futureRatio: FUTURE_RATIO })
-    }, REFRESH_INTERVAL)
-})
-onUnmounted(() => {
-    if (refreshTimer) clearInterval(refreshTimer)
-    timelineStore.$reset()
-})
+useIntervalFn(() => {
+    now.value = new Date()
+    timelineStore.fetch({ futureRatio: FUTURE_RATIO })
+}, REFRESH_INTERVAL)
+onMounted(() => timelineStore.fetch({ futureRatio: FUTURE_RATIO }))
+onUnmounted(() => timelineStore.$reset())
 </script>
 
 <template>
