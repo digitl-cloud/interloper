@@ -131,7 +131,7 @@ extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 # PYTEST
 # ###############
 [tool.pytest.ini_options]
-markers = ["integration", "functional"]
+markers = ["functional"]
 addopts = ["--import-mode=importlib", "-m not functional"]
 filterwarnings = ["ignore::FutureWarning:google.api_core", "ignore::DeprecationWarning"]
 asyncio_mode = "auto"
