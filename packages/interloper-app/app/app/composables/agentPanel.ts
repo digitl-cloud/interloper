@@ -3,6 +3,10 @@ import type { InjectionKey } from 'vue'
 const DEFAULT_WIDTH = 400
 const MIN_WIDTH = 320
 const MAX_WIDTH = 720
+/** The panel is a card this many pixels in from the viewport's top, right and bottom edges. */
+export const AGENT_PANEL_INSET = 8
+/** The space between the page's content and the card: the page panel's side padding. The resize handle sits in its middle. */
+export const AGENT_PANEL_GUTTER = 24
 
 /**
  * State of the docked agent chat panel (pushes the app layout): open flag
@@ -13,7 +17,7 @@ export function useAgentPanel() {
     const width = useCookie<number>('agent-panel-width', { default: () => DEFAULT_WIDTH })
     const dragging = useState('agent-panel-dragging', () => false)
 
-    /** Drag the panel's left edge — width follows the pointer until release. */
+    /** Drag the handle in the gutter: width follows the pointer until release. */
     function startResize() {
         dragging.value = true
         const previousCursor = document.body.style.cursor
@@ -24,7 +28,7 @@ export function useAgentPanel() {
         function onMove(e: MouseEvent | TouchEvent) {
             const x = 'touches' in e ? e.touches[0]?.clientX : e.clientX
             if (x == null) return
-            width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(window.innerWidth - x)))
+            width.value = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(window.innerWidth - AGENT_PANEL_INSET - AGENT_PANEL_GUTTER / 2 - x)))
         }
         function onEnd() {
             dragging.value = false

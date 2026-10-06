@@ -104,16 +104,19 @@ const panelItems: SplitterItem[] = [
     { slot: 'timeline', defaultSize: 40, minSize: 15, class: 'flex-col overflow-hidden p-px' },
     { slot: 'events', defaultSize: 60, minSize: 20, class: 'flex-col overflow-hidden p-px' },
 ]
-/** The handles are the 12px gaps between the cards, with a line lit while hovered or dragged. */
+/**
+ * The handles are the gaps between the cards, with a line lit while hovered or dragged: the page's panel
+ * gap, less the 1px each pane pads its card with so the ring isn't clipped.
+ */
 const HANDLE_LINE = 'relative bg-transparent before:absolute before:bg-transparent before:transition-colors data-[state=hover]:before:bg-accented data-[state=drag]:before:bg-accented'
-const PANELS_HANDLE_CLASS = `${HANDLE_LINE} h-3 before:inset-x-0 before:top-1/2 before:h-px`
+const PANELS_HANDLE_CLASS = `${HANDLE_LINE} h-3.5 sm:h-5.5 before:inset-x-0 before:top-1/2 before:h-0.5 before:-translate-y-1/2`
 
 type SplitterPanelHandle = { collapse: () => void, expand: () => void, isCollapsed: boolean }
 const railSplitter = useTemplateRef<{ panelsRef: SplitterPanelHandle[] }>('railSplitter')
 const railPanel = computed(() => railSplitter.value?.panelsRef[0])
 /** Read off the panel: a collapse restored from the saved layout emits no event. */
 const railCollapsed = computed(() => railPanel.value?.isCollapsed ?? false)
-const railHandleClass = computed(() => `${HANDLE_LINE} before:inset-y-0 before:left-1/2 before:w-px ${railCollapsed.value ? 'w-0' : 'w-3'}`)
+const railHandleClass = computed(() => `${HANDLE_LINE} before:inset-y-0 before:left-1/2 before:w-0.5 before:-translate-x-1/2 ${railCollapsed.value ? 'w-0' : 'w-3.5 sm:w-5.5'}`)
 
 function toggleRail() {
     if (railCollapsed.value) railPanel.value?.expand()
@@ -257,7 +260,8 @@ onUnmounted(() => {
                               :error="fetchError"
                               back-to="/executions/runs"
                               resource-label="run">
-                <div class="flex min-h-0 flex-1 flex-col gap-3">
+                <!-- The panel gap, less the 1px the splitter's panes pad their cards with. -->
+                <div class="flex min-h-0 flex-1 flex-col gap-[15px] sm:gap-[23px]">
                     <UCard v-if="run"
                            :ui="{ body: 'flex flex-col gap-4' }">
                         <ExecutionsRunMetaStrip :run="run"
@@ -272,9 +276,8 @@ onUnmounted(() => {
                                :items="railItems"
                                :ui="{ root: 'min-h-0 flex-1', handle: railHandleClass }">
                         <template #rail="{ collapsed }">
-                            <UCard v-if="!collapsed"
-                                   class="h-full w-full min-w-0"
-                                   :ui="{ root: 'flex flex-col', body: 'min-h-0 flex-1 overflow-y-auto p-3 sm:p-3' }">
+                            <div v-if="!collapsed"
+                                 class="h-full w-full min-w-0 overflow-y-auto">
                                 <ExecutionsRunRail v-model:status-filter="statusFilter"
                                                    v-model:selected="selectedAsset"
                                                    v-model:hovered="hoveredAsset"
@@ -282,7 +285,7 @@ onUnmounted(() => {
                                                    :buckets="stats.buckets"
                                                    :attempts="attempts"
                                                    :current-run-id="runId" />
-                            </UCard>
+                            </div>
                         </template>
 
                         <template #main>

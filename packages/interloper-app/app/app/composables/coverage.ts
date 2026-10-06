@@ -7,13 +7,13 @@ export interface DayAggregate {
     failed: number
 }
 
-/** Design cell colours; the amber tints are the partial states. */
+/** Cell colours from Tailwind's status scales; the low states are their tints. */
 export const CELL = {
-    covered: { light: '#1fa463', dark: '#45bc84' },
-    partial: { light: '#f2b23e', dark: '#e9ac46' },
-    partialLow: { light: '#f9dca0', dark: '#8a6a2a' },
-    failed: { light: '#e5484d', dark: '#ea686c' },
-    failedLow: { light: '#f4a5a8', dark: '#a04448' },
+    covered: { light: '#00bc7d', dark: '#00d492' },
+    partial: { light: '#ffb900', dark: '#ffb900' },
+    partialLow: { light: '#fee685', dark: '#8d630e' },
+    failed: { light: '#fb2c36', dark: '#ff6467' },
+    failedLow: { light: '#ffa2a2', dark: '#8d4041' },
     empty: { light: '#f5f5f5', dark: '#262626' },
 }
 

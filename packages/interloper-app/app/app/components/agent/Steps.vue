@@ -38,6 +38,7 @@ function failedOutput(output: unknown) {
     <UCollapsible class="w-full">
         <button type="button"
                 class="group flex items-center gap-1.5 w-full min-h-6 text-left text-sm text-muted hover:text-highlighted transition-colors cursor-pointer">
+            <slot name="leading" />
             <UIcon :name="failed ? 'i-lucide-triangle-alert' : 'i-lucide-list-checks'"
                    class="size-4 shrink-0"
                    :class="failed ? 'text-error' : ''" />
@@ -61,7 +62,7 @@ function failedOutput(output: unknown) {
                                     class="w-full">
                         <Markdown :value="part.text"
                                   :streaming="isPartStreaming(part)"
-                                  class="*:first:mt-0 *:last:mb-0" />
+                                  class="chat-prose *:first:mt-0 *:last:mb-0" />
                     </UChatReasoning>
                     <AgentTool v-else-if="isToolUIPart(part)"
                                :part="part" />

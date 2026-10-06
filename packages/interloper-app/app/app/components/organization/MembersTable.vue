@@ -4,8 +4,6 @@ import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { OrgMember } from '~/types/organisation'
 
 const UAvatar = resolveComponent('UAvatar')
-const UButton = resolveComponent('UButton')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
 const StatusPill = resolveComponent('StatusPill')
 
 const props = defineProps<{
@@ -102,28 +100,6 @@ const columns = computed<TableColumn<OrgMember>[]>(() => {
             },
         },
     ]
-
-    if (props.isAdmin) {
-        base.push({
-            id: 'actions',
-            header: '',
-            cell: ({ row }) => h('div', { class: 'flex justify-end' }, h(UDropdownMenu, {
-                items: getRowMenuItems(row.original),
-                content: { align: 'end' },
-            }, {
-                default: () => h(UButton, {
-                    icon: 'i-lucide-ellipsis-vertical',
-                    color: 'neutral',
-                    variant: 'ghost',
-                    size: 'xs',
-                    onClick: (e: Event) => e.stopPropagation(),
-                }),
-            })),
-            size: 50,
-            enableSorting: false,
-            enableGlobalFilter: false,
-        })
-    }
 
     return base
 })

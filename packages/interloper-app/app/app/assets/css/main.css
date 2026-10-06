@@ -29,40 +29,6 @@
     --color-gray-800: #262626;
     --color-gray-900: #171717;
     --color-gray-950: #0a0a0a;
-    /* status: success #1FA463 · error #E5484D · warning #E69E2E (50 = design tints) */
-    --color-green-50: #edf9f2;
-    --color-green-100: #d8f2e4;
-    --color-green-200: #b2e5cb;
-    --color-green-300: #7ed3aa;
-    --color-green-400: #45bc84;
-    --color-green-500: #1fa463;
-    --color-green-600: #17854f;
-    --color-green-700: #146a41;
-    --color-green-800: #125435;
-    --color-green-900: #10452d;
-    --color-green-950: #08271a;
-    --color-red-50: #fceded;
-    --color-red-100: #fadbdc;
-    --color-red-200: #f5b8ba;
-    --color-red-300: #ef8d90;
-    --color-red-400: #ea686c;
-    --color-red-500: #e5484d;
-    --color-red-600: #c93338;
-    --color-red-700: #a6282d;
-    --color-red-800: #852125;
-    --color-red-900: #6b1d20;
-    --color-red-950: #3b0d0f;
-    --color-amber-50: #fbf1e1;
-    --color-amber-100: #f8e6c8;
-    --color-amber-200: #f2d096;
-    --color-amber-300: #edbb66;
-    --color-amber-400: #e9ac46;
-    --color-amber-500: #e69e2e;
-    --color-amber-600: #c98219;
-    --color-amber-700: #a66714;
-    --color-amber-800: #855112;
-    --color-amber-900: #6b4110;
-    --color-amber-950: #3d2407;
 }
 
 
@@ -112,6 +78,78 @@
     --graph-asset-shadow-raised: 0 4px 12px rgb(11 42 66 / 0.1);
     --graph-layer-shadow: 0 2px 6px rgb(11 42 66 / 0.06);
     --graph-layer-shadow-raised: 0 4px 10px rgb(11 42 66 / 0.09);
+}
+
+/* Markdown in a conversation: Nuxt UI's prose spacing is set for documentation pages, so the
+   agent's answers take a line height and rhythm sized to their 13.5px text. In the utilities
+   layer, so these outrank the prose's own utilities but not a first/last-child reset. */
+@layer utilities {
+    .chat-prose :is(p, li) {
+        line-height: 1.65;
+    }
+
+    .chat-prose p {
+        margin-block: 0.75rem;
+    }
+
+    .chat-prose :is(ul, ol) {
+        margin-block: 0.75rem;
+        padding-inline-start: 1.25rem;
+    }
+
+    .chat-prose li {
+        margin-block: 0.25rem;
+        padding-inline-start: 0.25rem;
+    }
+
+    .chat-prose :is(h1, h2, h3, h4) {
+        margin-block: 1.25rem 0.5rem;
+        font-size: 0.9375rem;
+        line-height: 1.4;
+    }
+
+    .chat-prose h1 {
+        font-size: 1.0625rem;
+    }
+
+    .chat-prose h2 {
+        font-size: 1rem;
+    }
+
+    .chat-prose hr {
+        margin-block: 1.5rem;
+    }
+
+    .chat-prose blockquote {
+        margin-block: 0.5rem;
+    }
+
+    .chat-prose :is(th, td) {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8125rem;
+        line-height: 1.5;
+    }
+
+    .chat-prose div:has(> table) {
+        margin-block: 1rem;
+    }
+
+    .chat-prose :not(pre) > code {
+        display: inline;
+        padding: 0.0625rem 0.3125rem;
+        font-size: 0.85em;
+        box-decoration-break: clone;
+    }
+
+    .chat-prose pre {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        line-height: 1.5;
+    }
+
+    .chat-prose div:has(> pre) {
+        margin-block: 1rem;
+    }
 }
 
 /* Design mono section label ("eyebrow"): pair with a text color utility. */
@@ -170,18 +208,18 @@
     --ui-text-dimmed: var(--color-gray-500);
     --ui-text-muted: var(--color-gray-400);
     --ui-text-toned: var(--color-gray-300);
-    --ui-text: var(--color-gray-100);
+    --ui-text: var(--color-gray-200);
     --ui-text-highlighted: #ffffff;
     --ui-text-inverted: var(--color-gray-950);
-    /* surfaces: sidebar and cards share one tone, the panel sits lighter */
-    --ui-bg: #1c1c1c;
-    --ui-bg-muted: var(--color-gray-900);
+    /* surfaces: the panel is the darkest tone, sidebar and cards sit one step lighter */
+    --ui-bg: var(--color-gray-900);
+    --ui-bg-muted: #1c1c1c;
     --ui-bg-elevated: var(--color-gray-800);
     --ui-bg-accented: var(--color-gray-700);
     --ui-bg-inverted: #ffffff;
     --ui-border: var(--color-gray-800);
     --ui-border-muted: var(--color-gray-800);
-    --ui-border-accented: var(--color-gray-700);
+    --ui-border-accented: #373737;
     --ui-border-inverted: #ffffff;
     --ui-radius: 0.25rem;
     --graph-dot: var(--color-gray-800);
