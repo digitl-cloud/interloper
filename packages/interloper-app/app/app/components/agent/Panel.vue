@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * Docked agent chat panel (design: 400px right panel that pushes the app
- * layout, non-modal). The first time it opens it picks the conversation up
- * where it was left, the most recent one. Without one, and after "new", the
+ * layout, non-modal). The first time it opens, and on an organisation switch
+ * while open, it picks the conversation up where it was left in that
+ * organisation, the most recent one. Without one, and after "new", the
  * panel holds no conversation until the first message is sent, so nothing
  * empty is ever stored; turns stream through useAgentChat.
  */
@@ -31,18 +32,30 @@ function startNew() {
     summary.value = null
 }
 
-watch(open, async (v) => {
-    if (!v || resumed.value || unavailable.value) return
+/** Pick up the organisation's latest conversation, once it is open. */
+async function resume() {
+    if (!open.value || resumed.value || unavailable.value) return
     resumed.value = true
     try {
-        if (!agentStore.conversations.length) await agentStore.fetchConversations()
+        await agentStore.fetchConversations()
         const latest = agentStore.conversations[0]
         if (latest) await attach(latest)
     }
     catch {
         unavailable.value = true
     }
-}, { immediate: true })
+}
+
+watch(open, resume, { immediate: true })
+
+// A conversation belongs to one organisation: a switch leaves it for the new organisation's latest.
+useOrgScopedRefetch(resume, () => {
+    chat.value?.stop()
+    chat.value = undefined
+    summary.value = null
+    resumed.value = false
+    unavailable.value = false
+})
 
 const input = ref('')
 
