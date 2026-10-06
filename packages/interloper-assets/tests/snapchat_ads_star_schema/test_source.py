@@ -19,7 +19,7 @@ def _clear_memory() -> None:
 @pytest.mark.parametrize(
     ("asset", "name", "key"),
     [
-        ("fact_ads_stats", "ads_stats", "snapchat_ads.ads_stats"),
+        ("fact_ad_performance", "ads_stats", "snapchat_ads.ads_stats"),
         ("dim_campaigns", "campaigns", ["snapchat_ads.campaigns", "snapchat_ads.campaigns_stats"]),
         ("dim_ads", "ads", "snapchat_ads.ads"),
         ("dim_accounts", "accounts", "snapchat_ads.ad_account"),
@@ -32,9 +32,9 @@ def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: s
 
 def test_dimensions_are_built_from_the_facts() -> None:
     assert SnapchatAdsStarSchema.sibling_bindings() == {
-        "dim_campaigns": {"fact_ads_stats": "fact_ads_stats"},
-        "dim_ads": {"fact_ads_stats": "fact_ads_stats"},
-        "dim_accounts": {"fact_ads_stats": "fact_ads_stats"},
+        "dim_campaigns": {"fact_ad_performance": "fact_ad_performance"},
+        "dim_ads": {"fact_ad_performance": "fact_ad_performance"},
+        "dim_accounts": {"fact_ad_performance": "fact_ad_performance"},
     }
 
 

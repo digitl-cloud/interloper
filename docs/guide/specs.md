@@ -105,7 +105,7 @@ init:
     - key: facebook_ads_star_schema
       init:
         assets:
-          fact_ads_stats:
+          fact_ad_performance:
             ads_stats: [{ref: fb-ads-stats}]     # the asset has a parent: always a reference
 ```
 

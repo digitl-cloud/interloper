@@ -23,7 +23,7 @@ class CriteoStarSchema(il.Source):
         tags=["Fact"],
         relations={"ads_stats": il.Relation("asset", "criteo.ads_stats", many=True, optional=True)},
     )
-    def fact_ads_stats(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
+    def fact_ad_performance(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
         """Ad performance of every advertiser, one row per ad and day."""
         return []
 
@@ -36,17 +36,17 @@ class CriteoStarSchema(il.Source):
         self,
         context: il.ExecutionContext,
         campaigns: list[il.Upstream],
-        fact_ads_stats: il.Upstream,
+        fact_ad_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per campaign, from the campaign reports, completed from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_ads(self, context: il.ExecutionContext, fact_ads_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_ads(self, context: il.ExecutionContext, fact_ad_performance: il.Upstream) -> list[dict[str, Any]]:
         """One row per ad with its campaign, from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_accounts(self, context: il.ExecutionContext, fact_ads_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_accounts(self, context: il.ExecutionContext, fact_ad_performance: il.Upstream) -> list[dict[str, Any]]:
         """One row per advertiser with its name and currency, from the facts."""
         return []

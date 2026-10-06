@@ -20,7 +20,7 @@ def _clear_memory() -> None:
     ("asset", "name", "key"),
     [
         (
-            "fact_campaigns_stats",
+            "fact_campaign_performance",
             "campaigns_stats",
             [
                 "amazon_ads.products_campaigns_stats",
@@ -38,8 +38,8 @@ def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: s
 
 def test_dimensions_are_built_from_the_facts() -> None:
     assert AmazonAdsStarSchema.sibling_bindings() == {
-        "dim_campaigns": {"fact_campaigns_stats": "fact_campaigns_stats"},
-        "dim_accounts": {"fact_campaigns_stats": "fact_campaigns_stats"},
+        "dim_campaigns": {"fact_campaign_performance": "fact_campaign_performance"},
+        "dim_accounts": {"fact_campaign_performance": "fact_campaign_performance"},
     }
 
 

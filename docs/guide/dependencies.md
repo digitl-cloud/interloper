@@ -142,7 +142,7 @@ of a name that identifies the campaign under a naming convention, and a `similar
 below `1.0` also merges names that merely resemble each other.
 
 A star schema fans in one level below, with a qualified key: `FacebookAdsStarSchema` declares
-`facebook_ads.ads_stats` with `many=True` on its `fact_ads_stats`, one leg per Facebook Ads
+`facebook_ads.ads_stats` with `many=True` on its `fact_ad_performance`, one leg per Facebook Ads
 account. The star schemas are placeholders for now: they declare their wiring but materialize no
 rows.
 

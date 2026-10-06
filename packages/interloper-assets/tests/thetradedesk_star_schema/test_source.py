@@ -19,7 +19,7 @@ def _clear_memory() -> None:
 @pytest.mark.parametrize(
     ("asset", "name", "key"),
     [
-        ("fact_ad_groups_stats", "ad_groups_stats", "the_trade_desk.ad_groups_stats"),
+        ("fact_ad_group_performance", "ad_groups_stats", "the_trade_desk.ad_groups_stats"),
     ],
 )
 def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: str, key: str | list[str]) -> None:
@@ -29,9 +29,9 @@ def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: s
 
 def test_dimensions_are_built_from_the_facts() -> None:
     assert TheTradeDeskStarSchema.sibling_bindings() == {
-        "dim_campaigns": {"fact_ad_groups_stats": "fact_ad_groups_stats"},
-        "dim_ad_groups": {"fact_ad_groups_stats": "fact_ad_groups_stats"},
-        "dim_accounts": {"fact_ad_groups_stats": "fact_ad_groups_stats"},
+        "dim_campaigns": {"fact_ad_group_performance": "fact_ad_group_performance"},
+        "dim_ad_groups": {"fact_ad_group_performance": "fact_ad_group_performance"},
+        "dim_accounts": {"fact_ad_group_performance": "fact_ad_group_performance"},
     }
 
 

@@ -22,7 +22,7 @@ class TheTradeDeskStarSchema(il.Source):
         tags=["Fact"],
         relations={"ad_groups_stats": il.Relation("asset", "the_trade_desk.ad_groups_stats", many=True, optional=True)},
     )
-    def fact_ad_groups_stats(
+    def fact_ad_group_performance(
         self,
         context: il.ExecutionContext,
         ad_groups_stats: list[il.Upstream],
@@ -31,16 +31,22 @@ class TheTradeDeskStarSchema(il.Source):
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_campaigns(self, context: il.ExecutionContext, fact_ad_groups_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_campaigns(
+        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
+    ) -> list[dict[str, Any]]:
         """One row per campaign, from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_ad_groups(self, context: il.ExecutionContext, fact_ad_groups_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_ad_groups(
+        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
+    ) -> list[dict[str, Any]]:
         """One row per ad group with its campaign, from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_accounts(self, context: il.ExecutionContext, fact_ad_groups_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_accounts(
+        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
+    ) -> list[dict[str, Any]]:
         """One row per advertiser with its partner, from the facts."""
         return []
