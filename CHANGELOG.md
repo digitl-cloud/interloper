@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.102.0 (2026-10-06)
+
+### Features
+
+- **app**: Draw the overview's sections from the first frame, with skeletons while they load
+  ([`f7050f2`](https://github.com/digitl-cloud/interloper/commit/f7050f2e625b407d400ccc7164561023dc943c46))
+
+
 ## v0.101.1 (2026-10-06)
 
 ### Performance Improvements
