@@ -14,7 +14,6 @@ class TestRequestUserSelection:
         result = interaction.request_user_selection(ctx, "Which account?", [{"label": "A", "value": "1"}])
 
         assert isinstance(result, SelectionRequest)
-        assert result.awaits_user
         assert result.options == [{"label": "A", "value": "1"}]
 
     def test_an_empty_or_oversized_list_is_refused(self, ctx: ToolkitContext):

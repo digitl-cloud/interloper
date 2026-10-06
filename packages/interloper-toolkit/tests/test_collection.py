@@ -12,7 +12,7 @@ from interloper_db.models import Component
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 
 from interloper_toolkit import ToolkitContext, collection
-from interloper_toolkit.models import ComponentCounts, ComponentList, ToolError
+from interloper_toolkit.models import ComponentCounts, ComponentList, ConnectionSetup, ToolError
 
 
 class TestBindRelation:
@@ -189,21 +189,25 @@ class TestConnections:
         expected = "https://app.example.com/components/connections?new=demo_connection&name=Main+account"
         assert result.setup_url == (expected if external_url else None)
 
-    def test_request_connection_setup_presents_a_form_or_the_existing_connections(
+    def test_request_connection_setup_presents_the_form_even_when_connections_exist(
         self, ctx: ToolkitContext, store: Store
     ):
-        fresh = collection.request_connection_setup(ctx, "demo_connection", name="Main")
         store.components.create(ctx.org_id, kind="connection", key="demo_connection", config={}, encrypted=False)
-        again = collection.request_connection_setup(ctx, "demo_connection")
-        forced = collection.request_connection_setup(ctx, "demo_connection", force_new=True)
+
+        result = collection.request_connection_setup(ctx, "demo_connection", name="Main")
         unknown = collection.request_connection_setup(ctx, "nope")
 
-        assert fresh.status == "success"
-        assert again.status == "success"
-        assert forced.status == "success"
-        assert (fresh.name, fresh.oauth, fresh.existing) == ("Main", False, [])
-        assert [c.key for c in again.existing] == ["demo_connection"]
-        assert forced.existing == []
+        assert isinstance(result, ConnectionSetup)
+        assert (result.connection_key, result.name, result.oauth) == ("demo_connection", "Main", False)
+        assert set(result.model_dump()) == {
+            "status",
+            "message",
+            "connection_key",
+            "name",
+            "oauth",
+            "oauth_available",
+            "setup_url",
+        }
         assert unknown.status == "error"
         assert unknown.valid_values == ["demo_connection"]
 

@@ -239,23 +239,12 @@ class UserRequest(BaseModel):
     their input; elsewhere it is an ordinary result the model relays.
     """
 
-    @property
-    def awaits_user(self) -> bool:
-        """Whether the user is being asked.
-
-        Returns:
-            True unless the request resolved in place after all.
-        """
-        return True
-
 
 class ConnectionSetup(UserRequest):
     """The hand-off ``request_connection_setup`` makes.
 
     ``setup_url`` opens the app's connection form for this definition, when
-    the deployment knows its public URL. A non-empty ``existing`` means no
-    form was presented: the collection already holds connections of this
-    definition to reuse.
+    the deployment knows its public URL.
     """
 
     status: Literal["success"] = "success"
@@ -265,16 +254,6 @@ class ConnectionSetup(UserRequest):
     oauth: bool
     oauth_available: bool
     setup_url: str | None = None
-    existing: list[ComponentRef] = []
-
-    @property
-    def awaits_user(self) -> bool:
-        """Whether the form is presented.
-
-        Returns:
-            False when the existing connections were listed instead.
-        """
-        return not self.existing
 
 
 class ConnectionCheck(BaseModel):

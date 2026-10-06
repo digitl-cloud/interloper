@@ -252,7 +252,7 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
 
 
 def request_connection_setup(
-    ctx: ToolkitContext, connection_key: str, name: str | None = None, force_new: bool = False
+    ctx: ToolkitContext, connection_key: str, name: str | None = None
 ) -> ConnectionSetup | ToolError:
     """Hand the user to the app's secure connection setup form.
 
@@ -265,11 +265,6 @@ def request_connection_setup(
     A null ``setup_url`` means this deployment has no public app URL: the
     user sets the connection up in the app themselves.
 
-    When the collection already holds connections of this definition, no form
-    is presented: ``existing`` lists them so you can ask the user whether to
-    reuse one — call again with ``force_new`` only when they want another
-    account connected.
-
     The response notes whether the user can sign in with the provider
     (``oauth_available``) or must enter credentials manually; an unknown key
     fails with the list of valid connection keys.
@@ -278,7 +273,6 @@ def request_connection_setup(
         connection_key: Catalog key of the connection definition — usually
             ``<source_key>_connection`` (e.g. 'facebook_ads_connection').
         name: Optional display name to prefill in the form.
-        force_new: Present the form even though fitting connections exist.
     """
     try:
         defn = ctx.catalog.get(connection_key)
@@ -288,7 +282,7 @@ def request_connection_setup(
                 valid_values=sorted(k for k, d in ctx.catalog.items() if d.get("kind") == "connection"),
             )
         oauth = (defn.get("config_schema") or {}).get("x-oauth")
-        setup = ConnectionSetup(
+        return ConnectionSetup(
             message=(
                 "Setup form presented to the user. Ask them to complete it "
                 "(and to say so when done), then verify with list_components."
@@ -299,22 +293,6 @@ def request_connection_setup(
             oauth_available=OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False,
             setup_url=_setup_url(connection_key, name),
         )
-        if not force_new:
-            existing = [
-                ComponentRef(id=c.id, kind=c.kind, key=c.key, name=c.name)
-                for c in ctx.store.components.list(
-                    ctx.org_id, ComponentQuery(kind=["connection"], roots_only=False, limit=None)
-                ).items
-                if c.key == connection_key
-            ]
-            if existing:
-                setup.existing = existing
-                setup.message = (
-                    "The collection already holds connections of this definition — no form was "
-                    "presented. Ask the user whether to reuse one; call again with force_new "
-                    "only if they want another account connected."
-                )
-        return setup
     except Exception as e:
         return ToolError(error=str(e))
 
