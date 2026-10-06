@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.105.1 (2026-10-06)
+
+### Bug Fixes
+
+- **app**: Order graph layers by their neighbours to avoid edge crossings
+  ([`a58bcf6`](https://github.com/digitl-cloud/interloper/commit/a58bcf6d9343097e61f36be451e407e7457a5840))
+
+- **assets**: Mark the campaign matcher alpha
+  ([`5399b06`](https://github.com/digitl-cloud/interloper/commit/5399b06087e59469e44eb33045c05753d98254cf))
+
+
 ## v0.105.0 (2026-10-06)
 
 ### Features
