@@ -4,17 +4,21 @@ from interloper_assets.adservice.source import Adservice, AdserviceConnection
 from interloper_assets.adup.source import Adup, AdupConnection
 from interloper_assets.amazon_ads.connection import AmazonAdsAPILocation, AmazonAdsConnection
 from interloper_assets.amazon_ads.source import AmazonAds
+from interloper_assets.amazon_ads_star_schema.source import AmazonAdsStarSchema
 from interloper_assets.amazon_selling_partner.source import AmazonSellingPartner, AmazonSellingPartnerConnection
 from interloper_assets.awin.source import Awin, AwinConnection
 from interloper_assets.bing_ads.source import BingAds, BingAdsConnection
+from interloper_assets.bing_ads_star_schema.source import BingAdsStarSchema
 from interloper_assets.brandwatch.source import Brandwatch, BrandwatchConnection
 from interloper_assets.campaign_manager_360.source import CampaignManager360, CampaignManager360Connection
 from interloper_assets.campaign_matcher.source import CampaignMatcher
 from interloper_assets.campaign_performance_analysis.source import CampaignPerformanceAnalysis
 from interloper_assets.criteo.source import Criteo, CriteoConnection
+from interloper_assets.criteo_star_schema.source import CriteoStarSchema
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.display_video_360.source import DisplayVideo360, DisplayVideo360Connection
 from interloper_assets.facebook_ads.source import FacebookAds, FacebookAdsConnection
+from interloper_assets.facebook_ads_star_schema.source import FacebookAdsStarSchema
 from interloper_assets.facebook_insights.source import FacebookInsights, FacebookInsightsConnection
 from interloper_assets.google_ads.source import GoogleAds, GoogleAdsConnection
 from interloper_assets.impact.source import Impact, ImpactConnection
@@ -26,9 +30,12 @@ from interloper_assets.pinterest_ads.source import PinterestAds, PinterestAdsCon
 from interloper_assets.search_ads_360.source import SearchAds360, SearchAds360Connection
 from interloper_assets.search_console.source import SearchConsole, SearchConsoleConnection
 from interloper_assets.snapchat_ads.source import SnapchatAds, SnapchatAdsConnection
+from interloper_assets.snapchat_ads_star_schema.source import SnapchatAdsStarSchema
 from interloper_assets.teads.source import Teads, TeadsConnection
 from interloper_assets.thetradedesk.source import TheTradeDesk, TheTradeDeskConnection
+from interloper_assets.thetradedesk_star_schema.source import TheTradeDeskStarSchema
 from interloper_assets.tiktok_ads.source import TiktokAds, TiktokAdsConnection
+from interloper_assets.tiktok_ads_star_schema.source import TiktokAdsStarSchema
 from interloper_assets.usercentrics.source import Usercentrics, UsercentricsConnection
 
 __all__ = [
@@ -39,12 +46,14 @@ __all__ = [
     "AmazonAds",
     "AmazonAdsAPILocation",
     "AmazonAdsConnection",
+    "AmazonAdsStarSchema",
     "AmazonSellingPartner",
     "AmazonSellingPartnerConnection",
     "Awin",
     "AwinConnection",
     "BingAds",
     "BingAdsConnection",
+    "BingAdsStarSchema",
     "Brandwatch",
     "BrandwatchConnection",
     "CampaignManager360",
@@ -53,12 +62,14 @@ __all__ = [
     "CampaignPerformanceAnalysis",
     "Criteo",
     "CriteoConnection",
+    "CriteoStarSchema",
     "DemoMonthlySource",
     "DemoSource",
     "DisplayVideo360",
     "DisplayVideo360Connection",
     "FacebookAds",
     "FacebookAdsConnection",
+    "FacebookAdsStarSchema",
     "FacebookInsights",
     "FacebookInsightsConnection",
     "GoogleAds",
@@ -80,12 +91,15 @@ __all__ = [
     "SearchConsoleConnection",
     "SnapchatAds",
     "SnapchatAdsConnection",
+    "SnapchatAdsStarSchema",
     "Teads",
     "TeadsConnection",
     "TheTradeDesk",
     "TheTradeDeskConnection",
+    "TheTradeDeskStarSchema",
     "TiktokAds",
     "TiktokAdsConnection",
+    "TiktokAdsStarSchema",
     "Usercentrics",
     "UsercentricsConnection",
     "demo_asset",

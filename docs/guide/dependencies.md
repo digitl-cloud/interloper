@@ -108,7 +108,7 @@ class CampaignMatcher(il.Source):
     @il.asset(
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
-        relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
+        relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)},
     )
     def campaign_matches(
         self,
@@ -123,7 +123,7 @@ class CampaignMatcher(il.Source):
         ]
 ```
 
-The DAG binds every `campaigns` asset it holds, so the set of legs is decided by wiring, not by
+The DAG binds every `dim_campaigns` asset it holds, so the set of legs is decided by wiring, not by
 the class. `list[il.Upstream]` on its own infers the same relation on the parameter's bare key,
 which is a many-valued sibling; `relations=` is what reaches outside the source.
 
@@ -131,33 +131,42 @@ which is a many-valued sibling; `relations=` is what reaches outside the source.
 
 The relation above is not hypothetical: `interloper_assets.CampaignMatcher` declares exactly this
 wildcard (same `campaign_matches` decorator shown above, plus `schema=schemas.CampaignMatches`),
-matching campaigns across every advertising connector into one lookup table: each row names the
+matching campaigns across every advertising platform into one lookup table. It reads each
+platform's star schema rather than its connector: not every connector collects a `campaigns`
+entity, so a star schema's `dim_campaigns` is built from whatever carries the campaigns (a
+snapshot, a campaign report, the ad facts), and the matcher always finds them under one key.
+Each row names the
 campaign's `platform` and `account`, the normalised `canonical_name` it is matched on and the
 `match_id` shared by every campaign matched to it. A `key_pattern` on the source selects the part
 of a name that identifies the campaign under a naming convention, and a `similarity_threshold`
 below `1.0` also merges names that merely resemble each other.
 
-Building a DAG over both connectors and the matcher wires every `campaigns` asset held into the
-`campaigns` relation, one leg per connector:
+A star schema fans in one level below, with a qualified key: `FacebookAdsStarSchema` declares
+`facebook_ads.ads_stats` with `many=True` on its `fact_ads_stats`, one leg per Facebook Ads
+account. The star schemas are placeholders for now: they declare their wiring but materialize no
+rows.
+
+Building a DAG over the star schemas and the matcher wires every `dim_campaigns` asset held into
+the `campaigns` relation, one leg per platform:
 
 ```py
-fb = FacebookAds(...)   # declares a campaigns asset
-tt = TiktokAds(...)     # declares a campaigns asset
+fb = FacebookAdsStarSchema(...)   # declares a dim_campaigns asset
+tt = TiktokAdsStarSchema(...)     # declares a dim_campaigns asset
 matcher = CampaignMatcher(destinations=[dest])
 
-dag = il.DAG(fb, tt, matcher)   # binds matcher.campaign_matches.campaigns to [fb.campaigns, tt.campaigns]
+dag = il.DAG(fb, tt, matcher)   # binds matcher.campaign_matches.campaigns to [fb.dim_campaigns, tt.dim_campaigns]
 ```
 
 A matcher built against upstreams already materialized elsewhere reads them read-only instead of
 running them, the same explicit-bind pattern as any other relation:
 
 ```py
-matcher.campaign_matches.bind("campaigns", fb.campaigns)
-dag = il.DAG(matcher)   # fb.campaigns joins the DAG as enabled=False
+matcher.campaign_matches.bind("campaigns", fb.dim_campaigns)
+dag = il.DAG(matcher)   # fb.dim_campaigns joins the DAG as enabled=False
 ```
 
-`examples/campaign_matcher.yaml` is the same wiring written as a manifest: two connectors each
-override their `campaigns` asset to `enabled: false`, and `campaign_matches` names both by
+`examples/campaign_matcher.yaml` is the same wiring written as a manifest: two star schemas each
+override their `dim_campaigns` asset to `enabled: false`, and `campaign_matches` names both by
 `{ref: ...}` since an asset always travels under its own source. See [Specs](specs.md) for the
 manifest format.
 

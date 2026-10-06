@@ -64,10 +64,13 @@ def normalise(name: str, key_pattern: re.Pattern[str] | None = None) -> str:
 class CampaignMatcher(il.Source):
     """Matches campaigns across every advertising source in the organisation into one lookup table.
 
-    Every connector's ``campaigns`` asset feeds it. Each campaign name is
-    reduced to a normalised key, optionally through a naming-convention
-    pattern, and campaigns sharing a key share a match. Keys that merely
-    resemble each other can be merged too, above a similarity threshold.
+    Every star schema's ``dim_campaigns`` asset feeds it, whichever raw asset
+    that dimension was built from: a campaign snapshot on platforms that
+    collect one, campaign reports or ad facts on the others. Each campaign
+    name is reduced to a normalised key, optionally through a
+    naming-convention pattern, and campaigns sharing a key share a match.
+    Keys that merely resemble each other can be merged too, above a
+    similarity threshold.
     """
 
     key_pattern: str | None = il.InputField(
@@ -83,7 +86,7 @@ class CampaignMatcher(il.Source):
         schema=schemas.CampaignMatches,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
-        relations={"campaigns": il.Relation("asset", "*.campaigns", many=True)},
+        relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)},
     )
     def campaign_matches(
         self,
