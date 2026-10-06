@@ -60,7 +60,7 @@ def normalise(name: str, key_pattern: re.Pattern[str] | None = None) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", folded).split())
 
 
-@il.source(tags=["Analytics"], icon="carbon:connect", maturity="beta")
+@il.source(tags=["Analytics"], icon="carbon:connect", maturity="alpha")
 class CampaignMatcher(il.Source):
     """Matches campaigns across every advertising source in the organisation into one lookup table.
 
