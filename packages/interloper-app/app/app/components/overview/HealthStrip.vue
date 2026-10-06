@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Overview } from '~/types/overview'
 
-const props = defineProps<{ overview: Overview }>()
+const props = defineProps<{ overview: Overview | null }>()
 
 const SPARK_HEIGHT = 30
 
 const spark = computed(() => {
-    const max = Math.max(1, ...props.overview.runs.hourly.map(b => b.succeeded + b.failed))
-    return props.overview.runs.hourly.map((bucket, i) => ({
+    const hourly = props.overview?.runs.hourly ?? []
+    const max = Math.max(1, ...hourly.map(b => b.succeeded + b.failed))
+    return hourly.map((bucket, i) => ({
         key: bucket.hour,
         title: `${23 - i}h ago · ${bucket.succeeded} ok · ${bucket.failed} failed`,
         ok: bucket.succeeded ? Math.max(2, Math.round(SPARK_HEIGHT * bucket.succeeded / max)) : 1,
@@ -16,7 +17,8 @@ const spark = computed(() => {
 })
 
 const activity = computed(() => {
-    const { running, queued, longest_running_seconds } = props.overview.activity
+    const { running, queued, longest_running_seconds } = props.overview?.activity
+        ?? { running: 0, queued: 0, longest_running_seconds: null }
     const total = running + queued
     return {
         running,
@@ -28,12 +30,12 @@ const activity = computed(() => {
 })
 
 const backfillPct = computed(() => {
-    const { partitions_done, partitions_total } = props.overview.backfills
+    const { partitions_done, partitions_total } = props.overview?.backfills ?? { partitions_done: 0, partitions_total: 0 }
     return partitions_total ? Math.round((100 * partitions_done) / partitions_total) : 0
 })
 
 const jobs = computed(() => {
-    const { enabled, failing } = props.overview.jobs
+    const { enabled, failing } = props.overview?.jobs ?? { enabled: 0, failing: 0 }
     return {
         failing,
         healthy: enabled - failing,
@@ -47,10 +49,11 @@ const jobs = computed(() => {
     <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
         <OverviewHealthTile label="Runs · last 24h"
                             to="/executions/runs"
-                            :headline="overview.runs.total">
+                            :loading="!overview"
+                            :headline="overview?.runs.total">
             <template #detail>
-                {{ overview.runs.succeeded }} succeeded ·
-                <span :class="overview.runs.failed ? 'font-medium text-error' : ''">{{ overview.runs.failed }} failed</span>
+                {{ overview?.runs.succeeded }} succeeded ·
+                <span :class="overview?.runs.failed ? 'font-medium text-error' : ''">{{ overview?.runs.failed }} failed</span>
             </template>
             <template #footer>
                 <div class="flex items-end gap-0.5"
@@ -73,6 +76,7 @@ const jobs = computed(() => {
 
         <OverviewHealthTile label="Running now"
                             to="/executions/runs"
+                            :loading="!overview"
                             :headline="activity.running">
             <template #detail>{{ activity.queued }} queued</template>
             <template #footer>
@@ -91,8 +95,9 @@ const jobs = computed(() => {
 
         <OverviewHealthTile label="Backfills in progress"
                             to="/executions/backfills"
-                            :headline="overview.backfills.active">
-            <template #detail>{{ overview.backfills.partitions_done }} of {{ overview.backfills.partitions_total }} partitions</template>
+                            :loading="!overview"
+                            :headline="overview?.backfills.active">
+            <template #detail>{{ overview?.backfills.partitions_done }} of {{ overview?.backfills.partitions_total }} partitions</template>
             <template #footer>
                 <div class="flex h-1.5 overflow-hidden rounded-full bg-accented">
                     <div class="bg-primary"
@@ -107,9 +112,10 @@ const jobs = computed(() => {
 
         <OverviewHealthTile label="Jobs failing"
                             :to="kindPath('job')"
+                            :loading="!overview"
                             :headline="jobs.failing"
                             :headline-class="jobs.failing ? 'text-error' : ''">
-            <template #detail>of {{ overview.jobs.enabled }} enabled</template>
+            <template #detail>of {{ overview?.jobs.enabled }} enabled</template>
             <template #footer>
                 <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">
                     <div v-if="jobs.failing"

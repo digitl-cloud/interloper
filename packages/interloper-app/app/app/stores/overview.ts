@@ -17,6 +17,8 @@ export const useOverviewStore = defineStore('overview', () => {
     const overview = ref<Overview | null>(null)
     const coverage = ref<Coverage | null>(null)
     const coverageMonths = ref<CoverageMonths>(3)
+    /** The window the latest coverage read asked for, known before its answer. */
+    const coverageWindow = ref<{ since: string, until: string } | null>(null)
     const loading = ref(false)
     const coverageLoading = ref(false)
     const error = ref<Error | null>(null)
@@ -53,7 +55,8 @@ export const useOverviewStore = defineStore('overview', () => {
             // Day 1 first: subtracting months from a month end would overflow into the next month.
             since.setUTCDate(1)
             since.setUTCMonth(since.getUTCMonth() - coverageMonths.value)
-            const params = new URLSearchParams({ since: isoDate(since), until: isoDate(until) })
+            coverageWindow.value = { since: isoDate(since), until: isoDate(until) }
+            const params = new URLSearchParams(coverageWindow.value)
             const result = await apiFetch<Coverage>(`/overview/coverage?${params}`)
             if (seq === coverageSeq) coverage.value = result
         }
@@ -109,6 +112,7 @@ export const useOverviewStore = defineStore('overview', () => {
         coverageSeq++
         overview.value = null
         coverage.value = null
+        coverageWindow.value = null
         loading.value = false
         coverageLoading.value = false
         error.value = null
@@ -131,6 +135,7 @@ export const useOverviewStore = defineStore('overview', () => {
         overview,
         coverage,
         coverageMonths,
+        coverageWindow,
         loading,
         coverageLoading,
         error,

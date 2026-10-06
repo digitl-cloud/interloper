@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
 import { UIcon } from '#components'
 import type { KindInventory } from '~/types/overview'
 
-const props = defineProps<{ rows: KindInventory[] }>()
+const props = defineProps<{ rows: KindInventory[] | null }>()
 
 const KIND_META: Record<string, { label: string, icon: string, to: string }> = {
     source: { label: 'Sources', icon: 'i-lucide-plug', to: kindPath('source') },
@@ -22,7 +21,7 @@ const STATES = [
     { key: 'disabled', label: 'disabled', legend: 'Disabled', class: 'bg-accented' },
 ] as const
 
-const table = computed(() => props.rows.map(row => ({
+const table = computed(() => (props.rows ?? []).map(row => ({
     ...row,
     meta: KIND_META[row.kind] ?? { label: kindLabel(row.kind), icon: 'i-lucide-box', to: kindPath(row.kind) },
     segments: STATES.filter(s => row[s.key]).map(s => ({
@@ -35,12 +34,13 @@ const table = computed(() => props.rows.map(row => ({
 })))
 
 const summary = computed(() => {
+    if (!props.rows) return undefined
     const total = props.rows.reduce((n, r) => n + r.total, 0)
     const problems = props.rows.reduce((n, r) => n + r.failing + r.attention, 0)
     return `${total} in the collection · ${problems} need attention`
 })
 
-const columns: TableColumn<(typeof table.value)[number]>[] = [
+const columns = withSkeletons<(typeof table.value)[number]>([
     {
         id: 'kind',
         header: 'Kind',
@@ -67,14 +67,15 @@ const columns: TableColumn<(typeof table.value)[number]>[] = [
         meta: { class: { th: 'text-right', td: 'text-right text-xs' } },
         cell: ({ row }) => h('span', { class: row.original.issuesClass }, row.original.issues),
     },
-]
+])
 </script>
 
 <template>
     <UCard>
         <template #header>
             <CardHeader title="Components"
-                        :description="summary">
+                        :description="summary"
+                        :loading="!rows">
                 <UButton label="Open collection"
                          to="/collection"
                          color="neutral"
@@ -82,10 +83,10 @@ const columns: TableColumn<(typeof table.value)[number]>[] = [
                          size="sm" />
             </CardHeader>
         </template>
-        <UTable :data="table"
+        <UTable :data="rows ? table : skeletonRows(Object.keys(KIND_META).length)"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => navigateTo(row.original.meta.to)" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(row.original.meta.to)" />
         <template #footer>
             <div class="flex items-center gap-4 text-xs text-muted">
                 <span v-for="state in STATES"

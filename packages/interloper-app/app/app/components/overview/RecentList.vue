@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
 import { StatusPill } from '#components'
 import type { Run } from '~/types/run'
 
-const props = defineProps<{ runs: Run[] }>()
+const props = defineProps<{ runs: Run[] | null }>()
+
+/** As many rows as the overview returns, so the loaded table takes the skeleton's place. */
+const SKELETON_ROWS = 5
 
 const DOT: Record<ReturnType<typeof statusPillColor>, string> = {
     success: 'bg-success',
@@ -14,7 +16,7 @@ const DOT: Record<ReturnType<typeof statusPillColor>, string> = {
     neutral: 'bg-accented',
 }
 
-const rows = computed(() => props.runs.map((run) => {
+const rows = computed(() => (props.runs ?? []).map((run) => {
     const value = run.completed_at ?? run.started_at ?? run.created_at
     const at = value ? new Date(value) : null
     return {
@@ -27,7 +29,7 @@ const rows = computed(() => props.runs.map((run) => {
 
 type Row = (typeof rows.value)[number]
 
-const columns: TableColumn<Row>[] = [
+const columns = withSkeletons<Row>([
     {
         id: 'target',
         header: 'Target',
@@ -53,7 +55,7 @@ const columns: TableColumn<Row>[] = [
         meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-dimmed' } },
         cell: ({ row }) => row.original.at,
     },
-]
+])
 </script>
 
 <template>
@@ -67,10 +69,10 @@ const columns: TableColumn<Row>[] = [
                          size="sm" />
             </CardHeader>
         </template>
-        <UTable :data="rows"
+        <UTable :data="runs ? rows : skeletonRows(SKELETON_ROWS)"
                 :columns="columns"
                 empty="No runs yet."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.run.id}`)" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(`/executions/runs/${row.original.run.id}`)" />
     </UCard>
 </template>
