@@ -67,13 +67,12 @@ class TestDeferral:
         assert isinstance(result.output, DeferredToolRequests)
         assert [call.tool_name for call in result.output.calls] == ["request_user_selection"]
 
-    def test_a_connection_setup_stops_the_run_only_when_the_form_is_presented(self, ctx: ToolkitContext, store: Store):
+    def test_a_connection_setup_stops_the_run_even_when_connections_exist(self, ctx: ToolkitContext, store: Store):
         agent = agent_calling("request_connection_setup", {"connection_key": "demo_connection"})
-
-        fresh = agent.run_sync("connect", deps=ctx)
         store.components.create(ctx.org_id, kind="connection", key="demo_connection", config={})
-        existing = agent.run_sync("connect", deps=ctx)
 
-        assert isinstance(fresh.output, DeferredToolRequests)
-        assert [call.tool_name for call in fresh.output.calls] == ["request_connection_setup"]
-        assert existing.output == "done"
+        result = agent.run_sync("connect", deps=ctx)
+
+        assert isinstance(result.output, DeferredToolRequests)
+        assert [call.tool_name for call in result.output.calls] == ["request_connection_setup"]
+

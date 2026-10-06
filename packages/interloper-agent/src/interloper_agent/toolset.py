@@ -61,7 +61,7 @@ class Deferring(WrapperToolset[ToolkitContext]):
             CallDeferred: When the result awaits the user's input.
         """
         result = await super().call_tool(name, tool_args, ctx, tool)
-        if isinstance(result, UserRequest) and result.awaits_user:
+        if isinstance(result, UserRequest):
             raise CallDeferred()
         return result
 

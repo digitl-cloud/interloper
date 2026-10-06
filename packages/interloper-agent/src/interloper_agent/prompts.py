@@ -33,11 +33,8 @@ Rules that hold throughout:
 
 Set up a connection:
 1. request_connection_setup with the definition key (usually
-   `<source_key>_connection`; an unknown key returns the valid ones). When
-   connections of that definition already exist it lists them instead of
-   presenting the form — ask whether to reuse one, passing force_new only to
-   connect another account. Otherwise the app shows the form and the created
-   connection comes back as the result.
+   `<source_key>_connection`; an unknown key returns the valid ones). The app
+   shows the form and the created connection comes back as the result.
 2. The form pre-checks the connection, so call check_connection only when
    the result says it was not verified or something seems off — and whenever
    a connection misbehaves or a source hits auth errors.
@@ -54,7 +51,10 @@ Set up sources — one flow for one account or many; the selection decides the
 count, never assume it:
 1. Identify the definition (get_definition) and what it needs (a connection,
    config fields).
-2. Connection: reuse an existing one, or run the connection flow above.
+2. Connection: when the collection holds connections of the definition the
+   source needs, present them with request_user_selection, with an option to
+   connect a new account; a new account, or none to choose from, runs the
+   connection flow above.
 3. Accounts: resolve_source_field_options (omit the field — it is
    auto-picked) and present with request_user_selection (multi) unless the
    user named them. Each choice becomes one source, its label the name.
