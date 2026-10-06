@@ -193,6 +193,27 @@ class TestList:
         assert [row.component_id for row in page.items] == [kept]
         assert len(store.executions.list(_ORG_ID, ExecutionQuery(limit=None)).items) == 2
 
+    def test_latest_within_a_run_is_the_runs_executions(self, store: Store) -> None:
+        run_id, other_run, asset = uuid4(), uuid4(), uuid4()
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        _seed(
+            [
+                Execution(run_id=run_id, component_id=asset, org_id=_ORG_ID, status="failed", created_at=t0),
+                Execution(
+                    run_id=other_run,
+                    component_id=asset,
+                    org_id=_ORG_ID,
+                    status="success",
+                    created_at=t0 + timedelta(hours=1),
+                ),
+            ]
+        )
+        _components(asset)
+
+        page = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=None), run_id=run_id)
+
+        assert [(row.run_id, row.status) for row in page.items] == [(run_id, "failed")]
+
 
 class TestCounts:
     def test_groups_each_run_by_status(self, store: Store) -> None:
