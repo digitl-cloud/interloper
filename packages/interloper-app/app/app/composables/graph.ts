@@ -53,8 +53,9 @@ export function useGraphLayout() {
      * 1. Build adjacency lists + in-degree map
      * 2. Assign each node a rank = longest path from any root
      * 3. Group nodes by rank into layers
-     * 4. Center each layer horizontally
-     * 5. Return top-left positions and bounding box
+     * 4. Order each layer to reduce edge crossings (barycenter sweeps)
+     * 5. Center each layer horizontally
+     * 6. Return top-left positions and bounding box
      */
     function layoutDag(
         nodes: LayoutNode[],
@@ -133,24 +134,54 @@ export function useGraphLayout() {
         const crossExtent = (n: LayoutNode) => (isVertical ? n.width : n.height)
         const mainExtent = (n: LayoutNode) => (isVertical ? n.height : n.width)
 
+        const layerSpan = (ids: string[]) =>
+            ids.reduce((sum, id) => sum + crossExtent(nodeMap.get(id)!), 0) + (ids.length - 1) * gapX
+
+        // Barycenter ordering: sweeping down (parents), up (children), then down
+        // again, each node moves to the mean position of its neighbours.
+        // Positions are measured from each layer's center because layers are
+        // centered when placed; a node with no neighbour on the swept side
+        // keeps its own, and ties keep the input order.
+        const ordered = sortedRanks.map(r => layers.get(r)!)
+        const centers = () => {
+            const result = new Map<string, number>()
+            for (const ids of ordered) {
+                let cursor = -layerSpan(ids) / 2
+                for (const id of ids) {
+                    const extent = crossExtent(nodeMap.get(id)!)
+                    result.set(id, cursor + extent / 2)
+                    cursor += extent + gapX
+                }
+            }
+            return result
+        }
+        for (const down of [true, false, true]) {
+            const indices = ordered.map((_, i) => i)
+            for (const i of down ? indices.slice(1) : indices.slice(0, -1).reverse()) {
+                const center = centers()
+                const neighbours = down ? parents : children
+                const barycenter = (id: string) => {
+                    const linked = neighbours.get(id)!
+                    if (linked.length === 0) return center.get(id)!
+                    return linked.reduce((sum, other) => sum + center.get(other)!, 0) / linked.length
+                }
+                const weights = new Map(ordered[i]!.map(id => [id, barycenter(id)]))
+                ordered[i] = [...ordered[i]!].sort((a, b) => weights.get(a)! - weights.get(b)!)
+            }
+        }
+
         // Cross-axis span of each layer, for centering.
-        const layerSpans = sortedRanks.map((r) => {
-            const ids = layers.get(r)!
-            return ids.reduce((sum, id) => sum + crossExtent(nodeMap.get(id)!), 0)
-                + (ids.length - 1) * gapX
-        })
+        const layerSpans = ordered.map(layerSpan)
         const maxLayerSpan = Math.max(...layerSpans)
 
         // Position nodes
         let mainCursor = 0
 
-        for (let i = 0; i < sortedRanks.length; i++) {
-            const r = sortedRanks[i]!
-            const ids = layers.get(r)!
-            const layerSpan = layerSpans[i]!
+        for (let i = 0; i < ordered.length; i++) {
+            const ids = ordered[i]!
 
             // Center this layer within the widest layer.
-            let cross = (maxLayerSpan - layerSpan) / 2
+            let cross = (maxLayerSpan - layerSpans[i]!) / 2
             const maxMain = Math.max(...ids.map(id => mainExtent(nodeMap.get(id)!)))
 
             for (const id of ids) {
