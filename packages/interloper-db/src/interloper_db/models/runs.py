@@ -14,12 +14,6 @@ from sqlmodel import Field as SQLField
 from interloper_db.models.columns import PortableJSON, TZDateTime, timestamp_column
 from interloper_db.models.components import Component
 
-_OPERATION_EVENTS = (
-    "component_id IS NOT NULL AND event_type IN ('operation_queued', 'operation_skipped', 'operation_started', "
-    "'operation_completed', 'operation_failed', 'operation_canceled', 'operation_retried')"
-)
-"""The events the ``executions`` view derives operation executions from."""
-
 MAX_EVENT_TEXT = 60_000
 """Defensive cap for free-text event fields (well under Postgres limits)."""
 
@@ -319,15 +313,6 @@ class Event(SQLModel, table=True):
             postgresql_where=text("error IS NOT NULL"),
             sqlite_where=text("error IS NOT NULL"),
         ),
-        # The rows the ``executions`` view ranks, in its windows' partition order.
-        Index(
-            "ix_events_executions",
-            "org_id",
-            "run_id",
-            "component_id",
-            postgresql_where=text(_OPERATION_EVENTS),
-            sqlite_where=text(_OPERATION_EVENTS),
-        ),
     )
 
     id: UUID = SQLField(
@@ -446,20 +431,25 @@ class Event(SQLModel, table=True):
 
 
 class Execution(SQLModel, table=True):
-    """Read model over the ``executions`` view — never written.
+    """One operation's execution within a run: its verdict, timestamps and attempts.
 
-    One row per ``(run, operation)``: the operation's verdict, derived from
-    its lifecycle events (latest attempt first, then severity, then recency)
-    plus the queued/started/completed timestamps and how many attempts it
-    took. The timestamps span every attempt, so a retried operation reads as
-    one execution from its first start to its final outcome. The view itself is created by migration 002; ``create_all``
-    skips view-backed models (see the ``is_view`` marker).
+    One row per ``(run, operation)``, folded from the operation's lifecycle
+    events as they are saved: latest attempt first, then severity, then
+    recency decides the status, and the timestamps span every attempt, so a
+    retried operation reads as one execution from its first start to its
+    final outcome. The fold is a Postgres trigger on ``events``, so the
+    application never writes this table; migration 012 creates the table,
+    the trigger and the backfill, which is why ``create_all`` skips it (see
+    the ``migration_owned`` marker).
     """
 
     __tablename__: ClassVar[str] = "executions"
-    __table_args__: ClassVar[dict[str, Any]] = {"info": {"is_view": True}}
+    __table_args__: ClassVar[tuple[Any, ...]] = (
+        Index("ix_executions_latest", "org_id", "component_id", text("created_at DESC")),
+        {"info": {"migration_owned": True}},
+    )
 
-    run_id: UUID = SQLField(primary_key=True)
+    run_id: UUID = SQLField(sa_column=Column(ForeignKey("runs.id", ondelete="CASCADE"), primary_key=True))
     component_id: UUID = SQLField(primary_key=True)
     org_id: UUID
     component_key: str | None = None

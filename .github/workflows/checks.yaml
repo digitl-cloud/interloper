@@ -26,6 +26,21 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     permissions:
       contents: read
+    # The migration tests provision throwaway databases on this server; without it they skip.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      INTERLOPER_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/postgres
     steps:
       - name: Checkout
         uses: actions/checkout@v5

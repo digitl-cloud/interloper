@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
 from interloper_db import engine as engine_module
-from interloper_db.models import Execution, Run
+from interloper_db.models import Component, Execution, Run
 from interloper_db.store import ExecutionQuery, Store
 
 _ORG_ID = uuid4()
@@ -25,7 +25,7 @@ _ORG_ID = uuid4()
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over a fresh in-memory SQLite database carrying the runs and the executions read model.
+    """A store over a fresh in-memory SQLite database carrying the components, the runs and their executions.
 
     Yields:
         The store bound to that database, disposed once the test finishes.
@@ -35,7 +35,7 @@ def store() -> Iterator[Store]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    for model in (Run, Execution):
+    for model in (Component, Run, Execution):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
@@ -50,10 +50,25 @@ def _seed(executions: list[Execution]) -> None:
         session.commit()
 
 
+def _components(*component_ids: UUID, org_id: UUID = _ORG_ID) -> None:
+    """Persist the component rows a latest read starts from.
+
+    Args:
+        *component_ids: The components' ids.
+        org_id: The organisation owning them.
+    """
+    with Session(engine_module.get_engine()) as session:
+        session.add_all(
+            Component(id=component_id, org_id=org_id, kind="asset", key=f"asset_{index}")
+            for index, component_id in enumerate(component_ids)
+        )
+        session.commit()
+
+
 class TestList:
     """One run's executions, every run's, or each component's newest."""
 
-    def test_maps_the_view(self, store: Store) -> None:
+    def test_maps_the_rows(self, store: Store) -> None:
         run_id, asset_id = uuid4(), uuid4()
         _seed(
             [
@@ -122,6 +137,9 @@ class TestList:
             ]
         )
 
+        _components(asset_a, asset_b)
+        _components(foreign, org_id=other_org)
+
         page = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=None))
 
         assert {(row.component_id, row.run_id, row.status) for row in page.items} == {
@@ -148,6 +166,8 @@ class TestList:
             ]
         )
 
+        _components(*components)
+
         first = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=2))
         rest = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=2, offset=2))
 
@@ -157,6 +177,21 @@ class TestList:
         # SQLite round-trips the column naive.
         newest = {row.created_at.replace(tzinfo=timezone.utc) for row in first.items + rest.items if row.created_at}
         assert newest == {t0 + timedelta(hours=1)}
+
+    def test_latest_leaves_out_a_deleted_component(self, store: Store) -> None:
+        kept, deleted = uuid4(), uuid4()
+        _seed(
+            [
+                Execution(run_id=uuid4(), component_id=asset, org_id=_ORG_ID, status="success")
+                for asset in (kept, deleted)
+            ]
+        )
+        _components(kept)
+
+        page = store.executions.list(_ORG_ID, ExecutionQuery(latest=True, limit=None))
+
+        assert [row.component_id for row in page.items] == [kept]
+        assert len(store.executions.list(_ORG_ID, ExecutionQuery(limit=None)).items) == 2
 
 
 class TestCounts:

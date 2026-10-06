@@ -1,8 +1,9 @@
 """Tests for migration ``008_executions_by_org``: the organisation-scoped ``executions`` view.
 
 Postgres-only, like the other migration tests: this module reads a server DSN
-from ``INTERLOPER_TEST_POSTGRES_DSN``, provisions a throwaway database
-migrated to head, and drops it afterwards; without the variable it skips.
+from ``INTERLOPER_TEST_POSTGRES_DSN``, provisions a throwaway database at
+revision 008, and drops it afterwards; without the variable it skips. Later
+revisions replace the view with a table, so the module stops at its own.
 """
 
 from __future__ import annotations
@@ -16,18 +17,17 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Engine, text
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from interloper_db import engine as engine_module
 from interloper_db import provision
-from interloper_db.models import Event, Execution, Run
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
 def postgres_db() -> Iterator[Engine]:
-    """A throwaway Postgres database migrated to head.
+    """A throwaway Postgres database at revision 008.
 
     Yields:
         The global engine bound to that database, dropped once the module finishes.
@@ -40,6 +40,7 @@ def postgres_db() -> Iterator[Engine]:
     engine = engine_module.init_engine(dsn)
     try:
         provision.create_all(engine)
+        provision.downgrade(engine, revision="008")
         yield engine
     finally:
         engine.dispose()
@@ -50,6 +51,9 @@ def postgres_db() -> Iterator[Engine]:
 def _execute(session: Session, org_id: UUID, event_type: str) -> UUID:
     """Record a run of an organisation with one operation event.
 
+    Plain SQL rather than the models: those describe head, and later
+    revisions add columns this one lacks.
+
     Args:
         session: The session the rows are added to, left uncommitted.
         org_id: The organisation owning the run and its event.
@@ -58,21 +62,29 @@ def _execute(session: Session, org_id: UUID, event_type: str) -> UUID:
     Returns:
         The new run's id.
     """
-    run = Run(org_id=org_id, status="running")
-    session.add(run)
-    session.flush()
-    session.add(
-        Event(
-            id=uuid4(),
-            org_id=org_id,
-            run_id=run.id,
-            event_type=event_type,
-            component_id=uuid4(),
-            component_key="orders",
-            timestamp=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
-        )
+    run_id = uuid4()
+    session.connection().execute(
+        text(
+            "INSERT INTO runs (id, org_id, status, attempt, root_run_id, billable) "
+            "VALUES (:id, :org_id, 'running', 1, :id, true)"
+        ),
+        {"id": run_id, "org_id": org_id},
     )
-    return run.id
+    session.connection().execute(
+        text(
+            "INSERT INTO events (id, org_id, run_id, event_type, component_id, component_key, timestamp) "
+            "VALUES (:id, :org_id, :run_id, :event_type, :component_id, 'orders', :timestamp)"
+        ),
+        {
+            "id": uuid4(),
+            "org_id": org_id,
+            "run_id": run_id,
+            "event_type": event_type,
+            "component_id": uuid4(),
+            "timestamp": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
+        },
+    )
+    return run_id
 
 
 def _events_scans(plan: dict[str, Any]) -> Iterator[dict[str, Any]]:
@@ -99,9 +111,13 @@ class TestOrganisationScope:
             session.commit()
 
         with Session(postgres_db) as session:
-            rows = session.exec(select(Execution).where(Execution.org_id == org_id)).all()
+            rows = (
+                session.connection()
+                .execute(text("SELECT run_id, status FROM executions WHERE org_id = :org_id"), {"org_id": org_id})
+                .all()
+            )
 
-        assert [(row.run_id, row.status) for row in rows] == [(mine, "success")]
+        assert [tuple(row) for row in rows] == [(mine, "success")]
 
     def test_the_organisation_filter_reaches_the_events_scan(self, postgres_db: Engine) -> None:
         with postgres_db.connect() as connection:
@@ -129,7 +145,7 @@ class TestDowngrade:
             assert "PARTITION BY e.run_id, e.component_id" in definition
             assert not indexed
         finally:
-            provision.upgrade(postgres_db)
+            provision.upgrade(postgres_db, revision="008")
 
         assert state() == (scoped, True)
 
@@ -146,13 +162,10 @@ class TestUpgrade:
         with postgres_db.begin() as connection:
             connection.execute(text("CREATE INDEX ix_events_executions ON events (org_id)"))
             connection.execute(
-                text(
-                    "UPDATE pg_index SET indisvalid = false "
-                    "WHERE indexrelid = to_regclass('ix_events_executions')"
-                )
+                text("UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass('ix_events_executions')")
             )
         assert valid() is False
 
-        provision.upgrade(postgres_db)
+        provision.upgrade(postgres_db, revision="008")
 
         assert valid() is True

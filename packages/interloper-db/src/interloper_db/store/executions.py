@@ -1,21 +1,20 @@
-"""Execution reads: one row per operation of a run, derived from its events.
+"""Execution reads: one row per operation of a run, folded from its events.
 
-``executions`` is a database view over the run events, never written: each
-row is an operation's verdict in one run, its timestamps spanning every
-attempt. Every read here goes through the view, so the cost of deriving it is
-paid in one place.
+Each row is an operation's verdict in one run, its timestamps spanning every
+attempt. A trigger on ``events`` keeps the table current as events are
+saved, so reading it costs what the rows read cost, whatever the history.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Engine
-from sqlalchemy.orm import aliased
+from sqlalchemy import Engine, and_
 from sqlmodel import col, func, select
 
-from interloper_db.models import Execution
+from interloper_db.models import Component, Execution
 from interloper_db.session import session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -53,23 +52,45 @@ class ExecutionStore:
         Returns:
             The page of execution rows.
         """
-        statement = select(Execution).where(Execution.org_id == org_id)
-        if run_id is not None:
-            statement = statement.where(Execution.run_id == run_id)
         if query.latest:
-            rank = (
-                func.row_number()
-                .over(partition_by=col(Execution.component_id), order_by=col(Execution.created_at).desc())
-                .label("rank")
+            newest = and_(
+                col(Execution.component_id) == col(Component.id),
+                col(Execution.run_id) == self._newest_run(org_id, run_id),
             )
-            ranked = statement.add_columns(rank).subquery()
-            newest = aliased(Execution, ranked)
-            statement = select(newest).where(ranked.c.rank == 1)
-            order = (col(newest.created_at), col(newest.component_id))
+            statement = select(Execution).select_from(Component).join(Execution, newest)
+            statement = statement.where(Component.org_id == org_id)
         else:
-            order = (col(Execution.created_at), col(Execution.component_id))
+            statement = select(Execution).where(Execution.org_id == org_id)
+            if run_id is not None:
+                statement = statement.where(Execution.run_id == run_id)
+        order = (col(Execution.created_at), col(Execution.component_id))
         with session_scope(self._engine) as session:
             return Page.read(session, statement.order_by(*order), query)
+
+    @staticmethod
+    def _newest_run(org_id: UUID, run_id: UUID | None) -> Any:
+        """The run of a component's newest execution, correlated to the component being read.
+
+        One index probe per component the listing reads, so the cost follows
+        the organisation's components rather than its history; a component
+        that was deleted no longer has a newest execution.
+
+        Args:
+            org_id: Organisation UUID.
+            run_id: Keep only this run's executions; ``None`` considers every run.
+
+        Returns:
+            The correlated scalar subquery.
+        """
+        newest = (
+            select(Execution.run_id)
+            .where(Execution.org_id == org_id, col(Execution.component_id) == col(Component.id))
+            .order_by(col(Execution.created_at).desc())
+            .limit(1)
+        )
+        if run_id is not None:
+            newest = newest.where(Execution.run_id == run_id)
+        return newest.correlate(Component).scalar_subquery()
 
     def counts(self, run_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each run's operation executions by status, in one query.
