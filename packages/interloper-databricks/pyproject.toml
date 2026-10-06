@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-databricks"
-version = "0.103.0"
+version = "0.104.0"
 description = "Interloper Databricks integration: connection and destination"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

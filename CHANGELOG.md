@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v0.104.0 (2026-10-06)
+
+### Bug Fixes
+
+- **api**: Store each agent conversation message once
+  ([`d5f6a3a`](https://github.com/digitl-cloud/interloper/commit/d5f6a3a8c0d077013cb420d47cee81287481ac8f))
+
+- **app**: Draw agent cards once their call is ready, and failed ones as steps
+  ([`77b2791`](https://github.com/digitl-cloud/interloper/commit/77b2791267b0f1724f3c52fb52c64b04a239ae50))
+
+- **app**: Leave the agent panel's conversation on an organisation switch
+  ([`9d6bda7`](https://github.com/digitl-cloud/interloper/commit/9d6bda76397733fe08bfab66731fe35afdb12995))
+
+- **app**: Stop the run rail clipping its cards' side borders
+  ([`4529a3e`](https://github.com/digitl-cloud/interloper/commit/4529a3e9cdc7a0e41f7b6e5d504e5b9077f4d548))
+
+- **app**: Stop the timeline re-rendering every frame and leaking refresh timers
+  ([`7dab88a`](https://github.com/digitl-cloud/interloper/commit/7dab88a6e8e598733d107603fdd4be0e8393d6df))
+
+### Code Style
+
+- **app**: Centre the agent's cards and set them on the page tone
+  ([`9a2d063`](https://github.com/digitl-cloud/interloper/commit/9a2d06313b519dbfe50bcded7177f70baacb43d0))
+
+### Features
+
+- **agent**: Present the connection form whenever asked, offer reuse where a source needs one
+  ([`00654fc`](https://github.com/digitl-cloud/interloper/commit/00654fce57d884193fd8aa49a241490b2efd104b))
+
+### Performance Improvements
+
+- **agent**: Answer the common questions in one call and think less per round
+  ([`cf1e05f`](https://github.com/digitl-cloud/interloper/commit/cf1e05f34c0a095630f26bbdf7cfa11300678f9f))
+
+### Testing
+
+- **toolkit**: Cover the overview's attention rows and failed read
+  ([`55978da`](https://github.com/digitl-cloud/interloper/commit/55978da555160897140a4d62d49d82271fe465cf))
+
+### Breaking Changes
+
+- **agent**: Request_connection_setup no longer takes force_new, and its result no longer carries
+  existing; MCP clients passing or reading them must drop them.
+
+
 ## v0.103.0 (2026-10-06)
 
 ### Features
