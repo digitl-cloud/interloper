@@ -85,7 +85,7 @@ https://docs.interloper.dev/guide/jobs/
   single matching asset in the job; two matches (two `shop` instances) fail at load time with
   `DAGError`, and an unbound non-optional relation fails at load time with `ConfigError`. Write
   the `{ref: id}` only in the ambiguous case. A many-valued relation
-  (`il.Relation("asset", "*.campaigns", many=True)`) takes a list:
+  (`il.Relation("asset", "*.dim_campaigns", many=True)`) takes a list:
   `campaigns: [{ref: id-a}, {ref: id-b}]`.
 - **`${VAR}` is a spec-file feature.** `Spec.from_file` interpolates it; `interloper.yaml`
   (settings) does not, see the interloper-deploy skill.

@@ -99,17 +99,17 @@ init:
             access_token: ${FB_TOKEN}
             app_id: "1"
         assets:
-          campaigns:
-            id: fb-campaigns
+          ads_stats:
+            id: fb-ads-stats
             enabled: false
-    - key: campaign_matcher
+    - key: facebook_ads_star_schema
       init:
         assets:
-          campaign_matches:
-            campaigns: [{ref: fb-campaigns}]     # the asset has a parent: always a reference
+          fact_ads_stats:
+            ads_stats: [{ref: fb-ads-stats}]     # the asset has a parent: always a reference
 ```
 
-Without the explicit `campaigns:` line the DAG binds every `*.campaigns` node it holds. Neither
+Without the explicit `ads_stats:` line the DAG binds every `facebook_ads.ads_stats` node it holds. Neither
 target declares `destinations`: the job's cascade into every target that has none, so a target
 writes its own only to use something else. A parentless component mentioned a second time is a
 reference too (`destinations: [{ref: bq}]` on a target that needs the same destination as
