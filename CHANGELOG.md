@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.103.0 (2026-10-06)
+
+### Features
+
+- **app**: Polish the app's surfaces, spacing and agent panel
+  ([`2beb7ea`](https://github.com/digitl-cloud/interloper/commit/2beb7ea63691c8359c1fb1c3778839cd79f57605))
+
+
 ## v0.102.0 (2026-10-06)
 
 ### Features
