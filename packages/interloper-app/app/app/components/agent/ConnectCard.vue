@@ -137,7 +137,7 @@ async function submit() {
 </script>
 
 <template>
-    <div class="border border-default rounded-lg p-4 my-2 w-full min-w-80 max-w-md">
+    <div class="mx-auto my-2 w-full min-w-80 max-w-md rounded-lg border border-default bg-default p-4">
         <!-- Unknown type: the catalog may not carry this key anymore -->
         <div v-if="!defn"
              class="flex items-center gap-2 text-[13px] text-muted">

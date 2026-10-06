@@ -50,7 +50,7 @@ function confirm() {
 </script>
 
 <template>
-    <div class="border border-default rounded-lg p-4 my-2 w-full min-w-80 max-w-md flex flex-col gap-3">
+    <div class="mx-auto my-2 flex w-full min-w-80 max-w-md flex-col gap-3 rounded-lg border border-default bg-default p-4">
         <div class="flex items-center justify-between gap-2">
             <span class="text-[13px] font-semibold text-highlighted">{{ request.prompt }}</span>
             <UButton v-if="request.multi && request.options.length > 3 && !submitted"
