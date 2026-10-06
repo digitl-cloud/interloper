@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-duckdb"
-version = "0.104.0"
+version = "0.105.0"
 description = "Interloper DuckDB integration: DuckDB and MotherDuck destination and connection"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

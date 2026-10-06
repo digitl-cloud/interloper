@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.105.0 (2026-10-06)
+
+### Features
+
+- **assets**: Add star schema placeholders and feed the campaign matcher from them
+  ([`6af6457`](https://github.com/digitl-cloud/interloper/commit/6af6457d0b3df008e115865ed39bfa229dceb873))
+
+### Refactoring
+
+- **assets**: Name star schema facts after the performance they measure
+  ([`c68d4bd`](https://github.com/digitl-cloud/interloper/commit/c68d4bd522386adfd4e3a56e9e9bf7206bd50715))
+
+### Breaking Changes
+
+- **assets**: CampaignMatcher fans in `*.dim_campaigns` instead of `*.campaigns`. Not every
+  connector collects a campaigns entity, so a star schema's campaign dimension is the one key every
+  platform can expose. Matcher bindings to raw `campaigns` assets no longer validate.
+
+
 ## v0.104.0 (2026-10-06)
 
 ### Bug Fixes
