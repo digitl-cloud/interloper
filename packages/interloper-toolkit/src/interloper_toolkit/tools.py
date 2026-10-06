@@ -149,6 +149,7 @@ TOOLS: tuple[Tool, ...] = (
     Tool(scheduling.trigger_backfill, Effect.LAUNCH),
     Tool(scheduling.cancel_backfill, Effect.CANCEL),
     # Analytics
+    Tool(analytics.pipeline_overview, Effect.READ),
     Tool(analytics.job_health, Effect.READ),
     Tool(analytics.run_stats, Effect.READ),
     Tool(analytics.asset_coverage, Effect.READ),

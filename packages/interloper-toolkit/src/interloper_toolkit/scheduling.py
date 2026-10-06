@@ -132,7 +132,7 @@ def list_recent_runs(
     ctx: ToolkitContext,
     component_id: str | None = None,
     status: RunStatus | None = None,
-    limit: int = 20,
+    limit: int = 10,
     offset: int = 0,
 ) -> RunList | ToolError:
     """List recent runs, newest first, with optional filters.
@@ -140,7 +140,7 @@ def list_recent_runs(
     Args:
         component_id: Filter by job UUID (optional).
         status: Filter by status (optional).
-        limit: Maximum number of runs to return (default 20).
+        limit: Maximum number of runs to return (default 10).
         offset: Number of runs to skip, for paging past the first page.
 
     Returns the page of runs and the total number matching the filters.
@@ -296,11 +296,11 @@ def get_event(ctx: ToolkitContext, event_id: str) -> EventDetail | ToolError:
         return ToolError(error=str(e))
 
 
-def list_failures(ctx: ToolkitContext, limit: int = 20, offset: int = 0) -> FailureList | ToolError:
+def list_failures(ctx: ToolkitContext, limit: int = 10, offset: int = 0) -> FailureList | ToolError:
     """List recent failed runs, newest first, with their error events.
 
     Args:
-        limit: Maximum number of failed runs to return (default 20).
+        limit: Maximum number of failed runs to return (default 10).
         offset: Number of failed runs to skip, for paging past the first page.
 
     Returns the page of failed runs, each with its error count and the first
@@ -339,7 +339,7 @@ def error_breakdown(
     backfill_id: str | None = None,
     run_id: str | None = None,
     group_by: list[str] | None = None,
-    limit: int = 25,
+    limit: int = 10,
     offset: int = 0,
 ) -> ErrorBreakdown | ToolError:
     """Group the failures over a window by job, asset and cause, loudest first.
@@ -359,7 +359,7 @@ def error_breakdown(
         run_id: Keep failures of this run.
         group_by: Any of 'job', 'asset', 'cause' (default all three); a key
             left out is omitted from the rows.
-        limit: Maximum number of groups to return (default 25).
+        limit: Maximum number of groups to return (default 10).
         offset: Number of groups to skip, for paging past the first page.
 
     Returns the page of groups with attempt and run counts, first and last

@@ -62,7 +62,7 @@ class TestBind:
         parameters = inspect.signature(bound).parameters
         assert list(parameters) == ["run", "component_id", "status", "limit", "offset"]
         assert parameters["run"].annotation is int
-        assert parameters["limit"].default == 20
+        assert parameters["limit"].default == 10
         assert parameters["status"].annotation == (RunStatus | None)
         assert (
             inspect.signature(bound).return_annotation == typing.get_type_hints(scheduling.list_recent_runs)["return"]

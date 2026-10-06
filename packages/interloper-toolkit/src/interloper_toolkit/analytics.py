@@ -10,10 +10,34 @@ from interloper_toolkit.models import (
     AssetCoverage,
     JobHealthReport,
     JobHealthRow,
+    PipelineOverview,
     RunStats,
     ToolError,
 )
 from interloper_toolkit.stats import window
+
+
+def pipeline_overview(ctx: ToolkitContext, upcoming: int = 5) -> PipelineOverview | ToolError:
+    """The organisation at a glance: start here for health, status and "what failed?" questions.
+
+    One call returns the last 24 hours of runs (succeeded, failed), what is
+    running and queued now, active backfills, the failing and overdue jobs,
+    the next scheduled firings, everything that needs a person (failures
+    grouped by cause, connections needing re-authorisation, runs still
+    failing after retries, catalog drift, overdue schedules) and each
+    component kind's count by state. Its ids lead to the detailed tools,
+    for when the user asks for more.
+
+    Args:
+        upcoming: How many of the next scheduled firings to include (default 5).
+    """
+    try:
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+        health = ctx.store.insights.health(ctx.org_id, now=now)
+        activity = ctx.store.insights.activity(ctx.org_id, now=now)
+        return PipelineOverview.from_insights(health, activity, upcoming)
+    except Exception as e:
+        return ToolError(error=str(e))
 
 
 def job_health(ctx: ToolkitContext, limit: int = 50, offset: int = 0) -> JobHealthReport | ToolError:

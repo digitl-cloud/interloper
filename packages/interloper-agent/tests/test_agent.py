@@ -45,6 +45,9 @@ class TestBuildAgent:
 class TestModelSettings:
     def test_thinking_is_asked_for_per_provider(self):
         assert model_settings("google:gemini-2.5-flash") == {"google_thinking_config": {"include_thoughts": True}}
+        assert model_settings("google:gemini-3.8-flash") == {
+            "google_thinking_config": {"include_thoughts": True, "thinking_level": "MEDIUM"}
+        }
         assert model_settings("anthropic:claude-sonnet-4-5") == {"anthropic_thinking": {"type": "adaptive"}}
         assert model_settings("openai:gpt-5") is None
 

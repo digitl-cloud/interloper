@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 
+from google.genai.types import ThinkingLevel
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, DeferredToolRequests, UsageLimits
 from pydantic_ai.capabilities import AbstractCapability, ProcessHistory
@@ -98,11 +99,13 @@ def capabilities(model: str) -> list[AbstractCapability[ToolkitContext]]:
 
 
 def model_settings(model: str) -> ModelSettings | None:
-    """The settings that surface the model's reasoning to the app.
+    """The settings that surface the model's reasoning to the app, and bound it.
 
     The app shows thought summaries while a turn is in flight, which is the
     only account of a long turn the model can give. Each provider asks for
-    them differently; a provider with no such switch gets none.
+    them differently; a provider with no such switch gets none. Gemini 3
+    thinks at a medium level: its default reasons at length before every
+    tool hop, which is most of a turn's latency.
 
     Args:
         model: The ``provider:model`` name.
@@ -110,8 +113,13 @@ def model_settings(model: str) -> ModelSettings | None:
     Returns:
         The provider's settings, or ``None``.
     """
-    provider, _, _ = model.partition(":")
+    provider, _, name = model.partition(":")
     if provider in ("google", "google-cloud"):
+        # Gemini 2.5 rejects a thinking level; it only takes a token budget.
+        if name.startswith("gemini-3"):
+            return GoogleModelSettings(
+                google_thinking_config={"include_thoughts": True, "thinking_level": ThinkingLevel.MEDIUM}
+            )
         return GoogleModelSettings(google_thinking_config={"include_thoughts": True})
     if provider == "anthropic":
         return AnthropicModelSettings(anthropic_thinking={"type": "adaptive"})
