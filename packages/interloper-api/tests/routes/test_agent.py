@@ -219,6 +219,78 @@ class TestChat:
         assert [m["role"] for m in detail["messages"]] == ["user", "assistant", "user", "assistant"]
         assert detail["messages"][1]["parts"][0] == {"type": "text", "text": "Hello Ada", "state": "done"}
 
+    def test_a_follow_up_sent_with_the_whole_list_stores_each_message_once(self, store: Store, member: SimpleNamespace):
+        agent = _echo_agent()
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
+        first = _turn("hi there")
+        reply = {"id": "a1", "role": "assistant", "parts": [{"type": "text", "text": "Hello Ada", "state": "done"}]}
+
+        with agent.override(model=TestModel(call_tools=[], custom_output_text="Hello Ada")):
+            client.post(f"/agent/conversations/{conversation_id}/chat", json=first)
+            follow_up = {**_turn("and again"), "messages": [*first["messages"], reply, *_turn("and again")["messages"]]}
+            client.post(f"/agent/conversations/{conversation_id}/chat", json=follow_up)
+
+        row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
+        history = ModelMessagesTypeAdapter.validate_python(row.messages)
+        prompts = [p.content for m in history for p in m.parts if isinstance(p, UserPromptPart)]
+        assert prompts == ["hi there", "and again"]
+        assert len(history) == 4
+
+    def test_a_card_answer_sent_with_the_whole_list_stores_the_turn_once(self, store: Store, member: SimpleNamespace):
+        selection = {"prompt": "Which one?", "options": [{"label": "X", "value": "x"}], "multi": False}
+
+        async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+            answered = any(isinstance(p, ToolReturnPart) for p in messages[-1].parts)
+            if answered:
+                yield "Picked X"
+            else:
+                call = DeltaToolCall(name="request_user_selection", json_args=json.dumps(selection), tool_call_id="c1")
+                yield {0: call}
+
+        agent = Agent[ToolkitContext, str | DeferredToolRequests](
+            FunctionModel(stream_function=model),
+            deps_type=ToolkitContext,
+            output_type=[str, DeferredToolRequests],
+            toolsets=[toolset()],
+        )
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
+        first = _turn("pick for me")
+        card = {
+            "id": "a1",
+            "role": "assistant",
+            "parts": [
+                {
+                    "type": "tool-request_user_selection",
+                    "toolCallId": "c1",
+                    "state": "output-available",
+                    "input": selection,
+                    "output": {"selected": ["x"]},
+                }
+            ],
+        }
+
+        client.post(f"/agent/conversations/{conversation_id}/chat", json=first)
+        answered = client.post(
+            f"/agent/conversations/{conversation_id}/chat", json={**first, "messages": [*first["messages"], card]}
+        )
+
+        assert "Picked X" in answered.text
+        row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
+        history = ModelMessagesTypeAdapter.validate_python(row.messages)
+        assert [type(p).__name__ for m in history for p in m.parts] == [
+            "UserPromptPart",
+            "ToolCallPart",
+            "ToolReturnPart",
+            "TextPart",
+        ]
+        detail = client.get(f"/agent/conversations/{conversation_id}").json()
+        assert [(m["role"], [p["type"] for p in m["parts"]]) for m in detail["messages"]] == [
+            ("user", ["text"]),
+            ("assistant", ["tool-request_user_selection", "text"]),
+        ]
+
     def test_a_create_pauses_for_approval_and_runs_once_approved(self, store: Store, member: SimpleNamespace):
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
             if len(messages) == 1:
