@@ -35,7 +35,7 @@ class AmazonAdsStarSchema(il.Source):
             )
         },
     )
-    def fact_campaigns_stats(
+    def fact_campaign_performance(
         self,
         context: il.ExecutionContext,
         campaigns_stats: list[il.Upstream],
@@ -44,7 +44,9 @@ class AmazonAdsStarSchema(il.Source):
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_campaigns(self, context: il.ExecutionContext, fact_campaigns_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_campaigns(
+        self, context: il.ExecutionContext, fact_campaign_performance: il.Upstream
+    ) -> list[dict[str, Any]]:
         """One row per campaign with its ad product, from the facts."""
         return []
 
@@ -57,7 +59,7 @@ class AmazonAdsStarSchema(il.Source):
         self,
         context: il.ExecutionContext,
         profiles: list[il.Upstream],
-        fact_campaigns_stats: il.Upstream,
+        fact_campaign_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per profile with its marketplace and currency, from the profile snapshots and the facts."""
         return []

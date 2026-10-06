@@ -22,21 +22,21 @@ class BingAdsStarSchema(il.Source):
         tags=["Fact"],
         relations={"ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True)},
     )
-    def fact_ads_stats(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
+    def fact_ad_performance(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
         """Ad performance of every account, one row per ad and day."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_campaigns(self, context: il.ExecutionContext, fact_ads_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_campaigns(self, context: il.ExecutionContext, fact_ad_performance: il.Upstream) -> list[dict[str, Any]]:
         """One row per campaign, from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_ads(self, context: il.ExecutionContext, fact_ads_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_ads(self, context: il.ExecutionContext, fact_ad_performance: il.Upstream) -> list[dict[str, Any]]:
         """One row per ad with its ad group, from the facts."""
         return []
 
     @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_accounts(self, context: il.ExecutionContext, fact_ads_stats: il.Upstream) -> list[dict[str, Any]]:
+    def dim_accounts(self, context: il.ExecutionContext, fact_ad_performance: il.Upstream) -> list[dict[str, Any]]:
         """One row per account with its name, from the facts."""
         return []

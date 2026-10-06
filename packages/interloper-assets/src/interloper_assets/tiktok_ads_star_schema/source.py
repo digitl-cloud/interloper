@@ -23,7 +23,7 @@ class TiktokAdsStarSchema(il.Source):
         tags=["Fact"],
         relations={"ads_stats": il.Relation("asset", "tiktok_ads.ads_stats", many=True, optional=True)},
     )
-    def fact_ads_stats(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
+    def fact_ad_performance(self, context: il.ExecutionContext, ads_stats: list[il.Upstream]) -> list[dict[str, Any]]:
         """Ad performance of every advertiser, one row per ad and day."""
         return []
 
@@ -36,7 +36,7 @@ class TiktokAdsStarSchema(il.Source):
         self,
         context: il.ExecutionContext,
         campaigns: list[il.Upstream],
-        fact_ads_stats: il.Upstream,
+        fact_ad_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per campaign, from the campaign snapshots, completed from the facts."""
         return []
@@ -50,7 +50,7 @@ class TiktokAdsStarSchema(il.Source):
         self,
         context: il.ExecutionContext,
         ads: list[il.Upstream],
-        fact_ads_stats: il.Upstream,
+        fact_ad_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per ad with its ad group, from the ad snapshots, completed from the facts."""
         return []
@@ -64,7 +64,7 @@ class TiktokAdsStarSchema(il.Source):
         self,
         context: il.ExecutionContext,
         advertisers: list[il.Upstream],
-        fact_ads_stats: il.Upstream,
+        fact_ad_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per advertiser, from the advertiser snapshots, completed from the facts."""
         return []

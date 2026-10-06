@@ -19,7 +19,7 @@ def _clear_memory() -> None:
 @pytest.mark.parametrize(
     ("asset", "name", "key"),
     [
-        ("fact_ads_stats", "ads_stats", "facebook_ads.ads_stats"),
+        ("fact_ad_performance", "ads_stats", "facebook_ads.ads_stats"),
         ("dim_campaigns", "campaigns", ["facebook_ads.campaigns", "facebook_ads.campaigns_stats"]),
         ("dim_ads", "ads", "facebook_ads.ads"),
     ],
@@ -31,9 +31,9 @@ def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: s
 
 def test_dimensions_are_built_from_the_facts() -> None:
     assert FacebookAdsStarSchema.sibling_bindings() == {
-        "dim_campaigns": {"fact_ads_stats": "fact_ads_stats"},
-        "dim_ads": {"fact_ads_stats": "fact_ads_stats"},
-        "dim_accounts": {"fact_ads_stats": "fact_ads_stats"},
+        "dim_campaigns": {"fact_ad_performance": "fact_ad_performance"},
+        "dim_ads": {"fact_ad_performance": "fact_ad_performance"},
+        "dim_accounts": {"fact_ad_performance": "fact_ad_performance"},
     }
 
 
