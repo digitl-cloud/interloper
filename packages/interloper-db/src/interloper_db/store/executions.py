@@ -46,16 +46,17 @@ class ExecutionStore:
         Args:
             org_id: Organisation UUID.
             query: Whether to keep only each component's newest execution, and
-                the window to read.
+                the window to read. Within one run every component executes
+                once, so the newest is already all there is.
             run_id: Keep the executions of this run; ``None`` keeps every run's.
 
         Returns:
             The page of execution rows.
         """
-        if query.latest:
+        if query.latest and run_id is None:
             newest = and_(
                 col(Execution.component_id) == col(Component.id),
-                col(Execution.run_id) == self._newest_run(org_id, run_id),
+                col(Execution.run_id) == self._newest_run(org_id),
             )
             statement = select(Execution).select_from(Component).join(Execution, newest)
             statement = statement.where(Component.org_id == org_id)
@@ -68,7 +69,7 @@ class ExecutionStore:
             return Page.read(session, statement.order_by(*order), query)
 
     @staticmethod
-    def _newest_run(org_id: UUID, run_id: UUID | None) -> Any:
+    def _newest_run(org_id: UUID) -> Any:
         """The run of a component's newest execution, correlated to the component being read.
 
         One index probe per component the listing reads, so the cost follows
@@ -77,20 +78,18 @@ class ExecutionStore:
 
         Args:
             org_id: Organisation UUID.
-            run_id: Keep only this run's executions; ``None`` considers every run.
 
         Returns:
             The correlated scalar subquery.
         """
-        newest = (
+        return (
             select(Execution.run_id)
             .where(Execution.org_id == org_id, col(Execution.component_id) == col(Component.id))
             .order_by(col(Execution.created_at).desc())
             .limit(1)
+            .correlate(Component)
+            .scalar_subquery()
         )
-        if run_id is not None:
-            newest = newest.where(Execution.run_id == run_id)
-        return newest.correlate(Component).scalar_subquery()
 
     def counts(self, run_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each run's operation executions by status, in one query.
