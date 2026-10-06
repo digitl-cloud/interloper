@@ -17,7 +17,7 @@ from interloper.errors import ConfigError, NotFoundError
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session
+from sqlmodel import Session, col
 
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -39,6 +39,7 @@ from interloper_db.models import (
 from interloper_db.store import PageQuery, Store
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.insights import base as insights_base
+from interloper_db.store.runs import partition_keys_overlapping
 
 _ORG = uuid4()
 _T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
@@ -119,7 +120,27 @@ def _error(run_id: UUID, event_type: str, error: str | None, *, second: int = 0,
 
 
 def _execution(run_id: UUID, asset_id: UUID, status: str) -> None:
-    _add(Execution(run_id=run_id, component_id=asset_id, org_id=_ORG, component_key="orders", status=status))
+    """Record an asset's execution in a run, under the run's organisation and stamped with its partition key.
+
+    Args:
+        run_id: The run.
+        asset_id: The executed asset.
+        status: The execution's status.
+    """
+    with Session(engine_module.get_engine()) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        org_id, partition_key = run.org_id, run.partition_key
+    _add(
+        Execution(
+            run_id=run_id,
+            component_id=asset_id,
+            org_id=org_id,
+            component_key="orders",
+            partition_key=partition_key,
+            status=status,
+        )
+    )
 
 
 class TestErrorGroups:
@@ -170,18 +191,22 @@ class TestErrorGroups:
             store.insights.error_groups(_ORG, group_by=("job", "colour"))
 
 
+def _window(first: dt.date, last: dt.date) -> list[Any]:
+    return [partition_keys_overlapping(col(Execution.partition_key), first, last)]
+
+
 class TestCoverageRows:
     """Per asset and time partition, from runs of any target."""
 
-    def test_every_time_granularity_of_every_period_is_read(self, store: Store) -> None:
+    def test_reads_the_keys_of_every_granularity_overlapping_the_window(self, store: Store) -> None:
         job, asset = uuid4(), uuid4()
-        keys = ["2026-07-02", "2026-07-01T13", "2026-06", "2026", "2024-01-05", "2019"]
-        for key in [*keys, "eu"]:
+        inside = ["2026-07-02", "2026-07-01T13", "2026-07", "2026"]
+        for key in [*inside, "2026-06-30", "2026-06", "2025", "2026-08-01T00", "eu"]:
             _execution(_run(job, partition_key=key), asset, "success")
 
-        rows = store.insights._coverage_rows(_ORG)
+        rows = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31)))
 
-        assert sorted(row.partition_key for row in rows) == sorted(keys)
+        assert sorted(row.partition_key for row in rows) == sorted(inside)
         assert all(row.asset_id == asset and row.succeeded for row in rows)
 
     def test_runs_of_every_target_fold_into_one_row_per_asset_and_partition(self, store: Store) -> None:
@@ -192,7 +217,7 @@ class TestCoverageRows:
         _execution(_run(asset, partition_key="2026-07-01"), asset, "success")
         _execution(by_a_deleted_target, asset, "failed")
 
-        [row] = store.insights._coverage_rows(_ORG)
+        [row] = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
 
         assert (row.asset_id, row.partition_key, row.succeeded, row.failed) == (asset, "2026-07-01", True, True)
         assert row.failed_run_id == max(by_job, by_a_deleted_target)
@@ -202,16 +227,46 @@ class TestCoverageRows:
         for key, status in (("2026-07-01", "failed"), ("2026-07-02", "running"), ("2026-07-03", "canceled")):
             _execution(_run(job, partition_key=key), asset, status)
 
-        rows = {row.partition_key: (row.succeeded, row.failed) for row in store.insights._coverage_rows(_ORG)}
+        rows = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
 
-        assert rows == {"2026-07-01": (False, True), "2026-07-02": (False, False), "2026-07-03": (False, False)}
+        assert {row.partition_key: (row.succeeded, row.failed) for row in rows} == {
+            "2026-07-01": (False, True),
+            "2026-07-02": (False, False),
+            "2026-07-03": (False, False),
+        }
 
     def test_unpartitioned_runs_and_other_orgs_stay_out(self, store: Store) -> None:
         asset = uuid4()
         _execution(_run(uuid4()), asset, "success")
         _execution(_run(uuid4(), partition_key="2026-07-01", org_id=uuid4()), asset, "success")
 
-        assert store.insights._coverage_rows(_ORG) == []
+        assert store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1))) == []
+
+
+class TestAttemptedSpans:
+    """Each asset's first to last attempted day, all-time."""
+
+    def test_spans_the_first_day_of_the_first_key_to_the_last_day_of_the_last(self, store: Store) -> None:
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        monthly, daily = source.children[0].id, source.children[1].id
+        job = uuid4()
+        for key in ("2026-03", "2025-11", "2026-01"):
+            _execution(_run(job, partition_key=key), monthly, "success")
+        for key in ("2026-07-02", "2026-06-30"):
+            _execution(_run(job, partition_key=key), daily, "failed")
+
+        spans = store.insights._attempted_spans(_ORG)
+
+        assert spans[monthly] == (dt.date(2025, 11, 1), dt.date(2026, 3, 31))
+        assert spans[daily] == (dt.date(2026, 6, 30), dt.date(2026, 7, 2))
+
+    def test_an_asset_never_attempted_or_with_no_time_key_has_none(self, store: Store) -> None:
+        source = store.components.create(_ORG, kind="source", key="demo_source")
+        asset = source.children[0].id
+        _execution(_run(uuid4(), partition_key="eu"), asset, "success")
+        _execution(_run(uuid4()), asset, "success")
+
+        assert store.insights._attempted_spans(_ORG) == {}
 
 
 class TestCoverageByKey:

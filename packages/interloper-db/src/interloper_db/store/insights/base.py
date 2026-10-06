@@ -39,7 +39,13 @@ from interloper_db.session import session_scope
 from interloper_db.store.backfills import BackfillQuery, BackfillStore
 from interloper_db.store.components import ComponentQuery, ComponentStore
 from interloper_db.store.executions import ExecutionQuery, ExecutionStore
-from interloper_db.store.insights.coverage import AssetEvidence, CoverageGroup, CoverageRow, JobCoverage
+from interloper_db.store.insights.coverage import (
+    AssetEvidence,
+    CoverageGroup,
+    CoverageRow,
+    JobCoverage,
+    PartitionSpan,
+)
 from interloper_db.store.insights.failures import GROUP_KEYS, ErrorGroup, ErrorGroups, ErrorRow
 from interloper_db.store.insights.feed import ActivityEntry
 from interloper_db.store.insights.health import (
@@ -52,7 +58,7 @@ from interloper_db.store.insights.health import (
 )
 from interloper_db.store.insights.outcomes import Activity, JobOutcome
 from interloper_db.store.page import Page, PageQuery
-from interloper_db.store.runs import RunQuery, RunStore, partition_key_range
+from interloper_db.store.runs import RunQuery, RunStore, partition_key_range, partition_keys_overlapping
 
 # Every attempt that failed, retried ones included; step-level failures
 # (dest_write_failed and the like) repeat their operation's own verdict.
@@ -241,10 +247,12 @@ class InsightStore:
             The groups with a day expected in the window, by name.
         """
         query = ComponentQuery(kind=["source", "asset", "job"], roots_only=False, limit=None)
+        window = partition_keys_overlapping(col(Execution.partition_key), since, min(until, now.date()))
         assets = AssetEvidence.from_components(
             self._components.list(org_id, query).items,
             self._components.asset_partitionings(org_id),
-            self._coverage_rows(org_id),
+            self._coverage_rows(org_id, [window]),
+            self._attempted_spans(org_id),
         )
         return CoverageGroup.from_assets(assets, since, until, now)
 
@@ -269,7 +277,8 @@ class InsightStore:
             raise ConfigError(f"{start_key!r} and {end_key!r} are keys of different granularities")
         keys = [first.granularity.format(value) for value in first.granularity.period_range(first.value, last.value)]
         assets = self._components.target_assets(job)
-        rows = self._coverage_rows(org_id, asset_ids=list(assets), start_key=start_key, end_key=end_key)
+        in_range = partition_key_range(col(Execution.partition_key), start_key, end_key)
+        rows = self._coverage_rows(org_id, in_range, asset_ids=list(assets))
         return JobCoverage.from_rows(job.id, keys, assets, rows)
 
     def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
@@ -445,48 +454,33 @@ class InsightStore:
             return [ErrorRow(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
 
     def _coverage_rows(
-        self,
-        org_id: UUID,
-        *,
-        asset_ids: Sequence[UUID] | None = None,
-        start_key: str | None = None,
-        end_key: str | None = None,
+        self, org_id: UUID, keys: Sequence[Any], *, asset_ids: Sequence[UUID] | None = None
     ) -> list[CoverageRow]:
         """Per asset and time partition, whether any execution of it succeeded or failed.
 
-        Runs of every target count. Without a key range every granularity and
-        every period is read: the calendar derives both each asset's attempted
-        span and a window's days from these rows.
+        Runs of every target count: the partition key is the run's, stamped
+        on each execution.
 
         Args:
             org_id: Organisation UUID.
+            keys: Filters over ``executions.partition_key`` selecting the
+                partitions to read.
             asset_ids: Keep these assets; ``None`` keeps every asset.
-            start_key: With *end_key*, keep the keys of that inclusive range.
-            end_key: Last key of the range.
 
         Returns:
-            One row per asset and partition key that executed at least once.
+            One row per asset and selected partition key that executed at least once.
         """
-        key = col(Run.partition_key)
-        if start_key is not None and end_key is not None:
-            keys: list[Any] = partition_key_range(start_key, end_key)
-        else:
-            key_lengths = [
-                len(granularity.format(dt.datetime(2000, 1, 1)))
-                for granularity in TimeGranularity
-                if granularity.key_format is not None
-            ]
-            keys = [key.is_not(None), func.length(key).in_(key_lengths)]
+        key = col(Execution.partition_key)
+        filters = [col(Execution.org_id) == org_id, *keys]
         if asset_ids is not None:
-            keys.append(col(Execution.component_id).in_(asset_ids))
+            filters.append(col(Execution.component_id).in_(asset_ids))
         # Cast for a portable max(): Postgres has no max(uuid), and UUID() parses both its dashed text and SQLite's hex.
-        failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Run.id), String))))
+        failed_run = func.max(case((col(Execution.status) == "failed", cast(col(Execution.run_id), String))))
         # The asset id comes back as text and is parsed once per asset: a UUID per row costs more than the roll-up.
         asset = cast(col(Execution.component_id), String)
         statement = (
             sa_select(asset, key, func.max(case((col(Execution.status) == "success", 1), else_=0)), failed_run)
-            .join(Run, col(Run.id) == col(Execution.run_id))
-            .where(col(Execution.org_id) == org_id, col(Run.org_id) == org_id, *keys)
+            .where(*filters)
             .group_by(col(Execution.component_id), key)
         )
         parsed: dict[str, UUID] = {}
@@ -501,3 +495,45 @@ class InsightStore:
                 )
                 for asset_text, partition_key, succeeded, failed in session.execute(statement).all()  # ty: ignore[deprecated]
             ]
+
+    def _attempted_spans(self, org_id: UUID) -> dict[UUID, PartitionSpan]:
+        """Each asset's attempted partitions, all-time, as the days from its first to its last.
+
+        Two index probes per asset of the organisation, whatever its history:
+        its smallest and greatest time partition key, which sort
+        chronologically within the asset's granularity.
+
+        Args:
+            org_id: Organisation UUID.
+
+        Returns:
+            The span per asset that was ever attempted.
+        """
+        key = col(Execution.partition_key)
+        lengths = [
+            len(granularity.format(dt.datetime(2000, 1, 1)))
+            for granularity in TimeGranularity
+            if granularity.key_format is not None
+        ]
+
+        def edge(aggregate: Any) -> Any:
+            return (
+                select(aggregate(key))
+                .where(
+                    col(Execution.org_id) == org_id,
+                    col(Execution.component_id) == col(Component.id),
+                    func.length(key).in_(lengths),
+                )
+                .correlate(Component)
+                .scalar_subquery()
+            )
+
+        statement = sa_select(col(Component.id), edge(func.min), edge(func.max)).where(
+            col(Component.org_id) == org_id, col(Component.kind) == "asset"
+        )
+        with session_scope(self._engine) as session:
+            return {
+                asset_id: PartitionSpan.from_spans([PartitionSpan.from_key(first), PartitionSpan.from_key(last)])
+                for asset_id, first, last in session.execute(statement).all()  # ty: ignore[deprecated]
+                if first is not None
+            }

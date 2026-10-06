@@ -440,12 +440,21 @@ class Execution(SQLModel, table=True):
     final outcome. The fold is a Postgres trigger on ``events``, so the
     application never writes this table; migration 012 creates the table,
     the trigger and the backfill, which is why ``create_all`` skips it (see
-    the ``migration_owned`` marker).
+    the ``migration_owned`` marker). The run's partition key is stamped on
+    the row as it is created (migration 013), so coverage reads executions
+    by partition without joining every one to its run.
     """
 
     __tablename__: ClassVar[str] = "executions"
     __table_args__: ClassVar[tuple[Any, ...]] = (
         Index("ix_executions_latest", "org_id", "component_id", text("created_at DESC")),
+        Index(
+            "ix_executions_partition_key",
+            "org_id",
+            "partition_key",
+            postgresql_include=["component_id", "status", "run_id"],
+        ),
+        Index("ix_executions_component_partition_key", "org_id", "component_id", "partition_key"),
         {"info": {"migration_owned": True}},
     )
 
@@ -453,6 +462,7 @@ class Execution(SQLModel, table=True):
     component_id: UUID = SQLField(primary_key=True)
     org_id: UUID
     component_key: str | None = None
+    partition_key: str | None = None
     status: str
     attempts: int = 1
     started_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
