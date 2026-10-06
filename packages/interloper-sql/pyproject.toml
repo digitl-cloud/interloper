@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-sql"
-version = "0.101.0"
+version = "0.101.1"
 description = "Interloper SQL integration: a SQLAlchemy-backed destination for PostgreSQL and other SQL databases"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

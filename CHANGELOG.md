@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v0.101.1 (2026-10-06)
+
+### Performance Improvements
+
+- Fold executions from events into a table
+  ([`e7c21f2`](https://github.com/digitl-cloud/interloper/commit/e7c21f2facae5037d8b612b35ff5e3ff2bbbc8df))
+
+- Read coverage by window from a partition key on executions
+  ([`76420c7`](https://github.com/digitl-cloud/interloper/commit/76420c752496068c5c0b52a21fe330a4a227202c))
+
+### Testing
+
+- Keep the suite to unit tests
+  ([`4d82543`](https://github.com/digitl-cloud/interloper/commit/4d82543edc0b326725f8fea690af6196204888b9))
+
+- **db**: Pin the latest executions read within one run
+  ([`e6d62b6`](https://github.com/digitl-cloud/interloper/commit/e6d62b6c0cefe5f512d81c4f858f5f424f37d0e5))
+
+
 ## v0.101.0 (2026-10-05)
 
 ### Bug Fixes
