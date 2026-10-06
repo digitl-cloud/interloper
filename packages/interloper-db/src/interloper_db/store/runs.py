@@ -27,14 +27,14 @@ from __future__ import annotations
 import builtins
 import logging
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import ConfigError, ConflictError, NotFoundError
-from interloper.partitioning.time import TimePartition
-from sqlalchemy import Engine, exists, func, update
+from interloper.partitioning.time import TimeGranularity, TimePartition
+from sqlalchemy import Engine, and_, exists, func, or_, update
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
 
@@ -75,23 +75,48 @@ RunSort = Literal[
 # -- Expressions ---------------------------------------------------------------
 
 
-def partition_key_range(start_key: str, end_key: str) -> list[Any]:
-    """Filter runs to the partition keys from *start_key* to *end_key*, inclusive.
+def partition_key_range(key: Any, start_key: str, end_key: str) -> list[Any]:
+    """Filter a partition key column to the keys from *start_key* to *end_key*, inclusive.
 
     Keys of one granularity sort as strings, but keys of another can fall
     between them (``2026-08-21T13`` sorts between two day keys), so the range
     also requires the bounds' key length.
 
     Args:
+        key: The partition key column to filter.
         start_key: First partition key.
         end_key: Last partition key; the caller ensures it shares the start
             key's granularity.
 
     Returns:
-        Filter expressions over ``runs.partition_key``.
+        Filter expressions over *key*.
     """
-    key = col(Run.partition_key)
     return [key >= start_key, key <= end_key, func.length(key) == len(start_key)]
+
+
+def partition_keys_overlapping(key: Any, first: date, last: date) -> Any:
+    """Filter a partition key column to the keys, of any granularity, whose period overlaps a run of days.
+
+    Every granularity's range lies between the coarsest first key and the
+    finest last key, as strings, so that outer range lets an index on the
+    column seek to the window instead of filtering every key.
+
+    Args:
+        key: The partition key column to filter.
+        first: First day.
+        last: Last day, inclusive.
+
+    Returns:
+        A filter expression over *key*.
+    """
+    since, until = datetime.combine(first, time.min), datetime.combine(last, time(23))
+    bounds = [
+        (granularity.format(since), granularity.format(until))
+        for granularity in TimeGranularity
+        if granularity.key_format is not None
+    ]
+    within = or_(*(and_(*partition_key_range(key, start, end)) for start, end in bounds))
+    return and_(key >= min(start for start, _ in bounds), key <= max(end for _, end in bounds), within)
 
 
 class RunQuery(PageQuery):

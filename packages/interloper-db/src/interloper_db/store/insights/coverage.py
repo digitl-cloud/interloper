@@ -97,7 +97,8 @@ class AssetEvidence:
             source, or the asset itself when standalone.
         partitioning: The asset's partitioning, from its catalog definition.
         scheduled: Whether an enabled job targets the asset or its parent source.
-        evidence: Its coverage rows, all-time, each with the days its key covers.
+        evidence: Its coverage rows inside the window read, each with the
+            days its key covers.
         bounds: The days its attempted partitions span, all-time, or ``None``
             when it was never attempted.
     """
@@ -115,6 +116,7 @@ class AssetEvidence:
         components: list[Component],
         partitionings: dict[UUID, TimePartitionConfig],
         rows: list[CoverageRow],
+        spans: dict[UUID, PartitionSpan],
     ) -> list[AssetEvidence]:
         """Pair each partitioned asset row with its group, partitioning and evidence.
 
@@ -126,7 +128,10 @@ class AssetEvidence:
                 their outgoing relations loaded.
             partitionings: Each partitioned asset's partitioning by id; an
                 asset absent from it (unpartitioned, drifted) is left out.
-            rows: The store's all-time coverage rows, from runs of any target.
+            rows: The store's coverage rows for the window read, from runs of
+                any target.
+            spans: Each asset's attempted partitions, all-time; an asset
+                absent from it was never attempted.
 
         Returns:
             One entry per partitioned asset, in the order of *components*.
@@ -142,7 +147,7 @@ class AssetEvidence:
         rows_by_asset: dict[UUID, list[CoverageRow]] = defaultdict(list)
         for row in rows:
             rows_by_asset[row.asset_id].append(row)
-        spans: dict[str, PartitionSpan] = {}
+        key_spans: dict[str, PartitionSpan] = {}
         coverages = []
         for asset in components:
             if asset.kind != "asset" or asset.id not in partitionings:
@@ -150,11 +155,10 @@ class AssetEvidence:
             group = by_id[asset.parent_id] if asset.parent_id else asset
             evidence = []
             for row in rows_by_asset[asset.id]:
-                span = spans.get(row.partition_key)
+                span = key_spans.get(row.partition_key)
                 if span is None:
-                    span = spans[row.partition_key] = PartitionSpan.from_key(row.partition_key)
+                    span = key_spans[row.partition_key] = PartitionSpan.from_key(row.partition_key)
                 evidence.append((span, row))
-            bounds = PartitionSpan.from_spans([span for span, _ in evidence]) if evidence else None
             coverages.append(
                 cls(
                     asset=asset,
@@ -162,7 +166,7 @@ class AssetEvidence:
                     partitioning=partitionings[asset.id],
                     scheduled=asset.id in targeted or asset.parent_id in targeted,
                     evidence=evidence,
-                    bounds=bounds,
+                    bounds=spans.get(asset.id),
                 )
             )
         return coverages

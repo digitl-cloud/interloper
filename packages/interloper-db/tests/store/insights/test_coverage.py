@@ -46,7 +46,9 @@ class TestDayCounts:
     def test_an_asset_owing_nothing_inside_the_window_has_no_days(self):
         asset = Component(org_id=uuid4(), kind="asset", key="orders")
         row = CoverageRow(asset.id, "2026-07-01", succeeded=True, failed=False, failed_run_id=None)
-        [evidence] = AssetEvidence.from_components([asset], {asset.id: il.TimePartitionConfig(column="date")}, [row])
+        partitioning = {asset.id: il.TimePartitionConfig(column="date")}
+        spans = {asset.id: PartitionSpan.from_key("2026-07-01")}
+        [evidence] = AssetEvidence.from_components([asset], partitioning, [row], spans)
         now = dt.datetime(2026, 8, 13, tzinfo=dt.timezone.utc)
 
         assert DayCounts.from_asset(evidence, dt.date(2026, 6, 1), dt.date(2026, 6, 30), now) is None

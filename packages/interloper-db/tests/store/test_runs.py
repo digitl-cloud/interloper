@@ -18,13 +18,13 @@ from interloper.errors import ConfigError, ConflictError, NotFoundError
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
 from interloper_db.store import EventQuery, PageQuery, RunQuery, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
-from interloper_db.store.runs import partition_key_range
+from interloper_db.store.runs import partition_key_range, partition_keys_overlapping
 
 _ORG_ID = uuid4()
 
@@ -767,12 +767,28 @@ class TestAllAttemptsAndPartitionRange:
         self._add(store, partition_key="2026-08-01")
 
         with Session(store.engine) as session:
-            matched = session.exec(select(Run.id).where(*partition_key_range("2026-07-01", "2026-07-31"))).all()
+            statement = select(Run.id).where(*partition_key_range(col(Run.partition_key), "2026-07-01", "2026-07-31"))
+            matched = session.exec(statement).all()
 
         assert matched == [inside]
 
     def test_partition_key_range_bounds_by_value_and_granularity(self):
-        assert len(partition_key_range("2026-07-01", "2026-07-31")) == 3
+        assert len(partition_key_range(col(Run.partition_key), "2026-07-01", "2026-07-31")) == 3
+
+    def test_overlapping_keeps_the_keys_of_every_granularity_whose_period_meets_the_days(self, store: Store):
+        inside = {
+            key: self._add(store, partition_key=key)
+            for key in ("2026-07-01", "2026-07-31", "2026-07-15T23", "2026-07", "2026-06-30T00", "2026")
+        }
+        inside.pop("2026-06-30T00")
+        for key in ("2026-06-30", "2026-08-01", "2026-06", "2026-08", "2025", "2027", "eu"):
+            self._add(store, partition_key=key)
+        overlapping = partition_keys_overlapping(col(Run.partition_key), dt.date(2026, 7, 1), dt.date(2026, 7, 31))
+
+        with Session(store.engine) as session:
+            matched = set(session.exec(select(Run.id).where(overlapping)).all())
+
+        assert matched == set(inside.values())
 
 
 class TestRunFilters:

@@ -103,7 +103,12 @@ class TestAssetCoverage:
         ]
         executions = [
             Execution(
-                run_id=runs[key].id, component_id=asset.id, org_id=ctx.org_id, component_key=asset.key, status=status
+                run_id=runs[key].id,
+                component_id=asset.id,
+                org_id=ctx.org_id,
+                component_key=asset.key,
+                partition_key=key,
+                status=status,
             )
             for key, asset, status in outcomes
         ]

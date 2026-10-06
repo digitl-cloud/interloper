@@ -283,7 +283,7 @@ def _run(
 
 
 def _execution(store: Store, run: Run, asset: Component, status: str) -> None:
-    """Record one asset execution of a run.
+    """Record one asset execution of a run, stamped with its partition key as the database does.
 
     Args:
         store: The store whose engine the row is written through.
@@ -298,6 +298,7 @@ def _execution(store: Store, run: Run, asset: Component, status: str) -> None:
                 component_id=asset.id,
                 org_id=run.org_id,
                 component_key=asset.key,
+                partition_key=run.partition_key,
                 status=status,
                 created_at=run.created_at,
             )
@@ -1295,9 +1296,7 @@ class TestCoverage:
 
         assert body["sources"] == []
 
-    def test_another_organisations_data_never_appears(
-        self, client: TestClient, store: Store, member: SimpleNamespace
-    ):
+    def test_another_organisations_data_never_appears(self, client: TestClient, store: Store, member: SimpleNamespace):
         mine = store.components.create(member.org_id, kind="asset", key=visits.key, name="visits")
         other = store.organisations.create(name="Other", creator_id=member.id).id
         source = store.components.create(other, kind="source", key=Launch.key, name="launch")
