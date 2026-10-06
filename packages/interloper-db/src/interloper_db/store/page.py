@@ -49,8 +49,9 @@ class Page(BaseModel, Generic[T]):
         """Run a listing statement over the window *query* asks for.
 
         The total is counted over the same statement without its ordering and
-        window, so the two can never disagree; a whole-set read skips the
-        count, its length being the total.
+        window, so the two can never disagree. A page that came back short
+        already knows it: the matching set ends inside it, so the total is
+        its offset plus its rows and the count is skipped.
 
         Args:
             session: Open session the statement runs in.
@@ -61,8 +62,8 @@ class Page(BaseModel, Generic[T]):
             The page of rows.
         """
         items = list(session.exec(statement.offset(query.offset).limit(query.limit)).all())
-        if query.limit is None and query.offset == 0:
-            return cls(items=items, total=len(items))
+        if (query.limit is None or len(items) < query.limit) and (items or query.offset == 0):
+            return cls(items=items, total=query.offset + len(items))
         counted = select(func.count()).select_from(statement.order_by(None).subquery())
         return cls(items=items, total=session.exec(counted).one())
 

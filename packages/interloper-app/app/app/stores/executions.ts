@@ -25,39 +25,37 @@ export const useExecutionsStore = defineStore('executions', () => {
     /**********************
      * Realtime
      **********************/
-    // Re-fetch executions when new events arrive for the current run.
-    // The executions view aggregates events, so a full re-fetch is the
-    // simplest way to stay in sync.
+    // The executions table changes as events fold into it, so a pushed row is the row a refetch would read.
     useRealtimeSubscription({
-        table: 'events',
-        scope: () => runId.value ? orgStore.organisation?.id : null,
-        shouldHandle: (record: Record<string, any>) => record.run_id === runId.value,
-        onInsert: () => {
-            if (runId.value) _refetch(runId.value)
-        },
-    })
-
-    // A run streams many events; one refetch per burst is enough for the dots.
-    let latestTimer: ReturnType<typeof setTimeout> | undefined
-    useRealtimeSubscription({
-        table: 'events',
-        scope: () => latestLoaded.value ? orgStore.organisation?.id : null,
-        onInsert: () => {
-            clearTimeout(latestTimer)
-            latestTimer = setTimeout(() => { fetchLatest() }, 1000)
-        },
+        table: 'executions',
+        scope: () => runId.value || latestLoaded.value ? orgStore.organisation?.id : null,
+        onInsert: _apply,
+        onUpdate: _apply,
     })
 
     /**********************
      * Internals
      **********************/
-    async function _refetch(id: string) {
-        try {
-            executions.value = await fetchAll<Execution>(`/runs/${id}/executions`)
+    function _apply(record: Record<string, any>) {
+        const execution = record as Execution
+        if (execution.run_id === runId.value) {
+            executions.value = _upsert(executions.value, execution, row => row.component_id === execution.component_id)
         }
-        catch {
-            // Silently ignore — the initial fetch already set the error state
+        if (latestLoaded.value && execution.component_id) {
+            const current = latestByAssetId.value.get(execution.component_id)
+            if (!current || current.run_id === execution.run_id || _newer(execution, current)) {
+                latest.value = _upsert(latest.value, execution, row => row.component_id === execution.component_id)
+            }
         }
+    }
+
+    function _upsert(rows: Execution[], row: Execution, matches: (row: Execution) => boolean) {
+        const index = rows.findIndex(matches)
+        return index === -1 ? [...rows, row] : rows.map((existing, i) => (i === index ? row : existing))
+    }
+
+    function _newer(candidate: Execution, current: Execution) {
+        return (Date.parse(candidate.created_at ?? '') || 0) >= (Date.parse(current.created_at ?? '') || 0)
     }
 
     /**********************

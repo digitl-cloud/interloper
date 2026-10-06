@@ -456,9 +456,7 @@ class InsightStore:
 
         Runs of every target count. Without a key range every granularity and
         every period is read: the calendar derives both each asset's attempted
-        span and a window's days from these rows, because any read of the
-        executions view scans the organisation's operation events whole, so
-        one all-time read costs less than a bounds read plus a windowed one.
+        span and a window's days from these rows.
 
         Args:
             org_id: Organisation UUID.

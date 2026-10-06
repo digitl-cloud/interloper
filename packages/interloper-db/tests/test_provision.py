@@ -127,9 +127,7 @@ class TestMigrations:
         from alembic import command
 
         recorded: dict[str, list[Any]] = {"upgrade": [], "downgrade": []}
-        monkeypatch.setattr(
-            command, "upgrade", lambda config, revision: recorded["upgrade"].append((config, revision))
-        )
+        monkeypatch.setattr(command, "upgrade", lambda config, revision: recorded["upgrade"].append((config, revision)))
         monkeypatch.setattr(
             command, "downgrade", lambda config, revision: recorded["downgrade"].append((config, revision))
         )
@@ -142,7 +140,7 @@ class TestMigrations:
 
         upgrade()
 
-        (_config, revision), = alembic["upgrade"]
+        ((_config, revision),) = alembic["upgrade"]
         assert revision == "head"
 
     def test_upgrade_takes_an_explicit_revision(self, alembic: dict[str, list[Any]]) -> None:
@@ -246,19 +244,19 @@ class TestCreateAll:
         assert harness["created"]["bind"] is harness["engine"]
         assert harness["upgrades"] == [harness["engine"]]
 
-    def test_view_backed_models_are_left_to_alembic(self, harness: dict[str, Any]) -> None:
-        # A view cannot be created by metadata.create_all; the migrations own it.
+    def test_migration_owned_tables_are_left_to_alembic(self, harness: dict[str, Any]) -> None:
+        # The executions table comes with its trigger; only the migration creates both together.
         create_all(harness["engine"])
 
         tables = harness["created"]["tables"]
         assert tables
-        assert all(not table.info.get("is_view") for table in tables)
+        assert all(not table.info.get("migration_owned") for table in tables)
 
-    def test_a_view_backed_model_exists_to_be_excluded(self) -> None:
+    def test_a_migration_owned_table_exists_to_be_excluded(self) -> None:
         # Guards the filter above from silently becoming a no-op.
         from sqlmodel import SQLModel
 
-        assert any(table.info.get("is_view") for table in SQLModel.metadata.sorted_tables)
+        assert any(table.info.get("migration_owned") for table in SQLModel.metadata.sorted_tables)
 
     def test_the_lock_is_released_even_when_the_work_fails(
         self, harness: dict[str, Any], monkeypatch: pytest.MonkeyPatch

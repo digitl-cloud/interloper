@@ -21,7 +21,7 @@ router = APIRouter(prefix="/executions", tags=["executions"])
 
 
 class ExecutionResponse(BaseModel):
-    """Response body for an operation execution (from the ``executions`` view)."""
+    """Response body for an operation execution."""
 
     run_id: UUID
     org_id: UUID
@@ -34,7 +34,7 @@ class ExecutionResponse(BaseModel):
 
     @classmethod
     def from_row(cls, row: Execution) -> ExecutionResponse:
-        """Convert an executions-view row to its response model.
+        """Convert an execution row to its response model.
 
         Args:
             row: The execution row.

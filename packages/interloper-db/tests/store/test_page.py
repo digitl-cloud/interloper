@@ -70,48 +70,36 @@ class TestPageQuery:
 class TestRead:
     """A listing statement read over a window, with the size of the whole match."""
 
-    def test_reads_the_window_and_counts_the_whole_set(self, session: Session):
+    @pytest.mark.parametrize(
+        ("limit", "offset", "names", "counts"),
+        [
+            pytest.param(2, 1, ["b", "c"], True, id="a full page counts the whole set"),
+            pytest.param(2, 10, [], True, id="an empty page past the end still counts"),
+            pytest.param(None, 0, _NAMES, False, id="the whole set is its own total"),
+            pytest.param(None, 3, ["d", "e"], False, id="the rest of the set ends at its last row"),
+            pytest.param(10, 0, _NAMES, False, id="a short first page holds the whole set"),
+            pytest.param(2, 4, ["e"], False, id="a short later page ends the set"),
+        ],
+    )
+    def test_reads_the_window_and_counts_only_when_the_page_cannot_tell(
+        self, session: Session, limit: int | None, offset: int, names: list[str], counts: bool
+    ):
         statement = select(Organisation).order_by(col(Organisation.name))
-
-        page = Page.read(session, statement, PageQuery(limit=2, offset=1))
-
-        assert _names(page) == ["b", "c"]
-        assert page.total == len(_NAMES)
-
-    def test_an_offset_past_the_end_reads_nothing_but_still_counts(self, session: Session):
-        statement = select(Organisation).order_by(col(Organisation.name))
-
-        page = Page.read(session, statement, PageQuery(limit=2, offset=10))
-
-        assert page.items == []
-        assert page.total == len(_NAMES)
-
-    def test_no_limit_reads_the_whole_set_without_counting(self, session: Session):
-        statement = select(Organisation).order_by(col(Organisation.name))
-        counted: list[str] = []
+        executed: list[str] = []
 
         def record(_connection: object, _cursor: object, statement_text: str, *_rest: object) -> None:
-            counted.append(statement_text)
+            executed.append(statement_text)
 
         engine = session.get_bind()
         event.listen(engine, "before_cursor_execute", record)
         try:
-            page = Page.read(session, statement, PageQuery(limit=None))
+            page = Page.read(session, statement, PageQuery(limit=limit, offset=offset))
         finally:
             event.remove(engine, "before_cursor_execute", record)
 
-        assert _names(page) == _NAMES
+        assert _names(page) == names
         assert page.total == len(_NAMES)
-        assert len(counted) == 1
-        assert "count(" not in counted[0].lower()
-
-    def test_no_limit_with_an_offset_still_counts_the_whole_set(self, session: Session):
-        statement = select(Organisation).order_by(col(Organisation.name))
-
-        page = Page.read(session, statement, PageQuery(limit=None, offset=3))
-
-        assert _names(page) == ["d", "e"]
-        assert page.total == len(_NAMES)
+        assert any("count(" in text.lower() for text in executed) is counts
 
     def test_the_total_ignores_the_ordering(self, session: Session):
         ascending = select(Organisation).order_by(col(Organisation.name))

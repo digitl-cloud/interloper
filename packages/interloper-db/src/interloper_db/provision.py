@@ -73,8 +73,8 @@ def create_all(engine: Engine | None = None) -> None:
         lock_conn.execute(text("SET statement_timeout = 0"))
         lock_conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": PROVISION_LOCK_KEY})
         try:
-            # View-backed read models (info["is_view"]) are Alembic's to create.
-            tables = [table for table in SQLModel.metadata.sorted_tables if not table.info.get("is_view")]
+            # Tables a migration creates with database objects of their own (a trigger) are Alembic's to create.
+            tables = [table for table in SQLModel.metadata.sorted_tables if not table.info.get("migration_owned")]
             SQLModel.metadata.create_all(eng, tables=tables)
             upgrade(engine=eng)
         finally:
