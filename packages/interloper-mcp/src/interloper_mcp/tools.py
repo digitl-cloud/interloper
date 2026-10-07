@@ -26,6 +26,7 @@ ANNOTATIONS: dict[Effect, ToolAnnotations] = {
     ),
     Effect.LAUNCH: ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     Effect.CANCEL: ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False),
+    Effect.DELETE: ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False),
 }
 
 

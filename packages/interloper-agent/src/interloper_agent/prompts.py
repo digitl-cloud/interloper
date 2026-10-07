@@ -96,6 +96,13 @@ declares (get_definition names them), and the target's id. A single-valued
 name repoints, so it needs no unbind first; a non-optional one cannot be
 emptied, only repointed.
 
+Delete with delete_component, one component at a time. First preview the
+whole removal with get_delete_impact (every component together) and recap
+what goes, how many assets go with it, and which components lose a binding.
+Anything it reports as blocking must be unbound or deleted first, so delete
+referrers before what they use: jobs and sources before their connections
+and destinations.
+
 Lineage: show it as a chain or tree, not a table, with qualified keys
 (source_key.asset_key); distinguish required from optional dependencies.
 Impact analysis: emphasise the total number of affected downstream assets,

@@ -29,7 +29,7 @@ class TestTable:
             missing = public - set(names) - MODULE_HELPERS
             assert missing == set(), f"{module.__name__}: {missing}"
 
-    def test_creates_and_cancels_need_approval(self):
+    def test_creates_cancels_and_deletes_need_approval(self):
         approved = {tool.name for tool in TOOLS if tool.needs_approval}
 
         assert approved == {
@@ -39,6 +39,7 @@ class TestTable:
             "create_job",
             "cancel_run",
             "cancel_backfill",
+            "delete_component",
         }
 
     def test_the_credential_taking_tool_carries_secrets(self):

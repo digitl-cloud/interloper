@@ -49,13 +49,15 @@ class ToolError(BaseModel):
 
     ``valid_values`` lists the accepted values when an argument named an
     unknown one; ``category`` classes a provider failure (``config``,
-    ``auth``, ``network``, ``error``).
+    ``auth``, ``network``, ``error``); ``used_by`` names the components whose
+    bindings refused a deletion.
     """
 
     status: Literal["error"] = "error"
     error: str
     valid_values: list[str] | None = None
     category: str | None = None
+    used_by: list[ComponentRef] | None = None
 
 
 # -- Catalog --------------------------------------------------------------------
@@ -223,6 +225,30 @@ class ComponentUpdated(BaseModel):
     asset_count: int | None = None
     changed_fields: list[str] | None = None
     unresolved_requirements: list[str] | None = None
+
+
+class ComponentDeleted(BaseModel):
+    """A component deleted by ``delete_component``; ``asset_count`` is the assets a source took with it."""
+
+    status: Literal["success"] = "success"
+    message: str
+    component: ComponentRef
+    asset_count: int | None = None
+
+
+class ComponentDeleteImpact(BaseModel):
+    """What deleting a set of components would do, as ``get_delete_impact`` previews it.
+
+    ``asset_count`` is the source-owned assets that go with ``components``;
+    ``blocking`` refuse the deletion until unbound or deleted, ``detaching``
+    only lose a binding.
+    """
+
+    status: Literal["success"] = "success"
+    components: list[ComponentRef]
+    asset_count: int
+    blocking: list[ComponentRef]
+    detaching: list[ComponentRef]
 
 
 class FailedInstance(BaseModel):

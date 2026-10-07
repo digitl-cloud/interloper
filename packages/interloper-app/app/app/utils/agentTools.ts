@@ -7,6 +7,8 @@ const LABELS: Record<string, [running: string, done: string]> = {
     compare_schemas: ['Comparing schemas', 'Compared schemas'],
     list_components: ['Listing your components', 'Listed your components'],
     update_component: ['Updating the component', 'Updated the component'],
+    get_delete_impact: ['Previewing the deletion', 'Previewed the deletion'],
+    delete_component: ['Deleting the component', 'Deleted the component'],
     bind_relation: ['Linking components', 'Linked components'],
     unbind_relation: ['Unlinking components', 'Unlinked components'],
     check_connection: ['Checking the connection', 'Checked the connection'],
