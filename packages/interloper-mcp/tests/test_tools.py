@@ -38,6 +38,7 @@ def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor
 
 WRITES = {
     "update_component",
+    "delete_component",
     "bind_relation",
     "unbind_relation",
     "create_source",
@@ -67,7 +68,9 @@ async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments
     reads = {name for name, t in by_name.items() if t.annotations and t.annotations.readOnlyHint}
     assert reads == set(by_name) - WRITES
     cancel, check = by_name["cancel_backfill"].annotations, by_name["check_connection"].annotations
+    delete = by_name["delete_component"].annotations
     assert cancel is not None and cancel.destructiveHint is True
+    assert delete is not None and delete.destructiveHint is True
     assert check is not None and check.openWorldHint is True
 
 
@@ -82,6 +85,7 @@ async def test_a_viewer_token_is_refused_on_writes(store: Store, catalog: il.Cat
         "error": "Requires editor role or higher",
         "valid_values": None,
         "category": None,
+        "used_by": None,
     }
     assert (store.components.get(seeded["job_id"]).config or {})["enabled"] is True
 

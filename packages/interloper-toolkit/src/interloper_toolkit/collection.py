@@ -1,10 +1,10 @@
 """Collection tools: the org's component instances.
 
 Generic over component kinds, mirroring the framework's component
-architecture: one lister, one editor and the relation binders for any kind
-(sensitive kinds project identity-only and refuse config edits, driven by
-``KINDS``), plus the connection operations that are irreducibly
-kind-specific. Credentials never transit the model on the normal path:
+architecture: one lister, one editor, one deleter and the relation binders
+for any kind (sensitive kinds project identity-only and refuse config
+edits, driven by ``KINDS``), plus the connection operations that are
+irreducibly kind-specific. Credentials never transit the model on the normal path:
 ``request_connection_setup`` hands the user to the app's secure form, and
 the browser submits credentials to the API directly.
 """
@@ -26,6 +26,7 @@ from interloper.errors import (
     ConfigError,
     ConnectionCheckError,
     HydrationError,
+    InUseError,
     NotFoundError,
 )
 from interloper.oauth import OAuthAppCredentials
@@ -39,6 +40,8 @@ from interloper_toolkit.context import ToolkitContext
 from interloper_toolkit.models import (
     BindResult,
     ComponentCounts,
+    ComponentDeleted,
+    ComponentDeleteImpact,
     ComponentList,
     ComponentRef,
     ComponentSummary,
@@ -197,6 +200,71 @@ def update_component(
         )
     except Exception as e:
         return ToolError(error=str(e))
+
+
+def get_delete_impact(ctx: ToolkitContext, component_ids: list[str]) -> ComponentDeleteImpact | ToolError:
+    """Preview what deleting components would do, without deleting anything.
+
+    Reports the components that would go, how many source-owned assets go
+    with them, the components whose bindings block the deletion (they must be
+    unbound or deleted first) and those that would merely lose a binding (a
+    job's targets, a hook's watches). Pass every component of a planned
+    removal together: bindings among them don't count, so the preview shows
+    what the whole set leaves behind. Call this to build the recap before
+    delete_component.
+
+    Args:
+        component_ids: UUIDs of the components to delete, from list_components.
+    """
+    if not component_ids:
+        return ToolError(error="Pass at least one component id")
+    try:
+        components = [ctx.store.components.get(UUID(one), org_id=ctx.org_id) for one in component_ids]
+        impact = ctx.store.components.delete_impact([c.id for c in components])
+    except (NotFoundError, ValueError) as e:
+        return ToolError(error=str(e))
+    return ComponentDeleteImpact(
+        components=[ComponentRef(id=c.id, kind=c.kind, key=c.key, name=c.name) for c in components],
+        asset_count=sum(len(c.children) for c in components),
+        blocking=[ComponentRef.model_validate(ref) for ref in impact.blocking],
+        detaching=[ComponentRef.model_validate(ref) for ref in impact.detaching],
+    )
+
+
+@requires_role("editor")
+def delete_component(ctx: ToolkitContext, component_id: str) -> ComponentDeleted | ToolError:
+    """Delete a component from the organisation's collection, permanently.
+
+    Works on any kind; a source's assets go with it. An asset a source owns
+    is not deleted on its own: change the source's asset selection with
+    update_component instead. A component bound to it under a consuming
+    relation (a source's connection or destinations, a required upstream)
+    refuses the deletion, and the error's ``used_by`` names those components:
+    unbind or delete them first. Removing several components therefore goes
+    referrers first: jobs and sources before the connections and destinations
+    they use. Bindings that only scope something (a job's targets, a hook's
+    watches) are dropped. Preview with get_delete_impact, recap what goes and
+    what loses a binding, and get the user's explicit confirmation BEFORE
+    calling this.
+
+    Args:
+        component_id: UUID of the component, from list_components.
+    """
+    try:
+        component = ctx.store.components.get(UUID(component_id), org_id=ctx.org_id)
+        ctx.store.components.delete(component.id)
+    except InUseError as e:
+        return ToolError(
+            error=f"{e}. Unbind or delete those first.",
+            used_by=[ComponentRef.model_validate(ref) for ref in e.referrers],
+        )
+    except (ConfigError, NotFoundError, ValueError) as e:
+        return ToolError(error=str(e))
+    return ComponentDeleted(
+        message=f"{component.kind.capitalize()} '{component.name or component.key}' deleted",
+        component=ComponentRef(id=component.id, kind=component.kind, key=component.key, name=component.name),
+        asset_count=len(component.children) if component.kind == "source" else None,
+    )
 
 
 # -- Relations (write) ---------------------------------------------------------

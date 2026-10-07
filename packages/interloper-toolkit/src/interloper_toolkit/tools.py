@@ -31,6 +31,7 @@ class Effect(str, Enum):
     CREATE = "create"
     LAUNCH = "launch"
     CANCEL = "cancel"
+    DELETE = "delete"
 
 
 @dataclass(frozen=True)
@@ -61,9 +62,9 @@ class Tool:
         """Whether an interactive surface waits for the user before the call runs.
 
         Returns:
-            True for creates and cancels, the calls a user wants to confirm.
+            True for creates, cancels and deletes, the calls a user wants to confirm.
         """
-        return self.effect in (Effect.CREATE, Effect.CANCEL)
+        return self.effect in (Effect.CREATE, Effect.CANCEL, Effect.DELETE)
 
     def bind(self, context: Callable[..., ToolkitContext], *leading: inspect.Parameter) -> types.FunctionType:
         """Adapt the function to a surface that supplies the context itself.
@@ -115,6 +116,8 @@ TOOLS: tuple[Tool, ...] = (
     # Collection
     Tool(collection.list_components, Effect.READ),
     Tool(collection.update_component, Effect.EDIT),
+    Tool(collection.get_delete_impact, Effect.READ),
+    Tool(collection.delete_component, Effect.DELETE),
     Tool(collection.bind_relation, Effect.EDIT),
     Tool(collection.unbind_relation, Effect.EDIT),
     Tool(collection.request_connection_setup, Effect.READ),
