@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.106.0 (2026-10-07)
+
+### Features
+
+- **assets**: Wire campaign performance analysis downstream of the star schemas
+  ([`2e9980d`](https://github.com/digitl-cloud/interloper/commit/2e9980de6ecc8794d0933dd9fd5fff392da4f576))
+
+
 ## v0.105.1 (2026-10-06)
 
 ### Bug Fixes
