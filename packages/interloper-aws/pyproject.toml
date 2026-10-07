@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-aws"
-version = "0.106.0"
+version = "0.107.0"
 description = "Interloper AWS integration: Amazon S3 destination and connection"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

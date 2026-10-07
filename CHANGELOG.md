@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.107.0 (2026-10-07)
+
+### Features
+
+- **toolkit**: Delete components over MCP and the agent
+  ([`f71b622`](https://github.com/digitl-cloud/interloper/commit/f71b622c3b32873e436ba3e5ece94dbf9100684e))
+
+
 ## v0.106.0 (2026-10-07)
 
 ### Features
