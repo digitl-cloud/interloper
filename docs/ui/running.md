@@ -78,8 +78,8 @@ interloper app --api --cron --worker --reaper
 ```
 
 runs every service in one process against the configured Postgres, serving the UI on port 3000.
-Each service can be toggled off, so the API and worker scale out while cron and reaper stay
-singletons. `--dev` runs the Nuxt dev server with hot reload instead of the built assets.
+Each service can be toggled off and scaled out on its own: replicas of cron, the worker, the reaper
+and hook evaluation split the work through row locks. `--dev` runs the Nuxt dev server with hot reload instead of the built assets.
 
 ## Configuration
 

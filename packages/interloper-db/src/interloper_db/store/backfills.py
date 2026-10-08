@@ -254,6 +254,27 @@ class BackfillStore:
             save(session, db_backfill, "target")
             return db_backfill
 
+    def claim_hooks(self, backfill_id: UUID) -> bool:
+        """Hold a finished backfill for its hook evaluation, unless another sweep holds it or already evaluated it.
+
+        Called in the :meth:`Store.transaction` that evaluates the backfill
+        and stamps it with :meth:`mark_hooks_evaluated`: the row lock lasts
+        until then, so concurrent schedulers evaluate each backfill once.
+
+        Args:
+            backfill_id: The backfill UUID.
+
+        Returns:
+            Whether this transaction now holds the backfill's evaluation.
+        """
+        statement = (
+            select(Backfill.id)
+            .where(Backfill.id == backfill_id, col(Backfill.hooks_evaluated_at).is_(None))
+            .with_for_update(skip_locked=True)
+        )
+        with session_scope(self._engine) as session:
+            return session.exec(statement).first() is not None
+
     def mark_hooks_evaluated(self, backfill_id: UUID) -> None:
         """Stamp a backfill's hooks as evaluated, so the hook sweep moves past it.
 

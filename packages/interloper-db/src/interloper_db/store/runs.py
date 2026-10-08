@@ -623,6 +623,27 @@ class RunStore:
             commit(session)
             return db_run
 
+    def claim_hooks(self, run_id: UUID) -> bool:
+        """Hold a verdict for its hook evaluation, unless another sweep holds it or already evaluated it.
+
+        Called in the :meth:`Store.transaction` that evaluates the run and
+        stamps it with :meth:`mark_hooks_evaluated`: the row lock lasts until
+        then, so concurrent schedulers evaluate each verdict once.
+
+        Args:
+            run_id: The run UUID.
+
+        Returns:
+            Whether this transaction now holds the run's evaluation.
+        """
+        statement = (
+            select(Run.id)
+            .where(Run.id == run_id, col(Run.hooks_evaluated_at).is_(None))
+            .with_for_update(skip_locked=True)
+        )
+        with session_scope(self._engine) as session:
+            return session.exec(statement).first() is not None
+
     def mark_hooks_evaluated(self, run_id: UUID) -> None:
         """Stamp a run's hooks as evaluated, so the hook sweep moves past it.
 

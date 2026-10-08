@@ -1,8 +1,8 @@
 {{/*
-Guards the serving components against voluntary disruption (node upgrades,
-drains), which bypasses the Deployment's rollout strategy entirely.
+Guards the components against voluntary disruption (node upgrades, drains),
+which bypasses the Deployment's rollout strategy entirely.
 */}}
-{{- range $component := list "api" "frontend" "mcp" }}
+{{- range $component := list "scheduler" "api" "frontend" "mcp" }}
 {{- $cfg := index $.Values $component }}
 {{- if and $cfg.enabled $cfg.podDisruptionBudget.enabled }}
 ---

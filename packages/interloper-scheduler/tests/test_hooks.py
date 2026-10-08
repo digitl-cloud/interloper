@@ -628,6 +628,16 @@ class TestDeliveryCursor:
         assert len(payloads) == 1
         assert _evaluated_at(run.id) == stamped
 
+    def test_a_run_another_scheduler_holds_is_left_to_it(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        run = _terminal_run(store, self._watched_source(store))
+        monkeypatch.setattr(store.runs, "claim_hooks", lambda run_id: False)
+
+        _sweep(store)
+
+        assert payloads == []
+        assert _evaluated_at(run.id) is None
+
 
 class TestBackfillEvents:
     """A backfill's verdict is a subject of its own, beside its runs'."""

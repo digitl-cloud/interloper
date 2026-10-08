@@ -6,7 +6,7 @@ Deploys Interloper (scheduler + API + frontend) onto Kubernetes.
 
 | Component | Purpose |
 |-----------|---------|
-| **scheduler** | Singleton: runs cron, the queue worker, and the reaper in one process. Dispatches runs via the configured launcher. Required. |
+| **scheduler** | Runs cron, the queue worker, and the reaper in one process; replicas split the work through row locks. Dispatches runs via the configured launcher. Required. |
 | **api** | FastAPI backend serving `/api/*`. |
 | **frontend** | nginx serving the pre-built Nuxt SPA. |
 | **mcp** | MCP server (streamable HTTP, PAT bearer auth; the token's role gates writes) for external AI agents. Optional, off by default (`mcp.enabled`). |

@@ -1,9 +1,10 @@
 """Hook evaluator: fires hooks in reaction to terminal runs and backfills.
 
-A single background loop (a singleton, running alongside the cron
-controller) sweeps terminal runs and backfills not yet evaluated, matches
-them against hooks watching the subject's target component (or its parent
-source), and calls each matching hook's ``fire()``.
+A background loop on every scheduler replica sweeps terminal runs and
+backfills not yet evaluated, matches them against hooks watching the
+subject's target component (or its parent source), and calls each matching
+hook's ``fire()``. Each subject is evaluated in its own transaction under its
+row lock, skipped when another replica holds it, so replicas split the work.
 
 A hook observes a **verdict**, never an attempt: a failed run whose next
 attempt is queued is not an outcome, and the store stamps it evaluated in
@@ -93,11 +94,17 @@ class HookController(Controller):
     def _tick(self) -> None:
         """Evaluate every terminal run and backfill not yet stamped, oldest first."""
         for run in self._store.runs.hooks_pending():
-            self._evaluate(run)
-            self._store.runs.mark_hooks_evaluated(run.id)
+            with self._store.transaction():
+                if not self._store.runs.claim_hooks(run.id):
+                    continue
+                self._evaluate(run)
+                self._store.runs.mark_hooks_evaluated(run.id)
         for backfill in self._store.backfills.hooks_pending():
-            self._evaluate_backfill(backfill)
-            self._store.backfills.mark_hooks_evaluated(backfill.id)
+            with self._store.transaction():
+                if not self._store.backfills.claim_hooks(backfill.id):
+                    continue
+                self._evaluate_backfill(backfill)
+                self._store.backfills.mark_hooks_evaluated(backfill.id)
 
     def _evaluate(self, run: Run) -> None:
         """Fire every unclaimed, matching hook for one terminal run.
