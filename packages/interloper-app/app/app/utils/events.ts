@@ -60,7 +60,8 @@ const labelMap: Record<EventType, string> = {
     log: 'Log',
 }
 
-export type EventCategory = 'all' | 'lifecycle' | 'errors' | 'logs'
+export const EVENT_CATEGORIES = ['all', 'lifecycle', 'errors', 'logs'] as const
+export type EventCategory = typeof EVENT_CATEGORIES[number]
 
 /** All known event types, derived from the icon map so this can't drift. */
 const ALL_EVENT_TYPES = Object.keys(iconMap) as EventType[]

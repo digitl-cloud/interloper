@@ -87,8 +87,8 @@ async function handleDelete(ids: string[]) {
     }
 }
 
-const typeKey = ref<string | null>(null)
-const enabled = ref<boolean | null>(null)
+const typeKey = useQueryParam('type', null)
+const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
 
 function matchesFilters(hook: ComponentRecord): boolean {
     return (typeKey.value === null || hook.key === typeKey.value)

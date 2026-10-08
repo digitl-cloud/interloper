@@ -38,10 +38,12 @@ export function stateFromExecution(status: ExecutionStatus): GraphNodeState {
  * `type` nests sources under their catalog type, `source` shows sources
  * (the pre-grouping default), `asset` flattens everything to bare assets.
  */
-export type GroupBy = 'type' | 'source' | 'asset'
+export const GROUP_BYS = ['type', 'source', 'asset'] as const
+export type GroupBy = typeof GROUP_BYS[number]
 
 /** Source health filter for the collection graph (derived states only). */
-export type StatusFilter = 'all' | 'healthy' | 'attention' | 'paused'
+export const STATUS_FILTERS = ['all', 'healthy', 'attention', 'paused'] as const
+export type StatusFilter = typeof STATUS_FILTERS[number]
 
 /**
  * A directed asset→asset dependency, normalised away from the store shape.

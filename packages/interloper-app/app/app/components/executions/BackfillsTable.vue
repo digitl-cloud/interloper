@@ -27,9 +27,9 @@ onMounted(async () => {
  * backfills are what a manual partition run creates; they outnumber real
  * range backfills and hide them, so they stay out unless asked for.
  */
-const search = ref('')
-const status = ref<string | null>(null)
-const showSinglePartition = ref(false)
+const search = useQueryParam('q', '')
+const status = useQueryParam('status', null)
+const showSinglePartition = useQueryParam('single', false, booleanQuery)
 const shown = computed(() => {
     const needle = search.value.trim().toLowerCase()
     return backfills.value.filter(backfill =>

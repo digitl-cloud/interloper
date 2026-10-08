@@ -2,7 +2,6 @@
 import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { SplitterItem } from '@nuxt/ui'
-import type { EventCategory } from '~/utils/events'
 
 // orgSwitchTarget: this page is bespoke to one org's run — switching org from
 // the nav lands on the runs list instead.
@@ -27,7 +26,7 @@ const executions = computed(() => executionsStore.executions)
 const run = computed(() => runsStore.findById(runId) ?? initialRun.value)
 
 const selectedAsset = ref<string | null>(null)
-const statusFilter = ref<string | null>(null)
+const statusFilter = useQueryParam('status', null)
 const eventInFocus = ref<RunEvent | null>(null)
 /** Asset under the pointer in the rail, mirrored in the timeline and the graph. */
 const hoveredAsset = ref<string | null>(null)
@@ -64,7 +63,7 @@ watch(eventAssetIds, ids => eventsStore.filterByComponents(ids))
 watch(statusFilter, () => { selectedAsset.value = null })
 
 // Event category tab (All / Lifecycle / Errors / Logs), filtered server-side.
-const eventCategory = ref<EventCategory>('all')
+const eventCategory = useQueryParam('events', 'all', oneOfQuery(EVENT_CATEGORIES))
 const eventTabs = [
     { value: 'all', label: 'All', icon: 'i-lucide-list' },
     { value: 'lifecycle', label: 'Lifecycle', icon: 'i-lucide-activity' },
@@ -74,7 +73,7 @@ const eventTabs = [
 watch(eventCategory, cat => eventsStore.filterByEventTypes(eventTypesForCategory(cat)))
 
 // Top-panel view: the Gantt timeline or the run dependency graph.
-const view = ref<'timeline' | 'graph'>('timeline')
+const view = useQueryParam('view', 'timeline', oneOfQuery(['timeline', 'graph'] as const))
 const viewTabs = [
     { value: 'timeline', label: 'Timeline', icon: 'i-lucide-gantt-chart' },
     { value: 'graph', label: 'Graph', icon: 'i-lucide-workflow' },
@@ -184,7 +183,7 @@ onMounted(async () => {
     try {
         const [fetchedRun] = await Promise.all([
             runsStore.fetchOne(runId),
-            eventsStore.fetchForRun(runId),
+            eventsStore.fetchForRun(runId, eventTypesForCategory(eventCategory.value)),
             executionsStore.fetchForRun(runId),
             // Sources/assets back the Graph view (the run's target rides the run itself).
             componentsStore.byKind('source').length === 0

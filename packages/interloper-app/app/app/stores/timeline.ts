@@ -20,6 +20,8 @@ export const TIMELINE_SPANS = [
     { value: 30 * 24 * 3_600_000, label: '30d' },
 ]
 
+export const DEFAULT_TIMELINE_SPAN = 24 * 3_600_000
+
 /** Cap on one window's runs; anything beyond is reported, never silently dropped. */
 const MAX_RUNS = 1000
 
@@ -31,7 +33,7 @@ export const useTimelineStore = defineStore('timeline', () => {
      * State
      **********************/
     const runs = ref<Run[]>([])
-    const span = ref(24 * 3_600_000)
+    const span = ref(DEFAULT_TIMELINE_SPAN)
     /** Window bounds in epoch ms, anchored at the last fetch. */
     const rangeStart = ref(Date.now() - span.value)
     const rangeEnd = ref(Date.now())

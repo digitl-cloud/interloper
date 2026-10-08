@@ -52,7 +52,8 @@ const emit = defineEmits<{
 
 const { confirm } = useConfirm()
 
-const globalFilter = ref('')
+// The search rides the route query, so a filtered table is linkable.
+const globalFilter = useQueryParam('q', '')
 const rows = computed(() => props.filter ? props.data.filter(props.filter) : props.data)
 const tableRef = useTemplateRef<{ tableApi: any }>('table')
 

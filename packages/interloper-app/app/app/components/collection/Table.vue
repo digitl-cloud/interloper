@@ -151,7 +151,7 @@ function onRowContextMenu(e: Event, row: any) {
     ctxMenuOpen.value = true
 }
 
-const globalFilter = ref('')
+const globalFilter = useQueryParam('q', '')
 
 const filteredData = computed(() => {
     const q = globalFilter.value.trim().toLowerCase()

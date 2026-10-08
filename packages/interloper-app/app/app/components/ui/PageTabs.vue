@@ -2,16 +2,19 @@
 /**
  * A page's views as a segmented group of links: a bordered track, the active
  * view a raised chip. A view without an explicit `active` is active when its
- * route is, so path views and `?tab=` views read the same way.
+ * route is, so path views and `?tab=` views read the same way. A path view
+ * returns to its page with the filters it was left with.
  */
 defineProps<{ items: PageTab[] }>()
+
+const withLastQuery = useLastQuery()
 </script>
 
 <template>
     <nav class="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1 ring ring-default">
         <ULink v-for="item in items"
                :key="item.label"
-               :to="item.to"
+               :to="withLastQuery(item.to)"
                :active="item.active"
                class="inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors"
                active-class="bg-default text-highlighted shadow-xs dark:bg-inverted dark:text-inverted"

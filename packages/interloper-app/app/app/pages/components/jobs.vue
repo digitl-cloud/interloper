@@ -166,7 +166,7 @@ async function handleDelete(ids: string[]) {
     }
 }
 
-const enabled = ref<boolean | null>(null)
+const enabled = useQueryParam<boolean | null>('enabled', null, booleanQuery)
 </script>
 
 <template>

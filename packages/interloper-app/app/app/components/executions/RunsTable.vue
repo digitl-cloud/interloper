@@ -11,12 +11,10 @@ const UProgressGroup = resolveComponent('UProgressGroup')
 
 type RunRow = Run & { children?: Run[] }
 
-const route = useRoute()
-const router = useRouter()
 const runsStore = useRunsStore()
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const { runs, stacks, loading, total, pageIndex, pageSize, filters, filtered } = storeToRefs(runsStore)
+const { runs, stacks, loading, total, pageIndex, pageSize, filtered } = storeToRefs(runsStore)
 
 /**
  * A row is a stack at its latest attempt; expanding it lists the attempts
@@ -43,58 +41,44 @@ const expandedOptions = {
 const tableUi = { tr: 'cursor-pointer [&:has(>td[colspan]:empty)]:hidden' }
 
 /**
- * Filters live in the store (the fetch, the pagination and the realtime gate
- * read them) and mirror to the route query so a filtered view is linkable.
- * The query is written, never watched: the
- * store is the single source of truth while this table is mounted.
+ * Filters live in the route query so a filtered view is linkable; the store
+ * reads them (the fetch, the pagination and the realtime gate), the search
+ * once typing settles.
  */
-const search = ref(String(route.query.q ?? ''))
+const search = useQueryParam('q', '')
+const kindParam = useQueryParam('kind', null)
+const type = useQueryParam('type', null)
+const status = useQueryParam('status', null)
+/** Type choices follow the kind in view, so picking a kind drops a type outside it. */
 const kind = computed({
-    get: () => filters.value.kind,
-    set: (value: string | null) => applyFilters({ kind: value, key: null }),
+    get: () => kindParam.value,
+    set: (value: string | null) => {
+        kindParam.value = value
+        type.value = null
+    },
 })
-const type = computed({
-    get: () => filters.value.key,
-    set: (value: string | null) => applyFilters({ key: value }),
-})
-const status = computed({
-    get: () => filters.value.status,
-    set: (value: string | null) => applyFilters({ status: value }),
-})
+const settledSearch = refDebounced(search, 300)
 
 const RUN_STATUSES = ['pending', 'queued', 'dispatched', 'running', 'success', 'failed', 'canceled']
 
-watchDebounced(search, value => applyFilters({ q: value.trim() }), { debounce: 300 })
-
-async function applyFilters(next: Partial<RunFilters>) {
-    await runsStore.setFilters(next)
-    const { q, kind, key, status } = filters.value
-    router.replace({
-        query: { ...route.query, q: q || undefined, kind: kind ?? undefined, type: key ?? undefined, status: status ?? undefined },
-    })
-}
+watch([settledSearch, kindParam, type, status], ([q, kind, key, status]) =>
+    runsStore.setFilters({ q: q.trim(), kind, key, status }), { immediate: true })
 
 function clearFilters() {
     search.value = ''
-    applyFilters({ q: '', kind: null, key: null, status: null })
+    kindParam.value = null
+    type.value = null
+    status.value = null
 }
 
-/** Type choices follow the kind in view, so the two filters never contradict. */
-const typeChoices = computed(() => filters.value.kind
-    ? componentsStore.byKind(filters.value.kind)
+const typeChoices = computed(() => kindParam.value
+    ? componentsStore.byKind(kindParam.value)
     : componentsStore.all)
 
-onMounted(async () => {
+onMounted(() => {
     // Target icons and type names read the catalog; the filter choices read the collection.
     if (!catalogStore.loaded) catalogStore.fetchCatalog()
     if (componentsStore.all.length === 0) componentsStore.fetchAll()
-    const { q, kind, type, status } = route.query
-    await runsStore.setFilters({
-        q: typeof q === 'string' ? q : '',
-        kind: typeof kind === 'string' ? kind : null,
-        key: typeof type === 'string' ? type : null,
-        status: typeof status === 'string' ? status : null,
-    })
 })
 
 onUnmounted(runsStore.clearFilters)

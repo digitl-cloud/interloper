@@ -17,8 +17,8 @@ const catalogStore = useCatalogStore()
 const toast = useToast()
 
 // Canvas view controls (toolbar-owned)
-const groupBy = ref<GroupBy>('type')
-const statusFilter = ref<StatusFilter>('all')
+const groupBy = useQueryParam('group', 'type', oneOfQuery(GROUP_BYS))
+const statusFilter = useQueryParam('status', 'all', oneOfQuery(STATUS_FILTERS))
 
 const { sourceStatus } = useNodeStatus()
 const statusCounts = computed<Record<StatusFilter, number>>(() => {

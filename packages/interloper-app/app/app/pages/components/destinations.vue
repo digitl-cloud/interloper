@@ -70,7 +70,7 @@ function handleSaved() {
     drawerOpen.value = false
 }
 
-const typeKey = ref<string | null>(null)
+const typeKey = useQueryParam('type', null)
 </script>
 
 <template>

@@ -154,17 +154,18 @@ export const useEventsStore = defineStore('events', () => {
     }
 
     /**
-     * Load the first page of events for a run (clearing any active filters).
+     * Load the first page of events for a run, narrowed to `types`
+     * (`null` for every type) and clearing the component filter.
      *
      * Events are ordered oldest-first, so the terminal/outcome events
      * (`asset_completed`, `asset_failed`, `run_failed`, …) live at the end.
      * The table reaches them by infinite-scrolling — see `loadMore` — rather
      * than loading the whole history up front.
      */
-    async function fetchForRun(id: string) {
+    async function fetchForRun(id: string, types: string[] | null = null) {
         runId.value = id
         componentIds.value = null
-        eventTypes.value = null
+        eventTypes.value = types
         await _reload()
     }
 
