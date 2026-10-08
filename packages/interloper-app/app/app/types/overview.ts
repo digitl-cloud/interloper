@@ -52,6 +52,7 @@ export interface Overview {
  */
 export interface CoverageSource {
     id: string
+    key: string
     name: string
     kind: 'source' | 'asset'
     start: string

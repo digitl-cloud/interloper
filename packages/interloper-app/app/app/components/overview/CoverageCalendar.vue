@@ -17,13 +17,16 @@ const switching = computed(() => !!coverage.value && coverageLoading.value && co
 const SKELETON_DETAIL_ROWS = 3
 const colorMode = useColorMode()
 
-const sourceFilter = ref('all')
+const catalogStore = useCatalogStore()
+const typeFilter = ref('all')
 const selected = ref<string | null>(null)
-const { byDate, summary } = useCoverageCalendar(coverage, sourceFilter)
+const { byDate, summary } = useCoverageCalendar(coverage, typeFilter)
 
-const sourceOptions = computed(() => [
-    { label: 'All sources', value: 'all' },
-    ...(coverage.value?.sources ?? []).map(s => ({ label: s.name, value: s.id })),
+const typeOptions = computed(() => [
+    { label: 'All types', value: 'all' },
+    ...[...new Set((coverage.value?.sources ?? []).map(s => s.key))]
+        .map(key => ({ label: catalogStore.typeName(key), value: key, icon: componentIcon(key) }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
 ])
 const windowItems = ([3, 6, 12] as CoverageMonths[]).map(m => ({ label: `${m}m`, value: String(m) }))
 const activeWindow = computed({
@@ -147,7 +150,7 @@ function onClick(params: any) {
 }
 
 watch(coverage, (value) => {
-    if (sourceFilter.value !== 'all' && !value?.sources.some(s => s.id === sourceFilter.value)) sourceFilter.value = 'all'
+    if (typeFilter.value !== 'all' && !value?.sources.some(s => s.key === typeFilter.value)) typeFilter.value = 'all'
 })
 
 watch(coverage, (value) => {
@@ -166,8 +169,8 @@ watch(coverage, (value) => {
                 <UIcon v-if="switching"
                        name="i-lucide-loader-circle"
                        class="size-4 animate-spin text-dimmed" />
-                <USelect v-model="sourceFilter"
-                         :items="sourceOptions"
+                <USelect v-model="typeFilter"
+                         :items="typeOptions"
                          size="sm"
                          class="w-44" />
                 <UTabs v-model="activeWindow"
@@ -217,7 +220,7 @@ watch(coverage, (value) => {
         <OverviewCoverageDayDetail v-if="coverage && selected && !coverageError"
                                    :date="selected"
                                    :coverage="coverage"
-                                   :source-filter="sourceFilter" />
+                                   :type-filter="typeFilter" />
         <div v-else-if="!coverage && !coverageError"
              class="mt-5 flex flex-col gap-2.5">
             <USkeleton class="h-4 w-48" />
