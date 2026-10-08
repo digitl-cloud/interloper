@@ -8,7 +8,7 @@ import type { Coverage, CoverageDay } from '~/types/overview'
 const props = defineProps<{
     date: string
     coverage: Coverage
-    sourceFilter: string
+    typeFilter: string
 }>()
 
 /** Problem rows shown before the rest folds behind "Show all". */
@@ -20,12 +20,13 @@ const expanded = ref(false)
 watch(() => props.date, () => { expanded.value = false })
 
 const rows = computed(() => props.coverage.sources
-    .filter(s => props.sourceFilter === 'all' || s.id === props.sourceFilter)
+    .filter(s => props.typeFilter === 'all' || s.key === props.typeFilter)
     .flatMap((s) => {
         const d = sourceDay(s, props.date)
         if (!d) return []
         return [{
             ...d,
+            key: s.key,
             name: s.name,
             kind: s.kind,
             okPct: Math.round((100 * d.covered) / Math.max(1, d.expected)),
@@ -63,7 +64,7 @@ const summary = computed(() => {
     const covered = rows.value.reduce((n, r) => n + r.covered, 0)
     const failed = rows.value.reduce((n, r) => n + r.failed, 0)
     if (!rows.value.length) return 'Nothing expected on this day'
-    const parts = [`${covered} of ${expected} partitions covered`]
+    const parts = [`${covered} of ${expected} assets covered`]
     if (failed) parts.push(`${failed} failed`)
     if (covered + failed < expected) parts.push(`${expected - covered - failed} missing`)
     return parts.join(' · ')
@@ -84,6 +85,7 @@ const columns: TableColumn<Row>[] = [
             h('span', { class: 'truncate font-mono text-xs text-highlighted' }, row.original.name),
         ]),
     },
+    typeColumn<Row>(),
     {
         id: 'coverage',
         header: 'Coverage',
@@ -94,8 +96,8 @@ const columns: TableColumn<Row>[] = [
         ]),
     },
     {
-        id: 'partitions',
-        header: 'Partitions',
+        id: 'assets',
+        header: 'Assets',
         meta: { class: { th: 'text-right', td: 'text-right text-xs tabular-nums text-muted' } },
         cell: ({ row }) => `${row.original.covered} / ${row.original.expected}`,
     },

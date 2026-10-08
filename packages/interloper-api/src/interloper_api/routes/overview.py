@@ -164,6 +164,7 @@ class CoverageSource(BaseModel):
     """
 
     id: UUID
+    key: str
     name: str
     kind: Literal["source", "asset"]
     start: dt.date
@@ -174,7 +175,7 @@ class CoverageSource(BaseModel):
 
     @classmethod
     def from_group(cls, group: insights.CoverageGroup) -> CoverageSource:
-        """Name a calendar group after its row and attach its days.
+        """Name a calendar group after its row, with its definition key, and attach its days.
 
         Args:
             group: The insight coverage group.
@@ -185,6 +186,7 @@ class CoverageSource(BaseModel):
         component, days = group.component, group.days
         return cls(
             id=component.id,
+            key=component.key,
             name=component.name or component.key,
             kind="source" if component.kind == "source" else "asset",
             start=days.start,

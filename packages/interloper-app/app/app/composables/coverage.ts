@@ -51,16 +51,16 @@ export function sourceDay(source: CoverageSource, date: string): CoverageDay | n
     }
 }
 
-/** Sum the days of the selected sources per date, and phrase the window's summary. */
+/** Sum the days of the sources of the selected type per date, and phrase the window's summary. */
 export function useCoverageCalendar(
     coverage: MaybeRefOrGetter<Coverage | null>,
-    sourceFilter: MaybeRefOrGetter<string>,
+    typeFilter: MaybeRefOrGetter<string>,
 ) {
     const byDate = computed(() => {
         const map = new Map<string, DayAggregate>()
-        const filter = toValue(sourceFilter)
+        const filter = toValue(typeFilter)
         for (const source of toValue(coverage)?.sources ?? []) {
-            if (filter !== 'all' && source.id !== filter) continue
+            if (filter !== 'all' && source.key !== filter) continue
             const start = epochDay(source.start)
             source.expected.forEach((expected, i) => {
                 if (expected <= 0) return

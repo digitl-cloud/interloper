@@ -1003,6 +1003,7 @@ class TestCoverage:
             "sources": [
                 {
                     "id": str(source.id),
+                    "key": Shop.key,
                     "name": "shop",
                     "kind": "source",
                     "start": "2026-08-10",
@@ -1028,6 +1029,7 @@ class TestCoverage:
         assert body["sources"] == [
             {
                 "id": str(source.id),
+                "key": Shop.key,
                 "name": "shop",
                 "kind": "source",
                 "start": "2026-08-12",
@@ -1066,6 +1068,7 @@ class TestCoverage:
 
         [row] = self._coverage(client, "2026-08-01", "2026-08-13")["sources"]
 
+        assert (row["key"], row["name"]) == (Warehouse.key, "warehouse")
         assert row["start"] == "2026-08-02"
         assert (row["expected"], row["covered"], row["failed"]) == ([1, 0, 0, 1], [1, 0, 0, 0], [0, 0, 0, 1])
         assert row["failed_run_ids"] == {"3": str(failed.id)}

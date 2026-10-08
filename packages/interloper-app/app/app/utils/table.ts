@@ -80,17 +80,19 @@ export function nameColumn(
 }
 
 /** The `Type` column of a component table: the definition's icon and name. */
-export function typeColumn(icon: (key: string) => string = componentIcon): TableColumn<ComponentRecord> {
+export function typeColumn<T extends { key: string } = ComponentRecord>(
+    icon: (key: string) => string = componentIcon,
+): TableColumn<T> {
     const typeName = (key: string) => useCatalogStore().typeName(key)
     return {
         id: 'type',
         header: 'Type',
-        accessorFn: (row: ComponentRecord) => typeName(row.key),
-        cell: ({ row }: { row: { original: ComponentRecord } }) => h('span', { class: 'flex items-center gap-2 text-muted' }, [
+        accessorFn: (row: T) => typeName(row.key),
+        cell: ({ row }: { row: { original: T } }) => h('span', { class: 'flex items-center gap-2 text-muted' }, [
             h(UIcon, { name: icon(row.original.key), class: 'size-5 shrink-0' }),
             typeName(row.original.key),
         ]),
-    } as TableColumn<ComponentRecord>
+    } as TableColumn<T>
 }
 
 /**
