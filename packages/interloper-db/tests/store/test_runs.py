@@ -1256,6 +1256,23 @@ class TestHooksPending:
         store.backfills.mark_hooks_evaluated(backfill.id)
         assert store.backfills.hooks_pending() == []
 
+    def test_a_verdict_is_claimed_until_marked(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+        store.runs.complete(run.id, success=True)
+
+        assert store.runs.claim_hooks(run.id)
+        store.runs.mark_hooks_evaluated(run.id)
+        assert not store.runs.claim_hooks(run.id)
+
+    def test_a_finished_backfill_is_claimed_until_marked(self, store: Store) -> None:
+        backfill = _backfill(store, days=1, concurrency=1)
+        [run] = store.backfills.attempts(backfill.id)
+        store.runs.complete(run.id, success=True)
+
+        assert store.backfills.claim_hooks(backfill.id)
+        store.backfills.mark_hooks_evaluated(backfill.id)
+        assert not store.backfills.claim_hooks(backfill.id)
+
 
 class TestNamedReads:
     """The questions the scheduler, the toolkit and the overview ask by name."""

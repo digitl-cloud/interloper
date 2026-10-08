@@ -22,12 +22,19 @@ image:
 # Components
 # =============================================================================
 
-# ── Scheduler (cron + worker + reaper; singleton) ──────────────────────────
+# ── Scheduler (cron + worker + reaper) ─────────────────────────────────────
 # Runs cron reconciler, the queue worker, and the reaper in one process.
-# replicaCount must stay at 1 — cron + reaper are singletons.
 scheduler:
   enabled: true
   replicaCount: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
   image:
     repository: ""  # defaults to {image.registry}/interloper-scheduler
     tag: ""
