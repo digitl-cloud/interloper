@@ -709,6 +709,20 @@ class TestBackfillEvents:
         assert payload["metadata"]["failed_partitions"] == [["2026-09-03", None], ["2026-09-02", "rate limited"]]
         assert self._backfill_evaluated_at(backfill.id) is not None
 
+    def test_a_backfill_another_scheduler_holds_is_left_to_it(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        payloads = _capture_posts(monkeypatch)
+        job = self._job()
+        self._hook(store, job, "backfill_completed")
+        backfill = self._backfill(store, job, days=1)
+        for run in self._runs(backfill.id).values():
+            store.runs.complete(run.id, success=True)
+        monkeypatch.setattr(store.backfills, "claim_hooks", lambda backfill_id: False)
+
+        _sweep(store)
+
+        assert [payload["event_type"] for payload in payloads if payload["backfill_id"]] == []
+        assert self._backfill_evaluated_at(backfill.id) is None
+
     def test_a_completed_backfill_fires_completed(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         payloads = _capture_posts(monkeypatch)
         job = self._job()
