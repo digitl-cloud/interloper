@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.108.0 (2026-10-08)
+
+### Bug Fixes
+
+- **scheduler**: Fire cron jobs a scheduler restart delayed, and record skipped firings
+  ([`50df07f`](https://github.com/digitl-cloud/interloper/commit/50df07f8bc3380f5ce6815e426a28779c37c5789))
+
+### Features
+
+- **scheduler**: Run the scheduler as a multi-replica rolling deployment
+  ([`7f026c6`](https://github.com/digitl-cloud/interloper/commit/7f026c63a3040566016a8b6df2afa5015cea89ee))
+
+### Testing
+
+- **scheduler**: Cover the hook sweep leaving a held backfill to its holder
+  ([`869e2b5`](https://github.com/digitl-cloud/interloper/commit/869e2b54f0eeb4e28060d01ff96feba1ec75d971))
+
+
 ## v0.107.0 (2026-10-07)
 
 ### Features
