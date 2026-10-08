@@ -15,20 +15,23 @@ const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const editor = useCanEdit()
 
-interface SourceRow {
-    source: CoverageSource
-    days: (CoverageDay | undefined)[]
+/** A window's owed days, each counted once by its worst state: failed, else missing, else covered. */
+interface DayTally {
+    covered: number
     missing: number
     failed: number
 }
 
-interface TypeGroup {
+interface SourceRow extends DayTally {
+    source: CoverageSource
+    days: (CoverageDay | undefined)[]
+}
+
+interface TypeGroup extends DayTally {
     key: string
     name: string
     rows: SourceRow[]
     days: (DayAggregate | undefined)[]
-    missing: number
-    failed: number
     troubled: number
 }
 
@@ -36,6 +39,25 @@ const dates = computed(() => windowDates(props.coverage))
 
 function missingOn(day: DayAggregate | undefined): boolean {
     return !!day && day.covered + day.failed < day.expected
+}
+
+function tally(days: (DayAggregate | undefined)[]): DayTally {
+    const counts = { covered: 0, missing: 0, failed: 0 }
+    for (const day of days) {
+        if (!day) continue
+        if (day.failed) counts.failed++
+        else if (missingOn(day)) counts.missing++
+        else counts.covered++
+    }
+    return counts
+}
+
+function dayCounts(counts: DayTally) {
+    return [
+        { key: 'covered', icon: 'i-lucide-circle-check', color: 'text-success', label: 'covered', value: counts.covered },
+        { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing', value: counts.missing },
+        { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed', value: counts.failed },
+    ]
 }
 
 function byTrouble(a: { failed: number, missing: number }, b: { failed: number, missing: number }): number {
@@ -47,7 +69,7 @@ const groups = computed<TypeGroup[]>(() => {
     for (const source of props.coverage.sources) {
         if (props.typeFilter !== 'all' && source.key !== props.typeFilter) continue
         const days = dates.value.map(date => sourceDay(source, date) ?? undefined)
-        const row = { source, days, missing: days.filter(missingOn).length, failed: days.filter(day => day?.failed).length }
+        const row = { source, days, ...tally(days) }
         rowsByKey.set(source.key, [...(rowsByKey.get(source.key) ?? []), row])
     }
     return [...rowsByKey.entries()]
@@ -66,8 +88,7 @@ const groups = computed<TypeGroup[]>(() => {
                 name: catalogStore.typeName(key),
                 rows: rows.sort((a, b) => byTrouble(a, b) || a.source.name.localeCompare(b.source.name)),
                 days,
-                missing: days.filter(missingOn).length,
-                failed: days.filter(day => day?.failed).length,
+                ...tally(days),
                 troubled: rows.filter(row => row.missing || row.failed).length,
             }
         })
@@ -146,7 +167,7 @@ function run(row: SourceRow) {
     runOpen.value = true
 }
 
-const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_9rem_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
+const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
 </script>
 
 <template>
@@ -161,7 +182,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_9rem_6.5rem] i
                 <span />
                 <span>Source</span>
                 <span>{{ windowLabel }}</span>
-                <span class="text-right">Days missing · failed</span>
+                <span class="text-right">Days</span>
                 <span />
             </div>
             <template v-for="group in visibleGroups"
@@ -177,15 +198,22 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_9rem_6.5rem] i
                         <UIcon :name="componentIcon(group.key)"
                                class="size-5 shrink-0" />
                         <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
-                        <span class="shrink-0 text-xs text-muted">
-                            {{ group.troubled ? `${group.troubled} of ${group.rows.length} with gaps` : `${group.rows.length} complete` }}
-                        </span>
                     </span>
                     <OverviewCoverageStrip :dates="dates"
                                            :days="group.days"
                                            :selected="date"
                                            @select="emit('select', $event)" />
-                    <span class="text-right text-xs tabular-nums text-muted">{{ group.missing }} · {{ group.failed }}</span>
+                    <span class="flex justify-end gap-2.5 text-xs tabular-nums">
+                        <span v-for="count in dayCounts(group)"
+                              :key="count.key"
+                              :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
+                              class="inline-flex items-center gap-1"
+                              :class="count.value ? count.color : 'text-dimmed'">
+                            <UIcon :name="count.icon"
+                                   class="size-3.5" />
+                            {{ count.value.toLocaleString() }}
+                        </span>
+                    </span>
                     <span />
                 </div>
                 <template v-if="expanded.has(group.key)">
@@ -202,7 +230,17 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_9rem_6.5rem] i
                                                :days="row.days"
                                                :selected="date"
                                                @select="emit('select', $event)" />
-                        <span class="text-right text-xs tabular-nums text-muted">{{ row.missing }} · {{ row.failed }}</span>
+                        <span class="flex justify-end gap-2.5 text-xs tabular-nums">
+                            <span v-for="count in dayCounts(row)"
+                                  :key="count.key"
+                                  :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
+                                  class="inline-flex items-center gap-1"
+                                  :class="count.value ? count.color : 'text-dimmed'">
+                                <UIcon :name="count.icon"
+                                       class="size-3.5" />
+                                {{ count.value.toLocaleString() }}
+                            </span>
+                        </span>
                         <span class="text-right">
                             <ULink v-if="row.failed && failedRunId(row)"
                                    :to="{ path: `/executions/runs/${failedRunId(row)}`, query: { status: 'failed' } }"
