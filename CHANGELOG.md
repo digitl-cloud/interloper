@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.110.0 (2026-10-08)
+
+### Features
+
+- **app**: List coverage per type and source with a strip of the window's days
+  ([`1e68062`](https://github.com/digitl-cloud/interloper/commit/1e680621cf0c451bd275a8becf4ba95be7b98f4e))
+
+- **app**: Name each coverage row's type and filter the coverage card by type
+  ([`cc2c7ec`](https://github.com/digitl-cloud/interloper/commit/cc2c7ec7bf3315fcee32efc8c271131133a49503))
+
+
 ## v0.109.0 (2026-10-08)
 
 ### Features
