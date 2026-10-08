@@ -108,7 +108,7 @@ const columns: TableColumn<Row>[] = [
             if (editor.value && r.gap && !r.failed)
                 return h(UButton, { icon: 'i-lucide-play', label: 'Run', size: 'xs', color: 'neutral', variant: 'outline', onClick: () => run(r) })
             if (r.failed && r.failed_run_id)
-                return h(ULink, { to: `/executions/runs/${r.failed_run_id}`, class: 'inline-flex items-center gap-1 text-xs text-error hover:underline' },
+                return h(ULink, { to: { path: `/executions/runs/${r.failed_run_id}`, query: { status: 'failed' } }, class: 'inline-flex items-center gap-1 text-xs text-error hover:underline' },
                     () => ['Open run', h(UIcon, { name: 'i-lucide-arrow-right', class: 'size-3' })])
             if (!r.gap && !r.failed)
                 return h('span', { class: 'inline-flex items-center gap-1 text-xs text-success' },

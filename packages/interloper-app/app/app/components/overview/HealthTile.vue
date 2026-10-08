@@ -1,10 +1,13 @@
 <script setup lang="ts">
-/** Overview KPI tile: label, headline number with inline detail, footer visual pinned to the bottom; skeletons until loaded. */
-import { NuxtLink } from '#components'
+/**
+ * Overview KPI tile: label, headline number with inline detail, footer visual pinned to the bottom; skeletons until loaded.
+ * The whole tile links to `to` through an overlay, so a `relative` link in the detail can point at a narrower view.
+ */
+import type { RouteLocationRaw } from 'vue-router'
 
 defineProps<{
     label: string
-    to: string
+    to: RouteLocationRaw
     headline?: string | number
     headlineClass?: string
     loading?: boolean
@@ -12,10 +15,11 @@ defineProps<{
 </script>
 
 <template>
-    <UCard :as="NuxtLink"
-           :to="to"
-           class="transition-colors hover:bg-elevated/50"
+    <UCard class="relative transition-colors hover:bg-elevated/50"
            :ui="{ body: 'flex h-full min-h-32 flex-col gap-3' }">
+        <NuxtLink :to="to"
+                  :aria-label="label"
+                  class="absolute inset-0 rounded-[inherit]" />
         <div class="text-sm text-muted">{{ label }}</div>
         <div v-if="loading"
              class="flex h-9 items-center gap-2">

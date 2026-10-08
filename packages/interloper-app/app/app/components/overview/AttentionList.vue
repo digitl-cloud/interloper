@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router'
 import type { AttentionItem } from '~/types/overview'
 
 defineProps<{
@@ -18,17 +19,20 @@ const KIND_META: Record<AttentionItem['kind'], { label: string, icon: string, ro
     overdue: { label: 'Overdue job', icon: 'i-lucide-calendar-clock', rowIcon: 'i-lucide-clock' },
 }
 
-function openTarget(item: AttentionItem): { label: string, to: string } {
+/** Where an item opens: the run on its errors, or the list searched down to the component. */
+function openTarget(item: AttentionItem): { label: string, to: RouteLocationRaw } {
     switch (item.kind) {
         case 'error_group':
         case 'run_stack':
-            return { label: 'Open run', to: `/executions/runs/${item.run_id}` }
+            return { label: 'Open run', to: { path: `/executions/runs/${item.run_id}`, query: { events: 'errors' } } }
         case 'connection':
             return { label: 'Open connection', to: kindPath('connection') }
         case 'drift':
-            return { label: 'Open collection', to: '/collection' }
+            if (!item.component_kind || item.component_kind === 'asset')
+                return { label: 'Open collection', to: { path: '/collection', query: { q: item.target ?? undefined } } }
+            return { label: `Open ${item.component_kind}`, to: { path: kindPath(item.component_kind), query: { type: item.target ?? undefined } } }
         case 'overdue':
-            return { label: 'Open job', to: kindPath('job') }
+            return { label: 'Open job', to: { path: kindPath('job'), query: { q: item.target ?? undefined } } }
     }
 }
 
