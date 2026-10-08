@@ -43,18 +43,6 @@ async function loadData() {
 const usageByOrg = computed(() => new Map<string, AdminOrgQuotaStatus>(
     (quotas.value?.organisations ?? []).map(row => [row.id, row])))
 
-/** The quota closest to its ceiling — what the usage column reports. */
-function peakQuota(usage: AdminOrgQuotaStatus) {
-    const candidates = [
-        { label: 'Sources', used: usage.sources, limit: usage.effective.max_sources },
-        { label: 'Assets / source', used: usage.max_assets_per_source, limit: usage.effective.max_assets_per_source },
-        { label: 'Runs', used: usage.successful_runs, limit: usage.effective.max_successful_runs_per_month },
-    ].filter((entry): entry is { label: string, used: number, limit: number } =>
-        entry.limit != null && entry.limit > 0)
-    if (!candidates.length) return null
-    return candidates.reduce((a, b) => (b.used / b.limit > a.used / a.limit ? b : a))
-}
-
 function openCreate() {
     createName.value = ''
     createOpen.value = true
