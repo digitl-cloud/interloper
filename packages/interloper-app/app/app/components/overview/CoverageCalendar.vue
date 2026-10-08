@@ -217,10 +217,11 @@ watch(coverage, (value) => {
                 </div>
             </div>
         </div>
-        <OverviewCoverageDayDetail v-if="coverage && selected && !coverageError"
-                                   :date="selected"
-                                   :coverage="coverage"
-                                   :type-filter="typeFilter" />
+        <OverviewCoverageSourceList v-if="coverage && selected && !coverageError"
+                                    :date="selected"
+                                    :coverage="coverage"
+                                    :type-filter="typeFilter"
+                                    @select="selected = $event" />
         <div v-else-if="!coverage && !coverageError"
              class="mt-5 flex flex-col gap-2.5">
             <USkeleton class="h-4 w-48" />

@@ -36,6 +36,14 @@ function epochDay(date: string): number {
     return Date.parse(`${date}T00:00:00Z`)
 }
 
+/** Every date of a coverage window, oldest first. */
+export function windowDates(coverage: Coverage): string[] {
+    const dates: string[] = []
+    for (let day = epochDay(coverage.since); day <= epochDay(coverage.until); day += DAY_MS)
+        dates.push(new Date(day).toISOString().slice(0, 10))
+    return dates
+}
+
 /** A source's day on one date, unrolled from its arrays; `null` when nothing is expected of it then. */
 export function sourceDay(source: CoverageSource, date: string): CoverageDay | null {
     const i = Math.round((epochDay(date) - epochDay(source.start)) / DAY_MS)
