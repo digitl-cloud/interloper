@@ -53,7 +53,9 @@ const jobs = computed(() => {
                             :headline="overview?.runs.total">
             <template #detail>
                 {{ overview?.runs.succeeded }} succeeded ·
-                <span :class="overview?.runs.failed ? 'font-medium text-error' : ''">{{ overview?.runs.failed }} failed</span>
+                <ULink :to="{ path: '/executions/runs', query: { status: 'failed' } }"
+                       class="relative hover:underline"
+                       :class="overview?.runs.failed ? 'font-medium text-error' : 'text-muted'">{{ overview?.runs.failed }} failed</ULink>
             </template>
             <template #footer>
                 <div class="flex items-end gap-0.5"
@@ -75,10 +77,13 @@ const jobs = computed(() => {
         </OverviewHealthTile>
 
         <OverviewHealthTile label="Running now"
-                            to="/executions/runs"
+                            :to="{ path: '/executions/runs', query: { status: 'running' } }"
                             :loading="!overview"
                             :headline="activity.running">
-            <template #detail>{{ activity.queued }} queued</template>
+            <template #detail>
+                <ULink :to="{ path: '/executions/runs', query: { status: 'queued' } }"
+                       class="relative text-muted hover:underline">{{ activity.queued }} queued</ULink>
+            </template>
             <template #footer>
                 <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">
                     <div class="bg-primary"
@@ -94,7 +99,7 @@ const jobs = computed(() => {
         </OverviewHealthTile>
 
         <OverviewHealthTile label="Backfills in progress"
-                            to="/executions/backfills"
+                            :to="{ path: '/executions/backfills', query: { status: 'running', single: 'true' } }"
                             :loading="!overview"
                             :headline="overview?.backfills.active">
             <template #detail>{{ overview?.backfills.partitions_done }} of {{ overview?.backfills.partitions_total }} partitions</template>

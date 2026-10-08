@@ -59,6 +59,6 @@ const columns = withSkeletons<Row>([
                 :columns="columns"
                 empty="Nothing scheduled."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(kindPath('job'))" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: kindPath('job'), query: { q: row.original.job_name } })" />
     </UCard>
 </template>
