@@ -82,9 +82,6 @@ const visibleGroups = computed(() => showComplete.value ? [...troubledGroups.val
 
 const expanded = ref(new Set<string>())
 watch(() => groups.value.map(group => group.key).join(), () => {
-    if (groups.value.some(group => expanded.value.has(group.key))) return
-    const first = troubledGroups.value[0] ?? (groups.value.length === 1 ? groups.value[0] : undefined)
-    expanded.value = new Set(first ? [first.key] : [])
     showComplete.value = !troubledGroups.value.length && groups.value.length === 1
 }, { immediate: true })
 
