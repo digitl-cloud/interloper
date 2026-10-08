@@ -41,7 +41,7 @@ def fake_settings() -> SimpleNamespace:
             session_expiry_days=30,
             cookie_secure=True,
         ),
-        cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=None),
+        cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=3600),
         worker=SimpleNamespace(enabled=True, poll_interval=5),
         reaper=SimpleNamespace(
             enabled=True,

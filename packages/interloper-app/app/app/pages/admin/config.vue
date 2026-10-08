@@ -119,9 +119,7 @@ const sections = computed<ConfigSection[]>(() => {
             attrs: [
                 { key: 'reconcile', value: `${services.cron.reconcile_interval}s` },
                 { key: 'batch', value: String(services.cron.batch_size) },
-                ...(services.cron.max_execution_delay != null
-                    ? [{ key: 'max_delay', value: `${services.cron.max_execution_delay}s` }]
-                    : []),
+                { key: 'max_delay', value: `${services.cron.max_execution_delay}s` },
             ],
         },
         {

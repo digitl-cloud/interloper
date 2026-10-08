@@ -180,9 +180,10 @@ class CronSettings(BaseSettings):
 
     enabled: bool = Field(default=True, description="Run the cron controller.")
     reconcile_interval: int = Field(default=10, description="Seconds between reconciliations.")
-    max_execution_delay: int | None = Field(
-        default=None,
-        description="Seconds a due job may fire late; unset uses the reconcile interval, and it may not be shorter.",
+    max_execution_delay: int = Field(
+        default=3600,
+        description="Seconds a due job may still fire after its slot, so a scheduler restart doesn't drop it; "
+        "at least the reconcile interval.",
     )
     batch_size: int = Field(default=50, description="Due jobs dispatched per reconciliation.")
 
