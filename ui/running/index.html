@@ -2483,8 +2483,8 @@ components.</p>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>app<span class="w"> </span>--api<span class="w"> </span>--cron<span class="w"> </span>--worker<span class="w"> </span>--reaper
 </span></code></pre></div>
 <p>runs every service in one process against the configured Postgres, serving the UI on port 3000.
-Each service can be toggled off, so the API and worker scale out while cron and reaper stay
-singletons. <code>--dev</code> runs the Nuxt dev server with hot reload instead of the built assets.</p>
+Each service can be toggled off and scaled out on its own: replicas of cron, the worker, the reaper
+and hook evaluation split the work through row locks. <code>--dev</code> runs the Nuxt dev server with hot reload instead of the built assets.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p><code>interloper.yaml</code> in the working directory, or <code>INTERLOPER_*</code> variables:</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">postgres</span><span class="p">:</span>

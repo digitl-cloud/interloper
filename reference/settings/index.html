@@ -2802,9 +2802,9 @@
 </tr>
 <tr>
 <td><code>max_execution_delay</code></td>
-<td><code>int | None</code></td>
-<td><code>None</code></td>
-<td>Seconds a due job may fire late; unset uses the reconcile interval, and it may not be shorter.</td>
+<td><code>int</code></td>
+<td><code>3600</code></td>
+<td>Seconds a due job may still fire after its slot, so a scheduler restart doesn't drop it; at least the reconcile interval.</td>
 </tr>
 <tr>
 <td><code>batch_size</code></td>
