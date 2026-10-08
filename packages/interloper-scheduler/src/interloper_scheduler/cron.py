@@ -44,7 +44,7 @@ class CronController(Controller):
         self,
         store: Store | None = None,
         reconcile_interval: int = 10,
-        max_execution_delay: int | None = None,
+        max_execution_delay: int = 3600,
         batch_size: int = 50,
     ) -> None:
         """Initialize the cron controller.
@@ -53,8 +53,11 @@ class CronController(Controller):
             store: The Store for creating backfills. Defaults to the
                 settings-configured one.
             reconcile_interval: Seconds between cron evaluation cycles.
-            max_execution_delay: Max seconds a scheduled job can be late.
-                Defaults to the reconcile interval.
+            max_execution_delay: Max seconds a scheduled job can be late and
+                still fire. Generous on purpose: the controller runs as a
+                single pod, so a restart delays every slot it spans, and a
+                late firing can't pile up since the next slot is computed
+                from now.
             batch_size: Number of jobs to process per cycle.
 
         Raises:
@@ -64,7 +67,7 @@ class CronController(Controller):
         super().__init__(poll_interval=reconcile_interval)
         self._store = store or Store.from_settings()
         self._batch_size = batch_size
-        self._max_execution_delay = max_execution_delay if max_execution_delay is not None else reconcile_interval
+        self._max_execution_delay = max_execution_delay
         if self._max_execution_delay < reconcile_interval:
             raise ConfigError("cron.max_execution_delay must be >= cron.reconcile_interval")
 
@@ -96,16 +99,16 @@ class CronController(Controller):
                     logger.info("Scheduling new job '%s' for %s", job.name, next_run)
                     continue
 
-                # Check if too old to execute
-                delay_seconds = (now - scheduled_time).total_seconds()
-                if delay_seconds > self._max_execution_delay:
-                    logger.warning(
-                        "Skipping job '%s' - too late (%ds > %ds)",
-                        job.name,
-                        int(delay_seconds),
-                        self._max_execution_delay,
-                    )
+                delay = int((now - scheduled_time).total_seconds())
+                if delay > self._max_execution_delay:
                     self._store.components.stamp_state(job.id, next_run_at=next_run)
+                    self._skip(
+                        job,
+                        f"too late ({delay}s > {self._max_execution_delay}s)",
+                        scheduled_for=scheduled_time.isoformat(),
+                        delay=delay,
+                        max_execution_delay=self._max_execution_delay,
+                    )
                     continue
 
                 self._store.components.stamp_state(job.id, next_run_at=next_run)
@@ -115,7 +118,7 @@ class CronController(Controller):
                 except ValueError as exc:
                     # Targets disagree on granularity: skip rather than
                     # backfill a window that is wrong for some of them.
-                    logger.error("Skipping job '%s': %s", job.name, exc)
+                    self._skip(job, str(exc))
                     continue
 
                 # The store calls join this tick's transaction, so the firing
@@ -135,20 +138,21 @@ class CronController(Controller):
                     else:
                         self._store.runs.create(job.org_id, component_id=job.id)
                 except QuotaExceededError as exc:
-                    self._skip_over_quota(job, exc)
+                    self._skip(job, str(exc), quota=exc.quota, limit=exc.limit, used=exc.used)
 
             logger.info("Processed %d job(s)", len(jobs))
 
     # -- Internals -------------------------------------------------------------
 
-    def _skip_over_quota(self, job: Component, error: QuotaExceededError) -> None:
-        """Record a firing the organisation's quotas rejected, on the job itself.
+    def _skip(self, job: Component, reason: str, **details: Any) -> None:
+        """Record a due firing that created no run, on the job itself.
 
         Args:
-            job: The job whose firing was rejected.
-            error: The rejection, carrying the quota and its message.
+            job: The job whose firing was skipped.
+            reason: Why it was skipped, shown after "Scheduled firing skipped:".
+            **details: Structured facts about the skip, stored on the event's data.
         """
-        logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, error)
+        logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, reason)
         event = il.Event(
             type=il.EventType.LOG,
             metadata={
@@ -156,10 +160,8 @@ class CronController(Controller):
                 "component_kind": job.kind,
                 "component_key": job.key,
                 "level": "warning",
-                "message": f"Scheduled firing skipped: {error}",
-                "quota": error.quota,
-                "limit": error.limit,
-                "used": error.used,
+                "message": f"Scheduled firing skipped: {reason}",
+                **details,
             },
         )
         self._store.events.save(event, org_id=job.org_id)

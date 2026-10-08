@@ -37,7 +37,7 @@ export interface AdminConfig {
         cookie_secure: boolean
     }
     services: {
-        cron: { enabled: boolean, reconcile_interval: number, batch_size: number, max_execution_delay: number | null }
+        cron: { enabled: boolean, reconcile_interval: number, batch_size: number, max_execution_delay: number }
         worker: { enabled: boolean, poll_interval: number }
         reaper: {
             enabled: boolean

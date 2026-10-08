@@ -114,6 +114,21 @@ class TestScheduling:
         CronController(store=store, max_execution_delay=60)._tick()
         assert _runs(store) == []
         assert _state(store, job_id)["next_run_at"] > stale.isoformat()
+        (skipped,) = _events(store)
+        assert skipped.component_id == job_id
+        assert skipped.level == "warning"
+        assert skipped.data is not None
+        assert skipped.data["scheduled_for"] == stale.isoformat()
+        assert skipped.data["max_execution_delay"] == 60
+        assert skipped.data["delay"] >= 3600
+        assert "too late" in (skipped.message or "")
+
+    def test_a_firing_late_by_a_scheduler_restart_still_runs(self, store: Store) -> None:
+        late = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=90)
+        _job(store, config={"cron": "0 * * * *", "enabled": True}, state={"next_run_at": late.isoformat()})
+        CronController(store=store)._tick()
+        assert [run.status for run in _runs(store)] == ["queued"]
+        assert _events(store) == []
 
     def test_disabled_job_is_ignored(self, store: Store) -> None:
         _job(store, config={"cron": "0 * * * *", "enabled": False})
@@ -516,6 +531,9 @@ class TestGranularityResolution:
         with Session(store.engine) as session:
             assert session.exec(select(Backfill)).all() == []
         assert _state(store, job_id)["next_run_at"] > before
+        (skipped,) = _events(store)
+        assert skipped.component_id == job_id
+        assert "disagree on partition granularity" in (skipped.message or "")
 
     def test_job_without_partitioned_targets_runs_unwindowed(self, store: Store) -> None:
         # Partitioning is derived from the targets: nothing partitioned in

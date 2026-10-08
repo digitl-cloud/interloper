@@ -169,7 +169,7 @@ class AdminCronConfig(BaseModel):
     enabled: bool
     reconcile_interval: int
     batch_size: int
-    max_execution_delay: int | None = None
+    max_execution_delay: int
 
 
 class AdminWorkerConfig(BaseModel):
