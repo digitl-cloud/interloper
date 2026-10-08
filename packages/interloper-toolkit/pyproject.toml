@@ -3,7 +3,7 @@
 # ###############
 [project]
 name = "interloper-toolkit"
-version = "0.110.0"
+version = "0.110.1"
 description = "Interloper tool functions shared by the AI surfaces (agent, MCP)"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]

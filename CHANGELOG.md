@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.110.1 (2026-10-08)
+
+### Bug Fixes
+
+- **app**: Load the coverage list with every type collapsed
+  ([`7b75839`](https://github.com/digitl-cloud/interloper/commit/7b7583900da66b87e8e0f098b33f33c8fcfc8ed9))
+
+- **app**: Show a coverage row's days as covered, missing and failed counts
+  ([`8a665c9`](https://github.com/digitl-cloud/interloper/commit/8a665c9204b7f07fc81fe602c51885e78c0ce316))
+
+
 ## v0.110.0 (2026-10-08)
 
 ### Features
