@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { h } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
-import type { AdminOrganisation, AdminQuotaLimits, AdminQuotas, AdminUser } from '~/types/admin'
+import type { AdminOrganisation, AdminQuotas, AdminUser } from '~/types/admin'
+import type { QuotaPeak } from '~/utils/quota'
 
 definePageMeta({
     layout: 'admin',
@@ -90,24 +91,17 @@ interface AttentionItem {
     to: string
 }
 
-function runPct(row: { successful_runs: number, effective: AdminQuotaLimits }) {
-    const limit = row.effective.max_successful_runs_per_month
-    if (limit == null || limit <= 0) return null
-    return Math.round((row.successful_runs / limit) * 100)
-}
-
 const attention = computed<AttentionItem[]>(() => {
     const items: AttentionItem[] = []
     for (const row of liveQuotaRows.value) {
-        const pct = runPct(row)
-        const limit = row.effective.max_successful_runs_per_month
-        if (pct != null && limit != null && pct >= 75) {
+        const peak = peakQuota(row)
+        if (peak && peak.pct >= 75) {
             items.push({
                 icon: 'i-lucide-gauge',
-                tone: pct >= 90 ? 'error' : 'warning',
-                title: `${row.name} at ${pct}% of run quota`,
-                detail: `${row.successful_runs.toLocaleString()} of ${limit.toLocaleString()} successful runs`
-                    + (row.reserved_runs ? `, plus ${row.reserved_runs} reserved.` : '.'),
+                tone: peak.pct >= 90 ? 'error' : 'warning',
+                title: `${row.name} at ${peak.pct}% of ${peak.label.toLowerCase()} quota`,
+                detail: `${peak.label} ${peak.used.toLocaleString()} / ${peak.limit.toLocaleString()}`
+                    + (row.reserved_runs ? `, plus ${row.reserved_runs} reserved runs.` : '.'),
                 action: 'Review',
                 to: '/admin/organisations',
             })
@@ -159,16 +153,14 @@ const ATTENTION_TILE: Record<AttentionItem['tone'], string> = {
 // -- Quota pressure + top orgs ----------------------------------------------------
 
 const pressure = computed(() => liveQuotaRows.value
-    .map(row => ({ row, pct: runPct(row) }))
-    .filter((entry): entry is { row: typeof entry.row, pct: number } => entry.pct != null)
-    .sort((a, b) => b.pct - a.pct)
+    .map(row => ({ row, peak: peakQuota(row) }))
+    .filter((entry): entry is { row: typeof entry.row, peak: QuotaPeak } => entry.peak != null)
+    .sort((a, b) => b.peak.used / b.peak.limit - a.peak.used / a.peak.limit)
     .slice(0, 5)
-    .map(({ row, pct }) => ({
+    .map(({ row, peak }) => ({
         id: row.id,
         name: row.name,
-        used: row.successful_runs,
-        limit: row.effective.max_successful_runs_per_month!,
-        pct,
+        ...peak,
         note: Object.values(row.limits).some(value => value != null)
             ? 'Has per-organisation overrides'
             : 'Inherits instance defaults',
@@ -317,7 +309,7 @@ const activity = computed(() => {
                         </template>
                         <div v-if="pressure.length === 0"
                              class="text-sm text-muted">
-                            No run limits configured — usage is unmetered pressure-wise.
+                            No quota limits configured — usage is unmetered pressure-wise.
                         </div>
                         <div v-else
                              class="flex flex-col gap-4">
@@ -326,7 +318,7 @@ const activity = computed(() => {
                                 <div class="flex items-baseline gap-2">
                                     <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ entry.name }}</span>
                                     <span class="font-mono text-xs text-muted">
-                                        {{ entry.used.toLocaleString() }} / {{ entry.limit.toLocaleString() }}
+                                        {{ entry.label }} {{ entry.used.toLocaleString() }} / {{ entry.limit.toLocaleString() }}
                                     </span>
                                 </div>
                                 <AdminUsageMeter :used="entry.used"
