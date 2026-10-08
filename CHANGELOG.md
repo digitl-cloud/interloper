@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.109.0 (2026-10-08)
+
+### Features
+
+- **app**: Keep page filters in the URL and remember them per tab
+  ([`526638c`](https://github.com/digitl-cloud/interloper/commit/526638c6151d47f3dc26279c7548fd60e27301ba))
+
+- **app**: Link the overview to its pages already filtered
+  ([`fb7fd97`](https://github.com/digitl-cloud/interloper/commit/fb7fd97fca326d705914b32b93b09b6fcbf01865))
+
+
 ## v0.108.0 (2026-10-08)
 
 ### Bug Fixes
