@@ -121,7 +121,7 @@ async function handleDelete(ids: string[]) {
     }
 }
 
-const typeKey = ref<string | null>(null)
+const typeKey = useQueryParam('type', null)
 </script>
 
 <template>

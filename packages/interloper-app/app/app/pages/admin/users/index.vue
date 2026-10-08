@@ -21,7 +21,7 @@ const rows = ref<AdminUser[]>([])
 const loading = ref(false)
 
 const ALL_ORGS = 'all'
-const orgFilter = ref(ALL_ORGS)
+const orgFilter = useQueryParam('org', ALL_ORGS)
 
 const orgOptions = computed(() => {
     const seen = new Map<string, string>()

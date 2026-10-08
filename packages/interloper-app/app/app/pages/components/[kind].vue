@@ -199,7 +199,7 @@ const emptyCopy = computed(() => EMPTY_COPY[kind.value] ?? {
     catalogDesc: `Pick a type to create a new ${kind.value}.`,
 })
 
-const typeKey = ref<string | null>(null)
+const typeKey = useQueryParam('type', null)
 </script>
 
 <template>

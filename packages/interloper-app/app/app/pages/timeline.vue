@@ -11,10 +11,10 @@ const timelineStore = useTimelineStore()
 const componentsStore = useComponentsStore()
 const catalogStore = useCatalogStore()
 
-const { runs, span, rangeStart, rangeEnd, loading, total, truncated } = storeToRefs(timelineStore)
+const { runs, rangeStart, rangeEnd, loading, total, truncated } = storeToRefs(timelineStore)
 
 /** Active status bucket from the breakdown bar; narrows the bars to that status. */
-const statusFilter = ref<string | null>(null)
+const statusFilter = useQueryParam('status', null)
 const stats = computed(() => runStats(null, executionCounts(runs.value)))
 const shownRuns = computed(() => statusFilter.value
     ? runs.value.filter(run => statusesForKey(statusFilter.value!).includes(run.status))
@@ -23,10 +23,18 @@ const shownRuns = computed(() => statusFilter.value
 const rows = useRunTimelineRows(shownRuns)
 const selectedId = ref<string | null>(null)
 
+/** The window travels by its label (`?span=7d`). */
+const spanQuery: QueryCodec<number> = {
+    parse: raw => TIMELINE_SPANS.find(s => s.label === raw)?.value,
+    format: ms => TIMELINE_SPANS.find(s => s.value === ms)?.label ?? String(ms),
+}
+const windowSpan = useQueryParam('span', DEFAULT_TIMELINE_SPAN, spanQuery)
+watch(windowSpan, ms => timelineStore.setSpan(ms))
+
 const spanItems = TIMELINE_SPANS.map(s => ({ label: s.label, value: String(s.value) }))
 const activeSpan = computed({
-    get: () => String(span.value),
-    set: (value: string) => timelineStore.setSpan(Number(value)),
+    get: () => String(windowSpan.value),
+    set: (value: string) => { windowSpan.value = Number(value) },
 })
 
 const runCount = computed(() => runs.value.reduce((n, run) => n + (run.started_at ? 1 : 0), 0))
@@ -39,7 +47,7 @@ useIntervalFn(() => timelineStore.fetch(), REFRESH_INTERVAL)
 
 onMounted(async () => {
     await Promise.all([
-        timelineStore.fetch(),
+        timelineStore.setSpan(windowSpan.value),
         // Jobs give the rows; sources/assets name and icon the ad-hoc ones.
         componentsStore.fetchAll(['job', 'source', 'asset']),
         catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
