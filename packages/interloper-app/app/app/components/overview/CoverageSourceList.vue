@@ -137,37 +137,23 @@ const windowLabel = computed(() => {
     return `${format(since)} → ${format(until)}`
 })
 
-/** The latest failed run behind a row's most recent failed day. */
-function failedRunId(row: SourceRow): string | null {
-    for (let i = row.days.length - 1; i >= 0; i--) {
-        const id = row.days[i]?.failed_run_id
-        if (id) return id
-    }
-    return null
-}
+const selectedIndex = computed(() => dates.value.indexOf(props.date))
 
-/** The stretch of missing days around the selected day, else the most recent one. */
-function missingRange(row: SourceRow): { start: string, end: string } {
-    const selected = dates.value.indexOf(props.date)
-    let end = missingOn(row.days[selected]) ? selected : row.days.findLastIndex(missingOn)
-    let start = end
-    while (start > 0 && missingOn(row.days[start - 1])) start--
-    while (end < row.days.length - 1 && missingOn(row.days[end + 1])) end++
-    return { start: dates.value[start]!, end: dates.value[end]! }
+/** A row's day on the selected date, which its actions act on. */
+function selectedDay(row: SourceRow): CoverageDay | undefined {
+    return row.days[selectedIndex.value]
 }
 
 const runTarget = ref<ComponentRecord | null>(null)
-const runRange = ref<{ start: string, end: string } | undefined>()
 const runOpen = ref(false)
 function run(row: SourceRow) {
     const target = componentsStore.byId(row.source.id)
     if (!target) return
     runTarget.value = target
-    runRange.value = missingRange(row)
     runOpen.value = true
 }
 
-const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
+const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_10rem_minmax(0,1fr)_6.5rem] items-center gap-3 border-t border-default py-2 text-sm'
 </script>
 
 <template>
@@ -181,8 +167,8 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
                  class="border-t-0 text-xs text-muted">
                 <span />
                 <span>Source</span>
+                <span>Days</span>
                 <span>{{ windowLabel }}</span>
-                <span class="text-right">Days</span>
                 <span />
             </div>
             <template v-for="group in visibleGroups"
@@ -199,11 +185,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
                                class="size-5 shrink-0" />
                         <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
                     </span>
-                    <OverviewCoverageStrip :dates="dates"
-                                           :days="group.days"
-                                           :selected="date"
-                                           @select="emit('select', $event)" />
-                    <span class="flex justify-end gap-2.5 text-xs tabular-nums">
+                    <span class="flex gap-2.5 text-xs tabular-nums">
                         <span v-for="count in dayCounts(group)"
                               :key="count.key"
                               :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
@@ -214,6 +196,10 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
                             {{ count.value.toLocaleString() }}
                         </span>
                     </span>
+                    <OverviewCoverageStrip :dates="dates"
+                                           :days="group.days"
+                                           :selected="date"
+                                           @select="emit('select', $event)" />
                     <span />
                 </div>
                 <template v-if="expanded.has(group.key)">
@@ -226,11 +212,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
                                    class="size-3.5 shrink-0 text-dimmed" />
                             <span class="truncate font-mono text-xs text-highlighted">{{ row.source.name }}</span>
                         </span>
-                        <OverviewCoverageStrip :dates="dates"
-                                               :days="row.days"
-                                               :selected="date"
-                                               @select="emit('select', $event)" />
-                        <span class="flex justify-end gap-2.5 text-xs tabular-nums">
+                        <span class="flex gap-2.5 text-xs tabular-nums">
                             <span v-for="count in dayCounts(row)"
                                   :key="count.key"
                                   :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
@@ -241,27 +223,25 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
                                 {{ count.value.toLocaleString() }}
                             </span>
                         </span>
+                        <OverviewCoverageStrip :dates="dates"
+                                               :days="row.days"
+                                               :selected="date"
+                                               @select="emit('select', $event)" />
                         <span class="text-right">
-                            <ULink v-if="row.failed && failedRunId(row)"
-                                   :to="{ path: `/executions/runs/${failedRunId(row)}`, query: { status: 'failed' } }"
-                                   class="inline-flex items-center gap-1 text-xs text-error hover:underline">
-                                Open run
-                                <UIcon name="i-lucide-arrow-right"
-                                       class="size-3" />
-                            </ULink>
-                            <UButton v-else-if="row.missing && editor"
+                            <UButton v-if="selectedDay(row)?.failed_run_id"
+                                     label="Open run"
+                                     trailing-icon="i-lucide-arrow-right"
+                                     size="xs"
+                                     color="neutral"
+                                     variant="outline"
+                                     :to="{ path: `/executions/runs/${selectedDay(row)?.failed_run_id}`, query: { status: 'failed' } }" />
+                            <UButton v-else-if="missingOn(selectedDay(row)) && editor"
                                      icon="i-lucide-play"
                                      label="Run"
                                      size="xs"
                                      color="neutral"
                                      variant="outline"
                                      @click="run(row)" />
-                            <span v-else-if="!row.missing && !row.failed"
-                                  class="inline-flex items-center gap-1 text-xs text-success">
-                                <UIcon name="i-lucide-check"
-                                       class="size-3" />
-                                Complete
-                            </span>
                         </span>
                     </div>
                 </template>
@@ -298,6 +278,6 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_minmax(0,1fr)_10rem_6.5rem] 
         <ExecutionsRunModal v-if="runTarget"
                             v-model:open="runOpen"
                             :target="runTarget"
-                            :initial-range="runRange" />
+                            :initial-range="{ start: date, end: date }" />
     </div>
 </template>
