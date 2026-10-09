@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.110.2 (2026-10-09)
+
+### Bug Fixes
+
+- **app**: Act on the highlighted day in the coverage list
+  ([`049a442`](https://github.com/digitl-cloud/interloper/commit/049a44280a92621dae6dff30474fe0ffc8ed4e82))
+
+- **app**: Rank admin quota pressure by each organisation's highest quota
+  ([`76f3b6a`](https://github.com/digitl-cloud/interloper/commit/76f3b6ab8fea3f45164dc16f8aa5cbb57acbd278))
+
+
 ## v0.110.1 (2026-10-08)
 
 ### Bug Fixes
