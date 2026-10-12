@@ -7,16 +7,22 @@ import interloper as il
 from interloper_assets.google_analytics_4 import schemas
 
 
-@il.source(tags=["Analytics"], icon="logos:google-analytics", maturity="alpha")
+@il.source(
+    tags=["Analytics"],
+    icon="logos:google-analytics",
+    maturity="alpha",
+    relations={"destinations": il.Relation("destination", "bigquery_destination", many=True, optional=True)},
+)
 class GoogleAnalytics4Export(il.Source):
     """The BigQuery export of a Google Analytics 4 property.
 
     Google writes the export itself, one ``events_YYYYMMDD`` table per day in
     the ``analytics_<property id>`` dataset of the project the property
     exports to. ``events`` references those tables, which are read and never
-    written. The daily fact is a view over them, BigQuery-only, since the
-    sharded export exists nowhere else; it is created in the source's own
-    dataset, not in Google's export dataset, one per property.
+    written. The daily fact is a view over them; it is created in the
+    source's own dataset, not in Google's export dataset, one per property.
+    The source binds BigQuery destinations only, since the sharded export
+    exists nowhere else.
     """
 
     property_id: str = il.InputField(

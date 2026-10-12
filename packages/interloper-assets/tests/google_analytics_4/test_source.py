@@ -13,6 +13,7 @@ from interloper_assets.google_analytics_4.source import GoogleAnalytics4Export
 
 
 class RecordingWarehouse(DatabaseDestination):
+    key: ClassVar[str] = "bigquery_destination"
     dialect: ClassVar[str | None] = "bigquery"
     views: ClassVar[list[tuple[str, str | None, str]]] = []
 
@@ -42,6 +43,13 @@ class DuckLike(RecordingWarehouse):
     dialect: ClassVar[str | None] = "duckdb"
 
 
+class MisspokenWarehouse(RecordingWarehouse):
+    """A destination carrying the BigQuery key but another dialect, to isolate the view's dialect check."""
+
+    key: ClassVar[str] = "bigquery_destination"
+    dialect: ClassVar[str | None] = "duckdb"
+
+
 @pytest.fixture(autouse=True)
 def _reset() -> None:
     RecordingWarehouse.views.clear()
@@ -65,6 +73,12 @@ def test_the_view_is_pinned_to_bigquery_and_reads_the_export():
     assert "_TABLE_SUFFIX" in sql
 
 
-def test_the_view_refuses_another_warehouse():
+def test_the_source_binds_bigquery_destinations_only():
+    assert GoogleAnalytics4Export.relations["destinations"].keys == ["bigquery_destination"]
+    with pytest.raises(ConfigError, match="does not accept"):
+        GoogleAnalytics4Export(property_id="123", destinations=[DuckLike(id="duck")])
+
+
+def test_the_view_refuses_another_dialect():
     with pytest.raises(ConfigError, match="dialect 'bigquery'"):
-        il.DAG(GoogleAnalytics4Export(property_id="123", destinations=[DuckLike(id="duck")]))
+        il.DAG(GoogleAnalytics4Export(property_id="123", destinations=[MisspokenWarehouse(id="duck")]))
