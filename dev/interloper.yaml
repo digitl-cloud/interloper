@@ -31,6 +31,7 @@ catalog:
   - interloper_assets.facebook_ads_star_schema.source.FacebookAdsStarSchema
   - interloper_assets.facebook_insights.source.FacebookInsights
   - interloper_assets.google_ads.source.GoogleAds
+  - interloper_assets.google_analytics_4.source.GoogleAnalytics4Export
   - interloper_assets.impact.source.Impact
   - interloper_assets.instagram_insights.source.InstagramInsights
   - interloper_assets.linkedin_ads.source.LinkedinAds
