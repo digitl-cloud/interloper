@@ -2,57 +2,47 @@
 
 from __future__ import annotations
 
+import ibis
 import interloper as il
-from interloper.errors import ConfigError
+from interloper_sql import sql_view, union
 
 from interloper_assets.facebook_ads_star_schema import schemas
 
-
-def _union(upstreams: list[il.Upstream], select_by_key: dict[str, str]) -> str:
-    """One SELECT per upstream, by its asset key, joined by UNION ALL.
-
-    Args:
-        upstreams: The bound upstreams, each carrying a table reference.
-        select_by_key: The column list to select from an upstream, keyed by its asset key.
-
-    Returns:
-        The UNION ALL of one SELECT per upstream.
-
-    Raises:
-        ConfigError: If no upstream is bound; a view over nothing has no columns.
-    """
-    if not upstreams:
-        raise ConfigError("no upstream bound: a star schema view needs at least one account")
-    return " UNION ALL ".join(
-        f"SELECT {select_by_key[upstream.asset.key]} FROM {upstream.data.name}" for upstream in upstreams
-    )
-
-
 FACT_COLUMNS = (
-    "date_start AS date, CAST(account_id AS STRING) AS account_id, account_name, account_currency, "
-    "CAST(campaign_id AS STRING) AS campaign_id, campaign_name, CAST(adset_id AS STRING) AS adset_id, adset_name, "
-    "CAST(ad_id AS STRING) AS ad_id, ad_name, publisher_platform, platform_position, impression_device, "
-    "impressions, clicks, reach, spend"
+    "date_start",
+    "account_id",
+    "account_name",
+    "account_currency",
+    "campaign_id",
+    "campaign_name",
+    "adset_id",
+    "adset_name",
+    "ad_id",
+    "ad_name",
+    "publisher_platform",
+    "platform_position",
+    "impression_device",
+    "impressions",
+    "clicks",
+    "reach",
+    "spend",
 )
 
-CAMPAIGN_CANDIDATES = {
-    "campaigns": (
-        "CAST(id AS STRING) AS campaign_id, name AS campaign_name, CAST(account_id AS STRING) AS account_id, "
-        "objective, status, date, 1 AS priority"
-    ),
-    "campaigns_stats": (
-        "CAST(campaign_id AS STRING) AS campaign_id, campaign_name, CAST(account_id AS STRING) AS account_id, "
-        "objective, CAST(NULL AS STRING) AS status, date_start AS date, 2 AS priority"
-    ),
-}
 
-AD_CANDIDATES = {
-    "ads": (
-        "CAST(id AS STRING) AS ad_id, name AS ad_name, CAST(adset_id AS STRING) AS adset_id, "
-        "CAST(NULL AS STRING) AS adset_name, CAST(campaign_id AS STRING) AS campaign_id, "
-        "CAST(account_id AS STRING) AS account_id, status, date, 1 AS priority"
-    ),
-}
+def _latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
+    """One row per *key*, the first in *order*; shared by the three dimensions.
+
+    Args:
+        rows: Candidate rows, several per key.
+        key: The column one row is kept per value of.
+        *order: The sort that puts the row to keep first, such as the source
+            tier then the latest date.
+
+    Returns:
+        The kept rows, without the ranking column.
+    """
+    ranked = rows.mutate(rank=ibis.row_number().over(group_by=key, order_by=list(order)))
+    return ranked.filter(ranked["rank"] == 0).drop("rank")
 
 
 @il.source(tags=["Analytics"], icon="logos:facebook", maturity="alpha")
@@ -67,16 +57,16 @@ class FacebookAdsStarSchema(il.Source):
     recreated on every run, so they follow the accounts bound to them.
     """
 
-    @il.view(
+    @sql_view(
         schema=schemas.FactAdPerformance,
         tags=["Fact"],
         relations={"ads_stats": il.Relation("asset", "facebook_ads.ads_stats", many=True, optional=True)},
     )
-    def fact_ad_performance(self, ads_stats: list[il.Upstream]) -> str:
+    def fact_ad_performance(self, ads_stats: list[il.Upstream]) -> ibis.Table:
         """Ad performance of every account, one row per ad, day and placement breakdown."""
-        return _union(ads_stats, {"ads_stats": FACT_COLUMNS})
+        return union(ads_stats, *FACT_COLUMNS).rename(date="date_start")
 
-    @il.view(
+    @sql_view(
         schema=schemas.DimCampaigns,
         tags=["Dimension"],
         relations={
@@ -85,44 +75,91 @@ class FacebookAdsStarSchema(il.Source):
             )
         },
     )
-    def dim_campaigns(self, campaigns: list[il.Upstream], fact_ad_performance: il.Upstream) -> str:
+    def dim_campaigns(self, campaigns: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
         """One row per campaign, from its latest snapshot, else its latest report, else the facts."""
-        candidates = [
-            f"SELECT {CAMPAIGN_CANDIDATES[upstream.asset.key]} FROM {upstream.data.name}" for upstream in campaigns
-        ]
-        candidates.append(
-            "SELECT campaign_id, campaign_name, account_id, CAST(NULL AS STRING) AS objective, "
-            f"CAST(NULL AS STRING) AS status, date, 3 AS priority FROM {fact_ad_performance.data.name}"
-        )
-        return (
-            "SELECT campaign_id, campaign_name, account_id, objective, status, date "
-            f"FROM ({' UNION ALL '.join(candidates)}) WHERE TRUE "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY campaign_id ORDER BY priority, date DESC) = 1"
-        )
 
-    @il.view(
+        def from_snapshot(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                campaign_id=table["id"],
+                campaign_name=table["name"],
+                account_id=table["account_id"],
+                objective=table["objective"],
+                status=table["status"],
+                date=table["date"],
+                priority=ibis.literal(1),
+            )
+
+        def from_report(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                campaign_id=table["campaign_id"].cast("string"),
+                campaign_name=table["campaign_name"],
+                account_id=table["account_id"].cast("string"),
+                objective=table["objective"],
+                status=ibis.null("string"),
+                date=table["date_start"],
+                priority=ibis.literal(2),
+            )
+
+        def from_facts(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                campaign_id=table["campaign_id"],
+                campaign_name=table["campaign_name"],
+                account_id=table["account_id"],
+                objective=ibis.null("string"),
+                status=ibis.null("string"),
+                date=table["date"],
+                priority=ibis.literal(3),
+            )
+
+        candidates = {"campaigns": from_snapshot, "campaigns_stats": from_report}
+        rows = ibis.union(
+            *(candidates[upstream.asset.key](upstream.data) for upstream in campaigns),
+            from_facts(fact_ad_performance.data),
+            distinct=False,
+        )
+        return _latest(rows, "campaign_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
+
+    @sql_view(
         schema=schemas.DimAds,
         tags=["Dimension"],
         relations={"ads": il.Relation("asset", "facebook_ads.ads", many=True, optional=True)},
     )
-    def dim_ads(self, ads: list[il.Upstream], fact_ad_performance: il.Upstream) -> str:
+    def dim_ads(self, ads: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
         """One row per ad with its ad set, from its latest snapshot, else the facts."""
-        candidates = [f"SELECT {AD_CANDIDATES[upstream.asset.key]} FROM {upstream.data.name}" for upstream in ads]
-        candidates.append(
-            "SELECT ad_id, ad_name, adset_id, adset_name, campaign_id, account_id, CAST(NULL AS STRING) AS status, "
-            f"date, 2 AS priority FROM {fact_ad_performance.data.name}"
-        )
-        return (
-            "SELECT ad_id, ad_name, adset_id, adset_name, campaign_id, account_id, status, date "
-            f"FROM ({' UNION ALL '.join(candidates)}) WHERE TRUE "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ad_id ORDER BY priority, date DESC) = 1"
-        )
 
-    @il.view(schema=schemas.DimAccounts, tags=["Dimension"])
-    def dim_accounts(self, fact_ad_performance: il.Upstream) -> str:
-        """One row per ad account with its name and currency, from the facts."""
-        return (
-            "SELECT account_id, account_name, account_currency, date "
-            f"FROM {fact_ad_performance.data.name} WHERE TRUE "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY date DESC) = 1"
+        def from_snapshot(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                ad_id=table["id"],
+                ad_name=table["name"],
+                adset_id=table["adset_id"],
+                adset_name=ibis.null("string"),
+                campaign_id=table["campaign_id"],
+                account_id=table["account_id"],
+                status=table["status"],
+                date=table["date"],
+                priority=ibis.literal(1),
+            )
+
+        def from_facts(table: ibis.Table) -> ibis.Table:
+            return table.select(
+                ad_id=table["ad_id"],
+                ad_name=table["ad_name"],
+                adset_id=table["adset_id"],
+                adset_name=table["adset_name"],
+                campaign_id=table["campaign_id"],
+                account_id=table["account_id"],
+                status=ibis.null("string"),
+                date=table["date"],
+                priority=ibis.literal(2),
+            )
+
+        rows = ibis.union(
+            *(from_snapshot(upstream.data) for upstream in ads), from_facts(fact_ad_performance.data), distinct=False
         )
+        return _latest(rows, "ad_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
+
+    @sql_view(schema=schemas.DimAccounts, tags=["Dimension"])
+    def dim_accounts(self, fact_ad_performance: il.Upstream) -> ibis.Table:
+        """One row per ad account with its name and currency, from the facts."""
+        rows = fact_ad_performance.data.select("account_id", "account_name", "account_currency", "date")
+        return _latest(rows, "account_id", rows["date"].desc())
