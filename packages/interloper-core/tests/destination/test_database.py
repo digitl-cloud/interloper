@@ -55,6 +55,20 @@ class ViewlessDatabase(RecordingDatabase):
         DatabaseDestination.replace_view(self, table, dataset, sql)
 
 
+class OpenDatabase(RecordingDatabase):
+    """Database destination that reaches every recording database and names tables by its own id."""
+
+    def reaches(self, other):
+        return isinstance(other, RecordingDatabase)
+
+    def table_parts(self, table, dataset):
+        return (self.id, table)
+
+
+class OtherOpenDatabase(OpenDatabase):
+    """A second backend, so the two carry distinct destination keys."""
+
+
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
 def partitioned_asset(context: il.ExecutionContext) -> list:  # noqa: D103
     return []
@@ -265,15 +279,18 @@ class TestReference:
         reference = destination.reference(typed_asset(destinations=[destination]))
         assert reference.schema is Rows
 
-    def test_reference_prefers_the_default_destination_then_the_first_reachable(self):
-        here = RecordingDatabase(id="here")
-        there = RecordingDatabase(id="there")
+    def test_reference_prefers_the_default_destination(self):
+        here = OpenDatabase(id="here")
+        there = OtherOpenDatabase(id="there")
         asset = plain_asset(destinations=[there, here], default_destination_key=here.key)
-        assert here.reference(asset).parts == ("main", "plain_asset")
+        assert here.reference(asset).parts == ("here", "plain_asset")
 
+    def test_reference_without_a_default_takes_the_first_reachable(self):
+        here = OpenDatabase(id="here")
+        there = OtherOpenDatabase(id="there")
         unreachable = il.MemoryDestination(id="memory")
-        other = plain_asset(destinations=[unreachable, here])
-        assert here.reference(other).parts == ("main", "plain_asset")
+        asset = plain_asset(destinations=[unreachable, there, here])
+        assert here.reference(asset).parts == ("there", "plain_asset")
 
     def test_reference_refuses_an_asset_it_cannot_query(self):
         here = RecordingDatabase(id="here")
@@ -289,6 +306,20 @@ class TestReference:
         destination = ViewlessDatabase(id="db")
         with pytest.raises(ConfigError, match="does not support views"):
             destination.reference(plain_asset(destinations=[destination]))
+
+
+class TestReaches:
+    """A destination reaches itself, and another only when it can be told apart by id."""
+
+    def test_an_id_less_destination_reaches_only_itself(self):
+        here = RecordingDatabase()
+        there = RecordingDatabase()
+        here.id = there.id = ""
+        assert here.reaches(here)
+        assert not here.reaches(there)
+
+    def test_destinations_sharing_an_id_reach_each_other(self):
+        assert RecordingDatabase(id="db").reaches(RecordingDatabase(id="db"))
 
 
 class TestCreateView:
