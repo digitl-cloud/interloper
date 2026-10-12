@@ -125,7 +125,9 @@ class Source(Component, Workload):
     ``ignored_types``.
     """
 
-    model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor, Relation, type))
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True, ignored_types=(*Component.model_config["ignored_types"], type)
+    )
 
     # Definition
     asset_types: ClassVar[list[type[Asset]]] = []
@@ -596,6 +598,10 @@ class Source(Component, Workload):
                 asset.dataset = self.dataset
             if asset.table_name is None:
                 validate_key(asset.table)
+            else:
+                asset.dataset = asset._format_with_source_fields(asset.dataset)
+                validate_key(asset.dataset)
+                validate_key(asset.table.replace("*", ""))
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
             if asset.normalizer is None and self.normalizer is not None:

@@ -51,6 +51,7 @@ def test_the_events_reference_lives_in_the_property_dataset():
     source = GoogleAnalytics4Export(property_id="123")
     assert source.events.table == "events_*"
     assert source.events.dataset == "analytics_123"
+    assert source.fact_daily_events.dataset == "google_analytics4_export"
     assert isinstance(source.events, il.Reference)
 
 
@@ -59,7 +60,7 @@ def test_the_view_is_pinned_to_bigquery_and_reads_the_export():
     source = GoogleAnalytics4Export(property_id="123", destinations=[warehouse])
     il.DAG(source).materialize()
     [(table, dataset, sql)] = RecordingWarehouse.views
-    assert (table, dataset) == ("fact_daily_events", "analytics_123")
+    assert (table, dataset) == ("fact_daily_events__123", "google_analytics4_export")
     assert "`proj.analytics_123.events_*`" in sql
     assert "_TABLE_SUFFIX" in sql
 

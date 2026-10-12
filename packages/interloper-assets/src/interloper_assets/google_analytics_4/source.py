@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import interloper as il
 
 from interloper_assets.google_analytics_4 import schemas
@@ -15,9 +13,10 @@ class GoogleAnalytics4Export(il.Source):
 
     Google writes the export itself, one ``events_YYYYMMDD`` table per day in
     the ``analytics_<property id>`` dataset of the project the property
-    exports to. ``events`` references those tables; nothing is fetched or
+    exports to. ``events`` references those tables, which are read and never
     written. The daily fact is a view over them, BigQuery-only, since the
-    sharded export exists nowhere else.
+    sharded export exists nowhere else; it is created in the source's own
+    dataset, not in Google's export dataset, one per property.
     """
 
     property_id: str = il.InputField(
@@ -25,7 +24,13 @@ class GoogleAnalytics4Export(il.Source):
         discriminator=True,
     )
 
-    events = il.reference("events_*", key="events", schema=schemas.Events, tags=["Event"])
+    events = il.reference(
+        "events_*",
+        key="events",
+        dataset="analytics_{property_id}",  # noqa: RUF027
+        schema=schemas.Events,
+        tags=["Event"],
+    )
 
     @il.view(schema=schemas.FactDailyEvents, tags=["Fact"], dialect="bigquery")
     def fact_daily_events(self, events: il.Upstream) -> str:
@@ -36,24 +41,3 @@ class GoogleAnalytics4Export(il.Source):
             f"FROM {events.data.name} WHERE _TABLE_SUFFIX NOT LIKE 'intraday_%' "
             "GROUP BY 1, 2"
         )
-
-    def model_post_init(self, context: Any) -> None:
-        """Default the dataset to the property's export dataset before the assets inherit it.
-
-        Args:
-            context: Pydantic's post-init context, forwarded untouched.
-        """
-        if not self.dataset:
-            self.dataset = f"analytics_{self.property_id}"
-        super().model_post_init(context)
-
-    def asset_table(self, asset: il.Asset) -> str:
-        """Name the view by its key alone, since each property already has a dataset of its own.
-
-        Args:
-            asset: The asset to name a table for; only its ``key`` is read.
-
-        Returns:
-            The asset's key, without the property id suffix.
-        """
-        return asset.key
