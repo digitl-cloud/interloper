@@ -9,6 +9,7 @@ import interloper as il
 import pandas as pd
 import pytest
 from interloper.destination import IOContext
+from interloper.destination.database import TableReference
 from interloper.errors import DataNotFoundError
 from interloper.partitioning import Partition, PartitionConfig, TimePartition, TimePartitionWindow
 from interloper.schema import Schema
@@ -348,3 +349,31 @@ class TestCount:
     def test_missing_table_raises(self, destination):
         with pytest.raises(DataNotFoundError):
             destination.partition_row_counts(_ctx(daily()))
+
+
+class TestViews:
+    """Views are created under the asset's schema and read like tables."""
+
+    def test_reference_quotes_schema_and_table(self, destination):
+        @il.asset(dataset="shop")
+        def orders() -> list:
+            return []
+
+        assert destination.reference(orders(destinations=[destination])) == TableReference(
+            name='"shop"."orders"', parts=("shop", "orders"), schema=None
+        )
+
+    def test_replace_view_creates_the_schema_and_the_view(self, destination):
+        destination.connection.client.execute("CREATE SCHEMA shop; CREATE TABLE shop.orders AS SELECT 1 AS total")
+        destination.replace_view("totals", "reporting", 'SELECT SUM(total) AS total FROM "shop"."orders"')
+        destination.replace_view("totals", "reporting", 'SELECT SUM(total) * 2 AS total FROM "shop"."orders"')
+        assert destination.select("totals", "reporting", None).to_dict("records") == [{"total": 2}]
+
+    def test_reaches_the_same_database_only(self, destination, tmp_path):
+        same = DuckDBDestination(id="other", connection=destination.connection)
+        elsewhere = DuckDBDestination(
+            id="elsewhere", connection=DuckDBConnection(id="x", database=str(tmp_path / "other.duckdb"))
+        )
+        assert destination.reaches(same)
+        assert not destination.reaches(elsewhere)
+        assert DuckDBDestination.dialect == "duckdb"
