@@ -175,6 +175,14 @@ Contains Postgres connection info + the encryption key secret.
 {{- if .Values.otel.enabled }}
 - name: INTERLOPER_OTEL_ENABLED
   value: "true"
+{{- /* The pod is the telemetry's instance: the SDK's default is a random id
+per process, unreadable on a dashboard and unmatched across signals. */}}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: service.instance.id=$(POD_NAME)
 {{- with .Values.otel.endpoint }}
 - name: INTERLOPER_OTEL_ENDPOINT
   value: {{ . | quote }}

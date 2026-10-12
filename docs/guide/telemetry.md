@@ -108,7 +108,7 @@ The platform adds its own instruments where the event bus does not reach:
 
 | Instrument | Type | Attributes |
 |------------|------|------------|
-| `interloper.scheduler.tick` | gauge, unix seconds | `loop` (`cron`, `hook`, `queue`, `reaper`, `renewal`), `replica`; each loop's last successful tick, so `time() - value` is its staleness |
+| `interloper.scheduler.tick` | gauge, unix seconds | `loop` (`cron`, `hook`, `queue`, `reaper`, `renewal`); each loop's last successful tick, so `time() - value` is its staleness. Which replica ticked is the resource's `service.instance.id`, stamped by the deployment |
 | `interloper.runs.launched` | counter | `outcome` (`launched`, `failed`) |
 | `interloper.runs.reaped` | counter | `reason` (`startup`, `heartbeat`, `timeout`) |
 | `interloper.scheduler.skips` | counter | `reason` (`late`, `config`, `quota`); due cron firings that created no run |
