@@ -286,6 +286,10 @@ class DAG:
         included on purpose; the read uses the dependent's partition against
         the upstream table.
 
+        A dependent that reads no upstream data (``reads_upstream_data`` is
+        ``False``) is exempt: it refers to the whole upstream table rather than
+        reading a partition of it.
+
         Raises:
             DAGError: If a non-partitioned operation depends on a partitioned
                 one, or if two time-partitioned ends of an edge have
@@ -293,6 +297,8 @@ class DAG:
         """
         for operation_id, preds in self.predecessors.items():
             operation = self.operation_map[operation_id]
+            if not operation.reads_upstream_data:
+                continue
             for pred_id in preds:
                 upstream = self.operation_map[pred_id]
                 if upstream.partitioning is not None and operation.partitioning is None:
