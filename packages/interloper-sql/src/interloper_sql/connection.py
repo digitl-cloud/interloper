@@ -22,7 +22,7 @@ class SQLConnection(Connection):
     """Connection resource holding the URL of a SQL database.
 
     Any SQLAlchemy dialect whose driver is installed works; PostgreSQL through
-    psycopg ships with the package.
+    psycopg ships with the ``postgres`` extra.
     """
 
     model_config = SettingsConfigDict(env_prefix="sql_")
@@ -31,7 +31,7 @@ class SQLConnection(Connection):
         label="Database URL",
         description="SQLAlchemy URL, e.g. postgresql+psycopg://user:password@host:5432/db",
         info=(
-            "The URL carries the password, so it is stored as a secret. PostgreSQL works out of the box "
+            "The URL carries the password, so it is stored as a secret. PostgreSQL works with the postgres extra "
             "(postgresql+psycopg://); other databases need their SQLAlchemy driver installed, e.g. "
             "mysql+pymysql:// or mssql+pyodbc://."
         ),
