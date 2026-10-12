@@ -31,6 +31,7 @@ from interloper_db.models.runs import (
     BackfillStatus,
     Event,
     Execution,
+    Overdue,
     Run,
     RunStatus,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "Execution",
     "Invitation",
     "Organisation",
+    "Overdue",
     "PersonalAccessToken",
     "Profile",
     "Quota",

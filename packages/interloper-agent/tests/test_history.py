@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import ProcessHistory
@@ -140,6 +142,15 @@ class TestSummarise:
         assert "User: 2" not in head.parts[0].content
         assert tail == history[-RETAINED_TURNS * 4 :]
         assert prompts(compacted) == ["2", "3", "4"]
+
+    async def test_each_summary_is_counted(self, ctx: ToolkitContext, metric_total: Any):
+        history = turns(RETAINED_TURNS + 2, input_tokens=COMPACTION_THRESHOLD)
+        before = metric_total("interloper.agent.compactions")
+
+        await summarise(run_context(ctx), history)
+        await summarise(run_context(ctx), turns(RETAINED_TURNS, input_tokens=COMPACTION_THRESHOLD))
+
+        assert metric_total("interloper.agent.compactions") == before + 1
 
     async def test_a_previous_summary_feeds_the_next_one(self, ctx: ToolkitContext):
         earlier = ModelRequest(parts=[SystemPromptPart(content=SUMMARY_LEAD + "earlier facts")])

@@ -96,3 +96,30 @@ def metric_reader() -> InMemoryMetricReader:
         metrics.set_meter_provider(MeterProvider(metric_readers=[_metric_reader]))
         _metrics_installed = True
     return _metric_reader
+
+
+@pytest.fixture
+def metric_total(metric_reader: InMemoryMetricReader) -> Callable[..., float]:
+    """A lookup summing a metric's data points over the series matching some attributes.
+
+    A counter or gauge point contributes its value, a histogram point the
+    number of recordings it holds.
+
+    Returns:
+        A callable taking the metric name and attribute filters, returning
+        the matching points' total (0 when none exist).
+    """
+
+    def total(name: str, **attributes: str) -> float:
+        data = metric_reader.get_metrics_data()
+        return sum(
+            point.value if hasattr(point, "value") else point.count
+            for rm in (data.resource_metrics if data else [])
+            for sm in rm.scope_metrics
+            for metric in sm.metrics
+            if metric.name == name
+            for point in metric.data.data_points
+            if all((point.attributes or {}).get(key) == value for key, value in attributes.items())
+        )
+
+    return total

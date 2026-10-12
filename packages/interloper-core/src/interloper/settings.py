@@ -45,7 +45,7 @@ class RunnerSettings(BaseSettings):
 
 
 class TelemetrySettings(BaseSettings):
-    """OpenTelemetry settings: OTLP traces and metrics.
+    """OpenTelemetry settings: OTLP traces, metrics and logs.
 
     Exporting requires the ``otel`` extra (``interloper[otel]``); when it is
     missing, enabling telemetry logs a warning and stays a no-op.
@@ -68,6 +68,7 @@ class TelemetrySettings(BaseSettings):
     service_name: str = Field(default="", description="Reported service name; empty reports `interloper`.")
     traces: bool = Field(default=True, description="Export traces.")
     metrics: bool = Field(default=True, description="Export metrics.")
+    logs: bool = Field(default=True, description="Export the standard `logging` records, with their trace context.")
     sample_ratio: float = Field(default=1.0, description="Fraction of traces sampled, parent-based.")
     metric_export_interval: int = Field(default=60, description="Seconds between metric exports.")
 

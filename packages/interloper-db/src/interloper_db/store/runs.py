@@ -38,7 +38,7 @@ from sqlalchemy import Engine, and_, exists, func, or_, update
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
 
-from interloper_db.models import OPEN_RUN_STATUSES, TERMINAL_RUN_STATUSES, Component, Event, Run, RunStatus
+from interloper_db.models import OPEN_RUN_STATUSES, TERMINAL_RUN_STATUSES, Component, Event, Overdue, Run, RunStatus
 from interloper_db.session import commit, database_now, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QuotaStore, UsageLedger
@@ -350,7 +350,7 @@ class RunStore:
         startup_timeout: int,
         heartbeat_timeout: int,
         run_timeout: int | None,
-    ) -> builtins.list[tuple[Run, str]]:
+    ) -> builtins.list[tuple[Run, Overdue]]:
         """Every organisation's dispatched and running runs that should be failed now, with why.
 
         For the reaper. The rules are :meth:`Run.overdue`'s, judged against
@@ -363,7 +363,8 @@ class RunStore:
                 ``timeout``; ``None`` sets no deadline for those runs.
 
         Returns:
-            Each overdue run, its target loaded, with its failure reason.
+            Each overdue run, its target loaded, with the rule that caught it
+            and its failure reason.
         """
         statement = (
             select(Run).where(col(Run.status).in_([RunStatus.DISPATCHED, RunStatus.RUNNING])).options(*RUN_LOAD_OPTIONS)
@@ -372,14 +373,14 @@ class RunStore:
             now = database_now(session)
             overdue = []
             for db_run in session.exec(statement).all():
-                reason = db_run.overdue(
+                verdict = db_run.overdue(
                     now,
                     startup_timeout=startup_timeout,
                     heartbeat_timeout=heartbeat_timeout,
                     run_timeout=run_timeout,
                 )
-                if reason is not None:
-                    overdue.append((db_run, reason))
+                if verdict is not None:
+                    overdue.append((db_run, verdict))
             return overdue
 
     def hooks_pending(self) -> builtins.list[Run]:

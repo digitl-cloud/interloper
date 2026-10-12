@@ -1050,7 +1050,7 @@ class TestOverdue:
     @staticmethod
     def _overdue(store: Store, *, run_timeout: int | None = 3600) -> dict[UUID, str]:
         found = store.runs.overdue(startup_timeout=600, heartbeat_timeout=90, run_timeout=run_timeout)
-        return {run.id: reason for run, reason in found}
+        return {run.id: overdue.reason for run, overdue in found}
 
     def test_a_dispatched_run_that_never_started_is_overdue(self, store: Store) -> None:
         stuck, fresh = store.runs.create(_ORG_ID), store.runs.create(uuid4())

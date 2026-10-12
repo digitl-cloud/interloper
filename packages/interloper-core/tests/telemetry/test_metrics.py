@@ -75,6 +75,15 @@ class TestOtelMetricsHandler:
         (read,) = points("interloper.destination.io", operation="read", status="failed", destination_key="bq_m3")
         assert read.value == 1
 
+    def test_a_completed_write_adds_its_rows(self, points):
+        handler = OtelMetricsHandler()
+        handler(_event(EventType.DEST_WRITE_COMPLETED, run_id="run-m8", destination_key="bq_m8", rows=120))
+        handler(_event(EventType.DEST_WRITE_COMPLETED, run_id="run-m8", destination_key="bq_m8", rows=None))
+        handler(_event(EventType.DEST_WRITE_FAILED, run_id="run-m8", destination_key="bq_m8", rows=5))
+
+        (rows,) = points("interloper.destination.rows", destination_key="bq_m8")
+        assert rows.value == 120
+
     def test_duplicate_event_ids_count_once(self, points):
         # Docker/k8s hosts re-emit child events under the same deterministic id.
         handler = OtelMetricsHandler()
@@ -150,6 +159,14 @@ class TestPlatformIdentity:
         assert "target_name" not in (counter.attributes or {})
         (duration,) = points("interloper.run.duration", org_id="org-p1", target_key="nightly")
         assert duration.sum == 4.0
+
+    def test_run_metrics_carry_the_attempt(self, points):
+        handler = OtelMetricsHandler()
+        identity: dict[str, Any] = {"org_id": "org-p4", "target_kind": "job", "target_key": "nightly", "attempt": 2}
+        handler(_event(EventType.RUN_FAILED, run_id="run-p4", **identity))
+
+        (counter,) = points("interloper.runs", org_id="org-p4", attempt="2")
+        assert counter.value == 1
 
     def test_standalone_runs_omit_identity_attributes(self, points):
         handler = OtelMetricsHandler()

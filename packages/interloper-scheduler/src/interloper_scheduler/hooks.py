@@ -37,6 +37,7 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import ConfigError, NotFoundError
 from interloper.settings import AppSettings
+from interloper.telemetry.tracer import meter
 from interloper_db import BackfillStatus, EventQuery, RelationQuery, RunStatus, Store
 from interloper_db.models import Backfill, Component, Run
 
@@ -88,6 +89,7 @@ class HookController(Controller):
         """
         super().__init__(poll_interval=poll_interval)
         self._store = store or Store.from_settings()
+        self._firings = meter().create_counter("interloper.hooks", unit="{firing}", description="Hook firings")
 
     # -- Internals -------------------------------------------------------------
 
@@ -346,6 +348,7 @@ class HookController(Controller):
             logger.exception("Hook '%s' failed for %s", hook_row.name, subject)
 
         outcome = il.EventType.HOOK_FAILED if error else il.EventType.HOOK_FIRED
+        self._firings.add(1, {"status": "failed" if error else "fired", "component_key": hook_row.key})
         self._store.events.save(
             il.Event(
                 id=claim,

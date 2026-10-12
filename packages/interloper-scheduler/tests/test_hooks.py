@@ -254,6 +254,31 @@ class TestHookEvaluation:
             assert (hook_row.state or {}).get("last_run_id") == str(run.id)
             assert "no route" in (hook_row.state or {}).get("last_error", "")
 
+    def test_firings_are_counted_by_outcome(self, store: Store, monkeypatch: pytest.MonkeyPatch, metric_total: Any):
+        import httpx2
+
+        def boom(*args: Any, **kwargs: Any) -> None:
+            raise httpx2.ConnectError("no route")
+
+        monkeypatch.setattr(httpx2, "post", boom)
+        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        store.components.create(
+            _ORG,
+            kind="hook",
+            key="webhook_hook",
+            name="Notify",
+            config={"events": ["run_failed"], "url": "https://example.test/x"},
+            relations={"watches": [source.id]},
+        )
+        _terminal_run(store, source.id, status=RunStatus.FAILED)
+        before = {status: metric_total("interloper.hooks", status=status) for status in ("fired", "failed")}
+
+        _sweep(store)
+
+        after = {status: metric_total("interloper.hooks", status=status) for status in ("fired", "failed")}
+        assert after["failed"] == before["failed"] + 1
+        assert after["fired"] == before["fired"]
+
     def test_a_failure_without_a_message_is_still_a_failure(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         import httpx2
 

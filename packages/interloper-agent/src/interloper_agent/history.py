@@ -25,6 +25,7 @@ from __future__ import annotations
 import dataclasses
 from typing import cast
 
+from interloper.telemetry import meter
 from interloper_toolkit import ToolkitContext
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
@@ -51,6 +52,10 @@ COMPACTION_THRESHOLD = 100_000
 Half of the smallest window in use (Claude's 200k): room for a long,
 tool-heavy turn after the summary.
 """
+
+_compactions = meter().create_counter(
+    "interloper.agent.compactions", unit="{turn}", description="Agent turns whose older history was summarised"
+)
 
 SUMMARY_LEAD = "Summary of the conversation so far:\n\n"
 """What precedes the summary text in the system prompt that carries it."""
@@ -108,6 +113,7 @@ async def summarise(ctx: RunContext[ToolkitContext], messages: list[ModelMessage
         return messages
     summariser = Agent[None, str](cast(Model, ctx.model), instructions=SUMMARY_INSTRUCTIONS, output_type=str)
     result = await summariser.run(_transcript(messages[:boundary]))
+    _compactions.add(1)
     return [ModelRequest(parts=[SystemPromptPart(content=SUMMARY_LEAD + result.output)]), *messages[boundary:]]
 
 

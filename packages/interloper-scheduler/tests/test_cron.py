@@ -118,10 +118,20 @@ class TestScheduling:
         assert skipped.component_id == job_id
         assert skipped.level == "warning"
         assert skipped.data is not None
+        assert skipped.data["reason"] == "late"
         assert skipped.data["scheduled_for"] == stale.isoformat()
         assert skipped.data["max_execution_delay"] == 60
         assert skipped.data["delay"] >= 3600
         assert "too late" in (skipped.message or "")
+
+    def test_a_skipped_firing_is_counted_by_reason(self, store: Store, metric_total: Any) -> None:
+        stale = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+        _job(store, config={"cron": "0 * * * *", "enabled": True}, state={"next_run_at": stale.isoformat()})
+        before = metric_total("interloper.scheduler.skips", reason="late")
+
+        CronController(store=store, max_execution_delay=60)._tick()
+
+        assert metric_total("interloper.scheduler.skips", reason="late") == before + 1
 
     def test_a_firing_late_by_a_scheduler_restart_still_runs(self, store: Store) -> None:
         late = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=90)
@@ -283,7 +293,7 @@ class TestQuotas:
         (skipped,) = _events(store)
         assert skipped.component_id == job_id
         assert skipped.level == "warning"
-        assert skipped.data == {"quota": "max_successful_runs_per_month", "limit": 1, "used": 1}
+        assert skipped.data == {"reason": "quota", "quota": "max_successful_runs_per_month", "limit": 1, "used": 1}
 
     def test_a_lookback_over_the_partition_limit_skips_the_firing(self, store: Store) -> None:
         from types import SimpleNamespace
@@ -305,7 +315,7 @@ class TestQuotas:
         assert _state(store, job_id)["next_run_at"] > before
         (skipped,) = _events(store)
         assert skipped.component_id == job_id
-        assert skipped.data == {"quota": "max_backfill_partitions", "limit": 2, "used": 3}
+        assert skipped.data == {"reason": "quota", "quota": "max_backfill_partitions", "limit": 2, "used": 3}
         assert "spans 3 partitions" in (skipped.message or "")
 
     def test_a_skipped_job_does_not_block_the_rest_of_the_batch(self, store: Store) -> None:
