@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
@@ -16,6 +16,10 @@ from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition
 from interloper.representation import Representation
 from interloper.utils.data import is_empty
+
+if TYPE_CHECKING:
+    from interloper.asset.base import Asset
+    from interloper.schema import Schema
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,40 @@ class PartitionFilter:
     bounds: tuple[Any, Any] | None = None
 
 
+@dataclass(frozen=True)
+class TableReference:
+    """A table a SQL destination can query, as a view builds on it.
+
+    Attributes:
+        name: The qualified table name, quoted the way this destination's
+            dialect wants it, ready to drop into SQL text.
+        parts: The unquoted path to the table, outermost first (a BigQuery
+            project, dataset and table; a DuckDB schema and table), for a
+            builder that composes references itself.
+        schema: The asset's declared schema, ``None`` when it declares none.
+    """
+
+    name: str
+    parts: tuple[str, ...]
+    schema: type[Schema] | None
+
+
+@runtime_checkable
+class Compilable(Protocol):
+    """A view definition that renders itself for a dialect."""
+
+    def compile(self, dialect: str) -> str:
+        """Render the definition as SQL text for one dialect.
+
+        Args:
+            dialect: The destination's dialect name.
+
+        Returns:
+            The SQL text of the view's query.
+        """
+        ...
+
+
 class DatabaseDestination(Destination):
     """A destination whose partitions are rows selected by a filter in a table.
 
@@ -49,9 +87,19 @@ class DatabaseDestination(Destination):
     representation the backend holds natively; a consumer that wants records
     asks `records`.
 
+    Views are the SQL family's own: a `reference` is a
+    `TableReference`, a definition is SQL text in this destination's
+    ``dialect`` or a `Compilable` rendered for it, and `create_view`
+    replaces the view under the asset's table. A backend supports views by
+    naming its ``dialect`` and implementing `table_parts` and
+    `replace_view`; `reaches` says which other destinations' tables a view
+    here may query, the same instance by default.
+
     The destination instance holds no table identity and is shared across
     assets: ``asset.table`` and ``asset.dataset`` name the target at call time.
     """
+
+    dialect: ClassVar[str | None] = None
 
     # -- Backend hooks ---------------------------------------------------------
 
@@ -120,6 +168,115 @@ class DatabaseDestination(Destination):
             ``None``; the write runs inside the block.
         """
         yield
+
+    # -- Views -----------------------------------------------------------------
+
+    def table_parts(self, table: str, dataset: str | None) -> tuple[str, ...]:
+        """The unquoted path to a table, outermost first, such as ``(project, dataset, table)``.
+
+        Args:
+            table: Table name.
+            dataset: The asset's dataset, or ``None`` for the destination's default.
+
+        Raises:
+            ConfigError: Always; this backend does not support views.
+        """
+        raise ConfigError(f"Destination '{self.key}' does not support views")
+
+    def qualified_name(self, table: str, dataset: str | None) -> str:
+        """The qualified table name, quoted for this dialect.
+
+        Double-quotes every part, the SQL standard; a backend whose dialect
+        quotes differently overrides this.
+
+        Args:
+            table: Table name.
+            dataset: The asset's dataset, or ``None`` for the destination's default.
+
+        Returns:
+            The quoted, dot-joined path.
+        """
+        return ".".join('"' + part.replace('"', '""') + '"' for part in self.table_parts(table, dataset))
+
+    def replace_view(self, table: str, dataset: str | None, sql: str) -> None:
+        """Create or replace a view from a query.
+
+        Args:
+            table: The view's name.
+            dataset: The asset's dataset, or ``None`` for the destination's default.
+            sql: The query, in this destination's dialect.
+
+        Raises:
+            ConfigError: Always; this backend does not support views.
+        """
+        raise ConfigError(f"Destination '{self.key}' does not support views")
+
+    def reaches(self, other: Destination) -> bool:
+        """Whether a view in this destination may query tables in *other*.
+
+        Decided from configuration alone, never a network call: the same
+        instance by default, the same warehouse and location where a backend
+        knows better.
+
+        Args:
+            other: The destination holding an upstream's table.
+
+        Returns:
+            True when a query here can name tables there.
+        """
+        return other.id == self.id
+
+    def reference(self, asset: Asset) -> TableReference:
+        """The table an asset materializes to, as a view here may query it.
+
+        The asset's ``default_destination_key`` destination is preferred,
+        then the first one this destination `reaches`.
+
+        Args:
+            asset: The upstream asset.
+
+        Returns:
+            The table reference.
+
+        Raises:
+            ConfigError: If the asset has no destination, or none this
+                destination reaches.
+        """
+        destinations: list[Destination] = asset.destinations
+        if not destinations:
+            raise ConfigError(f"Asset '{asset.qualified_key}' has no destination to reference")
+        ordered = sorted(destinations, key=lambda candidate: candidate.key != asset.default_destination_key)
+        for candidate in ordered:
+            if isinstance(candidate, DatabaseDestination) and self.reaches(candidate):
+                return TableReference(
+                    name=candidate.qualified_name(asset.table, asset.dataset or None),
+                    parts=candidate.table_parts(asset.table, asset.dataset or None),
+                    schema=asset.schema,
+                )
+        raise ConfigError(
+            f"Destination '{self.key}' cannot query asset '{asset.qualified_key}': "
+            f"none of its destinations ({', '.join(d.key for d in destinations)}) is reachable"
+        )
+
+    def create_view(self, asset: Asset, definition: str | Compilable) -> None:
+        """Replace the view under the asset's table with a definition.
+
+        Args:
+            asset: The view being materialized.
+            definition: SQL text in this destination's dialect, or a
+                `Compilable` rendered for it.
+
+        Raises:
+            ConfigError: If a `Compilable` is given and this destination
+                declares no dialect.
+        """
+        if isinstance(definition, str):
+            sql = definition
+        elif self.dialect is None:
+            raise ConfigError(f"Destination '{self.key}' declares no dialect to compile a view for")
+        else:
+            sql = definition.compile(self.dialect)
+        self.replace_view(asset.table, asset.dataset or None, sql)
 
     # -- Destination interface -------------------------------------------------
 
