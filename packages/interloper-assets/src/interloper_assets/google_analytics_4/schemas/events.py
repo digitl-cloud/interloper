@@ -3,7 +3,11 @@ from pydantic import Field
 
 
 class Events(Schema):
-    """The GA4 BigQuery export, one row per event, sharded daily into events_YYYYMMDD tables."""
+    """The GA4 BigQuery export, one row per event, sharded daily into events_YYYYMMDD tables.
+
+    Only the top-level scalar columns are declared; the nested export records
+    are not.
+    """
 
     event_date: str | None = Field(default=None, description="The event's day as YYYYMMDD in the property's timezone.")
     event_timestamp: int | None = Field(
