@@ -122,8 +122,8 @@ class Destination(Component):
         """This destination's handle on an asset's data, for a view to build on.
 
         What a reference is depends on the destination: a SQL warehouse hands
-        out a table reference, and a destination that holds no views hands
-        out nothing. The default refuses.
+        out a table reference, and a destination that holds no views refuses,
+        as this default does.
 
         Args:
             asset: The asset a view wants to build on.
