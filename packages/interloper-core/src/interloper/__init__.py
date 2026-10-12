@@ -1,6 +1,6 @@
 """Interloper's public API: assets, sources, destinations, DAGs, and runners."""
 
-from interloper.asset import Asset, AssetDefinition, ExecutionContext, Reference, Upstream, asset, reference
+from interloper.asset import Asset, AssetDefinition, ExecutionContext, Reference, Upstream, View, asset, reference, view
 from interloper.catalog import Catalog
 from interloper.component import (
     KINDS,
@@ -167,6 +167,7 @@ __all__ = [
     "TimezoneField",
     "TriggerHook",
     "Upstream",
+    "View",
     "WebhookHook",
     "Workload",
     "asset",
@@ -180,4 +181,5 @@ __all__ = [
     "run",
     "schema",
     "source",
+    "view",
 ]

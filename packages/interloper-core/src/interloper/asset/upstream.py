@@ -26,7 +26,9 @@ class Upstream:
             partition at all); a ``LOG`` warning names the leg. An existing
             but empty partition is not this case: it arrives as whatever the
             destination returns for an empty read (an empty list or frame),
-            not ``None``.
+            not ``None``. For a view, the destination's reference to the
+            upstream (a `TableReference` on a SQL warehouse) rather than
+            data: a view reads nothing.
     """
 
     asset: Asset

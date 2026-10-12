@@ -5,10 +5,11 @@ from __future__ import annotations
 import functools
 import inspect
 from collections.abc import Callable
-from typing import Any, overload
+from typing import Any, cast, overload
 
 from interloper.asset.base import Asset
 from interloper.asset.reference import Reference
+from interloper.asset.view import View
 from interloper.component.decorator import decorate
 from interloper.component.relation import Relation
 
@@ -74,10 +75,57 @@ def asset(
         An Asset subclass with the function as its ``data()`` method.
     """
     if fn is not None:
-        return decorate(Asset, fn, build=_build_asset_class, relations=relations, **overrides)
+        return decorate(Asset, fn, build=build_asset_class, relations=relations, **overrides)
 
     def wrapper(fn: Callable[..., Any]) -> type[Asset]:
-        return decorate(Asset, fn, build=_build_asset_class, relations=relations, **overrides)
+        return decorate(Asset, fn, build=build_asset_class, relations=relations, **overrides)
+
+    return wrapper
+
+
+@overload
+def view(fn: Callable[..., Any], /) -> type[View]: ...
+@overload
+def view(
+    *,
+    relations: dict[str, Any] = ...,
+    **overrides: Any,
+) -> Callable[[Callable[..., Any]], type[View]]: ...
+def view(
+    fn: Callable[..., Any] | None = None,
+    /,
+    *,
+    relations: dict[str, Any] | None = None,
+    **overrides: Any,
+) -> type[View] | Callable[..., type[View]]:
+    """Create a View subclass from a decorated function.
+
+    Like `asset`, but the function returns the view's definition instead of
+    its rows: SQL text in the destination's dialect, or anything the
+    destination compiles. Each upstream parameter receives the destination's
+    reference to that upstream in ``data``:
+
+    ```py
+    @il.view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+    def order_totals(orders: list[il.Upstream]) -> str:
+        return " UNION ALL ".join(f"SELECT date, total FROM {upstream.data.name}" for upstream in orders)
+    ```
+
+    Args:
+        fn: The function to turn into a view, passed positionally when the
+            decorator is used bare. ``None`` in the parenthesised form.
+        relations: As for `asset`.
+        **overrides: As for `asset`, plus ``dialect`` to pin raw SQL to one
+            warehouse dialect.
+
+    Returns:
+        A View subclass with the function as its ``data()`` method.
+    """
+    if fn is not None:
+        return decorate(View, fn, build=_build_view_class, relations=relations, **overrides)
+
+    def wrapper(fn: Callable[..., Any]) -> type[View]:
+        return decorate(View, fn, build=_build_view_class, relations=relations, **overrides)
 
     return wrapper
 
@@ -108,12 +156,10 @@ def reference(table: str, *, key: str, **overrides: Any) -> type[Reference]:
     return decorate(Reference, Reference, build=_build_reference_class, table_name=table, key=key, **overrides)
 
 
-# -- Internals -----------------------------------------------------------------
-
-
-def _build_asset_class(
+def build_asset_class(
     fn: Any,
     *,
+    base: type[Asset] = Asset,
     classvars: dict[str, Any],
     fields: dict[str, Any],
     relations: dict[str, Relation],
@@ -133,16 +179,18 @@ def _build_asset_class(
 
     Args:
         fn: The sync or async function (or method) backing the asset's ``data()``.
+        base: The class the generated subclass extends: `Asset`, or a subclass
+            of it such as `View`.
         classvars: Class-level attributes to set on the generated subclass
             (``key``, ``tags``, ``schema``, …).
         fields: Pydantic field values to set on the generated subclass, annotated
-            from ``Asset.model_fields``.
+            from ``base.model_fields``.
         relations: Relations the decorator declares, name to relation. They go
             into the class body, which is what makes them win over the
             relations inferred from the ``data()`` annotations.
 
     Returns:
-        A dynamically created Asset subclass.
+        A dynamically created subclass of *base*.
     """
     fn_signature = inspect.signature(fn)
     fn_params = list(fn_signature.parameters.keys())
@@ -190,17 +238,41 @@ def _build_asset_class(
 
     annotations: dict[str, Any] = {}
     for field_name in fields:
-        if field_name in Asset.model_fields:
-            annotations[field_name] = Asset.model_fields[field_name].annotation
+        if field_name in base.model_fields:
+            annotations[field_name] = base.model_fields[field_name].annotation
     if annotations:
         namespace["__annotations__"] = annotations
 
-    cls = type(fn.__name__, (Asset,), namespace)
+    cls = type(fn.__name__, (base,), namespace)
 
     if fn.__doc__:
         cls.__doc__ = fn.__doc__
 
     return cls
+
+
+# -- Internals -----------------------------------------------------------------
+
+
+def _build_view_class(
+    fn: Any,
+    *,
+    classvars: dict[str, Any],
+    fields: dict[str, Any],
+    relations: dict[str, Relation],
+) -> type[View]:
+    """Build a View subclass from a function or method.
+
+    Args:
+        fn: The function (or method) backing the view's ``data()``.
+        classvars: Class-level attributes to set on the generated subclass.
+        fields: Pydantic field values to set on the generated subclass.
+        relations: Relations the decorator declares, name to relation.
+
+    Returns:
+        A dynamically created View subclass.
+    """
+    return cast("type[View]", build_asset_class(fn, base=View, classvars=classvars, fields=fields, relations=relations))
 
 
 def _build_reference_class(
