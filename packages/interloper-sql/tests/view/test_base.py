@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any, ClassVar
 
 import ibis
@@ -13,6 +14,7 @@ from interloper.errors import ConfigError
 from interloper.runner.results import ExecutionStatus
 
 from interloper_sql import sql_view, union
+from interloper_sql.view.types import IBIS_DIALECTS
 
 
 class RecordingWarehouse(DatabaseDestination):
@@ -105,6 +107,23 @@ def test_union_stamps_a_column_per_upstream():
     assert "'1'" in sql and "'2'" in sql and "UNION ALL" in sql
 
 
+def test_union_stamps_an_integer_as_int64():
+    class Numbered(il.Schema):
+        date: dt.date | None
+        total: float | None
+        account_number: int | None
+
+    @il.source
+    class NumberedReporting(il.Source):
+        @sql_view(schema=Numbered, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        def totals(self, orders: list[il.Upstream]) -> ibis.Table:
+            return union(orders, account_number=lambda upstream: 1)
+
+    warehouse = RecordingWarehouse(id="warehouse")
+    sql = _run(NumberedReporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], select=[]))
+    assert "1 AS" in sql
+
+
 def test_union_of_nothing_is_a_config_error():
     with pytest.raises(ConfigError, match="no upstream bound"):
         union([])
@@ -147,3 +166,33 @@ def test_an_upstream_without_a_schema_is_refused():
     assert result.status is ExecutionStatus.FAILED
     assert "declares no schema" in (result.executions[over.totals.id].error or "")
     assert RecordingWarehouse.views == []
+
+
+@pytest.mark.parametrize("dialect", sorted(IBIS_DIALECTS))
+def test_a_definition_compiles_for_every_dialect(dialect: str):
+    warehouse = RecordingWarehouse(id="warehouse")
+    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    reporting = Reporting(destinations=[warehouse])
+    dag = il.DAG(shop, reporting)
+    view = reporting.totals
+    definition = view._definition(il.run(view.run_async(None, dag, {})))  # ty: ignore[unresolved-attribute]
+    assert "SELECT" in definition.compile(dialect)
+
+
+def test_a_sql_view_runs_on_duckdb(tmp_path: Path):
+    duckdb = pytest.importorskip("interloper_duckdb")
+    warehouse = duckdb.DuckDBDestination(
+        id="warehouse", connection=duckdb.DuckDBConnection(id="duckdb", database=str(tmp_path / "t.duckdb"))
+    )
+    client = warehouse.connection.client
+    client.execute("CREATE SCHEMA shop")
+    client.execute(
+        "CREATE TABLE shop.orders__1 AS SELECT * FROM (VALUES "
+        "(DATE '2026-10-01', 10.0), (DATE '2026-10-01', 5.0), (DATE '2026-10-02', 2.0)) AS t(date, total)"
+    )
+    result = il.DAG(
+        Shop(account_id="1", destinations=[warehouse], select=[]), Reporting(destinations=[warehouse])
+    ).materialize()
+    assert result.status is ExecutionStatus.COMPLETED
+    frame = warehouse.select("totals", "reporting", None).sort_values("date")
+    assert frame["total"].tolist() == [15.0, 2.0]
