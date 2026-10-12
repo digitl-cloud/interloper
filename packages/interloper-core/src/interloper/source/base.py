@@ -588,7 +588,8 @@ class Source(Component, Workload):
             asset.parent = self
             if not asset.dataset:
                 asset.dataset = self.dataset
-            validate_key(asset.table)
+            if asset.table_name is None:
+                validate_key(asset.table)
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
             if asset.normalizer is None and self.normalizer is not None:

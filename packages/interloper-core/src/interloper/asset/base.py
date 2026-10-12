@@ -127,6 +127,7 @@ class Asset(Operation):
     schema: ClassVar[type[Schema] | None] = None
     internal_fields: ClassVar[frozenset[str]] = frozenset({"normalizer"})
     tags: ClassVar[list[str]] = []
+    table_name: ClassVar[str | None] = None
 
     _source_type: ClassVar[type[Source] | None] = None
 
@@ -264,13 +265,18 @@ class Asset(Operation):
 
     @property
     def table(self) -> str:
-        """The physical table (or leaf) name this asset materializes to.
+        """The physical table (or leaf) name this asset materializes to, or refers to.
 
-        Derived, never stored: the owning source composes it (see
-        `asset_table`) and the result is
-        coerced to a valid identifier. Standalone assets use their class key.
+        Composed by the owning source (see `asset_table`) and coerced to a
+        valid identifier, unless ``table_name`` gives the name outright: then
+        it is used as written, formatted with the owning source's fields, so
+        a reference can name a table interloper never created, wildcard and
+        all. Standalone assets use their class key.
         """
         source = self.source
+        if self.table_name is not None:
+            fields = {name: getattr(source, name) for name in type(source).model_fields} if source is not None else {}
+            return self.table_name.format(**fields)
         raw = source.asset_table(self) if source is not None else self.key
         return to_identifier(raw)
 
