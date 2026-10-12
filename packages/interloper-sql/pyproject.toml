@@ -9,6 +9,7 @@ readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = [
+    "ibis-framework>=12,<13",
     "interloper-core",
     "psycopg[binary]>=3.1",
     "sqlalchemy>=2.0",
