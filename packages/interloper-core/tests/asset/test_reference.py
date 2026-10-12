@@ -36,6 +36,16 @@ class TestReference:
 
         assert Dated().events.table == "events-2026"
 
+    def test_without_a_table_name_a_reference_is_named_like_any_asset(self):
+        @il.source
+        class Plain(il.Source):
+            property_id: str = il.InputField(default="", discriminator=True)
+
+            class Events(il.Reference):
+                pass
+
+        assert Plain(property_id="123").events.table == "events__123"
+
     def test_the_dataset_is_the_sources(self):
         source = Export(property_id="123", dataset="analytics_123")
         assert source.events.dataset == "analytics_123"
