@@ -377,3 +377,11 @@ class TestViews:
         assert destination.reaches(same)
         assert not destination.reaches(elsewhere)
         assert DuckDBDestination.dialect == "duckdb"
+
+    def test_in_memory_databases_reach_only_through_a_shared_connection(self):
+        first = DuckDBDestination(id="first", connection=DuckDBConnection(id="a", database=":memory:"))
+        second = DuckDBDestination(id="second", connection=DuckDBConnection(id="b", database=":memory:"))
+        sharing = DuckDBDestination(id="sharing", connection=first.connection)
+        assert not first.reaches(second)
+        assert not second.reaches(first)
+        assert first.reaches(sharing)
