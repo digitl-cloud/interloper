@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from interloper.asset import Asset, Reference
+from interloper.asset import Asset, Reference, ReferenceDeclaration
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -119,15 +119,7 @@ class Source(Component, Workload):
     source = MySource()
     source.users  # returns the Asset with key "users"
     ```
-
-    A reference is declared as a class attribute holding a class, which
-    Pydantic would reject as a non-annotated attribute, so ``type`` joins
-    ``ignored_types``.
     """
-
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True, ignored_types=(*Component.model_config["ignored_types"], type)
-    )
 
     # Definition
     asset_types: ClassVar[list[type[Asset]]] = []
@@ -484,16 +476,21 @@ class Source(Component, Workload):
 
         When ``@asset`` decorates a method in the source body, it
         transforms the method into an Asset class and sets it as a class
-        attribute.  This method collects those into ``asset_types`` and
-        replaces each entry with an `AssetRef` descriptor, which
-        exposes the class at class-level access and the live asset
-        instance at instance-level access.
+        attribute, and ``il.reference`` leaves a declaration that is built
+        into a Reference class here, keyed by its attribute name. This
+        method collects those into ``asset_types`` and replaces each entry
+        with an `AssetRef` descriptor, which exposes the class at
+        class-level access and the live asset instance at instance-level
+        access.
         """
         from interloper.asset.base import Asset
 
         # Only process assets defined directly on this class, not inherited.
         own: list[tuple[str, type[Asset]]] = []
         for attr_name, value in list(cls.__dict__.items()):
+            if isinstance(value, ReferenceDeclaration):
+                value = value.build(cls, attr_name)
+                setattr(cls, attr_name, value)
             if isinstance(value, type) and issubclass(value, Asset) and value is not Asset:
                 own.append((attr_name, value))
 

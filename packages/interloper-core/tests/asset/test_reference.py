@@ -18,7 +18,7 @@ class Events(il.Schema):
 class Export(il.Source):
     property_id: str = il.InputField(default="", discriminator=True)
 
-    events = il.reference("events_*", key="events", schema=Events, tags=["Event"])
+    events = il.reference("events_*", schema=Events, tags=["Event"])
 
 
 class TestReference:
@@ -32,7 +32,7 @@ class TestReference:
 
         @il.source
         class Dated(il.Source):
-            events = il.reference("events-2026", key="events")
+            events = il.reference("events-2026")
 
         assert Dated().events.table == "events-2026"
 
@@ -53,7 +53,7 @@ class TestReference:
     def test_the_dataset_can_be_the_references_own(self):
         @il.source
         class Exported(il.Source):
-            events = il.reference("events_*", key="events", dataset="exports")
+            events = il.reference("events_*", dataset="exports")
 
         assert Exported().events.dataset == "exports"
 
