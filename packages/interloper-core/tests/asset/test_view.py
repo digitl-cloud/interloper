@@ -180,7 +180,7 @@ class TestValidation:
         with pytest.raises(ConfigError, match="exactly one destination"):
             il.DAG(shop, Reporting())
 
-    def test_a_raw_sql_view_must_match_its_destinations_dialect(self):
+    def test_a_raw_ibis_view_must_match_its_destinations_dialect(self):
         @il.view(dialect="bigquery")
         def sharded() -> str:
             return "SELECT * FROM `p.d.events_*`"

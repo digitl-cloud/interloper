@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ibis
 import interloper as il
-from interloper_sql import sql_view, union
+from interloper_sql import ibis_view, union
 
 from interloper_assets.facebook_ads_star_schema import schemas
 
@@ -57,7 +57,7 @@ class FacebookAdsStarSchema(il.Source):
     recreated on every run, so they follow the accounts bound to them.
     """
 
-    @sql_view(
+    @ibis_view(
         schema=schemas.FactAdPerformance,
         tags=["Fact"],
         relations={"ads_stats": il.Relation("asset", "facebook_ads.ads_stats", many=True, optional=True)},
@@ -66,7 +66,7 @@ class FacebookAdsStarSchema(il.Source):
         """Ad performance of every account, one row per ad, day and placement breakdown."""
         return union(ads_stats, *FACT_COLUMNS).rename(date="date_start")
 
-    @sql_view(
+    @ibis_view(
         schema=schemas.DimCampaigns,
         tags=["Dimension"],
         relations={
@@ -119,7 +119,7 @@ class FacebookAdsStarSchema(il.Source):
         )
         return _latest(rows, "campaign_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
 
-    @sql_view(
+    @ibis_view(
         schema=schemas.DimAds,
         tags=["Dimension"],
         relations={"ads": il.Relation("asset", "facebook_ads.ads", many=True, optional=True)},
@@ -158,7 +158,7 @@ class FacebookAdsStarSchema(il.Source):
         )
         return _latest(rows, "ad_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
 
-    @sql_view(schema=schemas.DimAccounts, tags=["Dimension"])
+    @ibis_view(schema=schemas.DimAccounts, tags=["Dimension"])
     def dim_accounts(self, fact_ad_performance: il.Upstream) -> ibis.Table:
         """One row per ad account with its name and currency, from the facts."""
         rows = fact_ad_performance.data.select("account_id", "account_name", "account_currency", "date")

@@ -1,11 +1,11 @@
 # interloper-sql
 
-SQL for interloper: `sql_view`, portable views authored as Ibis expressions,
+SQL for interloper: `ibis_view`, portable views authored as Ibis expressions,
 and behind the `postgres` extra a SQL database destination, `SQLDestination`,
 a `DatabaseDestination` over SQLAlchemy Core with the `SQLConnection` that
 holds the database URL.
 
-The base package depends on Ibis only, so a package that defines `sql_view`s
+The base package depends on Ibis only, so a package that defines `ibis_view`s
 pulls in no database driver. `interloper-sql[postgres]` adds SQLAlchemy and
 `psycopg[binary]`; the destination and its connection exist only with it.
 

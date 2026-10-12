@@ -1,4 +1,4 @@
-"""SqlView: a view authored as an Ibis expression over its upstreams' declared schemas."""
+"""IbisView: a view authored as an Ibis expression over its upstreams' declared schemas."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class IbisDefinition:
         return str(ibis.to_sql(self.expression, dialect=IBIS_DIALECTS[dialect]))
 
 
-class SqlView(View):
+class IbisView(View):
     """A view whose ``data()`` receives Ibis tables and returns an Ibis expression.
 
     Each upstream's ``data`` is an ``ibis.Table`` named after the table the

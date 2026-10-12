@@ -1,4 +1,4 @@
-"""Tests for SqlView: Ibis tables in, a compiled definition out."""
+"""Tests for IbisView: Ibis tables in, a compiled definition out."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from interloper.destination.database import DatabaseDestination
 from interloper.errors import ConfigError
 from interloper.runner.results import ExecutionStatus
 
-from interloper_sql import sql_view, union
+from interloper_sql import ibis_view, union
 from interloper_sql.view.base import IbisDefinition
 from interloper_sql.view.types import IBIS_DIALECTS
 
@@ -62,7 +62,7 @@ class Shop(il.Source):
 
 @il.source
 class Reporting(il.Source):
-    @sql_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+    @ibis_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
     def totals(self, orders: list[il.Upstream]) -> ibis.Table:
         rows = union(orders)
         return rows.group_by(rows.date).aggregate(total=rows.total.sum())
@@ -95,7 +95,7 @@ def test_union_stamps_a_column_per_upstream():
 
     @il.source
     class StampedReporting(il.Source):
-        @sql_view(schema=Stamped, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        @ibis_view(schema=Stamped, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> ibis.Table:
             return union(orders, account_id=lambda upstream: upstream.asset.source.discriminator)  # ty: ignore[unresolved-attribute]
 
@@ -116,7 +116,7 @@ def test_union_stamps_an_integer_as_int64():
 
     @il.source
     class NumberedReporting(il.Source):
-        @sql_view(schema=Numbered, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        @ibis_view(schema=Numbered, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> ibis.Table:
             return union(orders, account_number=lambda upstream: 1)
 
@@ -133,7 +133,7 @@ def test_union_of_nothing_is_a_config_error():
 def test_an_expression_that_misses_a_declared_column_is_refused():
     @il.source
     class Wrong(il.Source):
-        @sql_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        @ibis_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> ibis.Table:
             return union(orders).select("date")
 
@@ -156,7 +156,7 @@ def test_an_upstream_without_a_schema_is_refused():
 
     @il.source
     class Over(il.Source):
-        @sql_view(schema=Totals, relations={"rows": il.Relation("asset", "untyped.rows")})
+        @ibis_view(schema=Totals, relations={"rows": il.Relation("asset", "untyped.rows")})
         def totals(self, rows: il.Upstream) -> ibis.Table:
             return rows.data
 
@@ -180,7 +180,7 @@ def test_a_definition_compiles_for_every_dialect(dialect: str):
     assert "SELECT" in definition.compile(dialect)
 
 
-def test_a_sql_view_runs_on_duckdb(tmp_path: Path):
+def test_a_ibis_view_runs_on_duckdb(tmp_path: Path):
     duckdb = pytest.importorskip("interloper_duckdb")
     warehouse = duckdb.DuckDBDestination(
         id="warehouse", connection=duckdb.DuckDBConnection(id="duckdb", database=str(tmp_path / "t.duckdb"))
@@ -240,7 +240,7 @@ def test_an_upstream_that_is_not_a_table_is_refused():
 def test_a_result_that_is_not_an_ibis_table_is_refused():
     @il.source
     class Textual(il.Source):
-        @sql_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        @ibis_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> str:
             return "SELECT 1"
 
@@ -256,7 +256,7 @@ def test_a_result_that_is_not_an_ibis_table_is_refused():
 def test_a_view_without_a_schema_is_refused():
     @il.source
     class Unschematic(il.Source):
-        @sql_view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        @ibis_view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
         def totals(self, orders: list[il.Upstream]) -> ibis.Table:
             return union(orders)
 

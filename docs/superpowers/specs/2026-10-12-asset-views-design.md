@@ -111,9 +111,9 @@ read. Nothing is ever created or written, and nothing checks the table against a
 a run touches no reference, so a mismatch surfaces where the table is used, from a consumer's read
 or a view's creation.
 
-### 7. Portable authoring: `sql_view` in `interloper-sql`
+### 7. Portable authoring: `ibis_view` in `interloper-sql`
 
-`il.view` takes raw SQL and is tied to its dialect. `interloper_sql.sql_view` is the portable layer:
+`il.view` takes raw SQL and is tied to its dialect. `interloper_sql.ibis_view` is the portable layer:
 it turns each `TableReference` into an `ibis.Table` from its name and schema (a reference whose
 schema is `None` is refused: there is nothing to type the table from), hands `data()` the tables, takes
 an Ibis expression back, checks its columns and types against the view's declared schema, and wraps it
@@ -121,7 +121,7 @@ in `compile(dialect)`. A many-valued relation hands over a list the author union
 **per_upstream_columns)` covers the common case and stamps per-upstream columns such as the account.
 
 Ibis is a dependency of `interloper-sql` only. Warehouse packages import nothing new; only modules
-that define `sql_view`s import `interloper_sql`. A spike precedes the implementation: safe casts and
+that define `ibis_view`s import `interloper_sql`. A spike precedes the implementation: safe casts and
 the latest-row-per-id pattern compile and run correctly on DuckDB and as a BigQuery dry run; the
 install footprint of `ibis-framework` without any backend; a raw-SQL escape hatch on unbound tables.
 
@@ -138,7 +138,7 @@ scope.
    `dim_accounts`, each with its schema class under `schemas/`.
 4. A GA4 export source: `il.reference` to `events_*` and a raw-SQL star schema over it, the
    showcase for references and for a view tied to one warehouse.
-5. `sql_view` in `interloper-sql`, after the spike, exercised on its own test model. The Facebook
+5. `ibis_view` in `interloper-sql`, after the spike, exercised on its own test model. The Facebook
    star schema stays raw SQL for now: porting it would make `interloper-assets` depend on
    `interloper-sql`, and with it on SQLAlchemy, psycopg and Ibis, in every image that ships the
    assets. The port waits for `interloper-sql`'s Postgres driver to move behind an extra.
@@ -166,7 +166,7 @@ and the campaign performance analysis follow the same pattern afterwards.
   nothing. Memory doubles throughout; no warehouse.
 - DuckDB: every Facebook view created over fixture tables for two accounts, including an account with
   no table (the warehouse's own error, reported on the view), and read back through the read path.
-- `interloper-sql`: the schema check; every `sql_view` compiled for every dialect Ibis names;
+- `interloper-sql`: the schema check; every `ibis_view` compiled for every dialect Ibis names;
   the Facebook views run on DuckDB.
 - Live: the Facebook star schema created in the Swarovski dev project on BigQuery over two accounts,
   queried by hand.

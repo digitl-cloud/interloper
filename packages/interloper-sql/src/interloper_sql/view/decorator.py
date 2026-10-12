@@ -1,4 +1,4 @@
-"""Decorator for creating SqlView subclasses from functions."""
+"""Decorator for creating IbisView subclasses from functions."""
 
 from __future__ import annotations
 
@@ -9,32 +9,32 @@ from interloper.asset.decorator import build_asset_class
 from interloper.component.decorator import decorate
 from interloper.component.relation import Relation
 
-from interloper_sql.view.base import SqlView
+from interloper_sql.view.base import IbisView
 
 
 @overload
-def sql_view(fn: Callable[..., Any], /) -> type[SqlView]: ...
+def ibis_view(fn: Callable[..., Any], /) -> type[IbisView]: ...
 @overload
-def sql_view(
+def ibis_view(
     *,
     relations: dict[str, Any] = ...,
     **overrides: Any,
-) -> Callable[[Callable[..., Any]], type[SqlView]]: ...
-def sql_view(
+) -> Callable[[Callable[..., Any]], type[IbisView]]: ...
+def ibis_view(
     fn: Callable[..., Any] | None = None,
     /,
     *,
     relations: dict[str, Any] | None = None,
     **overrides: Any,
-) -> type[SqlView] | Callable[..., type[SqlView]]:
-    """Create a SqlView subclass from a decorated function.
+) -> type[IbisView] | Callable[..., type[IbisView]]:
+    """Create an IbisView subclass from a decorated function.
 
     Like ``il.view``, but portable: each upstream parameter receives a typed
     ``ibis.Table`` in ``data``, the function returns an Ibis expression, and
     the destination compiles it for its own dialect:
 
     ```py
-    @sql_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+    @ibis_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
     def totals(orders: list[il.Upstream]) -> ibis.Table:
         rows = union(orders)
         return rows.group_by(rows.date).aggregate(total=rows.total.sum())
@@ -47,13 +47,13 @@ def sql_view(
         **overrides: As for ``il.asset``; a schema is required.
 
     Returns:
-        A SqlView subclass with the function as its ``data()`` method.
+        An IbisView subclass with the function as its ``data()`` method.
     """
     if fn is not None:
-        return decorate(SqlView, fn, build=_build_sql_view_class, relations=relations, **overrides)
+        return decorate(IbisView, fn, build=_build_ibis_view_class, relations=relations, **overrides)
 
-    def wrapper(fn: Callable[..., Any]) -> type[SqlView]:
-        return decorate(SqlView, fn, build=_build_sql_view_class, relations=relations, **overrides)
+    def wrapper(fn: Callable[..., Any]) -> type[IbisView]:
+        return decorate(IbisView, fn, build=_build_ibis_view_class, relations=relations, **overrides)
 
     return wrapper
 
@@ -61,14 +61,14 @@ def sql_view(
 # -- Internals -----------------------------------------------------------------
 
 
-def _build_sql_view_class(
+def _build_ibis_view_class(
     fn: Any,
     *,
     classvars: dict[str, Any],
     fields: dict[str, Any],
     relations: dict[str, Relation],
-) -> type[SqlView]:
-    """Build a SqlView subclass from a function or method.
+) -> type[IbisView]:
+    """Build an IbisView subclass from a function or method.
 
     Args:
         fn: The function (or method) backing the view's ``data()``.
@@ -77,8 +77,8 @@ def _build_sql_view_class(
         relations: Relations the decorator declares, name to relation.
 
     Returns:
-        A dynamically created SqlView subclass.
+        A dynamically created IbisView subclass.
     """
     return cast(
-        "type[SqlView]", build_asset_class(fn, base=SqlView, classvars=classvars, fields=fields, relations=relations)
+        "type[IbisView]", build_asset_class(fn, base=IbisView, classvars=classvars, fields=fields, relations=relations)
     )
