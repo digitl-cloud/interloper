@@ -8,11 +8,11 @@ import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import duckdb
 import pandas as pd
-from interloper.destination import IOContext, destination
+from interloper.destination import Destination, IOContext, destination
 from interloper.destination.database import DatabaseDestination, PartitionFilter
 from interloper.errors import DataNotFoundError
 from interloper.representation import Representation
@@ -59,6 +59,8 @@ class DuckDBDestination(DatabaseDestination):
     else ``main``. Tables are created on first write with typed columns and
     are never altered afterwards.
     """
+
+    dialect: ClassVar[str | None] = "duckdb"
 
     connection: DuckDBConnection
 
@@ -346,6 +348,43 @@ class DuckDBDestination(DatabaseDestination):
         finally:
             del self._transactions[ident]
             held.cursor.close()
+
+    # -- Views -----------------------------------------------------------------
+
+    def table_parts(self, table: str, dataset: str | None) -> tuple[str, str]:
+        """The schema and table a reference names.
+
+        Args:
+            table: Table name.
+            dataset: The schema, or ``None`` for the destination's default.
+
+        Returns:
+            ``(schema, table)``.
+        """
+        return (self._schema(dataset), table)
+
+    def replace_view(self, table: str, dataset: str | None, sql: str) -> None:
+        """Create or replace a view, creating its schema first.
+
+        Args:
+            table: The view's name.
+            dataset: The schema, or ``None`` for the destination's default.
+            sql: The view's query.
+        """
+        with self._cursor() as cursor, _DDL_LOCK:
+            cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {_quote(self._schema(dataset))}")
+            cursor.execute(f"CREATE OR REPLACE VIEW {self._ref(table, dataset)} AS {sql}")
+
+    def reaches(self, other: Destination) -> bool:
+        """Whether *other* is a DuckDB destination on the same database.
+
+        Args:
+            other: The destination holding an upstream's table.
+
+        Returns:
+            True for the same database file or MotherDuck database.
+        """
+        return isinstance(other, DuckDBDestination) and other.connection.database == self.connection.database
 
 
 def _iso(value: Any) -> Any:
