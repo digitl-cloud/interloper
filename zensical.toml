@@ -26,6 +26,7 @@ nav = [
         { "Sources" = "guide/sources.md" },
         { "Decorator options" = "guide/decorators.md" },
         { "Dependencies" = "guide/dependencies.md" },
+        { "Views & references" = "guide/views.md" },
         { "Resources & configs" = "guide/resources.md" },
         { "Connections" = "guide/connections.md" },
         { "OAuth providers" = "guide/oauth.md" },
