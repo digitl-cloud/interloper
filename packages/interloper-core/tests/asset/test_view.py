@@ -174,3 +174,9 @@ class TestValidation:
         with pytest.raises(ConfigError, match="dialect 'bigquery'"):
             il.DAG(sharded(destinations=[RecordingWarehouse(id="duck")]))
         il.DAG(sharded(destinations=[BigQueryLike(id="bq")]))
+
+    def test_a_view_source_round_trips_through_specs_without_a_destination(self):
+        reporting = Reporting()
+        rebuilt = il.Component.from_spec(reporting.to_spec())
+        assert isinstance(rebuilt, Reporting)
+        assert isinstance(rebuilt.order_totals, il.View)
