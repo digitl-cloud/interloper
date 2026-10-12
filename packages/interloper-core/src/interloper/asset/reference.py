@@ -29,9 +29,9 @@ class Reference(Asset):
     def table(self) -> str:
         """The table as written: a name interloper never composed, wildcard and all.
 
-        ``table_name``, or the class key when none was given.
+        ``table_name``, or the name any asset would get when none was given.
         """
-        return self.table_name if self.table_name is not None else self.key
+        return self.table_name if self.table_name is not None else super().table
 
     async def materialize_async(
         self,
