@@ -146,7 +146,21 @@ def union(upstreams: Sequence[Upstream], **columns: Callable[[Upstream], Any]) -
     if not upstreams:
         raise ConfigError("no upstream bound: a view needs at least one")
     tables = [
-        upstream.data.mutate(**{name: ibis.literal(value(upstream)) for name, value in columns.items()})
+        upstream.data.mutate(**{name: _literal(value(upstream)) for name, value in columns.items()})
         for upstream in upstreams
     ]
     return ibis.union(*tables, distinct=False)
+
+
+def _literal(value: Any) -> ibis.Value:
+    """A constant as an Ibis literal, an integer typed ``int64`` as a declared ``int`` column is.
+
+    Args:
+        value: The constant a stamped column holds.
+
+    Returns:
+        The literal; Ibis would type a small integer ``int8``.
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return ibis.literal(value, type="int64")
+    return ibis.literal(value)
