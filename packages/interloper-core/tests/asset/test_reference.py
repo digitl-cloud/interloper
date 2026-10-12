@@ -7,7 +7,6 @@ import datetime as dt
 import pytest
 
 import interloper as il
-from interloper.errors import ConfigError
 
 
 class Events(il.Schema):
@@ -28,42 +27,25 @@ class TestReference:
         assert il.Reference.reads_upstream_data is False
         assert il.Reference.kind == "asset"
 
-    def test_the_table_is_the_given_name_formatted_with_the_source_fields(self):
-        source = Export(property_id="123")
-        assert source.events.table == "events_*"
+    def test_the_table_is_the_given_name_as_written(self):
+        assert Export(property_id="123").events.table == "events_*"
 
         @il.source
-        class Sharded(il.Source):
-            property_id: str = il.InputField(default="", discriminator=True)
-            events = il.reference("events_{property_id}", key="events")  # noqa: RUF027
+        class Dated(il.Source):
+            events = il.reference("events-2026", key="events")
 
-        assert Sharded(property_id="123").events.table == "events_123"
+        assert Dated().events.table == "events-2026"
 
     def test_the_dataset_is_the_sources(self):
         source = Export(property_id="123", dataset="analytics_123")
         assert source.events.dataset == "analytics_123"
 
-    def test_the_dataset_is_formatted_with_the_source_fields(self):
+    def test_the_dataset_can_be_the_references_own(self):
         @il.source
-        class Sharded(il.Source):
-            property_id: str = il.InputField(default="", discriminator=True)
-            events = il.reference("events_*", key="events", dataset="analytics_{property_id}")  # noqa: RUF027
+        class Exported(il.Source):
+            events = il.reference("events_*", key="events", dataset="exports")
 
-        assert Sharded(property_id="123").events.dataset == "analytics_123"
-
-    def test_a_formatted_name_that_is_not_an_identifier_is_refused(self):
-        @il.source
-        class Sharded(il.Source):
-            property_id: str = il.InputField(default="", discriminator=True)
-            events = il.reference("events_{property_id}", key="events")  # noqa: RUF027
-
-        with pytest.raises(ValueError, match="invalid"):
-            Sharded(property_id="12-3")
-
-    def test_a_placeholder_without_a_source_is_a_config_error(self):
-        events = il.reference("events_{property_id}", key="events")
-        with pytest.raises(ConfigError, match=r"events.*property_id"):
-            events().table
+        assert Exported().events.dataset == "exports"
 
     def test_the_decorator_routes_overrides(self):
         events = Export.asset_types[0]

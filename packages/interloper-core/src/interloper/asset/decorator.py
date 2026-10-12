@@ -144,8 +144,7 @@ def reference(table: str, *, key: str, **overrides: Any) -> type[Reference]:
     ```
 
     Args:
-        table: The physical table name, used as written and formatted with
-            the owning source's fields (``"events_{property_id}"``).
+        table: The physical table name, used as written, wildcard and all.
         key: The asset key, which names the attribute and the catalog entry.
         **overrides: Definition metadata and behaviour as for `asset`
             (``schema``, ``tags``, ``dataset``, ``partitioning``, ...).
