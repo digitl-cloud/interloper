@@ -19,6 +19,7 @@ from interloper.component import Component, ComponentDefinition, ComponentIdenti
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
+    ConfigError,
     DataNotFoundError,
     DestinationError,
     PartitionError,
@@ -273,10 +274,9 @@ class Asset(Operation):
         a reference can name a table interloper never created, wildcard and
         all. Standalone assets use their class key.
         """
-        source = self.source
         if self.table_name is not None:
-            fields = {name: getattr(source, name) for name in type(source).model_fields} if source is not None else {}
-            return self.table_name.format(**fields)
+            return self._format_with_source_fields(self.table_name)
+        source = self.source
         raw = source.asset_table(self) if source is not None else self.key
         return to_identifier(raw)
 
@@ -588,6 +588,35 @@ class Asset(Operation):
         return destination.partition_row_counts(context)
 
     # -- Internals -------------------------------------------------------------
+    def _source_fields(self) -> dict[str, Any]:
+        """Every field of the owning source by name, the values a location is formatted with.
+
+        Returns:
+            The mapping, empty when the asset has no source.
+        """
+        source = self.source
+        return {name: getattr(source, name) for name in type(source).model_fields} if source is not None else {}
+
+    def _format_with_source_fields(self, template: str) -> str:
+        """Format a location with the owning source's fields.
+
+        Args:
+            template: A table or dataset name, possibly with ``{field}`` placeholders.
+
+        Returns:
+            The formatted name.
+
+        Raises:
+            ConfigError: If the template names a field the asset's source does
+                not have, or the asset has no source.
+        """
+        try:
+            return template.format(**self._source_fields())
+        except KeyError as error:
+            raise ConfigError(
+                f"Asset '{self.key}': '{template}' names {error}, which is not a field of its source"
+            ) from error
+
     async def _build_kwargs(
         self,
         context: ExecutionContext,

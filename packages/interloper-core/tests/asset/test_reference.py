@@ -7,6 +7,7 @@ import datetime as dt
 import pytest
 
 import interloper as il
+from interloper.errors import ConfigError
 
 
 class Events(il.Schema):
@@ -41,6 +42,28 @@ class TestReference:
     def test_the_dataset_is_the_sources(self):
         source = Export(property_id="123", dataset="analytics_123")
         assert source.events.dataset == "analytics_123"
+
+    def test_the_dataset_is_formatted_with_the_source_fields(self):
+        @il.source
+        class Sharded(il.Source):
+            property_id: str = il.InputField(default="", discriminator=True)
+            events = il.reference("events_*", key="events", dataset="analytics_{property_id}")  # noqa: RUF027
+
+        assert Sharded(property_id="123").events.dataset == "analytics_123"
+
+    def test_a_formatted_name_that_is_not_an_identifier_is_refused(self):
+        @il.source
+        class Sharded(il.Source):
+            property_id: str = il.InputField(default="", discriminator=True)
+            events = il.reference("events_{property_id}", key="events")  # noqa: RUF027
+
+        with pytest.raises(ValueError, match="invalid"):
+            Sharded(property_id="12-3")
+
+    def test_a_placeholder_without_a_source_is_a_config_error(self):
+        events = il.reference("events_{property_id}", key="events")
+        with pytest.raises(ConfigError, match=r"events.*property_id"):
+            events().table
 
     def test_the_decorator_routes_overrides(self):
         events = Export.asset_types[0]

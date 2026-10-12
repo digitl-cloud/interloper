@@ -15,9 +15,9 @@ class Reference(Asset):
     """An asset whose table exists before interloper does: nothing is created or written.
 
     A reference points at a table in a destination and knows how to read it.
-    ``table_name`` names the table as written, formatted with the owning
-    source's fields; the dataset is the asset's, the source's by default. A
-    run does nothing. Downstream assets read it like any other asset, and
+    ``table_name`` names the table as written, and the asset's ``dataset``
+    names where it is, the source's by default; both are formatted with the
+    owning source's fields. A run does nothing. Downstream assets read it like any other asset, and
     views build on it like any other table.
     """
 
