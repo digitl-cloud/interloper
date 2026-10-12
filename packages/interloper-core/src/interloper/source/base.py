@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import ConfigDict, Field, model_validator
 from typing_extensions import Self
 
-from interloper.asset import Asset
+from interloper.asset import Asset, Reference
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -596,12 +596,8 @@ class Source(Component, Workload):
             asset.parent = self
             if not asset.dataset:
                 asset.dataset = self.dataset
-            if asset.table_name is None:
+            if not isinstance(asset, Reference):
                 validate_key(asset.table)
-            else:
-                asset.dataset = asset._format_with_source_fields(asset.dataset)
-                validate_key(asset.dataset)
-                validate_key(asset.table.replace("*", ""))
             if not asset.default_destination_key and self.default_destination_key:
                 asset.default_destination_key = self.default_destination_key
             if asset.normalizer is None and self.normalizer is not None:

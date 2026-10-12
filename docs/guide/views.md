@@ -69,9 +69,10 @@ class GoogleAnalytics4Export(il.Source):
     events = il.reference("events_*", key="events", schema=Events)
 ```
 
-A reference names its table as written, formatted with the owning source's fields
-(`"events_{property_id}"`); the dataset is the asset's, the source's by default. Nothing is created
-or written. Downstream assets read it like any asset, and views build on it like any table.
+A reference names its table as written, wildcard and all; the dataset is the asset's, the source's
+by default, and a source whose tables vary per instance sets them in code, as the GA4 export points
+`events` at `analytics_<property id>` from its property id. Nothing is created or written.
+Downstream assets read it like any asset, and views build on it like any table.
 
 A source whose tables exist in one warehouse only says so with a narrowed `destinations` relation,
 checked when a destination is bound: the GA4 export declares
