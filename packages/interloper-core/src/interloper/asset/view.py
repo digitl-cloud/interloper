@@ -29,8 +29,9 @@ class View(Asset):
     the destination's reference to that upstream (a table reference on a SQL
     warehouse) in ``data``, and whatever ``data()`` returns goes to
     `Destination.create_view`. It has exactly one destination, and it is
-    unpartitioned: a run recreates the view, cheaply and idempotently, so the
-    view matches the wiring as of its last run.
+    unpartitioned: a run, for whatever partition, builds the same definition
+    and recreates the view, cheaply and idempotently, so the view matches the
+    wiring as of its last run.
 
     ``dialect`` pins a raw-SQL view to the warehouses whose dialect it is
     written in; ``None`` leaves the SQL unchecked, the author's assertion that
@@ -51,7 +52,7 @@ class View(Asset):
         """Build the definition and create the view.
 
         Args:
-            partition_or_window: Must be ``None``: a view is unpartitioned.
+            partition_or_window: Accepted and ignored: every partition builds the same definition.
             dag: DAG the upstream assets are looked up in.
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
@@ -91,8 +92,13 @@ class View(Asset):
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check the relations as any asset, then what only a view needs.
 
-        One destination; a dialect, when declared, that the destination
-        shares; every bound upstream reachable from that destination.
+        The view's own checks need the graph: one destination; a dialect, when
+        declared, that the destination shares; every bound upstream reachable
+        from that destination. They run at graph build, where the DAG supplies
+        ``nodes``, and not when a component is rebuilt from its spec, so a view
+        source hydrates before a job supplies its destination. A manifest
+        loaded through ``DAG.from_spec_file`` still gets them because it
+        builds a DAG.
 
         Args:
             nodes: Every node materializing in the same run, keyed by id, or ``None``.
@@ -103,6 +109,8 @@ class View(Asset):
                 referenced from it.
         """
         super().validate_relations(nodes)
+        if nodes is None:
+            return
         problems: list[str] = []
         destinations = self._destinations()
         if len(destinations) != 1:
