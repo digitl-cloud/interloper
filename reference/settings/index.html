@@ -2543,7 +2543,7 @@
 </tbody>
 </table>
 <h3 id="otel"><code>otel</code><a class="headerlink" href="#otel" title="Permanent link">&para;</a></h3>
-<p>OpenTelemetry settings: OTLP traces and metrics. Prefix <code>INTERLOPER_OTEL_</code>.</p>
+<p>OpenTelemetry settings: OTLP traces, metrics and logs. Prefix <code>INTERLOPER_OTEL_</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2595,6 +2595,12 @@
 <td><code>bool</code></td>
 <td><code>True</code></td>
 <td>Export metrics.</td>
+</tr>
+<tr>
+<td><code>logs</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Export the standard <code>logging</code> records, with their trace context.</td>
 </tr>
 <tr>
 <td><code>sample_ratio</code></td>

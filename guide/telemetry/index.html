@@ -1337,6 +1337,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Logs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#custom-instrumentation" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2480,9 +2491,10 @@
 
 
 <h1 id="telemetry">Telemetry<a class="headerlink" href="#telemetry" title="Permanent link">&para;</a></h1>
-<p>Interloper exports OpenTelemetry <strong>traces</strong> and <strong>metrics</strong> over OTLP: one trace per run, from
-the runner through every operation, <code>data()</code> call and destination read or write, across
-process boundaries; plus counters and duration histograms derived from the event bus.</p>
+<p>Interloper exports OpenTelemetry <strong>traces</strong>, <strong>metrics</strong> and <strong>logs</strong> over OTLP: one trace per
+run, from the runner through every operation, <code>data()</code> call and destination read or write,
+across process boundaries; counters and duration histograms derived from the event bus; and the
+standard <code>logging</code> records, each carrying the trace it was written under.</p>
 <p>Telemetry is off by default and costs nothing when disabled: the core depends only on the no-op
 <code>opentelemetry-api</code>. The SDK and exporters ship in the <code>otel</code> extra.</p>
 <h2 id="enabling">Enabling<a class="headerlink" href="#enabling" title="Permanent link">&para;</a></h2>
@@ -2542,7 +2554,7 @@ data plane down. <code>force_flush()</code> flushes without shutting down, for r
 <td>The <code>service.name</code> resource attribute.</td>
 </tr>
 <tr>
-<td><code>traces</code>, <code>metrics</code></td>
+<td><code>traces</code>, <code>metrics</code>, <code>logs</code></td>
 <td><code>true</code></td>
 <td>Signal toggles.</td>
 </tr>
@@ -2600,7 +2612,7 @@ instrumentation is installed, so REST-based sources get egress spans for free.</
 <tr>
 <td><code>interloper.runs</code></td>
 <td>counter</td>
-<td><code>status</code>, plus <code>org_id</code>, <code>target_kind</code>, <code>target_key</code> when the platform supplies them</td>
+<td><code>status</code>, plus <code>org_id</code>, <code>target_kind</code>, <code>target_key</code>, <code>attempt</code> when the platform supplies them</td>
 </tr>
 <tr>
 <td><code>interloper.run.duration</code></td>
@@ -2622,6 +2634,11 @@ instrumentation is installed, so REST-based sources get egress spans for free.</
 <td>counter</td>
 <td><code>operation</code> (<code>read</code>, <code>write</code>), <code>status</code>, <code>destination_key</code></td>
 </tr>
+<tr>
+<td><code>interloper.destination.rows</code></td>
+<td>counter</td>
+<td><code>destination_key</code>; the rows a completed write carried, when the data has a length</td>
+</tr>
 </tbody>
 </table>
 <p>Metrics are computed by a subscriber on the <a href="../events/">event bus</a>, so they cost nothing on the
@@ -2629,6 +2646,68 @@ execution path, and they dedupe on event id so re-emitted child events count onc
 stay low-cardinality by design: ids and partitions never become metric attributes. In a child
 container (<code>INTERLOPER_EVENTS_TO_STDERR=true</code>) the metrics handler is not installed; the host
 that re-emits the events is authoritative.</p>
+<p>The platform adds its own instruments where the event bus does not reach:</p>
+<table>
+<thead>
+<tr>
+<th>Instrument</th>
+<th>Type</th>
+<th>Attributes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interloper.scheduler.tick</code></td>
+<td>gauge, unix seconds</td>
+<td><code>loop</code> (<code>cron</code>, <code>hook</code>, <code>queue</code>, <code>reaper</code>, <code>renewal</code>); each loop's last successful tick, so <code>time() - value</code> is its staleness. Which replica ticked is the resource's <code>service.instance.id</code>, stamped by the deployment</td>
+</tr>
+<tr>
+<td><code>interloper.runs.launched</code></td>
+<td>counter</td>
+<td><code>outcome</code> (<code>launched</code>, <code>failed</code>)</td>
+</tr>
+<tr>
+<td><code>interloper.runs.reaped</code></td>
+<td>counter</td>
+<td><code>reason</code> (<code>startup</code>, <code>heartbeat</code>, <code>timeout</code>)</td>
+</tr>
+<tr>
+<td><code>interloper.scheduler.skips</code></td>
+<td>counter</td>
+<td><code>reason</code> (<code>late</code>, <code>config</code>, <code>quota</code>); due cron firings that created no run</td>
+</tr>
+<tr>
+<td><code>interloper.hooks</code></td>
+<td>counter</td>
+<td><code>status</code> (<code>fired</code>, <code>failed</code>), <code>component_key</code></td>
+</tr>
+<tr>
+<td><code>interloper.usage.drift</code></td>
+<td>gauge</td>
+<td><code>org_id</code>; the usage ledger minus the runs table, zero once reconciled</td>
+</tr>
+<tr>
+<td><code>interloper.agent.turns</code></td>
+<td>counter</td>
+<td><code>status</code> (<code>completed</code>, <code>failed</code>), <code>model</code></td>
+</tr>
+<tr>
+<td><code>interloper.agent.tokens</code></td>
+<td>counter</td>
+<td><code>kind</code> (<code>input</code>, <code>output</code>), <code>model</code></td>
+</tr>
+<tr>
+<td><code>interloper.agent.requests</code></td>
+<td>histogram</td>
+<td><code>model</code>; model requests one turn took</td>
+</tr>
+<tr>
+<td><code>interloper.agent.compactions</code></td>
+<td>counter</td>
+<td>turns whose older history was summarised</td>
+</tr>
+</tbody>
+</table>
 <h3 id="delta-temporality">Delta temporality<a class="headerlink" href="#delta-temporality" title="Permanent link">&para;</a></h3>
 <p>Counters and histograms are exported as <strong>deltas</strong>, not running totals. Runs are short-lived
 processes: a cumulative point from a process that exports once has no earlier point to be
@@ -2638,6 +2717,13 @@ processor in front of a Prometheus exporter that is scraped, with OpenMetrics en
 counter start timestamps survive, and <code>metric_expiration</code> raised well above the default so idle
 counters keep publishing. The accumulated totals live in the collector; restarting it resets
 them. A worked collector and Grafana setup is in the repository under <code>examples/telemetry</code>.</p>
+<h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
+<p>With <code>logs</code> on, a handler on the root logger ships every record the process emits, at the
+level the process already logs at, through the same OTLP endpoint. Records written inside a
+span carry its trace and span ids, so a log line in Grafana links to the trace it belongs to
+and a trace to the lines written during it. The collector needs a <code>logs</code> pipeline; without one
+the exporter reports the refused batches and the records still reach the process's own
+handlers.</p>
 <h2 id="custom-instrumentation">Custom instrumentation<a class="headerlink" href="#custom-instrumentation" title="Permanent link">&para;</a></h2>
 <p><code>tracer()</code> and <code>meter()</code> from <code>interloper.telemetry</code> return the framework's tracer and meter,
 no-op until the SDK is initialized:</p>
