@@ -9,7 +9,7 @@ import interloper as il
 import pytest
 from google.cloud import bigquery
 from interloper.destination import IOContext
-from interloper.destination.database import PartitionFilter
+from interloper.destination.database import PartitionFilter, TableReference
 from interloper.errors import ConfigError
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -632,3 +632,35 @@ class TestDefinition:
         }
 
 
+# -- Views ---------------------------------------------------------------------
+
+
+class TestViews:
+    """Views are plain DDL through the client; references quote the whole path once."""
+
+    def test_reference_backticks_the_whole_path(self):
+        destination, _ = _make_destination(dataset="ds")
+
+        @il.asset
+        def orders() -> list:
+            return []
+
+        assert destination.reference(orders(destinations=[destination])) == TableReference(
+            name="`test-proj.ds.orders`", parts=("test-proj", "ds", "orders"), schema=None
+        )
+
+    def test_replace_view_issues_create_or_replace(self):
+        destination, mock_client = _make_destination(dataset="ds")
+        destination.replace_view("totals", None, "SELECT 1 AS total")
+        mock_client.query.assert_called_once_with("CREATE OR REPLACE VIEW `test-proj.ds.totals` AS SELECT 1 AS total")
+        mock_client.query.return_value.result.assert_called_once()
+
+    def test_reaches_bigquery_in_the_same_location(self):
+        destination, _ = _make_destination(dataset="ds")
+        same_location, _ = _make_destination(dataset="other", _project="other-proj")
+        assert destination.reaches(same_location)
+        other_location = BigQueryDestination(
+            id="us", project="p", location="US", connection=GoogleCloudConnection(id="c", service_account_key=_SA_KEY)
+        )
+        assert not destination.reaches(other_location)
+        assert BigQueryDestination.dialect == "bigquery"

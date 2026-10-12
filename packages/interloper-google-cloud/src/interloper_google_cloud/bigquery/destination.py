@@ -8,14 +8,14 @@ import json
 import warnings
 from collections.abc import Sequence
 from functools import cached_property
-from typing import Any
+from typing import Any, ClassVar
 
 import google.auth
 import pandas as pd
 from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
-from interloper.destination import IOContext, destination
+from interloper.destination import Destination, IOContext, destination
 from interloper.destination.database import DatabaseDestination, PartitionFilter
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
@@ -34,6 +34,8 @@ from interloper_google_cloud.connection import GoogleCloudConnection
 )
 class BigQueryDestination(DatabaseDestination):
     """BigQuery destination."""
+
+    dialect: ClassVar[str | None] = "bigquery"
 
     connection: GoogleCloudConnection
 
@@ -218,6 +220,56 @@ class BigQueryDestination(DatabaseDestination):
                 self.client.create_dataset(bq_dataset)
             except Conflict:
                 pass  # Created by a concurrent asset — already exists
+
+    # -- Views -----------------------------------------------------------------
+
+    def table_parts(self, table: str, dataset: str | None) -> tuple[str, str, str]:
+        """The project, dataset and table a reference names.
+
+        Args:
+            table: Table name.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+
+        Returns:
+            ``(project, dataset, table)``.
+        """
+        return (self.project, self._resolve_dataset(dataset), table)
+
+    def qualified_name(self, table: str, dataset: str | None) -> str:
+        """The whole path in one pair of backticks, the form a wildcard table needs.
+
+        Args:
+            table: Table name.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+
+        Returns:
+            The path ``project.dataset.table`` wrapped in backticks.
+        """
+        return f"`{self._table_ref(table, dataset)}`"
+
+    def replace_view(self, table: str, dataset: str | None, sql: str) -> None:
+        """Create or replace a view, creating its dataset first.
+
+        Args:
+            table: The view's name.
+            dataset: The BigQuery dataset, or ``None`` for the destination's default.
+            sql: The view's query.
+        """
+        self._ensure_dataset(dataset)
+        self.client.query(f"CREATE OR REPLACE VIEW {self.qualified_name(table, dataset)} AS {sql}").result()
+
+    def reaches(self, other: Destination) -> bool:
+        """Whether *other* is a BigQuery destination in the same location.
+
+        BigQuery queries across projects but not across locations.
+
+        Args:
+            other: The destination holding an upstream's table.
+
+        Returns:
+            True for BigQuery in the same location.
+        """
+        return isinstance(other, BigQueryDestination) and other.location == self.location
 
     # -- DatabaseDestination hooks ---------------------------------------------
 
