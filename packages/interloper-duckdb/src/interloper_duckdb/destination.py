@@ -378,13 +378,21 @@ class DuckDBDestination(DatabaseDestination):
     def reaches(self, other: Destination) -> bool:
         """Whether *other* is a DuckDB destination on the same database.
 
+        An in-memory database exists only inside its own connection, so it is
+        shared only through the same connection instance; a database file or
+        MotherDuck database is shared by its path.
+
         Args:
             other: The destination holding an upstream's table.
 
         Returns:
-            True for the same database file or MotherDuck database.
+            True when both destinations use one connection, or share a non-memory database path.
         """
-        return isinstance(other, DuckDBDestination) and other.connection.database == self.connection.database
+        if not isinstance(other, DuckDBDestination):
+            return False
+        if other.connection is self.connection:
+            return True
+        return self.connection.database != ":memory:" and other.connection.database == self.connection.database
 
 
 def _iso(value: Any) -> Any:
