@@ -191,12 +191,21 @@ def test_a_sql_view_runs_on_duckdb(tmp_path: Path):
         "CREATE TABLE shop.orders__1 AS SELECT * FROM (VALUES "
         "(DATE '2026-10-01', 10.0), (DATE '2026-10-01', 5.0), (DATE '2026-10-02', 2.0)) AS t(date, total)"
     )
+    client.execute("CREATE TABLE shop.orders__2 AS SELECT * FROM (VALUES (3.0, DATE '2026-10-02')) AS t(total, date)")
     result = il.DAG(
-        Shop(account_id="1", destinations=[warehouse], select=[]), Reporting(destinations=[warehouse])
+        Shop(account_id="1", destinations=[warehouse], select=[]),
+        Shop(account_id="2", destinations=[warehouse], select=[]),
+        Reporting(destinations=[warehouse]),
     ).materialize()
     assert result.status is ExecutionStatus.COMPLETED
     frame = warehouse.select("totals", "reporting", None).sort_values("date")
-    assert frame["total"].tolist() == [15.0, 2.0]
+    assert frame["total"].tolist() == [15.0, 5.0]
+
+
+def test_union_keeps_only_the_named_columns():
+    table = ibis.table({"date": "date", "total": "float64"}, name="orders__1")
+    rows = union([il.Upstream(asset=Shop(account_id="1").orders, data=table)], "total")
+    assert list(rows.columns) == ["total"]
 
 
 def test_a_dialect_without_an_ibis_counterpart_is_a_config_error():

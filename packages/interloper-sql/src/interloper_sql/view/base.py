@@ -129,12 +129,18 @@ class SqlView(View):
         return IbisDefinition(result)
 
 
-def union(upstreams: Sequence[Upstream], **columns: Callable[[Upstream], Any]) -> ibis.Table:
+def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upstream], Any]) -> ibis.Table:
     """The UNION ALL of every upstream's table, optionally stamping a column per upstream.
+
+    Each table is projected to *columns*, or to every declared column, before
+    the union, so the branches line up by name: a bare ``SELECT *`` unions by
+    position, and two accounts' tables created at different times need not
+    share a column order.
 
     Args:
         upstreams: The bound upstreams of a many-valued relation, each carrying an ``ibis.Table``.
-        **columns: Column name to a function of the upstream giving that
+        *columns: The columns to keep from every table, in this order; every declared column by default.
+        **stamps: Column name to a function of the upstream giving that
             upstream's constant value, such as the account it came from.
 
     Returns:
@@ -145,12 +151,16 @@ def union(upstreams: Sequence[Upstream], **columns: Callable[[Upstream], Any]) -
     """
     if not upstreams:
         raise ConfigError("no upstream bound: a view needs at least one")
+    names = list(columns or upstreams[0].data.columns)
     tables = []
     for upstream in upstreams:
-        stamps = {}
-        for name, value in columns.items():
-            stamped = value(upstream)
+        # a projection keeping every column in order compiles to SELECT *, which unions by
+        # position; selecting in reverse forces the column list, and the outer select restores it
+        table = upstream.data.select(*reversed(names))
+        values = {}
+        for name, stamp in stamps.items():
+            stamped = stamp(upstream)
             is_integer = isinstance(stamped, int) and not isinstance(stamped, bool)
-            stamps[name] = ibis.literal(stamped, type="int64") if is_integer else ibis.literal(stamped)
-        tables.append(upstream.data.mutate(**stamps))
-    return ibis.union(*tables, distinct=False)
+            values[name] = ibis.literal(stamped, type="int64") if is_integer else ibis.literal(stamped)
+        tables.append(table.mutate(**values))
+    return ibis.union(*tables, distinct=False).select(*names, *stamps)
