@@ -60,8 +60,9 @@ class FacebookAdsStarSchema(il.Source):
     """Star schema over every Facebook Ads account, as views in the warehouse.
 
     The fact unions each account's ad performance; the dimensions take each
-    campaign and ad from its latest snapshot, else its latest report, else
-    the facts, so every key a fact carries resolves. Every bound upstream's
+    campaign from its latest snapshot, else its latest report, else the
+    facts, and each ad from its latest snapshot, else the facts, so every
+    key a fact carries resolves. Every bound upstream's
     table must exist, or the view fails when it is created. Views are
     recreated on every run, so they follow the accounts bound to them.
     """
