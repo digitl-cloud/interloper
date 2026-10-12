@@ -11,6 +11,7 @@ from typing_extensions import Self
 from interloper.asset import Asset, Reference
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
+from interloper.errors import ConfigError
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
@@ -578,6 +579,29 @@ class Source(Component, Workload):
                 return defn
         raise KeyError(f"Source '{cls.key}' has no asset with key '{key}'")
 
+    def format(self, template: str) -> str:
+        """Fill a location template with this source's fields.
+
+        An asset's ``dataset`` and a reference's ``table`` may name a field of
+        the source in braces (``"analytics_{property_id}"``), which is how a
+        declaration written once in the class body varies per instance.
+
+        Args:
+            template: A table or dataset name, possibly with ``{field}`` placeholders.
+
+        Returns:
+            The name with every placeholder filled.
+
+        Raises:
+            ConfigError: If the template names something that is not a field of this source.
+        """
+        try:
+            return template.format(**{name: getattr(self, name) for name in type(self).model_fields})
+        except KeyError as error:
+            raise ConfigError(
+                f"Source '{self.key}': '{template}' names {error}, which is not one of its fields"
+            ) from error
+
     def _resolve(self) -> None:
         """Apply source-level defaults to assets that don't define their own."""
         if not self.dataset:
@@ -586,8 +610,7 @@ class Source(Component, Workload):
 
         for asset in self.assets:
             asset.parent = self
-            if not asset.dataset:
-                asset.dataset = self.dataset
+            asset.dataset = self.format(asset.dataset or self.dataset)
             if not isinstance(asset, Reference):
                 validate_key(asset.table)
             if not asset.default_destination_key and self.default_destination_key:

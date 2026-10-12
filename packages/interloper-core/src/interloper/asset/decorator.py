@@ -130,19 +130,20 @@ def view(
     return wrapper
 
 
-def reference(table: str, **overrides: Any) -> Callable[[Callable[..., Any]], type[Reference]]:
+def reference(*, table: str, **overrides: Any) -> Callable[[Callable[..., Any]], type[Reference]]:
     """Create a Reference subclass from a decorated function: an asset over a table that already exists.
 
     Like ``il.asset``, but the function has nothing to compute: its name is
     the asset key and its docstring the description, and its body stays
-    empty, since a reference is never run.
+    empty, since a reference is never run. The table and the dataset may
+    name a field of the owning source in braces, filled per instance.
 
     ```py
     @il.source
     class Export(il.Source):
         property_id: str = il.InputField(discriminator=True)
 
-        @il.reference("events_*", schema=Events)
+        @il.reference(table="events_*", dataset="analytics_{property_id}", schema=Events)
         def events(self) -> None:
             \"\"\"The property's raw export, read and never written.\"\"\"
     ```
