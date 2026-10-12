@@ -652,9 +652,24 @@ class TestViews:
 
     def test_replace_view_issues_create_or_replace(self):
         destination, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.view_query = "SELECT 2 AS total"
         destination.replace_view("totals", None, "SELECT 1 AS total")
         mock_client.query.assert_called_once_with("CREATE OR REPLACE VIEW `test-proj.ds.totals` AS SELECT 1 AS total")
         mock_client.query.return_value.result.assert_called_once()
+
+    def test_replace_view_creates_a_view_that_does_not_exist_yet(self):
+        from google.cloud.exceptions import NotFound
+
+        destination, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.side_effect = NotFound("missing")
+        destination.replace_view("totals", None, "SELECT 1 AS total")
+        mock_client.query.assert_called_once()
+
+    def test_replace_view_skips_an_identical_view(self):
+        destination, mock_client = _make_destination(dataset="ds")
+        mock_client.get_table.return_value.view_query = "SELECT 1 AS total"
+        destination.replace_view("totals", None, "SELECT 1 AS total")
+        mock_client.query.assert_not_called()
 
     def test_reaches_bigquery_in_the_same_location(self):
         destination, _ = _make_destination(dataset="ds")
