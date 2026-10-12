@@ -48,6 +48,13 @@ class FakePartitionedAsset(il.Asset):
     partitioning: ClassVar[PartitionConfig | None] = PartitionConfig(column="day")
 
 
+class FakeDefinitionAsset(il.Asset):
+    """Asset that reads no upstream data, the shape of a view."""
+
+    reads_upstream_data: ClassVar[bool] = False
+    upstream: il.Asset | None = il.Relation("asset", optional=True)
+
+
 class FakeAssetRequiringFake(il.Asset):
     """Asset whose relation expects an upstream keyed ``fake_asset``."""
 
@@ -563,6 +570,12 @@ class TestValidation:
         downstream = FakeAsset(upstream=upstream)
         with pytest.raises(DAGError):
             DAG(upstream, downstream)
+
+    def test_an_asset_reading_no_upstream_data_may_depend_on_a_partitioned_one(self):
+        upstream = FakePartitionedAsset()
+        downstream = FakeDefinitionAsset(upstream=upstream)
+        dag = DAG(upstream, downstream)
+        assert dag.get_predecessors(downstream.id) == [upstream.id]
 
     def test_partitioned_depending_on_non_partitioned_is_allowed(self, dag_mixed: il.DAG):
         # ``dag_mixed`` fixture already built the DAG without error; presence
