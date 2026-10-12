@@ -66,7 +66,9 @@ Every upstream of a `sql_view` must declare a schema: that is what types its tab
 class GoogleAnalytics4Export(il.Source):
     property_id: str = il.InputField(discriminator=True)
 
-    events = il.reference("events_*", schema=Events)
+    @il.reference("events_*", schema=Events)
+    def events(self) -> None:
+        """The property's raw export, read and never written."""
 ```
 
 A reference names its table as written, wildcard and all; the dataset is the asset's, the source's
