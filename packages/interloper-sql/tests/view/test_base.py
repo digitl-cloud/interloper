@@ -14,6 +14,7 @@ from interloper.errors import ConfigError
 from interloper.runner.results import ExecutionStatus
 
 from interloper_sql import sql_view, union
+from interloper_sql.view.base import IbisDefinition
 from interloper_sql.view.types import IBIS_DIALECTS
 
 
@@ -196,3 +197,64 @@ def test_a_sql_view_runs_on_duckdb(tmp_path: Path):
     assert result.status is ExecutionStatus.COMPLETED
     frame = warehouse.select("totals", "reporting", None).sort_values("date")
     assert frame["total"].tolist() == [15.0, 2.0]
+
+
+def test_a_dialect_without_an_ibis_counterpart_is_a_config_error():
+    definition = IbisDefinition(ibis.table({"a": "int64"}, name="t"))
+    with pytest.raises(ConfigError, match="No Ibis dialect for 'nope'"):
+        definition.compile("nope")
+
+
+def test_a_three_part_table_name_sets_the_catalog():
+    class ThreePartWarehouse(RecordingWarehouse):
+        def table_parts(self, table, dataset):
+            return ("proj", dataset or "main", table)
+
+    warehouse = ThreePartWarehouse(id="warehouse")
+    sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], select=[]))
+    assert '"proj"."shop"."orders__1"' in sql
+
+
+def test_an_upstream_that_is_not_a_table_is_refused():
+    class Opaque(RecordingWarehouse):
+        def reference(self, asset):
+            return "not a table"
+
+    warehouse = Opaque(id="warehouse")
+    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    reporting = Reporting(destinations=[warehouse])
+    result = il.DAG(shop, reporting).materialize()
+    assert result.status is ExecutionStatus.FAILED
+    assert "is not a table" in (result.executions[reporting.totals.id].error or "")
+
+
+def test_a_result_that_is_not_an_ibis_table_is_refused():
+    @il.source
+    class Textual(il.Source):
+        @sql_view(schema=Totals, relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        def totals(self, orders: list[il.Upstream]) -> str:
+            return "SELECT 1"
+
+    warehouse = RecordingWarehouse(id="warehouse")
+    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    textual = Textual(destinations=[warehouse])
+    result = il.DAG(shop, textual).materialize()
+    assert result.status is ExecutionStatus.FAILED
+    assert "returned str, not an Ibis table" in (result.executions[textual.totals.id].error or "")
+    assert RecordingWarehouse.views == []
+
+
+def test_a_view_without_a_schema_is_refused():
+    @il.source
+    class Unschematic(il.Source):
+        @sql_view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+        def totals(self, orders: list[il.Upstream]) -> ibis.Table:
+            return union(orders)
+
+    warehouse = RecordingWarehouse(id="warehouse")
+    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    unschematic = Unschematic(destinations=[warehouse])
+    result = il.DAG(shop, unschematic).materialize()
+    assert result.status is ExecutionStatus.FAILED
+    assert "declares no schema" in (result.executions[unschematic.totals.id].error or "")
+    assert RecordingWarehouse.views == []
