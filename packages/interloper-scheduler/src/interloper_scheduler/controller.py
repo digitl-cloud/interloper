@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import socket
 import time
 from abc import ABC, abstractmethod
 from threading import Event
@@ -19,12 +18,6 @@ logger = logging.getLogger(__name__)
 _last_tick: dict[str, float] = {}
 _gauge_registered = False
 
-#: The pod (or host) this scheduler runs on. The collector strips the
-#: instance id from every metric so run pods share one series; the tick
-#: gauge carries its own replica label instead, so a replica that stopped
-#: ticking is not hidden behind one that still does.
-_replica = socket.gethostname()
-
 
 def _observe_ticks(_options: CallbackOptions) -> list[Observation]:
     """Report each loop's last successful tick, as the gauge callback.
@@ -35,7 +28,7 @@ def _observe_ticks(_options: CallbackOptions) -> list[Observation]:
     Returns:
         One observation per loop that has ticked at least once.
     """
-    return [Observation(timestamp, {"loop": name, "replica": _replica}) for name, timestamp in _last_tick.items()]
+    return [Observation(timestamp, {"loop": name}) for name, timestamp in _last_tick.items()]
 
 
 def _register_tick_gauge() -> None:
