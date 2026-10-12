@@ -525,7 +525,8 @@ def _time_partitioning(
                     + (" (hourly partitioning needs DATETIME or TIMESTAMP)" if field.field_type == "DATE" else "")
                 )
                 warnings.warn(
-                    f"Partition column '{config.column}' is {reason}; the BigQuery table will not be time-partitioned.",
+                    f"Partition column '{config.column}' is {reason}; "
+                    "the BigQuery table will not be time-partitioned.",
                     UserWarning,
                     stacklevel=2,
                 )
@@ -635,10 +636,8 @@ def _partition_param(
             value = datetime.datetime.fromisoformat(value)
         except ValueError:
             pass
-    if (
-        param_type in ("TIMESTAMP", "DATETIME")
-        and isinstance(value, datetime.date)
-        and not isinstance(value, datetime.datetime)
+    if param_type in ("TIMESTAMP", "DATETIME") and isinstance(value, datetime.date) and not isinstance(
+        value, datetime.datetime
     ):
         # A date bound against a datetime-typed column: promote to midnight so
         # the client serializes it in the parameter's declared type.
@@ -662,3 +661,4 @@ def _iso_string(value: Any) -> str:
         The ISO rendering of *value*.
     """
     return value.isoformat() if isinstance(value, (datetime.date, datetime.datetime)) else str(value)
+
