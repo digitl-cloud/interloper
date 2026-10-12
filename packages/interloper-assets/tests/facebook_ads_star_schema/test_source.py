@@ -28,7 +28,7 @@ def _account(account_id: str, warehouse) -> il.Source:
     return FacebookAds(account_id=account_id, connection=connection, destinations=[warehouse], select=[])
 
 
-def _seed(warehouse, account_id: str, *, campaigns_snapshot: bool) -> None:
+def _seed(warehouse, account_id: str, *, campaigns_snapshot: bool, snapshot_date: dt.date = DAY) -> None:
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS facebook_ads")
     client.execute(
@@ -47,7 +47,7 @@ def _seed(warehouse, account_id: str, *, campaigns_snapshot: bool) -> None:
     collected = "TRUE" if campaigns_snapshot else "FALSE"
     client.execute(
         f"CREATE TABLE facebook_ads.campaigns__{account_id} AS SELECT "
-        f"DATE '2026-10-01' AS date, 'c{account_id}' AS id, 'Camp from snapshot' AS name, "
+        f"DATE '{snapshot_date}' AS date, 'c{account_id}' AS id, 'Camp from snapshot' AS name, "
         f"'{account_id}' AS account_id, 'OUTCOME_SALES' AS objective, 'ACTIVE' AS status WHERE {collected}"
     )
     client.execute(
@@ -107,6 +107,15 @@ class TestOnDuckDB:
         assert rows["111"]["status"] == "ACTIVE"
         assert rows["222"]["campaign_name"] == "Camp from report"
         assert rows["222"]["status"] is None
+
+    def test_a_newer_fact_does_not_displace_an_older_snapshot(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_snapshot=True, snapshot_date=dt.date(2026, 9, 30))
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_campaigns")
+        assert row["campaign_name"] == "Camp from snapshot"
+        assert row["status"] == "ACTIVE"
+        assert row["date"] == dt.date(2026, 9, 30)
 
     def test_ads_and_accounts_come_from_the_facts(self, warehouse):
         first = _account("111", warehouse)

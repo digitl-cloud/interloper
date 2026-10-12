@@ -60,10 +60,10 @@ class FacebookAdsStarSchema(il.Source):
     """Star schema over every Facebook Ads account, as views in the warehouse.
 
     The fact unions each account's ad performance; the dimensions take each
-    campaign and ad from its latest snapshot where one is collected, else
-    from its latest report, else from the facts, so every key a fact carries
-    resolves. Views are recreated on every run, so they follow the accounts
-    bound to them.
+    campaign and ad from its latest snapshot, else its latest report, else
+    the facts, so every key a fact carries resolves. Every bound upstream's
+    table must exist, or the view fails when it is created. Views are
+    recreated on every run, so they follow the accounts bound to them.
     """
 
     @il.view(
@@ -96,7 +96,7 @@ class FacebookAdsStarSchema(il.Source):
         return (
             "SELECT campaign_id, campaign_name, account_id, objective, status, date "
             f"FROM ({' UNION ALL '.join(candidates)}) WHERE TRUE "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY campaign_id ORDER BY date DESC, priority) = 1"
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY campaign_id ORDER BY priority, date DESC) = 1"
         )
 
     @il.view(
@@ -114,7 +114,7 @@ class FacebookAdsStarSchema(il.Source):
         return (
             "SELECT ad_id, ad_name, adset_id, adset_name, campaign_id, account_id, status, date "
             f"FROM ({' UNION ALL '.join(candidates)}) WHERE TRUE "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ad_id ORDER BY date DESC, priority) = 1"
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ad_id ORDER BY priority, date DESC) = 1"
         )
 
     @il.view(schema=schemas.DimAccounts, tags=["Dimension"])
