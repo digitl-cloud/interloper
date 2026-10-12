@@ -1,13 +1,24 @@
-"""Interloper SQL integration: a SQLAlchemy-backed destination, its connection, and portable views."""
+"""Interloper SQL integration: portable views, and a SQLAlchemy-backed destination behind the postgres extra."""
 
-from interloper_sql.connection import SQLConnection
-from interloper_sql.destination import SQLDestination
 from interloper_sql.view import SqlView, sql_view, union
 
-__all__ = [
-    "SQLConnection",
-    "SQLDestination",
-    "SqlView",
-    "sql_view",
-    "union",
-]
+try:
+    from interloper_sql.connection import SQLConnection
+    from interloper_sql.destination import SQLDestination
+except ModuleNotFoundError as error:
+    # the destination and its connection need the postgres extra; the views do not
+    if error.name != "sqlalchemy":
+        raise
+    __all__ = [
+        "SqlView",
+        "sql_view",
+        "union",
+    ]
+else:
+    __all__ = [
+        "SQLConnection",
+        "SQLDestination",
+        "SqlView",
+        "sql_view",
+        "union",
+    ]

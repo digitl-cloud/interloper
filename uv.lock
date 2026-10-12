@@ -2344,7 +2344,7 @@ snowflake = [
     { name = "interloper-snowflake" },
 ]
 sql = [
-    { name = "interloper-sql" },
+    { name = "interloper-sql", extra = ["postgres"] },
 ]
 
 [package.dev-dependencies]
@@ -2366,7 +2366,7 @@ requires-dist = [
     { name = "interloper-google-cloud", marker = "extra == 'google-cloud'", editable = "packages/interloper-google-cloud" },
     { name = "interloper-slack", marker = "extra == 'slack'", editable = "packages/interloper-slack" },
     { name = "interloper-snowflake", marker = "extra == 'snowflake'", editable = "packages/interloper-snowflake" },
-    { name = "interloper-sql", marker = "extra == 'sql'", editable = "packages/interloper-sql" },
+    { name = "interloper-sql", extras = ["postgres"], marker = "extra == 'sql'", editable = "packages/interloper-sql" },
     { name = "opentelemetry-api", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.42,<2" },
@@ -2612,6 +2612,10 @@ source = { editable = "packages/interloper-sql" }
 dependencies = [
     { name = "ibis-framework" },
     { name = "interloper-core" },
+]
+
+[package.optional-dependencies]
+postgres = [
     { name = "psycopg", extra = ["binary"] },
     { name = "sqlalchemy" },
 ]
@@ -2620,9 +2624,10 @@ dependencies = [
 requires-dist = [
     { name = "ibis-framework", specifier = ">=12,<13" },
     { name = "interloper-core", editable = "packages/interloper-core" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
-    { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
+    { name = "sqlalchemy", marker = "extra == 'postgres'", specifier = ">=2.0" },
 ]
+provides-extras = ["postgres"]
 
 [[package]]
 name = "interloper-toolkit"

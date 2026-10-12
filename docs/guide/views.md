@@ -44,7 +44,9 @@ the warehouse's verdict when the view is created, reported as the view's failure
 
 `interloper-sql` adds `sql_view`: each upstream's `data` is an `ibis.Table` typed from the
 upstream's declared schema, the function returns an Ibis expression, and the destination compiles it
-for its own dialect. The expression's columns must match the view's declared schema.
+for its own dialect. The expression's columns must match the view's declared schema. The base package
+depends on Ibis only; the SQLAlchemy destination lives behind `interloper-sql[postgres]`, so a package
+that defines `sql_view`s pulls in no database driver.
 
 ```py
 from interloper_sql import sql_view, union
