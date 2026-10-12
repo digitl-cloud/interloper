@@ -139,6 +139,10 @@ asyncio_mode = "auto"
 # ###############
 # COVERAGE
 # ###############
+[tool.coverage.run]
+# a test that imports a package in a fresh interpreter is measured there too
+patch = ["subprocess"]
+
 [tool.coverage.report]
 include = ["packages/**/src/**"]
 exclude_also = [
