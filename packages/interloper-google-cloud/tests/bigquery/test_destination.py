@@ -38,6 +38,7 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
 
     """
     project = overrides.pop("_project", "test-proj")
+    destination_id = overrides.pop("_id", "test")
     mock_client = MagicMock()
     mock_client.project = project
     mock_client.location = "EU"
@@ -45,7 +46,7 @@ def _make_destination(**overrides: Any) -> tuple[BigQueryDestination, MagicMock]
     conn = GoogleCloudConnection(id="test-connection", service_account_key=_SA_KEY)
 
     dest = BigQueryDestination(
-        id="test",
+        id=destination_id,
         project=project,
         location="EU",
         default_dataset=overrides.get("dataset", None),
@@ -657,10 +658,11 @@ class TestViews:
 
     def test_reaches_bigquery_in_the_same_location(self):
         destination, _ = _make_destination(dataset="ds")
-        same_location, _ = _make_destination(dataset="other", _project="other-proj")
+        same_location, _ = _make_destination(dataset="other", _project="other-proj", _id="other")
         assert destination.reaches(same_location)
         other_location = BigQueryDestination(
-            id="us", project="p", location="US", connection=GoogleCloudConnection(id="c", service_account_key=_SA_KEY)
+            id="test", project="p", location="US", connection=GoogleCloudConnection(id="c", service_account_key=_SA_KEY)
         )
         assert not destination.reaches(other_location)
+        assert not destination.reaches(il.MemoryDestination(id="memory"))
         assert BigQueryDestination.dialect == "bigquery"
