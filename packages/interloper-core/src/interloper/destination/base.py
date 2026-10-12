@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from interloper.component import Component
 from interloper.destination.context import IOContext
+from interloper.errors import ConfigError
 from interloper.partitioning.base import Partition
+
+if TYPE_CHECKING:
+    from interloper.asset.base import Asset
 
 
 class Destination(Component):
@@ -22,7 +26,8 @@ class Destination(Component):
     partition, so a destination is partition-correct by construction. A
     backend that does not store per partition (a database that clears each
     partition and inserts a window in one batch) overrides `write` or
-    `read` instead.
+    `read` instead. Two more hooks, `reference` and `create_view`, serve
+    views; a destination that holds no views leaves them refusing.
 
     The hooks may be plain sync methods (the common case: most warehouse and
     file clients are sync) or ``async def`` for native async I/O. The engine
@@ -110,3 +115,34 @@ class Destination(Component):
         Returns:
             Mapping from partition value (as string) to row count.
         """
+
+    # -- Views -----------------------------------------------------------------
+
+    def reference(self, asset: Asset) -> Any:
+        """This destination's handle on an asset's data, for a view to build on.
+
+        What a reference is depends on the destination: a SQL warehouse hands
+        out a table reference, and a destination that holds no views hands
+        out nothing. The default refuses.
+
+        Args:
+            asset: The asset a view wants to build on.
+
+        Raises:
+            ConfigError: Always; this destination holds no views.
+        """
+        raise ConfigError(f"Destination '{self.key}' cannot reference asset '{asset.qualified_key}': it holds no views")
+
+    def create_view(self, asset: Asset, definition: Any) -> None:
+        """Materialize a view's definition under the asset's table.
+
+        Args:
+            asset: The view being materialized; its ``table`` and ``dataset``
+                name the view.
+            definition: Whatever the view's ``data()`` returned, in this
+                destination's own terms.
+
+        Raises:
+            ConfigError: Always; this destination holds no views.
+        """
+        raise ConfigError(f"Destination '{self.key}' does not support views")

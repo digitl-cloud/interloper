@@ -11,6 +11,7 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
+from interloper.errors import ConfigError
 from interloper.partitioning.base import Partition
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
@@ -240,3 +241,15 @@ class TestHookContract:
                 return {}
 
         assert Minimal(id="m").read(io_context(plain_asset())) == []
+
+
+class TestViewHooks:
+    """``reference`` and ``create_view`` refuse unless a destination implements them."""
+
+    def test_reference_refuses_by_default(self):
+        with pytest.raises(ConfigError, match="cannot reference"):
+            RecordingPartitions(id="r").reference(plain_asset())
+
+    def test_create_view_refuses_by_default(self):
+        with pytest.raises(ConfigError, match="does not support views"):
+            RecordingPartitions(id="r").create_view(plain_asset(), "SELECT 1")
