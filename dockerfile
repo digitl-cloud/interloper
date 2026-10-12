@@ -57,12 +57,15 @@
 #   API_EXTRAS        comma-separated interloper-api extras (default: agent).
 #                     agent bundles interloper-agent so the /agent routes
 #                     mount; agent.enabled still gates them at runtime.
-#   COMMON_EXTRAS     comma-separated extras defined by several workspace
-#                     packages (default: otel). Each maps to --extra {name},
-#                     applied to whichever selected packages carry it:
-#                     otel lands the SDK/exporters via core plus the
-#                     FastAPI/SQLAlchemy instrumentors via api/db where
-#                     those packages are in the image. Pass "" to disable.
+#   COMMON_EXTRAS     comma-separated extras applied unscoped (default:
+#                     otel,postgres). Each maps to --extra {name}, applied to
+#                     whichever selected packages carry it: otel lands the
+#                     SDK/exporters via core plus the FastAPI/SQLAlchemy
+#                     instrumentors via api/db where those packages are in
+#                     the image; postgres lands the SQL destination's driver
+#                     via interloper-sql. uv refuses an extra no selected
+#                     package defines, so postgres needs sql in CORE_EXTRAS.
+#                     Pass "" to disable.
 #
 # ================================================================
 
@@ -70,7 +73,7 @@ ARG CORE_EXTRAS=aws,azure,clickhouse,databricks,duckdb,google-cloud,slack,snowfl
 ARG ASSETS_EXTRAS=bing,facebook,google
 ARG SCHEDULER_EXTRAS=docker,k8s
 ARG API_EXTRAS=agent
-ARG COMMON_EXTRAS=otel
+ARG COMMON_EXTRAS=otel,postgres
 
 
 # ── Python base: workspace manifests for dependency caching ────

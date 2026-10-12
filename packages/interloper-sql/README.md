@@ -1,12 +1,17 @@
 # interloper-sql
 
-A SQL database destination for interloper: `SQLDestination`, a
-`DatabaseDestination` over SQLAlchemy Core, and the `SQLConnection` that holds
-the database URL.
+SQL for interloper: `sql_view`, portable views authored as Ibis expressions,
+and behind the `postgres` extra a SQL database destination, `SQLDestination`,
+a `DatabaseDestination` over SQLAlchemy Core with the `SQLConnection` that
+holds the database URL.
+
+The base package depends on Ibis only, so a package that defines `sql_view`s
+pulls in no database driver. `interloper-sql[postgres]` adds SQLAlchemy and
+`psycopg[binary]`; the destination and its connection exist only with it.
 
 One backend serves every SQLAlchemy dialect whose driver is installed.
-PostgreSQL works out of the box (the package depends on `psycopg[binary]`);
-MySQL, SQLite, Redshift, SQL Server and the rest need their own driver.
+PostgreSQL works with the extra; MySQL, SQLite, Redshift, SQL Server and the
+rest need their own driver on top.
 
 ## Setup
 
@@ -14,7 +19,7 @@ The connection is a single SQLAlchemy URL:
 
 | Database | URL | Driver to install |
 |----------|-----|-------------------|
-| PostgreSQL | `postgresql+psycopg://user:password@host:5432/db` | none, ships with the package |
+| PostgreSQL | `postgresql+psycopg://user:password@host:5432/db` | `interloper-sql[postgres]` |
 | MySQL / MariaDB | `mysql+pymysql://user:password@host:3306/db` | `pymysql` |
 | SQL Server | `mssql+pyodbc://user:password@host/db?driver=ODBC+Driver+18+for+SQL+Server` | `pyodbc` (and the ODBC driver) |
 | Redshift | `redshift+redshift_connector://user:password@host:5439/db` | `sqlalchemy-redshift`, `redshift_connector` |

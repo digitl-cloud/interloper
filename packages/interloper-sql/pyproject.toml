@@ -4,16 +4,17 @@
 [project]
 name = "interloper-sql"
 version = "0.110.2"
-description = "Interloper SQL integration: a SQLAlchemy-backed destination for PostgreSQL and other SQL databases"
+description = "Interloper SQL integration: portable views over SQL warehouses, and a SQLAlchemy-backed destination for PostgreSQL and other SQL databases"
 readme = "README.md"
 authors = [{ name = "Guillaume Onfroy", email = "guillaume@digitlcloud.com" }]
 requires-python = ">=3.10"
 dependencies = [
     "ibis-framework>=12,<13",
     "interloper-core",
-    "psycopg[binary]>=3.1",
-    "sqlalchemy>=2.0",
 ]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1", "sqlalchemy>=2.0"]
 
 [project.entry-points."interloper.components"]
 sql = "interloper_sql"

@@ -13,7 +13,7 @@ own README. All are versioned and released together.
 | `interloper-core[google-cloud]` | Pulls in `interloper-google-cloud`. |
 | `interloper-core[duckdb]` | Pulls in `interloper-duckdb`. |
 | `interloper-core[slack]` | Pulls in `interloper-slack`. |
-| `interloper-core[sql]` | Pulls in `interloper-sql`. |
+| `interloper-core[sql]` | Pulls in `interloper-sql[postgres]`: the SQL destination with its PostgreSQL driver. |
 | `interloper-core[snowflake]` | Pulls in `interloper-snowflake`. |
 | `interloper-core[clickhouse]` | Pulls in `interloper-clickhouse`. |
 | `interloper-core[databricks]` | Pulls in `interloper-databricks`. |
@@ -28,7 +28,7 @@ own README. All are versioned and released together.
 | `interloper-aws` | `AWSConnection` (an access key pair, or boto3's default credential chain), `S3Destination` (an `ObjectStoreDestination` over Amazon S3: hive-partitioned Parquet, JSONL or CSV). | `interloper.components` |
 | `interloper-azure` | `AzureConnection` (a Microsoft Entra service principal), `FabricWarehouseDestination` (a `DatabaseDestination` over a Microsoft Fabric Warehouse's SQL endpoint: typed T-SQL DDL, one schema per dataset, atomic partition replaces in an explicit transaction, batched parameterised inserts). | `interloper.components` |
 | `interloper-slack` | `SlackConnection`, `SlackHook`: a notification hook posting run and backfill outcomes to a channel, with a link back to the app when `server.external_url` is set. | `interloper.components` |
-| `interloper-sql` | `SQLConnection`, `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
+| `interloper-sql` | `SqlView`, `sql_view`, `union`: portable views authored as Ibis expressions, compiled for the destination's dialect. With the `postgres` extra, `SQLConnection` and `SQLDestination`: a `DatabaseDestination` over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg, any other SQLAlchemy dialect whose driver is installed. | `interloper.components` |
 | `interloper-snowflake` | `SnowflakeConnection`, `SnowflakeDestination` (a `DatabaseDestination` with typed DDL, quoted case-preserving identifiers and atomic partition replaces through a staged Parquet `COPY INTO`). | `interloper.components` |
 | `interloper-clickhouse` | `ClickHouseConnection`, `ClickHouseDestination` (a `DatabaseDestination` writing `MergeTree` tables, one database per dataset, partitioned to match the asset and replaced atomically per partition through a staging table and `REPLACE PARTITION`; self-hosted servers and ClickHouse Cloud). | `interloper.components` |
 | `interloper-databricks` | `DatabricksConnection` (an OAuth service principal or a personal access token), `DatabricksDestination` (a `DatabaseDestination` writing Delta tables in Unity Catalog through a SQL warehouse: Parquet staged in a volume, each partition replaced by one atomic `INSERT ... REPLACE WHERE`). | `interloper.components` |
