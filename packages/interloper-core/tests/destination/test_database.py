@@ -325,6 +325,11 @@ class TestReaches:
 class TestCreateView:
     """A definition is SQL text, or something that compiles to it for the dialect."""
 
+    def test_a_backend_without_view_hooks_refuses_to_create(self):
+        destination = ViewlessDatabase(id="db")
+        with pytest.raises(ConfigError, match="does not support views"):
+            destination.create_view(plain_asset(destinations=[destination]), "SELECT 1 AS a")
+
     def test_sql_text_is_passed_through(self):
         destination = RecordingDatabase(id="db")
         destination.create_view(plain_asset(destinations=[destination]), "SELECT 1 AS a")

@@ -288,14 +288,12 @@ def _build_reference_class(
         target: The anchor class, `Reference` itself.
         classvars: Class-level attributes to set (``key``, ``table_name``, ``schema``, ...).
         fields: Pydantic field values to set, annotated from the anchor's fields.
-        relations: Relations declared on the reference; a reference declares none.
+        relations: Passed by `decorate`'s builder contract and ignored: a reference declares none.
 
     Returns:
         A dynamically created Reference subclass named after its key.
     """
     namespace: dict[str, Any] = {**classvars, **fields, "__module__": target.__module__}
-    if relations:
-        namespace["relations"] = relations
     annotations = {name: target.model_fields[name].annotation for name in fields if name in target.model_fields}
     if annotations:
         namespace["__annotations__"] = annotations

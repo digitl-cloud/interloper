@@ -385,3 +385,6 @@ class TestViews:
         assert not first.reaches(second)
         assert not second.reaches(first)
         assert first.reaches(sharing)
+
+    def test_reaches_only_duckdb_destinations(self, destination):
+        assert not destination.reaches(il.MemoryDestination(id="memory"))
