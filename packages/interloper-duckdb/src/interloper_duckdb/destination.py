@@ -81,18 +81,6 @@ class DuckDBDestination(DatabaseDestination):
         """
         return dataset or self.default_dataset or DEFAULT_SCHEMA
 
-    def _ref(self, table: str, dataset: str | None) -> str:
-        """Build the quoted, schema-qualified table reference.
-
-        Args:
-            table: Table name.
-            dataset: The schema, or ``None`` for the destination's default.
-
-        Returns:
-            ``"schema"."table"``.
-        """
-        return f"{_quote(self._schema(dataset))}.{_quote(table)}"
-
     @contextmanager
     def _cursor(self) -> Iterator[duckdb.DuckDBPyConnection]:
         """Yield the cursor an operation runs on.
@@ -166,7 +154,7 @@ class DuckDBDestination(DatabaseDestination):
         )
         statements = (
             f"CREATE SCHEMA IF NOT EXISTS {_quote(self._schema(dataset))}",
-            f"CREATE TABLE IF NOT EXISTS {self._ref(table, dataset)} ({columns})",
+            f"CREATE TABLE IF NOT EXISTS {self.qualified_name(table, dataset)} ({columns})",
         )
         with _DDL_LOCK:
             for statement in statements:
@@ -226,7 +214,7 @@ class DuckDBDestination(DatabaseDestination):
             if not columns:
                 raise RuntimeError(f"Table '{self._schema(dataset)}.{table}' could not be created.")
 
-            ref = self._ref(table, dataset)
+            ref = self.qualified_name(table, dataset)
             frame = Representation.of(data).to("dataframe")
             extras = [str(c) for c in frame.columns if str(c) not in columns]
             if extras:
@@ -261,7 +249,7 @@ class DuckDBDestination(DatabaseDestination):
             if not types:
                 return
             self._begin()
-            ref = self._ref(table, dataset)
+            ref = self.qualified_name(table, dataset)
             if where is None:
                 cursor.execute(f"DELETE FROM {ref}")
                 return
@@ -288,7 +276,7 @@ class DuckDBDestination(DatabaseDestination):
                 raise DataNotFoundError(
                     f"Table '{self._schema(dataset)}.{table}' does not exist. Has the asset been materialized?"
                 )
-            ref = self._ref(table, dataset)
+            ref = self.qualified_name(table, dataset)
             if where is None:
                 return cursor.execute(f"SELECT * FROM {ref}").df()
             predicate, parameters = self._predicate(where, types)
@@ -315,7 +303,7 @@ class DuckDBDestination(DatabaseDestination):
                 )
             rows = cursor.execute(
                 f"SELECT CAST({_quote(column)} AS VARCHAR) AS partition_value, COUNT(*) AS cnt "
-                f"FROM {self._ref(table, dataset)} GROUP BY 1"
+                f"FROM {self.qualified_name(table, dataset)} GROUP BY 1"
             ).fetchall()
         return dict(rows)
 
@@ -373,7 +361,7 @@ class DuckDBDestination(DatabaseDestination):
         """
         with self._cursor() as cursor, _DDL_LOCK:
             cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {_quote(self._schema(dataset))}")
-            cursor.execute(f"CREATE OR REPLACE VIEW {self._ref(table, dataset)} AS {sql}")
+            cursor.execute(f"CREATE OR REPLACE VIEW {self.qualified_name(table, dataset)} AS {sql}")
 
     def reaches(self, other: Destination) -> bool:
         """Whether *other* is a DuckDB destination on the same database.

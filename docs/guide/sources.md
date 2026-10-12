@@ -153,14 +153,15 @@ source's own asset instances. Anything reaching outside the source is left to th
 ## Dataset and table naming
 
 Every asset materializes into `dataset.table`. The dataset is the source's `dataset` (or key).
-The table is computed by `Source.asset_table()`:
+The table is computed by `Source.table()`:
 
 - Without a discriminator: the asset key (`campaigns`).
 - With a discriminator: `{asset_key}__{discriminator}` (`campaigns__act_123`), so several
   instances of one source land side by side in one dataset.
+- A reference's `table` as written, with the source's fields filled in.
 
-Override `asset_table()` for another convention. The result is coerced to a valid identifier
-(lowercase letters, digits, underscores).
+The default is coerced to a valid identifier (lowercase letters, digits, underscores). Override
+`table()` for another convention; its result is validated when the source resolves its assets.
 
 ### The discriminator
 

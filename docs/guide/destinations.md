@@ -223,6 +223,6 @@ Behaviour the base class owns:
 
 ## Table naming
 
-The table name comes from the owning source's `asset_table()`; see
+The table name comes from the owning source's `table()`; see
 [Sources](sources.md#dataset-and-table-naming). Destinations read `context.asset.table` and
 `context.asset.dataset` and never compute names themselves.

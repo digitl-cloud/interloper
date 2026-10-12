@@ -17,7 +17,7 @@ from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
 from interloper.retry import RetryPolicy
 from interloper.serializable import IgnoredDescriptor
-from interloper.utils.text import validate_key
+from interloper.utils.text import to_identifier, validate_key
 
 if TYPE_CHECKING:
     from interloper.destination import Destination
@@ -318,28 +318,32 @@ class Source(Component, Workload):
         """
         return list(self.assets)
 
-    def asset_table(self, asset: Asset) -> str:
-        """Physical table name for one of this source's assets.
+    def table(self, asset: Asset) -> str:
+        """The physical table name of one of this source's assets.
 
-        Defaults to suffixing the asset key with the instance's
-        `discriminator` (the config
-        field marked ``discriminator=True``), so instances of a multi-account
-        source materialize side by side in one dataset instead of overwriting
-        each other's data. Without a discriminator the asset key is used as-is.
+        A reference's table is its ``table_name`` as written, with this
+        source's fields filled in by `format`. Any other asset's is the asset
+        key suffixed with the instance's `discriminator` (the config field
+        marked ``discriminator=True``) and coerced to a valid identifier, so
+        instances of a multi-account source materialize side by side in one
+        dataset instead of overwriting each other's data. Without a
+        discriminator the asset key is used as-is.
 
-        Override for full control over the composition; keep the
-        ``{asset.key}__{suffix}`` shape so tables stay wildcard-queryable per
-        asset. The return value is coerced to a valid identifier by
-        `Asset.table`.
+        Override for another composition; keep the ``{asset.key}__{suffix}``
+        shape so tables stay wildcard-queryable per asset, leave references
+        to ``super()``, and return a valid identifier: the result is
+        validated when the source resolves its assets, not coerced.
 
         Args:
-            asset: The asset to name a table for; only its ``key`` is read.
+            asset: The asset to name a table for.
 
         Returns:
             The physical table name for the asset.
         """
+        if isinstance(asset, Reference) and asset.table_name is not None:
+            return self.format(asset.table_name)
         discriminator = self.discriminator
-        return f"{asset.key}__{discriminator}" if discriminator else asset.key
+        return to_identifier(f"{asset.key}__{discriminator}" if discriminator else asset.key)
 
     def __getattr__(self, name: str) -> Asset:
         """Instance-level asset lookup fallback.

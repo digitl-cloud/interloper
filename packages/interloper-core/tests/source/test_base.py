@@ -305,18 +305,18 @@ class TestAssetTable:
     def test_discriminator_suffixes_table(self):
         source = FakeDiscriminatedSource(account_id="123")
         (asset,) = source.assets
-        assert source.asset_table(asset) == "fake_discriminated__123"
+        assert source.table(asset) == "fake_discriminated__123"
         assert asset.table == "fake_discriminated__123"
         # The logical identity is untouched — only the physical name varies.
         assert type(asset).key == "fake_discriminated"
         assert asset.dataset == "fake_discriminated_source"
 
-    def test_asset_table_is_sanitized(self):
+    def test_table_is_sanitized(self):
         source = FakeDiscriminatedSource(account_id="act_123-DE")
         (asset,) = source.assets
         assert asset.table == "fake_discriminated__act_123_de"
 
-    def test_default_asset_table_is_the_asset_key(self):
+    def test_default_table_is_the_asset_key(self):
         source = FakeDiscriminatedSource()
         (asset,) = source.assets
         assert asset.table == "fake_discriminated"
@@ -326,21 +326,21 @@ class TestAssetTable:
         restored = FakeDiscriminatedSource.from_spec(source.to_spec())
         assert [a.table for a in restored.assets] == ["fake_discriminated__123"]
 
-    def test_asset_table_override_takes_full_control(self):
+    def test_table_override_takes_full_control(self):
         class FakeOverridingSource(FakeDiscriminatedSource):
-            def asset_table(self, asset: il.Asset) -> str:
+            def table(self, asset: il.Asset) -> str:
                 return f"custom__{asset.key}"
 
         (asset,) = FakeOverridingSource(account_id="123").assets
         assert asset.table == "custom__fake_discriminated"
 
-    def test_invalid_asset_table_raises_at_init(self):
+    def test_invalid_table_raises_at_init(self):
         # The composed name is validated during ``_resolve``; ``validate_key``
         # raises a ValueError, so pydantic wraps it at init time.
         from pydantic import ValidationError
 
         class FakeBadTableSource(FakeDiscriminatedSource):
-            def asset_table(self, asset: il.Asset) -> str:
+            def table(self, asset: il.Asset) -> str:
                 """Return a name that sanitizes to an invalid identifier."""
                 return f"123_{asset.key}"
 
