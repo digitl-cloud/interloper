@@ -17,3 +17,12 @@ def test_sql_view_builds_a_sqlview_with_the_function_as_data():
     assert totals.key == "totals"
     assert totals.tags == ["Fact"]
     assert totals.relations["orders"].key == "orders"
+
+
+def test_the_bare_form_builds_a_sqlview_too():
+    @sql_view
+    def totals(orders: il.Upstream) -> ibis.Table:
+        return orders.data
+
+    assert issubclass(totals, SqlView)
+    assert totals.key == "totals"

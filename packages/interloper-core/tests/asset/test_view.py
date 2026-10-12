@@ -142,6 +142,20 @@ class TestRun:
         assert result.executions[reporting.order_totals.id].error == "RuntimeError: column date not found"
         assert result.executions[reporting.daily_totals.id].status is ExecutionStatus.CANCELED
 
+    def test_a_disabled_view_creates_nothing(self):
+        warehouse = RecordingWarehouse(id="warehouse")
+        reporting = Reporting(destinations=[warehouse], select=[])
+        assert il.run(reporting.order_totals.materialize_async(None, None, {})) is None
+        assert RecordingWarehouse.views == []
+
+    def test_a_run_without_exactly_one_destination_is_a_config_error(self):
+        @il.view
+        def constant() -> str:
+            return "SELECT 1"
+
+        with pytest.raises(ConfigError, match="needs exactly one destination, has 0"):
+            il.run(constant().materialize_async(None, None, {}))
+
 
 class TestValidation:
     def test_an_upstream_in_an_unreachable_destination_is_a_config_error(self):
