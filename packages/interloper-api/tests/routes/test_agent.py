@@ -219,6 +219,27 @@ class TestChat:
         assert [m["role"] for m in detail["messages"]] == ["user", "assistant", "user", "assistant"]
         assert detail["messages"][1]["parts"][0] == {"type": "text", "text": "Hello Ada", "state": "done"}
 
+    def test_a_turn_is_counted_with_its_tokens_and_requests(
+        self, store: Store, member: SimpleNamespace, metric_total: Any
+    ):
+        agent = _echo_agent()
+        client = _client(store, member, agent)
+        conversation_id = client.post("/agent/conversations").json()["id"]
+        before = {
+            "turns": metric_total("interloper.agent.turns", status="completed"),
+            "input": metric_total("interloper.agent.tokens", kind="input"),
+            "output": metric_total("interloper.agent.tokens", kind="output"),
+            "requests": metric_total("interloper.agent.requests"),
+        }
+
+        with agent.override(model=TestModel(call_tools=[], custom_output_text="Hello Ada")):
+            client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("hi there"))
+
+        assert metric_total("interloper.agent.turns", status="completed") == before["turns"] + 1
+        assert metric_total("interloper.agent.tokens", kind="input") > before["input"]
+        assert metric_total("interloper.agent.tokens", kind="output") > before["output"]
+        assert metric_total("interloper.agent.requests") == before["requests"] + 1
+
     def test_a_follow_up_sent_with_the_whole_list_stores_each_message_once(self, store: Store, member: SimpleNamespace):
         agent = _echo_agent()
         client = _client(store, member, agent)
@@ -337,7 +358,7 @@ class TestChat:
         assert "tool-output-available" in resumed.text
 
     def test_a_failing_turn_is_logged_server_side(
-        self, store: Store, member: SimpleNamespace, caplog: pytest.LogCaptureFixture
+        self, store: Store, member: SimpleNamespace, caplog: pytest.LogCaptureFixture, metric_total: Any
     ):
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
             raise RuntimeError("provider exploded")
@@ -349,9 +370,11 @@ class TestChat:
         client = _client(store, member, agent)
         conversation_id = client.post("/agent/conversations").json()["id"]
 
+        failed_before = metric_total("interloper.agent.turns", status="failed")
         with caplog.at_level("ERROR", logger="interloper_api.routes.agent"):
             response = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("hi"))
 
         assert response.status_code == 200
         assert '"type":"error"' in response.text
         assert "Agent turn failed: provider exploded" in caplog.text
+        assert metric_total("interloper.agent.turns", status="failed") == failed_before + 1

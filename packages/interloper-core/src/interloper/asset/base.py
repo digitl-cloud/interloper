@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import traceback
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sized
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
@@ -757,6 +757,7 @@ class Asset(Operation):
             metadata=metadata,
             schema=self._effective_schema or self.schema,
         )
+        rows = len(result) if isinstance(result, Sized) else None
 
         for destination in destinations:
             destination_key = destination.key
@@ -772,7 +773,7 @@ class Asset(Operation):
                     await invoke(destination.write, destination_context, result)
                 EventBus.emit(
                     EventType.DEST_WRITE_COMPLETED,
-                    metadata={**destination_meta, "message": f"Wrote '{self.key}'"},
+                    metadata={**destination_meta, "rows": rows, "message": f"Wrote '{self.key}'"},
                 )
             except Exception as e:
                 EventBus.emit(

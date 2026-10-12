@@ -24,6 +24,7 @@ from croniter import croniter
 from interloper.errors import ConfigError, QuotaExceededError
 from interloper.job.cron import CronJob
 from interloper.partitioning.time import TimePartitionWindow
+from interloper.telemetry.tracer import meter
 from interloper_db import Store
 from interloper_db.models import Component
 
@@ -66,6 +67,9 @@ class CronController(Controller):
         """
         super().__init__(poll_interval=reconcile_interval)
         self._store = store or Store.from_settings()
+        self._skips = meter().create_counter(
+            "interloper.scheduler.skips", unit="{firing}", description="Due cron firings that created no run"
+        )
         self._batch_size = batch_size
         self._max_execution_delay = max_execution_delay
         if self._max_execution_delay < reconcile_interval:
@@ -104,6 +108,7 @@ class CronController(Controller):
                     self._store.components.stamp_state(job.id, next_run_at=next_run)
                     self._skip(
                         job,
+                        "late",
                         f"too late ({delay}s > {self._max_execution_delay}s)",
                         scheduled_for=scheduled_time.isoformat(),
                         delay=delay,
@@ -118,7 +123,7 @@ class CronController(Controller):
                 except ValueError as exc:
                     # Targets disagree on granularity: skip rather than
                     # backfill a window that is wrong for some of them.
-                    self._skip(job, str(exc))
+                    self._skip(job, "config", str(exc))
                     continue
 
                 # The store calls join this tick's transaction, so the firing
@@ -138,21 +143,24 @@ class CronController(Controller):
                     else:
                         self._store.runs.create(job.org_id, component_id=job.id)
                 except QuotaExceededError as exc:
-                    self._skip(job, str(exc), quota=exc.quota, limit=exc.limit, used=exc.used)
+                    self._skip(job, "quota", str(exc), quota=exc.quota, limit=exc.limit, used=exc.used)
 
             logger.info("Processed %d job(s)", len(jobs))
 
     # -- Internals -------------------------------------------------------------
 
-    def _skip(self, job: Component, reason: str, **details: Any) -> None:
+    def _skip(self, job: Component, reason: str, message: str, **details: Any) -> None:
         """Record a due firing that created no run, on the job itself.
 
         Args:
             job: The job whose firing was skipped.
-            reason: Why it was skipped, shown after "Scheduled firing skipped:".
+            reason: Why it was skipped, bounded for metrics: ``late``,
+                ``config`` or ``quota``.
+            message: The sentence shown after "Scheduled firing skipped:".
             **details: Structured facts about the skip, stored on the event's data.
         """
-        logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, reason)
+        logger.warning("Skipping job '%s' for org %s: %s", job.name, job.org_id, message)
+        self._skips.add(1, {"reason": reason})
         event = il.Event(
             type=il.EventType.LOG,
             metadata={
@@ -160,7 +168,8 @@ class CronController(Controller):
                 "component_kind": job.kind,
                 "component_key": job.key,
                 "level": "warning",
-                "message": f"Scheduled firing skipped: {reason}",
+                "message": f"Scheduled firing skipped: {message}",
+                "reason": reason,
                 **details,
             },
         )

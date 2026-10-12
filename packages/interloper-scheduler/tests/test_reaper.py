@@ -123,6 +123,21 @@ class TestRules:
         assert Reaper(store=store, run_timeout=3600)._reap() == 1
         assert _error(store, run_id) == "Timed out after 3600s"
 
+    def test_each_reaped_run_is_counted_under_its_rule(self, store: Store, metric_total: Any) -> None:
+        _run(store, RunStatus.DISPATCHED, heartbeat_at=_ago(700))
+        _run(store, RunStatus.RUNNING, heartbeat_at=_ago(200))
+        _run(store, RunStatus.RUNNING, started_at=_ago(4000))
+        kinds = ("startup", "heartbeat", "timeout")
+        before = {kind: metric_total("interloper.runs.reaped", reason=kind) for kind in kinds}
+
+        Reaper(store=store, startup_timeout=600, heartbeat_timeout=90, run_timeout=3600)._reap()
+
+        assert {kind: metric_total("interloper.runs.reaped", reason=kind) - before[kind] for kind in kinds} == {
+            "startup": 1,
+            "heartbeat": 1,
+            "timeout": 1,
+        }
+
 
 class TestDiagnosis:
     """The launcher's diagnosis is detail on the reason, never a decision."""
@@ -168,6 +183,7 @@ class TestTargetContext:
                 select(EventRow).where(EventRow.run_id == run_id, EventRow.event_type == "run_failed")
             ).one()
             assert reaped_event.data == {
+                "attempt": 1,
                 "target_id": str(target_id),
                 "target_kind": "job",
                 "target_key": "nightly",
@@ -251,6 +267,21 @@ class TestReconcileUsage:
             reaper._reconcile_usage()
 
         assert "Usage ledger drift" not in caplog.text
+
+    def test_drift_is_a_gauge_that_falls_back_to_zero_once_resolved(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, metric_total: Any
+    ) -> None:
+        org_id = uuid4()
+        drift = UsageDrift(org_id=org_id, period_start=dt.date(2026, 6, 1), ledger=5, recomputed=7)
+        reaper = Reaper(store=store, launcher=_FakeLauncher(None))
+
+        monkeypatch.setattr(store.usage, "reconcile", lambda: [drift])
+        reaper._reconcile_usage()
+        assert metric_total("interloper.usage.drift", org_id=str(org_id)) == -2
+
+        monkeypatch.setattr(store.usage, "reconcile", list)
+        reaper._reconcile_usage()
+        assert metric_total("interloper.usage.drift", org_id=str(org_id)) == 0
 
     def test_a_failed_reconciliation_does_not_stop_the_loop(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

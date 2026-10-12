@@ -4,8 +4,8 @@ Counters and durations are order-insensitive, so they ride the
 `EventBus` (which already carries the full
 lifecycle taxonomy with timestamps) instead of the execution hot path.
 Metric attributes stay low-cardinality by design: ``component_key`` is
-bounded by the catalog, while ids and partitions are deliberately
-excluded.
+bounded by the catalog and ``attempt`` by the retry policy, while ids and
+partitions are deliberately excluded.
 """
 
 from __future__ import annotations
@@ -106,6 +106,9 @@ class OtelMetricsHandler:
         self._dest_io = m.create_counter(
             "interloper.destination.io", unit="{operation}", description="Destination read/write operations"
         )
+        self._dest_rows = m.create_counter(
+            "interloper.destination.rows", unit="{row}", description="Rows written to destinations"
+        )
         self._seen = _Bounded(max_tracked)
         self._started = _Bounded(max_tracked)
 
@@ -152,7 +155,7 @@ class OtelMetricsHandler:
             self._started[key] = event.timestamp
             return
 
-        IDENTITY_KEYS = ("org_id", "target_kind", "target_key")
+        IDENTITY_KEYS = ("org_id", "target_kind", "target_key", "attempt")
         identity = {key: str(event.metadata[key]) for key in IDENTITY_KEYS if event.metadata.get(key)}
 
         attributes = {
@@ -187,6 +190,9 @@ class OtelMetricsHandler:
     def _record_destination_io(self, event: Event) -> None:
         """Count one destination read/write, attributed by operation and outcome.
 
+        A completed write that reports its ``rows`` also adds them to the
+        rows counter, keyed by destination alone.
+
         Args:
             event: A terminal destination read or write event.
         """
@@ -198,6 +204,9 @@ class OtelMetricsHandler:
         if destination_key := event.metadata.get("destination_key"):
             attributes["destination_key"] = str(destination_key)
         self._dest_io.add(1, attributes)
+        rows = event.metadata.get("rows")
+        if event.type is EventType.DEST_WRITE_COMPLETED and isinstance(rows, int) and rows > 0:
+            self._dest_rows.add(rows, {key: attributes[key] for key in ("destination_key",) if key in attributes})
 
     def _elapsed(self, key: tuple[str, ...], *, until: dt.datetime) -> float | None:
         """Consume a stored start time and return the seconds since it.

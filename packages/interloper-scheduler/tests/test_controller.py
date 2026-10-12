@@ -57,6 +57,20 @@ class TestTickLiveness:
         assert "_stubloop" in loops
         assert loops["_stubloop"] > 0
 
+    def test_the_gauge_names_the_replica_it_ticks_on(self, metric_reader):
+        _StubLoopController().start()
+        data = metric_reader.get_metrics_data()
+        replicas = {
+            point.attributes.get("replica")
+            for rm in data.resource_metrics
+            for sm in rm.scope_metrics
+            for metric in sm.metrics
+            if metric.name == "interloper.scheduler.tick"
+            for point in metric.data.data_points
+        }
+        assert replicas == {controller._replica}
+        assert controller._replica
+
 
 class _InterruptingController(Controller):
     """Raises ``KeyboardInterrupt`` from its tick, as Ctrl-C would."""

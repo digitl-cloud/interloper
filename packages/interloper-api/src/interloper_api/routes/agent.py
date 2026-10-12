@@ -20,12 +20,13 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response
+from interloper.telemetry import meter
 from interloper_agent import TURN_LIMITS, summary_of
 from interloper_db import Page, PageQuery
 from interloper_db.models import Conversation
 from interloper_toolkit import ToolkitContext
 from pydantic import BaseModel
-from pydantic_ai import DeferredToolResults
+from pydantic_ai import Agent, DeferredToolResults
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.messages import (
     ModelMessage,
@@ -49,6 +50,12 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 SDK_VERSION = 7
 """The AI SDK major version the app speaks; tool approvals need at least 6."""
 
+_turns = meter().create_counter("interloper.agent.turns", unit="{turn}", description="Agent turns, by outcome")
+_tokens = meter().create_counter("interloper.agent.tokens", unit="{token}", description="Tokens agent turns spent")
+_requests = meter().create_histogram(
+    "interloper.agent.requests", unit="{request}", description="Model requests one agent turn took"
+)
+
 
 class LoggedEventStream(VercelAIEventStream[ToolkitContext, Any]):
     """The Vercel event stream, with a run's failure in the server log too.
@@ -68,6 +75,7 @@ class LoggedEventStream(VercelAIEventStream[ToolkitContext, Any]):
             The protocol's error chunks.
         """
         logger.error("Agent turn failed: %s", error, exc_info=error)
+        _turns.add(1, {"status": "failed"})
         async for chunk in super().on_error(error):
             yield chunk
 
@@ -327,6 +335,11 @@ async def chat(
             usage.output_tokens,
             len(messages),
         )
+        model = _model_name(agent)
+        _turns.add(1, {"status": "completed", "model": model})
+        _tokens.add(usage.input_tokens, {"kind": "input", "model": model})
+        _tokens.add(usage.output_tokens, {"kind": "output", "model": model})
+        _requests.record(usage.requests, {"model": model})
 
     history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
     return await ConversationAdapter.dispatch_request(
@@ -340,6 +353,20 @@ async def chat(
         usage_limits=TURN_LIMITS,
         on_complete=save,
     )
+
+
+def _model_name(agent: Agent[ToolkitContext, Any]) -> str:
+    """The model an agent answers with, as a metric attribute.
+
+    Args:
+        agent: The assistant; its model is the ``provider:model`` string it
+            was built with until the first turn resolves it.
+
+    Returns:
+        The model's name.
+    """
+    model = agent.model
+    return model if isinstance(model, str) else getattr(model, "model_name", str(model))
 
 
 def _fold_turns(messages: list[UIMessage]) -> list[UIMessage]:

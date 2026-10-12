@@ -1,8 +1,9 @@
 # Telemetry
 
-Interloper exports OpenTelemetry **traces** and **metrics** over OTLP: one trace per run, from
-the runner through every operation, `data()` call and destination read or write, across
-process boundaries; plus counters and duration histograms derived from the event bus.
+Interloper exports OpenTelemetry **traces**, **metrics** and **logs** over OTLP: one trace per
+run, from the runner through every operation, `data()` call and destination read or write,
+across process boundaries; counters and duration histograms derived from the event bus; and the
+standard `logging` records, each carrying the trace it was written under.
 
 Telemetry is off by default and costs nothing when disabled: the core depends only on the no-op
 `opentelemetry-api`. The SDK and exporters ship in the `otel` extra.
@@ -45,7 +46,7 @@ The `otel` block of `interloper.yaml`, or `INTERLOPER_OTEL_*` variables:
 | `protocol` | `grpc` | `grpc` or `http/protobuf`. |
 | `headers` | empty | Exporter headers as `key=value,key2=value2`. Treat as a secret. |
 | `service_name` | `interloper` | The `service.name` resource attribute. |
-| `traces`, `metrics` | `true` | Signal toggles. |
+| `traces`, `metrics`, `logs` | `true` | Signal toggles. |
 | `sample_ratio` | `1.0` | Parent-based head sampling ratio. |
 | `metric_export_interval` | `60` | Seconds between metric exports. |
 
@@ -90,17 +91,33 @@ instrumentation is installed, so REST-based sources get egress spans for free.
 
 | Instrument | Type | Attributes |
 |------------|------|------------|
-| `interloper.runs` | counter | `status`, plus `org_id`, `target_kind`, `target_key` when the platform supplies them |
+| `interloper.runs` | counter | `status`, plus `org_id`, `target_kind`, `target_key`, `attempt` when the platform supplies them |
 | `interloper.run.duration` | histogram, seconds | same |
 | `interloper.operations` | counter | `status`, `component_key` |
 | `interloper.operation.duration` | histogram, seconds | `status`, `component_key` |
 | `interloper.destination.io` | counter | `operation` (`read`, `write`), `status`, `destination_key` |
+| `interloper.destination.rows` | counter | `destination_key`; the rows a completed write carried, when the data has a length |
 
 Metrics are computed by a subscriber on the [event bus](events.md), so they cost nothing on the
 execution path, and they dedupe on event id so re-emitted child events count once. Attributes
 stay low-cardinality by design: ids and partitions never become metric attributes. In a child
 container (`INTERLOPER_EVENTS_TO_STDERR=true`) the metrics handler is not installed; the host
 that re-emits the events is authoritative.
+
+The platform adds its own instruments where the event bus does not reach:
+
+| Instrument | Type | Attributes |
+|------------|------|------------|
+| `interloper.scheduler.tick` | gauge, unix seconds | `loop` (`cron`, `hook`, `queue`, `reaper`, `renewal`), `replica`; each loop's last successful tick, so `time() - value` is its staleness |
+| `interloper.runs.launched` | counter | `outcome` (`launched`, `failed`) |
+| `interloper.runs.reaped` | counter | `reason` (`startup`, `heartbeat`, `timeout`) |
+| `interloper.scheduler.skips` | counter | `reason` (`late`, `config`, `quota`); due cron firings that created no run |
+| `interloper.hooks` | counter | `status` (`fired`, `failed`), `component_key` |
+| `interloper.usage.drift` | gauge | `org_id`; the usage ledger minus the runs table, zero once reconciled |
+| `interloper.agent.turns` | counter | `status` (`completed`, `failed`), `model` |
+| `interloper.agent.tokens` | counter | `kind` (`input`, `output`), `model` |
+| `interloper.agent.requests` | histogram | `model`; model requests one turn took |
+| `interloper.agent.compactions` | counter | turns whose older history was summarised |
 
 ### Delta temporality
 
@@ -112,6 +129,15 @@ processor in front of a Prometheus exporter that is scraped, with OpenMetrics en
 counter start timestamps survive, and `metric_expiration` raised well above the default so idle
 counters keep publishing. The accumulated totals live in the collector; restarting it resets
 them. A worked collector and Grafana setup is in the repository under `examples/telemetry`.
+
+## Logs
+
+With `logs` on, a handler on the root logger ships every record the process emits, at the
+level the process already logs at, through the same OTLP endpoint. Records written inside a
+span carry its trace and span ids, so a log line in Grafana links to the trace it belongs to
+and a trace to the lines written during it. The collector needs a `logs` pipeline; without one
+the exporter reports the refused batches and the records still reach the process's own
+handlers.
 
 ## Custom instrumentation
 

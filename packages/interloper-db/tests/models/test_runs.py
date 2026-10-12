@@ -25,6 +25,7 @@ def test_event_metadata_carries_target_context() -> None:
         "run_id": str(run.id),
         "backfill_id": str(run.backfill_id),
         "org_id": str(org),
+        "attempt": 1,
         "target_id": str(target.id),
         "target_kind": "job",
         "target_key": "nightly",
@@ -37,7 +38,7 @@ def test_event_metadata_without_target() -> None:
 
     metadata = run.event_metadata(None)
 
-    assert metadata == {"run_id": str(run.id), "backfill_id": None, "org_id": str(run.org_id)}
+    assert metadata == {"run_id": str(run.id), "backfill_id": None, "org_id": str(run.org_id), "attempt": 1}
 
 
 def test_a_stack_holds_one_run_per_attempt(auth_db: Engine) -> None:
@@ -66,6 +67,25 @@ def test_a_run_neither_dispatched_nor_running_is_never_overdue(status: str) -> N
     overdue = run.overdue(long_ago + dt.timedelta(days=30), startup_timeout=1, heartbeat_timeout=1, run_timeout=1)
 
     assert overdue is None
+
+
+@pytest.mark.parametrize(
+    ("status", "fields", "kind"),
+    [
+        ("dispatched", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "startup"),
+        ("running", {"heartbeat_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "heartbeat"),
+        ("running", {"started_at": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)}, "timeout"),
+    ],
+)
+def test_an_overdue_run_names_the_rule_that_caught_it(status: str, fields: dict[str, object], kind: str) -> None:
+    now = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
+    run = Run(org_id=uuid4(), status=status, heartbeat_at=now, started_at=now)
+    for name, value in fields.items():
+        setattr(run, name, value)
+
+    overdue = run.overdue(now, startup_timeout=60, heartbeat_timeout=60, run_timeout=60)
+
+    assert overdue is not None and overdue.kind == kind
 
 
 def _event_values(event: il.Event, org_id: UUID, run_id: UUID | None) -> dict[str, object]:

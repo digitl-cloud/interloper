@@ -3,7 +3,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, NamedTuple, Optional
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -49,6 +49,19 @@ class BackfillStatus(str, Enum):
     SUCCESS = "success"
     FAILED = "failed"
     CANCELED = "canceled"
+
+
+class Overdue(NamedTuple):
+    """Why a run should be failed now.
+
+    Attributes:
+        kind: The rule that caught it, bounded for metrics: ``startup``,
+            ``heartbeat`` or ``timeout``.
+        reason: The sentence recorded as the run's error.
+    """
+
+    kind: str
+    reason: str
 
 
 TERMINAL_RUN_STATUSES = frozenset({RunStatus.SUCCESS, RunStatus.FAILED, RunStatus.CANCELED})
@@ -191,7 +204,7 @@ class Run(SQLModel, table=True):
         startup_timeout: int,
         heartbeat_timeout: int,
         run_timeout: int | None,
-    ) -> str | None:
+    ) -> Overdue | None:
         """Why this run should be failed at *now*, if it should.
 
         A dispatched run whose pod has not started within the startup timeout
@@ -210,20 +223,21 @@ class Run(SQLModel, table=True):
                 target must be loaded for the job's own to apply.
 
         Returns:
-            The failure reason, or ``None`` while the run is in good standing.
+            The rule that caught it and the failure reason, or ``None`` while
+            the run is in good standing.
         """
         heartbeat = self.heartbeat_at
         if self.status == RunStatus.DISPATCHED:
             if heartbeat is not None and heartbeat < now - timedelta(seconds=startup_timeout):
-                return f"Run did not start within {startup_timeout}s"
+                return Overdue("startup", f"Run did not start within {startup_timeout}s")
             return None
         if self.status != RunStatus.RUNNING:
             return None
         if heartbeat is not None and heartbeat < now - timedelta(seconds=heartbeat_timeout):
-            return f"No heartbeat since {heartbeat:%Y-%m-%d %H:%M:%S} UTC"
+            return Overdue("heartbeat", f"No heartbeat since {heartbeat:%Y-%m-%d %H:%M:%S} UTC")
         timeout = (self.target.run_timeout if self.target is not None else None) or run_timeout
         if timeout is not None and self.started_at is not None and self.started_at < now - timedelta(seconds=timeout):
-            return f"Timed out after {timeout}s"
+            return Overdue("timeout", f"Timed out after {timeout}s")
         return None
 
     def supersede(self) -> None:
@@ -254,6 +268,7 @@ class Run(SQLModel, table=True):
             "run_id": str(self.id),
             "backfill_id": str(self.backfill_id) if self.backfill_id else None,
             "org_id": str(self.org_id),
+            "attempt": self.attempt,
         }
         if target is not None:
             metadata |= {

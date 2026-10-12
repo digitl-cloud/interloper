@@ -22,7 +22,9 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from interloper.telemetry.tracer import meter
 from interloper_db import Store
+from opentelemetry.metrics import CallbackOptions, Observation
 
 from interloper_scheduler.controller import Controller
 
@@ -30,6 +32,38 @@ if TYPE_CHECKING:
     from interloper_scheduler.launcher import Launcher
 
 logger = logging.getLogger(__name__)
+
+#: Ledger minus runs table for every organisation reconciled since startup,
+#: keyed by organisation id. An organisation that recovered keeps reporting
+#: zero, so the gauge never freezes on a stale drift.
+_drift: dict[str, int] = {}
+_gauge_registered = False
+
+
+def _observe_drift(_options: CallbackOptions) -> list[Observation]:
+    """Report each organisation's usage ledger drift, as the gauge callback.
+
+    Args:
+        _options: Collection options from the OTel SDK, unused.
+
+    Returns:
+        One observation per organisation reconciled since startup.
+    """
+    return [Observation(drift, {"org_id": org_id}) for org_id, drift in _drift.items()]
+
+
+def _register_drift_gauge() -> None:
+    """Register the usage drift gauge once per process."""
+    global _gauge_registered
+    if _gauge_registered:
+        return
+    _gauge_registered = True
+    meter().create_observable_gauge(
+        "interloper.usage.drift",
+        callbacks=[_observe_drift],
+        unit="{run}",
+        description="Successful runs the usage ledger charged minus the runs table's count, per organisation",
+    )
 
 
 class Reaper(Controller):
@@ -68,6 +102,10 @@ class Reaper(Controller):
         super().__init__(poll_interval=poll_interval)
         self._store = store
         self._launcher = launcher
+        self._reaped = meter().create_counter(
+            "interloper.runs.reaped", unit="{run}", description="Runs the reaper failed, by the rule that caught them"
+        )
+        _register_drift_gauge()
         self._startup_timeout = startup_timeout
         self._heartbeat_timeout = heartbeat_timeout
         self._run_timeout = run_timeout
@@ -101,6 +139,8 @@ class Reaper(Controller):
         except Exception:
             logger.exception("Usage reconciliation failed")
             return
+        _drift.update(dict.fromkeys(_drift, 0))
+        _drift.update({str(drift.org_id): drift.ledger - drift.recomputed for drift in drifts})
         for drift in drifts:
             logger.warning(
                 "Usage ledger drift for org %s (period %s): ledger=%d, runs table=%d",
@@ -122,12 +162,13 @@ class Reaper(Controller):
             run_timeout=self._run_timeout,
         )
         reaped = 0
-        for run, reason in overdue:
-            error = self._explain(run.id, reason)
+        for run, verdict in overdue:
+            error = self._explain(run.id, verdict.reason)
             logger.warning("Reaping run %s: %s", run.id, error)
             try:
                 if self._store.runs.reap(run.id, error, heartbeat_at=run.heartbeat_at) is not None:
                     reaped += 1
+                    self._reaped.add(1, {"reason": verdict.kind})
             except Exception:
                 logger.exception("Failed to reap run %s", run.id)
         return reaped

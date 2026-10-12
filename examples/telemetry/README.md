@@ -57,14 +57,16 @@ with the exception recorded on it.
                     traces ────────────────▶ Tempo
 pipeline.py ──OTLP :4317──▶ otel-collector                     Grafana :8080
                     metrics ── accumulated ──┐                      │
-                                             ▼                      │
+                    logs ── collector stdout ▼                      │
                           Prometheus scrapes :9464 ◀────────────────┘
 ```
 
 Metrics are *pulled* from the collector rather than pushed onward: the
 collector holds the accumulated totals and outlives every run, so scraping it
 avoids the short-lived-producer problem entirely. Traces are pushed straight
-through to Tempo.
+through to Tempo. Logs reach the collector too (`docker compose logs
+otel-collector` shows each batch); the stack ships no log store, so that is
+where they stop.
 
 Ports deliberately avoid 3000/3001 so this can run alongside an interloper dev
 instance. Prometheus is on :9090 if you want to poke at raw series; Tempo is
