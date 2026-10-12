@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import interloper as il
 
 from interloper_assets.google_analytics_4 import schemas
@@ -32,18 +30,9 @@ class GoogleAnalytics4Export(il.Source):
         discriminator=True,
     )
 
-    @il.reference("events_*", schema=schemas.Events, tags=["Event"])
+    @il.reference(table="events_*", dataset="analytics_{property_id}", schema=schemas.Events, tags=["Event"])  # noqa: RUF027
     def events(self) -> None:
         """The property's raw export: one events_YYYYMMDD table per day, read and never written."""
-
-    def model_post_init(self, context: Any) -> None:
-        """Point ``events`` at the property's export dataset.
-
-        Args:
-            context: Pydantic's post-init context, forwarded untouched.
-        """
-        super().model_post_init(context)
-        self.events.dataset = f"analytics_{self.property_id}"
 
     @il.view(schema=schemas.FactDailyEvents, tags=["Fact"], dialect="bigquery")
     def fact_daily_events(self, events: il.Upstream) -> str:

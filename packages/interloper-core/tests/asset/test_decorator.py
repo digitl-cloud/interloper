@@ -249,7 +249,7 @@ class TestReferenceDecorator:
     """``il.reference`` routes overrides like ``il.asset`` and refuses unknown names."""
 
     def test_the_table_and_the_function_name_land_on_the_class(self):
-        @il.reference("events_*", tags=["Event"])
+        @il.reference(table="events_*", tags=["Event"])
         def events() -> None:
             """The raw export."""
 
@@ -262,5 +262,5 @@ class TestReferenceDecorator:
     def test_an_unknown_override_is_refused(self):
         with pytest.raises(TypeError, match="does not accept 'bogus'"):
 
-            @il.reference("events_*", bogus=1)
+            @il.reference(table="events_*", bogus=1)
             def events() -> None: ...

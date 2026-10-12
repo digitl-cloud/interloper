@@ -18,7 +18,7 @@ class Events(il.Schema):
 class Export(il.Source):
     property_id: str = il.InputField(default="", discriminator=True)
 
-    @il.reference("events_*", schema=Events, tags=["Event"])
+    @il.reference(table="events_*", schema=Events, tags=["Event"])
     def events(self) -> None: ...
 
 
@@ -33,7 +33,7 @@ class TestReference:
 
         @il.source
         class Dated(il.Source):
-            @il.reference("events-2026")
+            @il.reference(table="events-2026")
             def events(self) -> None: ...
 
         assert Dated().events.table == "events-2026"
@@ -55,10 +55,31 @@ class TestReference:
     def test_the_dataset_can_be_the_references_own(self):
         @il.source
         class Exported(il.Source):
-            @il.reference("events_*", dataset="exports")
+            @il.reference(table="events_*", dataset="exports")
             def events(self) -> None: ...
 
         assert Exported().events.dataset == "exports"
+
+    def test_the_table_and_the_dataset_name_the_sources_fields(self):
+        @il.source
+        class Sharded(il.Source):
+            property_id: str = il.InputField(default="", discriminator=True)
+
+            @il.reference(table="events_{property_id}", dataset="analytics_{property_id}")  # noqa: RUF027
+            def events(self) -> None: ...
+
+        source = Sharded(property_id="123")
+        assert source.events.table == "events_123"
+        assert source.events.dataset == "analytics_123"
+
+    def test_a_placeholder_that_is_not_a_field_is_a_config_error(self):
+        @il.source
+        class Sharded(il.Source):
+            @il.reference(table="events_*", dataset="analytics_{property_id}")
+            def events(self) -> None: ...
+
+        with pytest.raises(ValueError, match=r"Source 'sharded'.*property_id"):
+            Sharded()
 
     def test_the_decorator_routes_overrides(self):
         events = Export.asset_types[0]

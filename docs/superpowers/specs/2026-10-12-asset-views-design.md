@@ -104,9 +104,9 @@ after its connectors.
 ### 6. References
 
 `il.reference` points at a table in a destination and knows how to read it. The location is
-`table`, used as written (`"events_*"`), and `dataset`, the source's by default; a source whose
-tables vary per instance sets them in code, as for any asset (the GA4 export points `events` at
-`analytics_<property id>`). Its schema is declared, or omitted and discovered from the destination on first
+`table`, used as written (`"events_*"`), and `dataset`, the source's by default; either may name a
+field of the owning source in braces (`dataset="analytics_{property_id}"`), filled per instance by
+`Source.format`. Its schema is declared, or omitted and discovered from the destination on first
 read. Nothing is ever created or written, and nothing checks the table against a declared schema:
 a run touches no reference, so a mismatch surfaces where the table is used, from a consumer's read
 or a view's creation.

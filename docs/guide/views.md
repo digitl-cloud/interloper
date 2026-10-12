@@ -66,15 +66,16 @@ Every upstream of a `sql_view` must declare a schema: that is what types its tab
 class GoogleAnalytics4Export(il.Source):
     property_id: str = il.InputField(discriminator=True)
 
-    @il.reference("events_*", schema=Events)
+    @il.reference(table="events_*", dataset="analytics_{property_id}", schema=Events)
     def events(self) -> None:
         """The property's raw export, read and never written."""
 ```
 
 A reference names its table as written, wildcard and all; the dataset is the asset's, the source's
-by default, and a source whose tables vary per instance sets them in code, as the GA4 export points
-`events` at `analytics_<property id>` from its property id. Nothing is created or written.
-Downstream assets read it like any asset, and views build on it like any table.
+by default. Either may name a field of the source in braces (`dataset="analytics_{property_id}"`),
+filled per instance, which is how the GA4 export points `events` at the property's own dataset.
+Nothing is created or written. Downstream assets read it like any asset, and views build on it like
+any table.
 
 A source whose tables exist in one warehouse only says so with a narrowed `destinations` relation,
 checked when a destination is bound: the GA4 export declares

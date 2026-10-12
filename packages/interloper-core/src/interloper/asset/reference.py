@@ -16,10 +16,10 @@ class Reference(Asset):
 
     A reference points at a table in a destination and knows how to read it.
     ``table_name`` names the table as written, and the asset's ``dataset``
-    names where it is, the source's by default; a source whose tables vary
-    per instance sets them in code, as for any asset. A run does nothing.
-    Downstream assets read it like any other asset, and views build on it
-    like any other table.
+    names where it is, the source's by default; either may name a field of
+    the owning source in braces (``"analytics_{property_id}"``), filled by
+    `Source.format`. A run does nothing. Downstream assets read it like any
+    other asset, and views build on it like any other table.
     """
 
     reads_upstream_data: ClassVar[bool] = False
@@ -27,11 +27,14 @@ class Reference(Asset):
 
     @property
     def table(self) -> str:
-        """The table as written: a name interloper never composed, wildcard and all.
+        """The table as written, wildcard and all, with the owning source's fields filled in.
 
         ``table_name``, or the name any asset would get when none was given.
         """
-        return self.table_name if self.table_name is not None else super().table
+        if self.table_name is None:
+            return super().table
+        source = self.source
+        return source.format(self.table_name) if source is not None else self.table_name
 
     async def materialize_async(
         self,
