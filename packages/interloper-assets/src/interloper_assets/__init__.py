@@ -21,6 +21,7 @@ from interloper_assets.facebook_ads.source import FacebookAds, FacebookAdsConnec
 from interloper_assets.facebook_ads_star_schema.source import FacebookAdsStarSchema
 from interloper_assets.facebook_insights.source import FacebookInsights, FacebookInsightsConnection
 from interloper_assets.google_ads.source import GoogleAds, GoogleAdsConnection
+from interloper_assets.google_analytics_4.source import GoogleAnalytics4Export
 from interloper_assets.impact.source import Impact, ImpactConnection
 from interloper_assets.instagram_insights.source import InstagramInsights, InstagramInsightsConnection
 from interloper_assets.linkedin_ads.source import LinkedinAds, LinkedinAdsConnection
@@ -74,6 +75,7 @@ __all__ = [
     "FacebookInsightsConnection",
     "GoogleAds",
     "GoogleAdsConnection",
+    "GoogleAnalytics4Export",
     "Impact",
     "ImpactConnection",
     "InstagramInsights",
