@@ -248,21 +248,19 @@ class TestPartitionedAsset:
 class TestReferenceDecorator:
     """``il.reference`` routes overrides like ``il.asset`` and refuses unknown names."""
 
-    def test_the_table_and_the_attribute_name_land_on_the_class(self):
-        @il.source
-        class Export(il.Source):
-            events = il.reference("events_*", tags=["Event"])
+    def test_the_table_and_the_function_name_land_on_the_class(self):
+        @il.reference("events_*", tags=["Event"])
+        def events() -> None:
+            """The raw export."""
 
-        [events] = Export.asset_types
         assert issubclass(events, il.Reference)
         assert events.table_name == "events_*"
         assert events.key == "events"
         assert events.tags == ["Event"]
-        assert events.__qualname__.endswith("Export.events")
+        assert events.__doc__ == "The raw export."
 
-    def test_an_unknown_override_is_refused_when_the_source_class_is_built(self):
+    def test_an_unknown_override_is_refused(self):
         with pytest.raises(TypeError, match="does not accept 'bogus'"):
 
-            @il.source
-            class Export(il.Source):
-                events = il.reference("events_*", bogus=1)
+            @il.reference("events_*", bogus=1)
+            def events() -> None: ...

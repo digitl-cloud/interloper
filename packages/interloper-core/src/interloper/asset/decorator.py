@@ -12,7 +12,6 @@ from interloper.asset.reference import Reference
 from interloper.asset.view import View
 from interloper.component.decorator import decorate
 from interloper.component.relation import Relation
-from interloper.serializable import IgnoredDescriptor
 
 
 @overload
@@ -131,18 +130,21 @@ def view(
     return wrapper
 
 
-def reference(table: str, **overrides: Any) -> ReferenceDeclaration:
-    """Declare a reference: an asset over a table that already exists.
+def reference(table: str, **overrides: Any) -> Callable[[Callable[..., Any]], type[Reference]]:
+    """Create a Reference subclass from a decorated function: an asset over a table that already exists.
 
-    Written as a class attribute of a source, since a reference has no body;
-    the attribute name is the asset key:
+    Like ``il.asset``, but the function has nothing to compute: its name is
+    the asset key and its docstring the description, and its body stays
+    empty, since a reference is never run.
 
     ```py
     @il.source
     class Export(il.Source):
         property_id: str = il.InputField(discriminator=True)
 
-        events = il.reference("events_*", schema=Events)
+        @il.reference("events_*", schema=Events)
+        def events(self) -> None:
+            \"\"\"The property's raw export, read and never written.\"\"\"
     ```
 
     Args:
@@ -151,46 +153,13 @@ def reference(table: str, **overrides: Any) -> ReferenceDeclaration:
             (``schema``, ``tags``, ``dataset``, ``partitioning``, ...).
 
     Returns:
-        The declaration, which the source builds into a `Reference` subclass
-        when its own class is created.
-    """
-    return ReferenceDeclaration(table, overrides)
-
-
-class ReferenceDeclaration(IgnoredDescriptor):
-    """A reference as written in a source body, built into its class with the source's.
-
-    Pydantic ignores it in the class body, so the attribute needs no
-    annotation; the source then replaces it with a `Reference` subclass named
-    after the attribute and nested in the source, as a decorated asset is.
+        A decorator turning the function into a Reference subclass.
     """
 
-    def __init__(self, table: str, overrides: dict[str, Any]) -> None:
-        """Keep what `reference` was given until a source class exists to build for.
+    def wrapper(fn: Callable[..., Any]) -> type[Reference]:
+        return decorate(Reference, fn, build=_build_reference_class, table_name=table, **overrides)
 
-        Args:
-            table: The physical table name, used as written.
-            overrides: Definition metadata and behaviour as for `asset`.
-        """
-        self.table = table
-        self.overrides = overrides
-
-    def build(self, owner: type, name: str) -> type[Reference]:
-        """Build the Reference subclass for one attribute of a source class.
-
-        Args:
-            owner: The source class the reference is written in.
-            name: The attribute name, which becomes the asset key.
-
-        Returns:
-            A Reference subclass nested in *owner* under *name*.
-        """
-        built = decorate(
-            Reference, Reference, build=_build_reference_class, table_name=self.table, key=name, **self.overrides
-        )
-        built.__module__ = owner.__module__
-        built.__qualname__ = f"{owner.__qualname__}.{name}"
-        return built
+    return wrapper
 
 
 def build_asset_class(
@@ -313,25 +282,24 @@ def _build_view_class(
 
 
 def _build_reference_class(
-    target: type[Reference],
+    fn: Any,
     *,
     classvars: dict[str, Any],
     fields: dict[str, Any],
     relations: dict[str, Relation],
 ) -> type[Reference]:
-    """Build a Reference subclass from routed overrides.
+    """Build a Reference subclass from a function or method.
 
     Args:
-        target: The anchor class, `Reference` itself.
-        classvars: Class-level attributes to set (``key``, ``table_name``, ``schema``, ...).
-        fields: Pydantic field values to set, annotated from the anchor's fields.
-        relations: Passed by `decorate`'s builder contract and ignored: a reference declares none.
+        fn: The function (or method) the reference is declared on; never run.
+        classvars: Class-level attributes to set on the generated subclass (``table_name`` among them).
+        fields: Pydantic field values to set on the generated subclass.
+        relations: Relations the decorator declares, name to relation.
 
     Returns:
-        A dynamically created Reference subclass named after its key.
+        A dynamically created Reference subclass.
     """
-    namespace: dict[str, Any] = {**classvars, **fields, "__module__": target.__module__}
-    annotations = {name: target.model_fields[name].annotation for name in fields if name in target.model_fields}
-    if annotations:
-        namespace["__annotations__"] = annotations
-    return type(classvars["key"], (target,), namespace)
+    return cast(
+        "type[Reference]",
+        build_asset_class(fn, base=Reference, classvars=classvars, fields=fields, relations=relations),
+    )

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from interloper.asset import Asset, Reference, ReferenceDeclaration
+from interloper.asset import Asset, Reference
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -476,21 +476,16 @@ class Source(Component, Workload):
 
         When ``@asset`` decorates a method in the source body, it
         transforms the method into an Asset class and sets it as a class
-        attribute, and ``il.reference`` leaves a declaration that is built
-        into a Reference class here, keyed by its attribute name. This
-        method collects those into ``asset_types`` and replaces each entry
-        with an `AssetRef` descriptor, which exposes the class at
-        class-level access and the live asset instance at instance-level
-        access.
+        attribute.  This method collects those into ``asset_types`` and
+        replaces each entry with an `AssetRef` descriptor, which
+        exposes the class at class-level access and the live asset
+        instance at instance-level access.
         """
         from interloper.asset.base import Asset
 
         # Only process assets defined directly on this class, not inherited.
         own: list[tuple[str, type[Asset]]] = []
         for attr_name, value in list(cls.__dict__.items()):
-            if isinstance(value, ReferenceDeclaration):
-                value = value.build(cls, attr_name)
-                setattr(cls, attr_name, value)
             if isinstance(value, type) and issubclass(value, Asset) and value is not Asset:
                 own.append((attr_name, value))
 
