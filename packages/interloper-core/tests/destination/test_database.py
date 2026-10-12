@@ -7,7 +7,8 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination.database import DatabaseDestination, PartitionFilter, TableReference
+from interloper.errors import ConfigError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.representation import Representation
 
@@ -15,6 +16,7 @@ from interloper.representation import Representation
 class RecordingDatabase(DatabaseDestination):
     """Database destination capturing every hook call."""
 
+    dialect: ClassVar[str | None] = "duckdb"
     calls: ClassVar[list[tuple[str, Any]]] = []
 
     def model_post_init(self, context: Any) -> None:
@@ -33,6 +35,24 @@ class RecordingDatabase(DatabaseDestination):
 
     def count(self, table, dataset, column):
         return {}
+
+    def table_parts(self, table, dataset):
+        return (dataset or "main", table)
+
+    def replace_view(self, table, dataset, sql):
+        self.calls.append(("replace_view", (table, dataset, sql)))
+
+
+class ViewlessDatabase(RecordingDatabase):
+    """Database destination that implements no view hook."""
+
+    dialect: ClassVar[str | None] = None
+
+    def table_parts(self, table, dataset):
+        return DatabaseDestination.table_parts(self, table, dataset)
+
+    def replace_view(self, table, dataset, sql):
+        DatabaseDestination.replace_view(self, table, dataset, sql)
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
@@ -224,3 +244,75 @@ class TestWriteTrustsConformedData:
         assert "materialization_strategy" not in RecordingDatabase.config_schema().get("properties", {})
 
 
+class TestReference:
+    """A table reference names the asset's table where this destination can query it."""
+
+    def test_reference_quotes_the_parts(self):
+        destination = RecordingDatabase(id="db")
+        asset = plain_asset(destinations=[destination])
+        reference = destination.reference(asset)
+        assert reference == TableReference(name='"main"."plain_asset"', parts=("main", "plain_asset"), schema=None)
+
+    def test_reference_carries_the_declared_schema(self):
+        class Rows(il.Schema):
+            a: int
+
+        @il.asset(schema=Rows)
+        def typed_asset() -> list:
+            return []
+
+        destination = RecordingDatabase(id="db")
+        reference = destination.reference(typed_asset(destinations=[destination]))
+        assert reference.schema is Rows
+
+    def test_reference_prefers_the_default_destination_then_the_first_reachable(self):
+        here = RecordingDatabase(id="here")
+        there = RecordingDatabase(id="there")
+        asset = plain_asset(destinations=[there, here], default_destination_key=here.key)
+        assert here.reference(asset).parts == ("main", "plain_asset")
+
+        unreachable = il.MemoryDestination(id="memory")
+        other = plain_asset(destinations=[unreachable, here])
+        assert here.reference(other).parts == ("main", "plain_asset")
+
+    def test_reference_refuses_an_asset_it_cannot_query(self):
+        here = RecordingDatabase(id="here")
+        elsewhere = RecordingDatabase(id="elsewhere")
+        with pytest.raises(ConfigError, match="cannot query asset 'plain_asset'"):
+            here.reference(plain_asset(destinations=[elsewhere]))
+
+    def test_reference_refuses_an_asset_with_no_destination(self):
+        with pytest.raises(ConfigError, match="no destination"):
+            RecordingDatabase(id="db").reference(plain_asset())
+
+    def test_a_backend_without_view_hooks_refuses(self):
+        destination = ViewlessDatabase(id="db")
+        with pytest.raises(ConfigError, match="does not support views"):
+            destination.reference(plain_asset(destinations=[destination]))
+
+
+class TestCreateView:
+    """A definition is SQL text, or something that compiles to it for the dialect."""
+
+    def test_sql_text_is_passed_through(self):
+        destination = RecordingDatabase(id="db")
+        destination.create_view(plain_asset(destinations=[destination]), "SELECT 1 AS a")
+        assert destination.calls == [("replace_view", ("plain_asset", None, "SELECT 1 AS a"))]
+
+    def test_a_compilable_is_compiled_for_the_dialect(self):
+        class Definition:
+            def compile(self, dialect: str) -> str:
+                return f"SELECT '{dialect}' AS dialect"
+
+        destination = RecordingDatabase(id="db")
+        destination.create_view(plain_asset(destinations=[destination]), Definition())
+        assert destination.calls == [("replace_view", ("plain_asset", None, "SELECT 'duckdb' AS dialect"))]
+
+    def test_a_compilable_needs_a_dialect(self):
+        class Definition:
+            def compile(self, dialect: str) -> str:
+                return "SELECT 1"
+
+        destination = ViewlessDatabase(id="db")
+        with pytest.raises(ConfigError, match="declares no dialect"):
+            destination.create_view(plain_asset(destinations=[destination]), Definition())
