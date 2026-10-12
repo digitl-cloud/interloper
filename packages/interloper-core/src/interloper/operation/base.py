@@ -113,11 +113,18 @@ class Operation(Component, Workload):
     ``capture_traceback`` controls whether a failed execution's traceback
     is attached to its failure event; off for operations whose raw errors
     embed secrets (credential exchanges carry them in URLs).
+
+    ``reads_upstream_data`` says whether executing the node reads its
+    upstreams' data for the run's partition. An asset does; a view or a
+    reference does not, which is what lets them sit, unpartitioned, on
+    partitioned upstreams: the partition rule in the DAG only applies to
+    nodes that read.
     """
 
     kind: ClassVar[str] = ""
     capture_traceback: ClassVar[bool] = True
     partitioning: ClassVar[PartitionConfig | None] = None
+    reads_upstream_data: ClassVar[bool] = True
 
     enabled: bool = Field(
         default=True,
