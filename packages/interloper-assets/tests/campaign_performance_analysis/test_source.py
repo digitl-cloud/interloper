@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 import interloper as il
 import pytest
@@ -30,9 +31,13 @@ def test_matches_is_the_single_optional_matcher_output() -> None:
     assert (relation.key, relation.many, relation.optional) == ("campaign_matcher.campaign_matches", False, True)
 
 
-def test_dag_binds_the_star_schema_facts_and_the_matcher() -> None:
+def test_dag_binds_the_star_schema_facts_and_the_matcher(tmp_path: Path) -> None:
+    duckdb = pytest.importorskip("interloper_duckdb")
+    warehouse = duckdb.DuckDBDestination(
+        id="warehouse", connection=duckdb.DuckDBConnection(id="duckdb", database=str(tmp_path / "test.duckdb"))
+    )
     memory = il.MemoryDestination()
-    facebook = FacebookAdsStarSchema(destinations=[memory])
+    facebook = FacebookAdsStarSchema(destinations=[warehouse])
     trade_desk = TheTradeDeskStarSchema(destinations=[memory])
     matcher = CampaignMatcher(destinations=[memory])
     analysis = CampaignPerformanceAnalysis(destinations=[memory])
