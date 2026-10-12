@@ -2789,7 +2789,7 @@ or written. Downstream assets read it like any asset, and views build on it like
 
 - [ ] **Step 2: Link it**
 
-In `zensical.toml`, add `{ "Views & references" = "guide/views.md" },` after the Dependencies entry. In `docs/guide/dependencies.md`, after the "Reading upstream data" table, add: "A view's upstreams are not read at all: `data` holds the destination's reference to the upstream instead. See [Views & references](views.md)." In `AGENTS.md`, under "Asset naming", add a fourth bullet: "**Star schema** — views over the categories above, tagged `Fact` (`fact_<process>`, e.g. `fact_ad_performance`) or `Dimension` (`dim_<noun>`, e.g. `dim_campaigns`), unpartitioned."
+In `zensical.toml`, add `{ "Views & references" = "guide/views.md" },` after the Dependencies entry. In `docs/guide/dependencies.md`, after the "Reading upstream data" table, add: "A view's upstreams are not read at all: `data` holds the destination's reference to the upstream instead. See `[Views & references](views.md)`." In `AGENTS.md`, under "Asset naming", add a fourth bullet: "**Star schema** — views over the categories above, tagged `Fact` (`fact_<process>`, e.g. `fact_ad_performance`) or `Dimension` (`dim_<noun>`, e.g. `dim_campaigns`), unpartitioned."
 
 - [ ] **Step 3: Build the docs**
 
