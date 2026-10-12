@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 from typing_extensions import Self
 
 from interloper.asset import Asset
@@ -119,7 +119,13 @@ class Source(Component, Workload):
     source = MySource()
     source.users  # returns the Asset with key "users"
     ```
+
+    A reference is declared as a class attribute holding a class, which
+    Pydantic would reject as a non-annotated attribute, so ``type`` joins
+    ``ignored_types``.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor, Relation, type))
 
     # Definition
     asset_types: ClassVar[list[type[Asset]]] = []
