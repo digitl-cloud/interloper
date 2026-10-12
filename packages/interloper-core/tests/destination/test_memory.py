@@ -7,6 +7,7 @@ import pytest
 import interloper as il
 from interloper.destination import IOContext
 from interloper.destination.memory import MemoryDestination
+from interloper.errors import ConfigError
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
@@ -54,3 +55,27 @@ class TestWindowWrites:
         day1 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part1))
         assert len(day1) == 1
         assert day1.iloc[0]["v"] == 1
+
+
+class TestViews:
+    """Memory holds no views: both hooks refuse."""
+
+    def test_reference_is_refused(self):
+        destination = il.MemoryDestination(id="memory")
+
+        @il.asset
+        def rows() -> list:
+            return []
+
+        with pytest.raises(ConfigError, match="cannot reference"):
+            destination.reference(rows())
+
+    def test_create_view_is_refused(self):
+        destination = il.MemoryDestination(id="memory")
+
+        @il.asset
+        def rows() -> list:
+            return []
+
+        with pytest.raises(ConfigError, match="does not support views"):
+            destination.create_view(rows(), "SELECT 1")
