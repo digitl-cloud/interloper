@@ -60,7 +60,7 @@ class TestAssets:
     def test_advertiser_id_discriminates_the_tables(self):
         source = _source()
         assert source.discriminator == "20765"
-        assert source.asset_table(_asset(source)) == "creatives_stats__20765"
+        assert source.table(_asset(source)) == "creatives_stats__20765"
 
 
 class TestSpecRoundtripAndReconcile:

@@ -264,14 +264,13 @@ class Asset(Operation):
 
     @property
     def table(self) -> str:
-        """The physical table (or leaf) name this asset materializes to.
+        """The physical table (or leaf) name this asset materializes to, or refers to.
 
-        Composed by the owning source (see `asset_table`) and coerced to a
-        valid identifier. Standalone assets use their class key.
+        Named by the owning source (see `Source.table`); a standalone asset
+        uses its class key.
         """
         source = self.source
-        raw = source.asset_table(self) if source is not None else self.key
-        return to_identifier(raw)
+        return source.table(self) if source is not None else to_identifier(self.key)
 
     @classmethod
     def classpath(cls) -> str:

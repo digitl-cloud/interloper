@@ -223,11 +223,11 @@ class TestIdentity:
     def test_table_standalone_equals_key(self):
         assert FakeAsset().table == "fake_asset"
 
-    def test_table_when_source_attached_uses_asset_table(self):
+    def test_table_when_source_attached_uses_table(self):
         source = FakeParentSource()
         asset = FakeSourceOwnedAsset()
         asset.parent = source
-        assert asset.table == source.asset_table(asset) == type(asset).key
+        assert asset.table == source.table(asset) == type(asset).key
 
     def test_data_default_raises_not_implemented(self):
         with pytest.raises(NotImplementedError):

@@ -59,7 +59,7 @@ class TestAssets:
     def test_analytics_id_discriminates_the_tables(self):
         source = _source()
         assert source.discriminator == "an-1"
-        assert source.asset_table(_asset("consents_stats")) == "consents_stats__an-1"
+        assert source.table(_asset("consents_stats")) == "consents_stats__an_1"
 
     def test_analytics_id_is_no_longer_a_connection_field(self):
         assert "analytics_id" not in UsercentricsConnection.model_fields

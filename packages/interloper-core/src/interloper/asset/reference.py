@@ -25,17 +25,6 @@ class Reference(Asset):
     reads_upstream_data: ClassVar[bool] = False
     table_name: ClassVar[str | None] = None
 
-    @property
-    def table(self) -> str:
-        """The table as written, wildcard and all, with the owning source's fields filled in.
-
-        ``table_name``, or the name any asset would get when none was given.
-        """
-        if self.table_name is None:
-            return super().table
-        source = self.source
-        return source.format(self.table_name) if source is not None else self.table_name
-
     async def materialize_async(
         self,
         partition_or_window: Partition | PartitionWindow | None = None,

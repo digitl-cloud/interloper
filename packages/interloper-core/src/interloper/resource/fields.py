@@ -176,7 +176,7 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
     - ``discriminator=True`` becomes ``x-discriminator``: it marks the config
       field whose value distinguishes instances of a component, driving the
       derived display name (`Component.instance_name`) and, for
-      sources, the per-instance asset table names (`Source.asset_table`).
+      sources, the per-instance asset table names (`Source.table`).
     - ``section`` becomes ``x-section``: the labelled group of the form the
       field renders under; fields without one lead the form.
 

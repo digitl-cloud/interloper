@@ -692,11 +692,11 @@ class ComponentStore:
 
         Two instances of the same source class write to the same physical
         ``dataset.table`` set unless they differ in ``dataset`` or in what
-        the class's ``asset_table`` derives from their config — such an
+        the class's ``table`` derives from their config — such an
         instance would silently overwrite the sibling's data on every run.
 
         Targets are computed by instantiating the class from each config, so
-        the check is exact under any ``asset_table`` override. An instance
+        the check is exact under any ``table`` override. An instance
         whose config can't construct the class yet is skipped — it can't run
         either, and the check re-fires on every update.
 
