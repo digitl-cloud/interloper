@@ -12,6 +12,7 @@ from interloper.asset.reference import Reference
 from interloper.asset.view import View
 from interloper.component.decorator import decorate
 from interloper.component.relation import Relation
+from interloper.serializable import IgnoredDescriptor
 
 
 @overload
@@ -130,29 +131,66 @@ def view(
     return wrapper
 
 
-def reference(table: str, *, key: str, **overrides: Any) -> type[Reference]:
+def reference(table: str, **overrides: Any) -> ReferenceDeclaration:
     """Declare a reference: an asset over a table that already exists.
 
-    Written as a class attribute of a source, since a reference has no body:
+    Written as a class attribute of a source, since a reference has no body;
+    the attribute name is the asset key:
 
     ```py
     @il.source
     class Export(il.Source):
         property_id: str = il.InputField(discriminator=True)
 
-        events = il.reference("events_*", key="events", schema=Events)
+        events = il.reference("events_*", schema=Events)
     ```
 
     Args:
         table: The physical table name, used as written, wildcard and all.
-        key: The asset key, which names the attribute and the catalog entry.
         **overrides: Definition metadata and behaviour as for `asset`
             (``schema``, ``tags``, ``dataset``, ``partitioning``, ...).
 
     Returns:
-        A Reference subclass.
+        The declaration, which the source builds into a `Reference` subclass
+        when its own class is created.
     """
-    return decorate(Reference, Reference, build=_build_reference_class, table_name=table, key=key, **overrides)
+    return ReferenceDeclaration(table, overrides)
+
+
+class ReferenceDeclaration(IgnoredDescriptor):
+    """A reference as written in a source body, built into its class with the source's.
+
+    Pydantic ignores it in the class body, so the attribute needs no
+    annotation; the source then replaces it with a `Reference` subclass named
+    after the attribute and nested in the source, as a decorated asset is.
+    """
+
+    def __init__(self, table: str, overrides: dict[str, Any]) -> None:
+        """Keep what `reference` was given until a source class exists to build for.
+
+        Args:
+            table: The physical table name, used as written.
+            overrides: Definition metadata and behaviour as for `asset`.
+        """
+        self.table = table
+        self.overrides = overrides
+
+    def build(self, owner: type, name: str) -> type[Reference]:
+        """Build the Reference subclass for one attribute of a source class.
+
+        Args:
+            owner: The source class the reference is written in.
+            name: The attribute name, which becomes the asset key.
+
+        Returns:
+            A Reference subclass nested in *owner* under *name*.
+        """
+        built = decorate(
+            Reference, Reference, build=_build_reference_class, table_name=self.table, key=name, **self.overrides
+        )
+        built.__module__ = owner.__module__
+        built.__qualname__ = f"{owner.__qualname__}.{name}"
+        return built
 
 
 def build_asset_class(

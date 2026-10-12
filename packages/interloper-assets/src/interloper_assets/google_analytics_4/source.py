@@ -32,7 +32,7 @@ class GoogleAnalytics4Export(il.Source):
         discriminator=True,
     )
 
-    events = il.reference("events_*", key="events", schema=schemas.Events, tags=["Event"])
+    events = il.reference("events_*", schema=schemas.Events, tags=["Event"])
 
     def model_post_init(self, context: Any) -> None:
         """Point ``events`` at the property's export dataset.
@@ -41,7 +41,7 @@ class GoogleAnalytics4Export(il.Source):
             context: Pydantic's post-init context, forwarded untouched.
         """
         super().model_post_init(context)
-        self.events.dataset = f"analytics_{self.property_id}"
+        self.events.dataset = f"analytics_{self.property_id}"  # ty: ignore[unresolved-attribute]
 
     @il.view(schema=schemas.FactDailyEvents, tags=["Fact"], dialect="bigquery")
     def fact_daily_events(self, events: il.Upstream) -> str:
