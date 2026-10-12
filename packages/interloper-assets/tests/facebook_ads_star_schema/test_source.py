@@ -32,9 +32,9 @@ def _seed(
     warehouse,
     account_id: str,
     *,
-    campaigns_snapshot: bool,
-    snapshot_date: dt.date = DAY,
-    ads_snapshot: bool = False,
+    campaigns_entity: bool,
+    entity_date: dt.date = DAY,
+    ads_entity: bool = False,
     extra_fact_campaign: bool = False,
 ) -> None:
     client = warehouse.connection.client
@@ -52,16 +52,16 @@ def _seed(
         f"DATE '2026-10-01' AS date_start, {account_id} AS account_id, 'c{account_id}' AS campaign_id, "
         "'Camp from report' AS campaign_name, 'OUTCOME_SALES' AS objective"
     )
-    collected = "TRUE" if campaigns_snapshot else "FALSE"
+    collected = "TRUE" if campaigns_entity else "FALSE"
     client.execute(
         f"CREATE TABLE facebook_ads.campaigns__{account_id} AS SELECT "
-        f"DATE '{snapshot_date}' AS date, 'c{account_id}' AS id, 'Camp from snapshot' AS name, "
+        f"DATE '{entity_date}' AS date, 'c{account_id}' AS id, 'Camp from entity' AS name, "
         f"'{account_id}' AS account_id, 'OUTCOME_SALES' AS objective, 'ACTIVE' AS status WHERE {collected}"
     )
-    ad_collected = "TRUE" if ads_snapshot else "FALSE"
+    ad_collected = "TRUE" if ads_entity else "FALSE"
     client.execute(
         f"CREATE TABLE facebook_ads.ads__{account_id} AS SELECT "
-        f"DATE '2026-09-30' AS date, 'a1' AS id, 'Ad from snapshot' AS name, 's1' AS adset_id, "
+        f"DATE '2026-09-30' AS date, 'a1' AS id, 'Ad from entity' AS name, 's1' AS adset_id, "
         f"'c{account_id}' AS campaign_id, '{account_id}' AS account_id, 'ACTIVE' AS status WHERE {ad_collected}"
     )
     if extra_fact_campaign:
@@ -105,55 +105,55 @@ class TestWiring:
 class TestOnDuckDB:
     def test_the_fact_unions_every_account(self, warehouse):
         first, second = _account("111", warehouse), _account("222", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=True)
-        _seed(warehouse, "222", campaigns_snapshot=False)
+        _seed(warehouse, "111", campaigns_entity=True)
+        _seed(warehouse, "222", campaigns_entity=False)
         _materialize(warehouse, first, second)
         rows = _rows(warehouse, "fact_ad_performance")
         assert [row["account_id"] for row in rows] == ["111", "222"]
         assert rows[0]["spend"] == 12.5 and rows[0]["date"] == DAY
 
-    def test_a_campaign_takes_its_snapshot_over_its_report_over_the_facts(self, warehouse):
+    def test_a_campaign_takes_its_entity_over_its_report_over_the_facts(self, warehouse):
         first, second = _account("111", warehouse), _account("222", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=True)
-        _seed(warehouse, "222", campaigns_snapshot=False)
+        _seed(warehouse, "111", campaigns_entity=True)
+        _seed(warehouse, "222", campaigns_entity=False)
         _materialize(warehouse, first, second)
         rows = {row["account_id"]: row for row in _rows(warehouse, "dim_campaigns")}
-        assert rows["111"]["campaign_name"] == "Camp from snapshot"
+        assert rows["111"]["campaign_name"] == "Camp from entity"
         assert rows["111"]["status"] == "ACTIVE"
         assert rows["222"]["campaign_name"] == "Camp from report"
         assert rows["222"]["status"] is None
 
-    def test_a_newer_fact_does_not_displace_an_older_snapshot(self, warehouse):
+    def test_a_newer_fact_does_not_displace_an_older_entity_row(self, warehouse):
         first = _account("111", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=True, snapshot_date=dt.date(2026, 9, 30))
+        _seed(warehouse, "111", campaigns_entity=True, entity_date=dt.date(2026, 9, 30))
         _materialize(warehouse, first)
         [row] = _rows(warehouse, "dim_campaigns")
-        assert row["campaign_name"] == "Camp from snapshot"
+        assert row["campaign_name"] == "Camp from entity"
         assert row["status"] == "ACTIVE"
         assert row["date"] == dt.date(2026, 9, 30)
 
-    def test_an_ad_snapshot_wins_over_the_facts(self, warehouse):
+    def test_an_ad_entity_wins_over_the_facts(self, warehouse):
         first = _account("111", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=False, ads_snapshot=True)
+        _seed(warehouse, "111", campaigns_entity=False, ads_entity=True)
         _materialize(warehouse, first)
         [row] = _rows(warehouse, "dim_ads")
-        assert row["ad_name"] == "Ad from snapshot"
+        assert row["ad_name"] == "Ad from entity"
         assert row["status"] == "ACTIVE"
         assert row["date"] == dt.date(2026, 9, 30)
 
     def test_a_campaign_known_only_from_the_facts_comes_from_them(self, warehouse):
         first = _account("111", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=True, extra_fact_campaign=True)
+        _seed(warehouse, "111", campaigns_entity=True, extra_fact_campaign=True)
         _materialize(warehouse, first)
         rows = {row["campaign_id"]: row for row in _rows(warehouse, "dim_campaigns")}
         assert rows["c999"]["campaign_name"] == "Camp from facts"
         assert rows["c999"]["objective"] is None
         assert rows["c999"]["status"] is None
-        assert rows["c111"]["campaign_name"] == "Camp from snapshot"
+        assert rows["c111"]["campaign_name"] == "Camp from entity"
 
     def test_ads_and_accounts_come_from_the_facts(self, warehouse):
         first = _account("111", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=False)
+        _seed(warehouse, "111", campaigns_entity=False)
         _materialize(warehouse, first)
         assert _rows(warehouse, "dim_ads") == [
             {
@@ -173,7 +173,7 @@ class TestOnDuckDB:
 
     def test_the_views_are_read_through_the_read_path(self, warehouse):
         first = _account("111", warehouse)
-        _seed(warehouse, "111", campaigns_snapshot=False)
+        _seed(warehouse, "111", campaigns_entity=False)
         star = _materialize(warehouse, first)
         frame = warehouse.read(il.IOContext(asset=star.dim_campaigns))
         assert frame["campaign_id"].tolist() == ["c111"]

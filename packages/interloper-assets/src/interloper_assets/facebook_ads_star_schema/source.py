@@ -50,8 +50,8 @@ class FacebookAdsStarSchema(il.Source):
     """Star schema over every Facebook Ads account, as views in the warehouse.
 
     The fact unions each account's ad performance; the dimensions take each
-    campaign from its latest snapshot, else its latest report, else the
-    facts, and each ad from its latest snapshot, else the facts, so every
+    campaign from its latest entity row, else its latest report, else the
+    facts, and each ad from its latest entity row, else the facts, so every
     key a fact carries resolves. Every bound upstream's
     table must exist, or the view fails when it is created. Views are
     recreated on every run, so they follow the accounts bound to them.
@@ -76,9 +76,9 @@ class FacebookAdsStarSchema(il.Source):
         },
     )
     def dim_campaigns(self, campaigns: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per campaign, from its latest snapshot, else its latest report, else the facts."""
+        """One row per campaign, from its latest entity row, else its latest report, else the facts."""
 
-        def from_snapshot(table: ibis.Table) -> ibis.Table:
+        def from_entity(table: ibis.Table) -> ibis.Table:
             return table.select(
                 campaign_id=table["id"],
                 campaign_name=table["name"],
@@ -111,7 +111,7 @@ class FacebookAdsStarSchema(il.Source):
                 priority=ibis.literal(3),
             )
 
-        candidates = {"campaigns": from_snapshot, "campaigns_stats": from_report}
+        candidates = {"campaigns": from_entity, "campaigns_stats": from_report}
         rows = ibis.union(
             *(candidates[upstream.asset.key](upstream.data) for upstream in campaigns),
             from_facts(fact_ad_performance.data),
@@ -125,9 +125,9 @@ class FacebookAdsStarSchema(il.Source):
         relations={"ads": il.Relation("asset", "facebook_ads.ads", many=True, optional=True)},
     )
     def dim_ads(self, ads: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad with its ad set, from its latest snapshot, else the facts."""
+        """One row per ad with its ad set, from its latest entity row, else the facts."""
 
-        def from_snapshot(table: ibis.Table) -> ibis.Table:
+        def from_entity(table: ibis.Table) -> ibis.Table:
             return table.select(
                 ad_id=table["id"],
                 ad_name=table["name"],
@@ -154,7 +154,7 @@ class FacebookAdsStarSchema(il.Source):
             )
 
         rows = ibis.union(
-            *(from_snapshot(upstream.data) for upstream in ads), from_facts(fact_ad_performance.data), distinct=False
+            *(from_entity(upstream.data) for upstream in ads), from_facts(fact_ad_performance.data), distinct=False
         )
         return _latest(rows, "ad_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
 
