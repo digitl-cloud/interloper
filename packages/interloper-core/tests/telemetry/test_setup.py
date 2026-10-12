@@ -290,13 +290,33 @@ class TestProviderConstruction:
         assert setup._log_handler is None
         assert "opentelemetry-instrumentation-logging" in caplog.text
 
-    def test_the_http_protocol_selects_the_http_exporters(self, intercept_global_setters):
+    def test_the_http_protocol_selects_the_http_exporters(self, intercept_global_setters, monkeypatch):
+        from opentelemetry.exporter.otlp.proto.http import _log_exporter
+        from opentelemetry.sdk._logs.export import LogRecordExportResult
+
+        class QuietLogExporter:
+            """Stands in for the http log exporter: the record init itself logs must not reach for a collector."""
+
+            def __init__(self, **kwargs: Any) -> None:
+                self.kwargs = kwargs
+
+            def export(self, batch: Any) -> LogRecordExportResult:
+                return LogRecordExportResult.SUCCESS
+
+            def shutdown(self) -> None:
+                pass
+
+            def force_flush(self, timeout_millis: int = 30000) -> bool:
+                return True
+
+        monkeypatch.setattr(_log_exporter, "OTLPLogExporter", QuietLogExporter)
         settings = TelemetrySettings(
-            enabled=True, traces=True, metrics=False, logs=False, protocol="http/protobuf", endpoint="http://collector:4318"
+            enabled=True, traces=True, metrics=False, logs=True, protocol="http/protobuf", endpoint="http://collector:4318"
         )
 
         assert init_telemetry(settings) is True
         assert setup._tracer_provider is not None
+        assert setup._logger_provider is not None
 
 
 class TestForceFlush:
