@@ -213,6 +213,8 @@ to the partition the run consumes. `il.Upstream` carries the asset and its data,
 | `data` | Whatever that destination's `read()` yields: rows for the built-in destinations, a DataFrame for BigQuery; `None` when nothing is materialized for the partition. |
 | `records` | The data as `list[dict]` whatever the destination handed back, `[]` when nothing is materialized. The one line a consumer needs to be indifferent to where its upstream is stored. |
 
+A view's upstreams are not read at all: `data` holds the destination's reference to the upstream instead. See [Views & references](views.md).
+
 `data` is `None`, with a `LOG` warning naming the leg, when the upstream has nothing
 materialized where the destination looks: no table or object for that scope at all
 (`MemoryDestination` and the file destinations key storage per partition, so a missing partition
