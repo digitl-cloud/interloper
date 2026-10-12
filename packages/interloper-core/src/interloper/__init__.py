@@ -1,6 +1,6 @@
 """Interloper's public API: assets, sources, destinations, DAGs, and runners."""
 
-from interloper.asset import Asset, AssetDefinition, ExecutionContext, Upstream, asset
+from interloper.asset import Asset, AssetDefinition, ExecutionContext, Reference, Upstream, asset, reference
 from interloper.catalog import Catalog
 from interloper.component import (
     KINDS,
@@ -139,6 +139,7 @@ __all__ = [
     "PartitionWindow",
     "RESTClient",
     "RangePaginator",
+    "Reference",
     "RefreshTokenOAuthConnection",
     "RefreshTokenResponse",
     "Registry",
@@ -175,6 +176,7 @@ __all__ = [
     "destination",
     "fetch_field_provider",
     "is_fetch_field_provider",
+    "reference",
     "run",
     "schema",
     "source",

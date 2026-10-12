@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Any, overload
 
 from interloper.asset.base import Asset
+from interloper.asset.reference import Reference
 from interloper.component.decorator import decorate
 from interloper.component.relation import Relation
 
@@ -79,6 +80,37 @@ def asset(
         return decorate(Asset, fn, build=_build_asset_class, relations=relations, **overrides)
 
     return wrapper
+
+
+def reference(table: str, *, key: str, **overrides: Any) -> type[Reference]:
+    """Declare a reference: an asset over a table that already exists.
+
+    Written as a class attribute of a source, since a reference has no body:
+
+    ```py
+    @il.source
+    class Export(il.Source):
+        property_id: str = il.InputField(discriminator=True)
+
+        events = il.reference("events_*", key="events", schema=Events)
+    ```
+
+    Args:
+        table: The physical table name, used as written and formatted with
+            the owning source's fields (``"events_{property_id}"``).
+        key: The asset key, which names the attribute and the catalog entry.
+        **overrides: Definition metadata and behaviour as for `asset`
+            (``schema``, ``tags``, ``dataset``, ``partitioning``, ...).
+
+    Returns:
+        A Reference subclass.
+    """
+    frame = inspect.currentframe()
+    declaring = frame.f_back if frame is not None and frame.f_back is not None else None
+    module = declaring.f_globals["__name__"] if declaring is not None else Reference.__module__
+    owner = declaring.f_locals.get("__qualname__") if declaring is not None else None
+    build = functools.partial(_build_reference_class, module=module, qualname=f"{owner}.{key}" if owner else key)
+    return decorate(Reference, Reference, build=build, table_name=table, key=key, **overrides)
 
 
 # -- Internals -----------------------------------------------------------------
@@ -174,3 +206,38 @@ def _build_asset_class(
         cls.__doc__ = fn.__doc__
 
     return cls
+
+
+def _build_reference_class(
+    target: type[Reference],
+    *,
+    classvars: dict[str, Any],
+    fields: dict[str, Any],
+    relations: dict[str, Relation],
+    module: str,
+    qualname: str,
+) -> type[Reference]:
+    """Build a Reference subclass from routed overrides.
+
+    The class takes the module and qualified name it would have had as a nested
+    class statement in the declaring source body, which is what Pydantic
+    requires of a class attribute that is not a field.
+
+    Args:
+        target: The anchor class, `Reference` itself.
+        classvars: Class-level attributes to set (``key``, ``table_name``, ``schema``, ...).
+        fields: Pydantic field values to set, annotated from the anchor's fields.
+        relations: Relations declared on the reference; a reference declares none.
+        module: The module of the declaring source body.
+        qualname: The qualified name the class takes, ``"Source.key"`` in a source body.
+
+    Returns:
+        A dynamically created Reference subclass named after its key.
+    """
+    namespace: dict[str, Any] = {**classvars, **fields, "__module__": module, "__qualname__": qualname}
+    if relations:
+        namespace["relations"] = relations
+    annotations = {name: target.model_fields[name].annotation for name in fields if name in target.model_fields}
+    if annotations:
+        namespace["__annotations__"] = annotations
+    return type(classvars["key"], (target,), namespace)
