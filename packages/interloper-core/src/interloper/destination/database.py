@@ -215,8 +215,9 @@ class DatabaseDestination(Destination):
         """Whether a view in this destination may query tables in *other*.
 
         Decided from configuration alone, never a network call: the same
-        instance by default, the same warehouse and location where a backend
-        knows better.
+        instance by default (the same object, or the same non-empty ``id``;
+        a destination whose ``id`` is empty is told apart by identity),
+        the same warehouse and location where a backend knows better.
 
         Args:
             other: The destination holding an upstream's table.
@@ -224,7 +225,7 @@ class DatabaseDestination(Destination):
         Returns:
             True when a query here can name tables there.
         """
-        return other.id == self.id
+        return other is self or (bool(self.id) and other.id == self.id)
 
     def reference(self, asset: Asset) -> TableReference:
         """The table an asset materializes to, as a view here may query it.
