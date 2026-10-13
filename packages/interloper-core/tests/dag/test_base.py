@@ -17,6 +17,7 @@ from interloper.errors import (
     ConfigError,
     DAGError,
 )
+from interloper.partitioning import ListPartitionConfig
 from interloper.partitioning.base import PartitionConfig
 from interloper.runner.results import ExecutionStatus
 from interloper.serializable import Spec
@@ -45,7 +46,7 @@ class FakeThirdAsset(il.Asset):
 class FakePartitionedAsset(il.Asset):
     """Partitioned asset used for partition-dependency validation tests."""
 
-    partitioning: ClassVar[PartitionConfig | None] = PartitionConfig(column="day")
+    partitioning: ClassVar[PartitionConfig | None] = ListPartitionConfig(column="day", values=("x",))
 
 
 class FakeDefinitionAsset(il.Asset):
@@ -235,7 +236,7 @@ class FinanceSingle(il.Source):
 # because inner classes don't exist as module attributes.
 
 
-_PART = PartitionConfig(column="date")
+_PART = ListPartitionConfig(column="date", values=("x",))
 
 
 @il.source
@@ -587,13 +588,28 @@ class TestGranularityAcrossEdges:
     def test_mixed_granularity_raises_even_for_read_only_upstreams(self):
         daily = FakeDaily(enabled=False)
         monthly = FakeMonthly(daily=daily)
-        with pytest.raises(DAGError, match="partitioned by day"):
+        with pytest.raises(DAGError, match="partitioned differently"):
             DAG(daily, monthly)
 
     def test_equal_granularity_passes(self):
         upstream = FakeDaily()
         downstream = FakeDaily(upstream=upstream)
         DAG(upstream, downstream)  # no raise
+
+    def test_a_list_upstream_of_a_time_dependent_is_rejected(self):
+        class Regions(il.Asset):
+            partitioning = il.ListPartitionConfig(column="region", values=("eu",))
+
+        class DailyOverRegions(il.Asset):
+            partitioning = il.TimePartitionConfig(column="date")
+            regions: Regions = il.Relation("asset", "regions")
+
+            def data(self, regions: il.Upstream) -> Any:  # pragma: no cover
+                return None
+
+        regions = Regions()
+        with pytest.raises(DAGError, match="partitioned differently"):
+            DAG(regions, DailyOverRegions(regions=regions))
 
 
 class TestDeclaredResolution:

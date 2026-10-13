@@ -49,11 +49,7 @@ def _faked_source(handler: Any) -> Any:
 
 async def _run(source: Any, key: str) -> list[dict[str, Any]]:
     asset = _asset(source, key)
-    context = ExecutionContext(
-        asset_key=asset.key,
-        partitioning=asset.partitioning,
-        partition_or_window=il.TimePartition(value=DAY),
-    )
+    context = ExecutionContext(asset, il.TimePartition(value=DAY).window)
     return await asset.data(context=context)
 
 

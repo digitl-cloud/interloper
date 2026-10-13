@@ -12,7 +12,7 @@ import interloper as il
 import pytest
 from interloper.destination import IOContext
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -79,13 +79,13 @@ def daily() -> list:
     return []
 
 
-@il.asset(partitioning=PartitionConfig(column="region"))
+@il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
 
 def _ctx(asset: Any, scope: Any = None, schema: type[Schema] | None = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 @pytest.fixture
@@ -188,7 +188,7 @@ class TestWrite:
 
     def test_non_time_partition_matches_by_equality(self, dest, fake):
         fake.tabs["regional"] = [["region", "n"], ["eu", 1], ["us", 2], ["eu-west", 3]]
-        dest.write(_ctx(regional(), Partition("eu")), [{"region": "eu", "n": 7}])
+        dest.write(_ctx(regional(), ListPartition("eu")), [{"region": "eu", "n": 7}])
         assert fake.tabs["regional"] == [["region", "n"], ["us", 2], ["eu-west", 3], ["eu", 7]]
 
     def test_whole_write_keeps_only_header(self, dest, fake):

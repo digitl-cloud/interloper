@@ -8,8 +8,7 @@ from unittest.mock import MagicMock
 import interloper as il
 import pytest
 from google.cloud import bigquery
-from interloper.destination import IOContext
-from interloper.destination.database import PartitionFilter, TableReference
+from interloper.destination import IOContext, PartitionFilter, TableReference
 from interloper.errors import ConfigError
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -359,12 +358,13 @@ class TestTimePartitioning:
         assert tp.field == "date"
 
     def test_generic_config_with_date_column(self):
-        tp = _time_partitioning(il.PartitionConfig(column="day"), to_fields(_RowSchema.field_specs()))
+        days = il.ListPartitionConfig(column="day", values=("2024-01-01", "2024-01-02", "2024-01-03"))
+        tp = _time_partitioning(days, to_fields(_RowSchema.field_specs()))
         assert tp is not None
         assert tp.field == "day"
 
     def test_generic_config_without_schema(self):
-        assert _time_partitioning(il.PartitionConfig(column="x"), None) is None
+        assert _time_partitioning(il.ListPartitionConfig(column="x", values=("x",)), None) is None
 
     def test_non_time_column_warns_and_skips(self):
         with pytest.warns(UserWarning, match="not be time-partitioned"):
@@ -576,10 +576,10 @@ class TestPartitionParam:
     def test_a_value_filter_deletes_by_equality_typed_from_the_column(self):
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "DATE")]
-        dest.delete("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
-        assert "= @partition_value" in mock_client.query.call_args.args[0]
+        dest.delete("tbl", "ds", PartitionFilter("day", values=("2024-01-01",)))
+        assert "IN UNNEST(@partition_values)" in mock_client.query.call_args.args[0]
         job_config = mock_client.query.call_args.kwargs["job_config"]
-        assert job_config.query_parameters[0].type_ == "DATE"
+        assert job_config.query_parameters[0].array_type == "DATE"
 
     def test_no_filter_truncates_the_table(self):
         dest, mock_client = _make_destination(dataset="ds")
@@ -591,7 +591,7 @@ class TestPartitionParam:
 
         dest, mock_client = _make_destination(dataset="ds")
         mock_client.get_table.side_effect = NotFound("nope")
-        dest.delete("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
+        dest.delete("tbl", "ds", PartitionFilter("day", values=("2024-01-01",)))
         assert not mock_client.query.called
 
     def test_select_returns_the_clients_dataframe_natively(self):
@@ -601,14 +601,14 @@ class TestPartitionParam:
         mock_client.get_table.return_value.schema = [bigquery.SchemaField("day", "TIMESTAMP")]
         frame = pd.DataFrame([{"day": "2024-01-01"}])
         mock_client.query.return_value.result.return_value.to_dataframe.return_value = frame
-        result = dest.select("tbl", "ds", PartitionFilter("day", value="2024-01-01"))
+        result = dest.select("tbl", "ds", PartitionFilter("day", values=("2024-01-01",)))
         assert result is frame
         job_config = mock_client.query.call_args.kwargs["job_config"]
         param = job_config.query_parameters[0]
-        assert param.type_ == "TIMESTAMP"
+        assert param.array_type == "TIMESTAMP"
         # Date-only strings are coerced to datetime for client serialization
         # (which normalizes them to UTC).
-        assert param.value == datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)
+        assert param.values == [datetime.datetime(2024, 1, 1, tzinfo=datetime.timezone.utc)]
 
     def test_select_on_a_missing_table_is_data_not_found(self):
         from google.cloud.exceptions import NotFound

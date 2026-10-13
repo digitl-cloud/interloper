@@ -25,7 +25,7 @@ TARGET_KIND = "interloper.target.kind"
 TARGET_KEY = "interloper.target.key"
 TARGET_NAME = "interloper.target.name"
 
-# Event-metadata keys (see Operation._event_metadata / RunState) → attribute names.
+# Event-metadata keys (see Component.event_metadata) to attribute names.
 _METADATA_KEYS = {
     "run_id": RUN_ID,
     "backfill_id": BACKFILL_ID,
@@ -33,7 +33,7 @@ _METADATA_KEYS = {
     "component_kind": COMPONENT_KIND,
     "component_key": COMPONENT_KEY,
     "qualified_key": COMPONENT_QUALIFIED_KEY,
-    "partition_or_window": PARTITION,
+    "window": PARTITION,
     "parent_id": PARENT_ID,
     "destination_key": DESTINATION_KEY,
     "org_id": ORG_ID,

@@ -34,7 +34,7 @@ from interloper.retry import RetryPolicy
 if TYPE_CHECKING:
     from interloper.component.relation import Relation
     from interloper.dag.base import DAG
-    from interloper.partitioning.base import Partition, PartitionWindow
+    from interloper.partitioning.base import PartitionWindow
 
 
 @dataclass
@@ -47,7 +47,7 @@ class OperationContext:
     outputs; operations without dependencies ignore it.
     """
 
-    partition_or_window: Partition | PartitionWindow | None = None
+    window: PartitionWindow | None = None
     dag: DAG | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -146,21 +146,18 @@ class Operation(Component, Workload):
         """
         return [self]
 
-    def effective_partition(
-        self, partition_or_window: Partition | PartitionWindow | None
-    ) -> Partition | PartitionWindow | None:
-        """The partition scope this operation actually consumes.
+    def effective_window(self, window: PartitionWindow | None) -> PartitionWindow | None:
+        """The window this operation actually consumes.
 
-        Unpartitioned operations ignore any requested scope.
+        Unpartitioned operations ignore any window the run was given.
 
         Args:
-            partition_or_window: The partition or partition window the run was
-                scoped to, or ``None`` when it was unscoped.
+            window: The window the run was scoped to, ``None`` when it was unscoped.
 
         Returns:
-            The scope unchanged for partitioned operations, ``None`` otherwise.
+            The window unchanged for a partitioned operation, ``None`` otherwise.
         """
-        return partition_or_window if self.partitioning is not None else None
+        return window if self.partitioning is not None else None
 
     def upstream_relations(self) -> dict[str, Relation]:
         """The node's relations that another node in the graph fills.
@@ -173,39 +170,6 @@ class Operation(Component, Workload):
             Relation name to declaration, for the relations accepting assets.
         """
         return {name: relation for name, relation in type(self).relations.items() if "asset" in relation.kinds}
-
-    def _validate_time_partitioning(self, partitioning: Any, partition_or_window: Any) -> None:
-        """Validate a time-partitioned run scope against this node.
-
-        Preflight hook; the default has no partitioning to validate
-        (``partitioning`` is ``None`` unless a subclass declares it).
-
-        Args:
-            partitioning: The node's time-partition configuration.
-            partition_or_window: The run's partition scope.
-        """
-
-    def _event_metadata(
-        self,
-        metadata: dict[str, Any],
-        partition_or_window: Partition | PartitionWindow | None = None,
-    ) -> dict[str, Any]:
-        """Build the base event metadata dict for this node.
-
-        Args:
-            metadata: Run-level metadata (e.g. run_id, backfill_id).
-            partition_or_window: Current partition scope.
-
-        Returns:
-            The merged metadata dict.
-        """
-        return {
-            **metadata,
-            "component_id": self.id,
-            "component_kind": self.kind,
-            "component_key": self.key,
-            "partition_or_window": str(partition_or_window) if partition_or_window else None,
-        }
 
     # -- Execution -----------------------------------------------------------
 

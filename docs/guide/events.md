@@ -57,9 +57,9 @@ event.id           # stable id, preserved across serialization
 ```
 
 Metadata always carries what the producer knows: `run_id`, `component_id`, `component_kind`,
-`component_key`, `qualified_key`, `source_id`, `partition_or_window`, plus `message` and, on
-failures, `error` and `traceback`. Destination events add `destination_key`; log events add
-`level`.
+`component_key`, `qualified_key`, `window` and, when the component has an owner, `parent_id`,
+plus `message` and, on failures, `error` and `traceback`. Destination events add
+`destination_key`, writes add `rows`, log events add `level`, operation events add `attempt`.
 
 Events serialize with `to_dict()` / `to_json()` and parse back with `Event.from_dict()` /
 `Event.from_json()`. Operation lifecycle events get a **deterministic id** derived from run,

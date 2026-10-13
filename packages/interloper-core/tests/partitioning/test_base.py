@@ -1,99 +1,114 @@
-"""Tests for ``interloper.partitioning.base``."""
+"""Tests for ``interloper.partitioning.base``: the contracts every kind implements, through the list kind."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from dataclasses import dataclass
-from typing import Any
+import datetime as dt
 
 import pytest
 
-from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
+from interloper.errors import ConfigError
+from interloper.partitioning.base import Partition, PartitionConfig, PartitionFilter, PartitionWindow
+from interloper.partitioning.list import ListPartition, ListPartitionConfig, ListPartitionWindow
+from interloper.partitioning.time import TimePartition, TimePartitionConfig, TimePartitionWindow
 
 
-@dataclass(frozen=True)
-class StringPartition(Partition):
-    """Minimal concrete partition keyed by a plain string."""
+class TestPartitionFilter:
+    def test_carries_values_or_bounds(self):
+        assert PartitionFilter("region", values=("eu",)).bounds is None
+        assert PartitionFilter("date", bounds=(dt.date(2026, 1, 1), dt.date(2026, 1, 2))).values is None
+
+    def test_rejects_both_and_neither(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            PartitionFilter("region")
+        with pytest.raises(ValueError, match="exactly one"):
+            PartitionFilter("region", values=("eu",), bounds=("a", "b"))
 
 
-@dataclass(frozen=True)
-class StringPartitionWindow(PartitionWindow):
-    """Minimal concrete window over two string bounds."""
+class TestPartition:
+    def test_str_is_the_id(self):
+        assert str(ListPartition("eu")) == "eu"
+        assert str(TimePartition(dt.date(2026, 1, 15))) == "2026-01-15"
 
-    def __iter__(self) -> Iterator[Partition]:
-        """Yield both bounds as partitions.
+    def test_window_is_the_window_of_one(self):
+        window = ListPartition("eu").window
+        assert isinstance(window, PartitionWindow)
+        assert list(window) == [ListPartition("eu")]
 
-        Yields:
-            One partition per bound.
-        """
-        yield StringPartition(self.start)
-        yield StringPartition(self.end)
+    def test_the_bases_are_abstract(self):
+        with pytest.raises(TypeError):
+            Partition()
+        with pytest.raises(TypeError):
+            PartitionWindow("a", "b")
+        with pytest.raises(TypeError):
+            PartitionConfig(column="x")
+
+
+class TestPartitionWindow:
+    def test_of_a_partition_is_its_window(self):
+        partition = TimePartition(dt.date(2026, 1, 15))
+        assert PartitionWindow.of(partition) == partition.window
+
+    def test_of_a_window_is_the_window(self):
+        window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
+        assert PartitionWindow.of(window) is window
+
+    def test_of_none_is_none(self):
+        assert PartitionWindow.of(None) is None
+
+    def test_str_names_one_partition_by_its_id(self):
+        assert str(ListPartitionWindow("eu", "eu", ("eu", "us"))) == "eu"
+        assert str(TimePartition(dt.date(2026, 1, 15)).window) == "2026-01-15"
+
+    def test_str_names_a_range_by_its_bounds(self):
+        assert str(ListPartitionWindow("eu", "apac", ("eu", "us", "apac"))) == "eu..apac"
+        window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 15))
+        assert str(window) == "2026-01-01..2026-01-15"
+
+    def test_iteration_and_length_agree(self):
+        window = ListPartitionWindow("eu", "apac", ("eu", "us", "apac"))
+        assert len(window) == 3
+        assert [partition.id for partition in window] == ["eu", "us", "apac"]
 
 
 class TestPartitionConfig:
-    """The declaration an asset carries."""
+    def test_a_window_is_required(self):
+        with pytest.raises(ConfigError, match="given no window"):
+            ListPartitionConfig(column="region", values=("eu",)).check(None)
 
-    def test_windows_are_opt_in(self):
-        assert PartitionConfig(column="date").allow_window is False
+    def test_several_partitions_need_allow_window(self):
+        config = ListPartitionConfig(column="region", values=("eu", "us"))
+        with pytest.raises(ConfigError, match="allow_window=False"):
+            config.check(ListPartitionWindow("eu", "us", ("eu", "us")))
+        ListPartitionConfig(column="region", values=("eu", "us"), allow_window=True).check(
+            ListPartitionWindow("eu", "us", ("eu", "us"))
+        )
 
-    def test_the_column_is_required(self):
-        assert PartitionConfig(column="date", allow_window=True).column == "date"
+    def test_window_parses_both_keys(self):
+        config = ListPartitionConfig(column="region", values=("eu", "us", "apac"))
+        window = config.window("us", "apac")
+        assert [partition.id for partition in window] == ["us", "apac"]
 
+    def test_definition_round_trips_through_json_like_values(self):
+        config = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 1))
+        definition = config.to_definition()
+        assert definition["kind"] == "time"
+        loosened = {**definition, "granularity": "day", "start": "2026-01-01"}
+        assert PartitionConfig.from_definition(loosened) == config
 
-class TestPartitionIdentity:
-    """The id is what reaches destination paths and partition keys."""
+    def test_definition_of_the_list_kind_round_trips(self):
+        config = ListPartitionConfig(column="region", values=("eu", "us"))
+        expected = {"kind": "list", "column": "region", "allow_window": False, "values": ("eu", "us")}
+        assert config.to_definition() == expected
+        assert PartitionConfig.from_definition({**config.to_definition(), "values": ["eu", "us"]}) == config
 
-    def test_derived_from_the_value(self):
-        assert StringPartition("2026-06-01").id == "2026-06-01"
+    def test_an_unknown_kind_is_a_config_error(self):
+        with pytest.raises(ConfigError, match="no known kind"):
+            PartitionConfig.from_definition({"column": "x"})
+        with pytest.raises(ConfigError, match="no known kind"):
+            PartitionConfig.from_definition({"kind": "hash", "column": "x"})
 
-    def test_a_non_string_value_is_stringified(self):
-        assert StringPartition(42).id == "42"
-
-
-class TestPartitionSlice:
-    """Windowed writes are split per partition by slicing on the column."""
-
-    def test_rows_are_filtered_to_the_partitions_own_value(self):
-        rows = [
-            {"date": "2026-06-01", "v": 1},
-            {"date": "2026-06-02", "v": 2},
-            {"date": "2026-06-01", "v": 3},
-        ]
-
-        sliced = StringPartition("2026-06-01").slice(rows, "date")
-
-        assert sliced == [{"date": "2026-06-01", "v": 1}, {"date": "2026-06-01", "v": 3}]
-
-    def test_no_matching_rows_yields_nothing(self):
-        rows = [{"date": "2026-06-02", "v": 2}]
-
-        assert StringPartition("2026-06-01").slice(rows, "date") == []
-
-    def test_unrecognised_data_cannot_be_sliced(self):
-        from interloper.errors import RepresentationError
-
-        with pytest.raises(RepresentationError, match="object"):
-            StringPartition("2026-06-01").slice(object(), "date")
-
-
-class TestPartitionWindowIdentity:
-    """A window's id names both of its inclusive bounds."""
-
-    def test_derived_from_both_bounds(self):
-        window = StringPartitionWindow(start="2026-06-01", end="2026-06-03")
-
-        assert window.id == "2026-06-01-2026-06-03"
-
-    def test_iteration_is_the_subclass_contract(self):
-        window = StringPartitionWindow(start="2026-06-01", end="2026-06-03")
-
-        assert [partition.id for partition in window] == ["2026-06-01", "2026-06-03"]
-
-
-def test_a_window_and_a_partition_are_distinguishable_by_type() -> None:
-    """Runners branch on the scope's type, so the hierarchy must stay disjoint."""
-    partition: Any = StringPartition("2026-06-01")
-    window: Any = StringPartitionWindow(start="2026-06-01", end="2026-06-03")
-
-    assert isinstance(partition, Partition) and not isinstance(partition, PartitionWindow)
-    assert isinstance(window, PartitionWindow) and not isinstance(window, Partition)
+    def test_kinds_are_never_compatible_across(self):
+        time = TimePartitionConfig(column="date")
+        regions = ListPartitionConfig(column="region", values=("eu",))
+        assert time.compatible(regions) is False
+        assert regions.compatible(time) is False

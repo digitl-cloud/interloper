@@ -14,7 +14,7 @@ class EventType(Enum):
     event inherits:
 
     - operation events carry ``component_id``, ``component_kind``,
-      ``component_key``, ``source_id``, ``partition_or_window`` and
+      ``component_key``, ``source_id``, ``window`` and
       ``message``;
     - asset data events add ``qualified_key`` to those;
     - destination I/O events add ``destination_key``;
@@ -64,7 +64,7 @@ class EventType(Enum):
     """The write raised."""
 
     RUN_STARTED = "run_started"
-    """The walk begins. Carries ``partition_or_window`` and ``message``."""
+    """The walk begins. Carries ``window`` and ``message``."""
     RUN_COMPLETED = "run_completed"
     """Every operation completed or was skipped."""
     RUN_FAILED = "run_failed"

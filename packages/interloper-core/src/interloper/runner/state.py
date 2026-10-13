@@ -12,7 +12,7 @@ from interloper.runner.results import ExecutionInfo, ExecutionStatus
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
     from interloper.operation.base import Operation, OperationResult
-    from interloper.partitioning.base import Partition, PartitionWindow
+    from interloper.partitioning.base import PartitionWindow
 
 
 # Fixed namespace for deterministic operation-event ids. A given lifecycle
@@ -54,7 +54,7 @@ class RunState:
 
         self.executions: dict[str, ExecutionInfo] = {}
         self.attempts: dict[str, int] = {operation.id: 1 for operation in dag.operations}
-        self.partition_or_window: Partition | PartitionWindow | None = None
+        self.window: PartitionWindow | None = None
         self.start_time: dt.datetime | None = None
         self.end_time: dt.datetime | None = None
 
@@ -106,15 +106,15 @@ class RunState:
 
     # -- Run lifecycle ---------------------------------------------------------
 
-    def start_run(self, partition_or_window: Partition | PartitionWindow | None) -> None:
+    def start_run(self, window: PartitionWindow | None) -> None:
         """Record the run start time and emit RUN_STARTED + OPERATION_QUEUED events.
 
         Args:
-            partition_or_window: Partition or window the run is scoped to, or
+            window: Partition or window the run is scoped to, or
                 ``None`` for an unpartitioned run. Stamped on every event this
                 state emits.
         """
-        self.partition_or_window = partition_or_window
+        self.window = window
         self.start_time = dt.datetime.now(dt.timezone.utc)
         self.end_time = None
 
@@ -122,7 +122,7 @@ class RunState:
             EventType.RUN_STARTED,
             metadata={
                 **self.metadata,
-                "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
+                "window": str(self.window) if self.window else None,
                 "message": f"Run started ({len(self.dag.operations)} operations)",
             },
         )
@@ -167,7 +167,7 @@ class RunState:
             event_type,
             metadata={
                 **self.metadata,
-                "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
+                "window": str(self.window) if self.window else None,
                 "error": error,
                 "message": message,
             },
@@ -381,19 +381,9 @@ class RunState:
             operation: The operation the event is about.
 
         Returns:
-            Dictionary of metadata keys for the event.
+            The operation's event metadata, carrying the attempt the event belongs to.
         """
-        meta: dict[str, Any] = {
-            **self.metadata,
-            "component_id": operation.id,
-            "component_kind": operation.kind,
-            "component_key": operation.key,
-            "partition_or_window": str(self.partition_or_window) if self.partition_or_window else None,
-            "attempt": self.attempts[operation.id],
-        }
-        if operation.parent is not None:
-            meta["parent_id"] = operation.parent.id
-        return meta
+        return operation.event_metadata(self.metadata, self.window, attempt=self.attempts[operation.id])
 
     @staticmethod
     def operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:

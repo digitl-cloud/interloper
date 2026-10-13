@@ -88,7 +88,7 @@ Every `read()` and `write()` receives an immutable `IOContext`:
 | Field | Meaning |
 |-------|---------|
 | `asset` | The asset being read or written. `asset.table`, `asset.dataset`, `asset.partitioning` name the storage location. |
-| `partition_or_window` | The partition or window of this call, or `None` for an unpartitioned asset. |
+| `window` | The window of this call, or `None` for an unpartitioned asset; `context.partitions` lists its partitions, `None` standing for the whole. |
 | `schema` | The effective schema of the data: the declared one, or the one inferred during conform. `None` when none could be resolved. |
 | `metadata` | Run metadata (run id, backfill id). |
 
@@ -134,7 +134,7 @@ instantiated. `partition_row_counts` feeds `asset.partition_row_counts()` and th
 
 `write()` and `read()` are the base class's: a window write is split into one `write_partition` call
 per partition, slicing the data through its [representation](../extending/representations.md)
-on the partition column; a window read returns one result per partition, newest first. A
+on the partition column; a window read is joined into one table through the data's representation, oldest partition first. A
 destination written this way is partition-correct by construction, and `CSVDestination`,
 `FileDestination`, `MemoryDestination` and `ObjectStoreDestination`, the base of `GCSDestination` and
 `S3Destination`, are all built exactly like this. The partitions a context covers are on the context

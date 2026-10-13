@@ -8,7 +8,7 @@ from interloper.asset.base import Asset
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
-    from interloper.partitioning.base import Partition, PartitionWindow
+    from interloper.partitioning import Partition, PartitionWindow
 
 
 class Reference(Asset):
@@ -27,14 +27,14 @@ class Reference(Asset):
 
     async def materialize_async(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Do nothing: the table exists already.
 
         Args:
-            partition_or_window: Ignored.
+            window: Ignored.
             dag: Ignored.
             metadata: Ignored.
 

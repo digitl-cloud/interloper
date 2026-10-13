@@ -34,19 +34,19 @@ in the generations.
 ```py
 result = dag.materialize()                                   # default AsyncRunner
 result = dag.materialize(il.TimePartition(dt.date(2026, 1, 15)))
-result = await dag.materialize_async(partition)
+result = await dag.materialize_async(window)
 ```
 
 For a specific runner or its options:
 
 ```py
 runner = il.AsyncRunner(max_workers=8, fail_fast=False)
-result = il.run(runner.run(dag, partition, metadata={"run_id": "..."}))    # sync code
-result = await runner.run(dag, partition)                                  # async code
+result = il.run(runner.run(dag, window, metadata={"run_id": "..."}))    # sync code
+result = await runner.run(dag, window)                                  # async code
 ```
 
-`metadata` is carried onto every event and span of the run; a `run_id` is generated when
-absent.
+`window` is a `PartitionWindow`, or a bare partition for the window of one; `metadata` is carried
+onto every event and span of the run; a `run_id` is generated when absent.
 
 ## The sync bridge
 
@@ -93,7 +93,7 @@ constructs it with `runner.config`.
 
 ```py
 result.status              # ExecutionStatus.COMPLETED or FAILED
-result.partition_or_window
+result.window
 result.execution_time      # seconds
 result.executions          # id -> ExecutionInfo
 result.completed_ids, result.failed_ids, result.canceled_ids
@@ -114,9 +114,9 @@ traceback, its dependents are canceled, and the run continues or stops depending
 so events and results are complete before it surfaces. A failure of the walk machinery itself
 (a deadlock, an invalid graph) raises `RunnerError`.
 
-Before anything executes, the runner validates the scope against every enabled
-operation: partitioned operations without a scope, windows against operations that forbid them,
-and time-partition mismatches fail the whole run up front.
+Before anything executes, the runner asks every enabled operation's partitioning to check the
+window and lists every failure in one `PartitionError`, so a run no asset can serve fails without
+executing anything.
 
 ## Retrying
 

@@ -129,11 +129,7 @@ class TestReportFlow:
         monkeypatch.setattr(constants, "REPORT_POLL_INTERVAL", 0)
 
         asset = _asset(_source(connection))
-        context = ExecutionContext(
-            asset_key=asset.key,
-            partitioning=asset.partitioning,
-            partition_or_window=il.TimePartition(value=dt.date(2026, 6, 14)),
-        )
+        context = ExecutionContext(asset, il.TimePartition(value=dt.date(2026, 6, 14)).window)
         return asyncio.run(asset.data(context=context)), requests
 
     def test_polls_until_finished_and_parses_the_csv(self, monkeypatch: Any):

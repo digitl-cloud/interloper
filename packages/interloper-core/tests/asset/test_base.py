@@ -8,8 +8,7 @@
 import asyncio
 import datetime
 import datetime as dt
-from collections.abc import Iterator
-from dataclasses import dataclass
+import warnings
 from typing import Any, ClassVar
 
 import pytest
@@ -22,8 +21,8 @@ from interloper.component.relation import ComponentIdentity
 from interloper.dag import DAG
 from interloper.errors import AssetError, ConfigError, DestinationError, PartitionError
 from interloper.events import Event, EventBus, EventType
-from interloper.partitioning.base import Partition, PartitionConfig, PartitionWindow
-from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionConfig
+from interloper.partitioning.time import TimePartition, TimePartitionConfig, TimePartitionWindow
 from interloper.runner.results import ExecutionStatus
 from interloper.serializable import Spec
 
@@ -115,17 +114,6 @@ class TtLike(il.Source):
             The single stamped row.
         """
         return [{"date": context.partition_date, "id": "tt"}]
-
-
-@dataclass(frozen=True)
-class FakePartition(Partition):
-    pass
-
-
-@dataclass(frozen=True)
-class FakePartitionWindow(PartitionWindow):
-    def __iter__(self) -> Iterator[Partition]:  # noqa: D105 - protocol method
-        yield FakePartition(self.start)  # pragma: no cover - not exercised
 
 
 @pytest.fixture(autouse=True)
@@ -283,10 +271,10 @@ class TestDefinition:
 
     def test_definition_includes_partitioning_when_set(self):
         class FakeAssetPartitioned(il.Asset):
-            partitioning: ClassVar[PartitionConfig | None] = PartitionConfig(column="day")
+            partitioning: ClassVar[PartitionConfig | None] = ListPartitionConfig(column="day", values=("x",))
 
         defn = FakeAssetPartitioned.definition()
-        assert defn.partitioning == {"column": "day", "allow_window": False}
+        assert defn.partitioning == {"kind": "list", "column": "day", "allow_window": False, "values": ("x",)}
 
 
 # -- Relation inference from data() --------------------------------------------
@@ -729,37 +717,8 @@ class TestReadDestination:
 # -- Partitioning validation ---------------------------------------------------
 
 
-class FakeAssetPartitioned(il.Asset):
-    partitioning = PartitionConfig(column="day", allow_window=False)
-
-
-class FakeAssetPartitionedWithWindow(il.Asset):
-    partitioning = PartitionConfig(column="day", allow_window=True)
-
-
-class TestPartitioning:
-    def test_unpartitioned_asset_with_no_partition_passes(self):
-        FakeAsset()._validate_partitioning(None)
-
-    def test_unpartitioned_asset_with_partition_warns(self):
-        with pytest.warns(UserWarning):
-            FakeAsset()._validate_partitioning(FakePartition(value="x"))
-
-    def test_partitioned_asset_without_partition_raises(self):
-        with pytest.raises(PartitionError):
-            FakeAssetPartitioned()._validate_partitioning(None)
-
-    def test_partitioned_asset_with_single_partition_passes(self):
-        FakeAssetPartitioned()._validate_partitioning(FakePartition(value="x"))
-
-    def test_window_not_allowed_raises(self):
-        window = FakePartitionWindow(start="a", end="b")
-        with pytest.raises(PartitionError):
-            FakeAssetPartitioned()._validate_partitioning(window)
-
-    def test_window_allowed_passes(self):
-        window = FakePartitionWindow(start="a", end="b")
-        FakeAssetPartitionedWithWindow()._validate_partitioning(window)
+class FakeAssetRegional(il.Asset):
+    partitioning = ListPartitionConfig(column="region", values=("eu", "us"))
 
 
 class FakeAssetDaily(il.Asset):
@@ -770,51 +729,47 @@ class FakeAssetBounded(il.Asset):
     partitioning = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 10))
 
 
-class TestTimePartitioning:
-    def test_matching_granularity_passes(self):
-        FakeAssetDaily()._validate_partitioning(TimePartition(dt.date(2026, 1, 1)))
+class TestWindowValidation:
+    """The asset defers to its partitioning's check; an unpartitioned asset ignores the window."""
 
-    def test_mismatched_partition_granularity_raises(self):
-        partition = TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH)
-        with pytest.raises(PartitionError, match="partitioned by day"):
-            FakeAssetDaily()._validate_partitioning(partition)
+    def test_an_unpartitioned_asset_ignores_the_window(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            FakeAsset()._check_window(TimePartition(dt.date(2026, 1, 1)).window)
+            FakeAsset()._check_window(None)
 
-    def test_mismatched_window_granularity_raises(self):
-        window = TimePartitionWindow(
-            start=dt.date(2026, 1, 1), end=dt.date(2026, 3, 1), granularity=TimeGranularity.MONTH
-        )
-        with pytest.raises(PartitionError, match="partitioned by day"):
-            FakeAssetDaily()._validate_partitioning(window)
+    def test_a_partitioned_asset_needs_a_window(self):
+        message = "Asset 'fake_asset_daily' is partitioned, but the run was given no window"
+        with pytest.raises(PartitionError, match=message):
+            FakeAssetDaily()._check_window(None)
 
-    def test_partition_on_the_start_bound_passes(self):
-        FakeAssetBounded()._validate_partitioning(TimePartition(dt.date(2026, 1, 10)))
+    def test_the_message_names_the_asset_and_the_predicate(self):
+        with pytest.raises(PartitionError, match="Asset 'fake_asset_bounded' has no data before 2026-01-10"):
+            FakeAssetBounded()._check_window(TimePartition(dt.date(2026, 1, 9)).window)
 
-    def test_partition_before_the_start_bound_raises(self):
-        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
-            FakeAssetBounded()._validate_partitioning(TimePartition(dt.date(2026, 1, 9)))
+    def test_a_list_asset_accepts_a_declared_partition(self):
+        FakeAssetRegional()._check_window(ListPartition("eu").window)
+        with pytest.raises(PartitionError, match="'apac' is not one of the declared partitions"):
+            FakeAssetRegional()._check_window(ListPartition("apac").window)
 
-    def test_window_reaching_before_the_start_bound_raises(self):
-        window = TimePartitionWindow(start=dt.date(2026, 1, 5), end=dt.date(2026, 1, 20))
-        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
-            FakeAssetBounded()._validate_partitioning(window)
+    def test_run_checks_before_anything_executes(self):
+        calls: list[str] = []
 
-    def test_window_within_the_start_bound_passes(self):
-        window = TimePartitionWindow(start=dt.date(2026, 1, 10), end=dt.date(2026, 1, 20))
-        FakeAssetBounded()._validate_partitioning(window)
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily(context: il.ExecutionContext) -> list:
+            calls.append("ran")
+            return []
 
-    def test_unbounded_asset_accepts_any_partition(self):
-        FakeAssetDaily()._validate_partitioning(TimePartition(dt.date(1999, 1, 1)))
+        with pytest.raises(PartitionError, match="given no window"):
+            daily().run()
+        assert calls == []
 
-    def test_a_non_time_partition_is_rejected(self):
-        # Only time partitions carry a granularity, so anything else would
-        # reach the asset as a scope that cannot answer `granularity`/`bounds`.
-        with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
-            FakeAssetDaily()._validate_partitioning(FakePartition(value="2026-01-01"))
+    def test_run_accepts_a_bare_partition_as_sugar(self):
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def daily(context: il.ExecutionContext) -> list:
+            return [{"date": context.partition_date}]
 
-    def test_a_non_time_window_is_rejected(self):
-        window = FakePartitionWindow(start="2026-01-01", end="2026-01-03")
-        with pytest.raises(PartitionError, match="is time-partitioned"):
-            FakeAssetDaily()._validate_partitioning(window)
+        assert daily().run(TimePartition(dt.date(2026, 1, 1))) == [{"date": dt.date(2026, 1, 1)}]
 
 
 # -- __call__ reconfiguration --------------------------------------------------
@@ -1282,7 +1237,7 @@ class TestPartitionRowCounts:
         mem = il.MemoryDestination()
         asset = FakeAssetDaily(id="daily", destinations=[mem])
         mem.write(
-            il.IOContext(asset=asset, partition_or_window=TimePartition(dt.date(2026, 1, 1))),
+            il.IOContext(asset=asset, window=TimePartition(dt.date(2026, 1, 1)).window),
             [{"date": "2026-01-01"}, {"date": "2026-01-01"}],
         )
 
@@ -1339,7 +1294,7 @@ class TestUpstreamReads:
         result = DAG(one, two, matcher).materialize(partition)
 
         assert result.status is ExecutionStatus.COMPLETED
-        rows = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
+        rows = mem.read(il.IOContext(asset=matcher, window=partition.window))
         assert sorted(row["source"] for row in rows) == ["fb_like", "tt_like"]
         assert all(row["rows"] == 1 for row in rows)
 
@@ -1363,7 +1318,7 @@ class TestUpstreamReads:
             EventBus.unsubscribe(handler)
 
         assert result.status is ExecutionStatus.COMPLETED
-        read = mem.read(il.IOContext(asset=matcher, partition_or_window=partition))
+        read = mem.read(il.IOContext(asset=matcher, window=partition.window))
         rows = {row["source"]: row["rows"] for row in read}
         assert rows == {"fb_like": 1, "tt_like": None}
         assert any("found no data in upstream" in e.metadata.get("message", "") for e in warnings_seen)
@@ -1405,7 +1360,7 @@ class TestUpstreamReads:
         asset = single(destinations=[mem], c=one.campaigns)
         DAG(one(enabled=False), asset).materialize(partition)
 
-        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+        assert mem.read(il.IOContext(asset=asset, window=partition.window)) == [
             {"date": dt.date(2026, 1, 1), "ids": ["fb"]}
         ]
 
@@ -1426,7 +1381,7 @@ class TestUpstreamReads:
         result = DAG(one(enabled=False), asset).materialize(partition)
 
         assert result.status is ExecutionStatus.COMPLETED
-        assert mem.read(il.IOContext(asset=asset, partition_or_window=partition)) == [
+        assert mem.read(il.IOContext(asset=asset, window=partition.window)) == [
             {"date": dt.date(2030, 5, 5), "got": False}
         ]
 
@@ -1467,6 +1422,85 @@ class TestUpstreamReads:
             EventBus.unsubscribe(handler)
 
         assert any("is not in the DAG" in e.metadata.get("message", "") for e in warnings_seen)
+
+
+class TestAssetPath:
+    """The asset path end to end: windowed reads, the list kind, and the three observed steps."""
+
+    def test_a_windowed_upstream_read_arrives_as_one_table(self):
+        mem = il.MemoryDestination()
+        windowed = TimePartitionConfig(column="date", allow_window=True)
+
+        @il.asset(partitioning=windowed)
+        def orders(context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"date": partition.id, "amount": 1} for partition in context.window]
+
+        @il.asset(partitioning=windowed)
+        def totals(context: il.ExecutionContext, orders: il.Upstream) -> list[dict[str, Any]]:
+            return [{"date": partition.id, "rows": len(orders.data)} for partition in context.window]
+
+        upstream = orders(id="orders", destinations=[mem])
+        downstream = totals(id="totals", destinations=[mem], orders=upstream)
+        window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
+
+        result = DAG(upstream, downstream).materialize(window)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        rows = mem.read(il.IOContext(asset=downstream, window=window))
+        assert [row["rows"] for row in rows] == [3, 3, 3]
+
+    def test_a_list_partitioned_asset_materializes_and_reads_back(self):
+        mem = il.MemoryDestination()
+        regions = ListPartitionConfig(column="region", values=("eu", "us"))
+
+        @il.asset(partitioning=regions)
+        def sales(context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"region": context.partition.value, "amount": 1}]
+
+        @il.asset(partitioning=regions)
+        def report(context: il.ExecutionContext, sales: il.Upstream) -> list[dict[str, Any]]:
+            return [{"region": context.partition.value, "rows": len(sales.data)}]
+
+        upstream = sales(id="sales", destinations=[mem])
+        downstream = report(id="report", destinations=[mem], sales=upstream)
+
+        result = DAG(upstream, downstream).materialize(ListPartition("eu"))
+
+        assert result.status is ExecutionStatus.COMPLETED
+        eu = ListPartition("eu").window
+        assert mem.read(il.IOContext(asset=upstream, window=eu)) == [{"region": "eu", "amount": 1}]
+        assert mem.read(il.IOContext(asset=downstream, window=eu)) == [{"region": "eu", "rows": 1}]
+
+    def test_the_three_steps_events_carry_the_window_and_the_destination(self):
+        mem = il.MemoryDestination()
+
+        @il.asset(partitioning=PARTITION)
+        def orders(context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"date": context.partition_date, "amount": 1}]
+
+        @il.asset(partitioning=PARTITION)
+        def report(context: il.ExecutionContext, orders: il.Upstream) -> list[dict[str, Any]]:
+            return [{"date": context.partition_date, "rows": len(orders.data)}]
+
+        upstream = orders(id="orders", destinations=[mem])
+        downstream = report(id="report", destinations=[mem], orders=upstream)
+        captured: list[Event] = []
+        EventBus.subscribe(captured.append)
+        try:
+            DAG(upstream, downstream).materialize(TimePartition(dt.date(2026, 1, 1)))
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(captured.append)
+
+        events = {event.type: event.metadata for event in captured if event.metadata.get("component_id") == "report"}
+        assert events[EventType.ASSET_DATA_STARTED]["message"] == "Executing 'report'"
+        assert events[EventType.ASSET_DATA_COMPLETED]["window"] == "2026-01-01"
+        assert events[EventType.DEST_READ_COMPLETED]["message"] == "Read 'orders'"
+        assert events[EventType.DEST_READ_COMPLETED]["destination_key"] == "memory_destination"
+        assert events[EventType.DEST_WRITE_COMPLETED]["message"] == "Wrote 'report'"
+        assert events[EventType.DEST_WRITE_COMPLETED]["rows"] == 1
+        assert events[EventType.DEST_WRITE_COMPLETED]["window"] == "2026-01-01"
+        assert events[EventType.DEST_WRITE_COMPLETED]["qualified_key"] == "report"
 
 
 class TestUpstreamReadFailures:
@@ -1632,18 +1666,3 @@ class TestConformEdgeCases:
 
 
 # -- Time-partition scope validation -------------------------------------------
-
-
-class TestTimePartitionScope:
-    """``_validate_time_partitioning`` guards the scope's shape."""
-
-    def test_no_scope_is_accepted(self):
-        asset = FakeAssetDaily()
-
-        asset._validate_time_partitioning(asset.partitioning, None)
-
-    def test_a_non_time_partition_is_rejected(self):
-        asset = FakeAssetDaily()
-
-        with pytest.raises(PartitionError, match="is time-partitioned, but the run was given a FakePartition"):
-            asset._validate_time_partitioning(asset.partitioning, FakePartition("x"))

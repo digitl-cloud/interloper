@@ -191,7 +191,7 @@ class BackfillStore:
         if end.value < start.value:
             raise ConfigError(f"Backfill range ends before it starts: {start_key!r} to {end_key!r}")
         window = TimePartitionWindow(start.value, end.value, start.granularity)
-        span = window.partition_count()
+        span = len(window)
 
         with session_scope(self._engine) as session:
             target = session.get(Component, component_id)
@@ -492,7 +492,7 @@ class BackfillStore:
             billable: Whether the runs count against the run quota, as the
                 target's workload declares.
         """
-        span = window.partition_count()
+        span = len(window)
         first_queued = max(0, span - db_backfill.concurrency)
         with session_scope(self._engine) as session:
             for index, value in enumerate(window.granularity.period_range(window.start, window.end)):

@@ -191,7 +191,7 @@ with tracer().start_as_current_span("shop.fetch_report", attributes={"shop.accou
 | `interloper.component.key` | `component_key` |
 | `interloper.component.qualified_key` | `qualified_key` |
 | `interloper.source.id` | `source_id` |
-| `interloper.partition` | `partition_or_window` |
+| `interloper.partition` | `window` |
 | `interloper.destination.key` | `destination_key` |
 | `interloper.upstream.key` | set directly on read spans |
 | `interloper.resource.name` | set directly on resolve spans |

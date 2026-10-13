@@ -1,4 +1,3 @@
-import asyncio
 import datetime as dt
 from pprint import pp
 
@@ -13,14 +12,10 @@ il.EventBus.subscribe(print)
 adup = Adup()
 dag = il.DAG(adup)
 
-partition = il.TimePartition(dt.date(2024, 1, 1))
-results = asyncio.run(dag.materialize(partition_or_window=partition))
+results = dag.materialize(il.TimePartition(dt.date(2024, 1, 1)))
 print(results)
 
 
 pp(Adup.definition().model_dump(mode="json"))
-pp(Adup.asset_def("account").model_dump(mode="json"))
-
+pp(Adup.definition().assets[0].model_dump(mode="json"))
 pp(AdupConnection.definition().model_dump(mode="json"))
-pp(Adup.definition().model_dump(mode="json"))
-pp(Adup.asset_def("account").model_dump(mode="json"))

@@ -59,4 +59,4 @@ def test_materializes_no_rows_yet() -> None:
     il.DAG(analysis).materialize(partition)
 
     with pytest.raises(DataNotFoundError):
-        memory.read(il.IOContext(asset=analysis.campaign_performance, partition_or_window=partition))
+        memory.read(il.IOContext(asset=analysis.campaign_performance, window=partition.window))

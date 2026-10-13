@@ -12,8 +12,7 @@ from typing import Any, ClassVar
 
 import duckdb
 import pandas as pd
-from interloper.destination import Destination, IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, Destination, IOContext, PartitionFilter, destination
 from interloper.errors import DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import InputField
@@ -179,8 +178,10 @@ class DuckDBDestination(DatabaseDestination):
         column = _quote(where.column)
         column_type = types.get(where.column)
         placeholder = f"CAST(? AS {column_type})" if column_type is not None else "?"
-        if where.bounds is None:
-            return f"{column} = {placeholder}", [where.value]
+        if where.values is not None:
+            placeholders = ", ".join(placeholder for _ in where.values)
+            return f"{column} IN ({placeholders})", list(where.values)
+        assert where.bounds is not None
         start, end = where.bounds
         if column_type == "VARCHAR":
             start, end = (_iso(bound) for bound in (start, end))

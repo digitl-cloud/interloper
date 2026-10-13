@@ -104,11 +104,7 @@ def _asset(key: str, source: Any = None) -> Any:
 
 
 def _run(asset: Any) -> list[dict[str, Any]]:
-    context = ExecutionContext(
-        asset_key=asset.key,
-        partitioning=asset.partitioning,
-        partition_or_window=il.TimePartition(value=DAY),
-    )
+    context = ExecutionContext(asset, il.TimePartition(value=DAY).window)
     return asset.data(context=context)
 
 

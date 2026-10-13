@@ -7,8 +7,15 @@ import pytest
 
 import interloper as il
 from interloper.destination import IOContext
-from interloper.destination.database import DatabaseDestination, PartitionFilter, TableReference
+from interloper.destination.database import DatabaseDestination, TableReference
 from interloper.errors import ConfigError
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    ListPartitionWindow,
+    PartitionFilter,
+    PartitionWindow,
+)
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.representation import Representation
 
@@ -88,8 +95,8 @@ class DiscriminatedSource(il.Source):
         """Asset carrying the instance discriminator in its table name."""
 
 
-def make_io_context(asset: il.Asset, partition_or_window=None, schema=None) -> IOContext:  # noqa: D103
-    return IOContext(asset=asset, partition_or_window=partition_or_window, schema=schema)
+def make_io_context(asset: il.Asset, window=None, schema=None) -> IOContext:  # noqa: D103
+    return IOContext(asset=asset, window=PartitionWindow.of(window), schema=schema)
 
 
 class TestWrite:
@@ -112,15 +119,13 @@ class TestWrite:
         assert destination.calls[1][0] == "insert"
 
     def test_non_time_partition_deletes_by_id(self):
-        from interloper.partitioning.base import Partition, PartitionConfig
-
-        @il.asset(partitioning=PartitionConfig(column="region"))
+        @il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us")))
         def regional(context: il.ExecutionContext) -> list:
             return []
 
         destination = RecordingDatabase(id="db")
-        destination.write(make_io_context(regional(), Partition("eu")), [{"region": "eu"}])
-        assert destination.calls[0] == ("delete", ("regional", None, PartitionFilter("region", value="eu")))
+        destination.write(make_io_context(regional(), ListPartition("eu")), [{"region": "eu"}])
+        assert destination.calls[0] == ("delete", ("regional", None, PartitionFilter("region", values=("eu",))))
 
     def test_window_deletes_each_partition_inserts_once(self):
         destination = RecordingDatabase(id="db")
@@ -203,6 +208,40 @@ class TestInsertDataHook:
         assert captured["data"] == [sentinel]
         assert captured["schema"] is MySchema
 
+    def test_window_reads_as_one_bounded_select(self):
+        destination = RecordingDatabase(id="db")
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 3))
+        destination.read(make_io_context(partitioned_asset(), window))
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 4)))
+        assert destination.calls == [("select", ("partitioned_asset", None, where))]
+
+    def test_a_list_window_reads_by_membership(self):
+        @il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us", "apac"), allow_window=True))
+        def regional(context: il.ExecutionContext) -> list:
+            return []
+
+        destination = RecordingDatabase(id="db")
+        window = ListPartitionWindow("eu", "us", ("eu", "us", "apac"))
+        destination.read(make_io_context(regional(), window))
+        assert destination.calls == [("select", ("regional", None, PartitionFilter("region", values=("eu", "us"))))]
+
+    def test_read_partition_is_read_over_the_partitions_window(self):
+        destination = RecordingDatabase(id="db")
+        partition = TimePartition(datetime.date(2024, 1, 1))
+        destination.read_partition(make_io_context(partitioned_asset()), partition)
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
+        assert destination.calls == [("select", ("partitioned_asset", None, where))]
+
+    def test_write_partition_replaces_that_partition(self):
+        destination = RecordingDatabase(id="db")
+        partition = TimePartition(datetime.date(2024, 1, 1))
+        destination.write_partition(make_io_context(partitioned_asset()), partition, [{"date": "2024-01-01"}])
+        where = PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
+        assert destination.calls == [
+            ("delete", ("partitioned_asset", None, where)),
+            ("insert", ("partitioned_asset", None, [{"date": "2024-01-01"}])),
+        ]
+
 
 class TestPartitionFilter:
     """The base resolves a partition into the filter a backend renders."""
@@ -215,15 +254,13 @@ class TestPartitionFilter:
         where = RecordingDatabase(id="db")._filter(make_io_context(partitioned_asset(), partition), partition)
         assert where == PartitionFilter("date", bounds=(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)))
 
-    def test_any_other_partition_filters_by_its_id(self):
-        from interloper.partitioning.base import Partition, PartitionConfig
-
-        @il.asset(partitioning=PartitionConfig(column="region"))
+    def test_a_list_partition_filters_by_membership(self):
+        @il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us")))
         def regional(context: il.ExecutionContext) -> list:
             return []
 
-        where = RecordingDatabase(id="db")._filter(make_io_context(regional(), Partition("eu")), Partition("eu"))
-        assert where == PartitionFilter("region", value="eu")
+        where = RecordingDatabase(id="db")._filter(make_io_context(regional()), ListPartition("eu"))
+        assert where == PartitionFilter("region", values=("eu",))
 
 
 class TestNativeReads:

@@ -78,7 +78,7 @@ class TestContract:
         operation = _NoopOperation()
         assert operation.enabled is True
         assert operation.partitioning is None
-        assert operation.effective_partition(None) is None
+        assert operation.effective_window(None) is None
         assert type(operation).capture_traceback is True
 
 

@@ -89,10 +89,10 @@ class TestRunSpecFileMode:
                 - path: {SOURCE_PATH}
             """,
         )
-        _cmd_run(_args(file=str(spec), dry_run=True, date="2026-06-01"))
+        _cmd_run(_args(file=str(spec), dry_run=True))
 
         out = capsys.readouterr().out
-        assert "2026-06-01" in out
+        assert "Window:    (none)" in out
         assert "1 enabled / 1 total" in out
         assert "1. fake_run_source.one" in out
 
@@ -180,12 +180,12 @@ class TestRunPreflightErrors:
     """Partition errors raised by the runner's preflight surface like the other input errors."""
 
     def test_window_without_allow_window_is_a_clean_error(self) -> None:
-        with pytest.raises(SystemExit, match="Error: Windowed runs require") as exc_info:
+        with pytest.raises(SystemExit, match="Error: The run's window is not valid") as exc_info:
             _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH], start_date="2026-01-01", end_date="2026-01-07"))
-        assert "allow_window=True" in str(exc_info.value)
+        assert "does not allow windows" in str(exc_info.value)
 
     def test_missing_partition_is_a_clean_error(self) -> None:
-        with pytest.raises(SystemExit, match="Error: This run requires a partition"):
+        with pytest.raises(SystemExit, match="given no window"):
             _cmd_run(_args(target=[PARTITIONED_SOURCE_PATH]))
 
 
@@ -216,71 +216,51 @@ class TestRunJobSpecMode:
         _cmd_run(_args(file=str(spec_file)))
 
 
-class TestResolvePartition:
-    """Partition keys on the CLI date flags: the shape carries the granularity."""
+class TestResolveWindow:
+    """The date flags resolve through the DAG's partitioning, so a key means what the asset means."""
 
-    def test_day_key_stays_daily(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
-        from interloper.partitioning.time import TimeGranularity, TimePartition
-
-        partition = _resolve_partition(_args(date="2026-06-01"))
-        assert isinstance(partition, TimePartition)
-        assert partition.granularity is TimeGranularity.DAY
-
-    def test_month_key_yields_a_monthly_partition(self) -> None:
+    def test_a_day_key_is_a_window_of_one(self) -> None:
         import datetime as dt
 
-        from interloper.cli.commands.run import _resolve_partition
-        from interloper.partitioning.time import TimeGranularity, TimePartition
+        from interloper.cli.commands.run import _resolve_window
+        from interloper.partitioning import TimeGranularity, TimePartitionWindow
 
-        partition = _resolve_partition(_args(date="2026-06"))
-        assert isinstance(partition, TimePartition)
-        assert partition.granularity is TimeGranularity.MONTH
-        assert partition.value == dt.date(2026, 6, 1)
-
-    def test_window_keys_must_share_a_granularity(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
-
-        with pytest.raises(SystemExit, match="must share one granularity"):
-            _resolve_partition(_args(start_date="2026-06", end_date="2026-08-01"))
-
-    def test_monthly_window(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
-        from interloper.partitioning.time import TimeGranularity, TimePartitionWindow
-
-        window = _resolve_partition(_args(start_date="2026-06", end_date="2026-08"))
+        window = _resolve_window(_args(date="2026-06-01"), il.DAG(FakePartitionedSource()))
         assert isinstance(window, TimePartitionWindow)
-        assert window.granularity is TimeGranularity.MONTH
-        assert window.partition_count() == 3
+        assert len(window) == 1
+        assert window.granularity is TimeGranularity.DAY
+        assert window.start == dt.date(2026, 6, 1)
 
-    def test_unknown_shape_is_a_clean_error(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
+    def test_a_key_of_another_granularity_is_refused(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
 
-        with pytest.raises(SystemExit, match="invalid --date"):
-            _resolve_partition(_args(date="not-a-key"))
+        with pytest.raises(SystemExit, match="is not a day key"):
+            _resolve_window(_args(date="2026-06"), il.DAG(FakePartitionedSource()))
 
-    def test_date_and_window_are_mutually_exclusive(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
+    def test_start_and_end_keys_are_a_range(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
 
-        with pytest.raises(SystemExit, match="cannot be combined with --start-date"):
-            _resolve_partition(_args(date="2026-06-01", start_date="2026-06-01", end_date="2026-06-02"))
+        window = _resolve_window(_args(start_date="2026-06-01", end_date="2026-06-03"), il.DAG(FakePartitionedSource()))
+        assert window is not None
+        assert str(window) == "2026-06-01..2026-06-03"
 
-    def test_a_half_specified_window_is_rejected(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
+    def test_a_key_needs_a_partitioned_operation(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
 
-        with pytest.raises(SystemExit, match="both --start-date and --end-date"):
-            _resolve_partition(_args(start_date="2026-06-01"))
+        with pytest.raises(SystemExit, match="no enabled operation of the DAG is partitioned"):
+            _resolve_window(_args(date="2026-06-01"), il.DAG(FakeRunSource()))
 
-    def test_an_unparseable_window_bound_is_a_clean_error(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
+    def test_no_flags_is_no_window(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
 
-        with pytest.raises(SystemExit, match="invalid start/end date"):
-            _resolve_partition(_args(start_date="nope", end_date="2026-06-02"))
+        assert _resolve_window(_args(), il.DAG(FakeRunSource())) is None
 
-    def test_no_date_flags_means_no_partition(self) -> None:
-        from interloper.cli.commands.run import _resolve_partition
+    def test_date_and_range_cannot_be_combined(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
 
-        assert _resolve_partition(_args()) is None
+        arguments = _args(date="2026-06-01", start_date="2026-06-01", end_date="2026-06-02")
+        with pytest.raises(SystemExit, match="cannot be combined"):
+            _resolve_window(arguments, il.DAG(FakePartitionedSource()))
 
 
 class TestRegister:
@@ -394,7 +374,7 @@ class TestPrintPlan:
 
         out = capsys.readouterr().out
         assert "Runner:    AsyncRunner" in out
-        assert "Partition: (none)" in out
+        assert "Window:    (none)" in out
         assert "1. fake_run_source.one" in out
         assert "Run:" not in out
 

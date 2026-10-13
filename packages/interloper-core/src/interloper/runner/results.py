@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import PartitionWindow
 
 if TYPE_CHECKING:
     from interloper.operation.base import OperationResult
@@ -128,7 +128,7 @@ class ExecutionInfo:
 class RunResult:
     """Result of a single DAG execution (one partition, window, or unpartitioned)."""
 
-    partition_or_window: Partition | PartitionWindow | None = None
+    window: PartitionWindow | None = None
     status: ExecutionStatus = ExecutionStatus.COMPLETED
     executions: dict[str, ExecutionInfo] = field(default_factory=dict)
     execution_time: float = 0.0
@@ -154,21 +154,13 @@ class RunResult:
         Returns:
             A formatted summary of this run result.
         """
-        identifier: str
-        if self.partition_or_window is None:
-            identifier = "partition=None"
-        elif isinstance(self.partition_or_window, PartitionWindow):
-            identifier = f"window={self.partition_or_window}"
-        else:
-            identifier = f"partition={self.partition_or_window}"
-
         completed_count = len(self.completed_ids)
         failed_count = len(self.failed_ids)
         canceled_count = len(self.canceled_ids)
 
         parts: list[str] = [
             f"status={self.status.value}",
-            identifier,
+            f"window={self.window}",
             f"completed={completed_count}",
             f"failed={failed_count}",
             f"canceled={canceled_count}",

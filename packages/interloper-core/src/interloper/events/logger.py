@@ -3,71 +3,56 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
 from interloper.events.bus import EventBus
 from interloper.events.types import EventType
 
+if TYPE_CHECKING:
+    from interloper.component.base import Component
+    from interloper.partitioning.base import PartitionWindow
+
 
 class EventLogger:
-    """Logger that emits messages as ``LOG`` events on the event bus.
+    """Logger that emits messages as ``LOG`` events attributed to one component.
 
-    Provides a familiar logging interface (debug/info/warning/error) where
-    each call emits an ``EventType.LOG`` event visible to all event handlers.
-    Log levels use the standard `logging` module constants.
-
-    Usage:
+    Provides the familiar ``debug`` / ``info`` / ``warning`` / ``error`` interface; each call
+    emits an ``EventType.LOG`` event carrying the component's identity, the run metadata and the
+    window, built through `Component.event_metadata`, plus ``level`` and ``message``.
 
     ```py
     context.logger.info("Fetched 142 records")
-    context.logger.warning("Rate limited, retrying...")
     ```
     """
 
     def __init__(
         self,
-        component_key: str,
-        metadata: dict[str, Any],
-        component_id: str | None = None,
-        component_kind: str = "asset",
-        parent_id: str | None = None,
+        component: Component,
+        metadata: Mapping[str, Any],
+        window: PartitionWindow | None = None,
     ) -> None:
-        """Initialize the logger.
+        """Bind the logger to a component and a run.
 
         Args:
-            component_key: Qualified key of the component that owns this logger.
-            metadata: Run metadata included in every emitted ``LOG`` event.
-            component_id: Id of the component that owns this logger. Carried on
-                every emitted ``LOG`` event so it can be attributed to the
-                component (e.g. filtered alongside its lifecycle events).
-            component_kind: Kind of the owning component.
-            parent_id: Id of the component that owns this one, if any.
+            component: The component the events are attributed to.
+            metadata: Run metadata carried on every event.
+            window: The window the run covers, carried on every event; ``None`` when unscoped.
         """
-        self._component_key = component_key
+        self._component = component
         self._metadata = metadata
-        self._component_id = component_id
-        self._component_kind = component_kind
-        self._parent_id = parent_id
+        self._window = window
 
     def _emit(self, level: int, message: str) -> None:
-        """Emit a ``LOG`` event with the given level and message.
+        """Emit a ``LOG`` event at a level.
 
         Args:
-            level: Standard `logging` level constant, carried on the event
-                as its level name.
+            level: Standard `logging` level constant, carried on the event as its level name.
             message: The log message.
         """
-        metadata: dict[str, Any] = {
-            **self._metadata,
-            "component_key": self._component_key,
-            "message": message,
-            "level": logging.getLevelName(level),
-        }
-        if self._component_id is not None:
-            metadata["component_id"] = self._component_id
-            metadata["component_kind"] = self._component_kind
-        if self._parent_id is not None:
-            metadata["parent_id"] = self._parent_id
+        metadata = self._component.event_metadata(
+            self._metadata, self._window, level=logging.getLevelName(level), message=message
+        )
         EventBus.emit(EventType.LOG, metadata=metadata)
 
     def debug(self, message: str) -> None:

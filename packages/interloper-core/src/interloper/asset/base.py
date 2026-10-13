@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import traceback
 import warnings
 from collections.abc import Iterator, Sized
-from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -25,16 +23,10 @@ from interloper.errors import (
     RepresentationError,
     format_exception,
 )
-from interloper.events import EventBus, EventType
+from interloper.events import EventBus, EventType, Step, StepKind
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, OperationContext, OperationResult
-from interloper.partitioning import (
-    Partition,
-    PartitionWindow,
-    TimePartition,
-    TimePartitionConfig,
-    TimePartitionWindow,
-)
+from interloper.partitioning import Partition, PartitionWindow
 from interloper.representation import Representation, View
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
@@ -304,7 +296,7 @@ class Asset(Operation):
         """
         has_schema = cls.schema is not None and hasattr(cls.schema, "json_schema")
         asset_schema = cls.schema.json_schema() if has_schema else None
-        partitioning = asdict(cls.partitioning) if cls.partitioning is not None else None
+        partitioning = cls.partitioning.to_definition() if cls.partitioning is not None else None
         return AssetDefinition(**dict(super().definition()), asset_schema=asset_schema, partitioning=partitioning)
 
     # -- Reconfiguration -------------------------------------------------------
@@ -392,12 +384,12 @@ class Asset(Operation):
             An effectless result: a materialization's effects are its
             destination writes and the events it emits.
         """
-        await self.materialize_async(context.partition_or_window, context.dag, context.metadata)
+        await self.materialize_async(context.window, context.dag, context.metadata)
         return OperationResult()
 
     def run(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
@@ -414,18 +406,18 @@ class Asset(Operation):
         Async code awaits `run_async` instead.
 
         Args:
-            partition_or_window: Partition or PartitionWindow for this run.
+            window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
             The raw execution result.
         """
-        return concurrency.run(self.run_async(partition_or_window, dag, metadata))
+        return concurrency.run(self.run_async(window, dag, metadata))
 
     async def run_async(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
@@ -438,61 +430,28 @@ class Asset(Operation):
         natively.
 
         Args:
-            partition_or_window: Partition or PartitionWindow for this run.
+            window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
             The raw execution result.
         """
-        self._validate_partitioning(partition_or_window)
+        window = self.effective_window(PartitionWindow.of(window))
+        self._check_window(window)
+        metadata = metadata or {}
+        context = ExecutionContext(self, window, metadata)
+        kwargs = await self._build_kwargs(context, window, dag)
 
-        source = self.source
-        context = ExecutionContext(
-            asset_key=self.key,
-            partition_or_window=partition_or_window,
-            partitioning=self.partitioning,
-            metadata=metadata,
-            asset_id=self.id,
-            source_id=source.id if source is not None else None,
-        )
-
-        kwargs = await self._build_kwargs(context, partition_or_window, dag)
-
-        exec_meta = self._event_metadata(metadata or {}, partition_or_window)
-        span_attrs = telemetry_attributes.from_metadata(exec_meta)
-        EventBus.emit(
-            EventType.ASSET_DATA_STARTED,
-            metadata={**exec_meta, "message": f"Executing '{self.key}'"},
-        )
-        try:
-            with tracer().start_as_current_span("interloper.asset.data", attributes=span_attrs):
-                result = self._unwrap(await invoke(self.data, **kwargs))
-            EventBus.emit(
-                EventType.ASSET_DATA_COMPLETED,
-                metadata={**exec_meta, "message": f"Executed '{self.key}'"},
-            )
-        except Exception as e:
-            EventBus.emit(
-                EventType.ASSET_DATA_FAILED,
-                metadata={
-                    **exec_meta,
-                    "error": format_exception(e),
-                    "traceback": traceback.format_exc(),
-                    "message": f"Execution of '{self.key}' failed: {format_exception(e)}",
-                },
-            )
-            raise
-
+        with Step(StepKind.ASSET_DATA, self.event_metadata(metadata, window), subject=f"'{self.key}'"):
+            result = self._unwrap(await invoke(self.data, **kwargs))
         # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
         # it never blocks the event loop while other assets run concurrently.
-        result = await asyncio.to_thread(self._normalize_and_conform, result)
-
-        return result
+        return await asyncio.to_thread(self._normalize_and_conform, result)
 
     def materialize(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
@@ -509,25 +468,25 @@ class Asset(Operation):
         Async code awaits `materialize_async` instead.
 
         Args:
-            partition_or_window: Partition or PartitionWindow for this run.
+            window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
         Returns:
             The execution result, or ``None`` if the asset is disabled.
         """
-        return concurrency.run(self.materialize_async(partition_or_window, dag, metadata))
+        return concurrency.run(self.materialize_async(window, dag, metadata))
 
     async def materialize_async(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Execute the asset and write the result to all configured destinations.
 
         Args:
-            partition_or_window: Partition or PartitionWindow for this run.
+            window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
@@ -537,9 +496,10 @@ class Asset(Operation):
         if not self.enabled:
             return None
 
+        window = self.effective_window(PartitionWindow.of(window))
         metadata = metadata or {}
-        result = await self.run_async(partition_or_window, dag, metadata)
-        await self._destination_write(partition_or_window, metadata, result)
+        result = await self.run_async(window, dag, metadata)
+        await self._destination_write(window, metadata, result)
         return result
 
     def data(self, **kwargs: Any) -> Any:
@@ -583,7 +543,7 @@ class Asset(Operation):
     async def _build_kwargs(
         self,
         context: ExecutionContext,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         dag: DAG | None,
     ) -> dict[str, Any]:
         """Build the keyword arguments ``data()`` is called with.
@@ -597,7 +557,7 @@ class Asset(Operation):
 
         Args:
             context: The execution context injected as the ``context`` parameter.
-            partition_or_window: Scope the upstreams are read at.
+            window: Scope the upstreams are read at.
             dag: DAG the upstream assets are looked up in. ``None`` is allowed
                 only when no relation has an upstream to read.
 
@@ -627,7 +587,7 @@ class Asset(Operation):
                         f"Asset '{self.key}' has upstreams but no DAG provided. "
                         "Pass a DAG to run() or materialize() for upstream resolution."
                     )
-                legs = await self._read_upstreams(name, targets, dag, partition_or_window, context.metadata)
+                legs = await self._read_upstreams(name, targets, dag, window, context.metadata)
                 kwargs[name] = legs if relations[name].many else (legs[0] if legs else None)
             else:
                 # Lazily-built clients cost under the data() span, not here.
@@ -644,7 +604,7 @@ class Asset(Operation):
         name: str,
         targets: list[Asset],
         dag: DAG | None,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> list[Upstream]:
         """Read every leg bound to one upstream relation.
@@ -668,7 +628,7 @@ class Asset(Operation):
                 DAG's own node.
             dag: The DAG the upstream assets are looked up in, ``None`` when
                 the run was given none, which leaves nothing to look up.
-            partition_or_window: Scope of the reads.
+            window: Scope of the reads.
             metadata: Run-level metadata carried onto the emitted events.
 
         Returns:
@@ -685,167 +645,110 @@ class Asset(Operation):
             if dag is not None and target.id not in dag.operation_map:
                 EventBus.emit(
                     EventType.LOG,
-                    metadata={
-                        **self._event_metadata(metadata, partition_or_window),
-                        "level": "WARNING",
-                        "message": (
+                    metadata=self.event_metadata(
+                        metadata,
+                        window,
+                        level="WARNING",
+                        message=(
                             f"Asset '{self.key}' upstream '{target.qualified_key}' for parameter '{name}' "
                             "is not in the DAG; the leg is skipped"
                         ),
-                    },
+                    ),
                 )
                 continue
             upstream = cast("Asset", dag.operation_map[target.id]) if dag is not None else target
             try:
-                data = await self._destination_read(upstream, partition_or_window, metadata)
+                data = await self._destination_read(upstream, window, metadata)
             except AssetError as error:
                 if not isinstance(error.__cause__, DataNotFoundError):
                     raise
                 EventBus.emit(
                     EventType.LOG,
-                    metadata={
-                        **self._event_metadata(metadata, partition_or_window),
-                        "level": "WARNING",
-                        "message": (
+                    metadata=self.event_metadata(
+                        metadata,
+                        window,
+                        level="WARNING",
+                        message=(
                             f"Asset '{self.key}' found no data in upstream '{upstream.qualified_key}' for "
-                            f"parameter '{name}' at {partition_or_window}; the leg is passed with data=None"
+                            f"parameter '{name}' at {window}; the leg is passed with data=None"
                         ),
-                    },
+                    ),
                 )
                 data = None
             legs.append(Upstream(asset=upstream, data=data))
         return legs
 
     async def _destination_write(
-        self,
-        partition_or_window: Partition | PartitionWindow | None,
-        metadata: dict[str, Any],
-        result: Any,
+        self, window: PartitionWindow | None, metadata: dict[str, Any], result: Any
     ) -> None:
-        """Write the execution result to all configured destinations.
+        """Write the execution result to every configured destination.
 
         Args:
-            partition_or_window: Scope of the run, narrowed to what the asset
-                actually consumes before it reaches the destination.
-            metadata: Run-level metadata (e.g. run_id, backfill_id), carried
-                onto the emitted write events.
-            result: The normalized and conformed data to write. An empty result
-                is skipped with a warning.
+            window: The window the asset consumed, ``None`` for an unpartitioned asset.
+            metadata: Run-level metadata (run id, backfill id), carried onto the emitted events.
+            result: The normalized and conformed data to write. An empty result is skipped with a
+                warning.
         """
         destinations = self._destinations()
         if not destinations:
             return
-
         if is_empty(result):
             EventBus.emit(
                 EventType.LOG,
-                metadata={
-                    **self._event_metadata(metadata, partition_or_window),
-                    "level": "WARNING",
-                    "message": (
+                metadata=self.event_metadata(
+                    metadata,
+                    window,
+                    level="WARNING",
+                    message=(
                         f"Asset '{self.key}' produced no data; skipping write to {len(destinations)} destination(s)"
                     ),
-                },
+                ),
             )
             return
-
-        destination_context = IOContext(
-            asset=self,
-            partition_or_window=self.effective_partition(partition_or_window),
-            metadata=metadata,
-            schema=self._effective_schema or self.schema,
-        )
+        context = IOContext(asset=self, window=window, metadata=metadata, schema=self._effective_schema or self.schema)
         rows = len(result) if isinstance(result, Sized) else None
-
         for destination in destinations:
-            destination_key = destination.key
-            destination_meta = self._event_metadata(metadata, partition_or_window)
-            destination_meta["destination_key"] = destination_key
-            span_attrs = telemetry_attributes.from_metadata(destination_meta)
-            EventBus.emit(
-                EventType.DEST_WRITE_STARTED,
-                metadata={**destination_meta, "message": f"Writing '{self.key}'"},
+            step = Step(
+                StepKind.DEST_WRITE,
+                self.event_metadata(metadata, window, destination_key=destination.key),
+                subject=f"'{self.key}'",
             )
-            try:
-                with tracer().start_as_current_span("interloper.destination.write", attributes=span_attrs):
-                    await invoke(destination.write, destination_context, result)
-                EventBus.emit(
-                    EventType.DEST_WRITE_COMPLETED,
-                    metadata={**destination_meta, "rows": rows, "message": f"Wrote '{self.key}'"},
-                )
-            except Exception as e:
-                EventBus.emit(
-                    EventType.DEST_WRITE_FAILED,
-                    metadata={
-                        **destination_meta,
-                        "error": format_exception(e),
-                        "traceback": traceback.format_exc(),
-                        "message": f"Failed to write '{self.key}': {format_exception(e)}",
-                    },
-                )
-                raise
+            with step:
+                await invoke(destination.write, context, result)
+                step.record(rows=rows)
 
     async def _destination_read(
-        self,
-        upstream_asset: Asset,
-        partition_or_window: Partition | PartitionWindow | None,
-        metadata: dict[str, Any],
+        self, upstream: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
     ) -> Any:
-        """Read data from an upstream asset's read destination (see ``_read_destination``).
+        """Read data from an upstream asset's read destination (see `_read_destination`).
 
         Args:
-            upstream_asset: The asset whose materialized data is read.
-            partition_or_window: Scope of the read, narrowed to what the
-                *upstream* asset consumes.
-            metadata: Run-level metadata (e.g. run_id, backfill_id), carried
-                onto the emitted read events.
+            upstream: The asset whose materialized data is read.
+            window: The run's window, narrowed to what the *upstream* asset consumes.
+            metadata: Run-level metadata (run id, backfill id), carried onto the emitted events.
 
         Returns:
             The data read from the upstream asset's destination.
 
         Raises:
-            AssetError: If no destination is found for the upstream asset.
+            AssetError: If the read fails for any reason, the cause attached.
         """
-        destination = upstream_asset._read_destination()
-
-        effective_partition = upstream_asset.effective_partition(partition_or_window)
-        destination_context = IOContext(
-            asset=upstream_asset,
-            partition_or_window=effective_partition,
-            metadata=metadata,
-            schema=upstream_asset.schema,
-        )
-
-        destination_meta = self._event_metadata(metadata, effective_partition)
-        destination_meta["destination_key"] = destination.key
-        span_attrs = telemetry_attributes.from_metadata(destination_meta)
-        span_attrs[telemetry_attributes.UPSTREAM_KEY] = upstream_asset.key
-        EventBus.emit(
-            EventType.DEST_READ_STARTED,
-            metadata={**destination_meta, "message": f"Reading '{upstream_asset.key}'"},
+        destination = upstream._read_destination()
+        window = upstream.effective_window(window)
+        context = IOContext(asset=upstream, window=window, metadata=metadata, schema=upstream.schema)
+        step = Step(
+            StepKind.DEST_READ,
+            self.event_metadata(metadata, window, destination_key=destination.key),
+            subject=f"'{upstream.key}'",
+            attributes={telemetry_attributes.UPSTREAM_KEY: upstream.key},
         )
         try:
-            with tracer().start_as_current_span("interloper.destination.read", attributes=span_attrs):
-                result = await invoke(destination.read, destination_context)
-            EventBus.emit(
-                EventType.DEST_READ_COMPLETED,
-                metadata={**destination_meta, "message": f"Read '{upstream_asset.key}'"},
-            )
-        except Exception as e:
-            EventBus.emit(
-                EventType.DEST_READ_FAILED,
-                metadata={
-                    **destination_meta,
-                    "error": format_exception(e),
-                    "traceback": traceback.format_exc(),
-                    "message": f"Failed to read '{upstream_asset.key}': {format_exception(e)}",
-                },
-            )
+            with step:
+                return await invoke(destination.read, context)
+        except Exception as error:
             raise AssetError(
-                f"Failed to load data from upstream asset '{upstream_asset.key}': {format_exception(e)}"
-            ) from e
-
-        return result
+                f"Failed to load data from upstream asset '{upstream.key}': {format_exception(error)}"
+            ) from error
 
     @staticmethod
     def _unwrap(result: Any) -> Any:
@@ -966,82 +869,24 @@ class Asset(Operation):
         except Exception:  # noqa: BLE001 - inference is best-effort metadata
             return None
 
-    def _validate_partitioning(
-        self,
-        partition_or_window: Partition | PartitionWindow | None,
-    ) -> None:
-        """Validate partitioning constraints before execution.
+    def _check_window(self, window: PartitionWindow | None) -> None:
+        """Check a run's window against this asset's partitioning.
+
+        An unpartitioned asset accepts any window and ignores it; a partitioned one defers to
+        its config, whose predicate is prefixed with the asset's name.
 
         Args:
-            partition_or_window: The scope the run was given. ``None`` means the
-                run was unscoped.
+            window: The run's window, ``None`` when the run was unscoped.
 
         Raises:
-            PartitionError: If partitioning constraints are violated.
+            PartitionError: If the window is not valid for the asset's partitioning.
         """
-        if self.partitioning is None and partition_or_window is not None:
-            warnings.warn(f"Asset '{self.key}' is not partitioned, partition/partition_window will be ignored")
-
-        if self.partitioning is not None and partition_or_window is None:
-            raise PartitionError(f"Asset '{self.key}' is partitioned, but no partition/partition_window provided")
-
-        if (
-            self.partitioning is not None
-            and isinstance(partition_or_window, PartitionWindow)
-            and not self.partitioning.allow_window
-        ):
-            raise PartitionError(f"Asset '{self.key}' does not support windowed runs (allow_window=False).")
-
-        if isinstance(self.partitioning, TimePartitionConfig):
-            self._validate_time_partitioning(self.partitioning, partition_or_window)
-
-    def _validate_time_partitioning(
-        self,
-        partitioning: TimePartitionConfig,
-        partition_or_window: Partition | PartitionWindow | None,
-    ) -> None:
-        """Validate a scope against the asset's time partitioning.
-
-        A time-partitioned asset requires a *time* partition: only those carry
-        the granularity, so anything else would reach the asset as a scope that
-        cannot answer ``granularity`` or ``bounds``, the contract
-        ``context.partition`` rests on.
-
-        Args:
-            partitioning: The asset's declared time partition config.
-            partition_or_window: The scope the run was given. ``None`` short-circuits
-                the check; the missing-scope case is caught by the caller.
-
-        Raises:
-            PartitionError: If the scope is not a time partition, its
-                granularity disagrees with the asset's, or it reaches before
-                the asset's ``start``.
-        """
-        scope = partition_or_window
-        if scope is None:
+        if self.partitioning is None:
             return
-
-        if not isinstance(scope, (TimePartition, TimePartitionWindow)):
-            raise PartitionError(
-                f"Asset '{self.key}' is time-partitioned, but the run was given a "
-                f"{type(scope).__name__}. Use `TimePartition` or `TimePartitionWindow`."
-            )
-
-        if scope.granularity is not partitioning.granularity:
-            raise PartitionError(
-                f"Asset '{self.key}' is partitioned by {partitioning.granularity.value}, "
-                f"but the run was given a {scope.granularity.value} partition."
-            )
-
-        if partitioning.start is None:
-            return
-
-        earliest = scope.start if isinstance(scope, PartitionWindow) else scope.value
-        if partitioning.granularity.truncate(earliest) < partitioning.start:
-            raise PartitionError(
-                f"Asset '{self.key}' has no data before {partitioning.start.isoformat()}, "
-                f"but the run reaches back to {partitioning.granularity.truncate(earliest).isoformat()}."
-            )
+        try:
+            self.partitioning.check(window)
+        except PartitionError as error:
+            raise PartitionError(f"Asset '{self.key}' {error}") from None
 
     def _validate_destination(self, destination: Destination) -> None:
         """Check that a destination is one this asset's ``destinations`` relation accepts.
@@ -1099,40 +944,10 @@ class Asset(Operation):
     def _span_attributes(self) -> dict[str, str]:
         """Identity attributes for spans opened below the asset's own span.
 
-        Run id and partition are omitted deliberately: the ancestor spans
-        already carry them, and these are emitted from code paths that
-        don't hold the run metadata.
+        Run id and window are omitted deliberately: the ancestor spans already carry them, and
+        these are emitted from code paths that don't hold the run metadata.
 
         Returns:
             The asset's identity attributes.
         """
-        return telemetry_attributes.from_metadata(self._event_metadata({}))
-
-    def _event_metadata(
-        self,
-        metadata: dict[str, Any],
-        partition_or_window: Partition | PartitionWindow | None = None,
-    ) -> dict[str, Any]:
-        """Build the base event metadata dict for this asset.
-
-        Merges run-level metadata with the asset's component identity fields.
-
-        Args:
-            metadata: Run-level metadata (e.g. run_id, backfill_id).
-            partition_or_window: Current partition scope.
-
-        Returns:
-            The merged metadata dict.
-        """
-        base: dict[str, Any] = {
-            **metadata,
-            "component_id": self.id,
-            "component_kind": self.kind,
-            "component_key": self.key,
-            "qualified_key": self.qualified_key,
-            "partition_or_window": str(partition_or_window) if partition_or_window else None,
-        }
-        source = self.source
-        if source is not None:
-            base["parent_id"] = source.id
-        return base
+        return telemetry_attributes.from_metadata(self.event_metadata({}))

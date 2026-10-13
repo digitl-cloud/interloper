@@ -13,10 +13,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from interloper.destination import IOContext
-from interloper.destination.database import PartitionFilter
+from interloper.destination import IOContext, PartitionFilter
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning.base import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionWindow
 from interloper.schema import Schema
 from pydantic import BaseModel, Field, ValidationError
@@ -77,12 +76,12 @@ def monthly() -> list:
     return []
 
 
-@il.asset(dataset="marts", partitioning=PartitionConfig(column="region"))
+@il.asset(dataset="marts", partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
 
-@il.asset(dataset="marts", partitioning=PartitionConfig(column="active"))
+@il.asset(dataset="marts", partitioning=ListPartitionConfig(column="active", values=("true", "false")))
 def by_flag() -> list:
     return []
 
@@ -109,7 +108,7 @@ def _destination(**overrides: Any) -> DatabricksDestination:
 
 
 def _ctx(asset: Any, scope: Any = None, schema: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _staged(session) -> str:
@@ -267,7 +266,7 @@ class TestDDL:
         assert "PARTITIONED BY" not in create
 
     def test_unclusterable_partition_column_is_not_a_key(self, session):
-        _destination().write(_ctx(by_flag(), Partition("true"), _Flagged), [{"active": True}])
+        _destination().write(_ctx(by_flag(), ListPartition("true"), _Flagged), [{"active": True}])
 
         create = next(s for s in session.sql if s.startswith("CREATE TABLE"))
         assert "CLUSTER BY" not in create
@@ -275,7 +274,7 @@ class TestDDL:
     def test_partition_column_past_the_statistics_columns_is_not_a_key(self, session):
         fields = {f"c{i:02d}": (str | None, Field(None)) for i in range(32)}
         wide = type("Wide", (Schema,), {"__annotations__": {k: v[0] for k, v in fields.items()} | {"region": str}})
-        _destination().write(_ctx(regional(), Partition("eu"), wide), [{"region": "eu"}])
+        _destination().write(_ctx(regional(), ListPartition("eu"), wide), [{"region": "eu"}])
 
         create = next(s for s in session.sql if s.startswith("CREATE TABLE"))
         assert create.count("STRING") == 33
@@ -415,7 +414,7 @@ class TestWrite:
 
     def test_non_time_partition_replaces_by_equality(self, session):
         session.tables.add(("marts", "regional"))
-        _destination().write(_ctx(regional(), Partition("eu")), [{"region": "eu", "cost": 1.0}])
+        _destination().write(_ctx(regional(), ListPartition("eu")), [{"region": "eu", "cost": 1.0}])
 
         assert f"INSERT INTO {REF}.`regional` BY NAME REPLACE WHERE `region` = 'eu' SELECT" in _insert(session)
 
@@ -432,7 +431,7 @@ class TestWrite:
 
     def test_write_partition_replaces_one_partition(self, session):
         session.tables.add(("marts", "regional"))
-        _destination().write_partition(_ctx(regional()), Partition("us"), [{"region": "us"}])
+        _destination().write_partition(_ctx(regional()), ListPartition("us"), [{"region": "us"}])
 
         assert "REPLACE WHERE `region` = 'us' SELECT" in _insert(session)
 
@@ -514,10 +513,10 @@ class TestPredicate:
         )
 
     def test_one_value_is_equality(self):
-        assert destination_module._predicate([PartitionFilter("region", value="eu")]) == "`region` = 'eu'"
+        assert destination_module._predicate([PartitionFilter("region", values=("eu",))]) == "`region` = 'eu'"
 
     def test_several_values_are_a_list(self):
-        filters = [PartitionFilter("region", value=v) for v in ("eu", "us")]
+        filters = [PartitionFilter("region", values=(v,)) for v in ("eu", "us")]
 
         assert destination_module._predicate(filters) == "`region` IN ('eu', 'us')"
 
@@ -567,7 +566,7 @@ class TestDelete:
 
     def test_by_filter(self, session):
         session.tables.add(("marts", "regional"))
-        _destination().delete("regional", "marts", PartitionFilter("region", value="eu"))
+        _destination().delete("regional", "marts", PartitionFilter("region", values=("eu",)))
 
         assert session.sql == [f"DELETE FROM {REF}.`regional` WHERE `region` = 'eu'"]
 

@@ -178,3 +178,15 @@ class TestRowsRepresentation:
         specs = {s.name: s for s in inferred.field_specs()}
         assert specs["a"].type is int
         assert specs["b"].type is str
+
+
+class TestConcat:
+    """A windowed read comes back as one table through the representation."""
+
+    def test_rows_concat_flattens_in_order(self):
+        rows = RowsRepresentation().concat([[{"a": 1}], [], [{"a": 2}, {"a": 3}]])
+        assert rows == [{"a": 1}, {"a": 2}, {"a": 3}]
+
+    def test_view_concat_appends_the_others(self):
+        view = Representation.of([{"a": 1}])
+        assert view.concat([[{"a": 2}], [{"a": 3}]]) == [{"a": 1}, {"a": 2}, {"a": 3}]

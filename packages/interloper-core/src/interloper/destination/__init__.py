@@ -3,11 +3,12 @@
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.destination.csv import CSVDestination
-from interloper.destination.database import Compilable, DatabaseDestination, PartitionFilter, TableReference
+from interloper.destination.database import Compilable, DatabaseDestination, TableReference
 from interloper.destination.decorator import destination
 from interloper.destination.file import FileDestination
 from interloper.destination.memory import MemoryDestination
 from interloper.destination.object_store import ObjectStoreDestination, StoredObject
+from interloper.partitioning import PartitionFilter
 
 __all__ = [
     "CSVDestination",

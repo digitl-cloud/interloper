@@ -11,6 +11,7 @@ import interloper as il
 from interloper.destination import IOContext, ObjectStoreDestination, StoredObject
 from interloper.destination.formats import CSVFormat, JSONLFormat, ParquetFormat
 from interloper.errors import DataNotFoundError
+from interloper.partitioning import PartitionWindow
 from interloper.schema import Schema
 
 
@@ -56,7 +57,7 @@ def partitioned_asset() -> list:  # noqa: D103
 
 
 def _ctx(asset: Any, schema: type[Schema] | None = None, scope: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _day(day: int) -> il.TimePartition:
@@ -173,15 +174,15 @@ class TestRead:
         dest.write(_ctx(partitioned_asset(), None, _day(2)), [{"id": 1, "day": "2024-01-02"}])
         assert dest.read(_ctx(partitioned_asset(), None, _day(2))) == [{"id": 1, "day": "2024-01-02"}]
 
-    def test_window_read_returns_one_result_per_partition(self):
+    def test_window_read_returns_one_table(self):
         dest = FakeBucket(format="jsonl")
         window = il.TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
         dest.write(
             _ctx(partitioned_asset(), None, window), [{"id": 1, "day": "2024-01-01"}, {"id": 2, "day": "2024-01-02"}]
         )
         assert dest.read(_ctx(partitioned_asset(), None, window)) == [
-            [{"id": 2, "day": "2024-01-02"}],
-            [{"id": 1, "day": "2024-01-01"}],
+            {"id": 1, "day": "2024-01-01"},
+            {"id": 2, "day": "2024-01-02"},
         ]
 
     def test_missing_object_raises_with_uri(self):

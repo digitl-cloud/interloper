@@ -2,7 +2,7 @@
 
 A `Representation` answers "what kind of table is this, and how do I
 view it generically?" for exactly one data representation. It bundles the
-generic table views (records, columns, partition filtering) with the schema
+generic table views (records, columns, partition filtering, concatenation) with the schema
 operations on that type (validate, reconcile, infer), so core never names a
 concrete dataframe library anywhere. ``Representation.of(data)``
 binds the matching representation to the data as a `View`, whose
@@ -168,6 +168,14 @@ class Representation(ABC):
             data: The table to infer from, in this representation's own type.
         """
 
+    @abstractmethod
+    def concat(self, tables: list[Any]) -> Any:
+        """Return several tables as one, in order.
+
+        Args:
+            tables: The tables to join, all in this representation's own type, at least one.
+        """
+
     @classmethod
     def of(cls, data: Any) -> View:
         """Resolve the representation matching *data* and bind it to the data.
@@ -302,6 +310,17 @@ class View:
             return self.data
         return target.from_records(self.records)
 
+    def concat(self, others: list[Any]) -> Any:
+        """Return the viewed data followed by *others*, as one table.
+
+        Args:
+            others: Further tables in the same representation, in the order they follow.
+
+        Returns:
+            One table in the data's own representation.
+        """
+        return self.representation.concat([self.data, *others])
+
 
 class RowsRepresentation(Representation):
     """The built-in ``list[dict]`` records representation."""
@@ -410,3 +429,14 @@ class RowsRepresentation(Representation):
             A dynamically created Schema subclass.
         """
         return Schema.infer(data)
+
+    def concat(self, tables: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+        """Return the rows of every table, in order.
+
+        Args:
+            tables: The row lists to join.
+
+        Returns:
+            One row list.
+        """
+        return [row for table in tables for row in table]

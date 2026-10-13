@@ -232,7 +232,7 @@ class TestMachineryErrors:
         # exception escaping the task means the scheduling machinery broke.
         il.MemoryDestination.clear()
 
-        async def exploding(self, operation, partition_or_window=None):
+        async def exploding(self, operation, window=None):
             raise MemoryError("scheduler bug")
 
         monkeypatch.setattr(AsyncRunner, "_execute_operation", exploding)
@@ -302,9 +302,9 @@ class TestMachineryErrors:
         )
         original = AsyncRunner._execute_operation
 
-        async def recording(self, operation, partition_or_window=None):
+        async def recording(self, operation, window=None):
             scheduled.append(operation.id)
-            return await original(self, operation, partition_or_window)
+            return await original(self, operation, window)
 
         monkeypatch.setattr(AsyncRunner, "_execute_operation", recording)
         asyncio.get_running_loop().call_later(0.3, release.set)

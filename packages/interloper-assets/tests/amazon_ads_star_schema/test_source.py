@@ -52,4 +52,4 @@ def test_materializes_no_rows_yet() -> None:
 
     for asset in star.assets:
         with pytest.raises(DataNotFoundError):
-            memory.read(il.IOContext(asset=asset, partition_or_window=partition))
+            memory.read(il.IOContext(asset=asset, window=partition.window))

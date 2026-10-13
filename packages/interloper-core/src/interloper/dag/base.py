@@ -13,7 +13,7 @@ from interloper.asset.base import Asset
 from interloper.component import Component
 from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError
 from interloper.operation import Operation, Workload
-from interloper.partitioning import Partition, PartitionWindow, TimePartitionConfig
+from interloper.partitioning import Partition, PartitionWindow
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.serializable import SerializationContext, Spec
 from interloper.telemetry import attributes
@@ -281,10 +281,10 @@ class DAG:
     def _check_partition_dependencies(self) -> None:
         """Check partition compatibility along every edge.
 
-        No unpartitioned dependent of a partitioned upstream, and equal
-        granularity between time-partitioned ends. Read-only upstreams are
-        included on purpose; the read uses the dependent's partition against
-        the upstream table.
+        No unpartitioned dependent of a partitioned upstream, and compatible
+        partitionings at both ends. Read-only upstreams are included on
+        purpose; the read uses the dependent's window against the upstream
+        table.
 
         A dependent that reads no upstream data (``reads_upstream_data`` is
         ``False``) is exempt: it refers to the whole upstream table rather than
@@ -292,8 +292,8 @@ class DAG:
 
         Raises:
             DAGError: If a non-partitioned operation depends on a partitioned
-                one, or if two time-partitioned ends of an edge have
-                different granularities.
+                one, or if the two ends of an edge do not accept the same
+                windows.
         """
         for operation_id, preds in self.predecessors.items():
             operation = self.operation_map[operation_id]
@@ -307,15 +307,13 @@ class DAG:
                         f"cannot be an upstream of non-partitioned asset '{operation.key}'"
                     )
                 if (
-                    isinstance(upstream.partitioning, TimePartitionConfig)
-                    and isinstance(operation.partitioning, TimePartitionConfig)
-                    and upstream.partitioning.granularity is not operation.partitioning.granularity
+                    upstream.partitioning is not None
+                    and operation.partitioning is not None
+                    and not upstream.partitioning.compatible(operation.partitioning)
                 ):
                     raise DAGError(
-                        f"Invalid upstream: '{upstream.key}' is partitioned by "
-                        f"{upstream.partitioning.granularity.value} but its dependent '{operation.key}' by "
-                        f"{operation.partitioning.granularity.value}; a run has one partition scope, so both "
-                        f"ends of an edge must share a granularity."
+                        f"Invalid upstream: '{upstream.key}' and its dependent '{operation.key}' are partitioned "
+                        "differently; a run has one window, so both ends of an edge must accept the same windows."
                     )
 
     # -- Traversal -------------------------------------------------------------
@@ -394,7 +392,7 @@ class DAG:
 
     def materialize(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
     ) -> RunResult:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
@@ -409,25 +407,25 @@ class DAG:
         Async code awaits `materialize_async` instead.
 
         Args:
-            partition_or_window: Partition or PartitionWindow every operation in
-                the DAG is run for. ``None`` for an unpartitioned DAG.
+            window: The window every operation in the DAG is run for; a partition is
+                accepted as the window of one. ``None`` for an unpartitioned DAG.
 
         Returns:
             The result of the DAG execution.
         """
         from interloper.utils import concurrency
 
-        return concurrency.run(self.materialize_async(partition_or_window))
+        return concurrency.run(self.materialize_async(window))
 
     async def materialize_async(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
     ) -> RunResult:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
         Args:
-            partition_or_window: Partition or PartitionWindow every operation in
-                the DAG is run for. ``None`` for an unpartitioned DAG.
+            window: The window every operation in the DAG is run for; a partition is
+                accepted as the window of one. ``None`` for an unpartitioned DAG.
 
         Returns:
             The result of the DAG execution.
@@ -435,10 +433,10 @@ class DAG:
         from interloper.runner.async_runner import AsyncRunner
 
         span_attrs: dict[str, Any] = {attributes.DAG_OPERATION_COUNT: len(self.operations)}
-        if partition_or_window is not None:
-            span_attrs[attributes.PARTITION] = str(partition_or_window)
+        if window is not None:
+            span_attrs[attributes.PARTITION] = str(window)
         with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs) as span:
-            result = await AsyncRunner().run(dag=self, partition_or_window=partition_or_window)
+            result = await AsyncRunner().run(dag=self, window=window)
             # A failed run is returned, not raised; without this the trace's
             # root span reads OK while the failure sits on a descendant.
             if result.status is ExecutionStatus.FAILED:

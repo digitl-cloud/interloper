@@ -17,8 +17,7 @@ from typing import Any, cast
 from interloper.errors import RunnerError, format_exception
 from interloper.events import Event, EventBus, EventType
 from interloper.operation import Operation
-from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import PartitionWindow
 from interloper.runner.sync_runner import SyncRunner
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
@@ -110,13 +109,14 @@ class KubernetesRunner(SyncRunner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> Future[Any]:
         """Launch an asset as a Kubernetes Job and return a polling Future.
 
         Args:
             operation: The operation to run in its own Job.
-            partition_or_window: The partition or window to materialize, when scoped.
+            window: The window to materialize, narrowed to the operation's own; ``None`` for an
+                unpartitioned operation.
 
         Returns:
             A Future that raises :class:`RunnerError` on Job failure.
@@ -131,7 +131,7 @@ class KubernetesRunner(SyncRunner):
         mini_dag = self.state.dag.mini_dag(operation.id)
         dag_spec = mini_dag.to_spec().model_dump(mode="json")
 
-        cmd = self._build_command(dag_spec, partition_or_window, self.state.run_id)
+        cmd = self._build_command(dag_spec, operation.effective_window(window), self.state.run_id)
         job_name = self._build_job_name(operation)
         env = self._build_env()
         resources = self._build_resources()
@@ -203,29 +203,6 @@ class KubernetesRunner(SyncRunner):
         self._job_map[future] = job_name
         return future
 
-    def _cancel_all(self, handles: list[Any]) -> None:
-        """Cancel all running jobs.
-
-        Args:
-            handles: The Job handles to delete.
-
-        """
-        assert self._batch_v1 is not None
-
-        for future in handles:
-            job_name = self._job_map.get(future)
-            if job_name is None:
-                continue
-            self._stop_job_log_streaming(job_name)
-            try:
-                self._batch_v1.delete_namespaced_job(
-                    name=job_name,
-                    namespace=self.namespace,
-                    body=client.V1DeleteOptions(propagation_policy="Background"),
-                )
-            except Exception:  # noqa: BLE001, S110
-                pass
-
     def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
         """Process a completed job future and author the terminal event.
 
@@ -266,31 +243,6 @@ class KubernetesRunner(SyncRunner):
         else:
             self.state.mark_completed(operation, emit=True)
 
-    def _handle_flushed_future(self, future: Future[Any], operation: Operation) -> None:
-        """Clean up job after flush, authoring the terminal event.
-
-        Same host-authored-terminal contract as :meth:`_handle_completed`
-        (``emit=True``, idempotent via deterministic ids) so an asset still
-        in flight when the run aborts is not left orphaned as ``running``.
-
-        Args:
-            future: The polling future being flushed.
-            operation: The operation the Job ran.
-
-        """
-        job_name = self._job_map.pop(future, None)
-        if job_name is not None:
-            self._stop_job_log_streaming(job_name)
-
-        info = self.state.executions.get(operation.id)
-        if not (info and info.is_terminal):
-            try:
-                future.result()
-            except Exception as e:  # noqa: BLE001
-                self.state.mark_failed(operation, format_exception(e), emit=True)
-            else:
-                self.state.mark_completed(operation, emit=True)
-
     # -- Job polling -----------------------------------------------------------
 
     def _poll_job(self, job_name: str) -> None:
@@ -327,14 +279,15 @@ class KubernetesRunner(SyncRunner):
     def _build_command(
         self,
         dag_spec: dict[str, Any],
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         run_id: str,
     ) -> list[str]:
         """Build the command to execute in the container.
 
         Args:
             dag_spec: The serialized DAG the pod reconstructs.
-            partition_or_window: The partition or window to materialize, when scoped.
+            window: The window to materialize, narrowed to the operation's own; ``None`` for an
+                unpartitioned operation.
             run_id: The run the pod reports against.
 
         Returns:
@@ -350,17 +303,11 @@ class KubernetesRunner(SyncRunner):
             json.dumps(dag_spec),
         ]
 
-        if isinstance(partition_or_window, TimePartition):
-            cmd.extend(["--date", partition_or_window.value.strftime("%Y-%m-%d")])
-        elif isinstance(partition_or_window, TimePartitionWindow):
-            cmd.extend(
-                [
-                    "--start-date",
-                    partition_or_window.start.strftime("%Y-%m-%d"),
-                    "--end-date",
-                    partition_or_window.end.strftime("%Y-%m-%d"),
-                ]
-            )
+        if window is not None:
+            if len(window) == 1:
+                cmd.extend(["--date", window.first.id])
+            else:
+                cmd.extend(["--start-date", window.first.id, "--end-date", window.last.id])
 
         return cmd
 

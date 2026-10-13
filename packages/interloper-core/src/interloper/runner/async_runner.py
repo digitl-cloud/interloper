@@ -10,7 +10,7 @@ from pydantic import PrivateAttr
 
 from interloper.errors import RunnerError, format_exception
 from interloper.operation.base import Operation, OperationContext
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
 from interloper.telemetry import attributes
@@ -52,14 +52,14 @@ class AsyncRunner(Runner):
     async def _run(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
         """Execute the DAG by dynamically scheduling ready operations.
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
 
         Returns:
@@ -73,7 +73,7 @@ class AsyncRunner(Runner):
         Raises:
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
-        self._init_run(dag, partition_or_window, metadata)
+        self._init_run(dag, window, metadata)
         inflight: dict[asyncio.Task[Any], Operation] = {}
 
         try:
@@ -88,7 +88,7 @@ class AsyncRunner(Runner):
                         break
                     if operation.id in submitted_ids:
                         continue
-                    handle = self._submit_operation(operation, partition_or_window)
+                    handle = self._submit_operation(operation, window)
                     inflight[handle] = operation
 
                 if not inflight:
@@ -141,13 +141,13 @@ class AsyncRunner(Runner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> asyncio.Task[Any]:
         """Schedule an operation as an asyncio task guarded by the semaphore.
 
         Args:
             operation: The operation to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
 
         Returns:
             The created task, which acquires a concurrency slot before
@@ -159,7 +159,7 @@ class AsyncRunner(Runner):
 
         async def _guarded() -> Any:
             async with sem:
-                return await self._execute_operation(operation, partition_or_window)
+                return await self._execute_operation(operation, window)
 
         return asyncio.create_task(_guarded())
 
@@ -168,7 +168,7 @@ class AsyncRunner(Runner):
     async def _execute_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: PartitionWindow | None = None,
     ) -> Any:
         """Execute a single operation with state tracking, retrying in place.
 
@@ -190,16 +190,16 @@ class AsyncRunner(Runner):
 
         Args:
             operation: The operation to execute.
-            partition_or_window: Partition or window to scope the run; narrowed
+            window: Partition or window to scope the run; narrowed
                 to the operation's own effective partition before executing.
 
         Returns:
             The execution's effects, or ``None`` if the operation failed.
         """
-        effective_partition = operation.effective_partition(partition_or_window)
-        span_attrs = attributes.from_metadata(operation._event_metadata(self.state.metadata, effective_partition))
+        effective_window = operation.effective_window(window)
+        span_attrs = attributes.from_metadata(operation.event_metadata(self.state.metadata, effective_window))
         context = OperationContext(
-            partition_or_window=effective_partition,
+            window=effective_window,
             dag=self.state.dag,
             metadata=self.state.metadata,
         )

@@ -118,11 +118,7 @@ class TestSearch:
             il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(api)),
         )
         asset = _asset(key, _source(connection))
-        context = ExecutionContext(
-            asset_key=asset.key,
-            partitioning=asset.partitioning,
-            partition_or_window=il.TimePartition(value=DAY),
-        )
+        context = ExecutionContext(asset, il.TimePartition(value=DAY).window)
         return asyncio.run(asset.data(context=context)), requests
 
     def test_campaigns_follow_the_page_token(self, monkeypatch: Any):

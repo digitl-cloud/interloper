@@ -15,7 +15,7 @@ from interloper_sql.view.types import IBIS_DIALECTS, ibis_schema
 if TYPE_CHECKING:
     from interloper.asset import Asset
     from interloper.dag.base import DAG
-    from interloper.partitioning.base import Partition, PartitionWindow
+    from interloper.partitioning import PartitionWindow
 
 
 class IbisDefinition:
@@ -61,7 +61,7 @@ class IbisView(View):
         name: str,
         targets: list[Asset],
         dag: DAG | None,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> list[Upstream]:
         """Turn every table reference into a typed Ibis table.
@@ -70,7 +70,7 @@ class IbisView(View):
             name: The ``data()`` parameter the upstreams are built for.
             targets: The bound upstream assets.
             dag: Forwarded to `View._read_upstreams`.
-            partition_or_window: Forwarded.
+            window: Forwarded.
             metadata: Forwarded.
 
         Returns:
@@ -79,7 +79,7 @@ class IbisView(View):
         Raises:
             ConfigError: If an upstream declares no schema, or its reference is not a table.
         """
-        upstreams = await super()._read_upstreams(name, targets, dag, partition_or_window, metadata)
+        upstreams = await super()._read_upstreams(name, targets, dag, window, metadata)
         tables: list[Upstream] = []
         for upstream in upstreams:
             reference = upstream.data

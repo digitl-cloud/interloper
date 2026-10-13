@@ -21,8 +21,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from databricks.sql.client import Connection as Session
 from databricks.sql.client import Cursor
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning.base import Partition
 from interloper.representation import Representation
@@ -218,7 +217,7 @@ class DatabricksDestination(DatabaseDestination):
         """Replace the partitions the context covers with the data, in one statement.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
+            context: IO context carrying the target asset, the window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
@@ -558,7 +557,7 @@ def _predicate(filters: Sequence[PartitionFilter]) -> str:
         else:
             ranges.append((start, end))
     parts = [f"{column} >= {_literal(start)} AND {column} < {_literal(end)}" for start, end in ranges]
-    values = [f.value for f in filters if f.bounds is None]
+    values = [value for f in filters if f.values is not None for value in f.values]
     if len(values) == 1:
         parts.append(f"{column} = {_literal(values[0])}")
     elif values:

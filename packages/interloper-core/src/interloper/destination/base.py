@@ -9,6 +9,7 @@ from interloper.component import Component
 from interloper.destination.context import IOContext
 from interloper.errors import ConfigError
 from interloper.partitioning.base import Partition
+from interloper.representation import Representation
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
@@ -22,8 +23,8 @@ class Destination(Component):
     `write_partition` and `read_partition` for a single
     partition, and `partition_row_counts` for the coverage view.
     `write` and `read` own the rest, splitting a window write into
-    one call per partition and gathering a window read into one result per
-    partition, so a destination is partition-correct by construction. A
+    one call per partition and joining a window read into one table, so a
+    destination is partition-correct by construction. A
     backend that does not store per partition (a database that clears each
     partition and inserts a window in one batch) overrides `write` or
     `read` instead. Two more hooks, `reference` and `create_view`, serve
@@ -79,7 +80,7 @@ class Destination(Component):
         unpartitioned whole is one call receiving the data as is.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
+            context: IO context carrying the target asset, the window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
@@ -87,18 +88,22 @@ class Destination(Component):
             self.write_partition(context, partition, chunk)
 
     def read(self, context: IOContext) -> Any:
-        """Read data for the context's partition, or window.
+        """Read the data the context covers, as one table.
+
+        Every partition in ``context.partitions`` is read through `read_partition`; several are
+        joined through the data's representation, so a window comes back as one table in whatever
+        type the destination holds natively.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
-                and the effective schema.
+            context: IO context carrying the target asset, the window and the effective schema.
 
         Returns:
-            The partition's data; a window returns one result per partition, in
-            window order.
+            One table, whatever the window.
         """
-        results = [self.read_partition(context, partition) for partition in context.partitions]
-        return results if context.window else results[0]
+        parts = [self.read_partition(context, partition) for partition in context.partitions]
+        if len(parts) == 1:
+            return parts[0]
+        return Representation.of(parts[0]).concat(parts[1:])
 
     @abstractmethod
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:

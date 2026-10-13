@@ -26,7 +26,7 @@ https://docs.interloper.dev/guide/partitioning/
 
    def on_event(event: il.Event) -> None:
        if event.type in (il.EventType.RUN_COMPLETED, il.EventType.RUN_FAILED):
-           print(event.metadata["partition_or_window"], event.metadata["message"])
+           print(event.metadata["window"], event.metadata["message"])
        elif event.type is il.EventType.OPERATION_FAILED:
            print("  ", event.metadata["component_key"], event.metadata["error"])
 
@@ -90,10 +90,10 @@ https://docs.interloper.dev/guide/partitioning/
 |------|-----|
 | Runner defaults | `AsyncRunner`: `fail_fast=True, reraise=False, max_workers=...`; `SerialRunner` same flags; the abstract `Runner` defaults to `fail_fast=False, reraise=True` |
 | Outcome of one run | `result.status`, `result.executions` (dict of operation id to `component_key`, `status`, `error`), the id lists `completed_ids` / `failed_ids` / `canceled_ids`, `execution_time` |
-| Partition count of a window | `window.partition_count()`; `window.id` is `start-end`, events report `start:end` |
+| Partition count of a window | `len(window)`; `str(window)` is `start..end`, or the partition id for a window of one, and events report the same under `window` |
 | Hourly partitions | `il.TimeGranularity.HOUR`, keys like `2026-01-15T13` |
 | Parallel partitions | run several `runner.run(dag, partition)` coroutines with `asyncio.gather`, or use the platform's backfill with its concurrency cap |
-| Progress events | `RUN_STARTED`/`RUN_COMPLETED`/`RUN_FAILED` carry `partition_or_window` and `message`; `OPERATION_FAILED` carries `component_key`, `error`, `traceback` |
+| Progress events | `RUN_STARTED`/`RUN_COMPLETED`/`RUN_FAILED` carry `window` and `message`; `OPERATION_FAILED` carries `component_key`, `error`, `traceback` |
 
 ## Common mistakes
 

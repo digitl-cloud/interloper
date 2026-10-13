@@ -159,11 +159,7 @@ class TestExport:
 
         monkeypatch.setattr(Usercentrics, "_export", export)
         asset = _asset(key)
-        context = il.ExecutionContext(
-            asset_key=asset.key,
-            partitioning=asset.partitioning,
-            partition_or_window=il.TimePartition(value=dt.date(2026, 6, 14)),
-        )
+        context = il.ExecutionContext(asset, il.TimePartition(value=dt.date(2026, 6, 14)).window)
         assert asyncio.run(asset.data(context=context)) == [{"day": "2026-06-14"}]
         assert exports == [(aggregation, dt.date(2026, 6, 14))]
 

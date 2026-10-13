@@ -896,7 +896,8 @@ class ComponentStore:
             org_id: Organisation UUID.
 
         Returns:
-            Each partitioned asset's time partition config by row id.
+            Each time-partitioned asset's partitioning by row id; an asset partitioned another
+            way has no coverage yet and is skipped.
         """
         statement = (
             select(Component)
@@ -910,12 +911,9 @@ class ComponentStore:
             definition = self._catalog.get(key)
             if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
                 continue
-            partitionings[asset_id] = il.TimePartitionConfig(
-                column=partitioning["column"],
-                allow_window=partitioning.get("allow_window", False),
-                granularity=TimeGranularity(partitioning.get("granularity", TimeGranularity.DAY)),
-                start=partitioning.get("start"),
-            )
+            config = il.PartitionConfig.from_definition(partitioning)
+            if isinstance(config, il.TimePartitionConfig):
+                partitionings[asset_id] = config
         return partitionings
 
     def target_assets(self, job: Component) -> dict[UUID, str]:

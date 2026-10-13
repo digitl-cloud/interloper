@@ -6,38 +6,20 @@ import warnings
 from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from interloper.destination.base import Destination
 from interloper.destination.context import IOContext
 from interloper.errors import ConfigError
+from interloper.partitioning import PartitionFilter
 from interloper.partitioning.base import Partition
-from interloper.partitioning.time import TimePartition
 from interloper.representation import Representation
 from interloper.utils.data import is_empty
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
     from interloper.schema import Schema
-
-
-@dataclass(frozen=True)
-class PartitionFilter:
-    """The rows one partition covers: a column, and either a value or half-open bounds.
-
-    Exactly one of ``value`` and ``bounds`` is set. A backend renders it in its
-    dialect: ``column = value``, or ``column >= start AND column < end``.
-
-    Attributes:
-        column: The partition column.
-        value: The partition id the rows carry, for a partition matched by equality.
-        bounds: The ``(start, end)`` of a time partition, ``end`` excluded.
-    """
-
-    column: str
-    value: Any = None
-    bounds: tuple[Any, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -81,7 +63,7 @@ class DatabaseDestination(Destination):
     `delete`, `select` and `count`, each receiving the
     table and the dataset the asset resolves to and, where a partition is
     involved, a `PartitionFilter` the base has already resolved
-    (half-open bounds for a time partition, equality otherwise). The base
+    (as the partition renders it: bounds for a time partition, membership for a list one). The base
     owns replacing: a partition's rows are deleted before its data is
     inserted, a window in one batch. Reads come back in whatever
     representation the backend holds natively; a consumer that wants records
@@ -282,26 +264,19 @@ class DatabaseDestination(Destination):
     # -- Destination interface -------------------------------------------------
 
     def write(self, context: IOContext, data: Any) -> None:
-        """Write data to the table, a window as one batch.
+        """Replace every partition the context covers with the data, in one batch.
 
-        Rows carry the partition column, so a database need not store per
-        partition: a window deletes every partition it covers and inserts the
-        whole batch once, instead of one `write_partition` per partition
-        (one load job rather than one per day). A single partition, or the
-        whole, is one `write_partition`. The write-time schema strategy
-        is applied to the data once, before either path.
+        Rows carry the partition column, so a database need not store per partition: the rows of
+        every partition the window covers are deleted, then the data is inserted once (one load
+        job rather than one per day). The unpartitioned whole is the same path with no filter.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
-                and the effective schema.
+            context: IO context carrying the target asset, the window and the effective schema.
             data: The data to write, in its native representation.
         """
         if is_empty(data):
             return
         self._warn_missing_partition_column(data, context)
-        if not context.window:
-            self.write_partition(context, context.partitions[0], data)
-            return
         table, dataset = self._target(context)
         with self.transaction():
             for partition in context.partitions:
@@ -309,38 +284,45 @@ class DatabaseDestination(Destination):
             self.insert(table, dataset, data, context)
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Replace one partition's rows: delete them, then insert the data.
+        """Replace one partition's rows: `write` over the partition's own window.
 
         Args:
             context: IO context carrying the target asset and the effective schema.
             partition: The partition being stored, or ``None`` for the whole table.
             data: The data to store, in its native representation.
         """
-        table, dataset = self._target(context)
-        with self.transaction():
-            self.delete(table, dataset, self._filter(context, partition))
-            self.insert(table, dataset, data, context)
+        self.write(replace(context, window=partition.window if partition is not None else None), data)
 
-    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
-        """Load one partition from the table.
+    def read(self, context: IOContext) -> Any:
+        """Select the rows the context covers, a window as one bounded select.
 
         Args:
-            context: IO context whose asset supplies the table, dataset, and
-                partition column.
+            context: IO context carrying the target asset, the window and the effective schema.
+
+        Returns:
+            The rows, in the backend's native representation.
+        """
+        table, dataset = self._target(context)
+        where = None if context.window is None else context.window.filter(self._partition_column(context))
+        return self.select(table, dataset, where)
+
+    def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
+        """Load one partition: `read` over the partition's own window.
+
+        Args:
+            context: IO context whose asset supplies the table, dataset, and partition column.
             partition: The partition to load, or ``None`` for the whole table.
 
         Returns:
             The partition's rows, in the backend's native representation.
         """
-        table, dataset = self._target(context)
-        return self.select(table, dataset, self._filter(context, partition))
+        return self.read(replace(context, window=partition.window if partition is not None else None))
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by the asset's partition column.
 
         Args:
-            context: IO context whose asset supplies the table, dataset, and
-                partition column.
+            context: IO context whose asset supplies the table, dataset, and partition column.
 
         Returns:
             Each partition value, as a string, to its row count.
@@ -380,12 +362,7 @@ class DatabaseDestination(Destination):
         return context.asset.partitioning.column
 
     def _filter(self, context: IOContext, partition: Partition | None) -> PartitionFilter | None:
-        """The rows one partition covers, resolved for a backend.
-
-        A time partition's rows may carry values anywhere inside its period
-        (a monthly partition whose rows hold daily dates), so equality on the
-        period start would miss them; its filter is the half-open bounds.
-        Any other partition matches its id.
+        """The rows one partition covers, as the partition renders them.
 
         Args:
             context: IO context whose asset supplies the partition column.
@@ -396,10 +373,7 @@ class DatabaseDestination(Destination):
         """
         if partition is None:
             return None
-        column = self._partition_column(context)
-        if isinstance(partition, TimePartition):
-            return PartitionFilter(column, bounds=partition.bounds)
-        return PartitionFilter(column, value=partition.id)
+        return partition.filter(self._partition_column(context))
 
     def _warn_missing_partition_column(self, data: Any, context: IOContext) -> None:
         """Warn when partitioned data lacks its partition column, since reads by partition would find nothing.
@@ -408,7 +382,7 @@ class DatabaseDestination(Destination):
             data: The data about to be written.
             context: IO context whose asset supplies the partition column.
         """
-        if context.partition_or_window is None or context.asset.partitioning is None:
+        if context.window is None or context.asset.partitioning is None:
             return
         column = context.asset.partitioning.column
         columns = Representation.of(data).columns

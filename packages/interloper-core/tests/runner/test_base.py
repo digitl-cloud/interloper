@@ -161,7 +161,8 @@ class TestPreflightValidation:
             daily(id="daily", destinations=[il.MemoryDestination()]),
             static(id="static", destinations=[il.MemoryDestination()]),
         )
-        with pytest.raises(PartitionError, match=r"requires a partition.*daily"):
+        message = r"not valid for every operation: 'daily' is partitioned, but the run was given no window"
+        with pytest.raises(PartitionError, match=message):
             await AsyncRunner().run(dag)
 
         # The run fails as a whole: not even the non-partitioned asset ran.
@@ -188,7 +189,7 @@ class TestPreflightValidation:
             return [{"date": "2026-01-01"}]
 
         dag = il.DAG(bounded(id="bounded", destinations=[il.MemoryDestination()]))
-        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
+        with pytest.raises(PartitionError, match="'bounded' has no data before 2026-01-10"):
             await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 5)))
 
         assert calls == []
@@ -199,7 +200,8 @@ class TestPreflightValidation:
             return [{"date": "2026-01-01"}]
 
         dag = il.DAG(daily(id="daily", destinations=[il.MemoryDestination()]))
-        with pytest.raises(PartitionError, match="partitioned by day"):
+        message = "'daily' is partitioned by day, but the run was given a month window"
+        with pytest.raises(PartitionError, match=message):
             await AsyncRunner().run(dag, TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH))
 
     async def test_a_windowed_run_needs_every_asset_to_allow_windows(self):
@@ -222,7 +224,7 @@ class TestPreflightValidation:
         )
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
 
-        with pytest.raises(PartitionError, match=r"allow_window=True.*daily_only"):
+        with pytest.raises(PartitionError, match=r"'daily_only' does not allow windows"):
             await AsyncRunner().run(dag, window)
 
         assert calls == []
@@ -232,7 +234,7 @@ class TestPreflightValidation:
 
         @il.asset(partitioning=TimePartitionConfig(column="date", allow_window=True))
         def windowed(context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"date": partition.value} for partition in context.window]
+            return [{"date": partition.id} for partition in context.window]
 
         dag = il.DAG(windowed(id="windowed", destinations=[il.MemoryDestination()]))
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
@@ -251,7 +253,22 @@ class TestPreflightValidation:
         asset = upstream(id="upstream", destinations=[il.MemoryDestination()])
         asset.enabled = False
 
-        AsyncRunner()._preflight_validation(il.DAG(asset), None)
+        AsyncRunner()._preflight(il.DAG(asset), None)
+
+    async def test_every_failing_operation_is_listed(self):
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def one() -> list[dict[str, Any]]:
+            return []
+
+        @il.asset(partitioning=TimePartitionConfig(column="date"))
+        def two() -> list[dict[str, Any]]:
+            return []
+
+        dag = il.DAG(
+            one(id="one", destinations=[il.MemoryDestination()]), two(id="two", destinations=[il.MemoryDestination()])
+        )
+        with pytest.raises(PartitionError, match=r"'one' is partitioned.*; 'two' is partitioned"):
+            await AsyncRunner().run(dag)
 
 
 class TestTelemetrySpans:

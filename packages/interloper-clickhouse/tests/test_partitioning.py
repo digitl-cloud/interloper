@@ -2,7 +2,7 @@
 
 import pytest
 from interloper.errors import ConfigError
-from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
+from interloper.partitioning import ListPartitionConfig, TimeGranularity, TimePartitionConfig
 
 from interloper_clickhouse.partitioning import partition_key, same_key
 
@@ -36,7 +36,8 @@ def test_time_partitioning(config, column_type, expected):
 
 
 def test_non_time_partitioning_is_the_column():
-    assert partition_key(PartitionConfig(column="region"), "`region`", "String") == "`region`"
+    regions = ListPartitionConfig(column="region", values=("eu", "us", "eu-west"))
+    assert partition_key(regions, "`region`", "String") == "`region`"
 
 
 def test_unpartitioned_has_no_key():

@@ -12,14 +12,14 @@ from pydantic import PrivateAttr
 
 from interloper.errors import RunnerError, format_exception
 from interloper.operation.base import Operation, OperationContext, OperationResult
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import PartitionWindow
 from interloper.runner.sync_runner import SyncRunner
 
 
 def _worker(
     operation_id: str,
     dag_spec: dict[str, Any],
-    partition_or_window: Partition | PartitionWindow | None,
+    window: PartitionWindow | None,
     metadata: dict[str, Any],
 ) -> tuple[str, bool, str | None, str | None, dict[str, Any], list[str]]:
     """Execute a single operation in a worker process.
@@ -31,7 +31,7 @@ def _worker(
     Args:
         operation_id: Id of the node to execute within the reconstructed DAG.
         dag_spec: JSON-mode dump of the DAG spec to reconstruct.
-        partition_or_window: Partition or window to scope the run; narrowed
+        window: Partition or window to scope the run; narrowed
             to the node's own effective partition.
         metadata: Run metadata, also carrying the parent span context.
 
@@ -62,7 +62,7 @@ def _worker(
         dag = DAGSpec(**dag_spec).reconstruct()
         operation = dag.operation_map[operation_id]
         context = OperationContext(
-            partition_or_window=operation.effective_partition(partition_or_window),
+            window=operation.effective_window(window),
             dag=dag,
             metadata=metadata,
         )
@@ -143,13 +143,13 @@ class MultiProcessRunner(SyncRunner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> Future[Any]:
         """Submit an operation for execution in a child process.
 
         Args:
             operation: The operation to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
 
         Returns:
             A Future representing the worker result.
@@ -166,7 +166,7 @@ class MultiProcessRunner(SyncRunner):
             _worker,
             operation.id,
             self._dag_spec,
-            partition_or_window,
+            window,
             self.state.metadata,
         )
         self._futures[future] = operation

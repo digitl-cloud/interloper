@@ -83,7 +83,7 @@ def _matches(matcher: il.Source, *connectors: il.Source) -> list[dict[str, Any]]
     memory = matcher.destinations[0]
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(*connectors, matcher).materialize(partition)
-    return memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    return memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
 
 
 def test_dag_binds_every_dim_campaigns_asset_and_matches_each_leg() -> None:
@@ -175,7 +175,7 @@ def test_leg_without_data_is_skipped_not_fatal() -> None:
     tt.dim_campaigns.enabled = False  # nothing written for tt: its leg reads as None
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, tt, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
     assert [r["campaign_id"] for r in rows] == ["fb_like-0"]
 
 
@@ -189,7 +189,7 @@ def test_matcher_alone_reads_bound_upstreams_read_only() -> None:
     dag = il.DAG(matcher)
     assert dag.operation_map[fb.dim_campaigns.id].enabled is False
     dag.materialize(partition)
-    assert len(memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))) == 1
+    assert len(memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))) == 1
 
 
 def test_matcher_with_no_campaigns_in_dag_is_a_build_error() -> None:
@@ -204,7 +204,7 @@ def test_matches_across_connector_schemas_with_different_field_names() -> None:
     matcher = CampaignMatcher(destinations=[memory])
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, tt, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
     by_id = {r["campaign_id"]: r for r in rows}
     assert by_id["fb_like-0"]["canonical_name"] == "summer sale"
     assert by_id["tt_like-0"]["canonical_name"] == "brand awareness"
@@ -217,7 +217,7 @@ def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() 
     matcher = CampaignMatcher(destinations=[memory])
     partition = il.TimePartition(dt.date(2026, 9, 1))
     il.DAG(fb, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, partition_or_window=partition))
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
     assert len(rows) == 1
     assert rows[0]["campaign_id"] == ""
     assert rows[0]["canonical_name"] == ""

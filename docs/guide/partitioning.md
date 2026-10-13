@@ -1,8 +1,9 @@
 # Partitioning
 
-Partitioning slices an asset into discrete units, almost always by time. A run of a partitioned
-asset is always scoped to one partition or to a window of partitions; the asset reads the scope
-from its context and fetches exactly that slice.
+Partitioning slices an asset into discrete units, by time or by a declared list of values. A run
+of a partitioned asset always covers a **window**: one partition, or several when the asset allows
+it. A partition is the storage unit; the window is the scope. The asset reads the window from its
+context and fetches exactly that slice.
 
 ## Time partitioning
 
@@ -50,9 +51,6 @@ period lasts and owns every piece of time arithmetic:
 | `MONTH` | `2026-08` | one calendar month |
 | `YEAR` | `2026` | one calendar year |
 
-`WEEK` and `QUARTER` exist with full arithmetic but cannot be declared on an asset: a partition
-id is a storage contract, and no destination needs those two.
-
 Ids are ISO-8601 prefixes: they sort chronologically as strings, embed in paths unchanged, and
 each shape names its granularity, so `il.TimePartition.from_key("2026-08")` rebuilds the
 partition without being told it is monthly.
@@ -79,23 +77,49 @@ partition = il.TimePartition(dt.date(2026, 5, 20), il.TimeGranularity.MONTH)
 partition.value          # 2026-05-01, normalized to the period start
 partition.id             # "2026-05"
 partition.bounds         # (2026-05-01, 2026-06-01)
+partition.window         # the one-partition window
+partition.filter("date") # the bounds, as a database selects them
 partition.slice(rows, "date")   # the rows inside the bounds
 
 window = il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 7))
-str(window)              # "2026-01-01:2026-01-07"
-window.partition_count() # 7
-list(window)             # TimePartition per day, newest first
+str(window)              # "2026-01-01..2026-01-07"; "2026-01-01" for a window of one
+len(window)              # 7
+list(window)             # TimePartition per day, oldest first
+window.bounds            # (2026-01-01, 2026-01-08)
 ```
 
 Both bounds of a window are inclusive; a window ending before it starts raises `ValueError`.
-Iteration yields the most recent partition first, so the freshest data lands first when a loop
-is interrupted.
+Every entry point (`asset.run`, `asset.materialize`, `dag.materialize`, `runner.run`) accepts a
+bare partition as the window of one.
 
 `TimePartitionWindow.lookback(now, lookback, offset, granularity, start)` builds the trailing
 window a schedule should cover: `offset` partitions back from the current one, `lookback`
 partitions long, clamped to `start`, or `None` when clamping leaves nothing. `now` may be an
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
 calendar, while hour windows are always UTC because hour ids are UTC labels.
+
+## List partitioning
+
+An asset partitioned by a declared list of values, such as regions or markets:
+
+```py
+@il.asset(partitioning=il.ListPartitionConfig(column="region", values=["eu", "us", "apac"]))
+def sales(self, context: il.ExecutionContext) -> list[dict]:
+    region = context.partition.value
+    return [{"region": region, **row} for row in fetch_sales(region)]
+```
+
+The values are the partition ids, in the declared order. A window is a contiguous range of that
+order: `config.window("eu", "us")` covers `eu` and `us`, and a backfill from the first value to
+the last covers everything. Databases select a list partition by membership, the file and object
+destinations key storage by its id. Platform support for list backfills and the run form is a
+follow-up; today a list-partitioned asset runs through `asset.run`, `dag.materialize` and the
+CLI.
+
+Every partitioning answers the same questions: `check(window)` validates a run's window,
+`partition(key)` parses a persisted key, `window(start_key, end_key)` builds a window,
+`compatible(other)` says whether both ends of a DAG edge accept the same windows, and
+`to_definition()` renders the catalog entry.
 
 ## Windowed assets
 
@@ -120,20 +144,21 @@ not allow windows.
 
 | Accessor | Gives you | Raises when |
 |----------|-----------|-------------|
-| `context.partition` | The `Partition`: `.value`, `.id`, `.granularity`, `.bounds` | not partitioned, no scope given, or the run holds a window |
-| `context.window` | The `PartitionWindow`: `.start`, `.end`, `.partition_count()`, iteration | not time-partitioned, no scope given, or `allow_window` is off |
-| `context.partition_date` | `partition.value` as a `date` | the granularity is not `DAY` |
+| `context.partition` | The window's only `Partition`: `.id`, and `.bounds` or `.value` by kind | not partitioned, no window given, or the window covers several partitions |
+| `context.window` | The `PartitionWindow`: `.start`, `.end`, `len()`, iteration | not partitioned, or no window given |
+| `context.partition_date` | `partition.value` as a `date` | not time-partitioned at `DAY`, or the window covers several partitions |
 
 ## Validation
 
-Before an asset executes, its scope is checked: a partitioned asset with no scope raises
-`PartitionError`; an unpartitioned asset given a scope warns and ignores it; a window needs
-`allow_window`; a time-partitioned asset needs a **time** partition of its own granularity; and a
-scope reaching before `start` is rejected. Runners perform the same checks for the whole DAG
-before starting, so a run that no asset can serve fails without executing anything.
+Before an asset executes, its partitioning checks the run's window: a partitioned asset with no
+window, a window of several partitions without `allow_window`, a window of another kind or
+granularity, or one reaching before `start` raise `PartitionError`, named after the asset. An
+unpartitioned asset ignores any window. Runners run the same check for every enabled operation
+before starting, listing every failing one, so a run no asset can serve fails without executing
+anything.
 
-## Custom partition schemes
+## Extending partitioning
 
-`il.PartitionConfig(column, allow_window)`, `il.Partition(value)` and `il.PartitionWindow(start,
-end)` are the generic bases. A custom partition's `id` is `str(value)` and its `slice()`
-selects rows by id equality; subclass to change either. Custom windows implement `__iter__`.
+A new kind subclasses `il.PartitionConfig`, `il.Partition` and `il.PartitionWindow` and implements
+their abstract contract; the config's `kind` registers it for `from_definition`. The list kind in
+`interloper.partitioning.list` is the reference implementation.

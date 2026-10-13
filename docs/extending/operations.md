@@ -21,7 +21,7 @@ class Operation(Workload):
     def failure(self, error: Exception) -> OperationResult: ...
 ```
 
-`OperationContext` carries the facts an execution is scoped to: `partition_or_window`, the
+`OperationContext` carries the facts an execution is scoped to: the `window`, the
 `dag` (how a node reaches upstream outputs), and the run `metadata`.
 
 `OperationResult` is what an operation hands back for the platform to persist: `config` fields
@@ -43,8 +43,8 @@ plain defaults that make any subclass a valid node; `Asset` overrides them with 
 | `bound(name)` | from `Component` | what is bound to one relation |
 | `source` | `None` | the owning source |
 | `partitioning` | `None` | the partition config |
-| `effective_partition(scope)` | scope if partitioned else `None` | same |
-| `_event_metadata(metadata, scope)` | component identity | adds `qualified_key`, `source_id` |
+| `effective_window(window)` | the window if partitioned else `None` | same |
+| `event_metadata(metadata, window, **extra)` | from `Component`: identity, window, `parent_id` | same |
 
 ## Writing an operation
 

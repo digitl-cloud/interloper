@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import mssql_python
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField
@@ -500,8 +499,9 @@ def _predicate(where: PartitionFilter) -> tuple[str, list[Any]]:
         The predicate text and the parameters its ``?`` placeholders name.
     """
     column = _quote(where.column)
-    if where.bounds is None:
-        return f"{column} = ?", [_bind(where.value)]
+    if where.values is not None:
+        return f"{column} IN ({', '.join('?' for _ in where.values)})", [_bind(value) for value in where.values]
+    assert where.bounds is not None
     start, end = where.bounds
     return f"{column} >= ? AND {column} < ?", [_bind(start), _bind(end)]
 

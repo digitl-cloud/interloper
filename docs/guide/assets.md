@@ -169,13 +169,13 @@ Unknown keyword arguments raise `TypeError` rather than being silently dropped.
 
 | Call | Effect |
 |------|--------|
-| `asset.run(partition, dag, metadata)` | Execute, normalize, conform. Return the data. Write nothing. |
-| `asset.materialize(partition, dag, metadata)` | Everything `run` does, then write to every destination. Returns the data, or `None` when the asset is disabled. |
+| `asset.run(window, dag, metadata)` | Execute, normalize, conform. Return the data. Write nothing. |
+| `asset.materialize(window, dag, metadata)` | Everything `run` does, then write to every destination. Returns the data, or `None` when the asset is disabled. |
 | `await asset.run_async(...)`, `await asset.materialize_async(...)` | The same, for async callers. |
 
-`partition` is required for partitioned assets and ignored (with a warning) for unpartitioned
-ones. `dag` is required when the asset has a bound upstream, because upstream data is read through
-the DAG's own node. `metadata` is a free-form dict (run id, backfill id) carried onto every event
+`window` is required for partitioned assets and ignored for unpartitioned ones; a bare partition
+is accepted as the window of one. `dag` is required when the asset has a bound upstream, because
+upstream data is read through the DAG's own node. `metadata` is a free-form dict (run id, backfill id) carried onto every event
 the run emits.
 
 An asset that produces no data skips its destination writes and emits a warning log event
@@ -183,7 +183,7 @@ rather than writing an empty table.
 
 ## What happens on materialize
 
-1. The partition scope is validated against the asset's partitioning.
+1. The run's window is checked by the asset's partitioning.
 2. Every relation is resolved: a resource to what is bound or its fallback, an upstream to an
    `il.Upstream` read from its destination.
 3. `data()` runs, wrapped in `asset_data_*` events and a tracing span.
@@ -201,15 +201,15 @@ An asset that declares a `context` parameter receives an `ExecutionContext`:
 
 | Accessor | Gives you |
 |----------|-----------|
-| `context.asset_key` | The asset's key. |
+| `context.asset` | The asset executing: `key`, `table`, `dataset`, `source`, `partitioning`. |
 | `context.metadata` | The run's metadata dict (`run_id`, `backfill_id`, anything the caller passed). |
 | `context.logger` | A logger whose `debug`, `info`, `warning`, `error` emit `LOG` events attributed to the asset. |
-| `context.partition` | The `Partition` this run covers: `.value`, `.id`, `.granularity`, `.bounds`. |
-| `context.window` | The `PartitionWindow`, for assets declaring `allow_window=True`. A single partition is presented as a one-partition window. |
+| `context.window` | The `PartitionWindow` the run covers; a window of one for assets without `allow_window`. |
+| `context.partition` | The window's only partition: `.id`, and `.bounds` or `.value` depending on the kind. |
 | `context.partition_date` | The partition value as a `date`, for daily assets only. |
 
 Each partition accessor raises an `AttributeError` explaining why it is unavailable: the asset
-is not partitioned, no partition was given, the run holds a window, or the granularity is not
+is not partitioned, no window was given, the window covers several partitions, or the granularity is not
 daily. See [Partitioning](partitioning.md).
 
 ## Identity

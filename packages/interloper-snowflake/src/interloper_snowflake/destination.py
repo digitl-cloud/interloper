@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import FetchField, InputField
@@ -169,7 +168,7 @@ class SnowflakeDestination(DatabaseDestination):
         transaction.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
+            context: IO context carrying the target asset, the window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
@@ -443,7 +442,8 @@ def _predicate(where: PartitionFilter) -> tuple[str, tuple[Any, ...]]:
         The predicate text and the parameters its ``%s`` placeholders name.
     """
     column = _quote(where.column)
-    if where.bounds is None:
-        return f"{column} = %s", (where.value,)
+    if where.values is not None:
+        return f"{column} IN ({', '.join('%s' for _ in where.values)})", tuple(where.values)
+    assert where.bounds is not None
     start, end = where.bounds
     return f"{column} >= %s AND {column} < %s", (start, end)

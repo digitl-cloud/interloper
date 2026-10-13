@@ -79,7 +79,7 @@ Partitioned assets always need a partition. `materialize()` on an asset with dep
 
    ```py
    dest = il.CSVDestination(base_path="./data")
-   dest.read(il.IOContext(asset=Shop().order_stats, partition_or_window=il.TimePartition(dt.date(2026, 1, 15)), schema=OrderStats))
+   dest.read(il.IOContext(asset=Shop().order_stats, window=il.TimePartition(dt.date(2026, 1, 15)).window, schema=OrderStats))
    ```
 
    The command exits non-zero when the run did not complete; `-v` shows destination reads and

@@ -34,12 +34,12 @@ class TestWindowWrites:
             {"date": "2024-01-02", "v": 2},
             {"date": "2024-01-02", "v": 3},
         ]
-        dest.write(IOContext(asset=partitioned_asset(), partition_or_window=window), rows)
+        dest.write(IOContext(asset=partitioned_asset(), window=window), rows)
 
         part1 = TimePartition(datetime.date(2024, 1, 1))
         part2 = TimePartition(datetime.date(2024, 1, 2))
-        day1 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part1))
-        day2 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part2))
+        day1 = dest.read(IOContext(asset=partitioned_asset(), window=part1.window))
+        day2 = dest.read(IOContext(asset=partitioned_asset(), window=part2.window))
         assert day1 == [{"date": "2024-01-01", "v": 1}]
         assert day2 == [{"date": "2024-01-02", "v": 2}, {"date": "2024-01-02", "v": 3}]
 
@@ -49,10 +49,10 @@ class TestWindowWrites:
         dest = MemoryDestination(id="mem")
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
         df = pd.DataFrame([{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}])
-        dest.write(IOContext(asset=partitioned_asset(), partition_or_window=window), df)
+        dest.write(IOContext(asset=partitioned_asset(), window=window), df)
 
         part1 = TimePartition(datetime.date(2024, 1, 1))
-        day1 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part1))
+        day1 = dest.read(IOContext(asset=partitioned_asset(), window=part1.window))
         assert len(day1) == 1
         assert day1.iloc[0]["v"] == 1
 

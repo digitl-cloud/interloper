@@ -10,8 +10,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import DataNotFoundError
 from interloper.representation import Representation
 from interloper.resource.fields import InputField
@@ -312,16 +311,17 @@ def _predicate(table: Table, where: PartitionFilter) -> ColumnElement[bool]:
 
     Args:
         table: The reflected table.
-        where: The filter: equality on ``value``, or half-open ``bounds``.
+        where: The filter: membership of ``values``, or half-open ``bounds``.
 
     Returns:
         The ``WHERE`` clause.
     """
     column = table.c[where.column]
-    if where.bounds is not None:
-        start, end = where.bounds
-        return and_(column >= _coerce(column, start), column < _coerce(column, end))
-    return column == _coerce(column, where.value)
+    if where.values is not None:
+        return column.in_([_coerce(column, value) for value in where.values])
+    assert where.bounds is not None
+    start, end = where.bounds
+    return and_(column >= _coerce(column, start), column < _coerce(column, end))
 
 
 def _coerce(column: Column[Any], value: Any) -> Any:

@@ -107,7 +107,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 
    ```py
    dest = shop.destinations[0]
-   dest.read(il.IOContext(asset=shop.order_stats, partition_or_window=il.TimePartition(dt.date(2026, 1, 15)), schema=OrderStats))
+   dest.read(il.IOContext(asset=shop.order_stats, window=il.TimePartition(dt.date(2026, 1, 15)).window, schema=OrderStats))
    ```
 
 5. **Register** (packages only, not a bare module): `[project.entry-points."interloper.components"]`

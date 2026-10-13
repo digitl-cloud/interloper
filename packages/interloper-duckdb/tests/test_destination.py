@@ -11,7 +11,13 @@ import pytest
 from interloper.destination import IOContext
 from interloper.destination.database import TableReference
 from interloper.errors import DataNotFoundError
-from interloper.partitioning import Partition, PartitionConfig, TimePartition, TimePartitionWindow
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    PartitionWindow,
+    TimePartition,
+    TimePartitionWindow,
+)
 from interloper.schema import Schema
 from pydantic import BaseModel
 
@@ -61,13 +67,13 @@ def daily() -> list:
     return []
 
 
-@il.asset(partitioning=PartitionConfig(column="region"))
+@il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
 
 def _ctx(asset: Any, scope: Any = None, schema: type[Schema] | None = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _query(destination: DuckDBDestination, sql: str, parameters: list | None = None) -> list[tuple]:
@@ -222,17 +228,18 @@ class TestWrite:
     def test_non_time_partition_replaces_by_equality(self, destination):
         rows = [{"region": "eu", "value": 1}, {"region": "us", "value": 2}]
         destination.write(_ctx(regional(), schema=RegionRow), rows)
-        destination.write(_ctx(regional(), Partition("eu"), RegionRow), [{"region": "eu", "value": 10}])
+        destination.write(_ctx(regional(), ListPartition("eu"), RegionRow), [{"region": "eu", "value": 10}])
         stored = _query(destination, 'SELECT "region", "value" FROM "main"."regional" ORDER BY "region"')
         assert stored == [("eu", 10), ("us", 2)]
 
     def test_string_id_matches_a_date_column(self, destination):
-        @il.asset(partitioning=PartitionConfig(column="day"))
+        @il.asset(partitioning=ListPartitionConfig(column="day", values=("2024-01-01", "2024-01-02", "2024-01-03")))
         def by_day_id() -> list:
             return []
 
         destination.write(_ctx(by_day_id()), _days(1, 2))
-        destination.write(_ctx(by_day_id(), Partition("2024-01-01")), [{"day": datetime.date(2024, 1, 1), "value": 10}])
+        rows = [{"day": datetime.date(2024, 1, 1), "value": 10}]
+        destination.write(_ctx(by_day_id(), ListPartition("2024-01-01")), rows)
         rows = _query(destination, 'SELECT "value" FROM "main"."by_day_id" ORDER BY "day"')
         assert rows == [(10,), (2,)]
 
@@ -330,7 +337,7 @@ class TestRead:
 
     def test_reads_one_non_time_partition(self, destination):
         destination.write(_ctx(regional()), [{"region": "eu", "value": 1}, {"region": "us", "value": 2}])
-        frame = destination.read(_ctx(regional(), Partition("us")))
+        frame = destination.read(_ctx(regional(), ListPartition("us")))
         assert frame["value"].tolist() == [2]
 
     def test_missing_table_raises(self, destination):

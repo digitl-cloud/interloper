@@ -171,23 +171,23 @@ class TestRunResultStr:
         rendered = str(result)
 
         assert rendered.startswith("RunResult(")
-        assert "partition=None" in rendered
+        assert "window=None" in rendered
         assert "completed=1" in rendered
         assert "failed=0" in rendered
         assert "time=0.00s" in rendered
 
     def test_names_the_partition(self) -> None:
-        result = RunResult(partition_or_window=TimePartition.from_key("2026-06-01"))
+        result = RunResult(window=TimePartition.from_key("2026-06-01").window)
 
-        assert "partition=2026-06-01" in str(result)
+        assert "window=2026-06-01" in str(result)
 
     def test_names_the_window(self) -> None:
         window = TimePartitionWindow(start=dt.date(2026, 6, 1), end=dt.date(2026, 6, 3))
-        result = RunResult(partition_or_window=window)
+        result = RunResult(window=window)
 
         rendered = str(result)
 
-        assert "window=2026-06-01:2026-06-03" in rendered
+        assert "window=2026-06-01..2026-06-03" in rendered
         assert "partition=" not in rendered
 
     def test_lists_the_failed_and_canceled_ids(self) -> None:

@@ -27,8 +27,7 @@ from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
 from interloper.events import Event, EventBus, EventType
 from interloper.operation import Operation
-from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import PartitionWindow
 from interloper.runner.sync_runner import SyncRunner
 from interloper.telemetry.propagation import child_process_env
 from pydantic import Field, PrivateAttr
@@ -122,13 +121,14 @@ class DockerRunner(SyncRunner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> Future[Any]:
         """Launch an asset in a Docker container and return a polling Future.
 
         Args:
             operation: The operation to run in its own container.
-            partition_or_window: The partition or window to materialize, when scoped.
+            window: The window to materialize, narrowed to the operation's own; ``None`` for an
+                unpartitioned operation.
 
         Returns:
             A Future that raises :class:`RunnerError` on container failure.
@@ -143,7 +143,7 @@ class DockerRunner(SyncRunner):
         mini_dag = self.state.dag.mini_dag(operation.id)
         dag_spec = mini_dag.to_spec().model_dump(mode="json")
 
-        cmd = self._build_command(dag_spec, partition_or_window, self.state.run_id)
+        cmd = self._build_command(dag_spec, operation.effective_window(window), self.state.run_id)
         name = self._build_name(operation)
         env = self._build_env()
         volumes = self._build_volumes()
@@ -213,37 +213,6 @@ class DockerRunner(SyncRunner):
             except Exception:  # noqa: BLE001, S110
                 pass
 
-    def _handle_flushed_future(self, future: Future[Any], operation: Operation) -> None:
-        """Clean up container after flush, authoring the terminal event.
-
-        Same host-authored-terminal contract as :meth:`_handle_completed`
-        (``emit=True``, idempotent via deterministic ids) so an asset still
-        in flight when the run aborts is not left orphaned as ``running``.
-
-        Args:
-            future: The polling future being flushed.
-            operation: The operation the container ran.
-
-        """
-        container = self._container_map.pop(future, None)
-        if container is not None:
-            self._stop_container_log_streaming(container)
-
-        info = self.state.executions.get(operation.id)
-        if not (info and info.is_terminal):
-            try:
-                future.result()
-            except Exception as e:  # noqa: BLE001
-                self.state.mark_failed(operation, format_exception(e), emit=True)
-            else:
-                self.state.mark_completed(operation, emit=True)
-
-        if container is not None and self.auto_remove:
-            try:
-                container.remove()
-            except Exception:  # noqa: BLE001, S110
-                pass
-
     # -- Container polling -----------------------------------------------------
 
     def _poll_container(self, container: Container) -> None:
@@ -266,14 +235,15 @@ class DockerRunner(SyncRunner):
     def _build_command(
         self,
         dag_spec: dict[str, Any],
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         run_id: str,
     ) -> list[str]:
         """Build the CLI command for asset execution in a container.
 
         Args:
             dag_spec: The serialized DAG the container reconstructs.
-            partition_or_window: The partition or window to materialize, when scoped.
+            window: The window to materialize, narrowed to the operation's own; ``None`` for an
+                unpartitioned operation.
             run_id: The run the container reports against.
 
         Returns:
@@ -289,17 +259,11 @@ class DockerRunner(SyncRunner):
             json.dumps(dag_spec),
         ]
 
-        if isinstance(partition_or_window, TimePartition):
-            cmd.extend(["--date", partition_or_window.value.strftime("%Y-%m-%d")])
-        elif isinstance(partition_or_window, TimePartitionWindow):
-            cmd.extend(
-                [
-                    "--start-date",
-                    partition_or_window.start.strftime("%Y-%m-%d"),
-                    "--end-date",
-                    partition_or_window.end.strftime("%Y-%m-%d"),
-                ]
-            )
+        if window is not None:
+            if len(window) == 1:
+                cmd.extend(["--date", window.first.id])
+            else:
+                cmd.extend(["--start-date", window.first.id, "--end-date", window.last.id])
 
         return cmd
 

@@ -15,8 +15,7 @@ import pandas as pd
 from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
-from interloper.destination import Destination, IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, Destination, IOContext, PartitionFilter, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
 from interloper.representation import Representation
@@ -575,7 +574,9 @@ def _merge_field_descriptions(
 
 
 # BigQuery column type -> query parameter type, for partition predicates.
-def _predicate(bq_table: bigquery.Table, where: PartitionFilter) -> tuple[str, list[bigquery.ScalarQueryParameter]]:
+def _predicate(
+    bq_table: bigquery.Table, where: PartitionFilter
+) -> tuple[str, list[bigquery.ScalarQueryParameter | bigquery.ArrayQueryParameter]]:
     """Render a partition filter as a parameterised SQL predicate.
 
     Args:
@@ -586,8 +587,9 @@ def _predicate(bq_table: bigquery.Table, where: PartitionFilter) -> tuple[str, l
         The predicate text and the typed parameters it names.
     """
     column = where.column
-    if where.bounds is None:
-        return f"`{column}` = @partition_value", [_partition_param(bq_table, column, where.value)]
+    if where.values is not None:
+        return f"`{column}` IN UNNEST(@partition_values)", [_partition_params(bq_table, column, where.values)]
+    assert where.bounds is not None
     start, end = where.bounds
     return (
         f"`{column}` >= @partition_start AND `{column}` < @partition_end",
@@ -596,6 +598,28 @@ def _predicate(bq_table: bigquery.Table, where: PartitionFilter) -> tuple[str, l
             _partition_param(bq_table, column, end, name="partition_end"),
         ],
     )
+
+
+def _partition_params(
+    bq_table: bigquery.Table,
+    column: str,
+    values: tuple[Any, ...],
+) -> bigquery.ArrayQueryParameter:
+    """Build the array parameter a membership predicate names, typed from the table.
+
+    Each value is coerced exactly as `_partition_param` coerces a scalar, so the array's type
+    and elements match the column.
+
+    Args:
+        bq_table: The target table (for column type lookup).
+        column: Partition column name.
+        values: The partition values.
+
+    Returns:
+        An array parameter named ``partition_values``.
+    """
+    scalars = [_partition_param(bq_table, column, value) for value in values]
+    return bigquery.ArrayQueryParameter("partition_values", scalars[0].type_, [scalar.value for scalar in scalars])
 
 
 def _partition_param(

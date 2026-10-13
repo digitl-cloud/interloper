@@ -81,8 +81,8 @@ Reference: https://docs.interloper.dev/guide/destinations/
    dag = il.DAG(shop)
    day = il.TimePartition(dt.date(2026, 3, 10))
    dag.materialize(day); dag.materialize(day)                      # second write must not duplicate
-   sqlite.read(il.IOContext(asset=shop.orders, partition_or_window=day, schema=Order))
-   jsonl.partition_row_counts(il.IOContext(asset=shop.orders, partition_or_window=day))
+   sqlite.read(il.IOContext(asset=shop.orders, window=day.window, schema=Order))
+   jsonl.partition_row_counts(il.IOContext(asset=shop.orders))
    shop.orders.materialize(il.TimePartitionWindow(dt.date(2026, 3, 1), dt.date(2026, 3, 3)))   # needs allow_window=True
    ```
 
@@ -98,7 +98,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
 
 | Need | Use |
 |------|-----|
-| Fields of `IOContext` | `asset`, `partition_or_window`, `metadata`, `schema` |
+| Fields of `IOContext` | `asset`, `window` (a `PartitionWindow` or `None`; `partition.window` for one partition), `metadata`, `schema` |
 | Rows from a DataFrame or list | `Representation.of(data).records` |
 | A DataFrame from rows or a DataFrame | `Representation.of(data).to("dataframe")` |
 | Rows the consumer can iterate whatever the destination | `leg.records` on an `il.Upstream` |

@@ -17,11 +17,11 @@ public `run()`:
 4. Delegate to `_run()`.
 5. Flush the event bus and unsubscribe.
 
-Subclasses implement `_run(dag, partition_or_window, metadata) -> RunResult`. Shared helpers:
+Subclasses implement `_run(dag, window, metadata) -> RunResult`. Shared helpers:
 
 | Helper | Purpose |
 |--------|---------|
-| `_init_run(dag, scope, metadata)` | Preflight validation, then create the `RunState` and emit `RUN_STARTED` and `OPERATION_QUEUED`. |
+| `_init_run(dag, window, metadata)` | `_preflight(dag, window)`, which asks every enabled partitioned operation's config to check the window, then create the `RunState` and emit `RUN_STARTED` and `OPERATION_QUEUED`. |
 | `_finalize_run(error=None)` | Emit the terminal run event and build the `RunResult`. |
 | `_reraise_first_failure()` | Re-raise the first failed operation's exception (or `RunnerError` with its message). |
 | `_on_start()`, `_on_end()` | Lifecycle hooks around the walk (create and shut down pools). |

@@ -11,7 +11,7 @@ import pytest
 import sqlalchemy
 from interloper.destination import IOContext
 from interloper.errors import DataNotFoundError
-from interloper.partitioning.base import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.schema import Schema
 from pydantic import Field
@@ -42,13 +42,13 @@ def daily_asset(context: il.ExecutionContext) -> list:
     return []
 
 
-@il.asset(partitioning=PartitionConfig(column="region"))
+@il.asset(partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional_asset(context: il.ExecutionContext) -> list:
     return []
 
 
 def _ctx(asset: Any, scope: Any = None, schema: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _day(n: int) -> datetime.date:
@@ -199,13 +199,13 @@ class TestOtherPartition:
     def test_replaces_by_equality(self, destination):
         rows = [{"region": "eu", "value": 1}, {"region": "us", "value": 2}]
         destination.write(_ctx(regional_asset(), None, _RegionRow), rows)
-        destination.write(_ctx(regional_asset(), Partition("eu"), _RegionRow), [{"region": "eu", "value": 10}])
+        destination.write(_ctx(regional_asset(), ListPartition("eu"), _RegionRow), [{"region": "eu", "value": 10}])
 
-        assert destination.read(_ctx(regional_asset(), Partition("eu"))) == [{"region": "eu", "value": 10}]
-        assert destination.read(_ctx(regional_asset(), Partition("us"))) == [{"region": "us", "value": 2}]
+        assert destination.read(_ctx(regional_asset(), ListPartition("eu"))) == [{"region": "eu", "value": 10}]
+        assert destination.read(_ctx(regional_asset(), ListPartition("us"))) == [{"region": "us", "value": 2}]
 
     def test_id_matches_a_date_column(self, destination):
-        @il.asset(partitioning=PartitionConfig(column="day"))
+        @il.asset(partitioning=ListPartitionConfig(column="day", values=("2024-01-01", "2024-01-02", "2024-01-03")))
         def by_day_id(context: il.ExecutionContext) -> list:
             return []
 
@@ -213,7 +213,7 @@ class TestOtherPartition:
             _ctx(by_day_id(), None, _DayRow), [{"day": _day(1), "value": 1}, {"day": _day(2), "value": 2}]
         )
 
-        assert destination.read(_ctx(by_day_id(), Partition("2024-01-02"))) == [{"day": _day(2), "value": 2}]
+        assert destination.read(_ctx(by_day_id(), ListPartition("2024-01-02"))) == [{"day": _day(2), "value": 2}]
 
 
 class TestWindow:

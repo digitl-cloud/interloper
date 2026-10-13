@@ -36,6 +36,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
 
    | Version | Old | New |
    |---------|-----|-----|
+   | unreleased (core phase 1) | event key `partition_or_window`; `IOContext(partition_or_window=...)`; `ExecutionContext(asset_key=, partitioning=, partition_or_window=)`; `RunResult.partition_or_window`; `str(window)` as `start:end`, `window.id`, `window.partition_count()`, `window.iter_partitions()`; `TimeGranularity.WEEK`/`QUARTER`; a run scoped to a bare partition | event key `window`; `IOContext(window=...)` taking a `PartitionWindow` (`partition.window` for one); `ExecutionContext(asset, window, metadata)`; `RunResult.window`; `str(window)` as `start..end` (the partition id for a window of one), `len(window)`, iteration oldest first; the four BigQuery granularities only; every entry point still accepts a bare partition as the window of one |
    | 0.76.0 | `FileDestination` ignored the partition scope: one `{dataset}/{table}/data.pkl` per asset, and `{table}/{table}/` when no dataset was set | a `{column}={partition_id}` segment per partition, and no duplicated segment, the same layout as `CSVDestination`. Re-materialize, or move existing pickles into the partition directories |
    | 0.74.0 | a fail-fast break interrupted running operations | they finish on their own and are recorded |
    | 0.70.0 | `OAuthProvider.token_method`, `token_params`, `token_basic_auth`; `renew()` overrides | request-builder overrides on the provider; `renewable` is derived, drop `renew()` |

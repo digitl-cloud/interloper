@@ -5,8 +5,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from interloper.errors import PartitionError
+from interloper.partitioning.base import PartitionFilter
 from interloper.partitioning.time import (
-    SUPPORTED_GRANULARITIES,
     TimeGranularity,
     TimePartition,
     TimePartitionConfig,
@@ -19,10 +20,7 @@ class TestTimeGranularityTruncate:
         ("granularity", "expected"),
         [
             (TimeGranularity.DAY, dt.date(2026, 5, 20)),
-            # 2026-05-20 is a Wednesday; weeks start on Monday.
-            (TimeGranularity.WEEK, dt.date(2026, 5, 18)),
             (TimeGranularity.MONTH, dt.date(2026, 5, 1)),
-            (TimeGranularity.QUARTER, dt.date(2026, 4, 1)),
             (TimeGranularity.YEAR, dt.date(2026, 1, 1)),
         ],
     )
@@ -43,15 +41,12 @@ class TestTimeGranularityAdvance:
         [
             (TimeGranularity.DAY, 1, dt.date(2026, 1, 2)),
             (TimeGranularity.DAY, -1, dt.date(2025, 12, 31)),
-            (TimeGranularity.WEEK, 2, dt.date(2026, 1, 12)),
             (TimeGranularity.MONTH, 1, dt.date(2026, 2, 1)),
             (TimeGranularity.MONTH, -1, dt.date(2025, 12, 1)),
-            (TimeGranularity.QUARTER, 1, dt.date(2026, 4, 1)),
             (TimeGranularity.YEAR, 1, dt.date(2027, 1, 1)),
         ],
     )
     def test_advances_whole_periods(self, granularity: TimeGranularity, periods: int, expected: dt.date) -> None:
-        # 2025-12-29 is the Monday of the week containing 2026-01-01.
         assert granularity.advance(dt.date(2026, 1, 1), periods) == expected
 
     def test_zero_is_a_truncation(self) -> None:
@@ -79,9 +74,7 @@ class TestTimeGranularityPeriodsBetween:
         [
             (TimeGranularity.DAY, dt.date(2026, 1, 1), dt.date(2026, 1, 8), 7),
             (TimeGranularity.DAY, dt.date(2026, 1, 8), dt.date(2026, 1, 1), -7),
-            (TimeGranularity.WEEK, dt.date(2026, 1, 1), dt.date(2026, 1, 22), 3),
             (TimeGranularity.MONTH, dt.date(2025, 11, 3), dt.date(2026, 2, 27), 3),
-            (TimeGranularity.QUARTER, dt.date(2026, 1, 1), dt.date(2026, 10, 1), 3),
             (TimeGranularity.YEAR, dt.date(2024, 6, 1), dt.date(2026, 2, 1), 2),
         ],
     )
@@ -114,12 +107,8 @@ class TestTimeGranularityIdentity:
         with pytest.raises(ValueError, match="not a month key"):
             TimeGranularity.MONTH.parse("2026-01-01")
 
-    @pytest.mark.parametrize("granularity", [TimeGranularity.WEEK, TimeGranularity.QUARTER])
-    def test_undeclarable_granularities_have_no_id_format(self, granularity: TimeGranularity) -> None:
-        with pytest.raises(NotImplementedError, match="partition id format"):
-            granularity.format(dt.date(2026, 1, 1))
-        with pytest.raises(NotImplementedError, match="partition id format"):
-            granularity.parse("2026-01-01")
+    def test_every_granularity_has_an_id_format(self) -> None:
+        assert [granularity.key_format for granularity in TimeGranularity] == ["%Y-%m-%dT%H", "%Y-%m-%d", "%Y-%m", "%Y"]
 
 
 class TestTimePartitionFromKey:
@@ -141,7 +130,7 @@ class TestTimePartitionFromKey:
         assert partition.id == key
 
     def test_rejects_an_unknown_shape(self) -> None:
-        with pytest.raises(ValueError, match="matches no granularity"):
+        with pytest.raises(PartitionError, match="matches no granularity"):
             TimePartition.from_key("2026-W33")
 
 
@@ -166,22 +155,6 @@ class TestTimePartitionConfig:
     def test_defaults_to_daily(self) -> None:
         assert TimePartitionConfig(column="date").granularity is TimeGranularity.DAY
 
-    def test_supported_set_is_bigquery_parity(self) -> None:
-        assert SUPPORTED_GRANULARITIES == {
-            TimeGranularity.HOUR,
-            TimeGranularity.DAY,
-            TimeGranularity.MONTH,
-            TimeGranularity.YEAR,
-        }
-
-    @pytest.mark.parametrize(
-        "granularity",
-        [g for g in TimeGranularity if g not in SUPPORTED_GRANULARITIES],
-    )
-    def test_unsupported_granularity_is_rejected(self, granularity: TimeGranularity) -> None:
-        with pytest.raises(ValueError, match="is not supported yet"):
-            TimePartitionConfig(column="date", granularity=granularity)
-
     def test_start_is_normalized_to_a_period_start(self) -> None:
         # At daily granularity a date is already a period start; the
         # normalization only shifts the value at coarser granularities.
@@ -193,6 +166,46 @@ class TestTimePartitionConfig:
 
     def test_start_defaults_to_none(self) -> None:
         assert TimePartitionConfig(column="date").start is None
+
+    def test_granularity_name_is_coerced(self) -> None:
+        config = TimePartitionConfig(column="date", granularity="month")  # ty: ignore[invalid-argument-type]
+        assert config.granularity is TimeGranularity.MONTH
+
+
+class TestTimePartitionConfigContract:
+    def test_check_accepts_its_own_granularity(self) -> None:
+        TimePartitionConfig(column="date").check(TimePartition(dt.date(2026, 1, 1)).window)
+
+    def test_check_rejects_another_granularity(self) -> None:
+        with pytest.raises(PartitionError, match="partitioned by day, but the run was given a month window"):
+            TimePartitionConfig(column="date").check(TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH).window)
+
+    def test_check_rejects_a_window_before_the_start(self) -> None:
+        config = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 10))
+        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
+            config.check(TimePartitionWindow(dt.date(2026, 1, 5), dt.date(2026, 1, 20)))
+        config.check(TimePartitionWindow(dt.date(2026, 1, 10), dt.date(2026, 1, 20)))
+
+    def test_check_rejects_a_list_window(self) -> None:
+        from interloper.partitioning.list import ListPartition
+
+        with pytest.raises(PartitionError, match="expects a time window"):
+            TimePartitionConfig(column="date").check(ListPartition("eu").window)
+
+    def test_partition_parses_at_its_granularity(self) -> None:
+        config = TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH)
+        assert config.partition("2026-05") == TimePartition(dt.date(2026, 5, 1), TimeGranularity.MONTH)
+        with pytest.raises(PartitionError, match="not a month key"):
+            config.partition("2026-05-01")
+
+    def test_window_rejects_an_inverted_range(self) -> None:
+        with pytest.raises(PartitionError, match="before it starts"):
+            TimePartitionConfig(column="date").window("2026-01-03", "2026-01-01")
+
+    def test_compatible_means_the_same_granularity(self) -> None:
+        daily = TimePartitionConfig(column="date")
+        assert daily.compatible(TimePartitionConfig(column="day")) is True
+        assert daily.compatible(TimePartitionConfig(column="date", granularity=TimeGranularity.MONTH)) is False
 
 
 class TestTimePartition:
@@ -224,24 +237,31 @@ class TestTimePartition:
     def test_bounds_are_half_open(self) -> None:
         assert TimePartition(dt.date(2026, 1, 1)).bounds == (dt.date(2026, 1, 1), dt.date(2026, 1, 2))
 
+    def test_str_is_the_id(self) -> None:
+        assert str(TimePartition(dt.date(2026, 5, 20), TimeGranularity.MONTH)) == "2026-05"
+
+    def test_filter_is_the_half_open_bounds(self) -> None:
+        partition = TimePartition(dt.date(2026, 5, 20), TimeGranularity.MONTH)
+        assert partition.filter("date") == PartitionFilter("date", bounds=(dt.date(2026, 5, 1), dt.date(2026, 6, 1)))
+
+    def test_window_is_the_one_period_window(self) -> None:
+        partition = TimePartition(dt.date(2026, 5, 20), TimeGranularity.MONTH)
+        assert partition.window == TimePartitionWindow(dt.date(2026, 5, 1), dt.date(2026, 5, 1), TimeGranularity.MONTH)
+
 
 class TestTimePartitionWindow:
-    def test_iterates_newest_first(self) -> None:
-        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
-        assert [p.value for p in window] == [dt.date(2026, 1, 3), dt.date(2026, 1, 2), dt.date(2026, 1, 1)]
+    def test_partitions_are_oldest_first(self) -> None:
+        window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
+        assert [partition.id for partition in window] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+        assert window.first.id == "2026-01-01" and window.last.id == "2026-01-03"
 
     def test_partitions_carry_the_window_granularity(self) -> None:
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 2))
-        assert all(p.granularity is TimeGranularity.DAY for p in window)
+        assert all(partition.granularity is TimeGranularity.DAY for partition in window.partitions)  # ty: ignore[unresolved-attribute]
 
-    def test_partition_count_is_inclusive(self) -> None:
-        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
-        assert window.partition_count() == 3
-
-    def test_single_partition_window(self) -> None:
-        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 1))
-        assert window.partition_count() == 1
-        assert [p.value for p in window] == [dt.date(2026, 1, 1)]
+    def test_len_is_inclusive(self) -> None:
+        assert len(TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))) == 3
+        assert len(TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 1))) == 1
 
     def test_bounds_are_truncated(self) -> None:
         window = TimePartitionWindow(
@@ -250,16 +270,20 @@ class TestTimePartitionWindow:
             granularity=TimeGranularity.MONTH,
         )
         assert (window.start, window.end) == (dt.date(2026, 1, 1), dt.date(2026, 3, 1))
-        assert window.partition_count() == 3
+        assert len(window) == 3
+
+    def test_bounds_and_filter_span_the_whole_window(self) -> None:
+        window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
+        assert window.bounds == (dt.date(2026, 1, 1), dt.date(2026, 1, 4))
+        assert window.filter("date") == PartitionFilter("date", bounds=(dt.date(2026, 1, 1), dt.date(2026, 1, 4)))
 
     def test_inverted_window_is_rejected(self) -> None:
         with pytest.raises(ValueError, match="ends before it starts"):
             TimePartitionWindow(start=dt.date(2026, 1, 3), end=dt.date(2026, 1, 1))
 
-    def test_str_and_repr_are_iso(self) -> None:
-        window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
-        assert str(window) == "2026-01-01:2026-01-03"
-        assert repr(window) == "2026-01-01 to 2026-01-03"
+    def test_str_uses_partition_ids(self) -> None:
+        window = TimePartitionWindow(dt.datetime(2026, 1, 1, 13), dt.datetime(2026, 1, 1, 15), TimeGranularity.HOUR)
+        assert str(window) == "2026-01-01T13..2026-01-01T15"
 
 
 class TestTimePartitionWindowLookback:
@@ -274,7 +298,7 @@ class TestTimePartitionWindowLookback:
         window = TimePartitionWindow.lookback(self.NOW, lookback=7)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 11), dt.date(2026, 8, 17))
-        assert window.partition_count() == 7
+        assert len(window) == 7
 
     def test_zero_offset_includes_the_current_partition(self) -> None:
         window = TimePartitionWindow.lookback(self.NOW, lookback=1, offset=0)
@@ -298,7 +322,7 @@ class TestTimePartitionWindowLookback:
         window = TimePartitionWindow.lookback(self.NOW, lookback=3, granularity=TimeGranularity.MONTH)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 5, 1), dt.date(2026, 7, 1))
-        assert window.partition_count() == 3
+        assert len(window) == 3
 
     def test_daily_window_follows_the_reference_zone_calendar(self) -> None:
         # 22:00 UTC on the 18th is already the 19th in Berlin: that zone's

@@ -40,7 +40,7 @@ class TestRoundtrip:
     def test_partitioned_roundtrip(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        context = IOContext(asset=asset, partition_or_window=_partition(1))
+        context = IOContext(asset=asset, window=_partition(1).window)
 
         dest.write(context, [{"date": "2024-01-01", "v": 1}])
 
@@ -49,8 +49,8 @@ class TestRoundtrip:
     def test_each_partition_keeps_its_own_data(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        first = IOContext(asset=asset, partition_or_window=_partition(1))
-        second = IOContext(asset=asset, partition_or_window=_partition(2))
+        first = IOContext(asset=asset, window=_partition(1).window)
+        second = IOContext(asset=asset, window=_partition(2).window)
 
         dest.write(first, [{"date": "2024-01-01"}])
         dest.write(second, [{"date": "2024-01-02"}])
@@ -91,26 +91,26 @@ class TestWindows:
             {"date": "2024-01-02", "v": 3},
         ]
 
-        dest.write(IOContext(asset=asset, partition_or_window=window), rows)
+        dest.write(IOContext(asset=asset, window=window), rows)
 
-        assert dest.read(IOContext(asset=asset, partition_or_window=_partition(1))) == [
+        assert dest.read(IOContext(asset=asset, window=_partition(1).window)) == [
             {"date": "2024-01-01", "v": 1}
         ]
-        assert dest.read(IOContext(asset=asset, partition_or_window=_partition(2))) == [
+        assert dest.read(IOContext(asset=asset, window=_partition(2).window)) == [
             {"date": "2024-01-02", "v": 2},
             {"date": "2024-01-02", "v": 3},
         ]
 
-    def test_a_window_read_returns_one_result_per_partition(self, tmp_path: Path):
+    def test_a_window_read_returns_one_table(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        dest.write(IOContext(asset=asset, partition_or_window=window), [{"date": "2024-01-01", "v": 1}])
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(2)), [{"date": "2024-01-02", "v": 2}])
+        dest.write(IOContext(asset=asset, window=window), [{"date": "2024-01-01", "v": 1}])
+        dest.write(IOContext(asset=asset, window=_partition(2).window), [{"date": "2024-01-02", "v": 2}])
 
-        pages = dest.read(IOContext(asset=asset, partition_or_window=window))
+        pages = dest.read(IOContext(asset=asset, window=window))
 
-        assert pages == [[{"date": "2024-01-02", "v": 2}], [{"date": "2024-01-01", "v": 1}]]
+        assert pages == [{"date": "2024-01-01", "v": 1}, {"date": "2024-01-02", "v": 2}]
 
     def test_a_non_tabular_payload_cannot_be_written_over_a_window(self, tmp_path: Path):
         # Nothing can split an arbitrary object by partition; refusing beats
@@ -122,16 +122,16 @@ class TestWindows:
         window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
 
         with pytest.raises(RepresentationError, match="dict"):
-            dest.write(IOContext(asset=asset, partition_or_window=window), {"blob": object.__doc__})
+            dest.write(IOContext(asset=asset, window=window), {"blob": object.__doc__})
 
     def test_a_non_tabular_payload_is_stored_whole_for_a_single_partition(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
         payload = {"blob": object.__doc__}
 
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), payload)
+        dest.write(IOContext(asset=asset, window=_partition(1).window), payload)
 
-        assert dest.read(IOContext(asset=asset, partition_or_window=_partition(1))) == payload
+        assert dest.read(IOContext(asset=asset, window=_partition(1).window)) == payload
 
 
 class TestPathLayout:
@@ -159,7 +159,7 @@ class TestPathLayout:
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
 
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"a": 1}])
+        dest.write(IOContext(asset=asset, window=_partition(1).window), [{"a": 1}])
 
         expected = tmp_path / asset.dataset / asset.table / "date=2024-01-01" / "data.pkl"
         assert expected.is_file()
@@ -177,10 +177,10 @@ class TestMissingData:
     def test_an_unwritten_partition_is_missing_on_its_own(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"a": 1}])
+        dest.write(IOContext(asset=asset, window=_partition(1).window), [{"a": 1}])
 
         with pytest.raises(DataNotFoundError, match="date=2024-01-02"):
-            dest.read(IOContext(asset=asset, partition_or_window=_partition(2)))
+            dest.read(IOContext(asset=asset, window=_partition(2).window))
 
 
 class TestPartitionRowCounts:
@@ -189,8 +189,8 @@ class TestPartitionRowCounts:
     def test_counts_rows_per_partition(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"v": 1}, {"v": 2}])
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(2)), [{"v": 3}])
+        dest.write(IOContext(asset=asset, window=_partition(1).window), [{"v": 1}, {"v": 2}])
+        dest.write(IOContext(asset=asset, window=_partition(2).window), [{"v": 3}])
 
         counts = dest.partition_row_counts(IOContext(asset=asset))
 
@@ -199,7 +199,7 @@ class TestPartitionRowCounts:
     def test_a_non_list_payload_counts_as_one_row(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), {"v": 1})
+        dest.write(IOContext(asset=asset, window=_partition(1).window), {"v": 1})
 
         counts = dest.partition_row_counts(IOContext(asset=asset))
 
@@ -213,7 +213,7 @@ class TestPartitionRowCounts:
     def test_the_unpartitioned_file_is_not_counted(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"v": 1}])
+        dest.write(IOContext(asset=asset, window=_partition(1).window), [{"v": 1}])
         dest.write(IOContext(asset=asset), [{"v": 9}])
 
         counts = dest.partition_row_counts(IOContext(asset=asset))
@@ -223,7 +223,7 @@ class TestPartitionRowCounts:
     def test_unrelated_and_empty_directories_are_ignored(self, tmp_path: Path):
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
-        dest.write(IOContext(asset=asset, partition_or_window=_partition(1)), [{"v": 1}])
+        dest.write(IOContext(asset=asset, window=_partition(1).window), [{"v": 1}])
         base = tmp_path / asset.dataset / asset.table
         (base / "not_a_partition").mkdir()
         (base / "date=2024-01-09").mkdir()

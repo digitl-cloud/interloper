@@ -205,7 +205,8 @@ travels inside its own source's document. See [Specs](specs.md).
 ## Reading upstream data
 
 Each leg is read from the upstream's `default_destination_key` destination, or its first, scoped
-to the partition the run consumes. `il.Upstream` carries the asset and its data, plus one accessor:
+to the window the upstream consumes, joined into one table when it covers several partitions.
+`il.Upstream` carries the asset and its data, plus one accessor:
 
 | Attribute | Meaning |
 |-----------|---------|

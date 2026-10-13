@@ -11,8 +11,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pandas as pd
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import ConfigError, DataNotFoundError
 from interloper.partitioning import PartitionConfig
 from interloper.partitioning.base import Partition
@@ -76,7 +75,7 @@ class ClickHouseDestination(DatabaseDestination):
         """Replace every partition the context covers with the data, a window as one batch.
 
         Args:
-            context: IO context carrying the target asset, the partition or window,
+            context: IO context carrying the target asset, the window,
                 and the effective schema.
             data: The data to write, in its native representation.
         """
@@ -561,8 +560,11 @@ def _predicate(where: PartitionFilter, columns: dict[str, str]) -> tuple[str, di
     """
     column = _quote(where.column)
     type_name = columns.get(where.column, STRING)
-    if where.bounds is None:
-        return f"{column} = {{value:{type_name}}}", {"value": where.value}
+    if where.values is not None:
+        names = [f"value{index}" for index in range(len(where.values))]
+        placeholders = ", ".join(f"{{{name}:{type_name}}}" for name in names)
+        return f"{column} IN ({placeholders})", dict(zip(names, where.values))
+    assert where.bounds is not None
     start, end = where.bounds
     if base_type(type_name) == STRING:
         start, end = (_iso(bound) for bound in (start, end))

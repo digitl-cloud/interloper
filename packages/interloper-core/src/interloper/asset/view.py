@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import traceback
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from interloper.asset.base import Asset
 from interloper.asset.upstream import Upstream
-from interloper.errors import ConfigError, format_exception
-from interloper.events import EventBus, EventType
-from interloper.telemetry import attributes as telemetry_attributes
-from interloper.telemetry.tracer import tracer
+from interloper.errors import ConfigError
+from interloper.events import Step, StepKind
+from interloper.partitioning import PartitionWindow
 from interloper.utils.concurrency import invoke
 
 if TYPE_CHECKING:
@@ -19,7 +17,7 @@ if TYPE_CHECKING:
     from interloper.component import Component
     from interloper.dag.base import DAG
     from interloper.destination import Destination
-    from interloper.partitioning.base import Partition, PartitionWindow
+    from interloper.partitioning import Partition
 
 
 class View(Asset):
@@ -45,14 +43,14 @@ class View(Asset):
 
     async def materialize_async(
         self,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Build the definition and create the view.
 
         Args:
-            partition_or_window: Accepted and ignored: every partition builds the same definition.
+            window: Accepted and ignored: every window builds the same definition.
             dag: DAG the upstream assets are looked up in.
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
 
@@ -61,32 +59,17 @@ class View(Asset):
         """
         if not self.enabled:
             return None
+        window = self.effective_window(PartitionWindow.of(window))
         metadata = metadata or {}
-        definition = self._definition(await self.run_async(partition_or_window, dag, metadata))
+        definition = self._definition(await self.run_async(window, dag, metadata))
         destination = self._view_destination()
-        event_metadata = self._event_metadata(metadata, partition_or_window)
-        event_metadata["destination_key"] = destination.key
-        EventBus.emit(
-            EventType.DEST_WRITE_STARTED, metadata={**event_metadata, "message": f"Creating view '{self.key}'"}
+        step = Step(
+            StepKind.DEST_WRITE,
+            self.event_metadata(metadata, window, destination_key=destination.key),
+            subject=f"view '{self.key}'",
         )
-        try:
-            span_attributes = telemetry_attributes.from_metadata(event_metadata)
-            with tracer().start_as_current_span("interloper.destination.write", attributes=span_attributes):
-                await invoke(destination.create_view, self, definition)
-            EventBus.emit(
-                EventType.DEST_WRITE_COMPLETED, metadata={**event_metadata, "message": f"Created view '{self.key}'"}
-            )
-        except Exception as error:
-            EventBus.emit(
-                EventType.DEST_WRITE_FAILED,
-                metadata={
-                    **event_metadata,
-                    "error": format_exception(error),
-                    "traceback": traceback.format_exc(),
-                    "message": f"Failed to create view '{self.key}': {format_exception(error)}",
-                },
-            )
-            raise
+        with step:
+            await invoke(destination.create_view, self, definition)
         return definition
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
@@ -174,7 +157,7 @@ class View(Asset):
         name: str,
         targets: list[Asset],
         dag: DAG | None,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> list[Upstream]:
         """Reference every upstream instead of reading it.
@@ -183,7 +166,7 @@ class View(Asset):
             name: The ``data()`` parameter the upstreams are built for.
             targets: The bound upstream assets.
             dag: Unused; a reference needs no run.
-            partition_or_window: Unused; a reference has no scope.
+            window: Unused; a reference has no scope.
             metadata: Unused.
 
         Returns:

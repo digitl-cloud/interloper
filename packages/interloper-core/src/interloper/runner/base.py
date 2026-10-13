@@ -15,7 +15,6 @@ from typing_extensions import Self
 from interloper.errors import ConfigError, PartitionError, RunnerError
 from interloper.events import Event, EventBus
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimePartitionConfig
 from interloper.registry import Registry
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
@@ -100,7 +99,7 @@ class Runner(Serializable):
     async def run(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
         """Materialize the DAG and return the result.
@@ -118,12 +117,13 @@ class Runner(Serializable):
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
 
         Returns:
             A RunResult summarizing the execution outcome.
         """
+        window = PartitionWindow.of(window)
         metadata = dict(metadata or {})
         metadata.setdefault("run_id", str(uuid.uuid4()))
         run_id = metadata["run_id"]
@@ -143,13 +143,13 @@ class Runner(Serializable):
         try:
             span_attrs = attributes.from_metadata(metadata)
             span_attrs[attributes.RUNNER_TYPE] = self.key
-            if partition_or_window is not None:
-                span_attrs[attributes.PARTITION] = str(partition_or_window)
+            if window is not None:
+                span_attrs[attributes.PARTITION] = str(window)
             with tracer().start_as_current_span(
                 "interloper.runner.run", context=parent_context, attributes=span_attrs
             ) as span:
                 inject_metadata(metadata)
-                result = await self._run(dag, partition_or_window, metadata)
+                result = await self._run(dag, window, metadata)
                 # Runners swallow asset failures into the result; surface them.
                 if result.status is ExecutionStatus.FAILED:
                     span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
@@ -164,14 +164,14 @@ class Runner(Serializable):
     async def _run(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any] | None,
     ) -> RunResult:
         """Walk the DAG and return the result (implemented by subclasses).
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
 
         Returns:
@@ -191,19 +191,19 @@ class Runner(Serializable):
     def _init_run(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any] | None,
     ) -> None:
         """Initialize run state and start the run.
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
         """
-        self._preflight_validation(dag, partition_or_window)
+        self._preflight(dag, window)
         self._state = RunState(dag, metadata=metadata)
-        self.state.start_run(partition_or_window)
+        self.state.start_run(window)
 
     def _finalize_run(
         self,
@@ -229,7 +229,7 @@ class Runner(Serializable):
         executions = self.state.end_run(status, error)
 
         return RunResult(
-            partition_or_window=self.state.partition_or_window,
+            window=self.state.window,
             status=status,
             executions=executions,
             execution_time=self.state.elapsed_time or 0,
@@ -254,51 +254,28 @@ class Runner(Serializable):
             raise info.exception
         raise RunnerError(f"Operation '{operation.key}' failed: {info.error}")
 
-    def _preflight_validation(
-        self,
-        dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None,
-    ) -> None:
-        """Run preflight validations before execution begins.
+    def _preflight(self, dag: DAG, window: PartitionWindow | None) -> None:
+        """Check the run's window against every enabled partitioned operation before anything executes.
 
-        Scope errors are raised here rather than left to the operations: a run
-        whose scope no operation can serve should fail as a whole, instead of
-        failing the offending operations while the rest of the DAG executes.
+        A run whose window no operation can serve fails as a whole, listing every failing
+        operation, instead of failing the offending operations while the rest of the DAG
+        executes.
 
         Args:
-            dag: The DAG whose operations are validated against the run scope.
-            partition_or_window: Partition or window to scope the run.
-                ``None`` means an unpartitioned run.
+            dag: The DAG whose operations are checked.
+            window: The run's window, ``None`` for an unscoped run.
 
         Raises:
-            PartitionError: If partitioned operations are run without a partition,
-                a windowed run includes operations that do not support windows, or
-                the scope disagrees with an operation's time partitioning.
+            PartitionError: If the window is not valid for at least one enabled partitioned
+                operation, naming each one with its own predicate.
         """
-        if partition_or_window is None:
-            partitioned = sorted(
-                operation.key
-                for operation in dag.operations
-                if operation.enabled and operation.partitioning is not None
-            )
-            if partitioned:
-                raise PartitionError(
-                    f"This run requires a partition or partition window. Partitioned operations: {partitioned}."
-                )
-            return
-
-        if isinstance(partition_or_window, PartitionWindow):
-            unsupported = [
-                operation.key
-                for operation in dag.operations
-                if operation.enabled and operation.partitioning is not None and not operation.partitioning.allow_window
-            ]
-            if unsupported:
-                raise PartitionError(
-                    "Windowed runs require all partitioned operations to set allow_window=True. "
-                    f"Unsupported operations: {sorted(unsupported)}."
-                )
-
+        problems: list[str] = []
         for operation in dag.operations:
-            if operation.enabled and isinstance(operation.partitioning, TimePartitionConfig):
-                operation._validate_time_partitioning(operation.partitioning, partition_or_window)
+            if not operation.enabled or operation.partitioning is None:
+                continue
+            try:
+                operation.partitioning.check(window)
+            except PartitionError as error:
+                problems.append(f"'{operation.key}' {error}")
+        if problems:
+            raise PartitionError("The run's window is not valid for every operation: " + "; ".join(problems))

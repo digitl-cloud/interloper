@@ -76,6 +76,12 @@ class TestDataFrameRepresentation:
         out = DataFrameRepresentation().filter_eq(df, "d", "2024-01-02")
         assert out["v"].tolist() == [2]
 
+    def test_concat_joins_frames_with_a_fresh_index(self):
+        frames = [pd.DataFrame({"a": [1]}), pd.DataFrame({"a": [2, 3]})]
+        joined = DataFrameRepresentation().concat(frames)
+        assert joined["a"].tolist() == [1, 2, 3]
+        assert joined.index.tolist() == [0, 1, 2]
+
 
 class TestDataFrameStrictReconcile:
     """Null-safe validation on DataFrames."""

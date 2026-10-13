@@ -177,7 +177,7 @@ class TestSignatureShapes:
     async def test_a_standalone_function_gains_a_self_parameter(self):
         @il.asset
         def standalone(context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"asset": context.asset_key}]
+            return [{"asset": context.asset.key}]
 
         import inspect
 

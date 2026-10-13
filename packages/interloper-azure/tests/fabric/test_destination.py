@@ -11,7 +11,7 @@ import interloper as il
 import pytest
 from interloper.destination import IOContext
 from interloper.errors import DataNotFoundError
-from interloper.partitioning.base import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -59,7 +59,7 @@ def daily() -> list:
     return []
 
 
-@il.asset(dataset="marts", partitioning=PartitionConfig(column="region"))
+@il.asset(dataset="marts", partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
@@ -81,7 +81,7 @@ def _destination(**overrides: Any) -> FabricWarehouseDestination:
 
 
 def _ctx(asset: Any, scope: Any = None, schema: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _parameters(warehouse, prefix: str) -> list[Any]:
@@ -232,10 +232,10 @@ class TestWriteShapes:
 
     def test_other_partition_deletes_by_equality(self, warehouse):
         warehouse.table("marts", "regional", "region", "cost")
-        _destination().write(_ctx(regional(), Partition("eu")), [{"region": "eu", "cost": 1.0}])
+        _destination().write(_ctx(regional(), ListPartition("eu")), [{"region": "eu", "cost": 1.0}])
 
         delete = next(s for s in warehouse.statements if s.sql.startswith("DELETE"))
-        assert (delete.sql, delete.parameters) == ("DELETE FROM [marts].[regional] WHERE [region] = ?", ["eu"])
+        assert (delete.sql, delete.parameters) == ("DELETE FROM [marts].[regional] WHERE [region] IN (?)", ["eu"])
 
     def test_window_deletes_each_partition_and_inserts_once(self, warehouse):
         warehouse.table("marts", "daily", "day", "cost")
@@ -415,10 +415,10 @@ class TestRead:
 
     def test_other_partition_reads_by_equality(self, warehouse):
         warehouse.table("marts", "regional", "region", "cost")
-        _destination().read(_ctx(regional(), Partition("eu")))
+        _destination().read(_ctx(regional(), ListPartition("eu")))
 
         select = warehouse.statements[-1]
-        assert (select.sql, select.parameters) == ("SELECT * FROM [marts].[regional] WHERE [region] = ?", ["eu"])
+        assert (select.sql, select.parameters) == ("SELECT * FROM [marts].[regional] WHERE [region] IN (?)", ["eu"])
 
     def test_missing_table_raises(self, warehouse):
         with pytest.raises(DataNotFoundError, match=r"Table 'marts.ads_stats' does not exist. Has the asset been"):

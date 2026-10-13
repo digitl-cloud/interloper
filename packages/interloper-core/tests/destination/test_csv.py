@@ -71,12 +71,12 @@ class TestWindowWrites:
             {"date": "2024-01-02", "v": "b"},
             {"date": "2024-01-02", "v": "c"},
         ]
-        dest.write(IOContext(asset=partitioned_asset(), partition_or_window=window), rows)
+        dest.write(IOContext(asset=partitioned_asset(), window=window), rows)
 
         part1 = TimePartition(datetime.date(2024, 1, 1))
         part2 = TimePartition(datetime.date(2024, 1, 2))
-        day1 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part1))
-        day2 = dest.read(IOContext(asset=partitioned_asset(), partition_or_window=part2))
+        day1 = dest.read(IOContext(asset=partitioned_asset(), window=part1.window))
+        day2 = dest.read(IOContext(asset=partitioned_asset(), window=part2.window))
         assert day1 == [{"date": "2024-01-01", "v": "a"}]
         assert day2 == [{"date": "2024-01-02", "v": "b"}, {"date": "2024-01-02", "v": "c"}]
 
@@ -88,6 +88,6 @@ class TestWindowWrites:
             {"date": "2024-01-02", "v": "b"},
             {"date": "2024-01-02", "v": "c"},
         ]
-        context = IOContext(asset=partitioned_asset(), partition_or_window=window)
+        context = IOContext(asset=partitioned_asset(), window=window)
         dest.write(context, rows)
         assert dest.partition_row_counts(context) == {"2024-01-01": 1, "2024-01-02": 2}

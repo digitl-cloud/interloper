@@ -28,6 +28,7 @@ from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
+    from interloper.partitioning.base import PartitionWindow
 
 
 # -- Registry ------------------------------------------------------------------
@@ -326,6 +327,39 @@ class Component(Serializable):
             Formatted string with class name, key, and id.
         """
         return f"{type(self).__name__} (key: {self.key}, id: {self.id})"
+
+    def event_metadata(
+        self,
+        metadata: Mapping[str, Any],
+        window: PartitionWindow | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Build the metadata of an event about this component.
+
+        One shape for every event: the run metadata, the component's identity, the window the
+        event is scoped to (``None`` when unscoped), the parent's id when the component has one,
+        and whatever the producer adds (a message, an error, a destination key, an attempt).
+
+        Args:
+            metadata: Run-level metadata (run id, backfill id, anything the caller passed).
+            window: The window the event is scoped to, or ``None``.
+            **extra: Producer-specific keys, written last so they win.
+
+        Returns:
+            The event metadata.
+        """
+        built: dict[str, Any] = {
+            **metadata,
+            "component_id": self.id,
+            "component_kind": self.kind,
+            "component_key": self.key,
+            "qualified_key": self.qualified_key,
+            "window": str(window) if window is not None else None,
+        }
+        if self._parent is not None:
+            built["parent_id"] = self._parent.id
+        built.update(extra)
+        return built
 
     @classmethod
     def anchor(cls) -> type[Component]:

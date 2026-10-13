@@ -172,6 +172,17 @@ class DataFrameRepresentation(Representation):
             field_definitions[str(column)] = (py_type | None if py_type is not Any else Any, None)
         return create_model("InferredSchema", __base__=Schema, **field_definitions)
 
+    def concat(self, tables: list[pd.DataFrame]) -> pd.DataFrame:
+        """Return the rows of every frame, in order, with a fresh index.
+
+        Args:
+            tables: The frames to join.
+
+        Returns:
+            One frame.
+        """
+        return pd.concat(tables, ignore_index=True)
+
 
 DATAFRAME_REPRESENTATION = DataFrameRepresentation()
 

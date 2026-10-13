@@ -128,11 +128,7 @@ class TestForecastingSnapshots:
         asset = next(a for a in _source().assets if type(a).key == "vendor_forecasting_retail_stats")
 
         def run(day: dt.date) -> list[dict[str, Any]]:
-            context = ExecutionContext(
-                asset_key=asset.key,
-                partitioning=asset.partitioning,
-                partition_or_window=il.TimePartition(value=day),
-            )
+            context = ExecutionContext(asset, il.TimePartition(value=day).window)
             return asyncio.run(asset.data(context=context))
 
         assert [r["startDate"] for r in run(dt.date(2026, 9, 13))] == ["2026-09-13", "2026-09-20"]

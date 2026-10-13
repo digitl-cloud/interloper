@@ -11,8 +11,7 @@ import pandas as pd
 import pytest
 from interloper.destination import IOContext
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import TimeGranularity
-from interloper.partitioning.base import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow, TimeGranularity
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -79,7 +78,7 @@ def hourly() -> list:
     return []
 
 
-@il.asset(dataset="marts", partitioning=PartitionConfig(column="region"))
+@il.asset(dataset="marts", partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
@@ -90,7 +89,7 @@ def _destination(**overrides: Any) -> ClickHouseDestination:
 
 
 def _ctx(asset: Any, scope: Any = None, schema: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 def _day(d: int, month: int = 1) -> datetime.date:
@@ -327,29 +326,29 @@ class TestWrite:
 
     def test_non_time_partition_replaces_by_value(self, clickhouse):
         destination = _destination()
-        destination.write(_ctx(regional(), Partition("eu"), _RegionSchema), [{"region": "eu", "cost": 1.0}])
-        destination.write(_ctx(regional(), Partition("us"), _RegionSchema), [{"region": "us", "cost": 2.0}])
-        destination.write(_ctx(regional(), Partition("eu"), _RegionSchema), [{"region": "eu", "cost": 3.0}])
+        destination.write(_ctx(regional(), ListPartition("eu"), _RegionSchema), [{"region": "eu", "cost": 1.0}])
+        destination.write(_ctx(regional(), ListPartition("us"), _RegionSchema), [{"region": "us", "cost": 2.0}])
+        destination.write(_ctx(regional(), ListPartition("eu"), _RegionSchema), [{"region": "eu", "cost": 3.0}])
 
         assert _rows(clickhouse, "SELECT region, cost FROM marts.regional") == [("eu", 3.0), ("us", 2.0)]
-        assert destination.read(_ctx(regional(), Partition("eu")))["cost"].tolist() == [3.0]
+        assert destination.read(_ctx(regional(), ListPartition("eu")))["cost"].tolist() == [3.0]
 
     def test_integer_partition_column(self, clickhouse):
         class _Shard(Schema):
             shard: int = Field(...)
             cost: float | None = Field(...)
 
-        @il.asset(dataset="marts", partitioning=PartitionConfig(column="shard"))
+        @il.asset(dataset="marts", partitioning=ListPartitionConfig(column="shard", values=("1", "2")))
         def sharded() -> list:
             return []
 
         destination = _destination()
-        destination.write(_ctx(sharded(), Partition("1"), _Shard), [{"shard": 1, "cost": 1.0}])
-        destination.write(_ctx(sharded(), Partition("2"), _Shard), [{"shard": 2, "cost": 2.0}])
-        destination.write(_ctx(sharded(), Partition("1"), _Shard), [{"shard": 1, "cost": 3.0}])
+        destination.write(_ctx(sharded(), ListPartition("1"), _Shard), [{"shard": 1, "cost": 1.0}])
+        destination.write(_ctx(sharded(), ListPartition("2"), _Shard), [{"shard": 2, "cost": 2.0}])
+        destination.write(_ctx(sharded(), ListPartition("1"), _Shard), [{"shard": 1, "cost": 3.0}])
 
         assert _rows(clickhouse, "SELECT shard, cost FROM marts.sharded") == [(1, 3.0), (2, 2.0)]
-        assert destination.read(_ctx(sharded(), Partition("2")))["cost"].tolist() == [2.0]
+        assert destination.read(_ctx(sharded(), ListPartition("2")))["cost"].tolist() == [2.0]
 
     def test_window_is_one_batch(self, clickhouse):
         window = TimePartitionWindow(_day(1), _day(3))
@@ -541,24 +540,24 @@ class TestRead:
 
     def test_non_time_partition_by_equality(self, clickhouse):
         destination = _destination()
-        destination.write(_ctx(regional(), Partition("eu"), _RegionSchema), [{"region": "eu", "cost": 1.0}])
+        destination.write(_ctx(regional(), ListPartition("eu"), _RegionSchema), [{"region": "eu", "cost": 1.0}])
 
-        destination.read(_ctx(regional(), Partition("eu")))
+        destination.read(_ctx(regional(), ListPartition("eu")))
 
         assert clickhouse.calls[-1] == (
             "query_df",
-            "SELECT * FROM `marts`.`regional` WHERE `region` = {value:String}",
-            {"value": "eu"},
+            "SELECT * FROM `marts`.`regional` WHERE `region` IN ({value0:String})",
+            {"value0": "eu"},
         )
 
-    def test_window_reads_each_partition(self, clickhouse):
+    def test_window_reads_as_one_frame(self, clickhouse):
         destination = _destination()
         window = TimePartitionWindow(_day(1), _day(2))
         destination.write(_ctx(daily(), window, _DaySchema), [{"day": _day(d), "cost": float(d)} for d in (1, 2)])
 
-        frames = destination.read(_ctx(daily(), window))
+        frame = destination.read(_ctx(daily(), window))
 
-        assert [frame["cost"].tolist() for frame in frames] == [[2.0], [1.0]]
+        assert sorted(frame["cost"].tolist()) == [1.0, 2.0]
 
     def test_missing_table_raises(self, clickhouse):
         with pytest.raises(DataNotFoundError, match=r"does not exist\. Has the asset been materialized\?"):

@@ -56,7 +56,7 @@ Pass `on_event` to the runner:
 ```py
 def report(event: il.Event) -> None:
     if event.type is il.EventType.RUN_COMPLETED:
-        print("done", event.metadata["partition_or_window"])
+        print("done", event.metadata["window"])
 
 runner = il.AsyncRunner(on_event=report)
 for partition in window:

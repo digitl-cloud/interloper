@@ -22,12 +22,14 @@ class ArrowRepresentation(Representation):
     def filter_range(self, data, column, start, end): ...      # rows where start <= column < end (ISO labels)
     def reconcile(self, data, schema, *, strict=False): ...    # the data in the schema's types; strict refuses mismatches
     def infer(self, data) -> type[il.Schema]: ...              # a Schema from the data
+    def concat(self, tables) -> pa.Table: ...                  # several tables as one, in order
 ```
 
 `filter_eq` and `filter_range` are how partitions slice data on write; `filter_range` compares
 values as ISO-8601 strings (`iso_label()`), which is what lets a date compare against a
 datetime and keeps half-open bounds exact. `to_records` and `from_records` are the conversion
-protocol: records are the hub every representation converts through. `reconcile` and `infer`
+protocol: records are the hub every representation converts through. `concat` is how a windowed
+read comes back as one table. `reconcile` and `infer`
 are what the [conform step](../guide/schema.md#the-conform-step) calls: `reconcile(strict=True)`
 under `STRICT`, `reconcile` under `RECONCILE`, `infer` when no schema is declared; `il.Schema.field_specs()` gives the type contract to map onto the
 library's dtypes, and the pandas implementation vectorizes them over columns.

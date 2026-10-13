@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from interloper.destination import IOContext
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning.base import Partition, PartitionConfig
+from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
@@ -56,7 +56,7 @@ def daily() -> list:
     return []
 
 
-@il.asset(dataset="marts", partitioning=PartitionConfig(column="region"))
+@il.asset(dataset="marts", partitioning=ListPartitionConfig(column="region", values=("eu", "us", "eu-west")))
 def regional() -> list:
     return []
 
@@ -69,7 +69,7 @@ def _destination(**overrides: Any) -> SnowflakeDestination:
 
 
 def _ctx(asset: Any, scope: Any = None, schema: Any = None) -> IOContext:
-    return IOContext(asset=asset, partition_or_window=scope, schema=schema)
+    return IOContext(asset=asset, window=PartitionWindow.of(scope), schema=schema)
 
 
 REF = '"ANALYTICS"."marts"'
@@ -311,11 +311,11 @@ class TestWrite:
 
     def test_non_time_partition_deletes_by_equality(self, session):
         session.tables.add(("marts", "regional"))
-        _destination().write(_ctx(regional(), Partition("eu")), [{"region": "eu", "cost": 1.0}])
+        _destination().write(_ctx(regional(), ListPartition("eu")), [{"region": "eu", "cost": 1.0}])
 
         assert [sql.split(" ")[0] for sql in session.sql] == ["CREATE", "PUT", "BEGIN", "DELETE", "COPY", "COMMIT"]
         delete = next(s for s in session.statements if s[0].startswith("DELETE"))
-        assert delete == (f'DELETE FROM {REF}."regional" WHERE "region" = %s', ("eu",))
+        assert delete == (f'DELETE FROM {REF}."regional" WHERE "region" IN (%s)', ("eu",))
 
     def test_window_is_one_batch(self, session):
         session.tables.add(("marts", "daily"))

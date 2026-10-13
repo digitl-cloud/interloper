@@ -89,8 +89,8 @@ class ConnectionCheckError(InterloperError):
 # -- Partitioning --------------------------------------------------------------
 
 
-class PartitionError(InterloperError, ValueError):
-    """An error related to partitioning configuration or constraints."""
+class PartitionError(ConfigError):
+    """A partitioning declaration, a partition key or a run's window is invalid."""
 
 
 # -- Schema / Normalizer -------------------------------------------------------

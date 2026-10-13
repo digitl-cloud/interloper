@@ -14,7 +14,7 @@ from pydantic import PrivateAttr
 import interloper as il
 from interloper.errors import PartitionError, RunnerError
 from interloper.operation.base import Operation, OperationContext, OperationResult
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import PartitionWindow
 from interloper.runner.results import ExecutionStatus
 from interloper.runner.sync_runner import SyncRunner
 
@@ -56,13 +56,13 @@ class ThreadRunner(SyncRunner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> Future[Any]:
         """Run the operation on the pool.
 
         Args:
             operation: The operation to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
 
         Returns:
             A future resolving to the operation's :class:`OperationResult`.
@@ -78,7 +78,7 @@ class ThreadRunner(SyncRunner):
             lambda: asyncio.run(
                 operation.execute(
                     OperationContext(
-                        partition_or_window=operation.effective_partition(partition_or_window),
+                        window=operation.effective_window(window),
                         dag=self.state.dag,
                         metadata=self.state.metadata,
                     )
@@ -408,7 +408,7 @@ class TestSubmissionContract:
 
         dag = il.DAG(daily(id="daily", destinations=[_memory()]))
 
-        with pytest.raises(PartitionError, match="requires a partition"):
+        with pytest.raises(PartitionError, match="'daily' is partitioned, but the run was given no window"):
             il.run(ThreadRunner().run(dag))
 
     def test_an_operation_still_listed_as_ready_is_not_submitted_twice(self) -> None:
@@ -425,13 +425,13 @@ class TestSubmissionContract:
             def _submit_operation(
                 self,
                 operation: Operation,
-                partition_or_window: Partition | PartitionWindow | None,
+                window: PartitionWindow | None,
             ) -> Future[Any]:
                 """Submit without transitioning the operation out of ``ready``.
 
                 Args:
                     operation: The operation to execute.
-                    partition_or_window: Partition or window to scope the run.
+                    window: Partition or window to scope the run.
 
                 Returns:
                     The submitted future.
@@ -442,7 +442,7 @@ class TestSubmissionContract:
                     lambda: asyncio.run(
                         operation.execute(
                             OperationContext(
-                                partition_or_window=operation.effective_partition(partition_or_window),
+                                window=operation.effective_window(window),
                                 dag=self.state.dag,
                                 metadata=self.state.metadata,
                             )

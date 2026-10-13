@@ -14,7 +14,7 @@ class TestFromMetadata:
                 "component_id": "a1",
                 "component_key": "orders",
                 "qualified_key": "shop.orders",
-                "partition_or_window": "2026-07-01",
+                "window": "2026-07-01",
                 "parent_id": "s1",
             }
         )

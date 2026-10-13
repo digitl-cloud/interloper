@@ -66,11 +66,7 @@ def _serving(body: dict[str, Any], urls: list[httpx2.URL] | None = None) -> Any:
 
 async def _run(source: Any, key: str, day: dt.date = DAY) -> list[dict[str, Any]]:
     asset = _asset(source, key)
-    context = ExecutionContext(
-        asset_key=asset.key,
-        partitioning=asset.partitioning,
-        partition_or_window=il.TimePartition(value=day),
-    )
+    context = ExecutionContext(asset, il.TimePartition(value=day).window)
     return await asset.data(context=context)
 
 

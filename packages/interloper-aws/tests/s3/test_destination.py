@@ -159,7 +159,7 @@ class TestThroughTheBase:
             {"id": 2, "cost": 2.5, "day": datetime.date(2024, 1, 1)},
             {"id": 3, "cost": None, "day": datetime.date(2024, 1, 2)},
         ]
-        dest.write(IOContext(asset=partitioned_asset(), partition_or_window=window, schema=_RowSchema), rows)
+        dest.write(IOContext(asset=partitioned_asset(), window=window, schema=_RowSchema), rows)
 
         assert sorted(key for _, key in s3.objects) == [
             f"lake/partitioned_asset/day=2024-01-01/data.{fmt}",
@@ -170,7 +170,7 @@ class TestThroughTheBase:
         }
 
         partition = il.TimePartition(datetime.date(2024, 1, 1))
-        assert dest.read(IOContext(asset=partitioned_asset(), partition_or_window=partition, schema=_RowSchema)) == [
+        assert dest.read(IOContext(asset=partitioned_asset(), window=partition.window, schema=_RowSchema)) == [
             rows[0],
             rows[1],
         ]

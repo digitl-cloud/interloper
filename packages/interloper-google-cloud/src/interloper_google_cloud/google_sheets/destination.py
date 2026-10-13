@@ -16,10 +16,8 @@ import google.auth
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
-from interloper.destination import IOContext, destination
-from interloper.destination.database import DatabaseDestination, PartitionFilter
+from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import Partition
 from interloper.representation import Representation
 from interloper.resource.fields import InputField
 from interloper.rest import RESTClient
@@ -318,21 +316,20 @@ class GoogleSheetsDestination(DatabaseDestination):
             if where is None or _matches(header, row, where)
         ]
 
-    def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
-        """Load one partition, restoring the schema's types when the context carries one.
+    def read(self, context: IOContext) -> list[dict[str, Any]]:
+        """Load the rows the context covers, restoring the schema's types when the context carries one.
 
         Dates and decimals are stored as strings and nested values as JSON,
         so rows are reconciled against ``context.schema`` (JSON cells decoded
         first) rather than handed back as Sheets holds them.
 
         Args:
-            context: IO context carrying the asset and the effective schema.
-            partition: The partition to load, or ``None`` for the whole table.
+            context: IO context carrying the asset, the window and the effective schema.
 
         Returns:
-            The partition's rows.
+            The rows the window covers.
         """
-        rows = super().read_partition(context, partition)
+        rows = super().read(context)
         if context.schema is None:
             return rows
         specs = context.schema.field_specs()
@@ -449,8 +446,9 @@ def _matches(header: list[Any], row: list[Any], where: PartitionFilter) -> bool:
         return False
     index = header.index(where.column)
     cell = _text(row[index] if index < len(row) else "")
-    if where.bounds is None:
-        return cell == _text(_cell(where.value))
+    if where.values is not None:
+        return cell in {_text(_cell(value)) for value in where.values}
+    assert where.bounds is not None
     start, end = where.bounds
     return _text(_cell(start)) <= cell < _text(_cell(end))
 

@@ -982,3 +982,33 @@ class TestPublicApi:
     def test_retired_names_are_gone(self) -> None:
         for retired in ("Dependency", "RelationDefinition", "ResourceRef", "AssetIdentity"):
             assert not hasattr(il, retired)
+
+
+class TestEventMetadata:
+    """One builder for every event's metadata."""
+
+    def test_carries_identity_run_metadata_and_window(self):
+        import datetime as dt
+
+        from interloper.partitioning import TimePartition
+
+        component = FakeComponent(id="c1")
+        built = component.event_metadata({"run_id": "r1"}, TimePartition(dt.date(2026, 1, 1)).window, attempt=2)
+        assert built == {
+            "run_id": "r1",
+            "component_id": "c1",
+            "component_kind": FakeComponent.kind,
+            "component_key": FakeComponent.key,
+            "qualified_key": FakeComponent.key,
+            "window": "2026-01-01",
+            "attempt": 2,
+        }
+
+    def test_window_is_none_when_unscoped_and_parent_id_only_with_a_parent(self):
+        component = FakeComponent(id="c1")
+        assert component.event_metadata({})["window"] is None
+        assert "parent_id" not in component.event_metadata({})
+        parent = FakeComponent(id="p1")
+        component.parent = parent
+        assert component.event_metadata({})["parent_id"] == "p1"
+        assert component.event_metadata({})["qualified_key"] == f"{FakeComponent.key}.{FakeComponent.key}"

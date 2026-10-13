@@ -35,6 +35,9 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider, RefreshTokenResponse
 from interloper.operation import Operation, OperationContext, OperationResult, Workload
 from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    ListPartitionWindow,
     Partition,
     PartitionConfig,
     PartitionWindow,
@@ -118,6 +121,9 @@ __all__ = [
     "Job",
     "JobState",
     "JsonField",
+    "ListPartition",
+    "ListPartitionConfig",
+    "ListPartitionWindow",
     "MaterializationStrategy",
     "Maturity",
     "MemoryDestination",

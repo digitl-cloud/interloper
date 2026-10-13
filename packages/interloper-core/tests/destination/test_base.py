@@ -12,7 +12,7 @@ import pytest
 import interloper as il
 from interloper.destination import IOContext
 from interloper.errors import ConfigError
-from interloper.partitioning.base import Partition
+from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.partitioning.time import TimePartition, TimePartitionWindow
 
 
@@ -129,8 +129,8 @@ def plain_asset() -> list:  # noqa: D103
     return []
 
 
-def io_context(asset: il.Asset, partition_or_window=None) -> IOContext:  # noqa: D103
-    return IOContext(asset=asset, partition_or_window=partition_or_window)
+def io_context(asset: il.Asset, window=None) -> IOContext:  # noqa: D103
+    return IOContext(asset=asset, window=PartitionWindow.of(window))
 
 
 class TestWriteDispatch:
@@ -196,7 +196,7 @@ class TestWriteDispatch:
         from interloper.errors import RepresentationError
 
         destination = RecordingPartitions(id="d")
-        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 1))
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
         with pytest.raises(RepresentationError, match="object"):
             destination.write(io_context(partitioned_asset(), window), object())
         assert destination.calls == []
@@ -213,10 +213,37 @@ class TestReadDispatch:
         result = RecordingPartitions(id="d").read(io_context(partitioned_asset(), partition))
         assert result == {"partition": "2024-01-02"}
 
-    def test_window_read_returns_one_result_per_partition(self):
-        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 1, 2))
-        result = RecordingPartitions(id="d").read(io_context(partitioned_asset(), window))
-        assert {r["partition"] for r in result} == {"2024-01-01", "2024-01-02"}
+    def test_window_read_returns_one_table_in_window_order(self):
+        il.MemoryDestination.clear()
+        destination = il.MemoryDestination()
+        asset = partitioned_asset()
+        for day in (7, 8, 9):
+            partition = TimePartition(datetime.date(2026, 9, day))
+            destination.write(IOContext(asset=asset, window=partition.window), [{"date": f"2026-09-0{day}"}])
+        window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 9))
+
+        assert destination.read(IOContext(asset=asset, window=window)) == [
+            {"date": "2026-09-07"},
+            {"date": "2026-09-08"},
+            {"date": "2026-09-09"},
+        ]
+
+    def test_a_window_of_non_tabular_data_is_an_error(self):
+        from interloper.errors import RepresentationError
+
+        class Opaque(il.Destination):
+            def write_partition(self, context, partition, data):
+                return None
+
+            def read_partition(self, context, partition):
+                return object()
+
+            def partition_row_counts(self, context):
+                return {}
+
+        window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 8))
+        with pytest.raises(RepresentationError, match="object"):
+            Opaque().read(IOContext(asset=partitioned_asset(), window=window))
 
 
 class TestHookContract:

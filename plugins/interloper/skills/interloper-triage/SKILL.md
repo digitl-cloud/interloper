@@ -18,7 +18,7 @@ Reference: https://docs.interloper.dev/reference/events/
 1. **Get the events.** `interloper run ... --events json` streams one JSON object per line; the
    platform's run detail page shows the same stream (filter "errors"). Rows are flat: `event_id`,
    `type`, `timestamp`, `run_id`, `component_id`, `component_kind`, `component_key`,
-   `partition_or_window`, `message`, plus `error` and `traceback` on failure rows only (absent,
+   `window`, `message`, plus `error` and `traceback` on failure rows only (absent,
    not null, elsewhere); `asset_data_*` and `dest_*` rows add `qualified_key` (`source.asset`).
    In Python the same keys sit in `event.metadata`. The CLI prints `asset_data_*` and `dest_*`
    events only with `-v`; confirm the capture level before reading their absence as evidence.
@@ -69,7 +69,7 @@ Reference: https://docs.interloper.dev/reference/events/
 |----------|---------------|
 | Which assets never ran | `operation_canceled` rows; `RunResult.canceled_ids` |
 | Was anything written | `dest_write_completed` rows (`-v` on the CLI); none means no destination or the failure came first |
-| Which partition | `partition_or_window` (`2026-01-15`, `2026-05-01:2026-08-01` for a window) |
+| Which partition | `window` (`2026-01-15`, `2026-05-01..2026-08-01` for a window of several partitions) |
 | Run outcome in Python | `result.status`, `result.failed_ids`, `result.canceled_ids`, or `result.executions` (dict of operation id to `component_key`, `status`, `error`, `traceback`) |
 
 ## Common mistakes

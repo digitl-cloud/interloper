@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from interloper.errors import RunnerError, format_exception
 from interloper.operation.base import Operation, OperationResult
-from interloper.partitioning.base import Partition, PartitionWindow
+from interloper.partitioning.base import PartitionWindow
 from interloper.runner.base import Runner
 from interloper.runner.results import RunResult
 
@@ -37,32 +37,32 @@ class SyncRunner(Runner):
     async def _run(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
         metadata: dict[str, Any] | None,
     ) -> RunResult:
         """Offload the blocking DAG walk to a worker thread.
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
 
         Returns:
             A RunResult summarizing the execution outcome.
         """
-        return await asyncio.to_thread(self._run_blocking, dag, partition_or_window, metadata)
+        return await asyncio.to_thread(self._run_blocking, dag, window, metadata)
 
     def _run_blocking(
         self,
         dag: DAG,
-        partition_or_window: Partition | PartitionWindow | None = None,
+        window: PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
         """Execute the DAG by dynamically scheduling ready operations.
 
         Args:
             dag: The DAG to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
             metadata: Arbitrary metadata (e.g. run_id, backfill_id).
 
         Returns:
@@ -75,7 +75,7 @@ class SyncRunner(Runner):
         Raises:
             RunnerError: If a deadlock or invalid DAG state is detected.
         """
-        self._init_run(dag, partition_or_window, metadata)
+        self._init_run(dag, window, metadata)
         inflight: dict[Future[Any], Operation] = {}
 
         try:
@@ -89,7 +89,7 @@ class SyncRunner(Runner):
                         break
                     if operation.id in submitted_ids:
                         continue
-                    handle = self._submit_operation(operation, partition_or_window)
+                    handle = self._submit_operation(operation, window)
                     inflight[handle] = operation
 
                 if not inflight:
@@ -141,13 +141,13 @@ class SyncRunner(Runner):
     def _submit_operation(
         self,
         operation: Operation,
-        partition_or_window: Partition | PartitionWindow | None,
+        window: PartitionWindow | None,
     ) -> Future[Any]:
         """Submit an operation for execution and return a Future.
 
         Args:
             operation: The operation to execute.
-            partition_or_window: Partition or window to scope the run.
+            window: Partition or window to scope the run.
 
         Returns:
             A Future resolving when the operation's execution finishes.

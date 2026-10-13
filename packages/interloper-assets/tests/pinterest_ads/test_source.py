@@ -52,11 +52,7 @@ def _child(key: str) -> Any:
 
 async def _run(source: Any, key: str) -> list[dict[str, Any]]:
     asset = next(a for a in source.assets if type(a).key == key)
-    context = il.ExecutionContext(
-        asset_key=asset.key,
-        partitioning=asset.partitioning,
-        partition_or_window=il.TimePartition(value=DAY),
-    )
+    context = il.ExecutionContext(asset, il.TimePartition(value=DAY).window)
     return await asset.data(context=context)
 
 
