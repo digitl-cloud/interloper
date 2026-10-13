@@ -292,6 +292,8 @@
       
         
       
+        
+      
     
     
     
@@ -595,6 +597,8 @@
       
         
       
+        
+      
     
     
     
@@ -734,6 +738,33 @@
     
   
   Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
 
     
   </span>
@@ -2869,10 +2900,9 @@ ever parents an asset, so the cast is safe.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The physical table (or leaf) name this asset materializes to.</p>
-<p>Derived, never stored: the owning source composes it (see
-<code>asset_table</code>) and the result is
-coerced to a valid identifier. Standalone assets use their class key.</p>
+        <p>The physical table (or leaf) name this asset materializes to, or refers to.</p>
+<p>Named by the owning source (see <code>Source.table</code>); a standalone asset
+uses its class key.</p>
 
     </div>
 
@@ -4196,7 +4226,9 @@ where the destination looks (no table or object for that
 partition at all); a <code>LOG</code> warning names the leg. An existing
 but empty partition is not this case: it arrives as whatever the
 destination returns for an empty read (an empty list or frame),
-not <code>None</code>.</p>
+not <code>None</code>. For a view, the destination's reference to the
+upstream (a <code>TableReference</code> on a SQL warehouse) rather than
+data: a view reads nothing.</p>
               </div>
             </td>
           </tr>

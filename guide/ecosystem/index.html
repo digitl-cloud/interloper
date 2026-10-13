@@ -294,6 +294,8 @@
       
         
       
+        
+      
     
     
     
@@ -597,6 +599,8 @@
       
         
       
+        
+      
     
     
     
@@ -739,6 +743,33 @@
     
   
   Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
 
     
   </span>
@@ -2356,6 +2387,8 @@
       
         
       
+        
+      
     
     
     
@@ -2423,7 +2456,7 @@ own README. All are versioned and released together.</p>
 </tr>
 <tr>
 <td><code>interloper-core[sql]</code></td>
-<td>Pulls in <code>interloper-sql</code>.</td>
+<td>Pulls in <code>interloper-sql[postgres]</code>: the SQL destination with its PostgreSQL driver.</td>
 </tr>
 <tr>
 <td><code>interloper-core[snowflake]</code></td>
@@ -2481,7 +2514,7 @@ own README. All are versioned and released together.</p>
 </tr>
 <tr>
 <td><code>interloper-sql</code></td>
-<td><code>SQLConnection</code>, <code>SQLDestination</code>: a <code>DatabaseDestination</code> over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg out of the box, any other SQLAlchemy dialect whose driver is installed.</td>
+<td><code>IbisView</code>, <code>ibis_view</code>, <code>union</code>: portable views authored as Ibis expressions, compiled for the destination's dialect. With the <code>postgres</code> extra, <code>SQLConnection</code> and <code>SQLDestination</code>: a <code>DatabaseDestination</code> over SQLAlchemy Core, one table per asset with datasets as SQL schemas; PostgreSQL through psycopg, any other SQLAlchemy dialect whose driver is installed.</td>
 <td><code>interloper.components</code></td>
 </tr>
 <tr>

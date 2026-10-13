@@ -294,6 +294,8 @@
       
         
       
+        
+      
     
     
     
@@ -548,6 +550,8 @@
   
     
     
+      
+        
       
         
       
@@ -925,6 +929,33 @@
     
   
   Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
 
     
   </span>
@@ -2462,6 +2493,8 @@
       
         
       
+        
+      
     
     
     
@@ -2631,14 +2664,15 @@ source's own asset instances. Anything reaching outside the source is left to th
 <a href="../dependencies/#how-wiring-works">DAG</a>.</p>
 <h2 id="dataset-and-table-naming">Dataset and table naming<a class="headerlink" href="#dataset-and-table-naming" title="Permanent link">&para;</a></h2>
 <p>Every asset materializes into <code>dataset.table</code>. The dataset is the source's <code>dataset</code> (or key).
-The table is computed by <code>Source.asset_table()</code>:</p>
+The table is computed by <code>Source.table()</code>:</p>
 <ul>
 <li>Without a discriminator: the asset key (<code>campaigns</code>).</li>
 <li>With a discriminator: <code>{asset_key}__{discriminator}</code> (<code>campaigns__act_123</code>), so several
   instances of one source land side by side in one dataset.</li>
+<li>A reference's <code>table</code> as written, with the source's fields filled in.</li>
 </ul>
-<p>Override <code>asset_table()</code> for another convention. The result is coerced to a valid identifier
-(lowercase letters, digits, underscores).</p>
+<p>The default is coerced to a valid identifier (lowercase letters, digits, underscores). Override
+<code>table()</code> for another convention; its result is validated when the source resolves its assets.</p>
 <h3 id="the-discriminator">The discriminator<a class="headerlink" href="#the-discriminator" title="Permanent link">&para;</a></h3>
 <p>One configuration field may be marked <code>discriminator=True</code>. Its value is what distinguishes
 instances of the same source: an ad account, a site URL, a property id. It drives the derived

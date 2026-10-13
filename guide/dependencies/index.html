@@ -18,7 +18,7 @@
         <link rel="prev" href="../decorators/">
       
       
-        <link rel="next" href="../resources/">
+        <link rel="next" href="../views/">
       
       
         
@@ -245,6 +245,8 @@
   
     
       
+      
+        
       
         
       
@@ -597,6 +599,8 @@
       
         
       
+        
+      
     
     
     
@@ -887,6 +891,33 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2417,6 +2448,8 @@
       
         
       
+        
+      
     
     
     
@@ -2655,6 +2688,7 @@ to the partition the run consumes. <code>il.Upstream</code> carries the asset an
 </tr>
 </tbody>
 </table>
+<p>A view's upstreams are not read at all: <code>data</code> holds the destination's reference to the upstream instead. See <a href="../views/">Views &amp; references</a>.</p>
 <p><code>data</code> is <code>None</code>, with a <code>LOG</code> warning naming the leg, when the upstream has nothing
 materialized where the destination looks: no table or object for that scope at all
 (<code>MemoryDestination</code> and the file destinations key storage per partition, so a missing partition
@@ -2788,13 +2822,13 @@ along those edges. A source offers the same idea over its own assets through <co
         
         
           
-          <a href="../resources/" class="md-footer__link md-footer__link--next" aria-label="Next: Resources &amp; configs">
+          <a href="../views/" class="md-footer__link md-footer__link--next" aria-label="Next: Views &amp; references">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Resources & configs
+                Views & references
               </div>
             </div>
             <div class="md-footer__button md-icon">

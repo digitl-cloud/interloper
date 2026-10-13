@@ -292,6 +292,8 @@
       
         
       
+        
+      
     
     
     
@@ -595,6 +597,8 @@
       
         
       
+        
+      
     
     
     
@@ -734,6 +738,33 @@
     
   
   Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
 
     
   </span>
@@ -1959,10 +1990,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Source.asset_table" class="md-nav__link">
+  <a href="#interloper.Source.table" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;asset_table
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;table
       </span>
     </span>
   </a>
@@ -1996,6 +2027,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;asset_def
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Source.format" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;format
       </span>
     </span>
   </a>
@@ -2896,26 +2938,28 @@ source holds trickles, so the name itself is not read.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="interloper.Source.asset_table" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">asset_table</span>
+<h3 id="interloper.Source.table" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">table</span>
 
 
-<a href="#interloper.Source.asset_table" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">asset_table</span><span class="p">(</span><span class="n">asset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="../assets/#interloper.Asset">Asset</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
+<a href="#interloper.Source.table" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">table</span><span class="p">(</span><span class="n">asset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="../assets/#interloper.Asset">Asset</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Physical table name for one of this source's assets.</p>
-<p>Defaults to suffixing the asset key with the instance's
-<code>discriminator</code> (the config
-field marked <code>discriminator=True</code>), so instances of a multi-account
-source materialize side by side in one dataset instead of overwriting
-each other's data. Without a discriminator the asset key is used as-is.</p>
-<p>Override for full control over the composition; keep the
-<code>{asset.key}__{suffix}</code> shape so tables stay wildcard-queryable per
-asset. The return value is coerced to a valid identifier by
-<code>Asset.table</code>.</p>
+        <p>The physical table name of one of this source's assets.</p>
+<p>A reference's table is its <code>table_name</code> as written, with this
+source's fields filled in by <code>format</code>. Any other asset's is the asset
+key suffixed with the instance's <code>discriminator</code> (the config field
+marked <code>discriminator=True</code>) and coerced to a valid identifier, so
+instances of a multi-account source materialize side by side in one
+dataset instead of overwriting each other's data. Without a
+discriminator the asset key is used as-is.</p>
+<p>Override for another composition; keep the <code>{asset.key}__{suffix}</code>
+shape so tables stay wildcard-queryable per asset, leave references
+to <code>super()</code>, and return a valid identifier: the result is
+validated when the source resolves its assets, not coerced.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2938,7 +2982,7 @@ asset. The return value is coerced to a valid identifier by
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The asset to name a table for; only its <code>key</code> is read.</p>
+                <p>The asset to name a table for.</p>
               </div>
             </td>
             <td>
@@ -3171,6 +3215,106 @@ so callers can use <code>.qualified_key</code> for cross-source references:</p>
             <td>
               <div class="doc-md-description">
                 <p>If no asset matches the key.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Source.format" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">format</span>
+
+
+<a href="#interloper.Source.format" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">format</span><span class="p">(</span><span class="n">template</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Fill a location template with this source's fields.</p>
+<p>An asset's <code>dataset</code> and a reference's <code>table</code> may name a field of
+the source in braces (<code>"analytics_{property_id}"</code>), which is how a
+declaration written once in the class body varies per instance.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>template</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A table or dataset name, possibly with <code>{field}</code> placeholders.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The name with every placeholder filled.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ConfigError&lt;/span&gt;" href="../errors/#interloper.errors.ConfigError">ConfigError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the template names something that is not a field of this source.</p>
               </div>
             </td>
           </tr>
