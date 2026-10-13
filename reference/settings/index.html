@@ -1837,6 +1837,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#log" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>log</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#catalog" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2574,7 +2585,7 @@
 </tbody>
 </table>
 <h3 id="otel"><code>otel</code><a class="headerlink" href="#otel" title="Permanent link">&para;</a></h3>
-<p>OpenTelemetry settings: OTLP traces, metrics and logs. Prefix <code>INTERLOPER_OTEL_</code>.</p>
+<p>OpenTelemetry settings: OTLP traces and metrics. Prefix <code>INTERLOPER_OTEL_</code>.</p>
 <table>
 <thead>
 <tr>
@@ -2628,12 +2639,6 @@
 <td>Export metrics.</td>
 </tr>
 <tr>
-<td><code>logs</code></td>
-<td><code>bool</code></td>
-<td><code>True</code></td>
-<td>Export the standard <code>logging</code> records, with their trace context.</td>
-</tr>
-<tr>
 <td><code>sample_ratio</code></td>
 <td><code>float</code></td>
 <td><code>1.0</code></td>
@@ -2644,6 +2649,26 @@
 <td><code>int</code></td>
 <td><code>60</code></td>
 <td>Seconds between metric exports.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="log"><code>log</code><a class="headerlink" href="#log" title="Permanent link">&para;</a></h3>
+<p>How the commands write their log records to stderr. Prefix <code>INTERLOPER_LOG_</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code></td>
+<td><code>Literal['text', 'json']</code></td>
+<td><code>'text'</code></td>
+<td><code>text</code> for a terminal; <code>json</code> writes one object per line with the record's trace and span ids, for a log collector to parse.</td>
 </tr>
 </tbody>
 </table>

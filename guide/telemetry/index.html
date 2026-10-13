@@ -2524,10 +2524,10 @@
 
 
 <h1 id="telemetry">Telemetry<a class="headerlink" href="#telemetry" title="Permanent link">&para;</a></h1>
-<p>Interloper exports OpenTelemetry <strong>traces</strong>, <strong>metrics</strong> and <strong>logs</strong> over OTLP: one trace per
-run, from the runner through every operation, <code>data()</code> call and destination read or write,
-across process boundaries; counters and duration histograms derived from the event bus; and the
-standard <code>logging</code> records, each carrying the trace it was written under.</p>
+<p>Interloper exports OpenTelemetry <strong>traces</strong> and <strong>metrics</strong> over OTLP: one trace per run, from
+the runner through every operation, <code>data()</code> call and destination read or write, across
+process boundaries; plus counters and duration histograms derived from the event bus. Logs go
+to stderr, where a collector picks them up, carrying the trace they were written under.</p>
 <p>Telemetry is off by default and costs nothing when disabled: the core depends only on the no-op
 <code>opentelemetry-api</code>. The SDK and exporters ship in the <code>otel</code> extra.</p>
 <h2 id="enabling">Enabling<a class="headerlink" href="#enabling" title="Permanent link">&para;</a></h2>
@@ -2587,7 +2587,7 @@ data plane down. <code>force_flush()</code> flushes without shutting down, for r
 <td>The <code>service.name</code> resource attribute.</td>
 </tr>
 <tr>
-<td><code>traces</code>, <code>metrics</code>, <code>logs</code></td>
+<td><code>traces</code>, <code>metrics</code></td>
 <td><code>true</code></td>
 <td>Signal toggles.</td>
 </tr>
@@ -2751,19 +2751,24 @@ counter start timestamps survive, and <code>metric_expiration</code> raised well
 counters keep publishing. The accumulated totals live in the collector; restarting it resets
 them. A worked collector and Grafana setup is in the repository under <code>examples/telemetry</code>.</p>
 <h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
-<p>With <code>logs</code> on, a handler on the root logger ships every record the process emits, at the
-level the process already logs at, through the same OTLP endpoint. Records written inside a
-span carry its trace and span ids, so a log line in Grafana links to the trace it belongs to
-and a trace to the lines written during it. The collector needs a <code>logs</code> pipeline; without one
-the exporter reports the refused batches and the records still reach the process's own
-handlers.</p>
+<p>The commands write their log records to stderr; they are not exported over OTLP. Shipping them
+is the job of whatever collects the container's output, typically an OpenTelemetry Collector
+reading the node's pod logs with the <code>filelog</code> receiver.</p>
+<p>With <code>log.format</code> set to <code>json</code> (<code>INTERLOPER_LOG_FORMAT=json</code>), each record is one JSON object
+per line:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span><span class="nt">"timestamp"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2026-10-13T12:00:00.123456+00:00"</span><span class="p">,</span><span class="w"> </span><span class="nt">"severity"</span><span class="p">:</span><span class="w"> </span><span class="s2">"INFO"</span><span class="p">,</span><span class="w"> </span><span class="nt">"logger"</span><span class="p">:</span><span class="w"> </span><span class="s2">"interloper_scheduler.queue"</span><span class="p">,</span><span class="w"> </span><span class="nt">"message"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Launching run 537b6608-..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"trace_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"4bf92f3577b34da6a3ce929d0e0e4736"</span><span class="p">,</span><span class="w"> </span><span class="nt">"span_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"00f067aa0ba902b7"</span><span class="p">}</span>
+</span></code></pre></div>
+<p><code>trace_id</code> and <code>span_id</code> are present when the record is written inside a span, so a collector
+can lift them onto the log record and link each line to its trace. A record with an exception
+carries the formatted traceback in <code>exception</code>. The default, <code>text</code>, is the human-readable line
+for a terminal.</p>
 <h2 id="custom-instrumentation">Custom instrumentation<a class="headerlink" href="#custom-instrumentation" title="Permanent link">&para;</a></h2>
 <p><code>tracer()</code> and <code>meter()</code> from <code>interloper.telemetry</code> return the framework's tracer and meter,
 no-op until the SDK is initialized:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.telemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">tracer</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">with</span> <span class="n">tracer</span><span class="p">()</span><span class="o">.</span><span class="n">start_as_current_span</span><span class="p">(</span><span class="s2">"shop.fetch_report"</span><span class="p">,</span> <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"shop.account"</span><span class="p">:</span> <span class="n">account_id</span><span class="p">}):</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="o">...</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.telemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">tracer</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">with</span> <span class="n">tracer</span><span class="p">()</span><span class="o">.</span><span class="n">start_as_current_span</span><span class="p">(</span><span class="s2">"shop.fetch_report"</span><span class="p">,</span> <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"shop.account"</span><span class="p">:</span> <span class="n">account_id</span><span class="p">}):</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <p><code>interloper.telemetry.attributes.from_metadata(metadata)</code> maps event-style metadata onto the
 <code>interloper.*</code> attribute names. The spans, attributes and instruments are listed below.</p>
