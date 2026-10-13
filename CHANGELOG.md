@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v0.112.0 (2026-10-13)
+
+### Bug Fixes
+
+- **cli**: Keep console logging when telemetry exports logs
+  ([`e78c261`](https://github.com/digitl-cloud/interloper/commit/e78c2611a31b0960439c92778eeea2b7dffcccfd))
+
+### Refactoring
+
+- **core**: Write logs to stderr only, as JSON with trace ids when asked
+  ([`23d9597`](https://github.com/digitl-cloud/interloper/commit/23d95970669ad1e0611db9dc0c91166351f3c9fb))
+
+### Breaking Changes
+
+- **core**: The `otel.logs` setting (`INTERLOPER_OTEL_LOGS`) is removed; settings reject the unknown
+  key.
+
+
 ## v0.111.0 (2026-10-13)
 
 ### Bug Fixes
