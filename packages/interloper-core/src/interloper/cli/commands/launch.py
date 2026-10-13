@@ -54,9 +54,10 @@ def _cmd_launch(args: argparse.Namespace) -> None:
     from interloper.runner import Runner
     from interloper.settings import AppSettings
 
-    configure_console_logging(logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s")
-
     settings = AppSettings.get()
+    configure_console_logging(
+        logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+    )
 
     from interloper_db import Store
 

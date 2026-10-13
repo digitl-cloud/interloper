@@ -87,7 +87,34 @@ class ConsoleEventHandler:
         created = event.timestamp.timestamp()
         record.created = created
         record.msecs = (created - int(created)) * 1000
+        # Likewise the trace: the worker thread has no current span, so the
+        # record takes the run's, which the runner puts on every event.
+        if span := self._span(event):
+            record.trace_id, record.span_id = span
         self._logger.handle(record)
+
+    @staticmethod
+    def _span(event: Event) -> tuple[str, str] | None:
+        """The trace and span ids of the run that emitted *event*.
+
+        Args:
+            event: The event, whose metadata carries the run's ``traceparent``
+                when telemetry was on while it ran.
+
+        Returns:
+            The hex trace and span ids, or ``None`` without a valid traceparent.
+        """
+        from opentelemetry import trace
+
+        from interloper.telemetry.propagation import extract_metadata
+
+        context = extract_metadata(event.metadata)
+        if context is None:
+            return None
+        span = trace.get_current_span(context).get_span_context()
+        if not span.is_valid:
+            return None
+        return trace.format_trace_id(span.trace_id), trace.format_span_id(span.span_id)
 
     @staticmethod
     def _level(event: Event) -> int:

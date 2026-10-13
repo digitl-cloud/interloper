@@ -13,7 +13,7 @@ the documentation site renders, so it is user-facing copy.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, ClassVar
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import (
@@ -45,7 +45,7 @@ class RunnerSettings(BaseSettings):
 
 
 class TelemetrySettings(BaseSettings):
-    """OpenTelemetry settings: OTLP traces, metrics and logs.
+    """OpenTelemetry settings: OTLP traces and metrics.
 
     Exporting requires the ``otel`` extra (``interloper[otel]``); when it is
     missing, enabling telemetry logs a warning and stays a no-op.
@@ -68,9 +68,20 @@ class TelemetrySettings(BaseSettings):
     service_name: str = Field(default="", description="Reported service name; empty reports `interloper`.")
     traces: bool = Field(default=True, description="Export traces.")
     metrics: bool = Field(default=True, description="Export metrics.")
-    logs: bool = Field(default=True, description="Export the standard `logging` records, with their trace context.")
     sample_ratio: float = Field(default=1.0, description="Fraction of traces sampled, parent-based.")
     metric_export_interval: int = Field(default=60, description="Seconds between metric exports.")
+
+
+class LogSettings(BaseSettings):
+    """How the commands write their log records to stderr."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}LOG_")
+
+    format: Literal["text", "json"] = Field(
+        default="text",
+        description="`text` for a terminal; `json` writes one object per line with the record's trace and span ids, "
+        "for a log collector to parse.",
+    )
 
 
 class SecretsSettings(BaseSettings):
@@ -324,7 +335,7 @@ class QuotaSettings(BaseSettings):
 class AppSettings(BaseSettings):
     """Top-level runtime settings for the CLI.
 
-    The framework reads ``runner``, ``otel``, ``catalog`` and ``secrets``;
+    The framework reads ``runner``, ``otel``, ``log``, ``catalog`` and ``secrets``;
     the other sections live here because ``AppSettings`` does, and configure
     the platform packages (``interloper-db``, ``interloper-api``,
     ``interloper-scheduler``, ``interloper-agent``, ``interloper-mcp``).
@@ -338,6 +349,7 @@ class AppSettings(BaseSettings):
 
     runner: RunnerSettings = Field(default_factory=RunnerSettings)
     otel: TelemetrySettings = Field(default_factory=TelemetrySettings)
+    log: LogSettings = Field(default_factory=LogSettings)
     catalog: list[str] = Field(
         default_factory=list,
         description="Import paths of the enabled components; empty enables everything installed.",

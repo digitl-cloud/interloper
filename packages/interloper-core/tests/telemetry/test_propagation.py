@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from opentelemetry import trace
 
 from interloper.telemetry.propagation import (
@@ -70,6 +72,18 @@ class TestChildProcessEnv:
         assert env["INTERLOPER_OTEL_ENDPOINT"] == "http://collector:4317"
         assert "INTERLOPER_POSTGRES_PASSWORD" not in env
         assert "TRACEPARENT" in env
+
+    def test_forwards_the_log_format_without_telemetry(self, monkeypatch):
+        from interloper.telemetry.propagation import child_process_env
+
+        for key in [key for key in os.environ if key.startswith("INTERLOPER_OTEL_")]:
+            monkeypatch.delenv(key)
+        monkeypatch.setenv("INTERLOPER_LOG_FORMAT", "json")
+
+        env = child_process_env()
+
+        assert env["INTERLOPER_LOG_FORMAT"] == "json"
+        assert "INTERLOPER_OTEL_SERVICE_NAME" not in env
 
     def test_children_get_their_own_service_name(self, monkeypatch):
         # Shared config forwards; identity doesn't. A scheduler pod named

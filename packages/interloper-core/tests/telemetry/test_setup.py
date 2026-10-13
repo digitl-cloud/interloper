@@ -36,7 +36,7 @@ class TestInitTelemetry:
     def test_enabled_is_idempotent(self):
         # Both signals off: initialization completes without installing
         # global providers (which are set-once per process).
-        settings = TelemetrySettings(enabled=True, traces=False, metrics=False, logs=False)
+        settings = TelemetrySettings(enabled=True, traces=False, metrics=False)
         assert init_telemetry(settings) is True
         assert init_telemetry(settings) is True
         assert setup._initialized is True
@@ -47,12 +47,12 @@ class TestInitTelemetry:
 
     def test_opts_into_stable_http_semconv(self, monkeypatch):
         monkeypatch.delenv("OTEL_SEMCONV_STABILITY_OPT_IN", raising=False)
-        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False, logs=False))
+        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False))
         assert os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] == "http"
 
     def test_operator_semconv_override_wins(self, monkeypatch):
         monkeypatch.setenv("OTEL_SEMCONV_STABILITY_OPT_IN", "http/dup")
-        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False, logs=False))
+        init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False))
         assert os.environ["OTEL_SEMCONV_STABILITY_OPT_IN"] == "http/dup"
 
     def test_instrument_fastapi_is_a_noop_when_uninitialized(self):
@@ -175,23 +175,9 @@ def restore_module_state():
     Yields:
         The ``setup`` module.
     """
-    saved = (
-        setup._tracer_provider,
-        setup._meter_provider,
-        setup._logger_provider,
-        setup._log_handler,
-        setup._metrics_handler,
-        setup._initialized,
-    )
+    saved = (setup._tracer_provider, setup._meter_provider, setup._metrics_handler, setup._initialized)
     yield setup
-    (
-        setup._tracer_provider,
-        setup._meter_provider,
-        setup._logger_provider,
-        setup._log_handler,
-        setup._metrics_handler,
-        setup._initialized,
-    ) = saved
+    setup._tracer_provider, setup._meter_provider, setup._metrics_handler, setup._initialized = saved
 
 
 class FakeProvider:
@@ -230,17 +216,16 @@ class TestProviderConstruction:
         Returns:
             The providers that were handed to each setter.
         """
-        from opentelemetry import _logs, metrics, trace
+        from opentelemetry import metrics, trace
 
         installed: dict[str, Any] = {}
         monkeypatch.setattr(trace, "set_tracer_provider", lambda provider: installed.update(tracer=provider))
         monkeypatch.setattr(metrics, "set_meter_provider", lambda provider: installed.update(meter=provider))
-        monkeypatch.setattr(_logs, "set_logger_provider", lambda provider: installed.update(logger=provider))
         setup._initialized = False
         return installed
 
     def test_traces_build_a_sampled_provider(self, intercept_global_setters):
-        assert init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False, logs=False)) is True
+        assert init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False)) is True
 
         provider = intercept_global_setters["tracer"]
         assert provider is setup._tracer_provider
@@ -248,14 +233,14 @@ class TestProviderConstruction:
         assert "meter" not in intercept_global_setters
 
     def test_the_service_name_is_overridable(self, intercept_global_setters):
-        init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False, logs=False, service_name="api"))
+        init_telemetry(TelemetrySettings(enabled=True, traces=True, metrics=False, service_name="api"))
 
         assert intercept_global_setters["tracer"].resource.attributes["service.name"] == "api"
 
     def test_metrics_build_a_provider_and_subscribe_the_handler(self, intercept_global_setters):
         # A long export interval keeps the periodic reader from reaching for
         # the (absent) collector during the test.
-        settings = TelemetrySettings(enabled=True, traces=False, metrics=True, logs=False, metric_export_interval=3600)
+        settings = TelemetrySettings(enabled=True, traces=False, metrics=True, metric_export_interval=3600)
 
         assert init_telemetry(settings) is True
 
@@ -263,79 +248,30 @@ class TestProviderConstruction:
         assert setup._metrics_handler is not None
         assert "tracer" not in intercept_global_setters
 
-    def test_logs_build_a_provider_and_attach_the_root_handler(self, intercept_global_setters):
-        import logging
-
-        settings = TelemetrySettings(enabled=True, traces=False, metrics=False, logs=True)
-
-        assert init_telemetry(settings) is True
-
-        assert intercept_global_setters["logger"] is setup._logger_provider
-        assert setup._log_handler is not None
-        assert setup._log_handler in logging.getLogger().handlers
-        assert setup._logger_provider.resource.attributes["service.name"] == "interloper"
-
-        shutdown_telemetry()
-
-        assert setup._log_handler is None
-        assert all(type(handler).__name__ != "LoggingHandler" for handler in logging.getLogger().handlers)
-
-    def test_a_missing_logging_instrumentation_keeps_records_local(self, intercept_global_setters, monkeypatch, caplog):
-        monkeypatch.setitem(sys.modules, "opentelemetry.instrumentation.logging.handler", None)
-
-        with caplog.at_level("WARNING", logger="interloper.telemetry.setup"):
-            init_telemetry(TelemetrySettings(enabled=True, traces=False, metrics=False, logs=True))
-
-        assert setup._logger_provider is not None
-        assert setup._log_handler is None
-        assert "opentelemetry-instrumentation-logging" in caplog.text
-
-    def test_the_http_protocol_selects_the_http_exporters(self, intercept_global_setters, monkeypatch):
-        from opentelemetry.exporter.otlp.proto.http import _log_exporter
-        from opentelemetry.sdk._logs.export import LogRecordExportResult
-
-        class QuietLogExporter:
-            """Stands in for the http log exporter: the record init itself logs must not reach for a collector."""
-
-            def __init__(self, **kwargs: Any) -> None:
-                self.kwargs = kwargs
-
-            def export(self, batch: Any) -> LogRecordExportResult:
-                return LogRecordExportResult.SUCCESS
-
-            def shutdown(self) -> None:
-                pass
-
-            def force_flush(self, timeout_millis: int = 30000) -> bool:
-                return True
-
-        monkeypatch.setattr(_log_exporter, "OTLPLogExporter", QuietLogExporter)
+    def test_the_http_protocol_selects_the_http_exporters(self, intercept_global_setters):
         settings = TelemetrySettings(
-            enabled=True, traces=True, metrics=False, logs=True, protocol="http/protobuf", endpoint="http://collector:4318"
+            enabled=True, traces=True, metrics=False, protocol="http/protobuf", endpoint="http://collector:4318"
         )
 
         assert init_telemetry(settings) is True
         assert setup._tracer_provider is not None
-        assert setup._logger_provider is not None
 
 
 class TestForceFlush:
     """Flushing without tearing the SDK down, for reused worker processes."""
 
-    def test_flushes_every_provider(self, restore_module_state):
-        tracer, meter, logs = FakeProvider(), FakeProvider(), FakeProvider()
+    def test_flushes_both_providers(self, restore_module_state):
+        tracer, meter = FakeProvider(), FakeProvider()
         setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
         setup._meter_provider = meter  # ty: ignore[invalid-assignment]
-        setup._logger_provider = logs  # ty: ignore[invalid-assignment]
 
         setup.force_flush()
 
-        assert (tracer.flushed, meter.flushed, logs.flushed) == (1, 1, 1)
+        assert (tracer.flushed, meter.flushed) == (1, 1)
 
     def test_is_a_no_op_without_providers(self, restore_module_state):
         setup._tracer_provider = None
         setup._meter_provider = None
-        setup._logger_provider = None
 
         setup.force_flush()
 
@@ -343,19 +279,17 @@ class TestForceFlush:
 class TestShutdown:
     """Teardown flushes, unsubscribes, and drops every handle."""
 
-    def test_shuts_down_every_provider(self, restore_module_state):
-        tracer, meter, logs = FakeProvider(), FakeProvider(), FakeProvider()
+    def test_shuts_down_both_providers(self, restore_module_state):
+        tracer, meter = FakeProvider(), FakeProvider()
         setup._tracer_provider = tracer  # ty: ignore[invalid-assignment]
         setup._meter_provider = meter  # ty: ignore[invalid-assignment]
-        setup._logger_provider = logs  # ty: ignore[invalid-assignment]
         setup._initialized = True
 
         shutdown_telemetry()
 
-        assert (tracer.shut_down, meter.shut_down, logs.shut_down) == (1, 1, 1)
+        assert (tracer.shut_down, meter.shut_down) == (1, 1)
         assert setup._tracer_provider is None
         assert setup._meter_provider is None
-        assert setup._logger_provider is None
         assert setup._initialized is False
 
     def test_the_metrics_handler_is_unsubscribed(self, restore_module_state):

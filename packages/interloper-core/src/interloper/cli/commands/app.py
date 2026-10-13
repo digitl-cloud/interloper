@@ -105,9 +105,10 @@ def _cmd_app(args: argparse.Namespace) -> None:
     from interloper.cli.runtime import Services, resolve_api_port
     from interloper.settings import AppSettings
 
-    configure_console_logging(logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s")
-
     settings = AppSettings.get()
+    configure_console_logging(
+        logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s", log_format=settings.log.format
+    )
     run_api = settings.server.enabled
     run_cron = settings.cron.enabled
     run_worker = settings.worker.enabled
