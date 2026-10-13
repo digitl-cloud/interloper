@@ -143,8 +143,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
             execution status.
     """
     import os
-    import sys
 
+    from interloper.cli.console import configure_console_logging
     from interloper.dag import DAGSpec
     from interloper.events import EventBus, StderrEventHandler
     from interloper.runner import ExecutionStatus, Runner
@@ -152,14 +152,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # One logging setup for everything the command prints: framework log
     # lines and run events share the same format, stream, and level.
-    # ``force=True`` rebinds the handler to the current stderr on every
-    # invocation (repeated in-process calls, captured streams in tests).
-    logging.basicConfig(
-        level=logging.WARNING if args.quiet else logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
-        datefmt="%H:%M:%S",
-        stream=sys.stderr,
-        force=True,
+    configure_console_logging(
+        logging.WARNING if args.quiet else logging.DEBUG if args.verbose else logging.INFO,
+        "%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
+        "%H:%M:%S",
     )
 
     settings = AppSettings.get()
