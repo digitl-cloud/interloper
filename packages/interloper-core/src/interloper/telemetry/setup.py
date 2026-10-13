@@ -13,7 +13,6 @@ import os
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from opentelemetry.sdk._logs import LoggerProvider
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.trace import TracerProvider
 
@@ -24,8 +23,6 @@ logger = logging.getLogger(__name__)
 
 _tracer_provider: TracerProvider | None = None
 _meter_provider: MeterProvider | None = None
-_logger_provider: LoggerProvider | None = None
-_log_handler: logging.Handler | None = None
 _metrics_handler: OtelMetricsHandler | None = None
 _initialized = False
 
@@ -85,7 +82,7 @@ def init_telemetry(settings: TelemetrySettings) -> bool:
     Returns:
         True when the SDK was (or already is) active.
     """
-    global _tracer_provider, _meter_provider, _logger_provider, _log_handler, _metrics_handler, _initialized
+    global _tracer_provider, _meter_provider, _metrics_handler, _initialized
 
     if _initialized:
         return True
@@ -163,21 +160,6 @@ def init_telemetry(settings: TelemetrySettings) -> bool:
 
         _metrics_handler = _register_metrics_handler()
 
-    if settings.logs:
-        from opentelemetry._logs import set_logger_provider
-        from opentelemetry.sdk._logs import LoggerProvider
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-
-        if grpc:
-            from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-        else:
-            from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-
-        _logger_provider = LoggerProvider(resource=resource)
-        _logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(**exporter_kwargs)))
-        set_logger_provider(_logger_provider)
-        _log_handler = _attach_log_handler(_logger_provider)
-
     _instrument_libraries()
 
     _initialized = True
@@ -247,29 +229,6 @@ def _duration_views() -> list[Any]:
         )
         for name in ("interloper.run.duration", "interloper.operation.duration")
     ]
-
-
-def _attach_log_handler(provider: LoggerProvider) -> logging.Handler | None:
-    """Put an OTLP handler on the root logger, so every record ships with its trace context.
-
-    The handler comes from the logging instrumentation (part of the ``otel``
-    extra); without it the records stay on whatever handlers the process
-    already has. The root logger's own level still decides what is emitted.
-
-    Args:
-        provider: The logger provider the handler writes through.
-
-    Returns:
-        The attached handler, or ``None`` when the instrumentation is missing.
-    """
-    try:
-        from opentelemetry.instrumentation.logging.handler import LoggingHandler
-    except ImportError:
-        logger.warning("Log export needs opentelemetry-instrumentation-logging; records stay local")
-        return None
-    handler = LoggingHandler(logger_provider=provider)
-    logging.getLogger().addHandler(handler)
-    return handler
 
 
 def _register_metrics_handler() -> OtelMetricsHandler | None:
@@ -349,19 +308,14 @@ def force_flush() -> None:
         _tracer_provider.force_flush()
     if _meter_provider is not None:
         _meter_provider.force_flush()
-    if _logger_provider is not None:
-        _logger_provider.force_flush()
 
 
 def shutdown_telemetry() -> None:
     """Flush and shut down the SDK providers (idempotent)."""
-    global _tracer_provider, _meter_provider, _logger_provider, _log_handler, _metrics_handler, _initialized
+    global _tracer_provider, _meter_provider, _metrics_handler, _initialized
 
     if _initialized:
         _instrument_libraries(enable=False)
-    if _log_handler is not None:
-        logging.getLogger().removeHandler(_log_handler)
-        _log_handler = None
     if _metrics_handler is not None:
         from interloper.events import EventBus
 
@@ -375,7 +329,4 @@ def shutdown_telemetry() -> None:
     if _meter_provider is not None:
         _meter_provider.shutdown()
         _meter_provider = None
-    if _logger_provider is not None:
-        _logger_provider.shutdown()
-        _logger_provider = None
     _initialized = False

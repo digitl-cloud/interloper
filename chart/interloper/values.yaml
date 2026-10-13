@@ -298,10 +298,16 @@ otel:
   endpoint: ""  # e.g. http://otel-collector.observability:4317
   protocol: grpc  # grpc | http/protobuf
 
+# How the pods write their log lines to stderr: `json` (one object per line,
+# with the trace and span ids of the record) for a log collector to parse, or
+# `text` for reading with kubectl. The scheduler forwards it to the run pods.
+log:
+  format: json
+
 # Extra interloper.yaml sections rendered verbatim into the generated
 # ConfigMap — tuning the chart has no opinion on (server, cron, worker,
 # reaper, mcp). Sections owned by a root-level block (agent, launcher,
-# runner, catalog, smtp, auth) are rejected here, as are secret-bearing
+# runner, catalog, smtp, auth, log) are rejected here, as are secret-bearing
 # ones (postgres, secrets): a YAML-provided field beats the env var the
 # chart injects, so allowing them would silently override credentials.
 extraConfig: {}

@@ -67,21 +67,23 @@ def child_process_env() -> dict[str, str]:
     """Telemetry environment for a spawned process or container.
 
     Forwards this process's ``INTERLOPER_OTEL_*`` configuration (so the
-    child initializes its own exporter) together with the current trace
-    context — merge into the child's environment. Shared config forwards,
-    identity does not: the child is always a run executor, so it gets
-    ``interloper-run`` rather than inheriting this process's name.
+    child initializes its own exporter) and ``INTERLOPER_LOG_*`` (so its log
+    lines carry the same format and trace ids) together with the current
+    trace context — merge into the child's environment. Shared config
+    forwards, identity does not: the child is always a run executor, so it
+    gets ``interloper-run`` rather than inheriting this process's name.
 
     Returns:
         Environment variable mapping (possibly empty).
     """
-    env = {
+    otel = {
         key: value
         for key, value in os.environ.items()
         if key.startswith("INTERLOPER_OTEL_") and key != _SERVICE_NAME_ENV
     }
-    if env:
-        env[_SERVICE_NAME_ENV] = "interloper-run"
+    if otel:
+        otel[_SERVICE_NAME_ENV] = "interloper-run"
+    env = {key: value for key, value in os.environ.items() if key.startswith("INTERLOPER_LOG_")} | otel
     env.update(traceparent_env())
     return env
 

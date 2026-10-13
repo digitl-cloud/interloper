@@ -152,13 +152,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # One logging setup for everything the command prints: framework log
     # lines and run events share the same format, stream, and level.
+    settings = AppSettings.get()
     configure_console_logging(
         logging.WARNING if args.quiet else logging.DEBUG if args.verbose else logging.INFO,
         "%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
         "%H:%M:%S",
+        log_format=settings.log.format,
     )
-
-    settings = AppSettings.get()
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
 
     # -- Subscribe stderr event handler (for container event forwarding) -------

@@ -172,6 +172,8 @@ Contains Postgres connection info + the encryption key secret.
       name: {{ include "interloper.secretName" . }}
       key: INTERLOPER_SMTP_PASSWORD
       optional: true
+- name: INTERLOPER_LOG_FORMAT
+  value: {{ .Values.log.format | quote }}
 {{- if .Values.otel.enabled }}
 - name: INTERLOPER_OTEL_ENABLED
   value: "true"

@@ -15,7 +15,7 @@ or extraConfig.secrets would silently override the Secret-fed credentials.
     {{- fail (printf "extraConfig.%s is not allowed — it would override the credentials the chart injects via env vars; use postgresql/externalPostgres and `secrets` instead" $key) -}}
   {{- end -}}
 {{- end -}}
-{{- range $key := list "agent" "launcher" "runner" "catalog" "smtp" "auth" -}}
+{{- range $key := list "agent" "launcher" "runner" "catalog" "smtp" "auth" "log" -}}
   {{- if hasKey $.Values.extraConfig $key -}}
     {{- fail (printf "extraConfig.%s is not allowed — this section is chart-managed; set the root-level `%s` value instead" $key $key) -}}
   {{- end -}}

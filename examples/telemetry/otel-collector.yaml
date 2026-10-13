@@ -24,10 +24,6 @@ processors:
     max_stale: 25h
 
 exporters:
-  # The demo stack has no log store; the records are summarised on the
-  # collector's stdout so the pipeline is visibly wired. Point a Loki or
-  # Cloud Logging exporter here instead.
-  debug: {}
   otlp/tempo:
     endpoint: tempo:4317
     tls:
@@ -60,7 +56,3 @@ service:
       receivers: [otlp]
       processors: [deltatocumulative, batch]
       exporters: [prometheus]
-    logs:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [debug]

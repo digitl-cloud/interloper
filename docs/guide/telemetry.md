@@ -1,9 +1,9 @@
 # Telemetry
 
-Interloper exports OpenTelemetry **traces**, **metrics** and **logs** over OTLP: one trace per
-run, from the runner through every operation, `data()` call and destination read or write,
-across process boundaries; counters and duration histograms derived from the event bus; and the
-standard `logging` records, each carrying the trace it was written under.
+Interloper exports OpenTelemetry **traces** and **metrics** over OTLP: one trace per run, from
+the runner through every operation, `data()` call and destination read or write, across
+process boundaries; plus counters and duration histograms derived from the event bus. Logs go
+to stderr, where a collector picks them up, carrying the trace they were written under.
 
 Telemetry is off by default and costs nothing when disabled: the core depends only on the no-op
 `opentelemetry-api`. The SDK and exporters ship in the `otel` extra.
@@ -46,7 +46,7 @@ The `otel` block of `interloper.yaml`, or `INTERLOPER_OTEL_*` variables:
 | `protocol` | `grpc` | `grpc` or `http/protobuf`. |
 | `headers` | empty | Exporter headers as `key=value,key2=value2`. Treat as a secret. |
 | `service_name` | `interloper` | The `service.name` resource attribute. |
-| `traces`, `metrics`, `logs` | `true` | Signal toggles. |
+| `traces`, `metrics` | `true` | Signal toggles. |
 | `sample_ratio` | `1.0` | Parent-based head sampling ratio. |
 | `metric_export_interval` | `60` | Seconds between metric exports. |
 
@@ -132,12 +132,21 @@ them. A worked collector and Grafana setup is in the repository under `examples/
 
 ## Logs
 
-With `logs` on, a handler on the root logger ships every record the process emits, at the
-level the process already logs at, through the same OTLP endpoint. Records written inside a
-span carry its trace and span ids, so a log line in Grafana links to the trace it belongs to
-and a trace to the lines written during it. The collector needs a `logs` pipeline; without one
-the exporter reports the refused batches and the records still reach the process's own
-handlers.
+The commands write their log records to stderr; they are not exported over OTLP. Shipping them
+is the job of whatever collects the container's output, typically an OpenTelemetry Collector
+reading the node's pod logs with the `filelog` receiver.
+
+With `log.format` set to `json` (`INTERLOPER_LOG_FORMAT=json`), each record is one JSON object
+per line:
+
+```json
+{"timestamp": "2026-10-13T12:00:00.123456+00:00", "severity": "INFO", "logger": "interloper_scheduler.queue", "message": "Launching run 537b6608-...", "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "span_id": "00f067aa0ba902b7"}
+```
+
+`trace_id` and `span_id` are present when the record is written inside a span, so a collector
+can lift them onto the log record and link each line to its trace. A record with an exception
+carries the formatted traceback in `exception`. The default, `text`, is the human-readable line
+for a terminal.
 
 ## Custom instrumentation
 

@@ -71,6 +71,29 @@ def test_record_timestamp_comes_from_the_event(caplog: pytest.LogCaptureFixture)
     assert caplog.records[-1].created == pytest.approx(event.timestamp.timestamp())
 
 
+def test_record_carries_the_trace_of_the_run_that_emitted_the_event(caplog: pytest.LogCaptureFixture) -> None:
+    """The bus worker has no current span, so the record takes the run's from the event."""
+    traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    event = Event(type=EventType.OPERATION_STARTED, metadata={"component_key": "foo", "traceparent": traceparent})
+    with caplog.at_level(logging.INFO, logger=EVENT_LOGGER_NAME):
+        ConsoleEventHandler()(event)
+
+    record = caplog.records[-1]
+    assert (vars(record)["trace_id"], vars(record)["span_id"]) == (
+        "4bf92f3577b34da6a3ce929d0e0e4736",
+        "00f067aa0ba902b7",
+    )
+
+
+def test_record_without_a_run_trace_has_no_ids(caplog: pytest.LogCaptureFixture) -> None:
+    """An unparsable traceparent leaves the record without ids rather than failing."""
+    event = Event(type=EventType.OPERATION_STARTED, metadata={"component_key": "foo", "traceparent": "garbage"})
+    with caplog.at_level(logging.INFO, logger=EVENT_LOGGER_NAME):
+        ConsoleEventHandler()(event)
+
+    assert not hasattr(caplog.records[-1], "trace_id")
+
+
 def test_json_lines_mode_streams_to_stdout(
     caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
