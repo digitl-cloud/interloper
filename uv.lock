@@ -2127,7 +2127,7 @@ wheels = [
 
 [[package]]
 name = "interloper-agent"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-agent" }
 dependencies = [
     { name = "interloper-assets" },
@@ -2148,7 +2148,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-api"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-api" }
 dependencies = [
     { name = "fastapi" },
@@ -2188,7 +2188,7 @@ provides-extras = ["agent", "otel"]
 
 [[package]]
 name = "interloper-app"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-app" }
 dependencies = [
     { name = "interloper-api" },
@@ -2205,7 +2205,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-assets"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-assets" }
 dependencies = [
     { name = "httpx2" },
@@ -2243,7 +2243,7 @@ provides-extras = ["bing", "google", "facebook"]
 
 [[package]]
 name = "interloper-aws"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-aws" }
 dependencies = [
     { name = "boto3" },
@@ -2260,7 +2260,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-azure"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-azure" }
 dependencies = [
     { name = "azure-identity" },
@@ -2277,7 +2277,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-clickhouse"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-clickhouse" }
 dependencies = [
     { name = "clickhouse-connect", extra = ["pandas"] },
@@ -2302,7 +2302,7 @@ dev = [{ name = "chdb", specifier = ">=3.0" }]
 
 [[package]]
 name = "interloper-core"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-core" }
 dependencies = [
     { name = "httpx2" },
@@ -2392,7 +2392,7 @@ dev = [
 
 [[package]]
 name = "interloper-databricks"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-databricks" }
 dependencies = [
     { name = "databricks-sql-connector", extra = ["pyarrow"] },
@@ -2409,7 +2409,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-db"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-db" }
 dependencies = [
     { name = "alembic" },
@@ -2441,7 +2441,7 @@ provides-extras = ["otel"]
 
 [[package]]
 name = "interloper-docker"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-docker" }
 dependencies = [
     { name = "docker" },
@@ -2458,7 +2458,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-duckdb"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-duckdb" }
 dependencies = [
     { name = "duckdb" },
@@ -2475,7 +2475,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-google-cloud"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-google-cloud" }
 dependencies = [
     { name = "db-dtypes" },
@@ -2500,7 +2500,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-k8s"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-k8s" }
 dependencies = [
     { name = "interloper-core" },
@@ -2517,7 +2517,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-mcp"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-mcp" }
 dependencies = [
     { name = "interloper-core" },
@@ -2538,7 +2538,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-pandas"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-pandas" }
 dependencies = [
     { name = "interloper-core" },
@@ -2553,7 +2553,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-scheduler"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-scheduler" }
 dependencies = [
     { name = "croniter" },
@@ -2581,7 +2581,7 @@ provides-extras = ["docker", "k8s"]
 
 [[package]]
 name = "interloper-slack"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-slack" }
 dependencies = [
     { name = "interloper-core" },
@@ -2592,7 +2592,7 @@ requires-dist = [{ name = "interloper-core", editable = "packages/interloper-cor
 
 [[package]]
 name = "interloper-snowflake"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-snowflake" }
 dependencies = [
     { name = "interloper-core" },
@@ -2609,7 +2609,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-sql"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-sql" }
 dependencies = [
     { name = "ibis-framework" },
@@ -2633,7 +2633,7 @@ provides-extras = ["postgres"]
 
 [[package]]
 name = "interloper-toolkit"
-version = "0.110.2"
+version = "0.111.0"
 source = { editable = "packages/interloper-toolkit" }
 dependencies = [
     { name = "interloper-core" },
@@ -2648,7 +2648,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-workspace"
-version = "0.110.2"
+version = "0.111.0"
 source = { virtual = "." }
 dependencies = [
     { name = "interloper-agent" },

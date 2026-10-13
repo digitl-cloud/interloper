@@ -2,6 +2,146 @@
 
 <!-- version list -->
 
+## v0.111.0 (2026-10-13)
+
+### Bug Fixes
+
+- **assets**: Rank star schema dimension sources by tier before recency
+  ([`327a3ca`](https://github.com/digitl-cloud/interloper/commit/327a3ca007a2ae4f8892c30120f73aef1348872c))
+
+- **core**: A reference without a table name is named like any asset
+  ([`6644066`](https://github.com/digitl-cloud/interloper/commit/664406667758c2f2d2fcb5930a58d81a0cec7541))
+
+- **core**: Run a view's own validation at graph build, not at hydration
+  ([`2bc0fc5`](https://github.com/digitl-cloud/interloper/commit/2bc0fc533729e8429689d1ca222d95c14a9b08ad))
+
+- **core**: Tell empty-id destinations apart by identity and test reference preference
+  ([`959f43a`](https://github.com/digitl-cloud/interloper/commit/959f43a15929dfb40ff8f4ecdc2a346ab8b5e471))
+
+- **duckdb**: Reach in-memory databases only through one connection
+  ([`29a36b2`](https://github.com/digitl-cloud/interloper/commit/29a36b2f4e225649d0f9f9a6874ab58805f46ce5))
+
+- **sql**: Stamp an integer as int64 in union, and test every dialect and DuckDB
+  ([`916e9c6`](https://github.com/digitl-cloud/interloper/commit/916e9c63776fcfff422607a22802782860cff110))
+
+### Chores
+
+- Restore the uv.lock revision to 5
+  ([`47d7342`](https://github.com/digitl-cloud/interloper/commit/47d73427872f10aa2cfcf01e24371c48c41f4043))
+
+### Documentation
+
+- Keep the plan's quoted guide link literal so the strict docs build passes
+  ([`7cd2cb6`](https://github.com/digitl-cloud/interloper/commit/7cd2cb6b77727d48147f29d4219a06f7992a1dfd))
+
+- Views and references
+  ([`1194236`](https://github.com/digitl-cloud/interloper/commit/1194236d8e4993412a1026a8186c419653504992))
+
+- Views and references design spec and implementation plan
+  ([`be98ed3`](https://github.com/digitl-cloud/interloper/commit/be98ed3d25564d7979257c3b902149dd2f4c3f58))
+
+### Features
+
+- Instrument the scheduler, agent and destinations, and export logs
+  ([`b73a414`](https://github.com/digitl-cloud/interloper/commit/b73a41428e351ffaebb72356edbb0b3b66c10f37))
+
+- **assets**: GA4 export source, a reference and a BigQuery view over it
+  ([`505d4b7`](https://github.com/digitl-cloud/interloper/commit/505d4b79904894d713733ecdbbe0c0291c446775))
+
+- **assets**: The Facebook Ads star schema as views
+  ([`ba9566c`](https://github.com/digitl-cloud/interloper/commit/ba9566cdf6566e506b422a5531a90dae76c1d49e))
+
+- **assets**: The Facebook star schema as sql_views
+  ([`94003bf`](https://github.com/digitl-cloud/interloper/commit/94003bff36daaee993fe1e96ca0dcb858cd52f07))
+
+- **assets**: The GA4 export binds BigQuery destinations only
+  ([`566b903`](https://github.com/digitl-cloud/interloper/commit/566b90340e474641d2a8a280e50b7e2d38d85200))
+
+- **bigquery**: Views
+  ([`e842f26`](https://github.com/digitl-cloud/interloper/commit/e842f261c1001e4b3d83c806e44a851660455adf))
+
+- **core**: A reference's table and dataset may name the source's fields
+  ([`13d3e8c`](https://github.com/digitl-cloud/interloper/commit/13d3e8cec31ee8f5f236b577dd5cea5679fae772))
+
+- **core**: Exempt nodes that read no upstream data from the partition rule
+  ([`63d53b2`](https://github.com/digitl-cloud/interloper/commit/63d53b2d66a71310fa3f29f585a93b688d692e90))
+
+- **core**: Format a reference's dataset with the source fields, like its table
+  ([`ea1e49e`](https://github.com/digitl-cloud/interloper/commit/ea1e49e7241ba98f5ea1c071b9c4d34d53f83355))
+
+- **core**: Give destinations the reference and create_view hooks
+  ([`d8834a6`](https://github.com/digitl-cloud/interloper/commit/d8834a63472c733832cd4da8223b770b48a59086))
+
+- **core**: References, assets over tables interloper never writes
+  ([`f25c6a4`](https://github.com/digitl-cloud/interloper/commit/f25c6a419e866ed2664e4d9e6a390777e0f1a06d))
+
+- **core**: Table references and view creation on database destinations
+  ([`5a5c933`](https://github.com/digitl-cloud/interloper/commit/5a5c93392071e09337a2b1ffc46f40a94359a494))
+
+- **core**: Views, assets whose definition is materialized
+  ([`bcb2b1a`](https://github.com/digitl-cloud/interloper/commit/bcb2b1a5ff2e65934a508599bf7e96fa89d50773))
+
+- **duckdb**: Views
+  ([`6c94cc1`](https://github.com/digitl-cloud/interloper/commit/6c94cc16bfac9fb4a2279b005817444d272b9169))
+
+- **sql**: Sql_view, portable views authored as Ibis expressions
+  ([`a440f64`](https://github.com/digitl-cloud/interloper/commit/a440f64b8d5f4569870e521ce10190f7ccbd8cd1))
+
+### Performance Improvements
+
+- **bigquery**: Skip the view DDL when the view is unchanged
+  ([`6f6d1e8`](https://github.com/digitl-cloud/interloper/commit/6f6d1e8e5d3cd8794b741992c6b2c5ee169c3e8b))
+
+### Refactoring
+
+- One seam per name, Source.table and the backend's table_parts
+  ([`b4725cf`](https://github.com/digitl-cloud/interloper/commit/b4725cf452cba3c00c579d82ec48424003065949))
+
+- Undo formatter churn and inline union's literal helper
+  ([`ae1fe2a`](https://github.com/digitl-cloud/interloper/commit/ae1fe2a4b3f43375b91abbdce43e93d15ac7cbf8))
+
+- **assets**: Name the star schema's dimension tiers after the asset categories
+  ([`69f275d`](https://github.com/digitl-cloud/interloper/commit/69f275d14ab20685d1347a10634b439ba918ff57))
+
+- **core**: A reference names its table verbatim, with no templating
+  ([`0ac5a53`](https://github.com/digitl-cloud/interloper/commit/0ac5a5332a222978222caa65508bccb0b910c121))
+
+- **core**: Il.reference declares, the source builds the class
+  ([`74c6338`](https://github.com/digitl-cloud/interloper/commit/74c63384d2359e83c35494c4ca349657a6a8fc12))
+
+- **core**: Il.reference decorates an empty function, like il.view
+  ([`151437c`](https://github.com/digitl-cloud/interloper/commit/151437c3c4e84e3d9bd15595f169769b83a70d92))
+
+- **core**: Let sources hold class attributes instead of stamping reference classes
+  ([`c85a707`](https://github.com/digitl-cloud/interloper/commit/c85a70743583f293490fd2214e5e4a2d88535148))
+
+- **scheduler**: Take the replica identity from the resource, not the loop
+  ([`6d79c1f`](https://github.com/digitl-cloud/interloper/commit/6d79c1fa4994fdc0043ed9dff7642176b68c87bc))
+
+- **sql**: Move SQLAlchemy and psycopg behind the postgres extra
+  ([`85885ba`](https://github.com/digitl-cloud/interloper/commit/85885ba6c19dce8076b274035c8e7d30bc2c203d))
+
+- **sql**: Rename SqlView and sql_view to IbisView and ibis_view
+  ([`95f56e6`](https://github.com/digitl-cloud/interloper/commit/95f56e641248c4222d44bae76b87536e6bb17433))
+
+### Testing
+
+- Cover the view and reference error branches codecov flagged
+  ([`99f4d9a`](https://github.com/digitl-cloud/interloper/commit/99f4d9a5512c73688f38472144203a56c6c67f5e))
+
+- Measure coverage inside test subprocesses
+  ([`f46865d`](https://github.com/digitl-cloud/interloper/commit/f46865d0a46c9925b70475f002c1cbd1a5dddf22))
+
+- **assets**: Cover star schema dimension tiers, and fix product copy
+  ([`e0c4810`](https://github.com/digitl-cloud/interloper/commit/e0c48105865114ecb618c1eccc19f8c191559840))
+
+- **bigquery**: Prove reaches follows the location rule
+  ([`f0b344b`](https://github.com/digitl-cloud/interloper/commit/f0b344be766a572edfecbc339865eff61a94d12b))
+
+- **telemetry**: Cover the http log exporter path
+  ([`e2376a3`](https://github.com/digitl-cloud/interloper/commit/e2376a35cf3da8c1dc3323917d66cc6dc0d108f0))
+
+
 ## v0.110.2 (2026-10-09)
 
 ### Bug Fixes
