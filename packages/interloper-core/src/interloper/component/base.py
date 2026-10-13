@@ -13,11 +13,13 @@ import inspect
 import sys
 import uuid
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
 from typing_extensions import Self
 
+from interloper.component.inherited import InheritedSetting
 from interloper.component.maturity import Maturity
 from interloper.component.relation import ComponentIdentity, Relation, unwrap_optional
 from interloper.errors import ConfigError
@@ -151,7 +153,9 @@ class Component(Serializable):
         `_collect` did not turn into a relation therefore became a plain
         field, silently: no trickle, no ``{ref}``, and two classes differing
         only in declaration order behaving differently. Both that and an
-        annotation Pydantic could not resolve at all are refused here.
+        annotation Pydantic could not resolve at all are refused here. Every
+        field marked ``x-inherit`` then gets its read-through descriptor (see
+        `InheritedSetting`).
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
@@ -180,6 +184,7 @@ class Component(Serializable):
                     f"{cls.__name__}.{name} is annotated with a Component class but was not collected as a "
                     f"relation; define the class before it is referenced or declare the relation explicitly"
                 )
+        InheritedSetting.install(cls)
 
     def __init__(self, /, **data: Any) -> None:
         """Bind the relation kwargs, validate everything else as fields.
@@ -189,8 +194,8 @@ class Component(Serializable):
         binds every element, ``None`` binds nothing. Each binding is checked
         as it is made (see `bind`); whether every relation that must be
         bound is bound is a question for whoever assembles the graph, since
-        components are wired piecewise (a source trickles into its assets,
-        reconstruction binds references once the document is whole), so
+        components are wired piecewise (a source's assets read its bindings
+        through it, reconstruction binds references once the document is whole), so
         `validate_relations` is called at those boundaries, not here.
 
         Unknown kwargs are a loud error rather than pydantic's silent
@@ -264,6 +269,29 @@ class Component(Serializable):
             value: The owning component, or ``None`` to detach it.
         """
         self._parent = value
+
+    def inherited(self, child: Component, name: str, own: Any) -> Any:
+        """What an owned component reads for one of its inherited settings.
+
+        The one seam a cascade goes through: an owned component never holds a
+        copy of what it inherits, it asks its owner on every read. The base
+        hands down this component's own effective value; an owner that names
+        part of its children's location overrides it (see `Source.inherited`).
+
+        Args:
+            child: The owned component reading the setting.
+            name: The setting's field name.
+            own: The child's stored value, ``None`` while unset.
+
+        Returns:
+            *own* when set, else this component's own value under *name* when
+            it declares such a field, else ``None``.
+        """
+        if own is not None:
+            return own
+        if name in type(self).model_fields:
+            return getattr(self, name)
+        return None
 
     @property
     def owned(self) -> list[Component]:
@@ -435,8 +463,8 @@ class Component(Serializable):
         written: a constructor kwarg, `bind`, `unbind`, attribute
         assignment, or a parent's `trickle`. The new binding is already
         in place, so `bound` reads it. The base does nothing; override
-        it to cascade, the way a source trickles its bindings into its assets
-        and destinations and a job into its targets.
+        it to cascade, the way a source trickles its bindings into its
+        destinations and a job into its targets.
 
         Binding on ``self`` from inside the hook re-enters it; bind on other
         components only.
@@ -464,23 +492,51 @@ class Component(Serializable):
     def resolve(self, name: str) -> Any:
         """What one of this component's declared relations actually resolves to.
 
-        Unlike `bound`, this falls back to what the relation can fill
-        itself with when nothing is bound, so a relation with a fallback (a config
-        whose every field is defaulted, say) works without a binding.
+        Unlike `bound`, this reads through the owner (see `_targets`) and then
+        falls back to what the relation can fill itself with, so a relation
+        with a fallback (a config whose every field is defaulted, say) works
+        without a binding.
 
         Args:
             name: The relation name as declared on the class.
 
         Returns:
-            The bound value when there is one, otherwise the relation's
-            fallback for a single-valued relation and an empty list for a
-            ``many`` one.
+            What the relation holds or reads through its owner, otherwise the
+            relation's fallback for a single-valued relation and an empty list
+            for a ``many`` one.
         """
         relation = self._relation(name)
-        bound = self.bound(name)
-        if bound or relation.many:
-            return bound
-        return relation.fallback()
+        targets = self._targets(name)
+        if relation.many:
+            return targets
+        return targets[0] if targets else relation.fallback()
+
+    def _targets(self, name: str) -> list[Component]:
+        """What one of this component's relations holds: its own binding, else what its owner hands it.
+
+        An owned component never holds a copy of its owner's bindings; it
+        reads them here. The owner's targets under the same name are filtered
+        by what this relation `accepts`, every accepted one for a ``many``
+        relation and the first otherwise, the filter `trickle` applies.
+
+        Args:
+            name: The relation name as declared on the class.
+
+        Returns:
+            The own targets when any are bound; otherwise the owner's accepted
+            targets; empty when neither holds any.
+        """
+        own = self._bound.get(name, [])
+        owner = self._parent
+        if own or owner is None or name not in type(owner).relations:
+            return list(own)
+        relation = self._relation(name)
+        accepted = [
+            target
+            for target in owner._targets(name)
+            if relation.accepts(target.kind, target.identity, owner=self.identity)
+        ]
+        return accepted if relation.many else accepted[:1]
 
     def trickle(self, child: Component) -> None:
         """Fill a child's unbound relations from this component's own bindings.
@@ -489,13 +545,15 @@ class Component(Serializable):
         itself bound, and that the child leaves unbound, this binds whichever
         of the parent's targets the child's relation `accepts`
         (every accepted target for a ``many`` relation, the first accepted one
-        otherwise). A binding the child already holds is never touched.
+        otherwise). A binding the child already holds, or reads through its
+        own owner (a job's asset target reading its source's destinations),
+        is never touched.
 
         Args:
             child: The component to trickle this component's bindings into.
         """
         for name, relation in type(child).relations.items():
-            if child._bound.get(name) or name not in self._bound:
+            if child._targets(name) or name not in self._bound:
                 continue
             accepted = [t for t in self._bound[name] if relation.accepts(t.kind, t.identity, owner=child.identity)]
             if accepted:
@@ -532,7 +590,7 @@ class Component(Serializable):
         """
         problems: list[str] = []
         for name, relation in type(self).relations.items():
-            targets = self._bound.get(name, [])
+            targets = self._targets(name)
             if not targets:
                 graph_filled = (
                     nodes is None and "asset" in relation.kinds and (not relation.local or self.parent is None)
@@ -556,6 +614,53 @@ class Component(Serializable):
         if problems:
             raise ConfigError(f"{type(self).__name__} '{self.qualified_key}': " + "; ".join(problems))
 
+    # -- Reconfiguration -------------------------------------------------------
+
+    def __call__(self, **changes: Any) -> Self:
+        """Return a reconfigured copy: naming something changes it, leaving it out keeps it.
+
+        A field name sets the field, validated as an assignment would be; on
+        an inherited field ``None`` means "inherit again". A relation name
+        rebinds through the write path: one component, a list, or ``None`` to
+        clear. The copy keeps its own bindings (a new dict, the same targets)
+        and its owner; the components it owns are copied and owned by the
+        copy, still bound to each other, while every outside target they bind
+        is shared, not duplicated.
+
+        Args:
+            **changes: Field and relation names to their new values.
+
+        Returns:
+            The reconfigured copy.
+
+        Raises:
+            TypeError: If a name is neither a field nor a declared relation.
+        """
+        cls = type(self)
+        unknown = sorted(name for name in changes if name not in cls.model_fields and name not in cls.relations)
+        if unknown:
+            raise TypeError(f"{cls.__name__} has no field or relation named: {', '.join(unknown)}")
+        copy = self.model_copy()
+        copy._bound = {name: list(targets) for name, targets in self._bound.items()}
+        owned = self._owned_by_field()
+        if owned:
+            children = [child for kids in owned.values() for child in kids]
+            memo: dict[int, Any] = {id(self): copy}
+            for component in (self, *children):
+                for targets in component._bound.values():
+                    for target in targets:
+                        if all(target is not child for child in children):
+                            memo[id(target)] = target
+            for field in owned:
+                copy.__dict__[field] = deepcopy(self.__dict__[field], memo)
+        for name, value in changes.items():
+            if name in cls.model_fields:
+                cls.__pydantic_validator__.validate_assignment(copy, name, value)
+        for name, value in changes.items():
+            if name in cls.relations:
+                setattr(copy, name, value)
+        return copy
+
     # -- Serialization & resolution --------------------------------------------
 
     def to_spec(self, *, context: SerializationContext | None = None) -> Spec:
@@ -567,9 +672,7 @@ class Component(Serializable):
         nothing bound is left out. The components this one owns (see
         `children`) travel inside this spec, under the field that holds
         them, as a map of key to init carrying the child's id: an owned
-        component never has a spec of its own. A binding a child holds that
-        is identical to this component's own is left out of the child's
-        payload, since the same trickle refills it on reconstruction.
+        component never has a spec of its own.
 
         Args:
             context: The state shared with the other roots of one document.
@@ -591,8 +694,6 @@ class Component(Serializable):
             payload: dict[str, Any] = {}
             for child in context.carried(children):
                 child_init = dict(child.to_spec(context=context).init or {})
-                for name in self._trickled(child):
-                    child_init.pop(name, None)
                 child_init["id"] = child.id
                 payload[child.key] = child_init
             if payload:
@@ -908,25 +1009,3 @@ class Component(Serializable):
             if children:
                 owned[name] = children
         return owned
-
-    def _trickled(self, child: Component) -> set[str]:
-        """The relation names a child holds exactly as this component holds them.
-
-        A child receives a relation's binding only through `trickle`,
-        which passes this component's own targets through unchanged; the
-        target ids are what tell that binding apart from one the child bound
-        on its own. Ids and not object identity, because a deep copy rebuilds
-        an owner's own bindings and its children's separately.
-
-        Args:
-            child: An owned component.
-
-        Returns:
-            The names whose binding on the child is exactly this component's
-            own list of targets, in order.
-        """
-        return {
-            name
-            for name, targets in self._bound.items()
-            if targets and [t.id for t in child._bound.get(name, [])] == [t.id for t in targets]
-        }

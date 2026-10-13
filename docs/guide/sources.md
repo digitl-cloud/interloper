@@ -94,7 +94,7 @@ Every declared relation is a constructor keyword under its own name; a list bind
 targets, `None` binds nothing. Attribute access reads what is bound (`source.connection`), and
 `bind`, `unbind` and assignment change it afterwards.
 
-Assets are attributes:
+Assets are attributes, under their key:
 
 ```py
 FacebookAds.campaigns          # the asset definition (class)
@@ -102,49 +102,53 @@ source.campaigns               # the live asset instance owned by this source
 source.campaigns.materialize()
 ```
 
+An asset class is its own descriptor: read on the class it is the class, read on an instance
+the live asset. Assets written in the class body are the typed form (`source.campaigns` types
+as `Asset`); an asset given only in `asset_types` is reached the same way at runtime, but a type
+checker cannot see it. An asset class belongs to one source: listing it in a second is a
+`TypeError` at definition.
+
 ### Reconfiguring
 
-Calling an instance returns a deep copy with overrides applied; the original is untouched:
+Calling an instance returns a copy with the named changes applied; the original is untouched:
 
 ```py
 staging = source(destinations=il.CSVDestination(base_path="./staging"))
 read_only = source(enabled=False)
 ```
 
-Accepted keywords: `dataset`, `default_destination_key`, `enabled` (applied to every
-asset), `normalizer`, `materialization_strategy`, and any relation name. A fixed keyword left
-out means "unchanged"; a relation name passed at all changes it, since `None` there clears the
-binding. Rebinding a relation also repoints the assets that had received it by trickle, leaving
-an asset that bound the relation itself alone.
+The rule is the one every component follows: naming a field or a relation changes it, leaving it
+out keeps it. `None` clears a relation, and makes a setting the assets inherit inherit again. The
+copy's assets are copied with it, still wired to each other, while the connections and
+destinations they read are shared.
 
-### Selecting assets
+### Narrowing and disabling
 
-`select` limits which assets a run materializes. Unselected assets stay in the source as
-read-only dependencies, so wiring still validates and their stored output is still readable:
+A source built with `enabled=False` makes every one of its assets read-only: they stay in a run
+as dependencies, so wiring still validates and their stored output is still readable. An asset
+can also be disabled alone (`source.campaigns(enabled=False)`). To build a source with only some
+of its assets, pass the `assets` override map, which is what the platform persists:
 
 ```py
-source = FacebookAds(account_id="act_123", select=["campaigns", "ads_stats"])
+source = FacebookAds(account_id="act_123", assets={"campaigns": {}, "ads_stats": {}})
 ```
 
-An unknown key raises `SourceError`.
+## What assets read through their source
 
-## What cascades to assets
+An asset never holds a copy of its source's settings or bindings: it reads what it leaves unset
+through the source, on every read, so a change to the source reaches its assets at once.
 
-At construction the source fills in whatever its assets did not set themselves:
+| Asset reads | When it leaves unset |
+|-------------|----------------------|
+| `dataset` (the source's, else the source key; `{field}` templates filled from the source) | its own `dataset` |
+| `default_destination_key`, `normalizer`, `materialization_strategy`, `retry` | its own |
+| `enabled` | never unset: an asset runs only while it and its source are enabled |
+| any relation, such as `connection` or `destinations` | its own binding |
 
-| Source setting | Asset receives it when |
-|----------------|------------------------|
-| `dataset` (defaults to the source key) | the asset's `dataset` is empty |
-| `destinations` | the asset has none |
-| `default_destination_key` | the asset's is empty |
-| `normalizer` | the asset has none |
-| `materialization_strategy` | the asset is still on `AUTO` |
-
-Relations trickle by name: for every relation the asset declares under a name the source has
-bound, and leaves unbound itself, the source binds whichever of its own targets that relation
-accepts. Destinations receive the same pass, so a `GoogleCloudConnection` set on the source
-reaches a `BigQueryDestination` that declares a `connection` relation. It re-runs on every
-`bind()`, so a destination bound after the assets exist still propagates.
+A relation is read by name, filtered by what the asset's relation accepts. A binding the asset
+holds itself always wins, and a spec carries only what an asset set itself. The source still
+trickles its bindings into its destinations, so a `GoogleCloudConnection` set on the source
+reaches a `BigQueryDestination` that declares a `connection` relation.
 
 An asset relation that names a sibling (a bare key) is bound at construction too, from the
 source's own asset instances. Anything reaching outside the source is left to the
@@ -152,7 +156,9 @@ source's own asset instances. Anything reaching outside the source is left to th
 
 ## Dataset and table naming
 
-Every asset materializes into `dataset.table`. The dataset is the source's `dataset` (or key).
+Every asset materializes into `dataset.table`. The dataset is the asset's own, else the
+source's `dataset`, else the source key; either may name a source field in braces
+(`"analytics_{property_id}"`).
 The table is computed by `Source.table()`:
 
 - Without a discriminator: the asset key (`campaigns`).
@@ -174,8 +180,8 @@ raises `TypeError`.
 
 `FacebookAds.definition()` returns a `SourceDefinition`: key, name, description, tags, the JSON
 Schema of its configuration fields, its declared relations, and one `AssetDefinition` per
-asset. `FacebookAds.asset_def("campaigns")` returns a single asset's definition with its
-qualified key. This is what the [catalog](catalog.md) is built from.
+asset. `FacebookAds.campaigns.definition()` returns a single asset's. This is what the
+[catalog](catalog.md) is built from.
 
 ## Sources are workloads
 

@@ -192,6 +192,14 @@ class TestWorkloadDefaults:
         job = il.Job(targets=[FakeSource(destinations=[own])], destinations=[FakeOtherJobDestination()])
         assert job.targets[0].destinations == [own]
 
+    def test_an_owned_asset_target_keeps_its_sources_destinations(self):
+        own = FakeJobDestination()
+        source = FakeSource(destinations=[own])
+        asset = source.assets[0]
+        il.Job(targets=[asset], destinations=[FakeOtherJobDestination()])
+        assert asset.destinations == [own]
+        assert asset.bound("destinations") == []
+
     def test_a_destination_bound_after_construction_still_cascades(self):
         destination = FakeJobDestination()
         job = il.Job(targets=[FakeSource()])

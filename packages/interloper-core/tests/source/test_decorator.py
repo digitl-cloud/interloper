@@ -89,14 +89,18 @@ class TestRelations:
 
 
 class TestMaterializable:
-    """``enabled`` is an asset-level runtime flag, not a source declaration."""
+    """``enabled`` is a switch on the source that its assets read through it."""
 
-    def test_not_accepted_by_the_decorator(self):
-        with pytest.raises(TypeError, match=r"Source does not accept 'enabled'"):
+    def test_the_decorator_may_declare_a_disabled_source(self):
+        @il.asset
+        def declared_asset() -> list[dict[str, Any]]:
+            return []
 
-            @il.source(enabled=False)
-            def probe():
-                return []
+        @il.source(enabled=False)
+        def declared_source():
+            return [declared_asset]
+
+        assert all(not asset.enabled for asset in declared_source().assets)
 
     def test_still_available_as_an_instance_override(self):
         @il.asset

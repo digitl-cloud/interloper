@@ -124,17 +124,18 @@ they mean something only as constructor arguments.
 
 ## Instance reconfiguration
 
-Calling an instance returns a copy; omitted keywords mean "unchanged".
+Calling any component instance returns a copy, with one rule: naming a field or a relation
+changes it, leaving it out keeps it.
 
-| `asset(...)` | `source(...)` |
-|--------------|---------------|
-| `id` | |
-| `dataset` | `dataset` (re-points assets that inherited the old value) |
-| `default_destination_key` | `default_destination_key` |
-| `enabled` | `enabled` (applied to every asset) |
-| `materialization_strategy` | `materialization_strategy` |
-| `normalizer` (`None` clears) | `normalizer` |
-| any relation name (replaced; `None` clears) | any relation name (replaced; `None` clears, and repoints what was trickled) |
+| Keyword | Effect on the copy |
+|---------|--------------------|
+| any field (`dataset`, `enabled`, `normalizer`, `id`, ...) | set, validated as an assignment |
+| an inherited field set to `None` (`asset(dataset=None)`) | inherits again from the source |
+| any relation name | rebound; `None` clears it |
+| anything else | `TypeError` |
+
+A source's copy carries copies of its assets, still wired to each other; every connection and
+destination they read is shared. `source(enabled=False)` makes every asset of the copy read-only.
 
 ## `OAuthConfig`
 

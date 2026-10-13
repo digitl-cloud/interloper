@@ -135,7 +135,7 @@ Reference: https://docs.interloper.dev/guide/sources/ and https://docs.interlope
 ## Common mistakes
 
 - Guessing constructor keywords (`Shop(io=...)`, `IOContext(dataset=...)`). Unknown keywords raise
-  `TypeError`; the instance keywords are `dataset`, `select`, the class's own fields, and every
+  `TypeError`; the instance keywords are `dataset`, `enabled`, `assets`, the class's own fields, and every
   declared relation name (`connection`, `destinations`, an upstream).
 - Passing `connection=...` with no `connection` relation declared: annotate it on the class body
   (`connection: ShopConnection`) or write `relations={"connection": il.Relation(ShopConnection)}`

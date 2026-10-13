@@ -5,29 +5,25 @@ from __future__ import annotations
 import asyncio
 import inspect
 import warnings
-from collections.abc import Iterator, Sized
-from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints
+from collections.abc import Sized
+from typing import TYPE_CHECKING, Any, ClassVar, cast, get_args, get_origin, get_type_hints, overload
 
-from pydantic import BaseModel, Field, PrivateAttr
-from typing_extensions import Self
+from pydantic import Field
+from pydantic._internal._model_construction import ModelMetaclass
 
 from interloper.asset.context import ExecutionContext
+from interloper.asset.output import Output
 from interloper.asset.upstream import Upstream
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Relation, unwrap_optional
 from interloper.destination import Destination, IOContext
 from interloper.errors import (
     AssetError,
-    DataNotFoundError,
-    DestinationError,
     PartitionError,
-    RepresentationError,
-    format_exception,
 )
 from interloper.events import EventBus, EventType, Step, StepKind
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.partitioning import Partition, PartitionWindow
-from interloper.representation import Representation, View
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
 from interloper.telemetry import attributes as telemetry_attributes
@@ -41,8 +37,6 @@ from interloper.utils.text import to_identifier
 if TYPE_CHECKING:
     from interloper.dag import DAG
     from interloper.source import Source
-
-_UNSET = object()
 
 # Parameters of ``data()`` that declare no relation: the instance itself, the
 # two values the asset injects, and the catch-all.
@@ -88,7 +82,49 @@ class AssetDefinition(ComponentDefinition):
         return str(ComponentIdentity(self.source_key or None, self.key))
 
 
-class Asset(Operation):
+class AssetMeta(ModelMetaclass):
+    """The metaclass of every asset class: an asset class read off a source instance is that source's asset.
+
+    An asset class is its own descriptor, as a `Relation` is. Read on a class it
+    is the class itself, which is what composite import paths
+    (``module:Shop.orders``) walk; read on a `Source` instance it is that
+    instance's live asset of the same key; read on any other instance it is the
+    class, as for any class attribute.
+    """
+
+    @overload
+    def __get__(cls, instance: None, owner: type | None = None) -> type[Asset]: ...
+    @overload
+    def __get__(cls, instance: Source, owner: type | None = None) -> Asset: ...
+    @overload
+    def __get__(cls, instance: object, owner: type | None = None) -> type[Asset]: ...
+    def __get__(cls, instance: object, owner: type | None = None) -> Any:
+        """Resolve to the class, or to a source instance's live asset of this key.
+
+        Args:
+            instance: The object the attribute is read on, ``None`` on a class.
+            owner: The class the attribute is read through; unused, part of
+                the descriptor protocol. Defaults to ``None``.
+
+        Returns:
+            The live asset when *instance* is a source, else this class.
+
+        Raises:
+            AttributeError: If the source holds no asset of this key (a source
+                narrowed to some of its assets by an override map).
+        """
+        from interloper.source.base import Source
+
+        if not isinstance(instance, Source):
+            return cls
+        key = cast("type[Asset]", cls).key
+        for asset in instance.assets:
+            if asset.key == key:
+                return asset
+        raise AttributeError(f"Source '{type(instance).__name__}' has no asset with key '{key}'")
+
+
+class Asset(Operation, metaclass=AssetMeta):
     """A data-producing component.
 
     Subclass and implement ``data()`` to define an asset. Every parameter of
@@ -121,24 +157,23 @@ class Asset(Operation):
     tags: ClassVar[list[str]] = []
 
     _source_type: ClassVar[type[Source] | None] = None
+    _parameters: ClassVar[tuple[str, ...]] = ()
 
     # State
-    dataset: str = Field(default="")
-    default_destination_key: str = Field(default="")
-    materialization_strategy: MaterializationStrategy = SelectField(
-        default=MaterializationStrategy.RECONCILE,
+    dataset: str | None = Field(default=None, json_schema_extra={"x-inherit": True})
+    default_destination_key: str | None = Field(default=None, json_schema_extra={"x-inherit": True})
+    materialization_strategy: MaterializationStrategy | None = SelectField(
+        default=None,
+        inherit=True,
         label="Materialization Strategy",
-        description="How this asset's data is checked against its schema.",
+        description="How this asset's data is checked against its schema; inherited from its source when unset.",
         info=(
             "'Reconcile' coerces data to the schema (or infers a schema when "
             "none is declared); 'Strict' requires a schema and fails on any "
             "mismatch. Both write the schema's types."
         ),
     )
-    normalizer: Normalizer | None = Field(default=None)
-
-    # Private
-    _effective_schema: type[Schema] | None = PrivateAttr(default=None)
+    normalizer: Normalizer | None = Field(default=None, json_schema_extra={"x-inherit": True})
 
     # -- Construction ----------------------------------------------------------
 
@@ -156,7 +191,9 @@ class Asset(Operation):
         Inference only runs on a class that writes its own ``data()``; a
         subclass that inherits one inherits its relations with it. A parameter
         nothing could ever fill is a definition error, raised from
-        `_infer_relation` as the class is created.
+        `_infer_relation` as the class is created. The parameters the call
+        fills are recorded, in order, in ``_parameters``, so a run never reads
+        the signature again.
         """
         super()._collect()
         if "data" not in cls.__dict__:
@@ -167,12 +204,17 @@ class Asset(Operation):
             return
         hints = cls._data_hints()
         inferred: dict[str, Relation] = {}
+        parameters: list[str] = []
         for name, parameter in signature.parameters.items():
-            if name in _RESERVED_PARAMETERS or name in cls.relations or parameter.kind in _VARIADIC_KINDS:
+            if name == "self" or parameter.kind in _VARIADIC_KINDS:
+                continue
+            parameters.append(name)
+            if name in _RESERVED_PARAMETERS or name in cls.relations:
                 continue
             hint = hints.get(name, parameter.annotation)
             relation = cls._infer_relation(name, hint, optional=parameter.default is None)
             inferred[name] = relation.model_copy(update={"name": name})
+        cls._parameters = tuple(parameters)
         if inferred:
             cls.relations = {**cls.relations, **inferred}
             for name, relation in inferred.items():
@@ -202,7 +244,7 @@ class Asset(Operation):
         """The relation one ``data()`` parameter declares.
 
         An optional upstream is inferred ``on_delete="detach"``: the parameter
-        already tolerates the leg being absent, so nothing is owed to it and
+        already tolerates the upstream being absent, so nothing is owed to it and
         deleting the upstream must not be refused on its behalf. A parameter
         naming a component class keeps the default ``block`` whether it is
         optional or not: this ruling covers asset upstreams only, and a
@@ -299,75 +341,6 @@ class Asset(Operation):
         partitioning = cls.partitioning.to_definition() if cls.partitioning is not None else None
         return AssetDefinition(**dict(super().definition()), asset_schema=asset_schema, partitioning=partitioning)
 
-    # -- Reconfiguration -------------------------------------------------------
-
-    def __call__(
-        self,
-        *,
-        id: str | None = None,
-        enabled: bool | None = None,
-        dataset: str | None = None,
-        default_destination_key: str | None = None,
-        materialization_strategy: MaterializationStrategy | None = None,
-        normalizer: Normalizer | None = _UNSET,  # ty: ignore[invalid-parameter-default]
-        **relations: Any,
-    ) -> Self:
-        """Return a reconfigured copy of this asset.
-
-        Every fixed parameter defaults to ``None``, meaning "leave unchanged".
-        Two exceptions: ``normalizer``, whose sentinel default lets an explicit
-        ``None`` clear the configured normalizer, and a name in **relations,
-        where ``None`` clears the binding, so only leaving the name out
-        entirely leaves it as is. Clearing a non-optional relation is refused
-        with a ``ConfigError``, since it cannot be left empty.
-
-        The copy carries this asset's own bindings and parent, so a copy made
-        to flip one field (the disabled parents of a mini-DAG, say)
-        still reads from the same destinations and upstreams.
-
-        Args:
-            id: New component id for the copy.
-            enabled: Whether the copy executes; a disabled copy is read-only.
-            dataset: Dataset (schema/namespace) the asset materializes into.
-            default_destination_key: When the asset has several destinations,
-                the one downstream assets read it from.
-            materialization_strategy: How the data is checked against the schema.
-            normalizer: Normalizer applied before conform; pass ``None`` to
-                explicitly clear it.
-            **relations: Replacement targets for the copy's declared relations,
-                keyed by relation name: a single component, a list of them, or
-                ``None`` to clear the binding.
-
-        Returns:
-            A copy of this asset carrying the overrides.
-
-        Raises:
-            TypeError: If a keyword argument names no declared relation.
-        """
-        unknown = [name for name in relations if name not in type(self).relations]
-        if unknown:
-            raise TypeError(f"{type(self).__name__} declares no relation(s): {', '.join(sorted(unknown))}")
-        overrides: dict[str, Any] = {}
-        if id is not None:
-            overrides["id"] = id
-        if enabled is not None:
-            overrides["enabled"] = enabled
-        if dataset is not None:
-            overrides["dataset"] = dataset
-        if default_destination_key is not None:
-            overrides["default_destination_key"] = default_destination_key
-        if materialization_strategy is not None:
-            overrides["materialization_strategy"] = materialization_strategy
-        if normalizer is not _UNSET:
-            overrides["normalizer"] = normalizer
-        copy = self.model_copy(update=overrides)
-        # The copy inherits the private state, bindings included: its own dict,
-        # pointing at the same targets, so rebinding one leaves this asset alone.
-        copy._bound = {name: list(targets) for name, targets in self._bound.items()}
-        for name, value in relations.items():
-            setattr(copy, name, value)
-        return copy
-
     # -- Execution -------------------------------------------------------------
 
     async def execute(self, context: OperationContext) -> OperationResult:
@@ -423,11 +396,9 @@ class Asset(Operation):
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
-        Resolves the context and everything the declared relations fill
-        (upstreams through the DAG), then runs the data function. Sync
-        ``data()`` functions are automatically offloaded to a thread via
-        ``asyncio.to_thread``; async ``data()`` functions are awaited
-        natively.
+        Resolves the context and the inputs, runs ``data()`` and shapes its
+        result (see `_produce`); a sync ``data()`` is offloaded to a thread,
+        an async one awaited.
 
         Args:
             window: The window the run covers; a partition is accepted as the window of one.
@@ -438,16 +409,7 @@ class Asset(Operation):
             The raw execution result.
         """
         window = self.effective_window(PartitionWindow.of(window))
-        self._check_window(window)
-        metadata = metadata or {}
-        context = ExecutionContext(self, window, metadata)
-        kwargs = await self._build_kwargs(context, window, dag)
-
-        with Step(StepKind.ASSET_DATA, self.event_metadata(metadata, window), subject=f"'{self.key}'"):
-            result = self._unwrap(await invoke(self.data, **kwargs))
-        # Normalization + conform is CPU-bound (pandas/pyarrow); offload it so
-        # it never blocks the event loop while other assets run concurrently.
-        return await asyncio.to_thread(self._normalize_and_conform, result)
+        return (await self._produce(window, dag, metadata or {})).data
 
     def materialize(
         self,
@@ -495,12 +457,11 @@ class Asset(Operation):
         """
         if not self.enabled:
             return None
-
         window = self.effective_window(PartitionWindow.of(window))
         metadata = metadata or {}
-        result = await self.run_async(window, dag, metadata)
-        await self._destination_write(window, metadata, result)
-        return result
+        output = await self._produce(window, dag, metadata)
+        await self._land(output, window, metadata)
+        return output.data
 
     def data(self, **kwargs: Any) -> Any:
         """Return this asset's data.
@@ -535,9 +496,25 @@ class Asset(Operation):
                 "Cannot compute partition row counts without a partition column."
             )
 
-        destination = self._read_destination()
-        context = IOContext(asset=self)
-        return destination.partition_row_counts(context)
+        return self.default_destination.partition_row_counts(IOContext(asset=self))
+
+    @property
+    def default_destination(self) -> Destination:
+        """The destination downstream readers load this asset from.
+
+        The destination whose key is ``default_destination_key`` when one is
+        set and bound, else the first bound destination.
+
+        Raises:
+            AssetError: If the asset has no destination at all.
+        """
+        destinations: list[Destination] = self.destinations
+        if not destinations:
+            raise AssetError(f"No destination found for upstream asset '{self.key}'")
+        preferred = next(
+            (destination for destination in destinations if destination.key == self.default_destination_key), None
+        )
+        return preferred or destinations[0]
 
     # -- Internals -------------------------------------------------------------
     async def _build_kwargs(
@@ -548,10 +525,10 @@ class Asset(Operation):
     ) -> dict[str, Any]:
         """Build the keyword arguments ``data()`` is called with.
 
-        One value per parameter: ``context`` and ``source`` are injected
-        directly, an ``asset``-kind relation is read through
-        `_read_upstreams` (every leg when it is many-valued, the single
-        leg or ``None`` otherwise), and any other relation resolves to what is
+        One value per recorded parameter (see `_collect`): ``context`` and ``source`` are injected
+        directly, an ``asset``-kind relation is handed over through
+        `_upstreams` (every upstream when it is many-valued, the single
+        one or ``None`` otherwise), and any other relation resolves to what is
         bound to it, or to what it can fill itself with (see
         `resolve`).
 
@@ -570,9 +547,7 @@ class Asset(Operation):
         kwargs: dict[str, Any] = {}
         relations = type(self).relations
 
-        for name in inspect.signature(self.data).parameters:
-            if name in ("self", "kwargs"):
-                continue
+        for name in type(self)._parameters:
             if name == "context":
                 kwargs["context"] = context
             elif name == "source":
@@ -587,8 +562,8 @@ class Asset(Operation):
                         f"Asset '{self.key}' has upstreams but no DAG provided. "
                         "Pass a DAG to run() or materialize() for upstream resolution."
                     )
-                legs = await self._read_upstreams(name, targets, dag, window, context.metadata)
-                kwargs[name] = legs if relations[name].many else (legs[0] if legs else None)
+                upstreams = await self._upstreams(name, targets, dag, window, context.metadata)
+                kwargs[name] = upstreams if relations[name].many else (upstreams[0] if upstreams else None)
             else:
                 # Lazily-built clients cost under the data() span, not here.
                 with tracer().start_as_current_span(
@@ -599,7 +574,7 @@ class Asset(Operation):
 
         return kwargs
 
-    async def _read_upstreams(
+    async def _upstreams(
         self,
         name: str,
         targets: list[Asset],
@@ -607,42 +582,29 @@ class Asset(Operation):
         window: PartitionWindow | None,
         metadata: dict[str, Any],
     ) -> list[Upstream]:
-        """Read every leg bound to one upstream relation.
+        """Hand every upstream bound to one relation to `_upstream`, through the DAG's own nodes.
 
-        A leg whose upstream has nothing materialized where the destination
-        looks (no table or object for that scope at all) is handed over with
-        ``data=None`` and a warning event, never dropped: the asset decides
-        what a missing leg means. An existing but empty scope is not this
-        case; it comes back as whatever the destination returns for an empty
-        read (an empty list or frame), not ``None``. Any other read failure
-        fails the asset, optional relation or not. A bound upstream absent
-        from *dag* is skipped the same way, with its own warning: relation
-        validation and the DAG's graph construction only tolerate such a
-        binding when the relation is optional, so the leg simply does not
-        exist for this run.
+        DAG membership is by id, so each upstream is taken from the DAG's node
+        when it is there: for a mini-DAG that node is a read-only copy of the
+        binding. An upstream absent from the DAG is skipped with a warning when
+        this asset reads data, since there is no run to read it for; a kind
+        that only refers to its upstreams refers to the binding itself.
 
         Args:
-            name: The ``data()`` parameter the legs are read for.
-            targets: The bound upstream assets; one absent from *dag* is
-                skipped rather than read, and one present is read through the
-                DAG's own node.
-            dag: The DAG the upstream assets are looked up in, ``None`` when
-                the run was given none, which leaves nothing to look up.
-            window: Scope of the reads.
+            name: The ``data()`` parameter the upstreams are for.
+            targets: The bound upstream assets.
+            dag: The DAG the upstreams are looked up in, ``None`` when the run
+                was given none.
+            window: The run's window.
             metadata: Run-level metadata carried onto the emitted events.
 
         Returns:
-            One `Upstream` per leg present in *dag*, in binding order.
-
-        Raises:
-            AssetError: If a leg cannot be read for a reason other than
-                missing data.
+            One `Upstream` per upstream handed over, in binding order.
         """
-        legs: list[Upstream] = []
+        upstreams: list[Upstream] = []
         for target in targets:
-            # DAG membership is by id, so the leg is read from the DAG's own node: for a mini-DAG
-            # that is a read-only copy of the bound asset, and reading the binding would miss it.
-            if dag is not None and target.id not in dag.operation_map:
+            node = dag.operation_map.get(target.id) if dag is not None else target
+            if node is None and self.reads_upstream_data:
                 EventBus.emit(
                     EventType.LOG,
                     metadata=self.event_metadata(
@@ -651,48 +613,79 @@ class Asset(Operation):
                         level="WARNING",
                         message=(
                             f"Asset '{self.key}' upstream '{target.qualified_key}' for parameter '{name}' "
-                            "is not in the DAG; the leg is skipped"
+                            "is not in the DAG; it is skipped"
                         ),
                     ),
                 )
                 continue
-            upstream = cast("Asset", dag.operation_map[target.id]) if dag is not None else target
-            try:
-                data = await self._destination_read(upstream, window, metadata)
-            except AssetError as error:
-                if not isinstance(error.__cause__, DataNotFoundError):
-                    raise
-                EventBus.emit(
-                    EventType.LOG,
-                    metadata=self.event_metadata(
-                        metadata,
-                        window,
-                        level="WARNING",
-                        message=(
-                            f"Asset '{self.key}' found no data in upstream '{upstream.qualified_key}' for "
-                            f"parameter '{name}' at {window}; the leg is passed with data=None"
-                        ),
-                    ),
-                )
-                data = None
-            legs.append(Upstream(asset=upstream, data=data))
-        return legs
+            upstreams.append(await self._upstream(cast("Asset", node or target), window, metadata))
+        return upstreams
 
-    async def _destination_write(
-        self, window: PartitionWindow | None, metadata: dict[str, Any], result: Any
-    ) -> None:
-        """Write the execution result to every configured destination.
+    async def _upstream(self, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]) -> Upstream:
+        """Hand one upstream to ``data()``: its data, or a reference to it for a kind that reads none.
 
         Args:
-            window: The window the asset consumed, ``None`` for an unpartitioned asset.
-            metadata: Run-level metadata (run id, backfill id), carried onto the emitted events.
-            result: The normalized and conformed data to write. An empty result is skipped with a
-                warning.
+            target: The upstream asset, the DAG's node when it has one.
+            window: The run's window.
+            metadata: Run-level metadata carried onto the emitted events.
+
+        Returns:
+            The upstream as ``data()`` receives it.
         """
-        destinations = self._destinations()
+        if self.reads_upstream_data:
+            return await Upstream.read(target, self, window, metadata)
+        return Upstream.reference(target, self.default_destination)
+
+    async def _produce(self, window: PartitionWindow | None, dag: DAG | None, metadata: dict[str, Any]) -> Output:
+        """Run ``data()`` over the resolved inputs and shape what it returned.
+
+        A generator is consumed inside the observed step, so a failure while
+        it yields fails the step; the rest of the shaping is CPU-bound
+        (pandas, pyarrow) and runs off the event loop.
+
+        Args:
+            window: The window this asset consumes, already narrowed.
+            dag: DAG the upstream assets are looked up in.
+            metadata: Run-level metadata carried onto the emitted events.
+
+        Returns:
+            The run's output.
+        """
+        self._check_window(window)
+        context = ExecutionContext(self, window, metadata)
+        kwargs = await self._build_kwargs(context, window, dag)
+        with Step(StepKind.ASSET_DATA, self.event_metadata(metadata, window), subject=f"'{self.key}'"):
+            result = Output._rows(await invoke(self.data, **kwargs))
+        return await asyncio.to_thread(self._output, result)
+
+    def _output(self, result: Any) -> Output:
+        """Shape what ``data()`` returned into this asset's output (see `Output.from_result`).
+
+        A kind whose output is not data overrides it (see `View`).
+
+        Args:
+            result: The value ``data()`` returned.
+
+        Returns:
+            The output.
+        """
+        return Output.from_result(result, self)
+
+    async def _land(self, output: Output, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
+        """Write the output to every destination, one observed step each.
+
+        An empty output is skipped with a warning. A kind that lands
+        elsewhere overrides it (see `View`).
+
+        Args:
+            output: The run's output.
+            window: The window the asset consumed, ``None`` for an unpartitioned asset.
+            metadata: Run-level metadata carried onto the emitted events.
+        """
+        destinations: list[Destination] = self.destinations
         if not destinations:
             return
-        if is_empty(result):
+        if is_empty(output.data):
             EventBus.emit(
                 EventType.LOG,
                 metadata=self.event_metadata(
@@ -705,8 +698,8 @@ class Asset(Operation):
                 ),
             )
             return
-        context = IOContext(asset=self, window=window, metadata=metadata, schema=self._effective_schema or self.schema)
-        rows = len(result) if isinstance(result, Sized) else None
+        context = IOContext(asset=self, window=window, metadata=metadata, schema=output.schema or self.schema)
+        rows = len(output.data) if isinstance(output.data, Sized) else None
         for destination in destinations:
             step = Step(
                 StepKind.DEST_WRITE,
@@ -714,160 +707,8 @@ class Asset(Operation):
                 subject=f"'{self.key}'",
             )
             with step:
-                await invoke(destination.write, context, result)
+                await invoke(destination.write, context, output.data)
                 step.record(rows=rows)
-
-    async def _destination_read(
-        self, upstream: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
-    ) -> Any:
-        """Read data from an upstream asset's read destination (see `_read_destination`).
-
-        Args:
-            upstream: The asset whose materialized data is read.
-            window: The run's window, narrowed to what the *upstream* asset consumes.
-            metadata: Run-level metadata (run id, backfill id), carried onto the emitted events.
-
-        Returns:
-            The data read from the upstream asset's destination.
-
-        Raises:
-            AssetError: If the read fails for any reason, the cause attached.
-        """
-        destination = upstream._read_destination()
-        window = upstream.effective_window(window)
-        context = IOContext(asset=upstream, window=window, metadata=metadata, schema=upstream.schema)
-        step = Step(
-            StepKind.DEST_READ,
-            self.event_metadata(metadata, window, destination_key=destination.key),
-            subject=f"'{upstream.key}'",
-            attributes={telemetry_attributes.UPSTREAM_KEY: upstream.key},
-        )
-        try:
-            with step:
-                return await invoke(destination.read, context)
-        except Exception as error:
-            raise AssetError(
-                f"Failed to load data from upstream asset '{upstream.key}': {format_exception(error)}"
-            ) from error
-
-    @staticmethod
-    def _unwrap(result: Any) -> Any:
-        """Turn the Python shapes ``data()`` may return besides a table into rows.
-
-        The one place the framework is lenient about what an asset returns: a
-        generator is consumed, a pydantic model or a list of them is dumped, a
-        lone dict becomes one row, and ``None`` is no rows. Everything else,
-        tables included, is returned untouched, so downstream only ever sees
-        a registered representation or an opaque object.
-
-        Args:
-            result: The raw value returned by ``data()``.
-
-        Returns:
-            The rows, or the result unchanged when it is not one of those shapes.
-        """
-        if result is None:
-            return []
-        if isinstance(result, Iterator):
-            result = list(result)
-        if isinstance(result, BaseModel):
-            return [result.model_dump()]
-        if isinstance(result, dict):
-            return [result]
-        if isinstance(result, list) and result and isinstance(result[0], BaseModel):
-            return [item.model_dump() if isinstance(item, BaseModel) else item for item in result]
-        return result
-
-    def _normalize_and_conform(self, result: Any) -> Any:
-        """Apply optional normalization, then always conform to the schema.
-
-        Normalization (when a normalizer is configured) reshapes the data:
-        flattening, column renaming, missing-key fill.  Conform then enforces
-        the declared schema according to the materialization strategy: it
-        runs whether or not a normalizer is configured, so a declared schema
-        is always a checked contract.
-
-        Args:
-            result: The value returned by ``data()``, unwrapped to a table or an opaque object.
-
-        Returns:
-            The normalized and conformed result.
-        """
-        # Two spans, not one: normalization is skipped without a normalizer.
-        span_attrs = self._span_attributes()
-        if self.normalizer is not None:
-            with tracer().start_as_current_span("interloper.normalizer.normalize", attributes=span_attrs):
-                result = self.normalizer.normalize(result)
-        with tracer().start_as_current_span("interloper.asset.conform", attributes=span_attrs):
-            return self._conform(result)
-
-    def _conform(self, result: Any) -> Any:
-        """Enforce the asset's schema according to the materialization strategy.
-
-        One pass: with a schema, ``RECONCILE`` aligns and coerces while
-        ``STRICT`` refuses extra, missing or invalid columns; both hand
-        destinations the schema's canonical types. Without a schema,
-        ``RECONCILE`` infers one and ``STRICT`` is an error. Data no
-        representation matches is not a table: without a schema it passes
-        through untouched (arbitrary objects bound for a file destination),
-        with one it is an error. The effective schema (declared, or inferred)
-        is carried to destinations via ``IOContext.schema``.
-
-        Args:
-            result: The data to conform, already normalized when a normalizer
-                is configured.
-
-        Returns:
-            The conformed result.
-
-        Raises:
-            AssetError: If ``STRICT`` is set without a schema, or if a schema
-                is declared but the data is not tabular.
-        """
-        strategy = self.materialization_strategy
-        schema = self.schema
-
-        if schema is None and strategy is MaterializationStrategy.STRICT:
-            raise AssetError(f"Asset '{self.key}': strategy='strict' requires a schema.")
-
-        try:
-            view = Representation.of(result)
-        except RepresentationError as e:
-            if schema is None:
-                self._effective_schema = None
-                return result
-            raise AssetError(
-                f"Asset '{self.key}' declares a schema but returned data that cannot be checked against it: {e}"
-            ) from e
-
-        if schema is None:
-            with tracer().start_as_current_span("interloper.asset.infer_schema", attributes=self._span_attributes()):
-                self._effective_schema = self._infer_schema(view)
-            return result
-
-        self._effective_schema = schema
-        with tracer().start_as_current_span("interloper.representation.reconcile", attributes=self._span_attributes()):
-            return view.reconcile(schema, strict=strategy is MaterializationStrategy.STRICT)
-
-    def _infer_schema(self, view: View) -> type[Schema] | None:
-        """Best-effort schema inference for the IO boundary (AUTO, no declared schema).
-
-        Inference is metadata for destinations (DDL, typed loads): it must
-        never fail a materialization, so any inference error yields ``None``.
-
-        Args:
-            view: The data bound to its representation.
-
-        Returns:
-            The inferred schema, or ``None`` when the data is empty or
-            inference fails.
-        """
-        if is_empty(view.data):
-            return None
-        try:
-            return view.infer()
-        except Exception:  # noqa: BLE001 - inference is best-effort metadata
-            return None
 
     def _check_window(self, window: PartitionWindow | None) -> None:
         """Check a run's window against this asset's partitioning.
@@ -887,59 +728,6 @@ class Asset(Operation):
             self.partitioning.check(window)
         except PartitionError as error:
             raise PartitionError(f"Asset '{self.key}' {error}") from None
-
-    def _validate_destination(self, destination: Destination) -> None:
-        """Check that a destination is one this asset's ``destinations`` relation accepts.
-
-        Args:
-            destination: The destination instance to check. Any destination is
-                accepted when the relation narrows no key.
-
-        Raises:
-            DestinationError: If the relation does not accept the destination.
-        """
-        relation = type(self).relations["destinations"]
-        if relation.accepts(destination.kind, destination.identity, owner=self.identity):
-            return
-        raise DestinationError(
-            f"Destination '{type(destination).__name__}' is not compatible with "
-            f"asset '{self.key}'. Allowed keys: [{', '.join(relation.keys)}]"
-        )
-
-    def _destinations(self) -> list[Destination]:
-        """The destinations this asset writes to and is read from.
-
-        Nothing is resolved here: a source trickles its own destinations into
-        every asset that has none of its own at construction, so what is bound
-        is the whole answer. The check catches a binding made by something
-        other than `bind` (a
-        hydration writing straight into the instance, say).
-
-        Returns:
-            The bound destinations, in binding order; empty when none is bound.
-        """
-        destinations: list[Destination] = self.destinations
-        for destination in destinations:
-            self._validate_destination(destination)
-        return destinations
-
-    def _read_destination(self) -> Destination:
-        """The destination downstream readers load this asset from.
-
-        The destination whose key equals ``default_destination_key`` when one
-        is configured and bound, else the first bound destination.
-
-        Returns:
-            The destination to read from.
-
-        Raises:
-            AssetError: If the asset has no destination at all.
-        """
-        destinations = self._destinations()
-        if not destinations:
-            raise AssetError(f"No destination found for upstream asset '{self.key}'")
-        preferred = next((d for d in destinations if d.key == self.default_destination_key), None)
-        return preferred or destinations[0]
 
     def _span_attributes(self) -> dict[str, str]:
         """Identity attributes for spans opened below the asset's own span.

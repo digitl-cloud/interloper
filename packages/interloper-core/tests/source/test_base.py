@@ -113,6 +113,24 @@ class Finance(il.Source):
             return []
 
 
+class Cascade(il.Source):
+    """Source whose method assets exercise inheritance."""
+
+    region: str = il.InputField(default="eu")
+
+    @il.asset(materialization_strategy=MaterializationStrategy.RECONCILE)
+    def explicit(self) -> list[dict[str, Any]]:
+        return []
+
+    @il.asset
+    def plain(self) -> list[dict[str, Any]]:
+        return []
+
+    @il.asset(dataset="raw_{region}")  # noqa: RUF027 - a template the source fills
+    def templated(self) -> list[dict[str, Any]]:
+        return []
+
+
 class FakeUnfillableSource(il.Source):
     """Source whose asset names a non-optional relation nothing can fill."""
 
@@ -133,37 +151,68 @@ class FakeUnfillableSource(il.Source):
 # -- Identity and class metadata -----------------------------------------------
 
 
-class TestRetryInheritance:
-    def test_a_source_policy_fills_its_assets(self):
-        policy = il.RetryPolicy(max_attempts=5)
+class TestInheritance:
+    def test_an_explicit_reconcile_survives_a_strict_source(self):
+        source = Cascade(materialization_strategy=MaterializationStrategy.STRICT)
+        assert source.explicit.materialization_strategy is MaterializationStrategy.RECONCILE
+        assert source.plain.materialization_strategy is MaterializationStrategy.STRICT
 
-        class Shop(il.Source):
-            class Orders(il.Asset):
-                def data(self) -> Any:  # pragma: no cover
-                    return []
+    def test_a_reconfigured_default_destination_key_reaches_the_assets(self):
+        assert Cascade()(default_destination_key="warehouse").plain.default_destination_key == "warehouse"
 
-        assert Shop(retry=policy).assets[0].retry == policy
+    def test_a_reconfigured_normalizer_reaches_the_assets(self):
+        normalizer = Normalizer()
+        assert Cascade()(normalizer=normalizer).plain.normalizer is normalizer
 
-    def test_an_assets_own_policy_wins(self):
-        source_policy = il.RetryPolicy(max_attempts=5)
-        asset_policy = il.RetryPolicy(max_attempts=2)
+    def test_a_retry_set_after_construction_reaches_the_assets(self):
+        source = Cascade()
+        source.retry = il.RetryPolicy(max_attempts=3)
+        assert source.plain.retry == il.RetryPolicy(max_attempts=3)
 
-        class Shop(il.Source):
-            class Orders(il.Asset):
-                retry: il.RetryPolicy | None = asset_policy
+    def test_a_dataset_set_after_construction_reaches_the_assets(self):
+        source = Cascade()
+        source.dataset = "other"
+        assert source.plain.dataset == "other"
 
-                def data(self) -> Any:  # pragma: no cover
-                    return []
+    def test_a_spec_carries_the_assets_own_values_only(self):
+        payload = (Cascade(dataset="raw").to_spec().init or {})["assets"]["plain"]
+        inherited = {"dataset", "default_destination_key", "materialization_strategy", "normalizer", "retry"}
+        assert inherited.isdisjoint(payload)
 
-        assert Shop(retry=source_policy).assets[0].retry == asset_policy
+    def test_an_assets_dataset_defaults_to_the_source_key(self):
+        source = Cascade()
+        assert source.dataset is None
+        assert source.plain.dataset == Cascade.key
 
-    def test_no_policy_anywhere_leaves_assets_unset(self):
-        class Shop(il.Source):
-            class Orders(il.Asset):
-                def data(self) -> Any:  # pragma: no cover
-                    return []
+    def test_a_dataset_template_names_a_field_of_the_source(self):
+        assert Cascade(region="us").templated.dataset == "raw_us"
 
-        assert Shop().assets[0].retry is None
+    def test_a_blank_persisted_value_inherits(self):
+        overrides = {"plain": {"dataset": "", "materialization_strategy": None}}
+        source = Cascade(dataset="raw", assets=overrides)  # ty: ignore[invalid-argument-type]
+        assert source.plain.dataset == "raw"
+        assert source.plain.materialization_strategy is MaterializationStrategy.RECONCILE
+
+    def test_a_disabled_source_disables_its_assets(self):
+        source = Cascade(enabled=False)
+        assert source.plain.enabled is False
+        assert source.plain.__dict__["enabled"] is True
+
+    def test_an_asset_disabled_alone_stays_disabled(self):
+        assert Cascade().plain(enabled=False).enabled is False
+
+    def test_the_source_enabled_flag_is_not_a_form_field(self):
+        assert "enabled" not in Cascade.config_schema().get("properties", {})
+
+    def test_a_standalone_asset_reads_its_own_values(self):
+        @il.asset
+        def lonely() -> list[dict[str, Any]]:
+            return []
+
+        asset = lonely()
+        assert asset.dataset is None
+        assert asset.materialization_strategy is None
+        assert asset.normalizer is None
 
 
 class TestIdentity:
@@ -176,10 +225,10 @@ class TestIdentity:
         assert il.Source.kind == "source"
         assert FakeSource.kind == "source"
 
-    def test_dataset_default_equals_source_key(self):
-        # ``_resolve`` fills an empty ``dataset`` with the source key at
-        # instance init — no class-level field mutation involved.
-        assert FakeSource().dataset == FakeSource.key
+    def test_dataset_defaults_to_unset_and_assets_read_the_source_key(self):
+        source = FakeSourceWithAssets()
+        assert source.dataset is None
+        assert source.assets[0].dataset == FakeSourceWithAssets.key
 
     def test_explicit_dataset_default_is_preserved(self):
         class FakeExplicitDatasetSource(il.Source):
@@ -241,7 +290,7 @@ class TestSourceRelations:
     def test_connection_trickles_to_assets(self):
         connection = FakeConnection(token="secret")
         source = Shop(connection=connection)
-        assert source.orders.connection is connection  # ty: ignore[unresolved-attribute]
+        assert source.orders.connection is connection
 
     def test_missing_connection_builds_and_fails_on_the_read(self, monkeypatch):
         # A connection reads its credentials from the environment, so an
@@ -283,7 +332,7 @@ class TestSourceRelations:
     def test_sibling_bindings_and_bind(self):
         assert Shop.sibling_bindings() == {"revenue": {"orders": "orders"}}
         source = Shop(connection=FakeConnection(token="secret"))
-        assert source.revenue.orders is source.orders  # ty: ignore[unresolved-attribute]
+        assert source.revenue.orders is source.orders
 
     def test_cross_source_key_stays_unbound(self):
         assert Finance.sibling_bindings() == {}
@@ -379,8 +428,12 @@ class TestDefinition:
             def data(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
                 return []
 
+        class FakeUndated(il.Asset):
+            def data(self) -> list[dict[str, Any]]:
+                return []
+
         class FakeMixedSource(il.Source):
-            asset_types: ClassVar[list[type[il.Asset]]] = [FakeDaily, *FakeSourceWithAssets.asset_types]
+            asset_types: ClassVar[list[type[il.Asset]]] = [FakeDaily, FakeUndated]
 
         [partitioning] = FakeMixedSource.definition().partitionings()
 
@@ -448,17 +501,9 @@ class TestAssets:
         asset_keys = {cls.key for cls in FakeSourceWithAssets.asset_types}
         assert asset_keys == {"fake_first", "fake_second"}
 
-    def test_nested_asset_classes_replaced_by_asset_ref_descriptors(self):
-        # After ``_collect_asset_types``, each nested class attribute is
-        # replaced by an ``AssetRef`` descriptor.  Class access returns
-        # the asset class, instance access returns the asset instance.
-        from interloper.source.base import AssetRef
-
-        assert isinstance(FakeSourceWithAssets.__dict__["FakeFirst"], AssetRef)
-        assert isinstance(FakeSourceWithAssets.__dict__["FakeSecond"], AssetRef)
-        # Class-level access returns the asset class.
+    def test_nested_asset_classes_stay_classes_on_the_class(self):
         assert FakeSourceWithAssets.FakeFirst.key == "fake_first"
-        assert FakeSourceWithAssets.FakeSecond.key == "fake_second"
+        assert FakeSourceWithAssets.__dict__["fake_first"] is FakeSourceWithAssets.FakeFirst
 
     def test_model_post_init_auto_instantiates_assets_from_types(self):
         source = FakeSourceWithAssets()
@@ -471,27 +516,16 @@ class TestAssets:
         source = FakeSourceWithAssets(assets=[asset])
         assert source.assets == [asset]
 
-    def test_getattr_returns_asset_instance_by_key(self):
+    def test_an_asset_is_reachable_by_key(self):
         source = FakeSourceWithAssets()
         looked_up = source.fake_first
         assert type(looked_up).key == "fake_first"
         assert looked_up is source.assets[0]
 
-    def test_getattr_raises_for_unknown_key(self):
+    def test_an_unknown_key_raises(self):
         source = FakeSourceWithAssets()
         with pytest.raises(AttributeError):
             _ = source.does_not_exist
-
-    def test_asset_def_returns_definition_with_source_key(self):
-        defn = FakeSourceWithAssets.asset_def("fake_first")
-        assert isinstance(defn, AssetDefinition)
-        assert defn.key == "fake_first"
-        assert defn.source_key == FakeSourceWithAssets.key
-        assert defn.qualified_key == f"{FakeSourceWithAssets.key}.fake_first"
-
-    def test_asset_def_raises_for_unknown_key(self):
-        with pytest.raises(KeyError):
-            FakeSourceWithAssets.asset_def("does_not_exist")
 
     def test_assets_are_parented_by_their_source(self):
         source = FakeSourceWithAssets()
@@ -499,10 +533,171 @@ class TestAssets:
         assert source.fake_first.qualified_key == "fake_source_with_assets.fake_first"
 
 
+class TestReachingAnAsset:
+    def test_the_class_read_is_the_asset_class(self):
+        assert Cascade.plain.key == "plain"
+        assert isinstance(Cascade.plain, type)
+
+    def test_the_instance_read_is_the_live_asset(self):
+        source = Cascade()
+        assert source.plain is source.assets[1]
+        assert source.plain.parent is source
+
+    def test_a_nested_asset_class_is_reachable_under_its_key(self):
+        source = Shop(connection=FakeConnection(token="t"))
+        assert source.orders is source.Orders
+
+    def test_a_listed_asset_is_reachable_under_its_key(self):
+        @il.asset
+        def listed() -> list[dict[str, Any]]:
+            return []
+
+        class Listing(il.Source):
+            asset_types: ClassVar[list[type[il.Asset]]] = [listed]
+
+        assert Listing.listed is listed  # ty: ignore[unresolved-attribute]
+        assert Listing().listed.parent is not None
+
+    def test_another_holder_reads_the_class(self):
+        class Holder:
+            asset_cls = Cascade.plain
+
+        assert Holder().asset_cls is Cascade.plain
+
+    def test_a_standalone_asset_is_untouched(self):
+        @il.asset
+        def lonely() -> list[dict[str, Any]]:
+            return []
+
+        assert lonely().parent is None
+        assert lonely.classpath().endswith(".lonely")
+
+    def test_an_asset_owned_by_another_source_is_refused(self):
+        with pytest.raises(TypeError, match="already belongs to source"):
+
+            class Thief(il.Source):
+                asset_types: ClassVar[list[type[il.Asset]]] = [Cascade.plain]
+
+    def test_an_asset_key_taken_by_another_attribute_is_refused(self):
+        @il.asset
+        def region() -> list[dict[str, Any]]:
+            return []
+
+        clashing = region
+        with pytest.raises(TypeError, match="the name is taken"):
+
+            class Clash(il.Source):
+                region: ClassVar[str] = "eu"
+                asset_types: ClassVar[list[type[il.Asset]]] = [clashing]
+
+    def test_an_asset_key_naming_an_inherited_attribute_is_refused(self):
+        @il.asset
+        def table() -> list[dict[str, Any]]:
+            return []
+
+        clashing = table
+        with pytest.raises(TypeError, match="the name is taken"):
+
+            class Clash(il.Source):
+                asset_types: ClassVar[list[type[il.Asset]]] = [clashing]
+
+    def test_a_subclass_keeps_its_parents_assets_reachable(self):
+        class Child(Shop):
+            pass
+
+        assert Child(connection=FakeConnection(token="t")).orders.key == "orders"
+
+    def test_a_pickled_source_keeps_its_assets_and_their_reads(self):
+        import pickle
+
+        source = pickle.loads(pickle.dumps(Cascade(dataset="raw")))
+        assert source.plain.parent is source
+        assert source.plain.dataset == "raw"
+
+    def test_select_asset_def_and_getattr_are_gone(self):
+        assert not hasattr(il.Source, "asset_def")
+        assert "select" not in il.Source.model_fields
+        assert "__getattr__" not in vars(il.Source)
+
+
 # -- Trickle-down resolution ---------------------------------------------------
 
 
-class TestResolution:
+class TestRelationInheritance:
+    def test_an_asset_reads_the_sources_connection_without_holding_it(self):
+        connection = FakeConnection(token="t")
+        source = Shop(connection=connection)
+        assert source.orders.connection is connection
+        assert source.orders.bound("connection") is None
+
+    def test_a_connection_rebound_on_the_source_reaches_the_asset(self):
+        source = Shop(connection=FakeConnection(token="a"))
+        replacement = FakeConnection(token="b")
+        source.connection = replacement
+        assert source.orders.connection is replacement
+
+    def test_an_assets_own_binding_wins(self):
+        own = FakeConnection(token="own")
+        source = Shop(connection=FakeConnection(token="source"))
+        source.orders.connection = own
+        assert source.orders.connection is own
+
+    def test_destinations_read_through_the_source(self):
+        destination = FakeDestination()
+        source = Shop(connection=FakeConnection(token="t"), destinations=[destination])
+        assert source.orders.destinations == [destination]
+        assert source.orders.bound("destinations") == []
+
+    def test_a_target_the_assets_relation_does_not_accept_is_not_inherited(self):
+        class Narrowed(il.Source):
+            class Picky(il.Asset):
+                destinations: list[il.Destination] = il.Relation(
+                    "destination", "fake_destination", many=True, optional=True
+                )
+
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        source = Narrowed(destinations=[FakeOtherDestination()])
+        assert source.picky.destinations == []
+
+    def test_a_relation_filled_through_the_source_validates(self):
+        source = Shop(connection=FakeConnection(token="t"))
+        source.orders.validate_relations()
+
+
+class TestInheritedSettings:
+    def test_a_source_policy_fills_its_assets(self):
+        policy = il.RetryPolicy(max_attempts=5)
+
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop(retry=policy).assets[0].retry == policy
+
+    def test_an_assets_own_policy_wins(self):
+        source_policy = il.RetryPolicy(max_attempts=5)
+        asset_policy = il.RetryPolicy(max_attempts=2)
+
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                retry: il.RetryPolicy | None = asset_policy
+
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop(retry=source_policy).assets[0].retry == asset_policy
+
+    def test_no_policy_anywhere_leaves_assets_unset(self):
+        class Shop(il.Source):
+            class Orders(il.Asset):
+                def data(self) -> Any:  # pragma: no cover
+                    return []
+
+        assert Shop().assets[0].retry is None
+
     def test_trickles_dataset_to_assets_without_one(self):
         class FakeTrickleSource(il.Source):
             class FakeChild(il.Asset):
@@ -581,7 +776,9 @@ class TestResolution:
 
         source = FakeTrickleSource(materialization_strategy=None)
         assert source.materialization_strategy is None
-        assert source.assets[0].materialization_strategy == MaterializationStrategy.RECONCILE
+        # Read through the source; conform treats an unset strategy as reconcile.
+        assert source.assets[0].materialization_strategy is None
+        assert source.assets[0].__dict__["materialization_strategy"] is None
 
     def test_trickles_default_destination_key(self):
         class FakeTrickleSource(il.Source):
@@ -616,98 +813,52 @@ class TestResolution:
 
 
 class TestReconfiguration:
-    def test_returns_a_copy(self):
-        source = FakeSourceWithAssets()
-        reconfigured = source(dataset="new")
-        assert reconfigured is not source
-        assert type(reconfigured) is type(source)
+    def test_naming_a_field_changes_it_on_a_copy(self):
+        source = Cascade()
+        copy = source(dataset="raw")
+        assert copy.dataset == "raw"
+        assert source.dataset is None
 
-    def test_override_dataset(self):
-        assert FakeSourceWithAssets()(dataset="override").dataset == "override"
+    def test_a_wrong_value_is_refused(self):
+        with pytest.raises(ValidationError):
+            Cascade()(region=42)
 
-    def test_override_dataset_repropagates_to_assets(self):
-        reconfigured = FakeSourceWithAssets()(dataset="override")
-        assert all(a.dataset == "override" for a in reconfigured.assets)
+    def test_an_unknown_name_is_refused(self):
+        with pytest.raises(TypeError, match="no field or relation"):
+            Cascade()(bogus=1)
 
-    def test_override_dataset_preserves_per_asset_overrides(self):
-        source = FakeSourceWithAssets()
-        source.assets[0].dataset = "pinned"
-        reconfigured = source(dataset="override")
-        assert [a.dataset for a in reconfigured.assets] == ["pinned", "override"]
+    def test_a_disabled_copy_disables_its_assets(self):
+        copy = Cascade()(enabled=False)
+        assert copy.plain.enabled is False
 
-    def test_override_destination(self):
-        new_dest = FakeDestination()
-        reconfigured = FakeSourceWithAssets()(destinations=new_dest)
-        assert reconfigured.destinations == [new_dest]
+    def test_an_inherited_none_inherits_again(self):
+        source = Cascade(dataset="raw")
+        asset = source.plain(dataset="own")
+        assert asset.dataset == "own"
+        assert asset(dataset=None).dataset == "raw"
 
-    def test_override_a_relation_leaves_the_original_alone(self):
-        source = FakeSourceWithAssets(destinations=[FakeDestination()])
-        reconfigured = source(destinations=FakeOtherDestination())
-        assert isinstance(source.destinations[0], FakeDestination)
-        assert isinstance(reconfigured.destinations[0], FakeOtherDestination)
+    def test_naming_a_relation_rebinds_it(self):
+        replacement = FakeConnection(token="b")
+        copy = Shop(connection=FakeConnection(token="a"))(connection=replacement)
+        assert copy.orders.connection is replacement
 
-    def test_unknown_relation_name_is_rejected(self):
-        with pytest.raises(TypeError, match="declares no relation"):
-            FakeSourceWithAssets()(watches=[FakeDestination()])
+    def test_none_clears_an_optional_relation(self):
+        copy = Shop(connection=FakeConnection(token="a"), destinations=[FakeDestination()])(destinations=None)
+        assert copy.destinations == []
 
-    def test_enabled_override_propagates_to_assets(self):
-        source = FakeSourceWithAssets()
-        reconfigured = source(enabled=False)
-        assert all(a.enabled is False for a in reconfigured.assets)
+    def test_a_copy_rewires_siblings_and_shares_outside_targets(self):
+        connection = FakeConnection(token="t")
+        source = Shop(connection=connection)
+        copy = source(dataset="raw")
+        assert copy.revenue.orders is copy.orders
+        assert copy.orders is not source.orders
+        assert copy.orders.parent is copy
+        assert copy.connection is connection
 
-    def test_copied_assets_have_source_backref_on_copy(self):
-        source = FakeSourceWithAssets()
-        reconfigured = source(dataset="new")
-        assert all(a.source is reconfigured for a in reconfigured.assets)
-
-    def test_omitted_relations_preserved(self):
-        source = FakeSourceWithAssets(dataset="original", destinations=[FakeDestination()])
-        reconfigured = source(dataset="updated")
-        assert isinstance(reconfigured.destinations[0], FakeDestination)
-
-    def test_override_default_destination_key(self):
-        reconfigured = FakeSourceWithAssets()(default_destination_key="primary")
-        assert reconfigured.default_destination_key == "primary"
-
-    def test_override_normalizer(self):
-        normalizer = Normalizer()
-        reconfigured = FakeSourceWithAssets()(normalizer=normalizer)
-        assert reconfigured.normalizer is normalizer
-
-    def test_override_materialization_strategy(self):
-        reconfigured = FakeSourceWithAssets()(
-            materialization_strategy=MaterializationStrategy.STRICT,
-        )
-        assert reconfigured.materialization_strategy == MaterializationStrategy.STRICT
-
-    def test_repointing_a_connection_reaches_a_trickled_asset(self):
-        a, b = FakeConnection(token="a"), FakeConnection(token="b")
-        source = Shop(connection=a)
-        reconfigured = source(connection=b)
-        assert reconfigured.orders.connection is b  # ty: ignore[unresolved-attribute]
-
-    def test_repointing_a_connection_preserves_an_asset_s_own_binding(self):
-        a, b, own = FakeConnection(token="a"), FakeConnection(token="b"), FakeConnection(token="own")
-        source = Shop(connection=a, assets={"orders": {"connection": own}})  # ty: ignore[invalid-argument-type]
-        reconfigured = source(connection=b)
-        # The copy is deep: what survives is an equal value, not the same object.
-        assert reconfigured.orders.connection.token == "own"  # ty: ignore[unresolved-attribute]
-
-    def test_repointing_a_connection_on_a_chained_copy_reaches_its_assets(self):
-        a, b = FakeConnection(token="a"), FakeConnection(token="b")
-        source = Shop(connection=a)
-        copy = source(dataset="other")
-        rebound = copy(connection=b)
-        assert rebound.orders.connection is b  # ty: ignore[unresolved-attribute]
-        assert source.orders.connection is a  # ty: ignore[unresolved-attribute]
-        # The intermediate copy is deep: what it holds is an equal value, not the same object.
-        assert copy.orders.connection.token == "a"  # ty: ignore[unresolved-attribute]
-
-    def test_repointing_a_connection_leaves_the_original_source_untouched(self):
-        a, b = FakeConnection(token="a"), FakeConnection(token="b")
-        source = Shop(connection=a)
-        source(connection=b)
-        assert source.orders.connection is a  # ty: ignore[unresolved-attribute]
+    def test_the_original_is_left_alone(self):
+        source = Shop(connection=FakeConnection(token="a"))
+        source(connection=FakeConnection(token="b"))
+        assert source.connection.token == "a"
 
 
 # -- Serialization round-trip --------------------------------------------------
@@ -793,12 +944,11 @@ class TestSpecRule:
         shop.orders.bind("destinations", own)
 
         entries = (shop.to_spec().init or {})["assets"]["orders"]["destinations"]
-        assert entries[0] == {"ref": destination.id}
-        assert entries[1]["path"] == FakeOtherDestination.classpath()
+        assert [entry["path"] for entry in entries] == [FakeOtherDestination.classpath()]
 
         rebuilt = Shop.from_spec(shop.to_spec())
-        assert [d.id for d in rebuilt.orders.destinations] == [destination.id, own.id]
-        assert rebuilt.orders._read_destination().id == destination.id
+        assert [d.id for d in rebuilt.orders.destinations] == [own.id]
+        assert rebuilt.orders.default_destination.id == own.id
 
     def test_round_trip_shares_instances_across_sources(self):
         destination = FakeDestination()
@@ -821,32 +971,4 @@ class TestSpecRule:
 
         finance = il.Source.from_spec(spec, resolve={shop.orders.id: shop.orders}.__getitem__)
 
-        assert finance.revenue.orders is shop.orders  # ty: ignore[unresolved-attribute]
-
-
-class TestSelect:
-    """Init-time asset selection via the ``select`` field."""
-
-    def test_unselected_assets_stay_as_non_enabled_deps(self):
-        source = FakeSourceWithAssets(select=["fake_second"])
-        by_key = {type(a).key: a for a in source.assets}
-        assert by_key["fake_second"].enabled
-        assert not by_key["fake_first"].enabled
-        # The disabled sibling stays wired as an upstream.
-        assert by_key["fake_second"].bound("fake_first") is by_key["fake_first"]
-
-    def test_selected_assets_keep_their_source(self):
-        source = FakeSourceWithAssets(select=["fake_first"])
-        assert all(a.source is source for a in source.assets)
-
-    def test_unknown_select_key_raises(self):
-        # SourceError is a ValueError, so pydantic wraps it at init time.
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError, match="has no asset"):
-            FakeSourceWithAssets(select=["nope"])
-
-    def test_dag_over_selected_source(self):
-        dag = il.DAG(FakeSourceWithAssets(select=["fake_second"]))
-        generations = dag.topological_generations()
-        assert [[type(a).key for a in g] for g in generations] == [["fake_second"]]
+        assert finance.revenue.orders is shop.orders

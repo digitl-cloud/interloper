@@ -109,6 +109,9 @@ class Operation(Component, Workload):
     depends on it, and does not execute. ``Asset`` adds the half only an
     asset has, which is that a disabled one is read-only and its downstreams
     resolve its data from its destination instead of recomputing it.
+    ``enabled`` and ``retry`` are inherited: an owned operation reads them
+    through its owner, which decides (a source's assets run only while the
+    source is enabled; one left without a retry policy uses its owner's).
 
     ``capture_traceback`` controls whether a failed execution's traceback
     is attached to its failure event; off for operations whose raw errors
@@ -129,13 +132,13 @@ class Operation(Component, Workload):
     enabled: bool = Field(
         default=True,
         description="Operation will execute",
-        json_schema_extra={"x-section": "Operation"},
+        json_schema_extra={"x-section": "Operation", "x-inherit": True},
     )
     retry: RetryPolicy | None = Field(
         default=None,
         title="Retry",
         description="Attempt budget for this operation's execution",
-        json_schema_extra={"x-section": "Operation"},
+        json_schema_extra={"x-section": "Operation", "x-inherit": True},
     )
 
     def operations(self) -> list[Operation]:

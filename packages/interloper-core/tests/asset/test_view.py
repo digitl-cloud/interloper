@@ -81,10 +81,22 @@ class TestDefinition:
 
 
 class TestRun:
+    def test_a_view_references_an_upstream_absent_from_the_dag(self):
+        @il.asset
+        def unrelated() -> list[dict[str, Any]]:
+            return []
+
+        warehouse = RecordingWarehouse(id="warehouse")
+        shop = Shop(destinations=[warehouse], enabled=False)
+        reporting = Reporting(destinations=[warehouse])
+        reporting.order_totals.bind("orders", shop.orders)
+        definition = il.run(reporting.order_totals.run_async(None, il.DAG(unrelated()), {}))
+        assert '"orders"' in definition
+
     def test_a_run_hands_data_references_and_creates_the_view(self):
         warehouse = RecordingWarehouse(id="warehouse")
-        shop_a = Shop(id="a", destinations=[warehouse], select=[])
-        shop_b = Shop(id="b", destinations=[warehouse], select=[])
+        shop_a = Shop(id="a", destinations=[warehouse], enabled=False)
+        shop_b = Shop(id="b", destinations=[warehouse], enabled=False)
         reporting = Reporting(destinations=[warehouse])
 
         il.DAG(shop_a, shop_b, reporting).materialize()
@@ -122,7 +134,7 @@ class TestRun:
     def test_a_partitioned_run_recreates_the_same_view(self):
         warehouse = RecordingWarehouse(id="warehouse")
         reporting = Reporting(destinations=[warehouse])
-        shop = Shop(destinations=[warehouse], select=[])
+        shop = Shop(destinations=[warehouse], enabled=False)
         dag = il.DAG(shop, reporting)
         dag.materialize(il.TimePartition(dt.date(2026, 1, 1)))
         dag.materialize(il.TimePartition(dt.date(2026, 1, 2)))
@@ -136,7 +148,7 @@ class TestRun:
 
         warehouse = Refusing(id="warehouse")
         reporting = Reporting(destinations=[warehouse])
-        shop = Shop(destinations=[warehouse], select=[])
+        shop = Shop(destinations=[warehouse], enabled=False)
         result = il.DAG(shop, reporting).materialize()
         assert result.status is ExecutionStatus.FAILED
         assert result.executions[reporting.order_totals.id].error == "RuntimeError: column date not found"
@@ -144,7 +156,7 @@ class TestRun:
 
     def test_a_disabled_view_creates_nothing(self):
         warehouse = RecordingWarehouse(id="warehouse")
-        reporting = Reporting(destinations=[warehouse], select=[])
+        reporting = Reporting(destinations=[warehouse], enabled=False)
         assert il.run(reporting.order_totals.materialize_async(None, None, {})) is None
         assert RecordingWarehouse.views == []
 

@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import ibis
-from interloper.asset import Upstream, View
+from interloper.asset import Output, Upstream, View
 from interloper.destination.database import TableReference
 from interloper.errors import ConfigError
 
@@ -14,7 +14,6 @@ from interloper_sql.view.types import IBIS_DIALECTS, ibis_schema
 
 if TYPE_CHECKING:
     from interloper.asset import Asset
-    from interloper.dag.base import DAG
     from interloper.partitioning import PartitionWindow
 
 
@@ -56,56 +55,42 @@ class IbisView(View):
     compiles it for its own dialect.
     """
 
-    async def _read_upstreams(
-        self,
-        name: str,
-        targets: list[Asset],
-        dag: DAG | None,
-        window: PartitionWindow | None,
-        metadata: dict[str, Any],
-    ) -> list[Upstream]:
-        """Turn every table reference into a typed Ibis table.
+    async def _upstream(self, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]) -> Upstream:
+        """Turn the upstream's table reference into a typed Ibis table.
 
         Args:
-            name: The ``data()`` parameter the upstreams are built for.
-            targets: The bound upstream assets.
-            dag: Forwarded to `View._read_upstreams`.
-            window: Forwarded.
+            target: The upstream asset.
+            window: Forwarded; a reference has no scope.
             metadata: Forwarded.
 
         Returns:
-            One `Upstream` per target, its ``data`` an ``ibis.Table``.
+            The upstream, its ``data`` an ``ibis.Table``.
 
         Raises:
-            ConfigError: If an upstream declares no schema, or its reference is not a table.
+            ConfigError: If the upstream declares no schema, or its reference is not a table.
         """
-        upstreams = await super()._read_upstreams(name, targets, dag, window, metadata)
-        tables: list[Upstream] = []
-        for upstream in upstreams:
-            reference = upstream.data
-            if not isinstance(reference, TableReference):
-                raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' is not a table: {reference!r}")
-            if reference.schema is None:
-                raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' declares no schema to type its table")
-            *outer, table = reference.parts
-            location = {}
-            if outer:
-                location["database"] = outer[-1]
-            if len(outer) > 1:
-                location["catalog"] = outer[-2]
-            tables.append(
-                Upstream(asset=upstream.asset, data=ibis.table(ibis_schema(reference.schema), name=table, **location))
-            )
-        return tables
+        upstream = await super()._upstream(target, window, metadata)
+        reference = upstream.data
+        if not isinstance(reference, TableReference):
+            raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' is not a table: {reference!r}")
+        if reference.schema is None:
+            raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' declares no schema to type its table")
+        *outer, table = reference.parts
+        location = {}
+        if outer:
+            location["database"] = outer[-1]
+        if len(outer) > 1:
+            location["catalog"] = outer[-2]
+        return Upstream(asset=upstream.asset, data=ibis.table(ibis_schema(reference.schema), name=table, **location))
 
-    def _definition(self, result: Any) -> IbisDefinition:
+    def _output(self, result: Any) -> Output:
         """Check the expression against the declared schema and wrap it.
 
         Args:
             result: The value ``data()`` returned.
 
         Returns:
-            The compilable definition.
+            The output, its data the compilable definition.
 
         Raises:
             ConfigError: If the result is not an Ibis table, the view
@@ -126,7 +111,7 @@ class IbisView(View):
                 f"View '{self.qualified_key}' declares columns its expression does not produce: "
                 f"missing {missing}, extra {extra}, retyped {retyped}"
             )
-        return IbisDefinition(result)
+        return Output(IbisDefinition(result))
 
 
 def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upstream], Any]) -> ibis.Table:

@@ -303,7 +303,7 @@ class TestAlreadyTerminal:
         class EmptyWorkload(il.Source):
             """Source that selects none of its assets."""
 
-        store = _RecordingStore(EmptyWorkload(select=[]), run=run, already_terminal=True)
+        store = _RecordingStore(EmptyWorkload(), run=run, already_terminal=True)
 
         with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
             assert _executor(store).execute(run.id) is False
@@ -332,7 +332,7 @@ class TestEmptyWorkload:
         class EmptyWorkload(il.Source):
             """Source that selects none of its assets."""
 
-        store = _RecordingStore(EmptyWorkload(select=[]), run=run)
+        store = _RecordingStore(EmptyWorkload(), run=run)
 
         assert _executor(store).execute(run.id) is True
         assert store.completed == [(run.id, True)]

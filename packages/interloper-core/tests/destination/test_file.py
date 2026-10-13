@@ -161,7 +161,7 @@ class TestPathLayout:
 
         dest.write(IOContext(asset=asset, window=_partition(1).window), [{"a": 1}])
 
-        expected = tmp_path / asset.dataset / asset.table / "date=2024-01-01" / "data.pkl"
+        expected = tmp_path / (asset.dataset or "") / asset.table / "date=2024-01-01" / "data.pkl"
         assert expected.is_file()
 
 
@@ -224,7 +224,7 @@ class TestPartitionRowCounts:
         dest = FileDestination(id="file", base_path=str(tmp_path))
         asset = partitioned_asset()
         dest.write(IOContext(asset=asset, window=_partition(1).window), [{"v": 1}])
-        base = tmp_path / asset.dataset / asset.table
+        base = tmp_path / (asset.dataset or "") / asset.table
         (base / "not_a_partition").mkdir()
         (base / "date=2024-01-09").mkdir()
 

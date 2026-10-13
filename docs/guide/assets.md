@@ -153,11 +153,18 @@ asset = users(destinations=il.CSVDestination(base_path="./data"), dataset="shop"
 
 read_only = asset(enabled=False)
 strict = asset(materialization_strategy=il.MaterializationStrategy.STRICT)
-bare = asset(normalizer=None)           # None explicitly clears the normalizer
+bare = asset(normalizer=None)           # unset: the source's normalizer, or none
 ```
 
-Every keyword of the call means "leave unchanged" when omitted, except a relation name: passing
-one at all changes it, since `None` there clears the binding.
+Naming a field or a relation changes it, leaving it out keeps it; `None` clears a relation and
+makes a setting the asset inherits from its source inherit again. An asset owned by a source
+reads its `dataset`, `default_destination_key`, `normalizer`, `materialization_strategy`,
+`retry` and unbound relations through the source on every read (see
+[Sources](sources.md#what-assets-read-through-their-source)), and runs only while the source is
+enabled too.
+
+`asset.default_destination` is the destination downstream assets read it from: the one whose key
+is `default_destination_key`, else the first.
 
 ```py
 rewired = asset(connection=OtherConnection(...), campaigns=[fb.campaigns, tt.campaigns])

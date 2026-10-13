@@ -81,7 +81,7 @@ def _run(view_source: il.Source, *shops: il.Source) -> str:
 
 def test_upstreams_arrive_as_typed_ibis_tables_and_the_definition_compiles_for_the_dialect():
     warehouse = RecordingWarehouse(id="warehouse")
-    sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], select=[]))
+    sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], enabled=False))
     assert '"shop"."orders__1"' in sql
     assert "SUM(" in sql
     assert isinstance(Reporting.totals, type) and issubclass(Reporting.totals, il.View)  # ty: ignore[unresolved-attribute]
@@ -102,8 +102,8 @@ def test_union_stamps_a_column_per_upstream():
     warehouse = RecordingWarehouse(id="warehouse")
     sql = _run(
         StampedReporting(destinations=[warehouse]),
-        Shop(account_id="1", destinations=[warehouse], select=[]),
-        Shop(account_id="2", destinations=[warehouse], select=[]),
+        Shop(account_id="1", destinations=[warehouse], enabled=False),
+        Shop(account_id="2", destinations=[warehouse], enabled=False),
     )
     assert "'1'" in sql and "'2'" in sql and "UNION ALL" in sql
 
@@ -121,7 +121,8 @@ def test_union_stamps_an_integer_as_int64():
             return union(orders, account_number=lambda upstream: 1)
 
     warehouse = RecordingWarehouse(id="warehouse")
-    sql = _run(NumberedReporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], select=[]))
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
+    sql = _run(NumberedReporting(destinations=[warehouse]), shop)
     assert "1 AS" in sql
 
 
@@ -138,7 +139,7 @@ def test_an_expression_that_misses_a_declared_column_is_refused():
             return union(orders).select("date")
 
     warehouse = RecordingWarehouse(id="warehouse")
-    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
     wrong = Wrong(destinations=[warehouse])
     result = il.DAG(shop, wrong).materialize()
     assert result.status is ExecutionStatus.FAILED
@@ -161,7 +162,7 @@ def test_an_upstream_without_a_schema_is_refused():
             return rows.data
 
     warehouse = RecordingWarehouse(id="warehouse")
-    untyped = Untyped(destinations=[warehouse], select=[])
+    untyped = Untyped(destinations=[warehouse], enabled=False)
     over = Over(destinations=[warehouse])
     result = il.DAG(untyped, over).materialize()
     assert result.status is ExecutionStatus.FAILED
@@ -172,11 +173,11 @@ def test_an_upstream_without_a_schema_is_refused():
 @pytest.mark.parametrize("dialect", sorted(IBIS_DIALECTS))
 def test_a_definition_compiles_for_every_dialect(dialect: str):
     warehouse = RecordingWarehouse(id="warehouse")
-    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
     reporting = Reporting(destinations=[warehouse])
     dag = il.DAG(shop, reporting)
     view = reporting.totals
-    definition = view._definition(il.run(view.run_async(None, dag, {})))  # ty: ignore[unresolved-attribute]
+    definition = il.run(view.run_async(None, dag, {}))
     assert "SELECT" in definition.compile(dialect)
 
 
@@ -193,8 +194,8 @@ def test_a_ibis_view_runs_on_duckdb(tmp_path: Path):
     )
     client.execute("CREATE TABLE shop.orders__2 AS SELECT * FROM (VALUES (3.0, DATE '2026-10-02')) AS t(total, date)")
     result = il.DAG(
-        Shop(account_id="1", destinations=[warehouse], select=[]),
-        Shop(account_id="2", destinations=[warehouse], select=[]),
+        Shop(account_id="1", destinations=[warehouse], enabled=False),
+        Shop(account_id="2", destinations=[warehouse], enabled=False),
         Reporting(destinations=[warehouse]),
     ).materialize()
     assert result.status is ExecutionStatus.COMPLETED
@@ -220,7 +221,7 @@ def test_a_three_part_table_name_sets_the_catalog():
             return ("proj", dataset or "main", table)
 
     warehouse = ThreePartWarehouse(id="warehouse")
-    sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], select=[]))
+    sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], enabled=False))
     assert '"proj"."shop"."orders__1"' in sql
 
 
@@ -230,7 +231,7 @@ def test_an_upstream_that_is_not_a_table_is_refused():
             return "not a table"
 
     warehouse = Opaque(id="warehouse")
-    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
     reporting = Reporting(destinations=[warehouse])
     result = il.DAG(shop, reporting).materialize()
     assert result.status is ExecutionStatus.FAILED
@@ -245,7 +246,7 @@ def test_a_result_that_is_not_an_ibis_table_is_refused():
             return "SELECT 1"
 
     warehouse = RecordingWarehouse(id="warehouse")
-    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
     textual = Textual(destinations=[warehouse])
     result = il.DAG(shop, textual).materialize()
     assert result.status is ExecutionStatus.FAILED
@@ -261,7 +262,7 @@ def test_a_view_without_a_schema_is_refused():
             return union(orders)
 
     warehouse = RecordingWarehouse(id="warehouse")
-    shop = Shop(account_id="1", destinations=[warehouse], select=[])
+    shop = Shop(account_id="1", destinations=[warehouse], enabled=False)
     unschematic = Unschematic(destinations=[warehouse])
     result = il.DAG(shop, unschematic).materialize()
     assert result.status is ExecutionStatus.FAILED

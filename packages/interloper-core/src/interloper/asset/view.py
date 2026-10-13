@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from interloper.asset.base import Asset
-from interloper.asset.upstream import Upstream
+from interloper.asset.output import Output
 from interloper.errors import ConfigError
 from interloper.events import Step, StepKind
 from interloper.partitioning import PartitionWindow
@@ -15,9 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from interloper.component import Component
-    from interloper.dag.base import DAG
     from interloper.destination import Destination
-    from interloper.partitioning import Partition
 
 
 class View(Asset):
@@ -34,43 +32,28 @@ class View(Asset):
     ``dialect`` pins a raw-SQL view to the warehouses whose dialect it is
     written in; ``None`` leaves the SQL unchecked, the author's assertion that
     it is portable.
+
+    A view varies from an asset through its hooks alone:
+    ``reads_upstream_data`` makes each upstream a reference, `_output` keeps
+    the definition as it is, and `_land` creates the view.
     """
 
     reads_upstream_data: ClassVar[bool] = False
     dialect: ClassVar[str | None] = None
 
-    # -- Execution -------------------------------------------------------------
+    # -- Destination -----------------------------------------------------------
 
-    async def materialize_async(
-        self,
-        window: Partition | PartitionWindow | None = None,
-        dag: DAG | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> Any:
-        """Build the definition and create the view.
+    @property
+    def default_destination(self) -> Destination:
+        """The one destination this view is created in.
 
-        Args:
-            window: Accepted and ignored: every window builds the same definition.
-            dag: DAG the upstream assets are looked up in.
-            metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
-
-        Returns:
-            The definition ``data()`` returned, or ``None`` if the view is disabled.
+        Raises:
+            ConfigError: If the view does not have exactly one destination.
         """
-        if not self.enabled:
-            return None
-        window = self.effective_window(PartitionWindow.of(window))
-        metadata = metadata or {}
-        definition = self._definition(await self.run_async(window, dag, metadata))
-        destination = self._view_destination()
-        step = Step(
-            StepKind.DEST_WRITE,
-            self.event_metadata(metadata, window, destination_key=destination.key),
-            subject=f"view '{self.key}'",
-        )
-        with step:
-            await invoke(destination.create_view, self, definition)
-        return definition
+        destinations: list[Destination] = self.destinations
+        if len(destinations) != 1:
+            raise ConfigError(f"View '{self.qualified_key}' needs exactly one destination, has {len(destinations)}")
+        return destinations[0]
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check the relations as any asset, then what only a view needs.
@@ -95,7 +78,7 @@ class View(Asset):
         if nodes is None:
             return
         problems: list[str] = []
-        destinations = self._destinations()
+        destinations: list[Destination] = self.destinations
         if len(destinations) != 1:
             problems.append(f"a view needs exactly one destination, has {len(destinations)}")
         else:
@@ -116,61 +99,30 @@ class View(Asset):
 
     # -- Internals -------------------------------------------------------------
 
-    def _definition(self, result: Any) -> Any:
-        """What ``data()`` returned, as the destination receives it.
-
-        Args:
-            result: The value ``data()`` returned.
-
-        Returns:
-            The result, untouched; a subclass may check or wrap it.
-        """
-        return result
-
-    def _normalize_and_conform(self, result: Any) -> Any:
+    def _output(self, result: Any) -> Output:
         """Leave a definition alone: it is not data.
 
         Args:
             result: The value ``data()`` returned.
 
         Returns:
-            The result, untouched.
+            The definition as the output's data, without a schema.
         """
-        return result
+        return Output(result)
 
-    def _view_destination(self) -> Destination:
-        """The one destination this view is created in.
-
-        Returns:
-            The destination.
-
-        Raises:
-            ConfigError: If the view does not have exactly one destination.
-        """
-        destinations = self._destinations()
-        if len(destinations) != 1:
-            raise ConfigError(f"View '{self.qualified_key}' needs exactly one destination, has {len(destinations)}")
-        return destinations[0]
-
-    async def _read_upstreams(
-        self,
-        name: str,
-        targets: list[Asset],
-        dag: DAG | None,
-        window: PartitionWindow | None,
-        metadata: dict[str, Any],
-    ) -> list[Upstream]:
-        """Reference every upstream instead of reading it.
+    async def _land(self, output: Output, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
+        """Create or replace the view in its one destination, as an observed write.
 
         Args:
-            name: The ``data()`` parameter the upstreams are built for.
-            targets: The bound upstream assets.
-            dag: Unused; a reference needs no run.
-            window: Unused; a reference has no scope.
-            metadata: Unused.
-
-        Returns:
-            One `Upstream` per target, its ``data`` the destination's reference.
+            output: The run's output, its data the view's definition.
+            window: The run's window; a view is unpartitioned, so ``None``.
+            metadata: Run-level metadata carried onto the emitted events.
         """
-        destination = self._view_destination()
-        return [Upstream(asset=target, data=destination.reference(target)) for target in targets]
+        destination = self.default_destination
+        step = Step(
+            StepKind.DEST_WRITE,
+            self.event_metadata(metadata, window, destination_key=destination.key),
+            subject=f"view '{self.key}'",
+        )
+        with step:
+            await invoke(destination.create_view, self, output.data)

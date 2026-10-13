@@ -19,7 +19,7 @@ from interloper.asset.base import AssetDefinition
 from interloper.component.base import Component
 from interloper.component.relation import ComponentIdentity
 from interloper.dag import DAG
-from interloper.errors import AssetError, ConfigError, DestinationError, PartitionError
+from interloper.errors import AssetError, ConfigError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionConfig
 from interloper.partitioning.time import TimePartition, TimePartitionConfig, TimePartitionWindow
@@ -671,24 +671,6 @@ class TestDestinations:
     def test_nothing_configured_leaves_the_relation_empty(self):
         assert FakeAsset().destinations == []
 
-    def test_validate_destination_is_a_noop_when_no_key_is_declared(self):
-        FakeAsset()._validate_destination(FakeDestination())
-
-    def test_validate_destination_accepts_a_declared_key(self):
-        @il.asset(relations={"destinations": [FakeDestination]})
-        def narrowed() -> Any:  # pragma: no cover - not exercised
-            return []
-
-        narrowed()._validate_destination(FakeDestination())
-
-    def test_validate_destination_rejects_an_undeclared_key(self):
-        @il.asset(relations={"destinations": [FakeDestination]})
-        def narrowed() -> Any:  # pragma: no cover - not exercised
-            return []
-
-        with pytest.raises(DestinationError):
-            narrowed()._validate_destination(FakeOtherDestination())
-
     def test_binding_an_undeclared_destination_is_rejected(self):
         @il.asset(relations={"destinations": [FakeDestination]})
         def narrowed() -> Any:  # pragma: no cover - not exercised
@@ -698,20 +680,59 @@ class TestDestinations:
             narrowed(destinations=[FakeOtherDestination()])
 
 
-class TestReadDestination:
-    def test_default_destination_key_selects_the_read_destination(self):
+class TestDefaultDestination:
+    def test_default_destination_key_selects_the_default_destination(self):
         first, second = il.MemoryDestination(), il.CSVDestination(base_path="/tmp/unused")
         asset = FakeAsset(destinations=[first, second], default_destination_key=second.key)
-        assert asset._read_destination() is second
+        assert asset.default_destination is second
 
-    def test_falls_back_to_the_first_destination(self):
+    def test_the_first_destination_is_the_default_without_a_key(self):
         first, second = il.MemoryDestination(), il.CSVDestination(base_path="/tmp/unused")
-        asset = FakeAsset(destinations=[first, second])
-        assert asset._read_destination() is first
+        assert FakeAsset(destinations=[first, second]).default_destination is first
 
-    def test_raises_without_destinations(self):
+    def test_no_destination_is_an_error(self):
         with pytest.raises(AssetError, match="No destination found"):
-            FakeAsset()._read_destination()
+            _ = FakeAsset().default_destination
+
+
+class TestConcurrentRuns:
+    async def test_two_runs_of_one_instance_keep_their_own_schemas(self):
+        seen: list[list[str]] = []
+
+        class Recording(il.MemoryDestination):
+            def write(self, context: il.IOContext, data: Any) -> None:
+                assert context.schema is not None
+                seen.append([spec.name for spec in context.schema.field_specs()])
+
+        @il.asset
+        def shifting(context: il.ExecutionContext) -> list[dict[str, Any]]:
+            return [{"left": 1}] if context.metadata["side"] == "left" else [{"right": 1}]
+
+        asset = shifting(destinations=[Recording()])
+        await asyncio.gather(
+            asset.materialize_async(metadata={"side": "left"}),
+            asset.materialize_async(metadata={"side": "right"}),
+        )
+        assert sorted(seen) == [["left"], ["right"]]
+
+
+class TestParameters:
+    def test_the_signature_is_recorded_once_in_order(self):
+        class Upstreamed(il.Asset):
+            def data(self, context: il.ExecutionContext, orders: il.Upstream, **extra: Any) -> Any:
+                return []
+
+        assert Upstreamed._parameters == ("context", "orders")
+
+    def test_a_subclass_inherits_the_record(self):
+        class Parent(il.Asset):
+            def data(self, context: il.ExecutionContext) -> Any:
+                return []
+
+        class Child(Parent):
+            pass
+
+        assert Child._parameters == ("context",)
 
 
 # -- Partitioning validation ---------------------------------------------------
@@ -805,11 +826,9 @@ class TestReconfiguration:
     def test_override_default_destination_key(self):
         assert FakeAsset()(default_destination_key="memory").default_destination_key == "memory"
 
-    def test_normalizer_explicit_none_clears_normalizer(self):
-        # The ``normalizer`` parameter uses a _UNSET sentinel so that
-        # passing ``None`` explicitly means "clear it" (not "unchanged").
-        reconfigured = FakeAsset()(normalizer=None)
-        assert reconfigured.normalizer is None
+    def test_normalizer_none_clears_without_a_sentinel(self):
+        asset = FakeAsset(normalizer=il.Normalizer())
+        assert asset(normalizer=None).normalizer is None
 
     def test_omitted_fields_preserved(self):
         asset = FakeAsset(dataset="original", enabled=False)
@@ -841,7 +860,7 @@ class TestReconfiguration:
         assert asset(destinations=None).destinations == []
 
     def test_an_unknown_keyword_is_rejected(self):
-        with pytest.raises(TypeError, match="declares no relation"):
+        with pytest.raises(TypeError, match="no field or relation"):
             FakeAsset()(nonsense=1)
 
 
@@ -1183,17 +1202,6 @@ class TestConform:
 
         with pytest.raises(AssetError, match=r"cannot[\s\S]*be checked"):
             await users().run_async()
-
-    async def test_auto_without_schema_infers_effective_schema(self):
-        @il.asset
-        def users() -> list[dict[str, Any]]:
-            return [{"user_id": 1, "name": "a"}]
-
-        asset = users()
-        await asset.run_async()
-        assert asset._effective_schema is not None
-        names = [s.name for s in asset._effective_schema.field_specs()]
-        assert names == ["user_id", "name"]
 
     async def test_iocontext_carries_schema_to_destination(self):
         captured: dict[str, Any] = {}
@@ -1602,67 +1610,6 @@ class TestNonMaterializableAssets:
         asset = FakeAsset(destinations=[il.MemoryDestination()], enabled=False)
 
         assert await asset.materialize_async() is None
-
-
-# -- Conform edge cases --------------------------------------------------------
-
-
-class TestConformEdgeCases:
-    """What ``_normalize_and_conform`` does with data no representation matches."""
-
-    async def test_non_tabular_data_without_a_schema_passes_through(self):
-        # Arbitrary objects bound for a FileDestination have no contract to
-        # check against, so they must reach the destination untouched.
-        payload = object()
-
-        @il.asset()
-        def opaque() -> Any:
-            return payload
-
-        asset = opaque(id="opaque")
-
-        assert asset._normalize_and_conform(payload) is payload
-        assert asset._effective_schema is None
-
-    def test_non_tabular_data_with_a_schema_is_an_actionable_error(self):
-        @il.asset(schema=ConformSchema)
-        def opaque() -> Any:
-            return object()
-
-        asset = opaque(id="opaque")
-
-        with pytest.raises(AssetError, match="declares a schema but returned data that cannot be checked"):
-            asset._normalize_and_conform(object())
-
-    def test_strict_returns_the_validated_data_equal(self):
-        from interloper.normalizer import MaterializationStrategy
-
-        @il.asset(schema=StrictConformSchema, materialization_strategy=MaterializationStrategy.STRICT)
-        def rows() -> list[dict[str, Any]]:
-            return [{"user_id": 1, "name": "x"}]
-
-        asset = rows(id="rows")
-        data = [{"user_id": 1, "name": "x"}]
-
-        assert asset._normalize_and_conform(data) == data
-        assert asset._effective_schema is StrictConformSchema
-
-    def test_failed_inference_leaves_no_effective_schema(self, monkeypatch: pytest.MonkeyPatch):
-        # Inference is best-effort metadata; a representation that cannot
-        # infer must not fail the materialization.
-        from interloper.representation import RowsRepresentation
-
-        @il.asset()
-        def rows() -> list[dict[str, Any]]:
-            return [{"a": 1}]
-
-        asset = rows(id="rows")
-        monkeypatch.setattr(
-            RowsRepresentation, "infer", lambda self, data: (_ for _ in ()).throw(RuntimeError("cannot infer"))
-        )
-
-        assert asset._normalize_and_conform([{"a": 1}]) == [{"a": 1}]
-        assert asset._effective_schema is None
 
 
 # -- Time-partition scope validation -------------------------------------------

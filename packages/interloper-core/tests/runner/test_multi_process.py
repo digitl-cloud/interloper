@@ -185,7 +185,7 @@ class TestWorker:
     def test_a_flaky_operation_is_retried_inside_the_worker(self) -> None:
         il.MemoryDestination.clear()
         _FLAKY_ATTEMPTS.clear()
-        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], select=["flaky"]))
+        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], assets={"flaky": {}}))  # ty: ignore[invalid-argument-type]
         operation = next(o for o in dag.operations if o.key == "flaky")
 
         _id, success, error, tb, _effects, retries = _worker(operation.id, spec, None, {})
@@ -198,7 +198,7 @@ class TestWorker:
 
     def test_an_exhausted_budget_reports_its_retried_attempts(self) -> None:
         il.MemoryDestination.clear()
-        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], select=["always_broken"]))
+        spec, dag = _spec(RetrySource(destinations=[il.MemoryDestination()], assets={"always_broken": {}}))  # ty: ignore[invalid-argument-type]
         operation = next(o for o in dag.operations if o.key == "always_broken")
 
         _id, success, error, _tb, _effects, retries = _worker(operation.id, spec, None, {})
@@ -250,7 +250,7 @@ class TestRun:
 
         result = il.run(
             runner.model_copy(update={"on_event": events.append}).run(
-                il.DAG(RetrySource(destinations=[il.MemoryDestination()], select=["flaky"]))
+                il.DAG(RetrySource(destinations=[il.MemoryDestination()], assets={"flaky": {}}))  # ty: ignore[invalid-argument-type]
             )
         )
 

@@ -124,26 +124,40 @@ definition rather than a component silently missing a relation.
 |--------|--------------|
 | `bind(name, *targets)` | Writes bindings, together with `unbind` and attribute assignment (which routes through the same checks, see below). Checks `accepts` for each target; `many` accumulates and collapses duplicates, single-valued replaces what it holds and refuses more than one target at a time. |
 | `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
-| `bound(name)` | What is explicitly bound: a list for `many`, the single component or `None`. |
-| `resolve(name)` | What a reader gets: `bound(name)`, else the relation's fallback for a single-valued relation, an empty list for a `many` one. Fallbacks are never bound. |
-| `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. |
+| `bound(name)` | What the component holds itself: a list for `many`, the single component or `None`. |
+| `resolve(name)` | What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a `many` one. Attribute access reads the same, without the fallback. Fallbacks are never bound. |
+| `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. For components that are not owned (a source's destinations, a job's targets); an owned one reads through its owner instead. |
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
 
 **Extension point**: `on_rebind(name)` is called once after every write to a binding, whichever
 way it was written (constructor kwarg, `bind`, `unbind`, attribute assignment, a parent's
 `trickle`), with the new binding already in place. The base does nothing. A kind that cascades its
-wiring overrides it; this is the whole of how a source's connection reaches its assets:
+wiring into components it does not own overrides it; this is how a source's connection reaches its
+destinations (its assets read it through the source and need nothing):
 
 ```py
 class Source(Component):
     def on_rebind(self, name: str) -> None:
-        for asset in self.assets:
-            self.trickle(asset)
         for destination in self.destinations:
             self.trickle(destination)
 ```
 
 Bind on other components from inside the hook, never on `self`: that would re-enter it.
+
+**Inherited settings**: a field declared with `inherit=True` on a field factory (or
+`json_schema_extra={"x-inherit": True}` on a plain `Field`) stores only the component's own value,
+`None` while unset, and reads through its owner on every read. The owner decides what its child
+reads in one method, `inherited(child, name, own)`: the base returns `own` when set, else the
+owner's own value under that name. `Source` overrides it to fill a dataset's `{field}` template
+and to disable its assets while it is disabled. Specs and configs carry stored values only.
+
+**Asset kinds** vary through three hooks, and override nothing else of the pipeline:
+
+| Hook | `Asset` does | Overridden by |
+|------|--------------|---------------|
+| `_upstream(target, window, metadata)` | reads the upstream's data (`Upstream.read`), or refers to it when the class sets `reads_upstream_data = False` | `IbisView`, to type the reference as an Ibis table |
+| `_output(result)` | shapes, normalizes and conforms what `data()` returned (`Output.from_result`) | `View`, to keep the definition as it is; `IbisView`, to check and wrap it |
+| `_land(output, window, metadata)` | writes to every destination, one observed step each | `View`, to create the view |
 
 A relation name is also a constructor keyword and an assignable attribute; assignment goes
 through `Relation.__set__`, which shares `bind`'s single write path: the replacement is checked

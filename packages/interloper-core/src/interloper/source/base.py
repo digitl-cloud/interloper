@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from pydantic import Field, model_validator
-from typing_extensions import Self
+from pydantic import ConfigDict, Field, model_validator
 
 from interloper.asset import Asset, Reference
-from interloper.asset.base import AssetDefinition
+from interloper.asset.base import AssetDefinition, AssetMeta
 from interloper.component import Component, ComponentDefinition, ComponentIdentity, Maturity, Relation
 from interloper.errors import ConfigError
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -21,65 +21,6 @@ from interloper.utils.text import to_identifier, validate_key
 
 if TYPE_CHECKING:
     from interloper.destination import Destination
-
-
-class AssetRef(IgnoredDescriptor):
-    """Class attribute that exposes a source-owned asset.
-
-    At **class access** (``FacebookAds.campaigns``) returns the asset
-    *class*: this is what makes ``import_from_path`` work on composite
-    paths like ``"module:FacebookAds.campaigns"`` without ever having to
-    instantiate the source.
-
-    At **instance access** (``facebook_ads.campaigns``) returns the live
-    asset instance owned by that source.
-
-    Replaces the old ``Source.__getattr__`` mechanism, which only worked
-    at instance level and forced reconstruction code to instantiate the
-    source just to reach its assets.
-    """
-
-    def __init__(self, asset_cls: type[Asset]) -> None:
-        """Bind this descriptor to an asset class.
-
-        Args:
-            asset_cls: The source-owned Asset subclass this descriptor exposes.
-        """
-        self.asset_cls = asset_cls
-        self.attr_name: str = ""
-
-    def __set_name__(self, owner: type, name: str) -> None:
-        """Capture the attribute name this descriptor was installed under.
-
-        Args:
-            owner: The class the descriptor is being installed on.
-            name: The attribute name it is bound to in that class body.
-        """
-        self.attr_name = name
-
-    def __get__(self, instance: Any, owner: type | None = None) -> Any:
-        """Return the asset class at class access, the instance at instance access.
-
-        Args:
-            instance: The source instance the attribute was read from, or
-                ``None`` for class-level access.
-            owner: The class owning the descriptor. Unused; part of the
-                descriptor protocol. Defaults to ``None``.
-
-        Returns:
-            The asset class when *instance* is ``None``, else the live asset
-            instance owned by that source.
-
-        Raises:
-            AttributeError: If accessed on an instance whose ``assets`` list
-                contains no asset matching this descriptor's key.
-        """
-        if instance is None:
-            return self.asset_cls
-        for asset in instance.assets:
-            if asset.key == self.asset_cls.key:
-                return asset
-        raise AttributeError(f"Source '{type(instance).__name__}' has no asset with key '{self.asset_cls.key}'")
 
 
 class SourceDefinition(ComponentDefinition):
@@ -114,31 +55,34 @@ class Source(Component, Workload):
         asset_types = [Users, Orders]
     ```
 
-    Access assets by key via attribute access:
+    An asset is reached by its key: on the class it is the asset class, on an
+    instance the live asset (see `AssetMeta`):
 
     ```py
-    source = MySource()
-    source.users  # returns the Asset with key "users"
+    MySource.users      # the asset class
+    MySource().users    # this source's Asset with key "users"
     ```
+
+    Assets written in the class body are the typed form; one given only in
+    ``asset_types`` is reached the same way at runtime.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, ignored_types=(IgnoredDescriptor, Relation, AssetMeta))
 
     # Definition
     asset_types: ClassVar[list[type[Asset]]] = []
     tags: ClassVar[list[str]] = []
-    internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "select"})
+    internal_fields: ClassVar[frozenset[str]] = frozenset({"assets", "normalizer", "enabled"})
 
     destinations: list[Destination] = Relation("destination", many=True, optional=True)
 
     # State
     normalizer: Normalizer | None = Field(default=None)
     assets: list[Asset] = Field(default_factory=list)
-    select: list[str] | None = Field(
-        default=None, description="Asset keys to materialize; others stay as read-only dependencies"
-    )
 
     # Exposed fields
-    dataset: str = InputField(
-        default="",
+    dataset: str | None = InputField(
+        default=None,
         description="Defaults to the source key when left empty",
         section="Destination",
     )
@@ -166,17 +110,12 @@ class Source(Component, Workload):
         description="Default attempt budget for this source's assets",
         json_schema_extra={"x-section": "Operation"},
     )
+    enabled: bool = Field(default=True, description="Whether this source's assets execute")
 
     # -- Construction & resolution ---------------------------------------------
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Auto-discover the source's assets at definition time.
-
-        Asset classes defined in the source body (via ``@asset`` on
-        methods) appear as class attributes.  We collect them into
-        ``asset_types`` and replace each class attribute with an
-        `AssetRef` descriptor that exposes the class at class
-        level and the live instance at instance level.
+        """Collect the source's assets at definition time (see `_collect_asset_types`).
 
         Args:
             **kwargs: Class-creation keyword arguments, forwarded untouched to
@@ -227,10 +166,10 @@ class Source(Component, Workload):
         return data
 
     def model_post_init(self, context: Any) -> None:
-        """Build the source's assets, resolve their defaults and wire them to each other.
+        """Build the source's assets, own them, check where they land, and wire them to each other.
 
         The assets are incomplete when built here: this source's own relation
-        kwargs are bound, and trickled into them, only after
+        kwargs, which they read through it, are bound only after
         ``model_post_init`` returns. That is why nothing is validated at
         construction; `validate_relations` cascades into each asset
         when the DAG or reconstruction asks, with everything this source can
@@ -243,9 +182,9 @@ class Source(Component, Workload):
         super().model_post_init(context)
         if not self.assets:
             self.assets = [cls() for cls in self.asset_types]
-        self._resolve()
-        if self.select is not None:
-            self._apply_select()
+        for asset in self.assets:
+            asset.parent = self
+        self._check_locations()
         self._bind_siblings()
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
@@ -270,45 +209,63 @@ class Source(Component, Workload):
                 asset.validate_relations(nodes)
 
     def on_rebind(self, name: str) -> None:
-        """Trickle this source's bindings into its assets and destinations whenever one changes.
+        """Trickle this source's bindings into its destinations whenever one changes.
 
-        A binding is the moment this can run: relation keyword arguments reach
-        a component after ``model_post_init`` has already built its assets, so
-        without this hook a source's connection would never reach them.
+        Its assets need nothing: they read what they leave unbound through
+        the source.
 
         Args:
             name: The relation name whose binding changed; every relation the
                 source holds trickles, so the name itself is not read.
         """
-        for asset in self.assets:
-            self.trickle(asset)
         for destination in self.destinations:
             self.trickle(destination)
 
-    def _apply_select(self) -> None:
-        """Mark assets outside ``select`` as disabled.
+    if TYPE_CHECKING:
 
-        Unselected assets stay in the list so intra-source dependency wiring
-        can still resolve them by key and their outputs stay readable, but
-        only the selected assets execute, and `validate_relations`
-        checks only those: the same position as
-        `mini_dag` on a node it only reads.
+        def __getattr__(self, name: str) -> Any:
+            """Type what a source exposes by name that a checker cannot see.
 
-        Raises:
-            SourceError: If a selected key matches no asset of this source.
-        """
-        from interloper.errors import SourceError
+            Static only, never defined at runtime: a decorated source is typed
+            as `Source`, so its own fields and the assets given in
+            ``asset_types`` are invisible to a checker. Assets written in the
+            class body type precisely through `AssetMeta` instead.
 
-        known = {a.key for a in self.assets}
-        unknown = [k for k in self.select or [] if k not in known]
-        if unknown:
-            raise SourceError(f"Source '{self.key}' has no asset(s) {unknown}; available: {sorted(known)}")
-        selected = set(self.select or [])
-        self.assets = [a if a.key in selected else a(enabled=False) for a in self.assets]
-        for asset in self.assets:
-            asset.parent = self
+            Args:
+                name: The attribute read.
+
+            Returns:
+                Whatever the source exposes under *name*.
+            """
+            ...
 
     # -- Assets ----------------------------------------------------------------
+
+    def inherited(self, child: Component, name: str, own: Any) -> Any:
+        """What one of this source's assets reads for an inherited setting.
+
+        The dataset is part of an asset's location, which the source names
+        (as `table` names the rest): the asset's own dataset, else this
+        source's, else this source's key, with any ``{field}`` filled from
+        this source's fields by `format`. Every other setting but ``enabled``
+        is handed down as `Component.inherited` does.
+
+        An asset runs only while it and this source are both enabled, which is
+        how ``source(enabled=False)`` puts a read-only source in a run.
+
+        Args:
+            child: The asset reading the setting.
+            name: The setting's field name.
+            own: The asset's stored value, ``None`` while unset.
+
+        Returns:
+            The effective value of the setting for *child*.
+        """
+        if name == "dataset":
+            return self.format(own or self.dataset or self.key)
+        if name == "enabled":
+            return bool(own) and self.enabled
+        return super().inherited(child, name, own)
 
     def operations(self) -> list[Operation]:
         """The source's own assets: the operations a run on it executes.
@@ -345,41 +302,6 @@ class Source(Component, Workload):
         discriminator = self.discriminator
         return to_identifier(f"{asset.key}__{discriminator}" if discriminator else asset.key)
 
-    def __getattr__(self, name: str) -> Asset:
-        """Instance-level asset lookup fallback.
-
-        At runtime, source-owned asset access is normally served by the
-        `AssetRef` descriptor installed on the class by
-        `_collect_asset_types`, so Python never reaches this
-        method.  It exists for two reasons:
-
-        1. **Static analysis**: it tells type checkers that
-           ``source.<asset_key>`` yields an `Asset`,
-           since the dynamically-installed descriptors aren't visible to
-           them.
-        2. **Safety net**: sources built imperatively (e.g. in tests)
-           that populate ``asset_types`` without going through
-           `_collect_asset_types` still get ergonomic attribute
-           access.
-
-        Args:
-            name: The attribute being looked up, read as an asset key.
-                Underscore-prefixed names are delegated to ``BaseModel``.
-
-        Returns:
-            The asset matching the given key.
-
-        Raises:
-            AttributeError: If no asset matches the given key.
-        """
-        # Delegate private attributes and Pydantic internals to BaseModel
-        if name.startswith("_"):
-            return super().__getattr__(name)  # ty: ignore[unresolved-attribute]
-        for asset in self.assets:
-            if asset.key == name:
-                return asset
-        raise AttributeError(f"Source has no asset with key '{name}'")
-
     # -- Definition ------------------------------------------------------------
 
     @classmethod
@@ -401,116 +323,41 @@ class Source(Component, Workload):
             assets.append(asset.model_copy(update={"source_key": cls.key, "maturity": maturity}))
         return SourceDefinition(**dict(own), assets=assets)
 
-    # -- Reconfiguration -------------------------------------------------------
-
-    def __call__(
-        self,
-        *,
-        dataset: str | None = None,
-        default_destination_key: str | None = None,
-        enabled: bool | None = None,
-        normalizer: Normalizer | None = None,
-        materialization_strategy: MaterializationStrategy | None = None,
-        **relations: Any,
-    ) -> Self:
-        """Return a reconfigured copy of this source.
-
-        Every fixed parameter defaults to ``None``, meaning "leave as is". A
-        name in **relations follows a different rule: passing it at all
-        changes it, since ``None`` there clears the binding rather than
-        leaving it alone; only leaving the name out entirely leaves it as is.
-        Clearing a non-optional relation is refused with a ``ConfigError``,
-        since it cannot be left empty.
-
-        Args:
-            dataset: Replacement dataset. Assets that inherited the source's
-                dataset are re-pointed; per-asset overrides are preserved.
-            default_destination_key: Replacement key of the destination
-                downstream assets read from.
-            enabled: Applied to every asset of the copy.
-            normalizer: Replacement normalizer for the source.
-            materialization_strategy: Replacement default strategy for the
-                source.
-            **relations: Replacement targets for the copy's declared
-                relations, keyed by relation name: a single component, a list
-                of them, or ``None`` to clear the binding. Rebinding a name
-                also clears it from any asset of the copy whose current
-                binding is exactly what this source had trickled into it, so
-                the new target reaches that asset once the copy re-trickles;
-                an asset that bound the relation itself keeps its own
-                binding.
-
-        Returns:
-            A deep copy of this source carrying the overrides.
-
-        Raises:
-            TypeError: If a keyword argument names no declared relation.
-        """
-        unknown = [name for name in relations if name not in type(self).relations]
-        if unknown:
-            raise TypeError(f"{type(self).__name__} declares no relation(s): {', '.join(sorted(unknown))}")
-        copy = self.model_copy(deep=True)
-        for asset in copy.assets:
-            asset.parent = copy
-            for name in relations.keys() & self._trickled(asset):
-                asset._bound.pop(name, None)
-        for name, value in relations.items():
-            setattr(copy, name, value)
-        if dataset is not None:
-            # Assets resolved their dataset at construction: re-point those that
-            # inherited the source's, preserving per-asset overrides.
-            for asset in copy.assets:
-                if asset.dataset == copy.dataset:
-                    asset.dataset = dataset
-            copy.dataset = dataset
-        if default_destination_key is not None:
-            copy.default_destination_key = default_destination_key
-        if enabled is not None:
-            copy.assets = [asset(enabled=enabled) for asset in copy.assets]
-        if normalizer is not None:
-            copy.normalizer = normalizer
-        if materialization_strategy is not None:
-            copy.materialization_strategy = materialization_strategy
-        return copy
-
     # -- Internals -------------------------------------------------------------
 
     @classmethod
     def _collect_asset_types(cls) -> None:
-        """Collect Asset subclasses from the class namespace into ``asset_types``.
+        """Gather the source's asset classes, own each, and make each reachable under its key.
 
-        When ``@asset`` decorates a method in the source body, it
-        transforms the method into an Asset class and sets it as a class
-        attribute.  This method collects those into ``asset_types`` and
-        replaces each entry with an `AssetRef` descriptor, which
-        exposes the class at class-level access and the live asset
-        instance at instance-level access.
+        The asset classes are the ones ``asset_types`` lists (which the
+        function form of `source` fills) followed by the ones written in the
+        class body, each once. A class collecting none inherits its parent's.
+        Each collected class is owned by this source and installed as a class
+        attribute under its key; an asset class is its own descriptor (see
+        `AssetMeta`), so ``Shop.orders`` is the class and ``Shop().orders`` the
+        live asset.
+
+        Raises:
+            TypeError: If an asset class already belongs to another source, or
+                if its key names another attribute of this source.
         """
-        from interloper.asset.base import Asset
-
-        # Only process assets defined directly on this class, not inherited.
-        own: list[tuple[str, type[Asset]]] = []
-        for attr_name, value in list(cls.__dict__.items()):
-            if isinstance(value, type) and issubclass(value, Asset) and value is not Asset:
-                own.append((attr_name, value))
-
-        if own:
-            # Merge with any asset_types already set (e.g. by the decorator).
-            existing = list(cls.__dict__.get("asset_types", []))
-            existing_keys = {a.key for a in existing}
-            for _, asset_cls in own:
-                asset_cls._source_type = cls
-                if asset_cls.key not in existing_keys:
-                    existing.append(asset_cls)
-            cls.asset_types = existing
-
-            # Replace the raw class attribute with a descriptor so that
-            # class access returns the class and instance access returns
-            # the live asset instance.
-            for attr_name, asset_cls in own:
-                ref = AssetRef(asset_cls)
-                ref.__set_name__(cls, attr_name)
-                setattr(cls, attr_name, ref)
+        listed: list[type[Asset]] = list(cls.__dict__.get("asset_types", []))
+        declared = [value for value in cls.__dict__.values() if isinstance(value, type) and issubclass(value, Asset)]
+        collected = listed + [asset_cls for asset_cls in declared if asset_cls not in listed]
+        if not collected:
+            return
+        for asset_cls in collected:
+            owner = asset_cls._source_type
+            if owner is not None and owner is not cls:
+                raise TypeError(f"Asset '{asset_cls.__name__}' already belongs to source '{owner.__name__}'")
+            current = inspect.getattr_static(cls, asset_cls.key, asset_cls)
+            if current is not asset_cls:
+                raise TypeError(
+                    f"Source '{cls.__name__}' cannot expose asset '{asset_cls.key}': the name is taken by {current!r}"
+                )
+            asset_cls._source_type = cls
+            setattr(cls, asset_cls.key, asset_cls)
+        cls.asset_types = collected
 
     @classmethod
     def sibling_bindings(cls) -> dict[str, dict[str, str]]:
@@ -553,36 +400,6 @@ class Source(Component, Workload):
                 if not asset.bound(name) and sibling_key in by_key:
                     asset.bind(name, by_key[sibling_key])
 
-    @classmethod
-    def asset_def(cls, key: str) -> AssetDefinition:
-        """Look up an asset definition by key.
-
-        Public for platform code that holds a key; connector code never needs it.
-
-        Returns an `AssetDefinition` with ``source_key`` set,
-        so callers can use ``.qualified_key`` for cross-source references:
-
-        ```py
-        FacebookAds.asset_def("campaigns").qualified_key
-        # → "facebook_ads.campaigns"
-        ```
-
-        Args:
-            key: The asset key (snake_cased class name).
-
-        Returns:
-            The asset definition with source context.
-
-        Raises:
-            KeyError: If no asset matches the key.
-        """
-        for asset_cls in cls.asset_types:
-            if asset_cls.key == key:
-                defn = asset_cls.definition()
-                defn.source_key = cls.key
-                return defn
-        raise KeyError(f"Source '{cls.key}' has no asset with key '{key}'")
-
     def format(self, template: str) -> str:
         """Fill a location template with this source's fields.
 
@@ -606,25 +423,16 @@ class Source(Component, Workload):
                 f"Source '{self.key}': '{template}' names {error}, which is not one of its fields"
             ) from error
 
-    def _resolve(self) -> None:
-        """Apply source-level defaults to assets that don't define their own."""
-        if not self.dataset:
-            self.dataset = self.key
-        validate_key(self.dataset)
+    def _check_locations(self) -> None:
+        """Resolve every asset's location once, so a bad one fails at construction.
 
+        This source's dataset and every materializing asset's table must be
+        valid identifiers, and every asset's dataset template must name fields
+        of this source. A reference names an existing table verbatim, wildcards
+        included, so its table is not checked.
+        """
+        validate_key(self.dataset or self.key)
         for asset in self.assets:
-            asset.parent = self
-            asset.dataset = self.format(asset.dataset or self.dataset)
+            _ = asset.dataset  # fills the template, refusing a placeholder that names no field
             if not isinstance(asset, Reference):
                 validate_key(asset.table)
-            if not asset.default_destination_key and self.default_destination_key:
-                asset.default_destination_key = self.default_destination_key
-            if asset.normalizer is None and self.normalizer is not None:
-                asset.normalizer = self.normalizer
-            if asset.retry is None and self.retry is not None:
-                asset.retry = self.retry
-            if (
-                self.materialization_strategy is not None
-                and asset.materialization_strategy is MaterializationStrategy.RECONCILE
-            ):
-                asset.materialization_strategy = self.materialization_strategy

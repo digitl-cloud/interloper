@@ -25,7 +25,7 @@ def warehouse(tmp_path: Path):
 
 def _account(account_id: str, warehouse) -> il.Source:
     connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
-    return FacebookAds(account_id=account_id, connection=connection, destinations=[warehouse], select=[])
+    return FacebookAds(account_id=account_id, connection=connection, destinations=[warehouse], enabled=False)
 
 
 def _seed(

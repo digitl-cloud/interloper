@@ -711,7 +711,7 @@ class ComponentStore:
         except (CatalogKeyError, ImportError, AttributeError, TypeError):
             return  # drifted key: nothing to derive a target from
 
-        def targets(config: dict[str, Any] | None) -> set[tuple[str, str]] | None:
+        def targets(config: dict[str, Any] | None) -> set[tuple[str | None, str]] | None:
             try:
                 source = source_cls(**(config or {}))
             except Exception:  # noqa: BLE001 — incomplete/stale config: nothing to compare

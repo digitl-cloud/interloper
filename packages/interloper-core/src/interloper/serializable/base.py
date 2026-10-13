@@ -787,6 +787,9 @@ class Serializable(BaseModel):
     def _fields_init(self, *, without: Collection[str] = ()) -> dict[str, Any]:
         """Serialize this instance's fields into a spec init payload.
 
+        Stored values are read, not attributes, so an inherited setting left
+        unset is omitted rather than written as whatever the owner hands down.
+
         Args:
             without: Field names to leave out, for an owner that writes some
                 of them itself.
@@ -800,7 +803,7 @@ class Serializable(BaseModel):
         for name in type(self).model_fields:
             if name == "id" or name in without:
                 continue
-            value = getattr(self, name)
+            value = self.__dict__.get(name)
             if value is None:
                 continue
             init[name] = Spec.dump_value(value)

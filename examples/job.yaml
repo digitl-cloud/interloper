@@ -25,4 +25,4 @@ init:
     - key: demo_source
       init:
         hello: spec
-        select: [a, b] # subset of the a -> b,c,d -> e DAG; omit to run all assets
+        assets: {a: {}, b: {}} # only a -> b of the a -> b,c,d -> e DAG; omit to build every asset

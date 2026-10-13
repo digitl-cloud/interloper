@@ -1,5 +1,6 @@
 """Tests for ``interloper_snowflake.destination``."""
 
+import copy
 import datetime
 from decimal import Decimal
 from typing import Any
@@ -197,17 +198,21 @@ class TestCopy:
         copied.write(_ctx(ads_stats(), schema=_DaySchema), [DAY])
         assert "COMMIT" in session.sql
 
-    def test_source_bound_to_the_destination_copies(self):
+    def test_the_destination_deep_copies_with_its_own_lock(self):
         destination = _destination()
-        source = _Source(destinations=[destination])
 
-        copied = source(dataset="marts")
+        copied_destination = copy.deepcopy(destination)
 
-        [copied_destination] = copied.destinations
-        assert copied.dataset == "marts"
         assert isinstance(copied_destination, SnowflakeDestination)
         assert copied_destination is not destination
         assert copied_destination._lock is not destination._lock
+
+    def test_a_reconfigured_source_shares_its_destination(self):
+        destination = _destination()
+        copied = _Source(destinations=[destination])(dataset="marts")
+
+        assert copied.dataset == "marts"
+        assert copied.destinations == [destination]
 
 
 class TestStaging:

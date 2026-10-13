@@ -81,9 +81,9 @@ class TestOverrideChannel:
         assert "'dataset'" in message
 
     def test_the_decorator_reports_an_unknown_name(self):
-        with pytest.raises(TypeError, match=r"does not accept 'enabled'"):
+        with pytest.raises(TypeError, match=r"does not accept 'bogus'"):
 
-            @il.source(enabled=False)
+            @il.source(bogus=False)
             def probe():
                 return []
 

@@ -154,9 +154,6 @@ def _build_source_from_fn(
     if fn.__doc__:
         source_cls.__doc__ = fn.__doc__
 
-    for asset_cls in assets:
-        asset_cls._source_type = source_cls
-
     return source_cls
 
 
@@ -169,8 +166,8 @@ def _build_source_from_class(
     """Build a Source subclass from a decorated class.
 
     Asset subclasses defined in the class body (via ``@asset`` on methods)
-    are auto-collected by ``Source.__init_subclass__._collect_asset_types()``.
-    Field annotations are handled by ``Source.build_class``.
+    are collected, and owned, by `Source._collect_asset_types` as the class
+    is created. Field annotations are handled by ``Source.build_class``.
 
     Args:
         cls: The decorated class.
@@ -180,9 +177,4 @@ def _build_source_from_class(
     Returns:
         A dynamically created Source subclass.
     """
-    source_cls = Source.build_class(cls, classvars=classvars, fields=fields)
-
-    for asset_cls in source_cls.asset_types:
-        asset_cls._source_type = source_cls
-
-    return source_cls
+    return Source.build_class(cls, classvars=classvars, fields=fields)

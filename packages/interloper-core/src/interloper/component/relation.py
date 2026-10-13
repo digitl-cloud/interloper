@@ -395,13 +395,16 @@ class Relation(BaseModel):
                 relation already carries its name.
 
         Returns:
-            This relation on class access; otherwise the instance's bound
-            value(s) for this relation's name (see
-            `Component.bound`).
+            This relation on class access; otherwise what the instance holds
+            or reads through its owner (see `Component._targets`), a list for a
+            ``many`` relation and a single component or ``None`` otherwise.
         """
         if instance is None:
             return self
-        return instance.bound(self.name)
+        targets = instance._targets(self.name)
+        if self.many:
+            return targets
+        return targets[0] if targets else None
 
     def __set__(self, instance: Component, value: Any) -> None:
         """Replace what is bound to this relation on *instance*, atomically.

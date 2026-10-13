@@ -130,7 +130,7 @@ class TestParameterizedForm:
             return []
 
         instance = plain()
-        assert instance.materialization_strategy is MaterializationStrategy.RECONCILE
+        assert instance.materialization_strategy is None
         assert instance.normalizer is None
         assert plain.schema is None
         assert plain.partitioning is None

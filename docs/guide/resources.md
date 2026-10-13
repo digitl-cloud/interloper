@@ -54,7 +54,8 @@ annotation naming a component class declares a relation rather than a pydantic f
 holds one instance, and a method asset reads it as `self.connection`, since it receives the source
 as `self`. An asset declares a resource of its own, like `config` above, only for what its source
 does not hold; declaring `connection: ShopConnection` on the asset as well is legal, and the
-source [trickles](#trickling) its instance into it, but it says twice what the source says once.
+asset [reads the source's instance](#reading-through-the-source), but it says twice what the
+source says once.
 
 ## Explicit relations
 
@@ -97,10 +98,11 @@ relation that holds no binding, `resolve(name)` falls back, in order:
 A `many` relation never falls back: `resolve(name)` on it is exactly `bound(name)`, an empty list
 when nothing is bound.
 
-A fallback is never bound, so an explicit binding or a later trickle always wins over it, and
-`to_spec()` never carries an auto-instantiated component. Attribute access reads bindings only:
-`asset.connection` is `None` while nothing is bound, where the same relation injected into
-`data()` goes through `resolve()` and receives the fallback. Because a resource is built at the
+A fallback is never bound, so an explicit binding, or one read through the owning source,
+always wins over it, and `to_spec()` never carries an auto-instantiated component. Attribute
+access reads bindings only, the asset's own or its source's: `asset.connection` is `None` while
+neither holds one, where the same relation injected into `data()` goes through `resolve()` and
+receives the fallback. Because a resource is built at the
 moment it is read, a credential that is neither bound nor in the environment surfaces as a
 pydantic validation error from the read that needed it, not at build time.
 
@@ -121,24 +123,27 @@ reads what is bound (`source.connection`), and assignment rebinds atomically.
 Once every explicit target is in place, the component checks itself: a non-optional relation that
 is unbound and cannot fill itself is a `ConfigError`.
 
-## Trickling
+## Reading through the source
 
-A source fills the unbound relations of its assets and destinations from its own bindings, by
-relation name, keeping only the targets the child's own relation accepts. A [job](jobs.md) does
-the same for its targets. A binding the child already holds is never touched.
+An asset never holds a copy of its source's bindings: a relation it leaves unbound reads the
+source's targets under the same name, keeping only those its own relation accepts. A binding the
+asset holds itself always wins.
 
 ```py
 shop = Shop(connection=ShopConnection(api_key="..."), destinations=[warehouse])
-shop.revenue.bound("connection")     # the source's connection instance
+shop.revenue.connection              # the source's connection instance
+shop.revenue.bound("connection")     # None: the asset holds none of its own
 ```
 
-Trickling re-runs on every `bind()` of the parent, so a destination bound after the assets exist
-still reaches them. Reconfiguring a source repoints what it had trickled and leaves what an asset
-bound itself alone:
+Because nothing is copied, rebinding the source, or reconfiguring it, reaches its assets at once:
 
 ```py
-staging = shop(connection=ShopConnection(api_key="..."))    # a copy, its assets repointed
+staging = shop(connection=ShopConnection(api_key="..."))    # a copy; its assets read the new one
 ```
+
+Components a source does not own still receive its bindings by trickling: a source fills the
+unbound relations of its destinations, and a [job](jobs.md) those of its targets, by relation
+name, on every `bind()`.
 
 ## Describing a resource
 

@@ -94,7 +94,7 @@ init:
             access_token: ${FB_TOKEN}
             app_id: "1"
             app_secret: ${FB_SECRET}
-        select: [campaigns, ads_stats]
+        assets: {campaigns: {}, ads_stats: {}}
 ```
 
 `interloper run -f job.yaml --date 2026-01-15` reconstructs it and runs its DAG. See

@@ -68,9 +68,9 @@ https://docs.interloper.dev/guide/jobs/
 
 - **`assets:` is a whitelist.** Reconstruction builds only the assets listed in the map; an
   asset left out does not exist in the run, so `assets: {order_stats: {enabled: false}}`
-  removes `orders`, not `order_stats`. Use `select:` to restrict what runs. Use `assets:` only
-  for per-asset overrides (`id`, `enabled`, `destinations`, a bound upstream) and list
-  every asset the run needs.
+  removes `orders`, not `order_stats`. List every asset the run needs, with per-asset
+  overrides (`id`, `enabled`, `destinations`, a bound upstream); `enabled: false` on an asset,
+  or on the whole source, keeps it as a read-only dependency.
 - **One reference rule, no flags.** A component that has a parent (an asset, always under its
   source) is `{ref: id}` wherever a relation points at it. A component without one (a
   destination, a connection) is written out in full the first time a relation reaches it and

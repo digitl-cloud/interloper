@@ -72,7 +72,7 @@ class MemoryDestination(Destination):
     def _build_key(
         self,
         name: str,
-        dataset: str,
+        dataset: str | None,
         partitioning: PartitionConfig | None,
         partition: Partition | None,
     ) -> str:

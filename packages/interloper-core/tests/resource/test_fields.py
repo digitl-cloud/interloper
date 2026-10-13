@@ -154,3 +154,15 @@ class TestValidation:
 
         with pytest.raises(TypeError, match="not a @fetch_field_provider"):
             Src.definition()
+
+
+def test_inherit_marks_the_field():
+    """``inherit=True`` renders as the ``x-inherit`` extra."""
+    field = il.InputField(default=None, inherit=True)
+    assert field.json_schema_extra["x-inherit"] is True
+
+
+def test_a_field_is_not_inherited_by_default():
+    """A field reads only its own value unless marked."""
+    field = il.InputField(default=None)
+    assert "x-inherit" not in field.json_schema_extra
