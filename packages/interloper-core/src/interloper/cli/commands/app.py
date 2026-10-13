@@ -101,10 +101,11 @@ def _cmd_app(args: argparse.Namespace) -> None:
             the service toggles having already been folded into settings.
     """
     from interloper.catalog import Catalog
+    from interloper.cli.console import configure_console_logging
     from interloper.cli.runtime import Services, resolve_api_port
     from interloper.settings import AppSettings
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    configure_console_logging(logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s")
 
     settings = AppSettings.get()
     run_api = settings.server.enabled

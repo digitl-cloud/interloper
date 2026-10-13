@@ -50,10 +50,11 @@ def _cmd_launch(args: argparse.Namespace) -> None:
         SystemExit: On any failure.
     """
     from interloper.catalog import Catalog
+    from interloper.cli.console import configure_console_logging
     from interloper.runner import Runner
     from interloper.settings import AppSettings
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    configure_console_logging(logging.INFO, "%(asctime)s %(name)s %(levelname)s %(message)s")
 
     settings = AppSettings.get()
 
