@@ -17,4 +17,3 @@ class Profiles(Schema):
     account_info_type: str = Field(..., description="Account info type")
     account_info_name: str = Field(..., description="Account info name")
     account_info_valid_payment_method: bool = Field(..., description="Whether account's payment method is valid")
-

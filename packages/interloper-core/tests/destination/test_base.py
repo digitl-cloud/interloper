@@ -100,6 +100,7 @@ class TestFetchProviderValidation:
 
 # -- Partition dispatch ----------------------------------------------------------
 
+
 class RecordingPartitions(il.Destination):
     """Destination capturing every partition-hook call."""
 
@@ -174,9 +175,7 @@ class TestWriteDispatch:
             {"date": "2024-02-10", "v": 2},
             {"date": "2024-02-20", "v": 3},
         ]
-        window = TimePartitionWindow(
-            datetime.date(2024, 1, 1), datetime.date(2024, 2, 1), il.TimeGranularity.MONTH
-        )
+        window = TimePartitionWindow(datetime.date(2024, 1, 1), datetime.date(2024, 2, 1), il.TimeGranularity.MONTH)
         destination.write(io_context(monthly(), window), rows)
         by_partition = {partition: data for kind, partition, data in destination.calls}
         assert by_partition["2024-01"] == [{"date": "2024-01-15", "v": 1}]

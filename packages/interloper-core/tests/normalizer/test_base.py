@@ -82,9 +82,9 @@ class TestFlatten:
         assert rows == [{"a_b_c": 1}]
 
     def test_the_separator_is_configurable(self):
-        rows = Normalizer(
-            flatten_max_level=None, flatten_separator="__", normalize_columns_names=False
-        ).normalize([{"a": {"b": 1}}])
+        rows = Normalizer(flatten_max_level=None, flatten_separator="__", normalize_columns_names=False).normalize(
+            [{"a": {"b": 1}}]
+        )
 
         assert rows == [{"a__b": 1}]
 

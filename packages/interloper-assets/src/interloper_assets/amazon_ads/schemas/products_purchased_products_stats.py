@@ -54,15 +54,11 @@ class ProductsPurchasedProductsStats(Schema):
     units_sold_clicks_14d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 14 days"
     )
-    units_sold_clicks_1d: int | None = Field(
-        ..., description="The number of units sold from clicks in the last 1 day"
-    )
+    units_sold_clicks_1d: int | None = Field(..., description="The number of units sold from clicks in the last 1 day")
     units_sold_clicks_30d: int | None = Field(
         ..., description="The number of units sold from clicks in the last 30 days"
     )
-    units_sold_clicks_7d: int | None = Field(
-        ..., description="The number of units sold from clicks in the last 7 days"
-    )
+    units_sold_clicks_7d: int | None = Field(..., description="The number of units sold from clicks in the last 7 days")
     units_sold_other_sku_14d: int | None = Field(
         ..., description="The number of units sold for other SKUs in the last 14 days"
     )

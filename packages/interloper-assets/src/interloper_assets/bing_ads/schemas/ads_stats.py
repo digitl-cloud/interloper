@@ -7,7 +7,9 @@ from pydantic import Field
 class AdsStats(Schema):
     """The Bing Ads report provides insights into advertising campaigns. It includes key metrics such as clicks, conversions, impressions, spend, and various ad attributes like titles, descriptions, and URLs."""
 
-    absolute_top_impression_rate_percent: float | None = Field(..., description="The absolute top impression rate percent")
+    absolute_top_impression_rate_percent: float | None = Field(
+        ..., description="The absolute top impression rate percent"
+    )
     account_id: str | None = Field(..., description="The ID of the account")
     account_name: str | None = Field(..., description="The name of the account")
     account_number: str | None = Field(..., description="The account number")

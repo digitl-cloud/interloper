@@ -14,9 +14,7 @@ class BrandsAdsStats(Schema):
     add_to_cart_clicks: int | None = Field(..., description="The number of clicks resulting in adding to cart")
     add_to_cart_rate: float | None = Field(..., description="The rate of adding to cart")
     branded_searches: int | None = Field(..., description="The number of searches for the brand")
-    branded_searches_clicks: int | None = Field(
-        ..., description="The number of clicks resulting from branded searches"
-    )
+    branded_searches_clicks: int | None = Field(..., description="The number of clicks resulting from branded searches")
     campaign_budget_amount: float | None = Field(..., description="The budget amount for the ad campaign")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code for the ad campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of budget for the ad campaign")
@@ -28,9 +26,7 @@ class BrandsAdsStats(Schema):
     cost_type: str | None = Field(..., description="The type of cost associated with the ad campaign")
     date: datetime.date | None = Field(..., description="The date of the ad performance data")
     detail_page_views: int | None = Field(..., description="The number of views of the ad's detail page")
-    detail_page_views_clicks: int | None = Field(
-        ..., description="The number of clicks resulting in detail page views"
-    )
+    detail_page_views_clicks: int | None = Field(..., description="The number of clicks resulting in detail page views")
     ecp_add_to_cart: float | None = Field(..., description="The effective cost per add to cart")
     impressions: int | None = Field(..., description="The number of ad impressions")
     new_to_brand_detail_page_view_rate: float | None = Field(
@@ -62,9 +58,7 @@ class BrandsAdsStats(Schema):
     new_to_brand_sales_percentage: float | None = Field(
         ..., description="The percentage of sales from new-to-brand customers"
     )
-    new_to_brand_units_sold: int | None = Field(
-        ..., description="The number of units sold from new-to-brand customers"
-    )
+    new_to_brand_units_sold: int | None = Field(..., description="The number of units sold from new-to-brand customers")
     new_to_brand_units_sold_clicks: int | None = Field(
         ..., description="The number of clicks resulting in units sold from new-to-brand customers"
     )

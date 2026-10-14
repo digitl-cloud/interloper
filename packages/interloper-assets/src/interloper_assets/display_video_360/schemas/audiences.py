@@ -26,4 +26,3 @@ class Audiences(Schema):
         default=None, description="The duration, in days, for which a user remains a member of the audience"
     )
     description: str | None = Field(default=None, description="A detailed description of the audience")
-

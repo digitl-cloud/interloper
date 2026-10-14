@@ -25,8 +25,12 @@ class Actions(Schema):
     customer_post_code: str | None = Field(default=None, description="Postal code of the customer")
     customer_region: str | None = Field(default=None, description="Region of the customer")
     customer_status: str | None = Field(default=None, description="Status of the customer (e.g., new, returning)")
-    delta_amount: float | None = Field(default=None, description="Difference in the total amount from the expected value")
-    delta_payout: float | None = Field(default=None, description="Difference in the payout amount from the expected value")
+    delta_amount: float | None = Field(
+        default=None, description="Difference in the total amount from the expected value"
+    )
+    delta_payout: float | None = Field(
+        default=None, description="Difference in the payout amount from the expected value"
+    )
     event_code: str | None = Field(default=None, description="Code representing the type of event")
     event_date: dt.datetime | None = Field(default=None, description="Date when the event occurred")
     id: str | None = Field(default=None, description="Unique identifier for the action")

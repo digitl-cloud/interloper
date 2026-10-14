@@ -173,7 +173,8 @@ class TestPlatformIdentity:
         handler(_event(EventType.RUN_FAILED, run_id="run-p2"))
 
         matches = [
-            p for p in points("interloper.runs", status="failed")
+            p
+            for p in points("interloper.runs", status="failed")
             if "org_id" not in (p.attributes or {}) and "target_key" not in (p.attributes or {})
         ]
         assert matches
@@ -183,8 +184,11 @@ class TestPlatformIdentity:
         handler(
             _event(
                 EventType.OPERATION_COMPLETED,
-                run_id="run-p3", component_id="a1", component_key="orders_p3",
-                org_id="org-p1", target_key="nightly",
+                run_id="run-p3",
+                component_id="a1",
+                component_key="orders_p3",
+                org_id="org-p1",
+                target_key="nightly",
             )
         )
         (counter,) = points("interloper.operations", component_key="orders_p3")

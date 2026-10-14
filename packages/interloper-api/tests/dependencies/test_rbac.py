@@ -74,9 +74,7 @@ def _profile(is_super_admin: bool = False) -> Profile:
     Returns:
         The stand-in, typed as a ``Profile`` for the helpers under test.
     """
-    return cast(
-        Profile, SimpleNamespace(id=_USER_ID, email="user@example.com", is_super_admin=is_super_admin)
-    )
+    return cast(Profile, SimpleNamespace(id=_USER_ID, email="user@example.com", is_super_admin=is_super_admin))
 
 
 def _store(role: str | None) -> Store:
@@ -309,9 +307,7 @@ class TestRequireSuperAdmin:
     """The cross-org admin surface is not bound to the active organisation."""
 
     def test_a_super_admin_passes(self) -> None:
-        response = _gate_client(
-            require_super_admin, _store(None), _profile(is_super_admin=True)
-        ).get("/gated")
+        response = _gate_client(require_super_admin, _store(None), _profile(is_super_admin=True)).get("/gated")
 
         assert response.status_code == 200
 

@@ -20,7 +20,8 @@ class ProductFulfillmentStats(Schema):
         default=None, description="Number of purchase order units confirmed to be shipped to Amazon"
     )
     most_recent_submitted: int | None = Field(
-        default=None, description="The number of units Amazon has ordered in the most recent purchase orders of the week"
+        default=None,
+        description="The number of units Amazon has ordered in the most recent purchase orders of the week",
     )
     net_received_units: int | None = Field(
         default=None,
@@ -34,7 +35,8 @@ class ProductFulfillmentStats(Schema):
         default=None, description="Net cost currency code of units received by Amazon"
     )
     overall_vendor_lead_time: float | None = Field(
-        default=None, description="Time (in days) from when a vendor receives a PO to when inventory is received in a FC"
+        default=None,
+        description="Time (in days) from when a vendor receives a PO to when inventory is received in a FC",
     )
     procurable_product_oos: float | None = Field(
         default=None, description="Out of stock rate on all products that are procurable"

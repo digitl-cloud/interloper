@@ -46,4 +46,3 @@ class TestIsEmpty:
         g = gen()
         assert is_empty(g) is False
         assert next(g) == 1  # generator left intact
-

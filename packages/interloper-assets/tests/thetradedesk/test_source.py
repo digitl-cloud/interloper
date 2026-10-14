@@ -49,9 +49,7 @@ class TestNormalizer:
         normalizer = _normalizer()
         assert normalizer.column_name("Player 25% Complete") == "player_25pct_complete"
         assert normalizer.column_name("TTD Cost (USD)") == "ttd_cost_usd"
-        assert normalizer.column_name("Ad Group Base Bid CPM (Adv Currency)") == (
-            "ad_group_base_bid_cpm_adv_currency"
-        )
+        assert normalizer.column_name("Ad Group Base Bid CPM (Adv Currency)") == ("ad_group_base_bid_cpm_adv_currency")
 
     def test_decimal_commas_and_day_first_dates(self):
         df = _normalizer().normalize([_ROW])

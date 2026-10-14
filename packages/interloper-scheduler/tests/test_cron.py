@@ -382,9 +382,7 @@ def _catalog_store() -> Store:
 
 
 def _job_targeting(store: Store, *source_keys: str, config: dict[str, Any]) -> UUID:
-    targets = [
-        store.components.create(_ORG, kind="source", key=key, name=key).id for key in source_keys
-    ]
+    targets = [store.components.create(_ORG, kind="source", key=key, name=key).id for key in source_keys]
     row = store.components.create(
         _ORG,
         kind="job",

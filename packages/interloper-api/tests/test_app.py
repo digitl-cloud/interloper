@@ -173,9 +173,7 @@ class TestCreateApp:
 
         assert get_features() == {"agent": True}
 
-    def test_state_slots_are_left_alone_when_not_supplied(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_state_slots_are_left_alone_when_not_supplied(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # ``create_app()`` with no store or catalog must not clobber whatever
         # a caller installed beforehand.
         from interloper_api.dependencies import state as state_module

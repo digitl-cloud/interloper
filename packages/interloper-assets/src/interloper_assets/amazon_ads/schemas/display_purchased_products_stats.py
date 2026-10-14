@@ -23,6 +23,4 @@ class DisplayPurchasedProductsStats(Schema):
     sales_brand_halo: float | None = Field(..., description="The sales with brand halo")
     sales_brand_halo_clicks: float | None = Field(..., description="The sales with brand halo clicks")
     units_sold_brand_halo: int | None = Field(..., description="The number of units sold with brand halo")
-    units_sold_brand_halo_clicks: int | None = Field(
-        ..., description="The number of units sold with brand halo clicks"
-    )
+    units_sold_brand_halo_clicks: int | None = Field(..., description="The number of units sold with brand halo clicks")

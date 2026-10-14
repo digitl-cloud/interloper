@@ -475,9 +475,7 @@ def test_create_run_rejects_an_invalid_partition(store: FakeStore) -> None:
     store.components.get = lambda cid, kind=None: SimpleNamespace(id=cid, org_id=_ORG_ID)
     store.runs.create = create
 
-    response = _client(store).post(
-        "/runs", json={"component_id": str(uuid4()), "partition_key": "2026-13-01"}
-    )
+    response = _client(store).post("/runs", json={"component_id": str(uuid4()), "partition_key": "2026-13-01"})
 
     assert response.status_code == 400
     assert "2026-13-01" in response.json()["detail"]

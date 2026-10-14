@@ -447,9 +447,7 @@ async def check_connection(ctx: ToolkitContext, connection_id: str) -> Connectio
             # Never forward the wrapped message: pydantic errors embed input
             # values, which for connections may be secrets — name fields only.
             if isinstance(e.__cause__, ValidationError):
-                fields = ", ".join(
-                    ".".join(str(loc) for loc in err["loc"]) or "(root)" for err in e.__cause__.errors()
-                )
+                fields = ", ".join(".".join(str(loc) for loc in err["loc"]) or "(root)" for err in e.__cause__.errors())
                 message = f"The stored config is no longer valid for this connection type (invalid fields: {fields})."
             else:
                 message = "The stored connection could not be reconstructed."

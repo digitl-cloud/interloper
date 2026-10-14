@@ -107,4 +107,3 @@ class FacebookAdsConnection(il.OAuthConnection):
         """
         await self.accounts()
         return True
-

@@ -39,4 +39,6 @@ class AdsStats(Schema):
     interactions: int | None = Field(default=None, description="The total number of interactions")
     path1: str | None = Field(default=None, description="The first path")
     path2: str | None = Field(default=None, description="The second path")
-    view_through_conversions: int | None = Field(default=None, description="The total number of view-through conversions")
+    view_through_conversions: int | None = Field(
+        default=None, description="The total number of view-through conversions"
+    )

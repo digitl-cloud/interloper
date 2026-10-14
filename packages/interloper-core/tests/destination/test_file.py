@@ -92,9 +92,7 @@ class TestWindows:
 
         dest.write(IOContext(asset=asset, window=window), rows)
 
-        assert dest.read(IOContext(asset=asset, window=_partition(1).window)) == [
-            {"date": "2024-01-01", "v": 1}
-        ]
+        assert dest.read(IOContext(asset=asset, window=_partition(1).window)) == [{"date": "2024-01-01", "v": 1}]
         assert dest.read(IOContext(asset=asset, window=_partition(2).window)) == [
             {"date": "2024-01-02", "v": 2},
             {"date": "2024-01-02", "v": 3},

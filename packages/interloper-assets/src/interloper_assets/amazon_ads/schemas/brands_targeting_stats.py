@@ -37,9 +37,7 @@ class BrandsTargetingStats(Schema):
     new_to_brand_detail_page_view_rate: float | None = Field(
         ..., description="The rate of new-to-brand detail page views"
     )
-    new_to_brand_detail_page_views: int | None = Field(
-        ..., description="The number of new-to-brand detail page views"
-    )
+    new_to_brand_detail_page_views: int | None = Field(..., description="The number of new-to-brand detail page views")
     new_to_brand_detail_page_views_clicks: int | None = Field(
         ..., description="The number of clicks for new-to-brand detail page views"
     )

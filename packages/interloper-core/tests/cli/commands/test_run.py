@@ -379,9 +379,7 @@ class TestPrintPlan:
         assert "Run:" not in out
 
 
-def test_an_unexpected_spec_failure_is_reported_cleanly(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_unexpected_spec_failure_is_reported_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A reconstruct crash the spec layer does not classify still exits, not tracebacks."""
     from interloper.dag import DAG
 

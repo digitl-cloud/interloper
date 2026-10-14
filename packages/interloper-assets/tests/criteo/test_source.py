@@ -25,7 +25,14 @@ from interloper_assets.criteo.source import Criteo
 # Raw API column names per asset, as Criteo returns them: the requested id
 # dimensions, their companion name/currency columns, and the full metric set.
 ADS_COLUMNS = [
-    "Day", "AdId", "Ad", "AdsetId", "Adset", "CampaignId", "Campaign", "Currency",
+    "Day",
+    "AdId",
+    "Ad",
+    "AdsetId",
+    "Adset",
+    "CampaignId",
+    "Campaign",
+    "Currency",
     *constants.STATISTICS_METRICS,
 ]
 CAMPAIGNS_COLUMNS = ["Day", "CampaignId", "Campaign", "Currency", *constants.STATISTICS_METRICS]

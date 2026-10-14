@@ -18,7 +18,9 @@ class ActionUpdates(Schema):
     catalog_description: str | None = Field(default=None, description="Description of the catalog item")
     catalog_manufacturer: str | None = Field(default=None, description="Manufacturer of the catalog item")
     catalog_name: str | None = Field(default=None, description="Name of the catalog")
-    catalog_original_format_category: str | None = Field(default=None, description="Original format category of the catalog item")
+    catalog_original_format_category: str | None = Field(
+        default=None, description="Original format category of the catalog item"
+    )
     catalog_sub_category: str | None = Field(default=None, description="Sub-category within the catalog")
     category: str | None = Field(default=None, description="Category of the action")
     clearing_date: dt.datetime | None = Field(default=None, description="Date when the action was cleared")

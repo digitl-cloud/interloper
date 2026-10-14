@@ -42,4 +42,3 @@ class CustomAudiences(Schema):
         default=None, description="The size of the audience for display campaigns on desktop."
     )
     description: str | None = Field(default=None, description="A description of the custom audience.")
-

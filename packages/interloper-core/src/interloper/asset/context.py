@@ -105,9 +105,7 @@ class ExecutionContext:
             )
         window = self._require_window("partition_date")
         if len(window) > 1:
-            raise AttributeError(
-                f"`context.partition_date` is not available, the run covers {len(window)} partitions."
-            )
+            raise AttributeError(f"`context.partition_date` is not available, the run covers {len(window)} partitions.")
         partition = window.first
         assert isinstance(partition, TimePartition)
         return partition.value

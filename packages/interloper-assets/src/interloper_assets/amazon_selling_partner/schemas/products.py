@@ -27,4 +27,3 @@ class Products(Schema):
         default=None,
         description="13-digit International Standard Book Number. Only applicable to products that are books.",
     )
-

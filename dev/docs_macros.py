@@ -125,9 +125,7 @@ def cli_reference() -> str:
     )
 
 
-def _command(
-    parser: argparse.ArgumentParser, name: str, level: int, help: str | None
-) -> str:
+def _command(parser: argparse.ArgumentParser, name: str, level: int, help: str | None) -> str:
     """Render one command.
 
     Args:
@@ -145,9 +143,7 @@ def _command(
     if rows:
         lines += ["| Argument | Meaning |", "|----------|---------|", *rows, ""]
     for sub_name, sub_parser, sub_help in _subcommands(parser):
-        lines.append(
-            _command(sub_parser, f"{name} {sub_name}", level + 1, sub_help)
-        )
+        lines.append(_command(sub_parser, f"{name} {sub_name}", level + 1, sub_help))
     return "\n".join(lines)
 
 

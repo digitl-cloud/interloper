@@ -377,8 +377,7 @@ class TestBuildClass:
 
         assert FakeChildSource.key == "fake_child_source"
 
-
-# -- Spec.dump_value -----------------------------------------------------------
+    # -- Spec.dump_value -----------------------------------------------------------
 
     def test_a_class_body_key_survives_a_decorator_classvar(self):
         @il.connection(name="Search Ads 360")

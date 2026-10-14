@@ -19,9 +19,10 @@ class Campaigns(Schema):
     objective: str | None = Field(default=None, description="The objective of the campaign")
     start_time: str | None = Field(default=None, description="The start time of the campaign")
     end_time: str | None = Field(default=None, description="The end time of the campaign")
-    lifetime_spend_cap_micro: float | None = Field(default=None, description="The lifetime spend cap of the campaign in micro units")
+    lifetime_spend_cap_micro: float | None = Field(
+        default=None, description="The lifetime spend cap of the campaign in micro units"
+    )
     buy_model: str | None = Field(default=None, description="The buy model of the campaign")
     delivery_status: str | None = Field(default=None, description="The delivery status of the campaign")
     creation_state: str | None = Field(default=None, description="The creation state of the campaign")
     experiment_id: str | None = Field(default=None, description="The ID of the associated experiment")
-

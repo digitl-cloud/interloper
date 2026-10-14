@@ -59,9 +59,7 @@ class BackfillQuery(PageQuery):
 class BackfillStore:
     """Store methods for backfills and the batch accounting of their runs."""
 
-    def __init__(
-        self, engine: Engine, quotas: QuotaStore, runs: Callable[[], RunStore], events: EventStore
-    ) -> None:
+    def __init__(self, engine: Engine, quotas: QuotaStore, runs: Callable[[], RunStore], events: EventStore) -> None:
         """Bind the facet to what it works through.
 
         Args:

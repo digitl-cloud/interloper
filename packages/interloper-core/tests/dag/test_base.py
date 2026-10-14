@@ -962,8 +962,7 @@ class TestSerialization:
             restored = DAG.from_spec(mini.to_spec())
             enabled = [a for a in restored.operations if a.enabled]
             assert len(enabled) == 1, (
-                f"mini_dag for '{type(asset).key}' has {len(enabled)} "
-                f"enabled assets after round-trip, expected 1"
+                f"mini_dag for '{type(asset).key}' has {len(enabled)} enabled assets after round-trip, expected 1"
             )
             assert type(enabled[0]).key == type(asset).key
 

@@ -73,21 +73,24 @@ class TestPublicConfigDisclosure:
 
     @staticmethod
     def _row(kind: str, config: dict | None = None) -> Component:
-        return cast(Component, SimpleNamespace(
-            id=uuid4(),
-            org_id=uuid4(),
-            kind=kind,
-            key="k",
-            name=None,
-            config=config,
-            state=None,
-            encrypted=kind == "connection",
-            parent_id=None,
-            out_relations=[],
-            children=[],
-            created_at=None,
-            updated_at=None,
-        ))
+        return cast(
+            Component,
+            SimpleNamespace(
+                id=uuid4(),
+                org_id=uuid4(),
+                kind=kind,
+                key="k",
+                name=None,
+                config=config,
+                state=None,
+                encrypted=kind == "connection",
+                parent_id=None,
+                out_relations=[],
+                children=[],
+                created_at=None,
+                updated_at=None,
+            ),
+        )
 
     @staticmethod
     def _store(decoded: dict, public: dict) -> Store:
@@ -103,16 +106,12 @@ class TestPublicConfigDisclosure:
 
     def test_list_response_carries_the_public_subset(self):
         store = self._store(decoded={"api_key": "SECRET", "auto_renew": False}, public={"auto_renew": False})
-        response = components_module.ComponentResponse.from_row(
-            self._row("connection"), store, include_config=False
-        )
+        response = components_module.ComponentResponse.from_row(self._row("connection"), store, include_config=False)
         assert response.config == {"auto_renew": False}
 
     def test_detail_response_carries_the_full_decode(self):
         store = self._store(decoded={"api_key": "SECRET", "auto_renew": False}, public={"auto_renew": False})
-        response = components_module.ComponentResponse.from_row(
-            self._row("connection"), store, include_config=True
-        )
+        response = components_module.ComponentResponse.from_row(self._row("connection"), store, include_config=True)
         assert response.config == {"api_key": "SECRET", "auto_renew": False}
 
     def test_non_secret_kinds_pass_their_config_through(self):
@@ -142,21 +141,24 @@ class TestUnreadablePayload:
 
     @staticmethod
     def _row() -> Component:
-        return cast(Component, SimpleNamespace(
-            id=uuid4(),
-            org_id=uuid4(),
-            kind="connection",
-            key="k",
-            name=None,
-            config=None,
-            state=None,
-            encrypted=True,
-            parent_id=None,
-            out_relations=[],
-            children=[],
-            created_at=None,
-            updated_at=None,
-        ))
+        return cast(
+            Component,
+            SimpleNamespace(
+                id=uuid4(),
+                org_id=uuid4(),
+                kind="connection",
+                key="k",
+                name=None,
+                config=None,
+                state=None,
+                encrypted=True,
+                parent_id=None,
+                out_relations=[],
+                children=[],
+                created_at=None,
+                updated_at=None,
+            ),
+        )
 
     @staticmethod
     def _store() -> Store:
@@ -174,16 +176,12 @@ class TestUnreadablePayload:
         return cast(Store, SimpleNamespace(components=components))
 
     def test_list_response_discloses_nothing(self):
-        response = components_module.ComponentResponse.from_row(
-            self._row(), self._store(), include_config=False
-        )
+        response = components_module.ComponentResponse.from_row(self._row(), self._store(), include_config=False)
         assert response.status is ComponentStatus.UNREADABLE
         assert response.config is None
 
     def test_detail_response_reports_the_state_instead_of_failing(self):
-        response = components_module.ComponentResponse.from_row(
-            self._row(), self._store(), include_config=True
-        )
+        response = components_module.ComponentResponse.from_row(self._row(), self._store(), include_config=True)
         assert response.status is ComponentStatus.UNREADABLE
         assert response.config is None
 
@@ -236,9 +234,7 @@ def _row(
     )
 
 
-def _relation(
-    name: str, dst_id: UUID, dst_kind: str, *, dst_key: str = "k", dst_name: str | None = None
-) -> Any:
+def _relation(name: str, dst_id: UUID, dst_kind: str, *, dst_key: str = "k", dst_name: str | None = None) -> Any:
     return SimpleNamespace(
         name=name,
         dst_id=dst_id,
@@ -419,9 +415,7 @@ class TestListComponents:
             _row(
                 kind="source",
                 key="fb",
-                relations=[
-                    _relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB")
-                ],
+                relations=[_relation("connection", connection_id, "connection", dst_key="facebook_ads", dst_name="FB")],
             )
         ]
 
@@ -442,9 +436,7 @@ class TestListComponents:
 class TestDeleteImpact:
     """``GET /components/delete-impact`` — the preview behind the delete confirmation."""
 
-    def test_returns_blocking_and_detaching_referrers(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_returns_blocking_and_detaching_referrers(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         first, second = uuid4(), uuid4()
         referrer: dict[str, str | None] = {"id": str(uuid4()), "kind": "source", "key": "fb", "name": "FB"}
         crud_store.impact = DeleteImpact(blocking=[referrer], detaching=[])
@@ -469,9 +461,7 @@ class TestDeleteImpact:
 class TestCreateComponent:
     """``POST /components``: store errors become the right status."""
 
-    def test_creates_and_returns_the_component(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_creates_and_returns_the_component(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         body = {"kind": "job", "key": "nightly", "config": {"cron": "0 2 * * *"}}
 
         response = crud_client.post("/components", json=body)
@@ -481,9 +471,7 @@ class TestCreateComponent:
         assert crud_store.created[0]["kind"] == "job"
         assert crud_store.created[0]["config"] == {"cron": "0 2 * * *"}
 
-    def test_relations_are_flattened_into_store_bindings(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_relations_are_flattened_into_store_bindings(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         destination_id = uuid4()
         body = {
             "kind": "source",
@@ -523,9 +511,7 @@ class TestCreateComponent:
 class TestGetComponent:
     """``GET /components/{id}`` — detail responses decode the config."""
 
-    def test_returns_the_component_with_its_config(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_returns_the_component_with_its_config(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         component_id = uuid4()
 
         response = crud_client.get(f"/components/{component_id}")
@@ -533,9 +519,7 @@ class TestGetComponent:
         assert response.status_code == 200
         assert response.json()["id"] == str(component_id)
 
-    def test_a_component_of_another_org_is_a_404(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_a_component_of_another_org_is_a_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.role = None
 
         response = crud_client.get(f"/components/{uuid4()}")
@@ -576,9 +560,7 @@ class TestUpdateComponent:
     def test_breaking_a_depended_on_binding_is_a_409_with_referrers(
         self, crud_client: TestClient, crud_store: CrudStore
     ) -> None:
-        referrers: list[dict[str, str | None]] = [
-            {"id": str(uuid4()), "kind": "source", "key": "fb", "name": "FB"}
-        ]
+        referrers: list[dict[str, str | None]] = [{"id": str(uuid4()), "kind": "source", "key": "fb", "name": "FB"}]
         crud_store.error = InUseError("still bound", referrers=referrers)
 
         response = crud_client.put(f"/components/{uuid4()}", json={"config": {}})
@@ -586,9 +568,7 @@ class TestUpdateComponent:
         assert response.status_code == 409
         assert response.json()["detail"]["used_by"] == referrers
 
-    def test_editing_requires_the_editor_role(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_editing_requires_the_editor_role(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.role = "viewer"
 
         response = crud_client.put(f"/components/{uuid4()}", json={"name": "Renamed"})
@@ -599,9 +579,7 @@ class TestUpdateComponent:
 class TestDeleteComponentStatuses:
     """``DELETE /components/{id}`` — the rest of the error mapping."""
 
-    def test_a_successful_delete_is_an_empty_204(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_a_successful_delete_is_an_empty_204(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         component_id = uuid4()
 
         response = crud_client.delete(f"/components/{component_id}")
@@ -636,9 +614,7 @@ class TestAddRelation:
 
         assert response.status_code == 201
         assert response.json()["dst_kind"] == "connection"
-        assert crud_store.added_relations == [
-            {"src_id": source_id, "name": "connection", "dst_id": destination_id}
-        ]
+        assert crud_store.added_relations == [{"src_id": source_id, "name": "connection", "dst_id": destination_id}]
 
     def test_add_relation_by_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
@@ -649,9 +625,7 @@ class TestAddRelation:
 
         assert response.status_code == 201
         assert response.json()["name"] == "destinations"
-        assert crud_store.added_relations == [
-            {"src_id": source_id, "name": "destinations", "dst_id": destination_id}
-        ]
+        assert crud_store.added_relations == [{"src_id": source_id, "name": "destinations", "dst_id": destination_id}]
 
     def test_a_target_in_another_org_is_a_404(
         self, crud_client: TestClient, crud_store: CrudStore, monkeypatch: pytest.MonkeyPatch
@@ -700,9 +674,7 @@ class TestRemoveRelation:
         response = crud_client.delete(f"/components/{source_id}/relations/connection/{destination_id}")
 
         assert response.status_code == 204
-        assert crud_store.removed_relations == [
-            {"src_id": source_id, "name": "connection", "dst_id": destination_id}
-        ]
+        assert crud_store.removed_relations == [{"src_id": source_id, "name": "connection", "dst_id": destination_id}]
 
     def test_remove_relation_route_uses_name(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         source_id, destination_id = uuid4(), uuid4()
@@ -710,9 +682,7 @@ class TestRemoveRelation:
         response = crud_client.delete(f"/components/{source_id}/relations/destinations/{destination_id}")
 
         assert response.status_code == 204
-        assert crud_store.removed_relations == [
-            {"src_id": source_id, "name": "destinations", "dst_id": destination_id}
-        ]
+        assert crud_store.removed_relations == [{"src_id": source_id, "name": "destinations", "dst_id": destination_id}]
 
     def test_a_required_name_is_refused(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         # Required dependency names are repointed, never emptied.
@@ -726,9 +696,7 @@ class TestRemoveRelation:
 class TestPartitionRowCounts:
     """``GET /components/{id}/partition-row-counts`` — asset data, not catalog metadata."""
 
-    def test_returns_counts_ordered_by_partition(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_returns_counts_ordered_by_partition(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         class Daily(il.Asset):
             """Partitioned asset whose destination reports two partitions."""
 
@@ -769,9 +737,7 @@ class TestPartitionRowCounts:
 
         assert response.status_code == 404
 
-    def test_an_unpartitioned_asset_is_a_400(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_an_unpartitioned_asset_is_a_400(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.loaded = SimpleNamespace(partitioning=None)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
@@ -779,9 +745,7 @@ class TestPartitionRowCounts:
         assert response.status_code == 400
         assert response.json()["detail"] == "Component is not a partitioned asset"
 
-    def test_a_destination_that_cannot_count_is_a_400(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_a_destination_that_cannot_count_is_a_400(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         def unsupported() -> dict[str, int]:
             raise NotImplementedError
 
@@ -794,15 +758,11 @@ class TestPartitionRowCounts:
         assert response.status_code == 400
         assert response.json()["detail"] == "Destination does not support partition row counts"
 
-    def test_an_empty_destination_is_a_404(
-        self, crud_client: TestClient, crud_store: CrudStore
-    ) -> None:
+    def test_an_empty_destination_is_a_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         def empty() -> dict[str, int]:
             raise DataNotFoundError("no data for asset 'daily'")
 
-        crud_store.loaded = SimpleNamespace(
-            partitioning=SimpleNamespace(column="date"), partition_row_counts=empty
-        )
+        crud_store.loaded = SimpleNamespace(partitioning=SimpleNamespace(column="date"), partition_row_counts=empty)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -814,9 +774,7 @@ class TestPartitionRowCounts:
         def broken() -> dict[str, int]:
             raise RuntimeError("warehouse unreachable")
 
-        crud_store.loaded = SimpleNamespace(
-            partitioning=SimpleNamespace(column="date"), partition_row_counts=broken
-        )
+        crud_store.loaded = SimpleNamespace(partitioning=SimpleNamespace(column="date"), partition_row_counts=broken)
 
         response = crud_client.get(f"/components/{uuid4()}/partition-row-counts")
 
@@ -867,13 +825,16 @@ class TestComponentResponseRelations:
                 _relation("destinations", destination_id, "destination"),
             ]
         )
-        store = cast(Store, SimpleNamespace(
-            components=SimpleNamespace(
-                read=lambda row, parent_key=None: ComponentReading(
-                    status=ComponentStatus.OK, config=row.config, public_config={}, discriminator=None
-                ),
-            )
-        ))
+        store = cast(
+            Store,
+            SimpleNamespace(
+                components=SimpleNamespace(
+                    read=lambda row, parent_key=None: ComponentReading(
+                        status=ComponentStatus.OK, config=row.config, public_config={}, discriminator=None
+                    ),
+                )
+            ),
+        )
 
         response = components_module.ComponentResponse.from_row(row, store, include_config=False)
 

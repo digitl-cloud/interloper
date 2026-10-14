@@ -48,9 +48,7 @@ def _console_handlers() -> list[logging.Handler]:
 
 
 class TestConfigureConsoleLogging:
-    def test_records_reach_stderr_beside_a_handler_attached_first(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_records_reach_stderr_beside_a_handler_attached_first(self, capsys: pytest.CaptureFixture[str]) -> None:
         exporter = _Recorder()
         logging.getLogger().addHandler(exporter)
 

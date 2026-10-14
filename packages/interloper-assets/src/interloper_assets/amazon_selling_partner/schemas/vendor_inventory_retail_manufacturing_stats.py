@@ -12,7 +12,9 @@ class VendorInventoryRetailManufacturingStats(Schema):
     (GET_VENDOR_INVENTORY_REPORT, sellingProgram=RETAIL, distributorView=MANUFACTURING).
     """
 
-    asin: str | None = Field(default=None, description="The ASIN (Amazon Standard Identification Number) of the product")
+    asin: str | None = Field(
+        default=None, description="The ASIN (Amazon Standard Identification Number) of the product"
+    )
     start_date: dt.date | None = Field(default=None, description="The start date of the inventory data")
     end_date: dt.date | None = Field(default=None, description="The end date of the inventory data")
     aged_90_plus_days_sellable_inventory_cost_amount: float | None = Field(

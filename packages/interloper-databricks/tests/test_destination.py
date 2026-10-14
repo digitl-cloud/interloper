@@ -159,8 +159,7 @@ class TestNaming:
 
         probe = next(sql for sql, _ in session.statements if "information_schema" in sql)
         assert probe == (
-            "SELECT 1 FROM `main`.information_schema.tables "
-            "WHERE table_schema = 'marts' AND table_name = 'described'"
+            "SELECT 1 FROM `main`.information_schema.tables WHERE table_schema = 'marts' AND table_name = 'described'"
         )
 
     def test_existing_mixed_case_table_is_found(self, session):

@@ -11,9 +11,12 @@ class CustomAudiences(Schema):
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
     account_id: str | None = Field(default=None, description="The ID of the Facebook account")
-    approximate_count_lower_bound: int | None = Field(default=None, description="The lower bound of the approximate count of custom audiences")
-    approximate_count_upper_bound: int | None = Field(default=None, description="The upper bound of the approximate count of custom audiences")
+    approximate_count_lower_bound: int | None = Field(
+        default=None, description="The lower bound of the approximate count of custom audiences"
+    )
+    approximate_count_upper_bound: int | None = Field(
+        default=None, description="The upper bound of the approximate count of custom audiences"
+    )
     description: str | None = Field(default=None, description="The description of the custom audience")
     id: str | None = Field(default=None, description="The ID of the custom audience")
     name: str | None = Field(default=None, description="The name of the custom audience")
-

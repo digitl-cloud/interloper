@@ -205,9 +205,7 @@ class TestRunResultStr:
         assert "partition=" not in rendered
 
     def test_lists_the_failed_and_canceled_ids(self) -> None:
-        result = _result(
-            a=ExecutionStatus.FAILED, b=ExecutionStatus.FAILED, c=ExecutionStatus.CANCELED
-        )
+        result = _result(a=ExecutionStatus.FAILED, b=ExecutionStatus.FAILED, c=ExecutionStatus.CANCELED)
 
         rendered = str(result)
 

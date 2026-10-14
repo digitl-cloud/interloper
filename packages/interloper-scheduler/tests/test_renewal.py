@@ -42,9 +42,7 @@ class StaticConn(il.Connection):
     api_key: str = "k"
 
 
-_CATALOG = il.Catalog(
-    components={"renewable_conn": RenewableConn.definition(), "static_conn": StaticConn.definition()}
-)
+_CATALOG = il.Catalog(components={"renewable_conn": RenewableConn.definition(), "static_conn": StaticConn.definition()})
 
 
 @pytest.fixture
@@ -73,8 +71,13 @@ def store() -> Iterator[Store]:
         engine_module._engine = None
 
 
-def _connection(store: Store, *, key: str = "renewable_conn", config: dict[str, Any] | None = None,
-                state: dict[str, Any] | None = None) -> UUID:
+def _connection(
+    store: Store,
+    *,
+    key: str = "renewable_conn",
+    config: dict[str, Any] | None = None,
+    state: dict[str, Any] | None = None,
+) -> UUID:
     row = store.components.create(_ORG, kind="connection", key=key, name="C", config=config or {}, encrypted=False)
     if state is not None:
         with Session(store.engine) as session:
@@ -166,9 +169,7 @@ class TestRenewalRuns:
     def test_successful_renewal_persists_and_schedules(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store, config={"token": "old"})
         run_id = self._dispatched_run(store, conn_id)
-        monkeypatch.setattr(
-            RenewableConn, "renew", lambda self: il.Renewal(fields={"token": "NEW"}, expires_in=7200)
-        )
+        monkeypatch.setattr(RenewableConn, "renew", lambda self: il.Renewal(fields={"token": "NEW"}, expires_in=7200))
 
         assert RunExecutor(store=store).execute(run_id) is True
 
@@ -186,9 +187,7 @@ class TestRenewalRuns:
         due = dt.datetime.fromisoformat(state["next_renewal_at"])
         assert dt.timedelta(minutes=55) < due - dt.datetime.now(dt.timezone.utc) < dt.timedelta(minutes=65)
 
-    def test_failed_renewal_stamps_curated_error_and_fails_the_run(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_failed_renewal_stamps_curated_error_and_fails_the_run(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store)
         run_id = self._dispatched_run(store, conn_id)
 

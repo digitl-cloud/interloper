@@ -1,6 +1,5 @@
 """Tests for ``interloper.destination.decorator``."""
 
-
 import interloper as il
 
 
@@ -23,6 +22,7 @@ class TestDecorator:
         @il.destination(relations={"connection": FakeConnection})
         class Decorated(il.MemoryDestination):
             """A destination-shaped fixture."""
+
         connection = FakeConnection()
 
         assert Decorated.relations["connection"].target is FakeConnection
@@ -32,11 +32,13 @@ class TestDecorator:
         @il.destination(relations={"connection": il.Relation(FakeConnection)})
         class Decorated(il.MemoryDestination):
             """A destination-shaped fixture."""
+
         assert Decorated.relations["connection"].target is FakeConnection
 
     def test_a_declared_relation_binds_and_resolves(self):
         @il.destination(relations={"connection": il.Relation(FakeConnection)})
         class Decorated(il.MemoryDestination):
             """A destination-shaped fixture."""
+
         connection = FakeConnection()
         assert Decorated(connection=connection).connection is connection  # ty: ignore[unresolved-attribute]

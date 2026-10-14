@@ -78,9 +78,7 @@ class TestTokenFlows:
         assert urllib.parse.parse_qs(request.content.decode())["code"] == ["the-code"]
 
     def test_refresh_grant_omits_scope(self):
-        request = self.SPEC.refresh_token_request(
-            client_id="cid", client_secret="cs", refresh_token="OLD", scope="a b"
-        )
+        request = self.SPEC.refresh_token_request(client_id="cid", client_secret="cs", refresh_token="OLD", scope="a b")
         assert json.loads(request.content) == {
             "grant_type": "refresh_token",
             "refresh_token": "OLD",

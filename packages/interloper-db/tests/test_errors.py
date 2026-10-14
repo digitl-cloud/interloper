@@ -53,9 +53,7 @@ class TestInUseError:
     """A delete refused because other records point at the target."""
 
     def test_referrers_are_carried_for_the_api_to_surface(self):
-        referrers: list[dict[str, str | None]] = [
-            {"id": "1", "kind": "job", "key": "nightly", "name": "Nightly"}
-        ]
+        referrers: list[dict[str, str | None]] = [{"id": "1", "kind": "job", "key": "nightly", "name": "Nightly"}]
 
         error = InUseError("Still referenced", referrers=referrers)
 

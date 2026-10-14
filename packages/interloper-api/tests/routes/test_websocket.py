@@ -329,9 +329,7 @@ class TestNotifyListener:
 class TestRealtimeLifespan:
     """Startup arms the listener thread from the already-initialized engine."""
 
-    async def test_starts_a_daemon_thread_with_the_unmasked_dsn(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_starts_a_daemon_thread_with_the_unmasked_dsn(self, monkeypatch: pytest.MonkeyPatch) -> None:
         started: list[dict[str, Any]] = []
 
         class FakeThread:

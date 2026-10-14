@@ -16,8 +16,12 @@ class Ads(Schema):
     name: str | None = Field(default=None, description="The name of the ad")
     ad_squad_id: str | None = Field(default=None, description="The ID of the ad squad that the ad belongs to")
     creative_id: str | None = Field(default=None, description="The ID of the creative")
-    third_party_paid_impression_tracking_urls: str | None = Field(default=None, description="Third party paid impression tracking URLs")
-    third_party_on_swipe_tracking_urls: str | None = Field(default=None, description="Third party on swipe tracking URLs")
+    third_party_paid_impression_tracking_urls: str | None = Field(
+        default=None, description="Third party paid impression tracking URLs"
+    )
+    third_party_on_swipe_tracking_urls: str | None = Field(
+        default=None, description="Third party on swipe tracking URLs"
+    )
     status: str | None = Field(default=None, description="The status of the ad")
     type: str | None = Field(default=None, description="The type of the ad")
     render_type: str | None = Field(default=None, description="The render type of the ad")
@@ -25,4 +29,3 @@ class Ads(Schema):
     delivery_status: str | None = Field(default=None, description="The delivery status of the ad")
     review_status_reasons: str | None = Field(default=None, description="The reasons for the review status of the ad")
     container_chain_ids: str | None = Field(default=None, description="The container chain IDs of the ad")
-

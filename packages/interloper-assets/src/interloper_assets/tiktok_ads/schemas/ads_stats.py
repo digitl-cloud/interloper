@@ -40,8 +40,16 @@ class AdsStats(Schema):
     secondary_goal_result: str | None = Field(default=None, description="Secondary goal result value of the ad")
     secondary_goal_result_rate: str | None = Field(default=None, description="Secondary goal result rate of the ad")
     spend: float | None = Field(default=None, description="Amount spent on the ad")
-    complete_payment: int | None = Field(default=None, description="Number of website purchase actions attributed to the ad")
-    total_complete_payment_rate: float | None = Field(default=None, description="Total value of website purchase actions attributed to the ad.")
-    vta_complete_payment: int | None = Field(default=None, description="Total value of purchase events attributed to only 'viewing' the ad")
-    vta_complete_payment_value: float | None = Field(default=None, description="Total value of purchase events attributed to someone only 'viewing' the ad")
+    complete_payment: int | None = Field(
+        default=None, description="Number of website purchase actions attributed to the ad"
+    )
+    total_complete_payment_rate: float | None = Field(
+        default=None, description="Total value of website purchase actions attributed to the ad."
+    )
+    vta_complete_payment: int | None = Field(
+        default=None, description="Total value of purchase events attributed to only 'viewing' the ad"
+    )
+    vta_complete_payment_value: float | None = Field(
+        default=None, description="Total value of purchase events attributed to someone only 'viewing' the ad"
+    )
     stat_time_day: dt.date | None = Field(default=None, description="Day of the ad")

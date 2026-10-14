@@ -149,9 +149,7 @@ class TestDiagnosis:
 
         assert (_error(store, run_id) or "").endswith("(reason=OOMKilled exit_code=137)")
 
-    def test_a_failing_diagnosis_leaves_the_plain_reason(
-        self, store: Store, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_failing_diagnosis_leaves_the_plain_reason(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
         class BrokenLauncher(_FakeLauncher):
             """Launcher whose ``diagnose`` always raises."""
 
@@ -321,9 +319,7 @@ class TestFailureReportingIsBestEffort:
         assert f"Failed to reap run {run_id}" in caplog.text
         assert _status(store, run_id) == "running"
 
-    def test_a_run_that_moved_after_the_read_is_left_alone(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_run_that_moved_after_the_read_is_left_alone(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
         run_id = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(7200))
         reaper = Reaper(store=store, launcher=_FakeLauncher(None))
         diagnose = reaper._explain

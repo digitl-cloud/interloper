@@ -35,9 +35,7 @@ class DisplayAdGroupsStats(Schema):
     new_to_brand_sales: float | None = Field(..., description="The number of new-to-brand sales.")
     new_to_brand_sales_clicks: float | None = Field(..., description="The number of new-to-brand sales clicks.")
     new_to_brand_units_sold: int | None = Field(..., description="The number of new-to-brand units sold.")
-    new_to_brand_units_sold_clicks: int | None = Field(
-        ..., description="The number of new-to-brand units sold clicks."
-    )
+    new_to_brand_units_sold_clicks: int | None = Field(..., description="The number of new-to-brand units sold clicks.")
     purchases: int | None = Field(..., description="The number of purchases.")
     purchases_clicks: int | None = Field(..., description="The number of purchases clicks.")
     purchases_promoted_clicks: int | None = Field(..., description="The number of purchases promoted clicks.")

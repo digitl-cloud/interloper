@@ -86,9 +86,9 @@ def _wait_for_file(service: Any, profile_id: str, report_id: int, file_id: int) 
     interval = float(constants.MIN_RETRY_INTERVAL)
     while True:
         logger.info(f"Waiting for report {report_id} (file {file_id})...")
-        status = (
-            service.reports().files().get(profileId=profile_id, reportId=report_id, fileId=file_id).execute()
-        )["status"]
+        status = (service.reports().files().get(profileId=profile_id, reportId=report_id, fileId=file_id).execute())[
+            "status"
+        ]
 
         if status == "REPORT_AVAILABLE":
             return

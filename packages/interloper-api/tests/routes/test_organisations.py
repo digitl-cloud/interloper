@@ -454,9 +454,7 @@ class TestListMembers:
         assert response.status_code == 404
         assert store.listed_members == []
 
-    def test_a_super_admin_lists_any_organisations_members(
-        self, super_client: TestClient, store: FakeStore
-    ) -> None:
+    def test_a_super_admin_lists_any_organisations_members(self, super_client: TestClient, store: FakeStore) -> None:
         response = super_client.get(f"/organisations/{_ORG_ID}/members", params={"limit": 1, "offset": 0})
 
         assert response.status_code == 200
@@ -647,9 +645,7 @@ class TestListInvitations:
         assert client.get(f"/organisations/{_ORG_ID}/invitations").status_code == 403
         assert store.listed_invitations == []
 
-    def test_a_super_admin_sees_any_organisations_invitations(
-        self, super_client: TestClient, store: FakeStore
-    ) -> None:
+    def test_a_super_admin_sees_any_organisations_invitations(self, super_client: TestClient, store: FakeStore) -> None:
         invitation_id = uuid4()
         store.invitation_rows = [_invitation(invitation_id, org_id=_OTHER_ORG_ID)]
 

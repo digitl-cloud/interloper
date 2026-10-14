@@ -11,5 +11,9 @@ class CampaignMatches(il.Schema):
     campaign_id: str = Field(description="The campaign's id on its platform.")
     campaign_name: str = Field(description="The campaign's name as its platform reports it.")
     match_id: str = Field(description="The id shared by every campaign matched to the same canonical campaign.")
-    canonical_name: str = Field(description="The normalised name the match is keyed on, shared by the matched campaigns.")
-    similarity: float = Field(description="How closely the campaign's own normalised name matches the canonical one, 0 to 1.")
+    canonical_name: str = Field(
+        description="The normalised name the match is keyed on, shared by the matched campaigns."
+    )
+    similarity: float = Field(
+        description="How closely the campaign's own normalised name matches the canonical one, 0 to 1."
+    )

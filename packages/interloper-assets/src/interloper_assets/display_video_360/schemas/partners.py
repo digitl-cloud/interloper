@@ -29,4 +29,3 @@ class Partners(Schema):
     data_access_config_sdf_config_admin_email: str | None = Field(
         default=None, description="Admin email for SDF config"
     )
-

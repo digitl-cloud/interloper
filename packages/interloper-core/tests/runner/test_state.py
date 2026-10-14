@@ -138,9 +138,7 @@ class TestInitialisation:
         root = next(operation for operation in dag.operations if operation.key == "root")
         # `enabled` is a field on `Operation`, so there is no class attribute to replace:
         # the property is installed, not overridden.
-        monkeypatch.setattr(
-            type(root), "enabled", property(lambda self: self.key != "root"), raising=False
-        )
+        monkeypatch.setattr(type(root), "enabled", property(lambda self: self.key != "root"), raising=False)
 
         state = RunState(dag, None, {"run_id": "run-1"})
 

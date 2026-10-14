@@ -32,9 +32,7 @@ class TestJSONLFormat:
 
     def test_dates_and_decimals_serialized(self):
         rows = [{"day": datetime.date(2024, 1, 2), "cost": Decimal("9.99")}]
-        assert JSONLFormat().deserialize(JSONLFormat().serialize(rows, None)) == [
-            {"day": "2024-01-02", "cost": "9.99"}
-        ]
+        assert JSONLFormat().deserialize(JSONLFormat().serialize(rows, None)) == [{"day": "2024-01-02", "cost": "9.99"}]
 
     def test_nan_becomes_null(self):
         payload = JSONLFormat().serialize([{"cost": float("nan")}], None)

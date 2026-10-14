@@ -12,7 +12,9 @@ class VendorInventoryRetailSourcingStats(Schema):
     (GET_VENDOR_INVENTORY_REPORT, sellingProgram=RETAIL, distributorView=SOURCING).
     """
 
-    asin: str | None = Field(default=None, description="The ASIN (Amazon Standard Identification Number) of the product")
+    asin: str | None = Field(
+        default=None, description="The ASIN (Amazon Standard Identification Number) of the product"
+    )
     start_date: dt.date | None = Field(default=None, description="The start date of the inventory retail sourcing")
     end_date: dt.date | None = Field(default=None, description="The end date of the inventory retail sourcing")
     aged_90_plus_days_sellable_inventory_cost_amount: float | None = Field(
@@ -73,6 +75,4 @@ class VendorInventoryRetailSourcingStats(Schema):
     unsellable_on_hand_inventory_units: float | None = Field(
         default=None, description="The number of units in unsellable on-hand inventory"
     )
-    vendor_confirmation_rate: float | None = Field(
-        default=None, description="The rate at which vendors confirm orders"
-    )
+    vendor_confirmation_rate: float | None = Field(default=None, description="The rate at which vendors confirm orders")

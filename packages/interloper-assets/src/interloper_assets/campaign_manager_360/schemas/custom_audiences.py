@@ -43,4 +43,3 @@ class CustomAudiences(Schema):
     list_population_rule_list_population_clauses: str | None = Field(
         default=None, description="Clauses for the list population rule"
     )
-

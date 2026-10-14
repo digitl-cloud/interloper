@@ -38,9 +38,7 @@ class BrandsCampaignsStats(Schema):
     new_to_brand_detail_page_view_rate: float | None = Field(
         ..., description="The rate of new-to-brand detail page views"
     )
-    new_to_brand_detail_page_views: int | None = Field(
-        ..., description="The number of new-to-brand detail page views"
-    )
+    new_to_brand_detail_page_views: int | None = Field(..., description="The number of new-to-brand detail page views")
     new_to_brand_detail_page_views_clicks: int | None = Field(
         ..., description="The number of new-to-brand detail page views clicks"
     )
@@ -55,9 +53,7 @@ class BrandsCampaignsStats(Schema):
     new_to_brand_sales_clicks: float | None = Field(..., description="The number of new-to-brand sales clicks")
     new_to_brand_sales_percentage: float | None = Field(..., description="The percentage of new-to-brand sales")
     new_to_brand_units_sold: int | None = Field(..., description="The number of new-to-brand units sold")
-    new_to_brand_units_sold_clicks: int | None = Field(
-        ..., description="The number of new-to-brand units sold clicks"
-    )
+    new_to_brand_units_sold_clicks: int | None = Field(..., description="The number of new-to-brand units sold clicks")
     new_to_brand_units_sold_percentage: float | None = Field(
         ..., description="The percentage of new-to-brand units sold"
     )

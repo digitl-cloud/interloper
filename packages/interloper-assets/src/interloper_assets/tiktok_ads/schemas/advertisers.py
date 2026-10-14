@@ -25,8 +25,9 @@ class Advertisers(Schema):
     license_url: str | None = Field(default=None, description="URL to the advertiser's license")
     name: str | None = Field(default=None, description="Name of the advertiser")
     owner_bc_id: str | None = Field(default=None, description="Business center ID of the advertiser's owner")
-    rejection_reason: str | None = Field(default=None, description="Reason for any rejection of the advertiser's application")
+    rejection_reason: str | None = Field(
+        default=None, description="Reason for any rejection of the advertiser's application"
+    )
     role: str | None = Field(default=None, description="Role of the advertiser in the system")
     status: str | None = Field(default=None, description="Current status of the advertiser")
     timezone: str | None = Field(default=None, description="Timezone used by the advertiser")
-

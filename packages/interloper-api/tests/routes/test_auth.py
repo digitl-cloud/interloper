@@ -84,9 +84,7 @@ def _client(
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_auth_config] = lambda: _auth_config(
-        super_admin_emails or [], allowed_domains or []
-    )
+    app.dependency_overrides[get_auth_config] = lambda: _auth_config(super_admin_emails or [], allowed_domains or [])
     return TestClient(app, follow_redirects=False)
 
 
@@ -157,9 +155,7 @@ def test_signup_allowed_for_listed_domain() -> None:
 
 def test_existing_profile_bypasses_allowlist() -> None:
     store = FakeStore(exists=True)
-    resp = _client(store, allowed_domains=["digitlcloud.com"]).get(
-        "/auth/google/callback", params={"code": "c"}
-    )
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted is not None
@@ -167,9 +163,7 @@ def test_existing_profile_bypasses_allowlist() -> None:
 
 def test_invited_email_can_sign_up() -> None:
     store = FakeStore(invited=True)
-    resp = _client(store, allowed_domains=["digitlcloud.com"]).get(
-        "/auth/google/callback", params={"code": "c"}
-    )
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params={"code": "c"})
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted is not None
@@ -332,18 +326,14 @@ class TestGoogleCallbackFailures:
         assert response.status_code == 500
 
     def test_a_rejected_code_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            auth_module.httpx2, "post", lambda *a, **k: SimpleNamespace(status_code=400, json=dict)
-        )
+        monkeypatch.setattr(auth_module.httpx2, "post", lambda *a, **k: SimpleNamespace(status_code=400, json=dict))
 
         response = _client(FakeStore()).get("/auth/google/callback?code=bad")
 
         assert response.status_code == 401
         assert response.json()["detail"] == "Failed to exchange authorization code"
 
-    def test_a_token_response_without_an_access_token_is_a_401(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_a_token_response_without_an_access_token_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             auth_module.httpx2,
             "post",
@@ -356,9 +346,7 @@ class TestGoogleCallbackFailures:
         assert response.json()["detail"] == "No access token in response"
 
     def test_a_failed_userinfo_lookup_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            auth_module.httpx2, "get", lambda *a, **k: SimpleNamespace(status_code=403, json=dict)
-        )
+        monkeypatch.setattr(auth_module.httpx2, "get", lambda *a, **k: SimpleNamespace(status_code=403, json=dict))
 
         response = _client(FakeStore()).get("/auth/google/callback?code=c")
 
@@ -369,9 +357,7 @@ class TestGoogleCallbackFailures:
         "userinfo",
         [{"email": "a@example.com"}, {"id": "google-1"}, {}],
     )
-    def test_incomplete_userinfo_is_a_401(
-        self, monkeypatch: pytest.MonkeyPatch, userinfo: dict[str, str]
-    ) -> None:
+    def test_incomplete_userinfo_is_a_401(self, monkeypatch: pytest.MonkeyPatch, userinfo: dict[str, str]) -> None:
         monkeypatch.setattr(
             auth_module.httpx2,
             "get",
@@ -512,9 +498,7 @@ class TestGetMe:
 
     def test_a_session_without_an_organisation_defaults_to_viewer(self) -> None:
         profile = _me_profile()
-        client = _session_client(
-            SessionStore(session=(profile, SimpleNamespace(organisation_id=None)))
-        )
+        client = _session_client(SessionStore(session=(profile, SimpleNamespace(organisation_id=None))))
         client.cookies.set("session_token", "tok")
 
         payload = client.get("/auth/me").json()

@@ -42,9 +42,7 @@ class DisplayAdvertisedProductsStats(Schema):
     new_to_brand_detail_page_view_views: int | None = Field(
         ..., description="The number of new-to-brand detail page view views"
     )
-    new_to_brand_detail_page_views: int | None = Field(
-        ..., description="The number of new-to-brand detail page views"
-    )
+    new_to_brand_detail_page_views: int | None = Field(..., description="The number of new-to-brand detail page views")
     new_to_brand_ecp_detail_page_view: float | None = Field(
         ..., description="The ECP of new-to-brand detail page views"
     )
@@ -53,9 +51,7 @@ class DisplayAdvertisedProductsStats(Schema):
     new_to_brand_sales: float | None = Field(..., description="The number of new-to-brand sales")
     new_to_brand_sales_clicks: float | None = Field(..., description="The number of new-to-brand sales clicks")
     new_to_brand_units_sold: int | None = Field(..., description="The number of new-to-brand units sold")
-    new_to_brand_units_sold_clicks: int | None = Field(
-        ..., description="The number of new-to-brand units sold clicks"
-    )
+    new_to_brand_units_sold_clicks: int | None = Field(..., description="The number of new-to-brand units sold clicks")
     promoted_asin: str | None = Field(..., description="The ASIN of the promoted product")
     promoted_sku: str | None = Field(..., description="The SKU of the promoted product")
     purchases: int | None = Field(..., description="The number of purchases")

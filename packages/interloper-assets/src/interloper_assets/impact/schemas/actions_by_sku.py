@@ -9,14 +9,20 @@ class ActionsBySku(Schema):
 
     action_date: dt.datetime | None = Field(default=None, description="Date when the action occurred.")
     action_id: str | None = Field(default=None, description="Unique identifier for the action.")
-    action_tracker: str | None = Field(default=None, description="Name of the action tracker used for the product action.")
+    action_tracker: str | None = Field(
+        default=None, description="Name of the action tracker used for the product action."
+    )
     at_id: str | None = Field(default=None, description="Identifier of the action tracker used for the product action.")
     batch_date: dt.date | None = Field(default=None, description="Date when the batch process occurred.")
     category: str | None = Field(default=None, description="Category of the product.")
     category_list: str | None = Field(default=None, description="List of categories associated with the product.")
     cost: float | None = Field(default=None, description="Cost associated with the product action.")
-    media_partner: str | None = Field(default=None, description="Name of the media partner associated with the product action.")
-    mp_id: str | None = Field(default=None, description="Identifier of the media partner associated with the product action.")
+    media_partner: str | None = Field(
+        default=None, description="Name of the media partner associated with the product action."
+    )
+    mp_id: str | None = Field(
+        default=None, description="Identifier of the media partner associated with the product action."
+    )
     oid: str | None = Field(default=None, description="Order identifier associated with the action.")
     product: str | None = Field(default=None, description="Name of the product.")
     product_category: str | None = Field(default=None, description="Detailed category of the product.")

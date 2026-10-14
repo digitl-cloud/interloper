@@ -118,9 +118,7 @@ class OperationResult:
         Returns:
             The result: the operation's own on success, its failure otherwise.
         """
-        span_attributes = telemetry_attributes.from_metadata(
-            operation.event_metadata(context.metadata, context.window)
-        )
+        span_attributes = telemetry_attributes.from_metadata(operation.event_metadata(context.metadata, context.window))
         attempt = 1
         while True:
             try:

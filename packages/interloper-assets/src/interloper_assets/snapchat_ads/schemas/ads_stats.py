@@ -8,26 +8,42 @@ class AdsStats(Schema):
     """The Ads report provides insights on the performance of individual ads in a campaign. It includes key metrics such as attachment views, conversions, custom events, impressions, saves, shares, spend, story opens, swipes, and video views."""
 
     android_installs: int | None = Field(default=None, description="Number of installs on Android devices")
-    attachment_avg_view_time_millis: int | None = Field(default=None, description="Average view time of attachments in milliseconds")
+    attachment_avg_view_time_millis: int | None = Field(
+        default=None, description="Average view time of attachments in milliseconds"
+    )
     attachment_frequency: float | None = Field(default=None, description="Frequency of attachment views")
     attachment_impressions: int | None = Field(default=None, description="Number of times the attachment was viewed")
-    attachment_quartile_1: int | None = Field(default=None, description="Number of viewers who watched the first 25% of the attachment")
-    attachment_quartile_2: int | None = Field(default=None, description="Number of viewers who watched the first 50% of the attachment")
-    attachment_quartile_3: int | None = Field(default=None, description="Number of viewers who watched the first 75% of the attachment")
-    attachment_total_view_time_millis: int | None = Field(default=None, description="Total view time of attachments in milliseconds")
+    attachment_quartile_1: int | None = Field(
+        default=None, description="Number of viewers who watched the first 25% of the attachment"
+    )
+    attachment_quartile_2: int | None = Field(
+        default=None, description="Number of viewers who watched the first 50% of the attachment"
+    )
+    attachment_quartile_3: int | None = Field(
+        default=None, description="Number of viewers who watched the first 75% of the attachment"
+    )
+    attachment_total_view_time_millis: int | None = Field(
+        default=None, description="Total view time of attachments in milliseconds"
+    )
     attachment_uniques: int | None = Field(default=None, description="Unique viewers of the attachment")
     attachment_video_views: int | None = Field(default=None, description="Number of video views within attachments")
-    attachment_view_completion: int | None = Field(default=None, description="Number of viewers who watched the entire attachment")
+    attachment_view_completion: int | None = Field(
+        default=None, description="Number of viewers who watched the entire attachment"
+    )
     avg_screen_time_millis: int | None = Field(default=None, description="Average screen time in milliseconds")
     avg_view_time_millis: int | None = Field(default=None, description="Average view time in milliseconds")
-    conversion_achievement_unlocked: int | None = Field(default=None, description="Number of achievement unlock conversions")
+    conversion_achievement_unlocked: int | None = Field(
+        default=None, description="Number of achievement unlock conversions"
+    )
     conversion_ad_click: int | None = Field(default=None, description="Number of ad click conversions")
     conversion_ad_view: int | None = Field(default=None, description="Number of ad view conversions")
     conversion_add_billing: int | None = Field(default=None, description="Number of add billing conversions")
     conversion_add_cart: int | None = Field(default=None, description="Number of add to cart conversions")
     conversion_add_to_wishlist: int | None = Field(default=None, description="Number of add to wishlist conversions")
     conversion_app_opens: int | None = Field(default=None, description="Number of app open conversions")
-    conversion_complete_tutorial: int | None = Field(default=None, description="Number of tutorial completion conversions")
+    conversion_complete_tutorial: int | None = Field(
+        default=None, description="Number of tutorial completion conversions"
+    )
     conversion_invite: int | None = Field(default=None, description="Number of invite conversions")
     conversion_level_completes: int | None = Field(default=None, description="Number of level complete conversions")
     conversion_list_view: int | None = Field(default=None, description="Number of list view conversions")

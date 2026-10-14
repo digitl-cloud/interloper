@@ -116,15 +116,11 @@ class TestFromSettings:
             monkeypatch.setattr(
                 "interloper.settings.AppSettings.get",
                 classmethod(
-                    lambda cls: SimpleNamespace(
-                        secrets=SimpleNamespace(encryption_key=encryption_key), quota=quota
-                    )
+                    lambda cls: SimpleNamespace(secrets=SimpleNamespace(encryption_key=encryption_key), quota=quota)
                 ),
             )
             monkeypatch.setattr(base_module, "engine_from_settings", lambda: component_db)
-            monkeypatch.setattr(
-                il.Catalog, "from_settings", classmethod(lambda cls: il.Catalog(components={}))
-            )
+            monkeypatch.setattr(il.Catalog, "from_settings", classmethod(lambda cls: il.Catalog(components={})))
             return quota
 
         return install
@@ -147,9 +143,7 @@ class TestFromSettings:
         assert decrypt is not None
         assert decrypt(encrypt(b"secret")) == b"secret"
 
-    def test_no_key_leaves_the_store_without_a_cipher(
-        self, settings, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_no_key_leaves_the_store_without_a_cipher(self, settings, caplog: pytest.LogCaptureFixture) -> None:
         # Resource persistence then fails closed rather than writing plaintext.
         settings(None)
 
@@ -182,9 +176,7 @@ class TestFromSettings:
 
         assert Store.from_settings(catalog=catalog)._catalog is catalog
 
-    def test_without_one_the_configured_catalog_is_used(
-        self, settings, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_without_one_the_configured_catalog_is_used(self, settings, monkeypatch: pytest.MonkeyPatch) -> None:
         settings(None)
         configured = il.Catalog(components={})
         monkeypatch.setattr(il.Catalog, "from_settings", classmethod(lambda cls: configured))

@@ -33,17 +33,11 @@ class BrandsSearchTermsStats(Schema):
     video_5_second_view_rate: float | None = Field(
         ..., description="The rate at which viewers watched at least 5 seconds of the video"
     )
-    video_5_second_views: int | None = Field(
-        ..., description="The number of views for at least 5 seconds of the video"
-    )
+    video_5_second_views: int | None = Field(..., description="The number of views for at least 5 seconds of the video")
     video_complete_views: int | None = Field(..., description="The number of complete video views")
-    video_first_quartile_views: int | None = Field(
-        ..., description="The number of views for at least 25% of the video"
-    )
+    video_first_quartile_views: int | None = Field(..., description="The number of views for at least 25% of the video")
     video_midpoint_views: int | None = Field(..., description="The number of views for at least 50% of the video")
-    video_third_quartile_views: int | None = Field(
-        ..., description="The number of views for at least 75% of the video"
-    )
+    video_third_quartile_views: int | None = Field(..., description="The number of views for at least 75% of the video")
     video_unmutes: int | None = Field(..., description="The number of video unmutes")
     view_click_through_rate: float | None = Field(..., description="The rate at which viewers clicked through the ad")
     viewability_rate: float | None = Field(..., description="The rate at which the ad was viewable")

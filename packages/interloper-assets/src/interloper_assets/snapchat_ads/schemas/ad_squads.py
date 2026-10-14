@@ -20,10 +20,16 @@ class AdSquads(Schema):
     targeting_reach_status: str | None = Field(default=None, description="The reach status of the ad squad")
     placement: str | None = Field(default=None, description="The placement of the ad squad")
     billing_event: str | None = Field(default=None, description="The billing event of the ad squad")
-    auto_bid: bool | None = Field(default=None, description="Flag indicating if auto bidding is enabled for the ad squad")
-    target_bid: bool | None = Field(default=None, description="Flag indicating if target bidding is enabled for the ad squad")
+    auto_bid: bool | None = Field(
+        default=None, description="Flag indicating if auto bidding is enabled for the ad squad"
+    )
+    target_bid: bool | None = Field(
+        default=None, description="Flag indicating if target bidding is enabled for the ad squad"
+    )
     bid_strategy: str | None = Field(default=None, description="The bid strategy of the ad squad")
-    lifetime_budget_micro: int | None = Field(default=None, description="The lifetime budget of the ad squad in micro units")
+    lifetime_budget_micro: int | None = Field(
+        default=None, description="The lifetime budget of the ad squad in micro units"
+    )
     start_time: str | None = Field(default=None, description="The start time of the ad squad")
     end_time: str | None = Field(default=None, description="The end time of the ad squad")
     optimization_goal: str | None = Field(default=None, description="The optimization goal of the ad squad")
@@ -33,18 +39,32 @@ class AdSquads(Schema):
     forced_view_setting: str | None = Field(default=None, description="The forced view setting of the ad squad")
     creation_state: str | None = Field(default=None, description="The creation state of the ad squad")
     delivery_status: str | None = Field(default=None, description="The delivery status of the ad squad")
-    delivery_properties_version: float | None = Field(default=None, description="The version of the delivery properties of the ad squad")
-    targeting_regulated_content: bool | None = Field(default=None, description="Flag indicating if targeting regulated content is enabled for the ad squad")
+    delivery_properties_version: float | None = Field(
+        default=None, description="The version of the delivery properties of the ad squad"
+    )
+    targeting_regulated_content: bool | None = Field(
+        default=None, description="Flag indicating if targeting regulated content is enabled for the ad squad"
+    )
     targeting_demographics: str | None = Field(default=None, description="Targeting demographics")
     targeting_interests: str | None = Field(default=None, description="Targeting interests")
     targeting_geos: str | None = Field(default=None, description="Targeting geos")
     targeting_enable_targeting_expansion: bool | None = Field(default=None, description="Enable targeting expansion")
-    targeting_auto_expansion_options_interest_expansion_option_enabled: bool | None = Field(default=None, description="Enable interest expansion option")
-    targeting_auto_expansion_options_custom_audience_expansion_option_enabled: bool | None = Field(default=None, description="Enable custom audience expansion option")
+    targeting_auto_expansion_options_interest_expansion_option_enabled: bool | None = Field(
+        default=None, description="Enable interest expansion option"
+    )
+    targeting_auto_expansion_options_custom_audience_expansion_option_enabled: bool | None = Field(
+        default=None, description="Enable custom audience expansion option"
+    )
     skadnetwork_properties_status: str | None = Field(default=None, description="Skadnetwork properties status")
-    cap_and_exclusion_config_frequency_cap_config: str | None = Field(default=None, description="Cap and exclusion frequency config")
-    cap_and_exclusion_config_is_industry_exclusive: bool | None = Field(default=None, description="Cap and exclusion industry exclusive")
-    cap_and_exclusion_config_is_industry_competitively_separated: bool | None = Field(default=None, description="nuCap and exclusion industry competitively separated")
+    cap_and_exclusion_config_frequency_cap_config: str | None = Field(
+        default=None, description="Cap and exclusion frequency config"
+    )
+    cap_and_exclusion_config_is_industry_exclusive: bool | None = Field(
+        default=None, description="Cap and exclusion industry exclusive"
+    )
+    cap_and_exclusion_config_is_industry_competitively_separated: bool | None = Field(
+        default=None, description="nuCap and exclusion industry competitively separated"
+    )
     targeting_devices: str | None = Field(default=None, description="Targeting devices")
     targeting_maid_status_spec_maid_status: str | None = Field(default=None, description="Targeting MAID status")
     share_of_voice: float | None = Field(default=None, description="Share of voice")
@@ -59,14 +79,27 @@ class AdSquads(Schema):
     reserved_debug_message: str | None = Field(default=None, description="Reserved debug message")
     reserved_start_target_date: str | None = Field(default=None, description="Reserved start target date")
     reserved_end_target_date: str | None = Field(default=None, description="Reserved end target date")
-    ad_scheduling_config_saturday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Saturday hour of day")
+    ad_scheduling_config_saturday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Saturday hour of day"
+    )
     cell_ids: str | None = Field(default=None, description="Cell IDs")
-    ad_scheduling_config_monday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Monday hour of day")
+    ad_scheduling_config_monday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Monday hour of day"
+    )
     bid_micro: float | None = Field(default=None, description="Bid (micro)")
-    ad_scheduling_config_tuesday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Tuesday hour of day")
-    ad_scheduling_config_wednesday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Wednesday hour of day")
-    ad_scheduling_config_thursday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Thursday hour of day")
-    ad_scheduling_config_friday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config Friday hour of day")
+    ad_scheduling_config_tuesday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Tuesday hour of day"
+    )
+    ad_scheduling_config_wednesday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Wednesday hour of day"
+    )
+    ad_scheduling_config_thursday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Thursday hour of day"
+    )
+    ad_scheduling_config_friday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config Friday hour of day"
+    )
     targeting_app_install_states: str | None = Field(default=None, description="Targeting app install states")
-    ad_scheduling_config_sunday_hour_of_day: str | None = Field(default=None, description="Ad scheduling config sunday hour of day")
-
+    ad_scheduling_config_sunday_hour_of_day: str | None = Field(
+        default=None, description="Ad scheduling config sunday hour of day"
+    )

@@ -17,4 +17,3 @@ class Account(Schema):
     id: int | None = Field(default=None, description="The advertiser account ID")
     advertiser_url: str | None = Field(default=None, description="The advertiser's URL")
     channel_id: int | None = Field(default=None, description="The channel ID")
-

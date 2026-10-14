@@ -9,6 +9,7 @@ from pydantic_settings import SettingsConfigDict
 
 class AmazonSellingPartnerLocation(Enum):
     """Selling Partner API region, which selects both endpoints."""
+
     NORTH_AMERICA = "NA"
     EUROPE = "EU"
     FAR_EAST = "FE"

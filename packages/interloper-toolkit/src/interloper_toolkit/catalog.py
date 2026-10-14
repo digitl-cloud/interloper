@@ -50,9 +50,7 @@ def _inline_refs(node: Any, defs: dict[str, Any] | None = None, _stack: frozense
     return {k: _inline_refs(v, defs, _stack) for k, v in node.items() if k not in ("$defs", "$ref")}
 
 
-def list_definitions(
-    ctx: ToolkitContext, kind: str | None = None
-) -> DefinitionCounts | DefinitionList | ToolError:
+def list_definitions(ctx: ToolkitContext, kind: str | None = None) -> DefinitionCounts | DefinitionList | ToolError:
     """List the component definitions available in the catalog.
 
     This answers "what does Interloper support / what could we add?" — the
@@ -214,14 +212,16 @@ def search_fields(ctx: ToolkitContext, query: str, limit: int = 50, offset: int 
                 for field_name, field_info in schema["properties"].items():
                     field_desc = field_info.get("description", "")
                     if query_lower in field_name.lower() or query_lower in field_desc.lower():
-                        matches.append(FieldMatch(
-                            source_key=source_key,
-                            asset_key=asset_key,
-                            qualified_key=f"{source_key}.{asset_key}",
-                            field_name=field_name,
-                            field_type=_extract_type(field_info),
-                            description=field_desc,
-                        ))
+                        matches.append(
+                            FieldMatch(
+                                source_key=source_key,
+                                asset_key=asset_key,
+                                qualified_key=f"{source_key}.{asset_key}",
+                                field_name=field_name,
+                                field_type=_extract_type(field_info),
+                                description=field_desc,
+                            )
+                        )
 
         page = matches[offset : offset + limit]
         return FieldSearchResult(query=query, match_count=len(page), total=len(matches), matches=page)
@@ -266,12 +266,14 @@ def compare_schemas(
         for field in sorted(shared):
             type_a = _extract_type(schema_a[field])
             type_b = _extract_type(schema_b[field])
-            shared_details.append(SharedField(
-                field=field,
-                type_a=type_a,
-                type_b=type_b,
-                type_match=type_a == type_b,
-            ))
+            shared_details.append(
+                SharedField(
+                    field=field,
+                    type_a=type_a,
+                    type_b=type_b,
+                    type_match=type_a == type_b,
+                )
+            )
 
         return SchemaComparison(
             asset_a=f"{source_key_a}.{asset_key_a}",

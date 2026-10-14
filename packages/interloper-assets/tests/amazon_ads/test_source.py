@@ -94,18 +94,55 @@ class TestSpecRoundtrip:
 
 # Count metrics: whole numbers only across the 20 M legacy rows of the Swarovski warehouse (checked
 # 2026-09-16), so the schemas type them as ``int``. Rates and amounts keep ``float``.
-COUNT_FIELDS = frozenset({
-    "impressions", "clicks", "purchases", "purchases_clicks", "units_sold", "units_sold_clicks",
-    "purchases_1d", "purchases_7d", "purchases_14d", "purchases_30d",
-    "units_sold_clicks_1d", "units_sold_clicks_7d", "units_sold_clicks_14d", "units_sold_clicks_30d",
-    "units_sold_same_sku_1d", "units_sold_same_sku_7d", "units_sold_same_sku_14d", "units_sold_same_sku_30d",
-    "purchases_same_sku_1d", "purchases_same_sku_7d", "purchases_same_sku_14d", "purchases_same_sku_30d",
-    "new_to_brand_purchases", "new_to_brand_units_sold", "detail_page_views", "add_to_cart", "branded_searches",
-    "viewable_impressions", "video_complete_views", "video_unmutes", "cumulative_reach",
-    "gross_impressions", "invalid_impressions", "gross_click_throughs", "invalid_click_throughs",
-})
+COUNT_FIELDS = frozenset(
+    {
+        "impressions",
+        "clicks",
+        "purchases",
+        "purchases_clicks",
+        "units_sold",
+        "units_sold_clicks",
+        "purchases_1d",
+        "purchases_7d",
+        "purchases_14d",
+        "purchases_30d",
+        "units_sold_clicks_1d",
+        "units_sold_clicks_7d",
+        "units_sold_clicks_14d",
+        "units_sold_clicks_30d",
+        "units_sold_same_sku_1d",
+        "units_sold_same_sku_7d",
+        "units_sold_same_sku_14d",
+        "units_sold_same_sku_30d",
+        "purchases_same_sku_1d",
+        "purchases_same_sku_7d",
+        "purchases_same_sku_14d",
+        "purchases_same_sku_30d",
+        "new_to_brand_purchases",
+        "new_to_brand_units_sold",
+        "detail_page_views",
+        "add_to_cart",
+        "branded_searches",
+        "viewable_impressions",
+        "video_complete_views",
+        "video_unmutes",
+        "cumulative_reach",
+        "gross_impressions",
+        "invalid_impressions",
+        "gross_click_throughs",
+        "invalid_click_throughs",
+    }
+)
 FLOAT_SUFFIXES = (
-    "_rate", "_percentage", "cost", "sales", "spend", "bid", "amount", "roas_clicks_7d", "roas_clicks_14d",
+    "_rate",
+    "_percentage",
+    "cost",
+    "sales",
+    "spend",
+    "bid",
+    "amount",
+    "roas_clicks_7d",
+    "roas_clicks_14d",
 )
 
 

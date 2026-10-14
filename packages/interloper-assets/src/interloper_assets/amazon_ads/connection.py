@@ -8,6 +8,7 @@ from pydantic_settings import SettingsConfigDict
 
 class AmazonAdsAPILocation(Enum):
     """Amazon Ads API region, which selects both endpoints."""
+
     NORTH_AMERICA = "NA"
     EUROPE = "EU"
     FAR_EAST = "FE"

@@ -234,4 +234,3 @@ class TestConcat:
     def test_table_concat_appends_the_others(self):
         table = TableData.from_data([{"a": 1}])
         assert table.concat([[{"a": 2}], [{"a": 3}]]) == [{"a": 1}, {"a": 2}, {"a": 3}]
-

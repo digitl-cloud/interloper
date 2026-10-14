@@ -1,6 +1,5 @@
 """Tests for ``interloper.serializable.body``."""
 
-
 import pytest
 
 import interloper as il

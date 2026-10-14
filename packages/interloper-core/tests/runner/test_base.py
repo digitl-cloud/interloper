@@ -368,9 +368,7 @@ class TestTelemetrySpans:
         def needs_resource(creds: Creds) -> list[dict[str, Any]]:
             return [{"x": creds.token}]
 
-        await AsyncRunner().run(
-            il.DAG(needs_resource(id="needs_resource", destinations=[il.MemoryDestination()]))
-        )
+        await AsyncRunner().run(il.DAG(needs_resource(id="needs_resource", destinations=[il.MemoryDestination()])))
 
         spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.asset.resolve_resource"]
         assert len(spans) == 1

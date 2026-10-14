@@ -234,9 +234,7 @@ class TestCheck:
         assert resp.status_code == 404
 
     def test_non_connection_component_404(self, source_catalog: il.Catalog):
-        resp = _client(source_catalog).post(
-            "/catalog/facebook_ads/check", json={"config": {}}
-        )
+        resp = _client(source_catalog).post("/catalog/facebook_ads/check", json={"config": {}})
         assert resp.status_code == 404
 
 
@@ -246,9 +244,7 @@ class TestHandleError:
     @staticmethod
     def _status_error(status: int) -> httpx2.HTTPStatusError:
         request = httpx2.Request("GET", "https://provider.example.com/x")
-        return httpx2.HTTPStatusError(
-            "boom", request=request, response=httpx2.Response(status, request=request)
-        )
+        return httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(status, request=request))
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_an_auth_failure_keeps_its_status(self, status: int) -> None:
@@ -294,9 +290,7 @@ class TestCheckResponseFromFailure:
     @staticmethod
     def _status_error(status: int) -> httpx2.HTTPStatusError:
         request = httpx2.Request("GET", "https://provider.example.com/x")
-        return httpx2.HTTPStatusError(
-            "boom", request=request, response=httpx2.Response(status, request=request)
-        )
+        return httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(status, request=request))
 
     def test_a_connection_check_error_carries_its_own_message(self) -> None:
         from interloper.errors import ConnectionCheckError
@@ -383,9 +377,7 @@ class TestResolveEdgeCases:
         assert "access_token" in detail
         assert "s3cret-value" not in detail
 
-    def test_a_provider_failure_is_mapped_not_raised(
-        self, source_catalog: il.Catalog, mock_graph
-    ) -> None:
+    def test_a_provider_failure_is_mapped_not_raised(self, source_catalog: il.Catalog, mock_graph) -> None:
         def handler(request: httpx2.Request) -> httpx2.Response:
             raise httpx2.ConnectError("no route to host")
 

@@ -11,7 +11,9 @@ class VendorSalesBusinessSourcingStats(Schema):
     (GET_VENDOR_SALES_REPORT, sellingProgram=BUSINESS, distributorView=SOURCING).
     """
 
-    asin: str | None = Field(default=None, description="The ASIN (Amazon Standard Identification Number) of the product")
+    asin: str | None = Field(
+        default=None, description="The ASIN (Amazon Standard Identification Number) of the product"
+    )
     start_date: dt.date | None = Field(default=None, description="The start date of the sales data")
     end_date: dt.date | None = Field(default=None, description="The end date of the sales data")
     customer_returns: int | None = Field(default=None, description="The number of customer returns")

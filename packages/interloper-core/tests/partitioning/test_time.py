@@ -121,9 +121,7 @@ class TestTimePartitionFromKey:
             ("2026-08-21T13", TimeGranularity.HOUR, dt.datetime(2026, 8, 21, 13)),
         ],
     )
-    def test_the_key_shape_carries_the_granularity(
-        self, key: str, granularity: TimeGranularity, value: object
-    ) -> None:
+    def test_the_key_shape_carries_the_granularity(self, key: str, granularity: TimeGranularity, value: object) -> None:
         partition = TimePartition.from_key(key)
         assert partition.granularity is granularity
         assert partition.value == value
