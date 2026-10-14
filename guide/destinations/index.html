@@ -2526,8 +2526,8 @@ double without changing.</p>
 </span></code></pre></div>
 <p>Upstream reads use the <strong>first</strong> resolved destination of the upstream asset.
 <code>default_destination_key</code> names a preferred one for the platform and UIs to honour.</p>
-<p>Decorators can restrict the destination <strong>classes</strong> an asset or source accepts; an instance of
-another class raises <code>DestinationError</code> at materialization:</p>
+<p>Decorators can restrict the destination <strong>classes</strong> an asset or source accepts; binding an
+instance of another class raises <code>ConfigError</code>:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"destinations"</span><span class="p">:</span> <span class="p">[</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">,</span> <span class="n">WarehouseDestination</span><span class="p">]})</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">orders</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
 </span></code></pre></div>
@@ -2535,22 +2535,24 @@ another class raises <code>DestinationError</code> at materialization:</p>
 <h3 id="csvdestination">CSVDestination<a class="headerlink" href="#csvdestination" title="Permanent link">&para;</a></h3>
 <p>CSV files on the local filesystem, one folder per asset, one file per partition:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{base_path}/{dataset}/{table}/data.csv
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>{base_path}/{dataset}/{table}/{column}={partition_id}/data.csv
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>{base_path}/{dataset}/{table}/{column}={partition_key}/data.csv
 </span></code></pre></div>
-<p>Rows are written as records; the first row's keys become the header. CSV stores strings, so a
+<p>Rows are written as they are; the first row's keys become the header. CSV stores strings, so a
 read reconciles the rows against the effective schema carried in the context, restoring the
 declared types and turning empty strings into <code>None</code>. Window writes are split per partition.</p>
 <h3 id="filedestination">FileDestination<a class="headerlink" href="#filedestination" title="Permanent link">&para;</a></h3>
 <p>Pickled Python objects, one file per partition:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>{base_path}/{dataset}/{table}/data.pkl
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{base_path}/{dataset}/{table}/{column}={partition_id}/data.pkl
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{base_path}/{dataset}/{table}/{column}={partition_key}/data.pkl
 </span></code></pre></div>
 <p>Same layout as <code>CSVDestination</code>, but it stores whatever the asset returned, tabular or not, so
 use it for arbitrary objects, and <code>CSVDestination</code> when you want to read the files yourself.
 Window writes are split per partition where the data's representation allows it; a non-tabular
-object, which nothing can slice, is stored whole under each partition of the window.</p>
+object, which nothing can slice, is stored whole under each partition of the window. A window
+read joins tables into one; non-tabular objects, which nothing can join, come back as a list with
+one value per partition, oldest first.</p>
 <h3 id="memorydestination">MemoryDestination<a class="headerlink" href="#memorydestination" title="Permanent link">&para;</a></h3>
-<p>An in-process store keyed by <code>{dataset}/{table}/{column}={partition_id}</code>, shared by every
+<p>An in-process store keyed by <code>{dataset}/{table}/{column}={partition_key}</code>, shared by every
 instance, meant for tests:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">il</span><span class="o">.</span><span class="n">MemoryDestination</span><span class="p">()</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">il</span><span class="o">.</span><span class="n">MemoryDestination</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>      <span class="c1"># between tests</span>
@@ -2603,7 +2605,7 @@ and implement the two partition hooks. Both may be sync or <code>async def</code
 </span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="n">base</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_path</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">dataset</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span> <span class="o">/</span> <span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">table</span>
 </span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>        <span class="k">if</span> <span class="n">partition</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>            <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="s2">"data.json"</span>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">partitioning</span><span class="o">.</span><span class="n">column</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">partition</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">"</span> <span class="o">/</span> <span class="s2">"data.json"</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>        <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">context</span><span class="o">.</span><span class="n">asset</span><span class="o">.</span><span class="n">partitioning</span><span class="o">.</span><span class="n">column</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">partition</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s2">"</span> <span class="o">/</span> <span class="s2">"data.json"</span>
 </span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>
 </span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">write_partition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">IOContext</span><span class="p">,</span> <span class="n">partition</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Partition</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">partition</span><span class="p">)</span>
@@ -2667,7 +2669,7 @@ nothing else, in four hooks that all take an object name relative to the bucket 
 <p>The base declares two fields, <code>format</code> (<code>parquet</code>, the default, <code>jsonl</code> or <code>csv</code>) and <code>prefix</code>
 (a path prefix inside the bucket), and lays objects out hive style, one per partition:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>{prefix}/{dataset}/{table}/data.{ext}
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>{prefix}/{dataset}/{table}/{column}={partition_id}/data.{ext}
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>{prefix}/{dataset}/{table}/{column}={partition_key}/data.{ext}
 </span></code></pre></div>
 <p>Behaviour the base class owns:</p>
 <ul>
@@ -2701,7 +2703,7 @@ asset resolves to:</p>
 <tbody>
 <tr>
 <td><code>insert(table, dataset, data, context)</code></td>
-<td>writing; the data arrives in its native representation; <code>Representation.of(data).records</code> views it as rows and <code>.to("dataframe")</code> converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from <code>context.schema</code> and its partitioning and description from <code>context.asset</code></td>
+<td>writing; the data arrives in its native representation; <code>TableData.from_data(data).rows</code> reads it as rows and <code>.to("dataframe")</code> converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from <code>context.schema</code> and its partitioning and description from <code>context.asset</code></td>
 </tr>
 <tr>
 <td><code>delete(table, dataset, where)</code></td>
@@ -2717,7 +2719,7 @@ asset resolves to:</p>
 </tr>
 </tbody>
 </table>
-<p>A <code>PartitionFilter</code> is a column and either a <code>value</code> (a partition matched by its id) or half-open
+<p>A <code>PartitionFilter</code> is a column and either a <code>value</code> (a partition matched by its key) or half-open
 <code>bounds</code> (a time partition, whose rows may carry any date inside the period). The base resolves
 it from the partition, so a backend only renders <code>column = value</code> or
 <code>column &gt;= start AND column &lt; end</code> in its dialect. <code>transaction()</code> is an optional context
@@ -2729,7 +2731,12 @@ manager around each delete-then-insert, a no-op by default.</p>
 <li><strong>Time partitions are scoped by bounds</strong>, not by equality, because rows of a monthly partition
   carry daily dates.</li>
 <li><strong>Reads are native</strong>: <code>read</code> hands back what <code>select</code> returned, a DataFrame from BigQuery, rows
-  from a row store. A consumer indifferent to the destination reads <code>il.Upstream.records</code>.</li>
+  from a row store. A consumer indifferent to the destination reads <code>il.Upstream.rows</code>.</li>
+<li><strong>The window methods are the contract</strong>: <code>write</code> and <code>read</code> take a whole window, and
+  <code>write_partition</code>/<code>read_partition</code> call them over a partition's own window, the other way round
+  from <code>Destination</code>. A backend may override a per-partition hook too, but only together with its
+  window method; a subclass overriding <code>read_partition</code> or <code>write_partition</code> alone is refused at
+  class definition, since the base's <code>read</code> and <code>write</code> would never call it.</li>
 <li><strong>Data arrives conformed</strong>: the asset's conform step already put the data in the effective
   schema's canonical types, so a backend never re-validates or coerces before writing.</li>
 <li>A warning is emitted when the partition column is missing from written data, since

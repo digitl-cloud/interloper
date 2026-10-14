@@ -1,0 +1,2494 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-14-core-surface-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Core phase 5: the surface sweep - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-phase-5-the-surface-sweep" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core phase 5: the surface sweep
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="core-phase-5-the-surface-sweep">Core phase 5: the surface sweep<a class="headerlink" href="#core-phase-5-the-surface-sweep" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-10-14. Status: approved in conversation, implementation pending.</p>
+<p>Phase 5 of the interloper-core consolidation programme (five stacked phases: scope, contexts and
+observation; Asset and Source; the runner family; Component, Serializable and decorators; the
+surface sweep). Phases 1 to 4 reshaped the kernel; this phase settles its surface: a short list of
+public renames where one concept had two names, imports through the package surface, dead code
+removed, the minors phases 1 to 4 deferred, internal names and stale text, and backfills emitting
+their lifecycle events.</p>
+<p>Scope: the kernel packages of <code>interloper-core</code> (asset, source, component, serializable, dag,
+runner, operation, events, partitioning, destination, connection, config, schema, normalizer,
+representation, job, hook, catalog, resource, retry, errors, registry, utils), the Docker and
+Kubernetes runners, the import sites in every workspace package, the backfill store and its
+scheduler wiring in <code>interloper-db</code>, and the docs, skills and examples. The periphery (<code>rest</code>,
+<code>oauth</code>, <code>telemetry</code>, <code>cli</code>, <code>settings</code>) is phase 6. Built on phase 4 (PR #461).</p>
+<p>Rename policy (decided): a curated set of author-facing renames, each with an upgrade row; nothing
+persisted changes. Event type values, runner config keys, classpaths and spec shapes stay.</p>
+<hr />
+<h2 id="1-curated-public-renames">1. Curated public renames<a class="headerlink" href="#1-curated-public-renames" title="Permanent link">&para;</a></h2>
+<h3 id="11-a-partition-is-identified-by-its-key">1.1 A partition is identified by its <code>key</code><a class="headerlink" href="#11-a-partition-is-identified-by-its-key" title="Permanent link">&para;</a></h3>
+<p><code>Partition.id</code>, <code>TimePartition.id</code> and <code>ListPartition.id</code> become <code>.key</code>, matching
+<code>TimePartition.from_key</code>, <code>PartitionConfig.partition(key)</code>, <code>TimeGranularity.key_format</code>, the
+partition's own docstring ("the partition's key") and <code>partition_key</code> everywhere outside core.
+Every reader follows: <code>window.first.key</code>, <code>window.last.key</code>, the container runners' window flags,
+the ClickHouse destination, docs and skills. The values are unchanged.</p>
+<h3 id="12-listdict-is-rows">1.2 <code>list[dict]</code> is <code>rows</code><a class="headerlink" href="#12-listdict-is-rows" title="Permanent link">&para;</a></h3>
+<p><code>Upstream.records</code> becomes <code>Upstream.rows</code>; <code>Representation.to_records</code> / <code>from_records</code> become
+<code>to_rows</code> / <code>from_rows</code>, in core and in every implementation (pandas, sql, google-cloud, azure);
+the representation wrapper's <code>.records</code> becomes <code>.rows</code>. "rows" is the house word (the rows
+representation's key, <code>Schema.validate_rows</code>, 188 uses against 57).</p>
+<h3 id="13-one-class-per-name">1.3 One class per name<a class="headerlink" href="#13-one-class-per-name" title="Permanent link">&para;</a></h3>
+<p><code>interloper.representation.View</code>, a representation bound to its data, becomes <code>TableData</code>, and its
+construction moves onto it: <code>TableData.from_data(data)</code> replaces <code>Representation.of(data)</code>. The
+<code>View</code> asset kind is untouched. <code>TableData</code> keeps every member of today's class (<code>representation</code>,
+<code>data</code>, <code>key</code>, <code>rows</code>, <code>columns</code>, <code>to(key)</code>, ...), renamed only where 1.2 renames.</p>
+<h3 id="14-run-kinds-named-after-their-runner">1.4 Run kinds named after their runner<a class="headerlink" href="#14-run-kinds-named-after-their-runner" title="Permanent link">&para;</a></h3>
+<p><code>InProcessRun</code>, <code>ContainerRun</code> and <code>JobRun</code> become <code>AsyncRun</code>, <code>DockerRun</code> and <code>KubernetesRun</code>:
+the run kind of <code>AsyncRunner</code>, <code>DockerRunner</code> and <code>KubernetesRunner</code>. <code>JobRun</code> no longer reads as
+a run of a <code>Job</code>.</p>
+<h3 id="15-not-renamed">1.5 Not renamed<a class="headerlink" href="#15-not-renamed" title="Permanent link">&para;</a></h3>
+<p>The runner capacity names (<code>max_workers</code>, <code>max_containers</code>, <code>max_jobs</code>) stay as they are.
+<code>Asset.run</code> / <code>materialize</code> stay (compute without writing, compute and write).
+<code>ExecutionContext</code> / <code>IOContext</code>, the <code>dest_*</code> event values and module locations stay.</p>
+<hr />
+<h2 id="2-the-export-surface">2. The export surface<a class="headerlink" href="#2-the-export-surface" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Every workspace package imports kernel names through the package that exports them
+  (<code>from interloper.catalog import Catalog</code>, <code>from interloper.resource import InputField</code>,
+  <code>from interloper.partitioning import TimePartition</code>, <code>from interloper.runner import Run</code>, ...),
+  never through a module inside it. About 90 import sites change. Imports between modules of one
+  core package, and spec <code>path:</code> strings (a classpath is identity), are unchanged.</li>
+<li>What a package's importers need, it exports: <code>CronField</code> and <code>TimezoneField</code> from
+  <code>interloper.resource</code> (the top-level <code>__init__</code> stops reaching past it); <code>json_default</code> and
+  <code>replace_non_finite</code> from <code>interloper.utils</code>.</li>
+<li><code>PartitionFilter</code> has one home, <code>interloper.partitioning</code>; <code>interloper.destination</code> stops
+  re-exporting it, and its 8 backends and 2 tests import it from <code>interloper.partitioning</code>.</li>
+<li>Names only their own module uses become private: <code>RECONCILERS</code>, <code>FETCH_FIELD_PROVIDER_ATTR</code>,
+  <code>HookEvent</code>. <code>Compilable</code> is no longer exported from <code>interloper.destination</code>.</li>
+<li>Unchanged, deliberately: the top-level decorator names shadowing their subpackages (the
+  decorators are the author API; <code>from interloper.asset import ...</code> keeps working); the hook event
+  spellings (<code>HookEvent</code>, <code>HOOK_EVENT_TYPES</code>, <code>EventType</code>), which serve the form, the runtime check
+  and the event; the <code>ListPartition</code> / <code>ListPartitionWindow</code> exports, which mirror <code>Time*</code>.</li>
+</ul>
+<hr />
+<h2 id="3-dead-code-and-deferred-fixes">3. Dead code and deferred fixes<a class="headerlink" href="#3-dead-code-and-deferred-fixes" title="Permanent link">&para;</a></h2>
+<h3 id="31-removed">3.1 Removed<a class="headerlink" href="#31-removed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>SourceError</code> (never raised, caught or referenced).</li>
+<li><code>utils.to_slug_case</code> and <code>utils.require_import</code> (no caller beyond their own tests).</li>
+<li><code>Event.from_log_line</code>'s bare-JSON branch ("legacy / testing convenience"; every producer writes
+  the <code>@EVENT:</code> prefix).</li>
+<li>Parameters no caller passes: <code>Catalog.get(default=)</code>, <code>TimeGranularity.period_range(reversed=)</code>
+  (test-only, shadows a builtin), <code>import_from_path(target_type=)</code> (test-only, with its typed
+  overload), <code>Schema.infer(name=)</code> (test-only).</li>
+<li>The field factories' <code>title=</code> passthrough: <code>label=</code> is the one spelling; a factory given
+  <code>title=</code> raises <code>TypeError</code> naming <code>label=</code>. <code>CronJob</code>'s <code>cron</code> and <code>timezone</code> fields use
+  <code>label=</code>. Plain pydantic <code>Field(title=...)</code> is unaffected.</li>
+<li>Duplicates: the Databricks destination's hand-rolled <code>_Lock</code> becomes <code>interloper.utils.RLock</code>;
+  the component-key and message fallback written in both <code>Event.__str__</code> and the console handler's
+  formatter is written once, on <code>Event</code>.</li>
+</ul>
+<p>Kept, deliberately: <code>TextField</code>, <code>DAG.get_predecessors</code> / <code>get_successors</code>, <code>ExecutionInfo.to_dict</code>
+(documented author API); <code>MaterializationStrategy</code>'s <code>"auto"</code> alias and the <code>k8s</code> runner alias
+(persisted in configs and the chart).</p>
+<h3 id="32-backfills-emit-their-lifecycle">3.2 Backfills emit their lifecycle<a class="headerlink" href="#32-backfills-emit-their-lifecycle" title="Permanent link">&para;</a></h3>
+<p><code>EventType.BACKFILL_STARTED</code>, <code>BACKFILL_COMPLETED</code> and <code>BACKFILL_FAILED</code> exist and nothing emits
+them as events today (the latter two are hook trigger names only). The backfill store records them
+at its transitions, in the same transaction:</p>
+<ul>
+<li><code>BACKFILL_STARTED</code> when <code>BackfillStore.create</code> creates the backfill (which starts it: its status
+  is <code>running</code> and <code>started_at</code> is set there);</li>
+<li><code>BACKFILL_COMPLETED</code> or <code>BACKFILL_FAILED</code> where <code>_advance_in</code> finalizes it, on the normal end and
+  on the fail-fast end.</li>
+</ul>
+<p>Each event is about the backfill's target component (<code>component_id</code>, <code>component_kind</code>,
+<code>component_key</code>), carries <code>backfill_id</code> and the backfill's partition bounds in its metadata, has no
+<code>run_id</code>, and has a deterministic id (uuid5 of the backfill id and the event type) so a retried
+transition never records it twice. The backfill store holds the event store, as the run store
+does. Hooks keep firing from the backfill status poll, unchanged. Canceling a backfill records
+nothing: there is no event type for it, and adding one is a new contract.</p>
+<h3 id="33-fixes-deferred-by-phases-1-to-4">3.3 Fixes deferred by phases 1 to 4<a class="headerlink" href="#33-fixes-deferred-by-phases-1-to-4" title="Permanent link">&para;</a></h3>
+<p>Each is pinned by a test that fails first.</p>
+<ul>
+<li>Runtime help: <code>Decorator</code> takes <code>doc=</code> and sets the instance's <code>__doc__</code>, so <code>help(il.asset)</code>
+  and <code>il.asset?</code> show the authored text, which has one source. The docs reference renders it by
+  inspection (<code>force_inspection</code> on those entries); if the docs build cannot, a per-kind
+  <code>Decorator</code> subclass carries the docstring instead.</li>
+<li>Refusing an asset another source owns says what to do: give the source the asset's overrides
+  through <code>assets={key: {...}}</code>.</li>
+<li>The settings refusal's accepted list leaves out <code>id</code>, and its hint reads "it is a setting of
+  <code>X</code>" (not "subclass it", wrong for <code>@il.asset(dialect=...)</code>).</li>
+<li>A source function returning anything but asset classes raises <code>TypeError</code> naming what it
+  returned.</li>
+<li><code>Run.walk</code>'s drain runs under the same fault handling as scheduling, and recording tolerates a
+  canceled task: a fault while draining still ends with the pending operations canceled and
+  <code>RUN_FAILED</code>.</li>
+<li>With <code>reraise</code>, <code>Runner.run</code> raises inside the run's span, so the trace records the exception.</li>
+<li>Missing tests: <code>operation_started</code> on attempt 2 through <code>AsyncRunner</code>, with its own event id; no
+  event id repeated in a fail-fast run.</li>
+<li><code>source(assets=...)</code> through <code>Component.__call__</code> is refused (<code>TypeError</code>): it would bypass the
+  ownership wiring. Overrides go through the constructor's <code>assets={key: {...}}</code> map.</li>
+<li><code>Upstream.read</code>'s missing-data warning names the parameter again.</li>
+<li><code>ListPartitionConfig(values="eu")</code> is refused instead of read as <code>("e", "u")</code>.</li>
+<li><code>PartitionConfig.from_definition</code> given an unknown kind raises <code>ConfigError</code>.</li>
+<li>The list-kind check and the partition-dependency messages read as sentences about the asset.</li>
+</ul>
+<p>Left as is: closing the Docker client per run (shared with polling threads that outlive a canceled
+run), a Kubernetes config error raising from <code>run</code> (phase 3's upgrade notes), <code>copy.deepcopy</code> of a
+source (no caller), the CLI <code>--date</code> help text (phase 6).</p>
+<hr />
+<h2 id="4-internal-names-stale-text-examples">4. Internal names, stale text, examples<a class="headerlink" href="#4-internal-names-stale-text-examples" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Abbreviated locals and private names become words (about 60: <code>k</code>/<code>v</code>, <code>e</code>, <code>inst</code>, <code>preds</code>,
+  <code>kids</code>, <code>coro</code>, <code>fmt</code>, <code>defn</code>, <code>span_attrs</code>, <code>runner_cls</code>, <code>asset_cls</code>, <code>config_cls</code>,
+  <code>_OPERATION_EVENT_NS</code>, <code>_ENV_VAR_RE</code>, <code>_KEY_RE</code>, ...).</li>
+<li>Private helpers named <code>resolve</code> that do something else take the verb for it:
+  <code>DAG._resolve_declared</code> becomes <code>_bind_declared</code>, <code>Schema._resolve_field_type</code> becomes
+  <code>_widen_types</code>. The public <code>resolve=</code> callback and <code>Component.resolve</code> stay.</li>
+<li>Section dividers use the house titles (<code>Helpers</code> becomes <code>Internals</code>, <code>Constructors</code> becomes
+  <code>Construction</code>, ...).</li>
+<li>Stale docstrings name what exists: <code>AssetRef</code> (now <code>AssetMeta</code>), <code>_read_upstreams</code>,
+  <code>Source._resolve</code>, <code>children</code> (now <code>owned</code>), <code>.conformer</code>, <code>validate</code> (now <code>validate_rows</code>),
+  <code>target</code> (now <code>targets</code>), <code>source_id</code> (now <code>parent_id</code>), the composite classpath format, and the
+  phase 4 leftovers (<code>Component._collect</code>, <code>InheritedSetting.install</code>, the <code>trickle_resources</code>
+  upgrade row).</li>
+<li>Docs: <code>RunResult(... partition=...)</code> shows <code>window=</code>; <code>guide/destinations.md</code> stops claiming a
+  <code>DestinationError</code>; the <code>"auto"</code> strategy alias names one version.</li>
+<li>Examples drive coroutines with <code>il.run(...)</code>, the documented sync bridge, instead of
+  <code>asyncio.run(...)</code>.</li>
+</ul>
+<hr />
+<h2 id="5-behaviour-changes">5. Behaviour changes<a class="headerlink" href="#5-behaviour-changes" title="Permanent link">&para;</a></h2>
+<p>Listed in the upgrade skill's row for this phase:</p>
+<ul>
+<li><code>Partition.id</code> is <code>Partition.key</code> (<code>window.first.key</code>, ...).</li>
+<li><code>Upstream.records</code> is <code>Upstream.rows</code>; <code>Representation.to_records</code> / <code>from_records</code> are
+  <code>to_rows</code> / <code>from_rows</code>.</li>
+<li><code>interloper.representation.View</code> is <code>TableData</code>; <code>Representation.of(data)</code> is
+  <code>TableData.from_data(data)</code>.</li>
+<li><code>InProcessRun</code>, <code>ContainerRun</code>, <code>JobRun</code> are <code>AsyncRun</code>, <code>DockerRun</code>, <code>KubernetesRun</code>.</li>
+<li><code>PartitionFilter</code> is imported from <code>interloper.partitioning</code> only.</li>
+<li><code>SourceError</code>, <code>utils.to_slug_case</code>, <code>utils.require_import</code> are removed; so are
+  <code>Catalog.get(default=)</code>, <code>period_range(reversed=)</code>, <code>import_from_path(target_type=)</code>,
+  <code>Schema.infer(name=)</code>.</li>
+<li>Field factories take <code>label=</code> only.</li>
+<li><code>source(assets=...)</code> raises; give overrides at construction.</li>
+<li>Backfills record <code>backfill_started</code> and <code>backfill_completed</code> / <code>backfill_failed</code> events.</li>
+</ul>
+<p>Unchanged: event type values, runner config keys (capacity names included), classpaths, spec
+shapes, catalog keys, kinds and paths.</p>
+<hr />
+<h2 id="6-testing">6. Testing<a class="headerlink" href="#6-testing" title="Permanent link">&para;</a></h2>
+<p>Mirror layout, red then green per unit.</p>
+<ul>
+<li>Each rename: the new name works and the old one is gone (a grep over sources, docs, skills and
+  examples finds none; <code>ty</code> checks every package).</li>
+<li>Each removal and fix: a test that fails before the change (3.1, 3.3).</li>
+<li>Backfills: <code>tests/store/test_backfills.py</code> in <code>interloper-db</code> pins <code>BACKFILL_STARTED</code> on create,
+  <code>BACKFILL_COMPLETED</code> / <code>BACKFILL_FAILED</code> on finalize (normal and fail-fast), the deterministic
+  ids, and no event on cancel.</li>
+<li>The catalog snapshot before and after is identical.</li>
+<li>The strict docs build passes; <code>help(il.asset)</code> shows the authored text.</li>
+<li>Live: every local example runs; the demo manifest runs; a backfill through the scheduler records
+  <code>backfill_started</code> then <code>backfill_completed</code>; a demo run through the API completes.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1842,10 +1842,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#interloper-run" class="md-nav__link">
+  <a href="#interloper-api" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>interloper run</code>
+        <code>interloper api</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interloper-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper app</code>
       </span>
     </span>
   </a>
@@ -1914,10 +1925,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interloper-app" class="md-nav__link">
+  <a href="#interloper-launch" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>interloper app</code>
+        <code>interloper launch</code>
       </span>
     </span>
   </a>
@@ -1925,10 +1936,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interloper-launch" class="md-nav__link">
+  <a href="#interloper-run" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code>interloper launch</code>
+        <code>interloper run</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interloper-scheduler" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper scheduler</code>
       </span>
     </span>
   </a>
@@ -2465,6 +2487,142 @@
 
 <h1 id="cli">CLI<a class="headerlink" href="#cli" title="Permanent link">&para;</a></h1>
 <p>Every command and flag of <code>interloper</code>, from the parser the CLI runs on.</p>
+<h2 id="interloper-api"><code>interloper api</code><a class="headerlink" href="#interloper-api" title="Permanent link">&para;</a></h2>
+<p>Serve the HTTP API. The frontend is served separately: by nginx in containers, by <code>interloper app</code> locally.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--host HOST</code></td>
+<td>Bind host (default: server.host, 0.0.0.0)</td>
+</tr>
+<tr>
+<td><code>--port PORT</code></td>
+<td>Bind port (default: server.port, 3000)</td>
+</tr>
+<tr>
+<td><code>--no-create-tables</code></td>
+<td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interloper-app"><code>interloper app</code><a class="headerlink" href="#interloper-app" title="Permanent link">&para;</a></h2>
+<p>Run the interloper application services. Flags left unset fall back to the server, cron, worker and reaper settings; at least one service must be enabled.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--host HOST</code></td>
+<td>Server bind host (default: 0.0.0.0)</td>
+</tr>
+<tr>
+<td><code>--port PORT</code></td>
+<td>Server bind port (default: 3000)</td>
+</tr>
+<tr>
+<td><code>--api, --no-api</code></td>
+<td>Run the API server</td>
+</tr>
+<tr>
+<td><code>--cron, --no-cron</code></td>
+<td>Run the cron controller</td>
+</tr>
+<tr>
+<td><code>--worker, --no-worker</code></td>
+<td>Run the queue worker</td>
+</tr>
+<tr>
+<td><code>--reaper, --no-reaper</code></td>
+<td>Run the reaper (timed-out run cleanup; singleton)</td>
+</tr>
+<tr>
+<td><code>--dev</code></td>
+<td>Run Nuxt dev server instead of serving built static assets</td>
+</tr>
+<tr>
+<td><code>--no-create-tables</code></td>
+<td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interloper-db"><code>interloper db</code><a class="headerlink" href="#interloper-db" title="Permanent link">&para;</a></h2>
+<p>Database operations.</p>
+<h3 id="interloper-db-init"><code>interloper db init</code><a class="headerlink" href="#interloper-db-init" title="Permanent link">&para;</a></h3>
+<p>Ensure database, create tables, migrate to head, promote configured super-admins (idempotent)</p>
+<h3 id="interloper-db-reset"><code>interloper db reset</code><a class="headerlink" href="#interloper-db-reset" title="Permanent link">&para;</a></h3>
+<p>Drop and recreate all tables</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--yes, -y</code></td>
+<td>Skip confirmation prompt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-db-upgrade"><code>interloper db upgrade</code><a class="headerlink" href="#interloper-db-upgrade" title="Permanent link">&para;</a></h3>
+<p>Run Alembic migrations to head (or a specific revision)</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>revision [optional]</code></td>
+<td>Target revision (default: head)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-db-downgrade"><code>interloper db downgrade</code><a class="headerlink" href="#interloper-db-downgrade" title="Permanent link">&para;</a></h3>
+<p>Downgrade Alembic migrations</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>revision [optional]</code></td>
+<td>Target revision (default: -1)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interloper-launch"><code>interloper launch</code><a class="headerlink" href="#interloper-launch" title="Permanent link">&para;</a></h2>
+<p>Execute one persisted run. On any failure before the executor takes over, the run is marked failed.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_id</code></td>
+<td>The UUID of the run to execute</td>
+</tr>
+</tbody>
+</table>
 <h2 id="interloper-run"><code>interloper run</code><a class="headerlink" href="#interloper-run" title="Permanent link">&para;</a></h2>
 <p>Execute a DAG directly with the configured runner, without persistence. The exit status is non-zero on invalid input, an import failure, or a run that did not complete.</p>
 <table>
@@ -2521,13 +2679,8 @@
 </tr>
 </tbody>
 </table>
-<h2 id="interloper-db"><code>interloper db</code><a class="headerlink" href="#interloper-db" title="Permanent link">&para;</a></h2>
-<p>Database operations.</p>
-<p>Requires <code>interloper_db</code>.</p>
-<h3 id="interloper-db-init"><code>interloper db init</code><a class="headerlink" href="#interloper-db-init" title="Permanent link">&para;</a></h3>
-<p>Ensure database, create tables, migrate to head, promote configured super-admins (idempotent)</p>
-<h3 id="interloper-db-reset"><code>interloper db reset</code><a class="headerlink" href="#interloper-db-reset" title="Permanent link">&para;</a></h3>
-<p>Drop and recreate all tables</p>
+<h2 id="interloper-scheduler"><code>interloper scheduler</code><a class="headerlink" href="#interloper-scheduler" title="Permanent link">&para;</a></h2>
+<p>Run the scheduler services: cron (with hooks and credential renewal), the queue worker and the reaper. Flags left unset fall back to the cron, worker and reaper settings; at least one service must be enabled.</p>
 <table>
 <thead>
 <tr>
@@ -2536,70 +2689,9 @@
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>--yes, -y</code></td>
-<td>Skip confirmation prompt</td>
-</tr>
-</tbody>
-</table>
-<h3 id="interloper-db-upgrade"><code>interloper db upgrade</code><a class="headerlink" href="#interloper-db-upgrade" title="Permanent link">&para;</a></h3>
-<p>Run Alembic migrations to head (or a specific revision)</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>revision [optional]</code></td>
-<td>Target revision (default: head)</td>
-</tr>
-</tbody>
-</table>
-<h3 id="interloper-db-downgrade"><code>interloper db downgrade</code><a class="headerlink" href="#interloper-db-downgrade" title="Permanent link">&para;</a></h3>
-<p>Downgrade Alembic migrations</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>revision [optional]</code></td>
-<td>Target revision (default: -1)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="interloper-app"><code>interloper app</code><a class="headerlink" href="#interloper-app" title="Permanent link">&para;</a></h2>
-<p>Run the interloper application services. Flags left unset fall back to the server, cron, worker and reaper settings; at least one service must be enabled.</p>
-<p>Requires <code>interloper_db</code>, <code>interloper_api</code> with <code>--api</code>, <code>interloper_scheduler</code> with <code>--cron</code>, <code>interloper_scheduler</code> with <code>--worker</code>, <code>interloper_scheduler</code> with <code>--reaper</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--host HOST</code></td>
-<td>Server bind host (default: 0.0.0.0)</td>
-</tr>
-<tr>
-<td><code>--port PORT</code></td>
-<td>Server bind port (default: 3000)</td>
-</tr>
-<tr>
-<td><code>--api, --no-api</code></td>
-<td>Run the API server</td>
-</tr>
 <tr>
 <td><code>--cron, --no-cron</code></td>
-<td>Run the cron controller</td>
+<td>Run the cron controller, with the hook and renewal controllers</td>
 </tr>
 <tr>
 <td><code>--worker, --no-worker</code></td>
@@ -2607,32 +2699,11 @@
 </tr>
 <tr>
 <td><code>--reaper, --no-reaper</code></td>
-<td>Run the reaper (timed-out run cleanup; singleton)</td>
-</tr>
-<tr>
-<td><code>--dev</code></td>
-<td>Run Nuxt dev server instead of serving built static assets</td>
+<td>Run the reaper (fails silent and overdue runs; singleton)</td>
 </tr>
 <tr>
 <td><code>--no-create-tables</code></td>
 <td>Skip CREATE TABLE bootstrap on startup (production: run <code>interloper db init</code> once instead)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="interloper-launch"><code>interloper launch</code><a class="headerlink" href="#interloper-launch" title="Permanent link">&para;</a></h2>
-<p>Execute one persisted run. On any failure before the executor takes over, the run is marked failed.</p>
-<p>Requires <code>interloper_db</code>, <code>interloper_scheduler</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>run_id</code></td>
-<td>The UUID of the run to execute</td>
 </tr>
 </tbody>
 </table>

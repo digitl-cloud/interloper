@@ -2538,7 +2538,10 @@ collapses to one when persisted.</p>
 </tr>
 </tbody>
 </table>
-<p>Backfill and hook events are emitted by the platform, not by the core runners. Every type, with when it fires, is in
+<p>Backfill and hook events are recorded by the platform, not by the core runners. A backfill records
+<code>BACKFILL_STARTED</code> when it is created and one verdict when it finishes: <code>BACKFILL_COMPLETED</code> when
+every partition succeeded, <code>BACKFILL_FAILED</code> when one failed (or, under fail-fast, at the first
+failure). A canceled backfill records no verdict. Every type, with when it fires, is in
 <a href="../../reference/events/">Events</a>.</p>
 <h2 id="logging-from-assets">Logging from assets<a class="headerlink" href="#logging-from-assets" title="Permanent link">&para;</a></h2>
 <p><code>context.logger</code> emits <code>LOG</code> events attributed to the asset, with the standard level names:</p>

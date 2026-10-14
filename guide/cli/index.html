@@ -2578,15 +2578,32 @@ is initialized from the <code>otel</code> settings for every command. In a conta
 <code>INTERLOPER_EVENTS_TO_STDERR=true</code>, events are forwarded as <code>@EVENT:</code> lines instead of being
 printed; see <a href="../events/#events-across-processes">Events</a>.</p>
 <h2 id="other-commands">Other commands<a class="headerlink" href="#other-commands" title="Permanent link">&para;</a></h2>
+<p>Each platform package contributes its own commands, so a command exists exactly when its
+package is installed:</p>
 <table>
 <thead>
 <tr>
 <th>Command</th>
-<th>Requires</th>
+<th>Package</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>interloper api</code></td>
+<td><code>interloper-api</code></td>
+<td>Serve the HTTP API: the api role's command.</td>
+</tr>
+<tr>
+<td><code>interloper scheduler</code></td>
+<td><code>interloper-scheduler</code></td>
+<td>Run cron (with hooks and credential renewal), the queue worker and the reaper: the scheduler role's command.</td>
+</tr>
+<tr>
+<td><code>interloper launch &lt;run_id&gt;</code></td>
+<td><code>interloper-scheduler</code></td>
+<td>Execute one persisted run.</td>
+</tr>
 <tr>
 <td><code>interloper db init\|reset\|upgrade\|downgrade</code></td>
 <td><code>interloper-db</code></td>
@@ -2594,18 +2611,12 @@ printed; see <a href="../events/#events-across-processes">Events</a>.</p>
 </tr>
 <tr>
 <td><code>interloper app</code></td>
-<td><code>interloper-db</code>, plus <code>interloper-api</code> and <code>interloper-scheduler</code> for the corresponding services</td>
-<td>Run the API, cron controller, queue worker and reaper.</td>
-</tr>
-<tr>
-<td><code>interloper launch &lt;run_id&gt;</code></td>
-<td><code>interloper-db</code>, <code>interloper-scheduler</code></td>
-<td>Execute one persisted run.</td>
+<td><code>interloper-app</code></td>
+<td>The API, the scheduler's services and the frontend in one process, for local development and single-process deployments (<code>--dev</code> runs the Nuxt dev server).</td>
 </tr>
 </tbody>
 </table>
-<p>A command whose packages are missing exits with a message naming them. Every flag is listed in
-<a href="../../reference/cli/">CLI</a>.</p>
+<p>Every flag is listed in <a href="../../reference/cli/">CLI</a>.</p>
 
 
 

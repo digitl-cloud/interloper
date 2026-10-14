@@ -2552,7 +2552,7 @@ period lasts and owns every piece of time arithmetic:</p>
 <thead>
 <tr>
 <th>Granularity</th>
-<th>Partition id</th>
+<th>Partition key</th>
 <th>Period</th>
 </tr>
 </thead>
@@ -2593,11 +2593,11 @@ partition without being told it is monthly.</p>
 </span></code></pre></div>
 <p>Rows of a partition may carry values anywhere inside the period (a monthly partition holding
 daily dates), so destinations scope by the partition's half-open <strong>bounds</strong>, never by equality
-on the id.</p>
+on the key.</p>
 <h2 id="partitions-and-windows">Partitions and windows<a class="headerlink" href="#partitions-and-windows" title="Permanent link">&para;</a></h2>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">partition</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">TimePartition</span><span class="p">(</span><span class="n">dt</span><span class="o">.</span><span class="n">date</span><span class="p">(</span><span class="mi">2026</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">20</span><span class="p">),</span> <span class="n">il</span><span class="o">.</span><span class="n">TimeGranularity</span><span class="o">.</span><span class="n">MONTH</span><span class="p">)</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">partition</span><span class="o">.</span><span class="n">value</span>          <span class="c1"># 2026-05-01, normalized to the period start</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">partition</span><span class="o">.</span><span class="n">id</span>             <span class="c1"># "2026-05"</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">partition</span><span class="o">.</span><span class="n">key</span>            <span class="c1"># "2026-05"</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">partition</span><span class="o">.</span><span class="n">bounds</span>         <span class="c1"># (2026-05-01, 2026-06-01)</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">partition</span><span class="o">.</span><span class="n">window</span>         <span class="c1"># the one-partition window</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">partition</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="s2">"date"</span><span class="p">)</span> <span class="c1"># the bounds, as a database selects them</span>
@@ -2616,7 +2616,7 @@ bare partition as the window of one.</p>
 window a schedule should cover: <code>offset</code> partitions back from the current one, <code>lookback</code>
 partitions long, clamped to <code>start</code>, or <code>None</code> when clamping leaves nothing. <code>now</code> may be an
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
-calendar, while hour windows are always UTC because hour ids are UTC labels.</p>
+calendar, while hour windows are always UTC because hour keys are UTC labels.</p>
 <h2 id="list-partitioning">List partitioning<a class="headerlink" href="#list-partitioning" title="Permanent link">&para;</a></h2>
 <p>An asset partitioned by a declared list of values, such as regions or markets:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">ListPartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"region"</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="s2">"eu"</span><span class="p">,</span> <span class="s2">"us"</span><span class="p">,</span> <span class="s2">"apac"</span><span class="p">]))</span>
@@ -2624,10 +2624,10 @@ calendar, while hour windows are always UTC because hour ids are UTC labels.</p>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">region</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">partition</span><span class="o">.</span><span class="n">value</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">"region"</span><span class="p">:</span> <span class="n">region</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">fetch_sales</span><span class="p">(</span><span class="n">region</span><span class="p">)]</span>
 </span></code></pre></div>
-<p>The values are the partition ids, in the declared order. A window is a contiguous range of that
+<p>The values are the partition keys, in the declared order. A window is a contiguous range of that
 order: <code>config.window("eu", "us")</code> covers <code>eu</code> and <code>us</code>, and a backfill from the first value to
 the last covers everything. Databases select a list partition by membership, the file and object
-destinations key storage by its id. Platform support for list backfills and the run form is a
+destinations key storage by its key. Platform support for list backfills and the run form is a
 follow-up; today a list-partitioned asset runs through <code>asset.run</code>, <code>dag.materialize</code> and the
 CLI.</p>
 <p>Every partitioning answers the same questions: <code>check(window)</code> validates a run's window,
@@ -2659,7 +2659,7 @@ not allow windows.</p>
 <tbody>
 <tr>
 <td><code>context.partition</code></td>
-<td>The window's only <code>Partition</code>: <code>.id</code>, and <code>.bounds</code> or <code>.value</code> by kind</td>
+<td>The window's only <code>Partition</code>: <code>.key</code>, and <code>.bounds</code> or <code>.value</code> by kind</td>
 <td>not partitioned, no window given, or the window covers several partitions</td>
 </tr>
 <tr>

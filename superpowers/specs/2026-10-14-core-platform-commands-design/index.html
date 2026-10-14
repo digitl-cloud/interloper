@@ -1,0 +1,2650 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-14-core-platform-commands-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Core phase 6a: platform out of core - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-phase-6a-platform-out-of-core" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core phase 6a: platform out of core
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="core-phase-6a-platform-out-of-core">Core phase 6a: platform out of core<a class="headerlink" href="#core-phase-6a-platform-out-of-core" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-10-14. Status: approved in conversation, implementation pending.</p>
+<p>Phase 6 of the interloper-core consolidation programme is the periphery pass (<code>cli</code>, <code>settings</code>,
+<code>errors</code>, <code>telemetry</code>, <code>rest</code>, <code>oauth</code>). It is split into three stacked sub-phases:</p>
+<ul>
+<li>6a, this spec: platform code leaves core;</li>
+<li>6b: telemetry and logging;</li>
+<li>6c: connection I/O (<code>rest</code> and <code>oauth</code>).</li>
+</ul>
+<p>Phases 1 to 5 reshaped the kernel and were rebased onto main 0.112.0 before this phase started.</p>
+<p><strong>The problem.</strong> <code>interloper-core</code> hosts the <code>app</code>, <code>db</code> and <code>launch</code> commands and the 532-line
+<code>cli/runtime.py</code>. They import <code>interloper_api</code>, <code>interloper_db</code>, <code>interloper_scheduler</code> and
+<code>interloper_app</code>, none of which core depends on, so they rely on lazy imports and a
+<code>requires</code>/<code>requires_when</code> check that misses the default case. It also declares six errors that
+only <code>interloper-db</code> raises and only db, api, toolkit and scheduler catch.</p>
+<p><strong>The goal.</strong> Each platform package owns its commands and errors, and core knows nothing about the
+platform. The surveys also found several CLI bugs, fixed here.</p>
+<p><strong>Not in scope.</strong>
+- Settings stay one typed document in core (<code>AppSettings</code>); nothing about them changes beyond the
+  DSN fix in section 5. Package-declared settings will be designed once, together with the
+  extension-package system, for platform packages and extensions alike.
+- Console logging setup, the <code>INTERLOPER_EVENTS_TO_STDERR</code> check and the telemetry lifecycle move
+  as they are and are 6b's.</p>
+<h2 id="1-commands-are-owned-by-their-packages">1. Commands are owned by their packages<a class="headerlink" href="#1-commands-are-owned-by-their-packages" title="Permanent link">&para;</a></h2>
+<p>A command is contributed through one entry-point group, <code>interloper.cli</code>. Each entry names a
+module-level <code>register(subparsers)</code> function, the shape every command already has (CLI command
+wiring is a permitted module-level function). The extension-package design reuses the same group
+later.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Package</th>
+<th>Module</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run</code></td>
+<td>interloper-core</td>
+<td><code>interloper/cli/commands/run.py</code></td>
+</tr>
+<tr>
+<td><code>db</code> (init, reset, upgrade, downgrade)</td>
+<td>interloper-db</td>
+<td><code>interloper_db/cli.py</code></td>
+</tr>
+<tr>
+<td><code>launch</code></td>
+<td>interloper-scheduler</td>
+<td><code>interloper_scheduler/cli.py</code></td>
+</tr>
+<tr>
+<td><code>api</code> (new, section 2)</td>
+<td>interloper-api</td>
+<td><code>interloper_api/cli.py</code></td>
+</tr>
+<tr>
+<td><code>scheduler</code> (new, section 2)</td>
+<td>interloper-scheduler</td>
+<td><code>interloper_scheduler/cli.py</code></td>
+</tr>
+<tr>
+<td><code>app</code></td>
+<td>interloper-app</td>
+<td><code>interloper_app/cli.py</code></td>
+</tr>
+</tbody>
+</table>
+<p>Core declares its own <code>run</code> entry in the same group, so the parser has one path: <code>build_parser()</code>
+registers every installed entry, sorted by name, so <code>--help</code> and the generated CLI reference are
+stable. A command exists exactly when its package is installed. Running <code>interloper app</code> on a
+core-only install gets argparse's own <code>invalid choice: 'app' (choose from 'run', ...)</code>.</p>
+<p><code>main()</code> keeps the lifecycle every command shares and nothing command-specific:</p>
+<ol>
+<li>load <code>.env</code>;</li>
+<li>parse;</li>
+<li>activate settings;</li>
+<li>start telemetry;</li>
+<li>call the handler;</li>
+<li>shut down telemetry and clear settings.</li>
+</ol>
+<p>The <code>app</code> special case (<code>apply_cli_overrides</code> before activation) leaves <code>main()</code>. A command whose
+flags override settings (<code>api</code>, <code>scheduler</code>, <code>app</code>) re-activates the active settings with its
+overrides at the start of its handler. The overrides never touch <code>otel</code>, so telemetry started by
+<code>main()</code> is unaffected.</p>
+<p><strong>Removed:</strong>
+- <code>requires</code>, <code>requires_any</code>, <code>requires_when</code>, <code>_has_package</code> and <code>_enforce_requires</code>;
+- the dead <code>--help</code> fallback in <code>main()</code>;
+- <code>runtime.py</code>, whose content moves to the role packages (section 2).</p>
+<p><code>dev/docs_macros.py</code>'s <code>cli_reference()</code> stops reading <code>requires</code>/<code>requires_when</code>; it renders the
+parser <code>build_parser()</code> returns, now holding every installed command.</p>
+<h2 id="2-one-command-per-role">2. One command per role<a class="headerlink" href="#2-one-command-per-role" title="Permanent link">&para;</a></h2>
+<p>The <code>api</code> and <code>scheduler</code> images each run <code>interloper app</code> with only their own half installed. The
+api image has core, db and api; the scheduler image has core, db and scheduler; neither has
+<code>interloper-app</code>. A role therefore gets its own command, owned by its package, and <code>interloper app</code>
+composes them.</p>
+<h3 id="21-the-supervisor-core">2.1 The supervisor (core)<a class="headerlink" href="#21-the-supervisor-core" title="Permanent link">&para;</a></h3>
+<p>Every serving command runs several blocking loops until a signal arrives. That lifecycle is one
+small class in core, <code>interloper.utils.Supervisor</code>. It is type-agnostic: it knows nothing about
+api or scheduler.</p>
+<ul>
+<li>It takes the services to run. A service is anything with a <code>name</code>, a blocking <code>start()</code> and a
+  <code>stop()</code>, which the scheduler's controllers already have.</li>
+<li>It runs each service in its own daemon thread.</li>
+<li>It installs SIGINT, SIGTERM and SIGHUP handlers.</li>
+<li>On a signal, or when any service's thread ends unexpectedly, it stops every service, joins the
+  threads with a grace period and logs <code>Shutdown complete.</code></li>
+</ul>
+<p>This is the lifecycle <code>Services.run</code>, <code>_start_threads</code>, <code>_install_signal_handlers</code>, <code>_on_signal</code>
+and <code>_shutdown</code> implement today, given one home, with one deliberate change. Today a service whose
+thread dies (the API failing to bind its port, a controller crashing) leaves the process up with
+the other services running and the dead one silently gone, so a pod looks alive while serving
+nothing. Under the supervisor, the death of any service stops the process, and the orchestrator
+restarts it. The dev-mode parent watchdog and the Nuxt process stay in interloper-app
+(section 2.4), as services handed to the same supervisor.</p>
+<h3 id="22-interloper-api-interloper-api">2.2 <code>interloper api</code> (interloper-api)<a class="headerlink" href="#22-interloper-api-interloper-api" title="Permanent link">&para;</a></h3>
+<p>The API is served by <code>ApiServer</code>, a service wrapping <code>uvicorn.Server</code>:
+- <code>start()</code> runs the server;
+- <code>stop()</code> sets <code>should_exit</code>.</p>
+<p><code>ApiServer.from_settings(settings, *, store, catalog, port, cors_origins=None)</code> builds the FastAPI
+app with <code>create_app</code>, instruments it, and configures uvicorn exactly as <code>_build_api</code> does today.
+<code>interloper api</code> never serves the SPA: the api image has no <code>interloper-app</code>, and nginx serves the
+frontend in containers.</p>
+<p>The command:
+- <strong>Flags:</strong> <code>--host</code>, <code>--port</code> and <code>--no-create-tables</code>, the last applied through
+  <code>provision.bootstrap</code> (section 3).
+- <strong>Behaviour:</strong> it bootstraps the database, builds the catalog and store, and supervises the one
+  <code>ApiServer</code>.</p>
+<h3 id="23-interloper-scheduler-interloper-scheduler">2.3 <code>interloper scheduler</code> (interloper-scheduler)<a class="headerlink" href="#23-interloper-scheduler-interloper-scheduler" title="Permanent link">&para;</a></h3>
+<p>The scheduler's services are built by
+<code>SchedulerServices.from_settings(settings, *, store, catalog, cron, worker, reaper)</code>, which returns
+the enabled services:
+- cron, which brings hooks and renewal (renewal only when <code>renewal.enabled</code>);
+- the queue worker and the reaper, sharing one <code>Launcher</code>.</p>
+<p>That is today's <code>_build_cron</code> and <code>_build_launcher_services</code>, unchanged.</p>
+<p>The command:
+- <strong>Flags:</strong> <code>--cron/--no-cron</code>, <code>--worker/--no-worker</code>, <code>--reaper/--no-reaper</code> and
+  <code>--no-create-tables</code>. Each toggle defaults to its settings section's <code>enabled</code> value, as <code>app</code>'s
+  do today.
+- <strong>Behaviour:</strong> it bootstraps the database and supervises the enabled services. With none enabled
+  it exits with an error rather than idling.</p>
+<h3 id="24-interloper-app-interloper-app">2.4 <code>interloper app</code> (interloper-app)<a class="headerlink" href="#24-interloper-app-interloper-app" title="Permanent link">&para;</a></h3>
+<p><code>interloper app</code> is the all-in-one: the Makefile, local development and single-process
+deployments. It keeps every flag it has today: <code>--api/--no-api</code>, <code>--cron/--no-cron</code>,
+<code>--worker/--no-worker</code>, <code>--reaper/--no-reaper</code>, <code>--host</code>, <code>--port</code>, <code>--dev</code> and
+<code>--no-create-tables</code>.</p>
+<p>It composes the role services and supervises them together:
+- an <code>ApiServer</code> with the built SPA mounted, outside dev mode;
+- the <code>SchedulerServices</code>;
+- in dev mode, the Nuxt dev server and the parent-death watchdog.</p>
+<p>What moves from <code>runtime.py</code> into <code>interloper_app</code> (<code>services.py</code>, <code>assets.py</code>):
+- <strong>The API port choice</strong> (<code>resolve_api_port</code>, <code>_find_free_port</code>) is app-only, because only dev
+  mode moves the API off <code>server.port</code>. It becomes a method of the app's composition, not a free
+  function.
+- <strong>The Nuxt dev process management:</strong> occupied-port check, process-group kill, SIGKILL after the
+  grace period.
+- <strong>The SPA fallback middleware</strong> becomes a named ASGI class next to <code>static_dir()</code> in
+  <code>interloper_app/assets.py</code>, instead of a class nested inside a method. Its <code>/api</code> prefix check
+  matches the segment (<code>/api</code> or <code>/api/...</code>), not any path starting with <code>/api</code>.</p>
+<h3 id="25-images-chart-and-makefile">2.5 Images, chart and Makefile<a class="headerlink" href="#25-images-chart-and-makefile" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>dockerfile <code>api</code>, <code>api-slim</code> CMD</td>
+<td><code>interloper app --api --no-cron --no-worker --no-reaper --no-create-tables</code></td>
+<td><code>interloper api --no-create-tables</code></td>
+</tr>
+<tr>
+<td>dockerfile <code>scheduler</code>, <code>scheduler-slim</code> CMD</td>
+<td><code>interloper app --no-api --cron --worker --reaper --no-create-tables</code></td>
+<td><code>interloper scheduler --no-create-tables</code></td>
+</tr>
+<tr>
+<td>chart <code>api-deployment.yaml</code> args</td>
+<td><code>app --api --no-cron --no-worker --no-reaper --no-create-tables</code></td>
+<td><code>api --no-create-tables</code></td>
+</tr>
+<tr>
+<td>chart <code>scheduler-deployment.yaml</code> args</td>
+<td><code>app --no-api --cron --worker --reaper --no-create-tables</code></td>
+<td><code>scheduler --no-create-tables</code></td>
+</tr>
+<tr>
+<td>Makefile <code>dev-up</code>, compose</td>
+<td><code>interloper app --api --cron --worker --reaper --dev</code></td>
+<td>unchanged</td>
+</tr>
+</tbody>
+</table>
+<p>The chart and the images are released together under one version (the chart's image tag defaults
+to its app version). A deployment that pins an older image under the new chart would run a command
+that image lacks, so the upgrade note says to move both together.</p>
+<h2 id="3-db-and-launch-move">3. <code>db</code> and <code>launch</code> move<a class="headerlink" href="#3-db-and-launch-move" title="Permanent link">&para;</a></h2>
+<p><code>interloper db</code> moves to <code>interloper_db/cli.py</code> and <code>interloper launch</code> to
+<code>interloper_scheduler/cli.py</code>. Their names, subcommands and flags are unchanged, including the
+chart's <code>interloper db init</code> job and the launchers' <code>interloper launch &lt;uuid&gt;</code>.</p>
+<p>The database bootstrap written three times (<code>app</code>, <code>db init</code>, <code>db reset</code>: <code>ensure_database</code>, then
+<code>init_engine</code>, then <code>create_all</code>) becomes one procedure in <code>interloper_db/provision.py</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">bootstrap</span><span class="p">(</span><span class="n">dsn</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">statement_timeout</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">create_tables</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Engine</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="sd">"""Ensure the database exists, bind the engine, and create the tables unless asked not to."""</span>
+</span></code></pre></div>
+<p><code>db init</code> calls <code>bootstrap(dsn)</code> and then promotes the configured super-admins, as today. <code>db reset</code>
+calls <code>drop_database(dsn)</code> then <code>bootstrap(dsn)</code>. The serving commands call it with their
+<code>statement_timeout</code> and <code>create_tables=not args.no_create_tables</code>.</p>
+<h2 id="4-platform-errors-move-to-interloper-db">4. Platform errors move to <code>interloper-db</code><a class="headerlink" href="#4-platform-errors-move-to-interloper-db" title="Permanent link">&para;</a></h2>
+<p><code>NotFoundError</code>, <code>ConflictError</code>, <code>InUseError</code>, <code>QuotaExceededError</code>, <code>HydrationError</code> and
+<code>ComponentDriftError</code> move to <code>interloper_db/errors.py</code>, re-exported from <code>interloper_db</code>.</p>
+<ul>
+<li>Only <code>interloper-db</code> raises them, plus one <code>NotFoundError</code> in the scheduler's executor.</li>
+<li>Only db, api, toolkit and scheduler catch them, all of which depend on <code>interloper-db</code>.</li>
+<li>They still subclass core's <code>InterloperError</code>, so <code>except InterloperError</code> keeps catching them.</li>
+<li>The api's exception handlers keep their status codes and bodies.</li>
+<li><code>CatalogKeyError</code> stays in core, which raises it. It and <code>ComponentDriftError</code> are kept apart on
+  purpose: the api answers a bad key in a request with 400 and a stored row that drifted from the
+  catalog with 409.</li>
+</ul>
+<p><strong>What changes for consumers:</strong>
+- About 50 import sites update.
+- <code>docs/reference/errors.md</code> gains <code>interloper_db.errors</code>.
+- <code>docs/ui/definitions.md</code>'s link follows.
+- Importing them from <code>interloper.errors</code> is an <code>ImportError</code>. Core cannot re-export them without
+  importing db, so the upgrade skill gets the row.</p>
+<p><strong>What remains in core's <code>errors.py</code> is tidied:</strong>
+- the module docstring stops claiming every error also inherits a built-in (five don't);
+- the empty <code># -- Source</code> divider goes;
+- <code>DestinationError</code> and <code>DataNotFoundError</code> get their own <code>Destination</code> divider;
+- <code>ConfigError</code>'s docstring describes what it means in core, not in the store and the api;
+- <code>AssetNotFoundError</code> gets the <code>__str__</code> that <code>NotFoundError</code> has, so <code>str(error)</code> is not wrapped
+  in <code>KeyError</code> quotes.</p>
+<p><code>format_exception</code> stays in <code>errors.py</code>, its owner as a formatter of exceptions for messages.</p>
+<h2 id="5-bugs">5. Bugs<a class="headerlink" href="#5-bugs" title="Permanent link">&para;</a></h2>
+<p>Each bug gets a test that fails first.</p>
+<table>
+<thead>
+<tr>
+<th>Bug</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>db init</code> and <code>db reset</code> print the full DSN, password included</td>
+<td>Messages name the target as <code>PostgresSettings.location</code> (<code>host:port/database</code>), a new property; the DSN is never printed.</td>
+</tr>
+<tr>
+<td><code>PostgresSettings.dsn</code> does not URL-escape user or password, so <code>@</code>, <code>:</code> or <code>/</code> in a password breaks the connection</td>
+<td>Both are percent-encoded when the DSN is built (in core's <code>settings.py</code>, which stays).</td>
+</tr>
+<tr>
+<td><code>launch</code> leaves a run <code>dispatched</code> when catalog loading fails (<code>Catalog.from_settings</code> runs outside the <code>try</code> that marks the run failed)</td>
+<td>The store opens first, since nothing can be recorded without it; everything after it runs inside the <code>try</code>.</td>
+</tr>
+<tr>
+<td><code>run -f spec.yaml --format inline</code> ignores <code>--format</code></td>
+<td><code>-f</code> and <code>--format</code> become one mutually exclusive argparse group. The runners call <code>run --format inline &lt;json&gt;</code> without <code>-f</code>, so they are unaffected.</td>
+</tr>
+<tr>
+<td><code>app --dev --no-api</code> gives Nuxt its own port as the API port</td>
+<td><code>--dev</code> without the API is refused: the dev server only proxies to an API.</td>
+</tr>
+<tr>
+<td>A bare <code>interloper app</code> without the api package crashes with an <code>ImportError</code> traceback</td>
+<td>Gone by design: <code>app</code> lives in interloper-app, which depends on api and scheduler.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-cleanup-in-the-code-that-moves">6. Cleanup in the code that moves<a class="headerlink" href="#6-cleanup-in-the-code-that-moves" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><code>run.py</code></strong> (stays in core):</li>
+<li><code>_dag_from_paths</code> becomes <code>DAG.from_paths(paths)</code>, the example rule 8 uses.</li>
+<li><code>_print_plan</code> loses its always-empty <code>name</code> parameter.</li>
+<li><code>_resolve_window</code> stays as flag handling.</li>
+<li><strong>Names:</strong> <code>db_sub</code>, <code>uvi_config</code>, <code>addr</code>, <code>sock</code>, <code>e</code>, <code>exc</code> and the <code>_DAG</code> alias are written
+  out. <code>dsn</code> stays: it is the established term and the property's name.</li>
+<li><strong>Errors:</strong> <code>app</code> raises <code>SystemExit("Error: ...")</code> like the other commands, not <code>print</code> plus
+  <code>sys.exit(1)</code>.</li>
+<li><strong>Logging:</strong> no f-strings in logging calls.</li>
+<li><strong>Stale docstrings:</strong></li>
+<li><code>app</code>'s says it omits the reaper and that db is "and/or";</li>
+<li><code>launch</code>'s promises failure handling it lacked;</li>
+<li><code>run</code>'s says "manifest" where everything else says "spec" and lists <code>Destination</code> as a target;</li>
+<li>the <code>requires</code> vocabulary disappears with the machinery.</li>
+</ul>
+<h2 id="7-contracts">7. Contracts<a class="headerlink" href="#7-contracts" title="Permanent link">&para;</a></h2>
+<p><strong>Unchanged:</strong>
+- <code>interloper run [--format inline] [--run-id ...] ...</code>;
+- <code>interloper launch &lt;uuid&gt;</code>;
+- <code>interloper db init|reset|upgrade|downgrade</code> and their flags;
+- <code>interloper app</code> and every flag it has;
+- the <code>interloper-mcp</code> script;
+- every settings key and <code>INTERLOPER_*</code> env name;
+- the api's error responses.</p>
+<p><strong>Changed, with an upgrade-skill row:</strong>
+- the api and scheduler images' CMD and the chart's args move to <code>interloper api</code> and
+  <code>interloper scheduler</code> (section 2.5);
+- the platform errors import from <code>interloper_db</code>;
+- a command whose package is not installed is now absent rather than refused by <code>requires</code>.</p>
+<h2 id="8-testing">8. Testing<a class="headerlink" href="#8-testing" title="Permanent link">&para;</a></h2>
+<p>Unit tests only, mirroring the layout.</p>
+<ul>
+<li><strong>Moved tests follow their code:</strong></li>
+<li><code>tests/cli/test_runtime.py</code> is split into <code>interloper-app/tests/test_services.py</code> and
+    <code>test_assets.py</code>, <code>interloper-api/tests/test_cli.py</code> and <code>interloper-scheduler/tests/test_cli.py</code>;</li>
+<li>the <code>db</code> and <code>launch</code> command tests move to their packages.</li>
+<li><strong>The parser:</strong></li>
+<li>with every workspace package installed, <code>build_parser()</code> lists <code>api</code>, <code>app</code>, <code>db</code>, <code>launch</code>,
+    <code>run</code> and <code>scheduler</code>;</li>
+<li>an entry point that fails to import stops the CLI with its error rather than silently
+    vanishing.</li>
+<li><strong>The supervisor</strong> (core):</li>
+<li>stops every service on a signal;</li>
+<li>stops the rest when one service's thread dies.</li>
+<li><strong>The role commands build the expected services from flags and settings</strong>, without starting a
+  server:</li>
+<li><code>scheduler --no-worker</code> builds cron (with hooks and renewal) and the reaper;</li>
+<li><code>app --no-api --dev</code> is refused;</li>
+<li><code>api</code> builds one <code>ApiServer</code> on <code>--port</code>.</li>
+<li><strong><code>provision.bootstrap</code></strong> honours <code>create_tables=False</code>.</li>
+<li><strong>Errors:</strong> the six errors import from <code>interloper_db</code> and are <code>InterloperError</code>s;
+  <code>str(AssetNotFoundError("x"))</code> is <code>x</code>.</li>
+<li><strong>Each bug</strong> in section 5 has its own test.</li>
+<li><strong>Full check:</strong> <code>make check-python</code>, the strict docs build (CLI reference regenerated, errors
+  reference) and the catalog dump against the base.</li>
+<li><strong>Live:</strong></li>
+<li>the dev instance through <code>make dev-up</code> (exercises <code>interloper app</code> with every service);</li>
+<li><code>interloper api</code> and <code>interloper scheduler</code> started from the workspace on a spare port against
+    the dev database: the API answers <code>/api/health</code>, a run of the demo source completes through
+    the scheduler's worker, and SIGTERM stops each cleanly;</li>
+<li><code>interloper db upgrade</code> against the dev database;</li>
+<li>the api and scheduler images built, each started with its new CMD far enough to print its
+    <code>--help</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>

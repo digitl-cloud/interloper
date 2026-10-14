@@ -2735,7 +2735,7 @@ and <code>last_renewal_error</code>, hooks show <code>last_fired_at</code> and <
 <p>Persisted components reference catalog keys. When a key no longer resolves, because the class
 was renamed or removed (<code>missing</code>) or is not enabled in this deployment's catalog (<code>disabled</code>),
 the component is shown with a drift status instead of failing to load, and the Sources page
-offers a confirmed cleanup. See <code>ComponentDriftError</code> in <a href="../../reference/errors/">Errors</a>.</p>
+offers a confirmed cleanup. See <code>interloper_db.ComponentDriftError</code> in <a href="../../reference/errors/">Errors</a>.</p>
 <h2 id="what-a-package-author-gets">What a package author gets<a class="headerlink" href="#what-a-package-author-gets" title="Permanent link">&para;</a></h2>
 <p>Writing this, and nothing else:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">connection</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"Shop API"</span><span class="p">,</span> <span class="n">icon</span><span class="o">=</span><span class="s2">"carbon:shopping-cart"</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Commerce"</span><span class="p">])</span>

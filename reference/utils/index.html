@@ -2407,17 +2407,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.utils.text.to_slug_case" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;to_slug_case
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#interloper.utils.text.to_label" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2544,17 +2533,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;get_object_path
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#interloper.utils.imports.require_import" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;require_import
       </span>
     </span>
   </a>
@@ -2928,7 +2906,7 @@ copied. A copy never shares the original's lock, so it starts unheld.</p>
 
     <div class="doc doc-contents ">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="threading.local">local</span></code></p>
+              Bases: <code>_thread._local</code></p>
 
 
 
@@ -3270,7 +3248,7 @@ engine stays async-native.</p>
               </div>
             </td>
             <td>
-                  <code>()</code>
+                <em>required</em>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -3286,7 +3264,7 @@ engine stays async-native.</p>
               </div>
             </td>
             <td>
-                  <code>{}</code>
+                <em>required</em>
             </td>
           </tr>
       </tbody>
@@ -3625,80 +3603,6 @@ are replaced.</p>
             <td>
               <div class="doc-md-description">
                 <p>The coerced text.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.utils.text.to_slug_case" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">to_slug_case</span>
-
-
-<a href="#interloper.utils.text.to_slug_case" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">to_slug_case</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Convert text to a URL/key-safe slug (lowercase, hyphen-separated).</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>text</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The text to convert.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The converted text.</p>
               </div>
             </td>
           </tr>
@@ -4253,7 +4157,7 @@ aware and naive values.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>An aware datetime; an already-aware <em>ts</em> is returned unchanged.</p>
+                <p>An aware datetime; an already-aware <em>value</em> is returned unchanged.</p>
               </div>
             </td>
           </tr>
@@ -4361,7 +4265,7 @@ that drops tzinfo attributes to the same month it was written in.</p>
 
     <div class="doc doc-contents first">
 
-        <p>Dynamic import helpers and import-guard decorator.</p>
+        <p>Dynamic import helpers.</p>
 
 
 
@@ -4391,13 +4295,7 @@ that drops tzinfo attributes to the same month it was written in.</p>
 
 
 <a href="#interloper.utils.imports.import_from_path" class="headerlink" title="Permanent link">&para;</a></h3>
-          <div class="doc-overloads">
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">import_from_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Any">Any</span></span>
-</span></code></pre></div><div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">import_from_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n">target_type</span><span class="p">:</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="interloper.utils.imports.T">T</span></span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n"><span title="interloper.utils.imports.T">T</span></span>
-</span></code></pre></div>          </div>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">import_from_path</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">path</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n">target_type</span><span class="p">:</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="interloper.utils.imports.T">T</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Any">Any</span></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4444,23 +4342,6 @@ that drops tzinfo attributes to the same month it was written in.</p>
                 <em>required</em>
             </td>
           </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>target_type</code>
-            </td>
-            <td>
-                  <code><span title="type">type</span>[<span title="interloper.utils.imports.T">T</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If provided, validates the imported object is an
-instance of this type.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
       </tbody>
     </table>
 
@@ -4481,29 +4362,6 @@ instance of this type.</p>
             <td>
               <div class="doc-md-description">
                 <p>The imported object.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="ValueError">ValueError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If <em>target_type</em> is given and the object does not match.</p>
               </div>
             </td>
           </tr>
@@ -4578,101 +4436,6 @@ instance of this type.</p>
             <td>
               <div class="doc-md-description">
                 <p>Dotted path string like <code>"module.submodule.ClassName"</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.utils.imports.require_import" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">require_import</span>
-
-
-<a href="#interloper.utils.imports.require_import" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">require_import</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">import_name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n">error_message</span><span class="p">:</span> <span class="n"><span title="str">str</span></span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="interloper.utils.imports.F">F</span></span> <span class="o">|</span> <span class="n"><span title="interloper.utils.imports.C">C</span></span><span class="p">],</span> <span class="n"><span title="interloper.utils.imports.F">F</span></span> <span class="o">|</span> <span class="n"><span title="interloper.utils.imports.C">C</span></span><span class="p">]</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Decorator that defers an <code>ImportError</code> until the decorated object is used.</p>
-<p>Works with both classes and functions. For classes the check runs at
-instantiation; for functions it runs at call time.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>import_name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Top-level package name to look for (e.g. <code>"pandas"</code>).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>error_message</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Message for the <code>ImportError</code> raised when the package
-is missing.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="interloper.utils.imports.F">F</span> | <span title="interloper.utils.imports.C">C</span>], <span title="interloper.utils.imports.F">F</span> | <span title="interloper.utils.imports.C">C</span>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>A decorator that wraps the target class or function.</p>
               </div>
             </td>
           </tr>

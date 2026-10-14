@@ -2434,7 +2434,7 @@ The source instance arrives as <code>self</code>, so assets can share configurat
 <div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="p">(</span><span class="n">shop</span><span class="p">)</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">dag</span><span class="o">.</span><span class="n">materialize</span><span class="p">()</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># RunResult(status=completed, partition=None, completed=3, failed=0, canceled=0, time=0.02s)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># RunResult(status=completed, window=None, completed=3, failed=0, canceled=0, time=0.02s)</span>
 </span></code></pre></div>
 <p><code>dag.materialize()</code> uses the default <code>AsyncRunner</code>, which runs independent assets concurrently.
 Pick another runner, or tune concurrency and failure handling, as described in

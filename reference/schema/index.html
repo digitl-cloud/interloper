@@ -2115,7 +2115,7 @@
   <a href="#interloper.schema.decorator.schema" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;schema
+        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;schema
       </span>
     </span>
   </a>
@@ -2135,10 +2135,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper.Schema.field_specs" class="md-nav__link">
+  <a href="#interloper.Schema.key" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;field_specs
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;key
       </span>
     </span>
   </a>
@@ -2146,10 +2146,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Schema.json_schema" class="md-nav__link">
+  <a href="#interloper.Schema.model_config" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;json_schema
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;model_config
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Schema.field_specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;field_specs
       </span>
     </span>
   </a>
@@ -2168,10 +2179,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Schema.validate_rows" class="md-nav__link">
+  <a href="#interloper.Schema.json_schema" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;validate_rows
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;json_schema
       </span>
     </span>
   </a>
@@ -2183,6 +2194,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;reconcile
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Schema.validate_rows" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;validate_rows
       </span>
     </span>
   </a>
@@ -2207,10 +2229,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper.Normalizer.normalize" class="md-nav__link">
+  <a href="#interloper.Normalizer.key" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;normalize
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;key
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Normalizer.model_config" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;model_config
       </span>
     </span>
   </a>
@@ -2222,6 +2255,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;column_name
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Normalizer.normalize" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;normalize
       </span>
     </span>
   </a>
@@ -2241,6 +2285,34 @@
       </span>
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="MaterializationStrategy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper.MaterializationStrategy.RECONCILE" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;RECONCILE
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.MaterializationStrategy.STRICT" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;STRICT
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2506,16 +2578,15 @@
 <p>A schema is an asset's data contract; a normalizer coerces the vendor's rows into it and a materialization strategy decides how they land.</p>
 
 
-<div class="doc doc-object doc-attribute">
-
+<div class="doc doc-object doc-function">
 
 
 <h2 id="interloper.schema.decorator.schema" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">schema</span>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">schema</span>
 
 
 <a href="#interloper.schema.decorator.schema" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">schema</span> <span class="o">=</span> <span class="n"><span title="interloper.component.decorator.Decorator">Decorator</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Schema&lt;/span&gt;" href="./#interloper.Schema">Schema</a></span><span class="p">)</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">schema</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n"><span title="Any">Any</span></span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">/</span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">:</span> <span class="n"><span title="Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="Any">Any</span></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -2536,6 +2607,7 @@
 body. <code>key</code> overrides the auto-derived snake_cased key and <code>name</code> is the
 human-readable display name.</p>
 
+
     </div>
 
 </div>
@@ -2554,7 +2626,7 @@ human-readable display name.</p>
 
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Serializable&lt;/span&gt;" href="../catalog/#interloper.Serializable">Serializable</a></code></p>
+              Bases: <code>interloper.serializable.base.Serializable</code></p>
 
 
 
@@ -2588,6 +2660,62 @@ human-readable display name.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.Schema.key" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">key</span>
+
+
+<a href="#interloper.Schema.key" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">key</span> <span class="o">=</span> <span class="s1">'schema'</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>str(object='') -&gt; str
+str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p>
+<p>Create a new string object from the given object. If encoding or
+errors is specified, then the object must expose a data buffer
+that will be decoded using the given encoding and error handler.
+Otherwise, returns the result of object.<strong>str</strong>() (if defined)
+or repr(object).
+encoding defaults to sys.getdefaultencoding().
+errors defaults to 'strict'.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.Schema.model_config" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">model_config</span>
+
+
+<a href="#interloper.Schema.model_config" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;,)}</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>dict() -&gt; new empty dictionary
+dict(mapping) -&gt; new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -&gt; new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)</p>
+
+    </div>
+
+</div>
 
 
 
@@ -2629,6 +2757,106 @@ come out in declaration order: <code>Serializable</code> normalizes
             <td>
               <div class="doc-md-description">
                 <p>One <code>FieldSpec</code> per declared data field, in declaration order.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Schema.infer" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">infer</span>
+
+
+<a href="#interloper.Schema.infer" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">infer</span><span class="p">(</span><span class="n">rows</span><span class="p">:</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="typing.Self">Self</span></span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Infer a Schema subclass from a list of row dicts.</p>
+<p>Examines the values across all rows for each key and maps Python types
+to Pydantic field types.  All fields are <code>Optional</code> because any key
+may be absent in some rows.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>rows</code>
+            </td>
+            <td>
+                  <code><span title="list">list</span>[<span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Non-empty list of dicts to infer from.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="type">type</span>[<span title="typing.Self">Self</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A dynamically created Schema subclass.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;SchemaError&lt;/span&gt;" href="../errors/#interloper.errors.SchemaError">SchemaError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>rows</em> is empty.</p>
               </div>
             </td>
           </tr>
@@ -2689,22 +2917,27 @@ the subclass's data columns, in declaration order (see
 <div class="doc doc-object doc-function">
 
 
-<h3 id="interloper.Schema.infer" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">infer</span>
+<h3 id="interloper.Schema.reconcile" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">reconcile</span>
 
 
-<a href="#interloper.Schema.infer" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">infer</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">rows</span><span class="p">:</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]],</span> <span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s2">"InferredSchema"</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="typing_extensions.Self">Self</span></span><span class="p">]</span>
+<a href="#interloper.Schema.reconcile" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">reconcile</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">rows</span><span class="p">:</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]],</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Infer a Schema subclass from a list of row dicts.</p>
-<p>Examines the values across all rows for each key and maps Python types
-to Pydantic field types.  All fields are <code>Optional</code> because any key
-may be absent in some rows.</p>
+        <p>Reconcile rows against this schema.</p>
+<p>Fields are coerced one by one through per-field <code>TypeAdapter</code>s —
+the row-wise mirror of the DataFrame representation's column-wise casts.
+Extra keys are dropped (their union logged as a warning), missing
+fields get their default (or <code>None</code>, which pydantic accepts only
+for nullable fields), and scalar <code>str</code> fields are stringified
+up front since pydantic's lax mode never coerces <em>to</em> <code>str</code>.</p>
+<p>This is more permissive than <code>validate_rows</code>: it actively
+transforms data to match the schema rather than rejecting mismatches.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2727,27 +2960,11 @@ may be absent in some rows.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Non-empty list of dicts to infer from.</p>
+                <p>List of row dicts.</p>
               </div>
             </td>
             <td>
                 <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Class name for the generated model.</p>
-              </div>
-            </td>
-            <td>
-                  <code>&#39;InferredSchema&#39;</code>
             </td>
           </tr>
       </tbody>
@@ -2765,11 +2982,11 @@ may be absent in some rows.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code><span title="type">type</span>[<span title="typing_extensions.Self">Self</span>]</code>
+                  <code><span title="list">list</span>[<span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A dynamically created Schema subclass.</p>
+                <p>A new list of row dicts with columns aligned and types coerced.</p>
               </div>
             </td>
           </tr>
@@ -2792,7 +3009,8 @@ may be absent in some rows.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If <em>rows</em> is empty.</p>
+                <p>If a value cannot be coerced (e.g. <code>"abc"</code> → <code>int</code>)
+or a required non-nullable field is missing.</p>
               </div>
             </td>
           </tr>
@@ -2898,114 +3116,6 @@ in the schema and rows that are missing required schema fields.</p>
 
 </div>
 
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Schema.reconcile" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">reconcile</span>
-
-
-<a href="#interloper.Schema.reconcile" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">reconcile</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">rows</span><span class="p">:</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]],</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="list">list</span></span><span class="p">[</span><span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]]</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Reconcile rows against this schema.</p>
-<p>Fields are coerced one by one through per-field <code>TypeAdapter</code>s —
-the row-wise mirror of the DataFrame representation's column-wise casts.
-Extra keys are dropped (their union logged as a warning), missing
-fields get their default (or <code>None</code>, which pydantic accepts only
-for nullable fields), and scalar <code>str</code> fields are stringified
-up front since pydantic's lax mode never coerces <em>to</em> <code>str</code>.</p>
-<p>This is more permissive than <code>validate</code> — it actively
-transforms data to match the schema rather than rejecting mismatches.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>rows</code>
-            </td>
-            <td>
-                  <code><span title="list">list</span>[<span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>List of row dicts.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="list">list</span>[<span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>A new list of row dicts with columns aligned and types coerced.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;SchemaError&lt;/span&gt;" href="../errors/#interloper.errors.SchemaError">SchemaError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If a value cannot be coerced (e.g. <code>"abc"</code> → <code>int</code>)
-or a required non-nullable field is missing.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
 
 
   </div>
@@ -3028,7 +3138,7 @@ or a required non-nullable field is missing.</p>
 
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Serializable&lt;/span&gt;" href="../catalog/#interloper.Serializable">Serializable</a></code></p>
+              Bases: <code>interloper.serializable.base.Serializable</code></p>
 
 
 
@@ -3060,7 +3170,6 @@ host → child-pod DAG-spec boundary.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.normalize_columns_names">normalize_columns_names</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3071,7 +3180,6 @@ host → child-pod DAG-spec boundary.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.flatten_max_level">flatten_max_level</span></code></td>
             <td>
-                  <code><span title="int">int</span> | None</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3084,7 +3192,6 @@ flattens up to that many levels.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.flatten_separator">flatten_separator</span></code></td>
             <td>
-                  <code><span title="str">str</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3095,7 +3202,6 @@ flattens up to that many levels.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.fill_missing">fill_missing</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3107,7 +3213,6 @@ has the same columns.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.replace_empty_dicts">replace_empty_dicts</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3118,7 +3223,6 @@ has the same columns.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.replace_empty_strings">replace_empty_strings</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3129,7 +3233,6 @@ has the same columns.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.drop_na_columns">drop_na_columns</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3140,7 +3243,6 @@ has the same columns.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.snake_case_digits">snake_case_digits</span></code></td>
             <td>
-                  <code><span title="bool">bool</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3154,7 +3256,6 @@ depends on the upstream API's naming semantics.</p>
           <tr class="doc-section-item">
             <td><code><span title="interloper.Normalizer.column_overrides">column_overrides</span></code></td>
             <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="str">str</span>]</code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -3185,8 +3286,141 @@ rule can handle (<code>eCPAddToCart</code> → <code>ecp_add_to_cart</code>).</p
 
 
 
+<div class="doc doc-object doc-attribute">
 
 
+
+<h3 id="interloper.Normalizer.key" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">key</span>
+
+
+<a href="#interloper.Normalizer.key" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">key</span> <span class="o">=</span> <span class="s1">'normalizer'</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>str(object='') -&gt; str
+str(bytes_or_buffer[, encoding[, errors]]) -&gt; str</p>
+<p>Create a new string object from the given object. If encoding or
+errors is specified, then the object must expose a data buffer
+that will be decoded using the given encoding and error handler.
+Otherwise, returns the result of object.<strong>str</strong>() (if defined)
+or repr(object).
+encoding defaults to sys.getdefaultencoding().
+errors defaults to 'strict'.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.Normalizer.model_config" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">model_config</span>
+
+
+<a href="#interloper.Normalizer.model_config" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">model_config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'arbitrary_types_allowed'</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">'ignored_types'</span><span class="p">:</span> <span class="p">(</span><span class="o">&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">interloper</span><span class="o">.</span><span class="n">serializable</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">IgnoredDescriptor</span><span class="s1">'&gt;,)}</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>dict() -&gt; new empty dictionary
+dict(mapping) -&gt; new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -&gt; new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)</p>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Normalizer.column_name" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">column_name</span>
+
+
+<a href="#interloper.Normalizer.column_name" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">column_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Transform a column name according to the normalizer's convention.</p>
+<p>Explicit <code>column_overrides</code> win; otherwise converts to
+<code>snake_case</code>, optionally splitting letter→digit boundaries
+(see <code>snake_case_digits</code>).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Original column name.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Transformed column name.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -3286,83 +3520,6 @@ rule can handle (<code>eCPAddToCart</code> → <code>ecp_add_to_cart</code>).</p
 
 </div>
 
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Normalizer.column_name" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">column_name</span>
-
-
-<a href="#interloper.Normalizer.column_name" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">column_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="str">str</span></span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Transform a column name according to the normalizer's convention.</p>
-<p>Explicit <code>column_overrides</code> win; otherwise converts to
-<code>snake_case</code>, optionally splitting letter→digit boundaries
-(see <code>snake_case_digits</code>).</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Original column name.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Transformed column name.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
 
 
   </div>
@@ -3384,7 +3541,7 @@ rule can handle (<code>eCPAddToCart</code> → <code>ecp_add_to_cart</code>).</p
 
     <div class="doc doc-contents first">
             <p class="doc doc-class-bases">
-              Bases: <code><span title="str">str</span></code>, <code><span title="enum.Enum">Enum</span></code></p>
+              Bases: <code>builtins.str</code>, <code>enum.Enum</code></p>
 
 
 
@@ -3404,7 +3561,7 @@ they differ in what counts as an error.</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code><span title="interloper.MaterializationStrategy.RECONCILE">RECONCILE</span></code></td>
+            <td><code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-attribute&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-attribute-name&quot;&gt;RECONCILE&lt;/span&gt;" href="./#interloper.MaterializationStrategy.RECONCILE">RECONCILE</a></code></td>
             <td>
             </td>
             <td>
@@ -3416,7 +3573,7 @@ no schema declared, infer one from the data for the destinations.</p>
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code><span title="interloper.MaterializationStrategy.STRICT">STRICT</span></code></td>
+            <td><code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-attribute&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-attribute-name&quot;&gt;STRICT&lt;/span&gt;" href="./#interloper.MaterializationStrategy.STRICT">STRICT</a></code></td>
             <td>
             </td>
             <td>
@@ -3447,6 +3604,126 @@ pass are still coerced to the declared types.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.MaterializationStrategy.RECONCILE" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">RECONCILE</span>
+
+
+<a href="#interloper.MaterializationStrategy.RECONCILE" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">RECONCILE</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">RECONCILE</span><span class="p">:</span> <span class="s1">'reconcile'</span><span class="o">&gt;</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How the conform step enforces an asset's schema.</p>
+<p>Both strategies hand destinations data in the schema's canonical types;
+they differ in what counts as an error.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="interloper.MaterializationStrategy.RECONCILE.RECONCILE">RECONCILE</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The default. Align columns to the schema (extras dropped
+with a warning, missing nullables filled) and coerce values. With
+no schema declared, infer one from the data for the destinations.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="interloper.MaterializationStrategy.RECONCILE.STRICT">STRICT</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Schema required. Extra columns, missing required columns and
+values the schema rejects fail the materialization; values that
+pass are still coerced to the declared types.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.MaterializationStrategy.STRICT" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">STRICT</span>
+
+
+<a href="#interloper.MaterializationStrategy.STRICT" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">STRICT</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">STRICT</span><span class="p">:</span> <span class="s1">'strict'</span><span class="o">&gt;</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How the conform step enforces an asset's schema.</p>
+<p>Both strategies hand destinations data in the schema's canonical types;
+they differ in what counts as an error.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="interloper.MaterializationStrategy.STRICT.RECONCILE">RECONCILE</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The default. Align columns to the schema (extras dropped
+with a warning, missing nullables filled) and coerce values. With
+no schema declared, infer one from the data for the destinations.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="interloper.MaterializationStrategy.STRICT.STRICT">STRICT</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Schema required. Extra columns, missing required columns and
+values the schema rejects fail the materialization; values that
+pass are still coerced to the declared types.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
 
 
 
