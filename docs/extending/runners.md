@@ -117,3 +117,8 @@ records the verdict and emits the terminal event, after `state.advance(operation
 so it lands on that attempt; deterministic operation event ids make the host's and the child's
 collapse into one when persisted. Pass
 `child_process_env()` into the child for trace continuity.
+
+Run the child on the host's interloper version. The spec and the flags it receives are written
+by the host's version and read by the child's, so a child image older than its host can refuse
+a spec field or a flag it does not know yet. Upgrade the runner image together with the host,
+and roll them back together.
