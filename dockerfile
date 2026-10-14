@@ -270,12 +270,12 @@ RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 FROM runtime-exec AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
-CMD ["interloper", "scheduler", "--no-create-tables"]
+CMD ["interloper", "scheduler", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
 FROM runtime AS scheduler-slim
 COPY --from=build-scheduler-slim --chown=app:app /interloper/.venv /interloper/.venv
 USER app
-CMD ["interloper", "scheduler", "--no-create-tables"]
+CMD ["interloper", "scheduler", "--cron", "--worker", "--reaper", "--no-create-tables"]
 
 # ── core (the framework; also the per-asset Job target) ───────
 FROM runtime-exec AS core

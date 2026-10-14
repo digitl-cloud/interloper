@@ -76,13 +76,15 @@ components.
 Each role starts through the command its package contributes, which is what the images run:
 
 ```sh
-interloper api --no-create-tables          # the api image: the HTTP API
-interloper scheduler --no-create-tables    # the scheduler image: cron (with hooks and renewal), worker, reaper
+interloper api --no-create-tables                                  # the api image: the HTTP API
+interloper scheduler --cron --worker --reaper --no-create-tables   # the scheduler image: cron (with hooks and renewal), worker, reaper
 ```
 
 `interloper scheduler` takes `--no-cron`, `--no-worker` and `--no-reaper` to split its services
 across replicas: cron and the reaper are singletons, the worker scales out, and replicas split
-the work through row locks.
+the work through row locks. Without a flag, a service follows its `enabled` setting
+(`cron.enabled`, `worker.enabled`, `reaper.enabled`), which every pod reading the same
+`interloper.yaml` shares; that is why the images and the chart name all three.
 
 ## One process
 
