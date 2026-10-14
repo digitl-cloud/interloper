@@ -17,6 +17,7 @@ setup:
 
 check-python:
 	uv run ruff check packages
+	uv run ruff format --check
 	uv run ty check
 	uv run pytest
 

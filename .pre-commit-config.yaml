@@ -4,6 +4,8 @@ repos:
     rev: v0.16.7
     hooks:
       - id: ruff-check
+      - id: ruff-format
+        args: [--check]
   - repo: local
     hooks:
       - id: ty

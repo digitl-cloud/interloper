@@ -120,6 +120,10 @@ invalid-attribute-override = "ignore"
 target-version = "py310"
 line-length = 120
 
+[tool.ruff.format]
+# Markdown is page copy: its code blocks are laid out for the reader, not the formatter.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 extend-select = ["E", "I", "UP", "ANN001", "ANN201", "ANN202"]
 
