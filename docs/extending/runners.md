@@ -48,12 +48,14 @@ A `Run` implements:
 | Member | Role |
 |--------|------|
 | `execute(operation) -> OperationResult` | Execute one operation where this kind of run executes it, and return what it came to. An operation's own failure is a result with its `error` set, never an exception; an `execute` that raises is a fault of the run itself and fails the whole run. |
+| `open()` | Acquire what the run holds from outside the process (a client, a connection). Optional; the walk calls it after `RUN_STARTED`, so a failure fails the run with its events, like any other fault of the run. |
 | `close()` | Release what the run holds (pools, clients). Optional; a failure here is logged and never masks the run's result. |
 | `reports_progress` | Class attribute, `True` by default. Set it to `False` when each operation executes in a child process that reports its own start and retries (see below). |
 
-What a run holds while it lasts (a pool, a client) is its attributes, set up in `__init__`
-after `super().__init__(...)`, which checks the run's window against every enabled partitioned
-operation before anything is emitted.
+What a run holds while it lasts (a pool, a client) is its attributes. Local ones (a pool) are
+set up in `__init__` after `super().__init__(...)`, which checks the run's window against every
+enabled partitioned operation before anything is emitted; anything that reaches outside the
+process (a Docker daemon, a cluster) is acquired in `open`, where a failure is reported.
 
 ## The walk
 
@@ -81,6 +83,7 @@ state.context(operation)           # the OperationContext it executes with
 
 state.start(operation)             # RUNNING; OPERATION_STARTED
 state.retry(operation, error)      # OPERATION_RETRIED; the next attempt
+state.advance(operation, attempt)  # catches up with the attempts a child made on its own
 state.finish(operation, result)    # COMPLETED or FAILED; promotes or cancels its dependents
 state.cancel_pending()             # cancels everything not yet terminal
 ```
@@ -109,6 +112,8 @@ itself, and the host records them silently. Have the child run
 `interloper run --format inline --run-id=<id> <spec>` under `INTERLOPER_EVENTS_TO_STDERR=true`
 (the CLI then subscribes a `StderrEventHandler`), and feed its log through an
 `EventLogReader(operation.id, label=...)`, which forwards that operation's `@EVENT:` lines to the
-host's event bus. The host still records the verdict and emits the terminal event; deterministic
-operation event ids make the host's and the child's collapse into one when persisted. Pass
+host's event bus and follows the last attempt they report (`reader.attempt`). The host still
+records the verdict and emits the terminal event, after `state.advance(operation, reader.attempt)`
+so it lands on that attempt; deterministic operation event ids make the host's and the child's
+collapse into one when persisted. Pass
 `child_process_env()` into the child for trace continuity.

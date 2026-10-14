@@ -52,6 +52,33 @@ class TestEventLogReader:
             reader.close()
         assert captured == []
 
+    def test_tracks_the_last_attempt_the_operation_reached(self):
+        with _capture():
+            reader = EventLogReader("asset-1", label="container x")
+            assert reader.attempt == 1
+            reader.feed(_line(EventType.OPERATION_STARTED, component_id="asset-1", attempt=1))
+            reader.feed(_line(EventType.OPERATION_RETRIED, component_id="asset-1", attempt=1))
+            reader.feed(_line(EventType.OPERATION_STARTED, component_id="asset-1", attempt=2))
+            reader.feed(_line(EventType.OPERATION_STARTED, component_id="upstream", attempt=5))
+            reader.close()
+        assert reader.attempt == 2
+
+    def test_a_retry_reaches_the_next_attempt_before_it_starts(self):
+        with _capture():
+            reader = EventLogReader("asset-1", label="container x")
+            reader.feed(_line(EventType.OPERATION_RETRIED, component_id="asset-1", attempt=1))
+            reader.close()
+        assert reader.attempt == 2
+
+    def test_a_stopped_reader_forwards_nothing_more(self):
+        with _capture() as captured:
+            reader = EventLogReader("asset-1", label="pod x")
+            reader.stop()
+            reader.feed(_line(EventType.OPERATION_STARTED, component_id="asset-1", attempt=2))
+            reader.close()
+        assert captured == []
+        assert reader.attempt == 1
+
     def test_close_reads_a_trailing_line_without_newline(self):
         with _capture() as captured:
             reader = EventLogReader("asset-1", label="container x")

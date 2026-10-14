@@ -77,8 +77,8 @@ class Contained(il.Asset):
         return []
 
 
-def _event_line(event_type: EventType, component_id: str = "asset-1") -> bytes:
-    event = Event(type=event_type, metadata={"component_id": component_id, "run_id": "run-1"})
+def _event_line(event_type: EventType, component_id: str = "asset-1", **metadata: Any) -> bytes:
+    event = Event(type=event_type, metadata={"component_id": component_id, "run_id": "run-1", **metadata})
     return (EVENT_LINE_PREFIX + event.to_json() + "\n").encode()
 
 
@@ -124,6 +124,27 @@ class TestContainerRun:
         [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
         assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
         assert result.executions["asset-1"].error == "RunnerError: Container c0ffee000000 exited with code 3"
+
+    async def test_a_container_that_dies_mid_retry_ends_its_last_attempt(self, monkeypatch, asset):
+        container = FakeContainer([_event_line(EventType.OPERATION_STARTED, attempt=2)], status_code=137)
+
+        _, events = await _run(monkeypatch, container, asset)
+
+        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
+        assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED, attempt=2)
+
+    async def test_an_unreachable_daemon_fails_the_run_with_its_events(self, monkeypatch, asset):
+        def unreachable() -> None:
+            raise docker.errors.DockerException("daemon down")
+
+        monkeypatch.setattr(docker, "from_env", unreachable)
+        events: list[Event] = []
+
+        result = await DockerRunner(image="img", on_event=events.append).run(il.DAG(asset), metadata={"run_id": "r"})
+
+        assert result.status is ExecutionStatus.FAILED
+        assert result.executions["asset-1"].status is ExecutionStatus.CANCELED
+        assert [event.type for event in events][-1] is EventType.RUN_FAILED
 
     async def test_a_launch_failure_is_a_failed_operation(self, monkeypatch, asset):
         result, events = await _run(monkeypatch, None, asset)

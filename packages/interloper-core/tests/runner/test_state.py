@@ -354,6 +354,20 @@ class TestProgressReportedElsewhere:
         assert [event.type for event in events] == [EventType.OPERATION_COMPLETED]
         assert state.executions[root.id].status is ExecutionStatus.COMPLETED
 
+    def test_the_verdict_lands_on_the_attempt_the_child_reached(self) -> None:
+        state, operations = _state(ChainSource(destinations=[il.MemoryDestination()]), reports_progress=False)
+        root = operations["root"]
+
+        with _capture() as events:
+            state.start(root)
+            state.advance(root, 3)
+            state.advance(root, 2)
+            state.finish(root, OperationResult(error="exited"))
+
+        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
+        assert failed.id == RunState.operation_event_id("run-1", root.id, EventType.OPERATION_FAILED, attempt=3)
+        assert state.executions[root.id].attempt == 3
+
 
 class TestEventIds:
     """Operation events carry ids derived from ``(run_id, component_id, event_type, attempt)``.

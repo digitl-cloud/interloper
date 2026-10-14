@@ -6,8 +6,8 @@ inline``, so the operation resolves its upstreams from their destinations
 without recomputing them. The container reports its operation's progress as
 ``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
 container runs; the host authors the operation's terminal event itself, from
-the container's exit code, so an operation whose container dies without a
-word still ends.
+the container's exit code and on the last attempt the container reported, so
+an operation whose container dies without a word, or mid-retry, still ends.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import docker
+from docker import DockerClient
 from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
 from interloper.events import EventLogReader
@@ -46,11 +47,12 @@ class DockerRun(Run):
 
     runner: DockerRunner
     reports_progress = False
+    docker: DockerClient
 
     def __init__(
         self, runner: DockerRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
     ) -> None:
-        """Open the Docker client and a polling pool sized to the runner's capacity.
+        """Open a polling pool sized to the runner's capacity.
 
         Args:
             runner: The runner this is a run of.
@@ -59,8 +61,11 @@ class DockerRun(Run):
             metadata: Run-level metadata, carrying the ``run_id``.
         """
         super().__init__(runner, dag, window, metadata)
-        self.docker = docker.from_env()
         self.polling = ThreadPoolExecutor(max_workers=runner.max_containers)
+
+    async def open(self) -> None:
+        """Connect to the Docker daemon."""
+        self.docker = docker.from_env()
 
     async def execute(self, operation: Operation) -> OperationResult:
         """Run the operation in its own container, followed on the polling pool.
@@ -69,17 +74,21 @@ class DockerRun(Run):
             operation: The operation to execute.
 
         Returns:
-            Its result.
+            Its result, recorded on the last attempt the container reported.
         """
+        reader = EventLogReader(operation.id, label=f"container {self.name(operation)}")
         # The child continues the run's trace, which only this context carries onto the pool thread.
-        follow = partial(contextvars.copy_context().run, self.follow, operation)
-        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+        follow = partial(contextvars.copy_context().run, self.follow, operation, reader)
+        result = await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+        self.state.advance(operation, reader.attempt)
+        return result
 
-    def follow(self, operation: Operation) -> OperationResult:
+    def follow(self, operation: Operation, reader: EventLogReader) -> OperationResult:
         """Start the operation's container, forward its log's events until it exits, then read its exit code.
 
         Args:
             operation: The operation the container executes.
+            reader: Forwards the container's events.
 
         Returns:
             An empty result for exit code 0; otherwise a failure naming the
@@ -90,7 +99,7 @@ class DockerRun(Run):
         except Exception as error:  # noqa: BLE001 - a container that cannot start fails its operation
             return OperationResult(error=format_exception(error))
         try:
-            self.forward_log(container, operation)
+            self.forward_log(container, reader)
             status_code = container.wait().get("StatusCode", 1)
         except Exception as error:  # noqa: BLE001 - losing the container fails its operation, never the run
             return OperationResult(error=format_exception(error))
@@ -124,7 +133,7 @@ class DockerRun(Run):
             stderr=True,
         )
 
-    def forward_log(self, container: Container, operation: Operation) -> None:
+    def forward_log(self, container: Container, reader: EventLogReader) -> None:
         """Forward the operation's events from the container's log until the log ends.
 
         A stream that breaks is logged and ends the forwarding: the exit code,
@@ -132,9 +141,8 @@ class DockerRun(Run):
 
         Args:
             container: The running container.
-            operation: The operation it executes.
+            reader: Forwards the container's events.
         """
-        reader = EventLogReader(operation.id, label=f"container {container.short_id}")
         try:
             for chunk in container.logs(stream=True, follow=True, stdout=False, stderr=True):
                 reader.feed(chunk)

@@ -6,7 +6,8 @@ inline``, so the operation resolves its upstreams from their destinations
 without recomputing them. The pod reports its operation's progress as
 ``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
 pod runs; the host authors the operation's terminal event itself, from the
-Job's status, so an operation whose pod dies without a word still ends.
+Job's status and on the last attempt the pod reported, so an operation whose
+pod dies without a word, or mid-retry, still ends.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from interloper.errors import RunnerError, format_exception
 from interloper.events import EventLogReader
@@ -43,18 +44,22 @@ class KubernetesRun(Run):
 
     Following a Job blocks, so each one is followed on a thread of the run's
     polling pool. The Job's status decides the verdict; the pod's log is
-    forwarded alongside on a thread of its own, given a few seconds after the
-    verdict to deliver the pod's last events, and abandoned past them: a pod
-    lost with its node can leave a log stream open that never ends.
+    forwarded alongside on a thread of its own, given ``log_grace`` seconds
+    after the verdict to deliver the pod's last events, and stopped past them:
+    a pod lost with its node can leave a log stream open that never ends, and
+    an event arriving after the verdict would contradict it.
     """
 
     runner: KubernetesRunner
     reports_progress = False
+    batch: client.BatchV1Api
+    core: client.CoreV1Api
+    log_grace: ClassVar[float] = 5.0
 
     def __init__(
         self, runner: KubernetesRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
     ) -> None:
-        """Connect to the cluster and open a polling pool sized to the runner's capacity.
+        """Open a polling pool sized to the runner's capacity.
 
         Args:
             runner: The runner this is a run of.
@@ -63,13 +68,16 @@ class KubernetesRun(Run):
             metadata: Run-level metadata, carrying the ``run_id``.
         """
         super().__init__(runner, dag, window, metadata)
+        self.polling = ThreadPoolExecutor(max_workers=runner.max_jobs)
+
+    async def open(self) -> None:
+        """Connect to the cluster: in-cluster when the host runs in a pod, from the kubeconfig otherwise."""
         try:
             config.load_incluster_config()
         except config.ConfigException:
             config.load_kube_config()
         self.batch = client.BatchV1Api()
         self.core = client.CoreV1Api()
-        self.polling = ThreadPoolExecutor(max_workers=runner.max_jobs)
 
     async def execute(self, operation: Operation) -> OperationResult:
         """Run the operation in its own Job, followed on the polling pool.
@@ -78,17 +86,21 @@ class KubernetesRun(Run):
             operation: The operation to execute.
 
         Returns:
-            Its result.
+            Its result, recorded on the last attempt the pod reported.
         """
+        reader = EventLogReader(operation.id, label=f"job {self.name(operation)}")
         # The child continues the run's trace, which only this context carries onto the pool thread.
-        follow = partial(contextvars.copy_context().run, self.follow, operation)
-        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+        follow = partial(contextvars.copy_context().run, self.follow, operation, reader)
+        result = await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+        self.state.advance(operation, reader.attempt)
+        return result
 
-    def follow(self, operation: Operation) -> OperationResult:
+    def follow(self, operation: Operation, reader: EventLogReader) -> OperationResult:
         """Create the operation's Job, forward its pod's events, and wait for the Job's verdict.
 
         Args:
             operation: The operation the Job executes.
+            reader: Forwards the pod's events.
 
         Returns:
             An empty result when the Job succeeded; otherwise a failure naming
@@ -100,7 +112,7 @@ class KubernetesRun(Run):
         except Exception as error:  # noqa: BLE001 - a Job that cannot be created fails its operation
             return OperationResult(error=format_exception(error))
         finished = threading.Event()
-        forwarding = threading.Thread(target=self.forward_log, args=(name, operation, finished), daemon=True)
+        forwarding = threading.Thread(target=self.forward_log, args=(name, reader, finished), daemon=True)
         forwarding.start()
         try:
             succeeded = self.wait(name)
@@ -108,7 +120,8 @@ class KubernetesRun(Run):
             return OperationResult(error=format_exception(error))
         finally:
             finished.set()
-            forwarding.join(timeout=5.0)
+            forwarding.join(timeout=self.log_grace)
+            reader.stop()
         if succeeded:
             return OperationResult()
         return OperationResult(error=format_exception(RunnerError(f"Job {name} failed")))
@@ -142,7 +155,7 @@ class KubernetesRun(Run):
             return False
         return None
 
-    def forward_log(self, name: str, operation: Operation, finished: threading.Event) -> None:
+    def forward_log(self, name: str, reader: EventLogReader, finished: threading.Event) -> None:
         """Forward the operation's events from the Job's pod log until the log ends.
 
         A stream that breaks is logged and ends the forwarding: the Job's
@@ -150,13 +163,12 @@ class KubernetesRun(Run):
 
         Args:
             name: The Job's name.
-            operation: The operation it executes.
+            reader: Forwards the pod's events.
             finished: Set once the Job's verdict is known.
         """
         pod = self.pod(name, finished)
         if pod is None:
             return
-        reader = EventLogReader(operation.id, label=f"pod {pod}")
         try:
             stream = self.core.read_namespaced_pod_log(
                 name=pod, namespace=self.runner.namespace, container="interloper", follow=True, _preload_content=False
@@ -170,6 +182,10 @@ class KubernetesRun(Run):
     def pod(self, name: str, finished: threading.Event) -> str | None:
         """Wait for the Job's pod to start.
 
+        The pods are listed once more after the verdict: a pod that fails right
+        after its image pull can go from ``Pending`` to ``Failed`` between two
+        polls, and its log still holds the events saying why.
+
         Args:
             name: The Job's name.
             finished: Set once the Job's verdict is known, which ends the wait.
@@ -177,7 +193,8 @@ class KubernetesRun(Run):
         Returns:
             The pod's name, or ``None`` when the Job finished without one starting.
         """
-        while not finished.is_set():
+        while True:
+            last = finished.is_set()
             try:
                 pods = self.core.list_namespaced_pod(namespace=self.runner.namespace, label_selector=f"job-name={name}")
             except Exception:
@@ -186,8 +203,9 @@ class KubernetesRun(Run):
                 for pod in pods.items:
                     if pod.status is not None and pod.status.phase in _STARTED:
                         return pod.metadata.name
+            if last:
+                return None
             finished.wait(self.runner.poll_interval)
-        return None
 
     def job(self, operation: Operation, name: str) -> client.V1Job:
         """The Job that runs the operation's mini-DAG, once, in the runner's pod settings.

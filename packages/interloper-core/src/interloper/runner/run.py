@@ -12,12 +12,13 @@ from typing_extensions import Self
 
 from interloper.errors import PartitionError, RunnerError, format_exception
 from interloper.events import EventBus, EventType
+from interloper.operation.base import OperationResult
 from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.runner.state import RunState
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
-    from interloper.operation.base import Operation, OperationResult
+    from interloper.operation.base import Operation
     from interloper.partitioning.base import PartitionWindow
     from interloper.runner.base import Runner
 
@@ -29,9 +30,9 @@ class Run(ABC):
 
     A runner is configuration; a run is made from it for one DAG and one
     window, walks the DAG once and is closed. Each kind of run says where an
-    operation executes (`execute`) and what it holds while the run lasts (its
-    attributes, released by `close`); the walk, the run's own lifecycle events
-    and its result are the same for every kind.
+    operation executes (`execute`) and what it holds while the run lasts
+    (acquired by `open`, released by `close`); the walk, the run's own
+    lifecycle events and its result are the same for every kind.
 
     ``reports_progress`` is off for a run whose operations execute in a child
     process that reports its own starts and retries.
@@ -82,9 +83,9 @@ class Run(ABC):
         result is recorded as it lands. Under ``fail_fast`` nothing new starts
         once an operation failed; what is in flight always finishes. An
         ``execute`` that raises, rather than returning a failed result, is a
-        fault of the run itself and becomes the run's error, as is one raised
-        while draining; either way the run still ends, its pending operations
-        canceled.
+        fault of the run itself and becomes the run's error, as is a failure to
+        `open` or one raised while draining; either way the run still ends, its
+        pending operations canceled.
 
         Returns:
             The run's result.
@@ -92,6 +93,7 @@ class Run(ABC):
         self.start()
         inflight: dict[asyncio.Task[OperationResult], Operation] = {}
         try:
+            await self.open()
             await self._schedule(inflight)
         except Exception as fault:  # noqa: BLE001 - a fault of the run itself becomes the run's error
             self.fault = fault
@@ -142,7 +144,8 @@ class Run(ABC):
     ) -> None:
         """Record what each finished task's operation came to; a task that raised is the run's fault.
 
-        A canceled task carries no result and no fault: it is skipped.
+        A task canceled from within (an operation letting a ``CancelledError``
+        escape) fails its operation: left running, it would stall the walk.
 
         Args:
             finished: The tasks that finished.
@@ -151,6 +154,7 @@ class Run(ABC):
         for task in finished:
             operation = inflight.pop(task)
             if task.cancelled():
+                self.state.finish(operation, OperationResult(error=f"Operation '{operation.key}' was canceled"))
                 continue
             fault = task.exception()
             if fault is None:
@@ -235,6 +239,14 @@ class Run(ABC):
 
         Returns:
             Its result.
+        """
+
+    async def open(self) -> None:  # noqa: B027 - a run holding nothing acquires nothing
+        """Acquire what the run holds once its lifecycle has started; nothing by default.
+
+        Called inside the walk, so a failure to acquire (a daemon or a cluster
+        out of reach) fails the run with its events instead of raising before
+        any is emitted.
         """
 
     async def close(self) -> None:  # noqa: B027 - a run holding nothing releases nothing

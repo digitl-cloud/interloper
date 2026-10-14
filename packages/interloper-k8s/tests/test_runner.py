@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
+import threading
+import time
 from collections.abc import Iterator
 from typing import Any
 
 import interloper as il
 import pytest
 import urllib3
-from interloper.events import Event, EventType
+from interloper.events import Event, EventBus, EventType
 from interloper.events.stderr import EVENT_LINE_PREFIX
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
 from interloper.runner import ExecutionStatus, RunState
@@ -32,6 +35,8 @@ class FakeCluster:
         pod_starts: bool = True,
         broken: bool = False,
         creatable: bool = True,
+        pending_until_verdict: bool = False,
+        log_delay: float = 0.0,
     ) -> None:
         """Script the cluster.
 
@@ -41,6 +46,9 @@ class FakeCluster:
             pod_starts: Whether the Job's pod ever starts.
             broken: Whether the log stream breaks after the chunks.
             creatable: Whether creating the Job succeeds.
+            pending_until_verdict: Whether the pod reads ``Pending`` until the
+                Job's verdict has been read, the way a pod failing at once does.
+            log_delay: Seconds the log stream stalls before yielding its chunks.
         """
         self.chunks = chunks or []
         self.succeeded = succeeded
@@ -48,6 +56,10 @@ class FakeCluster:
         self.broken = broken
         self.creatable = creatable
         self.created: list[V1Job] = []
+        self.pending_until_verdict = pending_until_verdict
+        self.pod_listed = threading.Event()
+        self.verdict_read = threading.Event()
+        self.log_delay = log_delay
 
     def create_namespaced_job(self, namespace: str, body: V1Job) -> None:
         if not self.creatable:
@@ -55,14 +67,22 @@ class FakeCluster:
         self.created.append(body)
 
     def read_namespaced_job_status(self, name: str, namespace: str) -> V1Job:
+        if self.pending_until_verdict:
+            self.pod_listed.wait(timeout=5.0)
+            self.verdict_read.set()
         return V1Job(status=V1JobStatus(succeeded=1) if self.succeeded else V1JobStatus(failed=1))
 
     def list_namespaced_pod(self, namespace: str, label_selector: str) -> V1PodList:
         if not self.pod_starts:
             return V1PodList(items=[])
-        return V1PodList(items=[V1Pod(metadata=V1ObjectMeta(name="pod-1"), status=V1PodStatus(phase="Succeeded"))])
+        phase = "Succeeded" if self.succeeded else "Failed"
+        if self.pending_until_verdict and not self.verdict_read.is_set():
+            phase = "Pending"
+            self.pod_listed.set()
+        return V1PodList(items=[V1Pod(metadata=V1ObjectMeta(name="pod-1"), status=V1PodStatus(phase=phase))])
 
     def read_namespaced_pod_log(self, **kwargs: Any) -> Iterator[bytes]:
+        time.sleep(self.log_delay)
         yield from self.chunks
         if self.broken:
             raise urllib3.exceptions.ProtocolError("stream reset")
@@ -106,8 +126,8 @@ def connect(monkeypatch: pytest.MonkeyPatch) -> Any:
     return install
 
 
-def _event_line(event_type: EventType, component_id: str = "asset-1") -> bytes:
-    event = Event(type=event_type, metadata={"component_id": component_id, "run_id": "run-1"})
+def _event_line(event_type: EventType, component_id: str = "asset-1", **metadata: Any) -> bytes:
+    event = Event(type=event_type, metadata={"component_id": component_id, "run_id": "run-1", **metadata})
     return (EVENT_LINE_PREFIX + event.to_json() + "\n").encode()
 
 
@@ -143,6 +163,55 @@ class TestJobRun:
         [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
         assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
         assert result.executions["asset-1"].error == "RunnerError: Job interloper-run-run-1-asset-1 failed"
+
+    async def test_a_pod_that_fails_right_after_pending_still_delivers_its_events(self, connect, asset):
+        connect(chunks=[_event_line(EventType.ASSET_DATA_FAILED)], succeeded=False, pending_until_verdict=True)
+        events: list[Event] = []
+        runner = KubernetesRunner(image="img", poll_interval=0.2, on_event=events.append)
+
+        await runner.run(il.DAG(asset), metadata={"run_id": "run-1"})
+
+        assert EventType.ASSET_DATA_FAILED in [event.type for event in events]
+
+    async def test_a_pod_that_dies_mid_retry_ends_its_last_attempt(self, connect, asset):
+        connect(chunks=[_event_line(EventType.OPERATION_STARTED, attempt=2)], succeeded=False)
+
+        _, events = await _run(asset)
+
+        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
+        assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED, attempt=2)
+
+    async def test_a_log_still_streaming_past_the_grace_is_dropped(self, connect, asset, monkeypatch):
+        monkeypatch.setattr(KubernetesRun, "log_grace", 0.05)
+        connect(chunks=[_event_line(EventType.OPERATION_STARTED, attempt=2)], succeeded=False, log_delay=0.3)
+        events: list[Event] = []
+        EventBus.subscribe(events.append)
+        try:
+            await KubernetesRunner(image="img", poll_interval=0.0).run(il.DAG(asset), metadata={"run_id": "run-1"})
+            await asyncio.sleep(0.5)
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(events.append)
+
+        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
+        assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
+        assert EventType.OPERATION_STARTED not in [event.type for event in events]
+
+    async def test_an_unreachable_cluster_fails_the_run_with_its_events(self, monkeypatch, asset):
+        def unreachable() -> None:
+            raise config.ConfigException("no cluster")
+
+        monkeypatch.setattr(config, "load_incluster_config", unreachable)
+        monkeypatch.setattr(config, "load_kube_config", unreachable)
+        events: list[Event] = []
+
+        result = await KubernetesRunner(image="img", on_event=events.append).run(
+            il.DAG(asset), metadata={"run_id": "run-1"}
+        )
+
+        assert result.status is ExecutionStatus.FAILED
+        assert result.executions["asset-1"].status is ExecutionStatus.CANCELED
+        assert [event.type for event in events][-1] is EventType.RUN_FAILED
 
     async def test_a_job_that_cannot_be_created_is_a_failed_operation(self, connect, asset):
         connect(creatable=False)

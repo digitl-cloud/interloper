@@ -59,7 +59,10 @@ class EventLogReader:
     child's own ``RUN_*`` events and events about other operations (the
     read-only upstreams of its mini-DAG) are dropped; a line that is not an
     event is logged at debug level. A forwarded event keeps its id, so it
-    persists idempotently.
+    persists idempotently. ``attempt`` follows the last attempt the
+    operation's events report, the one a verdict authored by the host belongs to:
+    a retry reaches the next attempt as soon as it is announced, before that
+    attempt starts. Once `stop` is called nothing more is forwarded.
     """
 
     def __init__(self, component_id: str, label: str) -> None:
@@ -72,6 +75,8 @@ class EventLogReader:
         self.component_id = component_id
         self.label = label
         self.pending = ""
+        self.attempt = 1
+        self.stopped = False
 
     def feed(self, chunk: bytes) -> None:
         """Read a chunk of the log, forwarding every complete line it ends.
@@ -83,6 +88,10 @@ class EventLogReader:
         *lines, self.pending = self.pending.split("\n")
         for line in lines:
             self._read(line)
+
+    def stop(self) -> None:
+        """Stop forwarding once the verdict is known: whatever the log still holds is dropped."""
+        self.stopped = True
 
     def close(self) -> None:
         """Read the last line, which the log may end without a newline."""
@@ -96,7 +105,7 @@ class EventLogReader:
             line: One line of the log.
         """
         line = line.rstrip()
-        if not line:
+        if not line or self.stopped:
             return
         event = Event.from_log_line(line)
         if event is None:
@@ -104,4 +113,7 @@ class EventLogReader:
             return
         if event.type in _RUN_EVENTS or event.metadata.get("component_id") not in (None, self.component_id):
             return
+        if isinstance(attempt := event.metadata.get("attempt"), int):
+            reached = attempt + 1 if event.type is EventType.OPERATION_RETRIED else attempt
+            self.attempt = max(self.attempt, reached)
         EventBus.emit_event(event)

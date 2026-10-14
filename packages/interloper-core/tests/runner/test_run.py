@@ -96,6 +96,46 @@ class TestWalk:
         with pytest.raises(RuntimeError, match="runner bug"):
             await FaultyRunner(reraise=True).run(_dag())
 
+    async def test_an_operation_canceled_from_within_fails_instead_of_stalling_the_walk(self):
+        class Canceling(ScriptedRun):
+            async def execute(self, operation: Operation) -> OperationResult:
+                raise asyncio.CancelledError
+
+        class CancelingRunner(il.AsyncRunner):
+            Run = Canceling
+
+        events: list[Event] = []
+        result = await CancelingRunner(on_event=events.append).run(_dag())
+
+        statuses = {info.component_key: info.status for info in result.executions.values()}
+        assert statuses == {"first": ExecutionStatus.FAILED, "second": ExecutionStatus.CANCELED}
+        assert result.executions["first"].error == "Operation 'first' was canceled"
+        run_failed = next(event for event in events if event.type is EventType.RUN_FAILED)
+        assert "circular" not in str(run_failed.metadata.get("error"))
+
+    async def test_a_run_that_cannot_open_fails_with_its_lifecycle_events(self):
+        class Unreachable(ScriptedRun):
+            async def open(self) -> None:
+                raise ConnectionError("cluster unreachable")
+
+        class UnreachableRunner(il.AsyncRunner):
+            Run = Unreachable
+
+        events: list[Event] = []
+        result = await UnreachableRunner(on_event=events.append).run(_dag())
+
+        assert result.status is ExecutionStatus.FAILED
+        assert ScriptedRun.executed == []
+        assert [event.type for event in events] == [
+            EventType.RUN_STARTED,
+            EventType.OPERATION_QUEUED,
+            EventType.OPERATION_QUEUED,
+            EventType.OPERATION_CANCELED,
+            EventType.OPERATION_CANCELED,
+            EventType.RUN_FAILED,
+        ]
+        assert events[-1].metadata["error"] == "ConnectionError: cluster unreachable"
+
     async def test_a_failing_close_does_not_mask_the_result(self):
         class Leaky(ScriptedRun):
             async def close(self) -> None:

@@ -22,7 +22,7 @@ class RunState:
     a deterministic id. With ``reports_progress`` off, a start and a retry are
     recorded without an event: the operation executes in a child process that
     reports its own, while every verdict is still recorded, and its terminal
-    event authored, here.
+    event authored, here, on the last attempt the child reached (`advance`).
 
     Event ids derive from ``(run_id, component_id, event_type, attempt)``, so
     the *same* logical event collapses to one row when more than one party
@@ -141,6 +141,17 @@ class RunState:
             message = f"Operation '{operation.key}' failed on attempt {info.attempt}, retrying: {error}"
             self._emit(EventType.OPERATION_RETRIED, operation, message, error=error)
         info.attempt += 1
+
+    def advance(self, operation: Operation, attempt: int) -> None:
+        """Catch up with the attempts a child process made on its own, so its verdict lands on the last one.
+
+        Args:
+            operation: The operation the child executed.
+            attempt: The last attempt the child reported; an earlier one than
+                already recorded changes nothing.
+        """
+        info = self.executions[operation.id]
+        info.attempt = max(info.attempt, attempt)
 
     def finish(self, operation: Operation, result: OperationResult) -> None:
         """Record what an operation came to.
