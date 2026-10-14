@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from interloper.component import Component
 from interloper.destination.context import IOContext
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, RepresentationError
 from interloper.partitioning.base import Partition
 from interloper.representation import TableData
 
@@ -88,22 +88,28 @@ class Destination(Component):
             self.write_partition(context, partition, chunk)
 
     def read(self, context: IOContext) -> Any:
-        """Read the data the context covers, as one table.
+        """Read the data the context covers, a window of tables as one table.
 
         Every partition in ``context.partitions`` is read through `read_partition`; several are
         joined through the data's representation, so a window comes back as one table in whatever
-        type the destination holds natively.
+        type the destination holds natively. Data no representation recognises (objects a file
+        destination pickled) cannot be joined, and comes back as one value per partition.
 
         Args:
             context: IO context carrying the target asset, the window and the effective schema.
 
         Returns:
-            One table, whatever the window.
+            One table, whatever the window; a list of the partitions' values, in window order, for
+            a window of non-tabular data.
         """
         parts = [self.read_partition(context, partition) for partition in context.partitions]
         if len(parts) == 1:
             return parts[0]
-        return TableData.from_data(parts[0]).concat(parts[1:])
+        try:
+            table = TableData.from_data(parts[0])
+        except RepresentationError:
+            return parts
+        return table.concat(parts[1:])
 
     @abstractmethod
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:

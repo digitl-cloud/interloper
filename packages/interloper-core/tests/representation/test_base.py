@@ -4,7 +4,7 @@ import pytest
 from pydantic import Field
 
 from interloper.errors import RepresentationError, SchemaError
-from interloper.representation import REPRESENTATIONS, RowsRepresentation, TableData
+from interloper.representation import REPRESENTATIONS, Representation, RowsRepresentation, TableData
 from interloper.schema import Schema
 
 
@@ -198,6 +198,38 @@ class TestConcat:
     def test_rows_concat_flattens_in_order(self):
         rows = RowsRepresentation().concat([[{"a": 1}], [], [{"a": 2}, {"a": 3}]])
         assert rows == [{"a": 1}, {"a": 2}, {"a": 3}]
+
+    def test_a_representation_without_its_own_concat_joins_through_rows(self):
+        class Tuples(Representation):
+            """Rows held in a tuple, declaring no ``concat`` of its own."""
+
+            key = "tuples"
+
+            def matches(self, data):
+                return isinstance(data, tuple)
+
+            def to_rows(self, data):
+                return list(data)
+
+            def from_rows(self, rows):
+                return tuple(rows)
+
+            def columns(self, data):
+                return []
+
+            def filter_eq(self, data, column, value):
+                return data
+
+            def filter_range(self, data, column, start, end):
+                return data
+
+            def reconcile(self, data, schema, *, strict=False):
+                return data
+
+            def infer(self, data):
+                return Schema
+
+        assert Tuples().concat([({"a": 1},), (), ({"a": 2},)]) == ({"a": 1}, {"a": 2})
 
     def test_table_concat_appends_the_others(self):
         table = TableData.from_data([{"a": 1}])

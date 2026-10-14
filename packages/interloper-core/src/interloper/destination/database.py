@@ -79,9 +79,35 @@ class DatabaseDestination(Destination):
 
     The destination instance holds no table identity and is shared across
     assets: ``asset.table`` and ``asset.dataset`` name the target at call time.
+
+    The calls run the other way round from `Destination`: `write` and `read`
+    are the contract and `write_partition`/`read_partition` derive from them,
+    a partition being a window of one. A subclass overriding a per-partition
+    hook overrides its window method too, or the class is refused: the base's
+    window method would never call the override.
     """
 
     dialect: ClassVar[str | None] = None
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse a subclass that overrides a per-partition hook without its window method.
+
+        Args:
+            **kwargs: Forwarded to ``super().__init_subclass__``.
+
+        Raises:
+            TypeError: If the subclass overrides ``write_partition`` without
+                ``write``, or ``read_partition`` without ``read``.
+        """
+        super().__init_subclass__(**kwargs)
+        for hook, method in (("write_partition", "write"), ("read_partition", "read")):
+            overrides_hook = getattr(cls, hook) is not getattr(DatabaseDestination, hook)
+            overrides_method = getattr(cls, method) is not getattr(DatabaseDestination, method)
+            if overrides_hook and not overrides_method:
+                raise TypeError(
+                    f"{cls.__name__} overrides {hook} but not {method}: a database destination reads and "
+                    f"writes through {method}, which never calls {hook}. Override {method} instead."
+                )
 
     # -- Backend hooks ---------------------------------------------------------
 

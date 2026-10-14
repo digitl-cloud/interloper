@@ -6,6 +6,7 @@
 
 import datetime
 import importlib
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import pytest
@@ -228,22 +229,25 @@ class TestReadDispatch:
             {"date": "2026-09-09"},
         ]
 
-    def test_a_window_of_non_tabular_data_is_an_error(self):
-        from interloper.errors import RepresentationError
+    def test_a_window_of_non_tabular_data_reads_as_one_value_per_partition(self):
+        @dataclass(frozen=True)
+        class Box:
+            key: str
 
         class Opaque(il.Destination):
             def write_partition(self, context, partition, data):
                 return None
 
             def read_partition(self, context, partition):
-                return object()
+                return Box(partition.key)
 
             def partition_row_counts(self, context):
                 return {}
 
         window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 8))
-        with pytest.raises(RepresentationError, match="object"):
-            Opaque().read(IOContext(asset=partitioned_asset(), window=window))
+        result = Opaque().read(IOContext(asset=partitioned_asset(), window=window))
+
+        assert result == [Box("2026-09-07"), Box("2026-09-08")]
 
 
 class TestHookContract:

@@ -65,7 +65,9 @@ Pickled Python objects, one file per partition:
 Same layout as `CSVDestination`, but it stores whatever the asset returned, tabular or not, so
 use it for arbitrary objects, and `CSVDestination` when you want to read the files yourself.
 Window writes are split per partition where the data's representation allows it; a non-tabular
-object, which nothing can slice, is stored whole under each partition of the window.
+object, which nothing can slice, is stored whole under each partition of the window. A window
+read joins tables into one; non-tabular objects, which nothing can join, come back as a list with
+one value per partition, oldest first.
 
 ### MemoryDestination
 
@@ -216,6 +218,11 @@ Behaviour the base class owns:
   carry daily dates.
 - **Reads are native**: `read` hands back what `select` returned, a DataFrame from BigQuery, rows
   from a row store. A consumer indifferent to the destination reads `il.Upstream.rows`.
+- **The window methods are the contract**: `write` and `read` take a whole window, and
+  `write_partition`/`read_partition` call them over a partition's own window, the other way round
+  from `Destination`. A backend may override a per-partition hook too, but only together with its
+  window method; a subclass overriding `read_partition` or `write_partition` alone is refused at
+  class definition, since the base's `read` and `write` would never call it.
 - **Data arrives conformed**: the asset's conform step already put the data in the effective
   schema's canonical types, so a backend never re-validates or coerces before writing.
 - A warning is emitted when the partition column is missing from written data, since

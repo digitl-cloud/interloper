@@ -99,6 +99,27 @@ def make_io_context(asset: il.Asset, window=None, schema=None) -> IOContext:  # 
     return IOContext(asset=asset, window=PartitionWindow.of(window), schema=schema)
 
 
+class TestHookDirection:
+    """A database's contract is the window methods; the per-partition hooks derive from them."""
+
+    def test_overriding_only_a_partition_hook_is_refused(self):
+        with pytest.raises(TypeError, match=r"overrides read_partition but not read"):
+
+            class Partitionwise(RecordingDatabase):
+                def read_partition(self, context, partition):
+                    return []
+
+    def test_overriding_a_partition_hook_with_its_window_method_is_accepted(self):
+        class Batched(RecordingDatabase):
+            def write(self, context, data):
+                return None
+
+            def write_partition(self, context, partition, data):
+                return None
+
+        assert Batched.write_partition is not DatabaseDestination.write_partition
+
+
 class TestWrite:
     """Partition-aware write dispatch."""
 

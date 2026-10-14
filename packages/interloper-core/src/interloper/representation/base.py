@@ -168,13 +168,16 @@ class Representation(ABC):
             data: The table to infer from, in this representation's own type.
         """
 
-    @abstractmethod
     def concat(self, tables: list[Any]) -> Any:
-        """Return several tables as one, in order.
+        """Return several tables as one, in order; through rows unless the representation joins natively.
 
         Args:
             tables: The tables to join, all in this representation's own type, at least one.
+
+        Returns:
+            One table, in this representation's own type.
         """
+        return self.from_rows([row for table in tables for row in self.to_rows(table)])
 
 
 @dataclass(frozen=True)
