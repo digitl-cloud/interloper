@@ -39,7 +39,7 @@ exercises the whole span catalogue rather than the same two spans five times:
 
 One successful run produces 34 spans covering every span the framework emits
 except `interloper.dag_spec.reconstruct`, which only appears with the
-multiprocess or container runners.
+container runners.
 
 The dashboard has three rows: **Runs** (throughput, success rate, duration
 percentiles), **Assets** (per-asset outcomes and p95 duration, plus a table of

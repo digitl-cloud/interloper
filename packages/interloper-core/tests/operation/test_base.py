@@ -169,7 +169,7 @@ class TestRunnerDrivesOperations:
 
         assert result.status is ExecutionStatus.COMPLETED
         info = result.executions[operation.id]
-        assert info.effects == OperationResult(config={"token": "NEW"}, state={"refreshed": True})
+        assert info.result == OperationResult(config={"token": "NEW"}, state={"refreshed": True})
         assert {event.type for event in events} >= {il.EventType.RUN_STARTED, il.EventType.RUN_COMPLETED}
 
     async def test_failure_is_curated_and_traceback_suppressed(self):
@@ -182,7 +182,8 @@ class TestRunnerDrivesOperations:
         info = result.executions[operation.id]
         assert info.error == "curated"
         assert info.traceback is None
-        assert info.effects == OperationResult(error="curated", state={"failed": True})
+        assert info.result is not None
+        assert (info.result.error, info.result.state) == ("curated", {"failed": True})
         assert all("hunter2" not in str(event.metadata) for event in events)
 
     async def test_fail_fast_abort_defers_detail_to_the_operation_event(self):
@@ -219,8 +220,8 @@ class TestRunnerDrivesOperations:
         result = await il.AsyncRunner().run(il.DAG(asset, operation))
 
         assert result.status is ExecutionStatus.COMPLETED
-        assert result.executions[asset.id].effects == OperationResult()
-        effects = result.executions[operation.id].effects
+        assert result.executions[asset.id].result == OperationResult()
+        effects = result.executions[operation.id].result
         assert effects is not None and effects.config == {"token": "NEW"}
 
 
@@ -228,3 +229,89 @@ class TestWorkloadValidation:
     def test_dag_rejects_non_workloads(self):
         with pytest.raises(DAGError, match="Expected a workload"):
             il.DAG(object())  # ty: ignore[invalid-argument-type]
+
+
+class _Flaky(Operation):
+    """Fails a set number of times, then succeeds with an effect."""
+
+    failures: int = 0
+    retry: il.RetryPolicy | None = il.RetryPolicy(max_attempts=3, delay=0.0, jitter=0.0)
+
+    async def execute(self, context: OperationContext) -> OperationResult:
+        if self.failures > 0:
+            self.failures -= 1
+            raise ConnectionError("transient")
+        return OperationResult(state={"done": True})
+
+
+class _Curated(Operation):
+    """Always fails, and curates its failure."""
+
+    capture_traceback: ClassVar[bool] = False
+
+    async def execute(self, context: OperationContext) -> OperationResult:
+        raise ValueError("secret in here")
+
+    def failure(self, error: Exception) -> OperationResult:
+        return OperationResult(error="curated", state={"failed": True})
+
+
+class _Attempts:
+    """Records what the attempt loop reports, in order."""
+
+    def __init__(self) -> None:
+        self.reported: list[str] = []
+
+    def retry(self, error: str) -> None:
+        self.reported.append(f"retry: {error}")
+
+    def restart(self) -> None:
+        self.reported.append("restart")
+
+
+async def _execute(operation: Operation, attempts: _Attempts) -> OperationResult:
+    return await OperationResult.from_execution(
+        operation, OperationContext(), on_retry=attempts.retry, on_restart=attempts.restart
+    )
+
+
+class TestFromExecution:
+    async def test_success_returns_the_operations_effects(self):
+        attempts = _Attempts()
+        result = await _execute(_Flaky(), attempts)
+        assert result.succeeded
+        assert result.state == {"done": True}
+        assert attempts.reported == []
+
+    async def test_a_retryable_failure_is_reported_then_restarted(self):
+        attempts = _Attempts()
+        result = await _execute(_Flaky(failures=2), attempts)
+        assert result.succeeded
+        assert attempts.reported == ["retry: ConnectionError: transient", "restart"] * 2
+
+    async def test_an_exhausted_budget_returns_the_failure(self):
+        attempts = _Attempts()
+        result = await _execute(_Flaky(failures=5), attempts)
+        assert not result.succeeded
+        assert result.error == "ConnectionError: transient"
+        assert attempts.reported == ["retry: ConnectionError: transient", "restart"] * 2
+        assert isinstance(result.exception, ConnectionError)
+        assert result.traceback is not None and "ConnectionError" in result.traceback
+
+    async def test_an_error_the_operation_declines_is_not_retried(self):
+        class Declining(_Flaky):
+            def retryable(self, error: Exception) -> bool:
+                return False
+
+        attempts = _Attempts()
+        result = await _execute(Declining(failures=1), attempts)
+        assert not result.succeeded
+        assert attempts.reported == []
+
+    async def test_the_failure_hook_curates_and_the_traceback_can_be_withheld(self):
+        result = await _execute(_Curated(), _Attempts())
+        assert (result.error, result.state, result.traceback) == ("curated", {"failed": True}, None)
+        assert isinstance(result.exception, ValueError)
+
+    def test_the_exception_is_not_part_of_equality(self):
+        assert OperationResult(error="x", exception=ValueError("a")) == OperationResult(error="x")

@@ -10,7 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import RunnerError
 from interloper.events import Event
-from interloper.runner.async_runner import AsyncRunner
+from interloper.runner.async_runner import AsyncRunner, InProcessRun
 from interloper.runner.results import ExecutionStatus
 
 
@@ -198,12 +198,9 @@ class TestMachineryErrors:
         """Make the DAG report nothing ready while the run stays incomplete.
 
         Args:
-            monkeypatch: Fixture used to neutralize ``ready_operations``.
+            monkeypatch: Fixture used to neutralize ``ready``.
         """
-        monkeypatch.setattr(
-            "interloper.runner.state.RunState.ready_operations",
-            property(lambda self: []),
-        )
+        monkeypatch.setattr("interloper.runner.state.RunState.ready", property(lambda self: []))
 
     @staticmethod
     def _dag() -> il.DAG:
@@ -228,37 +225,19 @@ class TestMachineryErrors:
             await AsyncRunner(reraise=True).run(self._dag())
 
     async def test_a_task_level_exception_aborts_the_walk(self, monkeypatch: pytest.MonkeyPatch):
-        # Operation failures are absorbed by ``_execute_operation``; an
-        # exception escaping the task means the scheduling machinery broke.
+        # Operation failures are returned as results; an exception escaping
+        # ``execute`` means the run's own machinery broke.
         il.MemoryDestination.clear()
 
-        async def exploding(self, operation, window=None):
+        async def exploding(self, operation):
             raise MemoryError("scheduler bug")
 
-        monkeypatch.setattr(AsyncRunner, "_execute_operation", exploding)
+        monkeypatch.setattr(InProcessRun, "execute", exploding)
 
         result = await AsyncRunner(reraise=False).run(self._dag())
 
         assert result.status is ExecutionStatus.FAILED
         assert result.executions["solo"].status is ExecutionStatus.CANCELED
-
-    async def test_a_teardown_failure_does_not_mask_the_result(self):
-        il.MemoryDestination.clear()
-
-        class BrokenTeardown(AsyncRunner):
-            """Runner whose teardown hook raises."""
-
-            def _on_end(self) -> None:
-                """Fail after the walk finished.
-
-                Raises:
-                    RuntimeError: Always.
-                """
-                raise RuntimeError("teardown exploded")
-
-        result = await BrokenTeardown().run(self._dag())
-
-        assert result.status is ExecutionStatus.COMPLETED
 
     async def test_reraise_surfaces_the_original_operation_exception(self):
         il.MemoryDestination.clear()
@@ -271,45 +250,3 @@ class TestMachineryErrors:
 
         with pytest.raises(KeyError, match="missing-field"):
             await AsyncRunner(reraise=True).run(dag)
-
-    async def test_an_operation_still_listed_as_ready_is_not_scheduled_twice(
-        self, monkeypatch: pytest.MonkeyPatch
-    ):
-        il.MemoryDestination.clear()
-        release = asyncio.Event()
-        scheduled: list[str] = []
-
-        @il.asset()
-        async def quick() -> list[dict[str, Any]]:
-            return [{"x": 1}]
-
-        @il.asset()
-        async def blocking() -> list[dict[str, Any]]:
-            await asyncio.wait_for(release.wait(), timeout=5)
-            return [{"x": 1}]
-
-        dag = il.DAG(
-            quick(id="quick", destinations=[il.MemoryDestination()]),
-            blocking(id="blocking", destinations=[il.MemoryDestination()]),
-        )
-
-        # Report every non-terminal operation as ready, so ``blocking`` is
-        # still listed when the walk loops after ``quick`` lands — exactly
-        # what the resubmission guard exists for.
-        monkeypatch.setattr(
-            "interloper.runner.state.RunState.ready_operations",
-            property(lambda self: [o for o in self.dag.operations if not self.executions[o.id].is_terminal]),
-        )
-        original = AsyncRunner._execute_operation
-
-        async def recording(self, operation, window=None):
-            scheduled.append(operation.id)
-            return await original(self, operation, window)
-
-        monkeypatch.setattr(AsyncRunner, "_execute_operation", recording)
-        asyncio.get_running_loop().call_later(0.3, release.set)
-
-        result = await AsyncRunner(max_workers=4).run(dag)
-
-        assert sorted(scheduled) == ["blocking", "quick"]
-        assert result.status is ExecutionStatus.COMPLETED

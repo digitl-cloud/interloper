@@ -37,80 +37,69 @@ _TERMINAL_STATUSES = frozenset(
 
 @dataclass
 class ExecutionInfo:
-    """Execution information for a single operation.
+    """One operation's record in a run: its status, its attempt, when it ran, and its result.
 
-    ``effects`` carries the executed operation's
-    `OperationResult` — the config and
-    state fields the platform envelope persists after the run. ``None``
-    until the node reaches a terminal state, and for skipped or canceled
-    nodes, which never executed.
-
-    ``exception`` is in-memory only and never serialized: in-process
-    runners record the original exception so ``reraise`` can re-raise it
-    faithfully; cross-process runners only have the recorded message.
+    ``result`` is set once the operation finished, either way, and carries
+    what the platform persists (its effects) and what failed (its error,
+    traceback and, in memory only, its exception). It stays ``None`` for an
+    operation skipped, canceled or still running.
     """
 
     component_id: str
     component_key: str
     status: ExecutionStatus
+    attempt: int = 1
     start_time: dt.datetime | None = None
     end_time: dt.datetime | None = None
-    error: str | None = None
-    traceback: str | None = None
-    effects: OperationResult | None = None
-    exception: Exception | None = None
+    result: OperationResult | None = None
+
+    @property
+    def error(self) -> str | None:
+        """The failure's message, ``None`` unless the operation failed."""
+        return self.result.error if self.result is not None else None
+
+    @property
+    def traceback(self) -> str | None:
+        """The failure's traceback, when one was captured."""
+        return self.result.traceback if self.result is not None else None
 
     @property
     def execution_time(self) -> float | None:
-        """Computed execution time in seconds."""
+        """Seconds between start and end, ``None`` until both are known."""
         if self.start_time and self.end_time:
             return (self.end_time - self.start_time).total_seconds()
         return None
 
-    def mark_running(self) -> None:
-        """Transition to RUNNING and record start time."""
+    @property
+    def is_terminal(self) -> bool:
+        """Whether the operation reached a final status: completed, failed, canceled or skipped."""
+        return self.status in _TERMINAL_STATUSES
+
+    def start(self) -> None:
+        """Mark the operation running, from now."""
         self.status = ExecutionStatus.RUNNING
         self.start_time = dt.datetime.now(dt.timezone.utc)
 
-    def mark_completed(self) -> None:
-        """Transition to COMPLETED and record end time."""
-        self.status = ExecutionStatus.COMPLETED
-        self.end_time = dt.datetime.now(dt.timezone.utc)
-
-    def mark_failed(self, error: str, tb: str | None = None, exception: Exception | None = None) -> None:
-        """Transition to FAILED with an error message and optional traceback.
+    def finish(self, result: OperationResult) -> None:
+        """Record what the operation came to: completed when it succeeded, failed otherwise.
 
         Args:
-            error: Error message describing the failure.
-            tb: Formatted traceback string, or ``None`` when unavailable.
-            exception: The original exception, when the runner has it
-                in-process; ``None`` for cross-process failures.
+            result: The operation's result.
         """
-        self.status = ExecutionStatus.FAILED
+        self.status = ExecutionStatus.COMPLETED if result.succeeded else ExecutionStatus.FAILED
         self.end_time = dt.datetime.now(dt.timezone.utc)
-        self.error = error
-        self.traceback = tb
-        self.exception = exception
+        self.result = result
 
-    def mark_canceled(self) -> None:
-        """Transition to CANCELED and record end time."""
+    def cancel(self) -> None:
+        """Mark the operation canceled, from now."""
         self.status = ExecutionStatus.CANCELED
         self.end_time = dt.datetime.now(dt.timezone.utc)
 
-    @property
-    def is_terminal(self) -> bool:
-        """Whether this asset has reached a final state.
-
-        Returns:
-            True if completed, failed, canceled, or skipped.
-        """
-        return self.status in _TERMINAL_STATUSES
-
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a plain dict.
+        """Serialize the record to a plain dict; the result's effects and exception stay in the process.
 
         Returns:
-            A dict representation of this execution info.
+            The record as JSON-able values.
         """
         return {
             "component_id": self.component_id,

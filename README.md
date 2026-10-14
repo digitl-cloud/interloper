@@ -151,7 +151,7 @@ dag.materialize(il.TimePartition(dt.date(2026, 1, 15)))   # default AsyncRunner
 for partition in il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 7)):   # newest first
     dag.materialize(partition)
 
-runner = il.AsyncRunner(max_workers=8, fail_fast=False, on_event=print)   # or SerialRunner, MultiProcessRunner
+runner = il.AsyncRunner(max_workers=8, fail_fast=False, on_event=print)   # or SerialRunner, DockerRunner, KubernetesRunner
 result = il.run(runner.run(dag, il.TimePartition(dt.date(2026, 1, 15))))   # il.run: sync bridge, notebook-safe
 result.status, result.failed_ids, result.executions
 ```

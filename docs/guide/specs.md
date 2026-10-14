@@ -139,8 +139,8 @@ payload = dag_spec.model_dump(mode="json")
 dag = il.DAG.from_spec(DAGSpec(**payload))
 ```
 
-It is what `MultiProcessRunner` ships to its workers and what `interloper run --format inline`
-accepts. The override map is built from the DAG's **actual** asset instances, so a parent the run
+It is what the Docker and Kubernetes runners ship to each container, and what
+`interloper run --format inline` accepts. The override map is built from the DAG's **actual** asset instances, so a parent the run
 only reads travels as its own document carrying that one asset with `enabled: false`,
 and stays read-only after the round-trip.
 

@@ -18,56 +18,63 @@ def _info(status: ExecutionStatus = ExecutionStatus.QUEUED, key: str = "source.a
 class TestExecutionInfoTransitions:
     """Each transition stamps the timestamp its status implies."""
 
-    def test_running_stamps_only_the_start(self) -> None:
+    def test_start_stamps_only_the_start(self) -> None:
         info = _info()
 
-        info.mark_running()
+        info.start()
 
         assert info.status is ExecutionStatus.RUNNING
         assert info.start_time is not None
         assert info.end_time is None
         assert info.is_terminal is False
 
-    def test_completed_stamps_the_end(self) -> None:
+    def test_a_successful_result_completes(self) -> None:
         info = _info()
-        info.mark_running()
+        info.start()
 
-        info.mark_completed()
+        info.finish(OperationResult())
 
         assert info.status is ExecutionStatus.COMPLETED
         assert info.end_time is not None
+        assert info.error is None
         assert info.is_terminal is True
 
-    def test_failed_records_the_error_and_the_original_exception(self) -> None:
+    def test_a_failed_result_fails_and_is_kept(self) -> None:
         info = _info()
         exception = ValueError("upstream 500")
+        result = OperationResult(error="upstream 500", traceback="Traceback...", exception=exception)
 
-        info.mark_failed("upstream 500", tb="Traceback...", exception=exception)
+        info.finish(result)
 
         assert info.status is ExecutionStatus.FAILED
         assert info.error == "upstream 500"
         assert info.traceback == "Traceback..."
-        # In-process runners keep the exception so ``reraise`` re-raises it faithfully.
-        assert info.exception is exception
+        # In-process runs keep the exception so ``reraise`` re-raises it faithfully.
+        assert info.result is result
+        assert info.result.exception is exception
         assert info.is_terminal is True
 
     def test_a_cross_process_failure_carries_only_its_message(self) -> None:
         info = _info()
 
-        info.mark_failed("worker died")
+        info.finish(OperationResult(error="worker died"))
 
         assert info.error == "worker died"
         assert info.traceback is None
-        assert info.exception is None
+        assert info.result is not None and info.result.exception is None
 
-    def test_canceled_is_terminal(self) -> None:
+    def test_cancel_is_terminal(self) -> None:
         info = _info()
 
-        info.mark_canceled()
+        info.cancel()
 
         assert info.status is ExecutionStatus.CANCELED
         assert info.end_time is not None
+        assert info.result is None
         assert info.is_terminal is True
+
+    def test_the_attempt_starts_at_one(self) -> None:
+        assert _info().attempt == 1
 
     @pytest.mark.parametrize(
         ("status", "terminal"),
@@ -97,7 +104,7 @@ class TestExecutionTime:
 
     def test_unknown_while_still_running(self) -> None:
         info = _info()
-        info.mark_running()
+        info.start()
 
         assert info.execution_time is None
 
@@ -111,8 +118,7 @@ class TestToDict:
     def test_carries_status_timestamps_and_error(self) -> None:
         info = _info(key="demo.a")
         info.start_time = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
-        info.mark_failed("nope", tb="tb", exception=ValueError("nope"))
-        info.effects = OperationResult(config={"x": 1})
+        info.finish(OperationResult(error="nope", config={"x": 1}, traceback="tb", exception=ValueError("nope")))
 
         payload = info.to_dict()
 
@@ -124,9 +130,17 @@ class TestToDict:
         assert payload["execution_time"] is not None
         assert payload["error"] == "nope"
         assert payload["traceback"] == "tb"
-        # ``exception`` and ``effects`` never leave the process.
-        assert "exception" not in payload
-        assert "effects" not in payload
+        # The result's effects and exception never leave the process.
+        assert set(payload) == {
+            "component_id",
+            "component_key",
+            "status",
+            "start_time",
+            "end_time",
+            "execution_time",
+            "error",
+            "traceback",
+        }
 
     def test_null_timestamps_stay_null(self) -> None:
         payload = _info().to_dict()

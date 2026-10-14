@@ -3,8 +3,7 @@
 Trace context crosses interloper's boundaries on two channels:
 
 - the run ``metadata`` dict (``traceparent`` key), which flows unchanged
-  from `Runner.run` through ``RunState`` into every event and into
-  ``MultiProcessRunner`` workers;
+  from `Runner.run` through ``RunState`` into every event;
 - the ``TRACEPARENT`` / ``TRACESTATE`` environment variables, the only
   channel into spawned processes and containers (launchers, docker/k8s
   runner children).

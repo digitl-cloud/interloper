@@ -96,7 +96,7 @@ class Launcher(ABC):
         """Initialize the launcher.
 
         Args:
-            runner_type: Runner type name (``async``, ``serial``, ``multi_process``).
+            runner_type: Runner type name (``async``, ``serial``, or a registered key).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
         """
         self._runner_type = runner_type
@@ -144,7 +144,7 @@ class InProcessLauncher(Launcher):
         """Initialize the launcher.
 
         Args:
-            runner_type: Runner type name (``async``, ``serial``, ``multi_process``).
+            runner_type: Runner type name (``async``, ``serial``, or a registered key).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
             store: Optional Store instance to share with executors.
             reaper: Run liveness settings the executors' heartbeat follows;

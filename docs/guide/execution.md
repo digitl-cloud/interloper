@@ -64,22 +64,19 @@ code already on that loop raises `RuntimeError`; `await` there instead.
 |--------|-------------|----------------------|
 | `AsyncRunner(max_workers=4)` | asyncio tasks bounded by a semaphore | in-process, on the event loop; sync `data()` offloaded to threads |
 | `SerialRunner()` | one at a time | `AsyncRunner` with a single slot |
-| `MultiProcessRunner(max_workers=4)` | a process pool | child processes; the DAG is shipped as a spec and reconstructed there |
 
-Companion packages register Docker and Kubernetes runners under the same interface; see
-[Ecosystem](ecosystem.md).
+Companion packages register Docker and Kubernetes runners under the same interface, each
+operation in its own container or Job; see [Ecosystem](ecosystem.md).
 
-Operations are scheduled dynamically: as soon as every predecessor has completed, an operation
-becomes ready and is submitted while a slot is free. A failed operation cancels everything
-downstream of it.
-
-`MultiProcessRunner` requires every component in the DAG to be serializable and, like any
-process pool, a `if __name__ == "__main__":` guard.
+A runner is configuration. Each `runner.run(dag)` makes a run from it that walks the DAG once, so
+one runner serves any number of runs, concurrently too. Operations are scheduled dynamically: as
+soon as every predecessor has completed, an operation becomes ready and starts while a slot is
+free. A failed operation cancels everything downstream of it.
 
 ### Options
 
-| Option | `AsyncRunner`, `MultiProcessRunner` | Meaning |
-|--------|-------------------------------------|---------|
+| Option | `AsyncRunner` | Meaning |
+|--------|---------------|---------|
 | `max_workers` | `4` | Concurrency ceiling. `SerialRunner` pins it to 1. |
 | `fail_fast` | `True` | Stop submitting after the first failure: work already running finishes and is recorded, everything still queued is canceled. `False` runs everything that can still run. |
 | `reraise` | `False` | Re-raise the first failed operation's exception after the run is finalized. `False` returns a failed `RunResult` instead. |
@@ -101,9 +98,10 @@ print(result)
 # RunResult(status=failed, partition=2026-01-15, completed=2, failed=1, canceled=1, time=1.20s, failed=[...], canceled=[...])
 ```
 
-`ExecutionInfo` carries `component_id`, `component_key`, `status`, `start_time`, `end_time`,
-`execution_time`, `error`, `traceback`, and `effects` (what the operation asked the platform to
-persist). `ExecutionStatus` is `QUEUED`, `READY`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED`
+`ExecutionInfo` carries `component_id`, `component_key`, `status`, `attempt`, `start_time`,
+`end_time`, `execution_time`, and `result`: the `OperationResult` the operation came to, with its
+effects (what it asked the platform to persist) and, on failure, its `error` and `traceback`,
+which `ExecutionInfo.error` and `ExecutionInfo.traceback` read. `ExecutionStatus` is `QUEUED`, `READY`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED`
 (disabled), `CANCELED` (downstream of a failure).
 
 ## Failure handling

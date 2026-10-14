@@ -228,11 +228,11 @@ class RunExecutor:
         """Persist the executed operations' effects onto their component rows.
 
         Args:
-            result: The run result whose per-node execution infos carry the
+            result: The run result whose per-node execution records carry the
                 effects; nodes without effects are untouched.
         """
         for info in result.executions.values():
-            effects = info.effects
+            effects = info.result
             if effects is None:
                 continue
             if effects.config:

@@ -1,247 +1,61 @@
-"""Async-native runner using asyncio tasks for bounded concurrency."""
+"""AsyncRunner: every operation in this process, on one event loop."""
 
 from __future__ import annotations
 
-import asyncio
-import traceback
-from typing import TYPE_CHECKING, Any
+from functools import partial
+from typing import TYPE_CHECKING
 
-from pydantic import PrivateAttr
-
-from interloper.errors import RunnerError, format_exception
-from interloper.operation.base import Operation, OperationContext
-from interloper.partitioning.base import PartitionWindow
+from interloper.operation.base import OperationResult
 from interloper.runner.base import Runner
-from interloper.runner.results import RunResult
-from interloper.telemetry import attributes
-from interloper.telemetry.tracer import tracer
+from interloper.runner.run import Run
 
 if TYPE_CHECKING:
-    from interloper.dag.base import DAG
+    from interloper.operation.base import Operation
+
+
+class InProcessRun(Run):
+    """One run of an AsyncRunner: every operation executes in this process, on its event loop.
+
+    A sync ``data()`` is offloaded to a thread by the asset itself, so one
+    event loop serves the whole run.
+    """
+
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Execute the operation here, under its retry policy, reporting each retry as it happens.
+
+        Args:
+            operation: The operation to execute.
+
+        Returns:
+            Its result.
+        """
+        return await OperationResult.from_execution(
+            operation,
+            self.state.context(operation),
+            on_retry=partial(self.state.retry, operation),
+            on_restart=partial(self.state.start, operation),
+        )
 
 
 class AsyncRunner(Runner):
-    """Async-native, in-process runner — the single DAG-walking engine.
+    """Run every operation in this process: ``max_workers`` at a time, sync ones offloaded to threads.
 
-    Schedules ready operations as ``asyncio`` tasks bounded by an
-    ``asyncio.Semaphore``. It subsumes both serial and thread-pool execution:
-
-    - ``AsyncRunner(max_workers=1)`` — serial execution (deterministic ordering).
-    - ``AsyncRunner(max_workers=4)`` — concurrent execution (default).
-
-    Sync ``data()`` functions are automatically offloaded to threads via
-    ``asyncio.to_thread``, while async ``data()`` functions run natively
-    on the event loop. Either way, exactly one event loop is created per
-    run (not per asset):
+    ``AsyncRunner(max_workers=1)`` is serial and deterministic (see
+    `SerialRunner`); the default runs four operations at once:
 
     ```py
-    # async
-    result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)
-
-    # sync edge (scripts, REPL, notebooks)
-    result = il.run(AsyncRunner(on_event=log_event).run(dag))
+    result = await AsyncRunner(max_workers=2, on_event=log_event).run(dag)   # async
+    result = il.run(AsyncRunner(on_event=log_event).run(dag))                 # sync edge
     ```
     """
+
+    Run = InProcessRun
 
     max_workers: int = 4
     fail_fast: bool = True
     reraise: bool = False
 
-    _semaphore: asyncio.Semaphore | None = PrivateAttr(default=None)
-
-    async def _run(
-        self,
-        dag: DAG,
-        window: PartitionWindow | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> RunResult:
-        """Execute the DAG by dynamically scheduling ready operations.
-
-        Args:
-            dag: The DAG to execute.
-            window: Partition or window to scope the run.
-            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
-
-        Returns:
-            A RunResult summarizing the execution outcome.
-
-        Operation failures are absorbed into state (each node's own error,
-        traceback, and effects); with ``reraise`` set, the first failed
-        operation's original exception is re-raised after the run is
-        finalized.
-
-        Raises:
-            RunnerError: If a deadlock or invalid DAG state is detected.
-        """
-        self._init_run(dag, window, metadata)
-        inflight: dict[asyncio.Task[Any], Operation] = {}
-
-        try:
-            self._on_start()
-            self._semaphore = asyncio.Semaphore(self.max_workers)
-
-            while not self.state.is_run_complete():
-                submitted_ids = {operation.id for operation in inflight.values()}
-
-                for operation in self.state.ready_operations:
-                    if len(inflight) >= self._capacity:
-                        break
-                    if operation.id in submitted_ids:
-                        continue
-                    handle = self._submit_operation(operation, window)
-                    inflight[handle] = operation
-
-                if not inflight:
-                    raise RunnerError(
-                        "No operations ready but execution not complete. "
-                        "This indicates a circular dependency or invalid DAG state."
-                    )
-
-                done, _ = await asyncio.wait(inflight.keys(), return_when=asyncio.FIRST_COMPLETED)
-                for task in done:
-                    inflight.pop(task)
-                    exception = task.exception()
-                    if exception is not None:
-                        raise exception
-
-                if self.fail_fast and self.state.failed_operations:
-                    break
-
-            await self._flush(inflight)
-            result = self._finalize_run()
-
-        except Exception as e:
-            # Operation failures are absorbed into state, so an exception
-            # here means the walk machinery itself broke.
-            await self._flush(inflight)
-            result = self._finalize_run(error=format_exception(e))
-            if self.reraise:
-                raise
-        finally:
-            try:
-                self._on_end()
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-        if self.reraise and self.state.failed_operations:
-            self._reraise_first_failure()
-        return result
-
-    # -- Scheduling primitives -------------------------------------------------
-
     @property
-    def _capacity(self) -> int:
-        """Maximum number of concurrent operations this runner can execute.
-
-        Returns:
-            ``max_workers``, the size of the semaphore bounding execution.
-        """
+    def capacity(self) -> int:
+        """How many operations a run executes at once: ``max_workers``."""
         return self.max_workers
-
-    def _submit_operation(
-        self,
-        operation: Operation,
-        window: PartitionWindow | None,
-    ) -> asyncio.Task[Any]:
-        """Schedule an operation as an asyncio task guarded by the semaphore.
-
-        Args:
-            operation: The operation to execute.
-            window: Partition or window to scope the run.
-
-        Returns:
-            The created task, which acquires a concurrency slot before
-            executing the operation.
-        """
-        assert self._semaphore is not None
-
-        sem = self._semaphore
-
-        async def _guarded() -> Any:
-            async with sem:
-                return await self._execute_operation(operation, window)
-
-        return asyncio.create_task(_guarded())
-
-    # -- Operation execution -----------------------------------------------------
-
-    async def _execute_operation(
-        self,
-        operation: Operation,
-        window: PartitionWindow | None = None,
-    ) -> Any:
-        """Execute a single operation with state tracking, retrying in place.
-
-        An operation carrying a `RetryPolicy`
-        gets another attempt whenever it raises an error it calls retryable
-        and its budget allows one: the failure is recorded as retried, the
-        backoff is slept, and the same node executes again. An operation
-        carrying no policy is attempted once.
-
-        Only an exhausted or declined failure marks the node failed, which is
-        what cancels its dependents and, under ``fail_fast``, stops the walk.
-        A node still working through its attempts has not failed, so nothing
-        downstream reacts to it.
-
-        On failure the operation's own `failure` hook
-        curates the recorded message and effects, and the traceback is
-        attached only when the operation's class allows it — operations
-        whose raw errors embed secrets opt out.
-
-        Args:
-            operation: The operation to execute.
-            window: Partition or window to scope the run; narrowed
-                to the operation's own effective partition before executing.
-
-        Returns:
-            The execution's effects, or ``None`` if the operation failed.
-        """
-        effective_window = operation.effective_window(window)
-        span_attrs = attributes.from_metadata(operation.event_metadata(self.state.metadata, effective_window))
-        context = OperationContext(
-            window=effective_window,
-            dag=self.state.dag,
-            metadata=self.state.metadata,
-        )
-        policy = operation.retry
-
-        while True:
-            self.state.mark_running(operation)
-            try:
-                with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attrs):
-                    result = await operation.execute(context)
-            except Exception as e:  # noqa: BLE001 — every failure becomes the node's record
-                attempt = self.state.attempts[operation.id]
-                if policy is not None and policy.allows(attempt + 1) and operation.retryable(e):
-                    self.state.mark_retried(operation, format_exception(e))
-                    await asyncio.sleep(policy.delay_before(attempt + 1))
-                    continue
-                failed = operation.failure(e)
-                tb = traceback.format_exc() if type(operation).capture_traceback else None
-                self.state.mark_failed(
-                    operation, failed.error or format_exception(e), tb=tb, effects=failed, exception=e
-                )
-                return None
-            self.state.mark_completed(operation, effects=result)
-            return result
-
-    async def _flush(self, inflight: dict[asyncio.Task[Any], Operation]) -> None:
-        """Let the in-flight tasks finish when the walk ends.
-
-        Called on a fail-fast break, a machinery abort, or natural
-        completion (where it is effectively a no-op). Work already running
-        is never interrupted: ``_execute_operation`` records each outcome as
-        it lands, and finalization cancels whatever was never submitted.
-
-        Args:
-            inflight: Tasks still in flight, mapped to the operation each was
-                created for. An empty mapping is a no-op.
-        """
-        if not inflight:
-            return
-
-        done, _ = await asyncio.wait(inflight.keys())
-
-        for task in done:
-            if not task.cancelled():
-                task.exception()  # Consume to avoid "exception never retrieved"

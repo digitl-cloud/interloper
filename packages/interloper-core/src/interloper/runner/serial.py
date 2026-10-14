@@ -1,4 +1,4 @@
-"""Serial runner — executes operations one at a time in dependency order."""
+"""SerialRunner: one operation at a time, in dependency order."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from interloper.runner.async_runner import AsyncRunner
 class SerialRunner(AsyncRunner):
     """Execute operations one at a time in dependency order.
 
-    The simplest runner — deterministic, easy to debug. It is the async
+    The simplest runner: deterministic, easy to debug. It is the async
     engine with a single concurrency slot, so there is never more than one
     operation in flight:
 

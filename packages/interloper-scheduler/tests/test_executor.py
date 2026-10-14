@@ -371,7 +371,7 @@ class TestApplyEffects:
             component_key="a",
             status=ExecutionStatus.COMPLETED,
         )
-        info.effects = effects
+        info.result = effects
         return RunResult(executions={component_id: info})
 
     def test_config_effects_are_merged(self, hydrated_asset: il.Asset) -> None:

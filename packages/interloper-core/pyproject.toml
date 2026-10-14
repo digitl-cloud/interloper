@@ -72,7 +72,6 @@ rows = "interloper.representation.base:RowsRepresentation"
 [project.entry-points."interloper.runners"]
 async = "interloper.runner.async_runner:AsyncRunner"
 serial = "interloper.runner.serial:SerialRunner"
-multi_process = "interloper.runner.multi_process:MultiProcessRunner"
 
 [project.entry-points."interloper.oauth_providers"]
 amazon = "interloper.oauth.providers:AMAZON"

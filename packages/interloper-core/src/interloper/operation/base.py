@@ -20,8 +20,10 @@ to the store.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from traceback import format_exc
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
@@ -30,8 +32,12 @@ from interloper.component.base import Component
 from interloper.errors import format_exception
 from interloper.partitioning.base import PartitionConfig
 from interloper.retry import RetryPolicy
+from interloper.telemetry import attributes as telemetry_attributes
+from interloper.telemetry.tracer import tracer
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from interloper.component.relation import Relation
     from interloper.dag.base import DAG
     from interloper.partitioning.base import PartitionWindow
@@ -54,20 +60,87 @@ class OperationContext:
 
 @dataclass
 class OperationResult:
-    """What an operation hands back for the platform to persist.
+    """What an operation came to: the effects the platform persists, and the verdict.
 
     ``config`` fields are merged into the target component's stored config
     (through its encryption path) and ``state`` fields onto its
     machine-owned state: how an operation's effects reach the row without
-    the operation knowing the store. ``error`` carries the
-    persistence-safe message of a failed execution, set by
-    `Operation.failure`; success paths leave it unset (terminal
-    status is the runner's, not the operation's).
+    the operation knowing the store. An operation's `execute` returns one
+    carrying its effects, and its `failure` hook one carrying the
+    persistence-safe ``error``. The attempt loop (`from_execution`) completes
+    a failure with the ``traceback`` (when the operation's class allows one)
+    and the original ``exception``, kept in memory only so a runner can
+    re-raise it. An unset ``error`` means the operation succeeded.
     """
 
     error: str | None = None
     config: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
+    traceback: str | None = None
+    exception: BaseException | None = field(default=None, compare=False, repr=False)
+
+    @property
+    def succeeded(self) -> bool:
+        """Whether the operation succeeded, which is whether no error is set.
+
+        Returns:
+            ``True`` when ``error`` is unset.
+        """
+        return self.error is None
+
+    @classmethod
+    async def from_execution(
+        cls,
+        operation: Operation,
+        context: OperationContext,
+        *,
+        on_retry: Callable[[str], None],
+        on_restart: Callable[[], None],
+    ) -> OperationResult:
+        """Execute an operation under its retry policy and return what it came to.
+
+        Each attempt runs inside the ``interloper.operation.execute`` span. A
+        failure is retried when the operation's `RetryPolicy` allows another
+        attempt and `Operation.retryable` agrees: ``on_retry`` is told the
+        error as it happens, the policy's backoff is slept, ``on_restart`` is
+        told the next attempt starts, and the operation executes again. Any
+        other failure becomes the operation's `failure` result, completed with
+        the formatted error when the hook left it empty, the traceback when the
+        class's ``capture_traceback`` allows, and the original exception.
+
+        Args:
+            operation: The operation to execute.
+            context: The facts it executes with.
+            on_retry: Told the formatted error of each attempt that will be
+                retried, before its backoff.
+            on_restart: Told when the next attempt starts, after the backoff.
+
+        Returns:
+            The result: the operation's own on success, its failure otherwise.
+        """
+        span_attributes = telemetry_attributes.from_metadata(
+            operation.event_metadata(context.metadata, context.window)
+        )
+        attempt = 1
+        while True:
+            try:
+                with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attributes):
+                    return await operation.execute(context)
+            except Exception as error:  # noqa: BLE001 - every failure becomes the operation's result
+                policy = operation.retry
+                if policy is not None and policy.allows(attempt + 1) and operation.retryable(error):
+                    on_retry(format_exception(error))
+                    await asyncio.sleep(policy.delay_before(attempt + 1))
+                    attempt += 1
+                    on_restart()
+                    continue
+                failed = operation.failure(error)
+                return replace(
+                    failed,
+                    error=failed.error or format_exception(error),
+                    traceback=format_exc() if type(operation).capture_traceback else None,
+                    exception=error,
+                )
 
 
 class Workload(ABC):

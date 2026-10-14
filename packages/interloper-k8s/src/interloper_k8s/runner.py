@@ -1,54 +1,293 @@
-"""Kubernetes-based runner that executes each asset in its own Job.
+"""KubernetesRunner: each operation in its own Job.
 
-Each submitted asset runs inside a Kubernetes Job. A mini-DAG comprising
-the target asset and all its upstream ancestors is sent to the container
-via inline JSON so the asset can resolve its upstream dependencies from IO
-without recomputing them.
+A Job's pod runs its operation's mini-DAG (the operation and its upstream
+ancestors, the ancestors read-only) through ``interloper run --format
+inline``, so the operation resolves its upstreams from their destinations
+without recomputing them. The pod reports its operation's progress as
+``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
+pod runs; the host authors the operation's terminal event itself, from the
+Job's status, so an operation whose pod dies without a word still ends.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
+import logging
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, cast
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 from interloper.errors import RunnerError, format_exception
-from interloper.events import Event, EventBus, EventType
-from interloper.operation import Operation
-from interloper.partitioning import PartitionWindow
-from interloper.runner.sync_runner import SyncRunner
+from interloper.events import EventLogReader
+from interloper.operation import Operation, OperationResult
+from interloper.runner.base import Runner
+from interloper.runner.run import Run
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
-from kubernetes.client import V1Job
-from pydantic import Field, PrivateAttr
+from pydantic import Field
 
-# Events emitted by the container's inner run — not forwarded to the host.
-_RUN_EVENTS = frozenset(
-    {
-        EventType.RUN_STARTED,
-        EventType.RUN_COMPLETED,
-        EventType.RUN_FAILED,
-    }
-)
+if TYPE_CHECKING:
+    from interloper.dag.base import DAG
+    from interloper.partitioning import PartitionWindow
+
+logger = logging.getLogger(__name__)
+
+_STARTED = frozenset({"Running", "Succeeded", "Failed"})
 
 
-class KubernetesRunner(SyncRunner):
-    """Execute assets as individual Kubernetes Jobs.
+class JobRun(Run):
+    """One run of a KubernetesRunner: each operation in its own Job, its events read from the pod's log.
 
-    For each asset, constructs a mini-DAG comprising the asset and all its
-    upstream ancestors. The mini-DAG is sent to the container via inline JSON.
-    Inside the container, all non-target assets are marked as
-    ``enabled=False`` to avoid recomputation while still enabling
-    IO-based dependency resolution.
-
-    The blocking Job-polling walk is offloaded to a thread, so the runner
-    satisfies the async-native ``run()`` contract::
-
-        result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
-        # or, from a sync edge: il.run(KubernetesRunner(image=...).run(dag))
+    Following a Job blocks, so each one is followed on a thread of the run's
+    polling pool. The Job's status decides the verdict; the pod's log is
+    forwarded alongside on a thread of its own, given a few seconds after the
+    verdict to deliver the pod's last events, and abandoned past them: a pod
+    lost with its node can leave a log stream open that never ends.
     """
+
+    runner: KubernetesRunner
+    reports_progress = False
+
+    def __init__(
+        self, runner: KubernetesRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
+    ) -> None:
+        """Connect to the cluster and open a polling pool sized to the runner's capacity.
+
+        Args:
+            runner: The runner this is a run of.
+            dag: The DAG to walk.
+            window: The window the run covers, ``None`` when unscoped.
+            metadata: Run-level metadata, carrying the ``run_id``.
+        """
+        super().__init__(runner, dag, window, metadata)
+        try:
+            config.load_incluster_config()
+        except config.ConfigException:
+            config.load_kube_config()
+        self.batch = client.BatchV1Api()
+        self.core = client.CoreV1Api()
+        self.polling = ThreadPoolExecutor(max_workers=runner.max_jobs)
+
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Run the operation in its own Job, followed on the polling pool.
+
+        Args:
+            operation: The operation to execute.
+
+        Returns:
+            Its result.
+        """
+        # The child continues the run's trace, which only this context carries onto the pool thread.
+        follow = partial(contextvars.copy_context().run, self.follow, operation)
+        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+
+    def follow(self, operation: Operation) -> OperationResult:
+        """Create the operation's Job, forward its pod's events, and wait for the Job's verdict.
+
+        Args:
+            operation: The operation the Job executes.
+
+        Returns:
+            An empty result when the Job succeeded; otherwise a failure naming
+            the Job, or why it could not be created or watched.
+        """
+        name = self.name(operation)
+        try:
+            self.batch.create_namespaced_job(namespace=self.runner.namespace, body=self.job(operation, name))
+        except Exception as error:  # noqa: BLE001 - a Job that cannot be created fails its operation
+            return OperationResult(error=format_exception(error))
+        finished = threading.Event()
+        forwarding = threading.Thread(target=self.forward_log, args=(name, operation, finished), daemon=True)
+        forwarding.start()
+        try:
+            succeeded = self.wait(name)
+        except Exception as error:  # noqa: BLE001 - losing the Job fails its operation, never the run
+            return OperationResult(error=format_exception(error))
+        finally:
+            finished.set()
+            forwarding.join(timeout=5.0)
+        if succeeded:
+            return OperationResult()
+        return OperationResult(error=format_exception(RunnerError(f"Job {name} failed")))
+
+    def wait(self, name: str) -> bool:
+        """Wait for the Job to finish.
+
+        Args:
+            name: The Job's name.
+
+        Returns:
+            Whether it succeeded.
+        """
+        while (succeeded := self.outcome(name)) is None:
+            time.sleep(self.runner.poll_interval)
+        return succeeded
+
+    def outcome(self, name: str) -> bool | None:
+        """Whether the Job succeeded: ``True`` or ``False`` once finished, ``None`` while it runs.
+
+        Args:
+            name: The Job's name.
+
+        Returns:
+            The Job's outcome so far.
+        """
+        status = self.batch.read_namespaced_job_status(name=name, namespace=self.runner.namespace).status
+        if status is not None and status.succeeded:
+            return True
+        if status is not None and status.failed:
+            return False
+        return None
+
+    def forward_log(self, name: str, operation: Operation, finished: threading.Event) -> None:
+        """Forward the operation's events from the Job's pod log until the log ends.
+
+        A stream that breaks is logged and ends the forwarding: the Job's
+        status, not the log, decides the operation's verdict.
+
+        Args:
+            name: The Job's name.
+            operation: The operation it executes.
+            finished: Set once the Job's verdict is known.
+        """
+        pod = self.pod(name, finished)
+        if pod is None:
+            return
+        reader = EventLogReader(operation.id, label=f"pod {pod}")
+        try:
+            stream = self.core.read_namespaced_pod_log(
+                name=pod, namespace=self.runner.namespace, container="interloper", follow=True, _preload_content=False
+            )
+            for chunk in stream:
+                reader.feed(chunk)
+        except Exception:
+            logger.debug("Log stream of pod %s ended early", pod, exc_info=True)
+        reader.close()
+
+    def pod(self, name: str, finished: threading.Event) -> str | None:
+        """Wait for the Job's pod to start.
+
+        Args:
+            name: The Job's name.
+            finished: Set once the Job's verdict is known, which ends the wait.
+
+        Returns:
+            The pod's name, or ``None`` when the Job finished without one starting.
+        """
+        while not finished.is_set():
+            try:
+                pods = self.core.list_namespaced_pod(namespace=self.runner.namespace, label_selector=f"job-name={name}")
+            except Exception:
+                logger.debug("Listing the pods of Job %s failed", name, exc_info=True)
+            else:
+                for pod in pods.items:
+                    if pod.status is not None and pod.status.phase in _STARTED:
+                        return pod.metadata.name
+            finished.wait(self.runner.poll_interval)
+        return None
+
+    def job(self, operation: Operation, name: str) -> client.V1Job:
+        """The Job that runs the operation's mini-DAG, once, in the runner's pod settings.
+
+        Args:
+            operation: The operation the Job executes.
+            name: The Job's name.
+
+        Returns:
+            The Job to create.
+        """
+        labels = {"interloper.component_id": operation.id, "interloper.run_id": self.state.run_id}
+        command = self.command(operation)
+        container = client.V1Container(
+            name="interloper",
+            image=self.runner.image,
+            image_pull_policy=self.runner.image_pull_policy,
+            command=command[:1],
+            args=command[1:],
+            env=self.runner.environment() or None,
+            resources=self.runner.requirements(),
+        )
+        pull_secrets = [client.V1LocalObjectReference(name=secret) for secret in self.runner.image_pull_secrets]
+        pod = client.V1PodSpec(
+            containers=[container],
+            restart_policy="Never",
+            service_account_name=self.runner.service_account_name,
+            node_selector=self.runner.node_selector or None,
+            tolerations=self.runner.pod_tolerations() or None,
+            image_pull_secrets=pull_secrets or None,
+        )
+        return client.V1Job(
+            api_version="batch/v1",
+            kind="Job",
+            metadata=client.V1ObjectMeta(
+                name=name,
+                namespace=self.runner.namespace,
+                labels=labels,
+                annotations={"interloper.component_id": operation.id},
+            ),
+            spec=client.V1JobSpec(
+                template=client.V1PodTemplateSpec(metadata=client.V1ObjectMeta(labels=labels), spec=pod),
+                backoff_limit=0,
+                ttl_seconds_after_finished=self.runner.ttl_seconds_after_finished,
+            ),
+        )
+
+    def command(self, operation: Operation) -> list[str]:
+        """The command the pod runs: its operation's mini-DAG through ``interloper run --format inline``.
+
+        Args:
+            operation: The operation the pod executes.
+
+        Returns:
+            The argv, with the operation's own window as ``--date`` or
+            ``--start-date``/``--end-date``.
+        """
+        spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
+        command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
+        window = operation.effective_window(self.state.window)
+        if window is not None and len(window) == 1:
+            command.extend(["--date", window.first.id])
+        elif window is not None:
+            command.extend(["--start-date", window.first.id, "--end-date", window.last.id])
+        return command
+
+    def name(self, operation: Operation) -> str:
+        """A Job name unique to this operation and run, within Kubernetes' 63 characters.
+
+        Args:
+            operation: The operation the Job executes.
+
+        Returns:
+            ``interloper-run-<run>-<operation>``, each id cut to 8 characters.
+        """
+        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}"[:63]
+
+    async def close(self) -> None:
+        """Release the polling pool.
+
+        A canceled run returns at once: whatever is still being followed
+        finishes on its thread in the background.
+        """
+        self.polling.shutdown(wait=False)
+
+
+class KubernetesRunner(Runner):
+    """Execute each operation in its own Kubernetes Job, ``max_jobs`` at a time.
+
+    The Job's pod runs the image's ``interloper`` CLI on the operation's
+    mini-DAG; the host forwards the pod's events and records the Job's status:
+
+    ```py
+    result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
+    # or, from a sync edge: il.run(KubernetesRunner(image=...).run(dag))
+    ```
+    """
+
+    Run = JobRun
 
     image: str
     namespace: str = "default"
@@ -65,404 +304,47 @@ class KubernetesRunner(SyncRunner):
     fail_fast: bool = False
     reraise: bool = False
 
-    _batch_v1: client.BatchV1Api | None = PrivateAttr(default=None)
-    _core_v1: client.CoreV1Api | None = PrivateAttr(default=None)
-    _poll_pool: ThreadPoolExecutor | None = PrivateAttr(default=None)
-    _job_map: dict[Future[Any], str] = PrivateAttr(default_factory=dict)
-    _log_threads: dict[str, threading.Thread] = PrivateAttr(default_factory=dict)
-    _stop_log_streaming: threading.Event = PrivateAttr(default_factory=threading.Event)
-
-    # -- Scheduling primitives -------------------------------------------------
-
     @property
-    def _capacity(self) -> int:
-        """Maximum number of concurrent Jobs.
-
-        Returns:
-            The configured Job ceiling.
-        """
+    def capacity(self) -> int:
+        """How many Jobs a run executes at once: ``max_jobs``."""
         return self.max_jobs
 
-    def _on_start(self) -> None:
-        """Initialize Kubernetes client."""
-        try:
-            config.load_incluster_config()
-        except config.ConfigException:
-            config.load_kube_config()
-
-        self._batch_v1 = client.BatchV1Api()
-        self._core_v1 = client.CoreV1Api()
-        self._stop_log_streaming.clear()
-        self._poll_pool = ThreadPoolExecutor(max_workers=self.max_jobs)
-
-    def _on_end(self) -> None:
-        """Signal all log streaming threads to stop."""
-        self._stop_log_streaming.set()
-        for thread in self._log_threads.values():
-            thread.join(timeout=2.0)
-        self._log_threads.clear()
-        if self._poll_pool is not None:
-            self._poll_pool.shutdown(wait=True, cancel_futures=False)
-            self._poll_pool = None
-        self._job_map.clear()
-
-    def _submit_operation(
-        self,
-        operation: Operation,
-        window: PartitionWindow | None,
-    ) -> Future[Any]:
-        """Launch an asset as a Kubernetes Job and return a polling Future.
-
-        Args:
-            operation: The operation to run in its own Job.
-            window: The window to materialize, narrowed to the operation's own; ``None`` for an
-                unpartitioned operation.
+    def environment(self) -> list[client.V1EnvVar]:
+        """The environment every pod gets.
 
         Returns:
-            A Future that raises :class:`RunnerError` on Job failure.
-
-        Raises:
-            RunnerError: If the Job cannot be created.
-
+            ``env_vars``, the switch that makes the child report its events on
+            stderr, and the trace context the child continues.
         """
-        if self._poll_pool is None or self._batch_v1 is None:
-            raise RunnerError("Kubernetes client not initialized")
+        environment = [client.V1EnvVar(name=name, value=value) for name, value in self.env_vars.items()]
+        environment.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
+        environment.extend(client.V1EnvVar(name=name, value=value) for name, value in child_process_env().items())
+        return environment
 
-        mini_dag = self.state.dag.mini_dag(operation.id)
-        dag_spec = mini_dag.to_spec().model_dump(mode="json")
-
-        cmd = self._build_command(dag_spec, operation.effective_window(window), self.state.run_id)
-        job_name = self._build_job_name(operation)
-        env = self._build_env()
-        resources = self._build_resources()
-        tolerations = self._build_tolerations()
-
-        container = client.V1Container(
-            name="interloper",
-            image=self.image,
-            image_pull_policy=self.image_pull_policy,
-            command=cmd[:1],
-            args=cmd[1:],
-            env=env or None,
-            resources=resources,
-        )
-
-        pod_spec = client.V1PodSpec(
-            containers=[container],
-            restart_policy="Never",
-            service_account_name=self.service_account_name,
-            node_selector=self.node_selector or None,
-            tolerations=tolerations or None,
-            image_pull_secrets=[client.V1LocalObjectReference(name=s) for s in self.image_pull_secrets]
-            if self.image_pull_secrets
-            else None,
-        )
-
-        job = client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=job_name,
-                namespace=self.namespace,
-                labels={
-                    "interloper.component_id": operation.id,
-                    "interloper.run_id": self.state.run_id,
-                },
-                annotations={
-                    "interloper.component_id": operation.id,
-                },
-            ),
-            spec=client.V1JobSpec(
-                template=client.V1PodTemplateSpec(
-                    metadata=client.V1ObjectMeta(
-                        labels={
-                            "interloper.component_id": operation.id,
-                            "interloper.run_id": self.state.run_id,
-                        }
-                    ),
-                    spec=pod_spec,
-                ),
-                backoff_limit=0,
-                ttl_seconds_after_finished=self.ttl_seconds_after_finished,
-            ),
-        )
-
-        self.state.mark_running(operation, emit=False)
-
-        try:
-            self._batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
-        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
-            self.state.mark_failed(operation, format_exception(e))
-            done: Future[None] = Future()
-            done.set_result(None)
-            return done
-
-        self._start_log_streaming(job_name, target_component_id=operation.id)
-
-        future = self._poll_pool.submit(self._poll_job, job_name)
-        self._job_map[future] = job_name
-        return future
-
-    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
-        """Process a completed job future and author the terminal event.
-
-        The host authors the terminal event itself (``emit=True``) from the
-        authoritative **Job status** (succeeded vs failed) instead of trusting
-        the child to have emitted one.  Deterministic event ids keep this
-        idempotent: when the child *did* stream its own (richer) terminal it was
-        persisted first and the host's emit dedups away
-        (``ON CONFLICT DO NOTHING``); when the child died without reporting one
-        (eviction / OOM / deadline mid-retry) the host's event is the only
-        terminal, so the asset no longer orphans as ``running``.
-
-        The log thread is joined with a longer timeout first so a child terminal
-        that is still in flight wins the race.
-
-        A failed operation aborts the run through state — the walk loop
-        checks ``failed_operations`` under fail-fast — so a child-streamed
-        terminal's rich error stays the operation's record, never overwritten
-        by the bare Job status.
-
-        Args:
-            future: The polling future that has completed.
-            operation: The operation the Job ran.
-
-        """
-        job_name = self._job_map.pop(future, None)
-        if job_name is not None:
-            self._stop_job_log_streaming(job_name, timeout=5.0)
-
-        info = self.state.executions.get(operation.id)
-        if info and info.is_terminal:
-            return
-
-        try:
-            future.result()
-        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
-            self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
-        else:
-            self.state.mark_completed(operation, emit=True)
-
-    # -- Job polling -----------------------------------------------------------
-
-    def _poll_job(self, job_name: str) -> None:
-        """Block until the Job completes or fails; raise on failure.
-
-        Args:
-            job_name: The Job to wait on.
-
-        Raises:
-            RunnerError: If the job fails.
-        """
-        assert self._batch_v1 is not None
-
-        while not self._stop_log_streaming.is_set():
-            updated_job = cast(
-                V1Job,
-                self._batch_v1.read_namespaced_job_status(name=job_name, namespace=self.namespace),
-            )
-
-            assert updated_job.status is not None
-            status = updated_job.status
-
-            if status.succeeded is not None and status.succeeded > 0:
-                return
-            if status.failed is not None and status.failed > 0:
-                raise RunnerError(f"Job {job_name} failed")
-
-            time.sleep(self.poll_interval)
-
-        raise RunnerError(f"Job {job_name} stopped (runner shutting down)")
-
-    # -- Job helpers -----------------------------------------------------------
-
-    def _build_command(
-        self,
-        dag_spec: dict[str, Any],
-        window: PartitionWindow | None,
-        run_id: str,
-    ) -> list[str]:
-        """Build the command to execute in the container.
-
-        Args:
-            dag_spec: The serialized DAG the pod reconstructs.
-            window: The window to materialize, narrowed to the operation's own; ``None`` for an
-                unpartitioned operation.
-            run_id: The run the pod reports against.
+    def requirements(self) -> client.V1ResourceRequirements | None:
+        """The resources every pod requests and is limited to.
 
         Returns:
-            The argv the pod entrypoint is started with.
-
-        """
-        cmd = [
-            "interloper",
-            "run",
-            "--format",
-            "inline",
-            f"--run-id={run_id}",
-            json.dumps(dag_spec),
-        ]
-
-        if window is not None:
-            if len(window) == 1:
-                cmd.extend(["--date", window.first.id])
-            else:
-                cmd.extend(["--start-date", window.first.id, "--end-date", window.last.id])
-
-        return cmd
-
-    def _build_env(self) -> list[client.V1EnvVar]:
-        """Build the environment variables for the container.
-
-        Returns:
-            The environment each operation pod receives.
-
-        """
-        env = [client.V1EnvVar(name=k, value=v) for k, v in self.env_vars.items()]
-        env.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
-        env.extend(client.V1EnvVar(name=k, value=v) for k, v in child_process_env().items())
-        return env
-
-    def _build_resources(self) -> client.V1ResourceRequirements | None:
-        """Build the resource requirements for the container.
-
-        Returns:
-            The requirements, or None when none are configured.
-
+            The requirements, ``None`` when none are configured.
         """
         if not self.resources:
             return None
         return client.V1ResourceRequirements(
-            requests=self.resources.get("requests"),
-            limits=self.resources.get("limits"),
+            requests=self.resources.get("requests"), limits=self.resources.get("limits")
         )
 
-    def _build_job_name(self, operation: Operation) -> str:
-        """Build the name for the Kubernetes job (max 63 chars).
-
-        Args:
-            operation: The operation the Job runs.
-
-        Returns:
-            A Job name unique to this operation and run, within the
-            kubernetes name-length limit.
-
-        """
-        # return f"interloper-run-{self.state.run_id[:8]}-{to_slug_case(type(operation).key)}"[:63]
-        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}"[:63]
-
-    def _build_tolerations(self) -> list[client.V1Toleration]:
-        """Build tolerations for pod scheduling.
+    def pod_tolerations(self) -> list[client.V1Toleration]:
+        """The tolerations every pod is scheduled with.
 
         Returns:
             The configured tolerations, empty when none are set.
-
         """
         return [
             client.V1Toleration(
-                key=t.get("key"),
-                operator=t.get("operator", "Equal"),
-                value=t.get("value"),
-                effect=t.get("effect"),
+                key=toleration.get("key"),
+                operator=toleration.get("operator", "Equal"),
+                value=toleration.get("value"),
+                effect=toleration.get("effect"),
             )
-            for t in self.tolerations
+            for toleration in self.tolerations
         ]
-
-    def _start_log_streaming(self, job_name: str, *, target_component_id: str) -> None:
-        """Stream events from a K8s pod's logs to the host EventBus.
-
-        Only events for the **target asset** are forwarded.
-        Container-internal ``RUN_*`` events and events for
-        disabled parent assets are dropped.
-
-        Args:
-            job_name: The K8s Job name to stream logs from.
-            target_component_id: Only forward events with this ``asset_id``.
-        """
-        if self._core_v1 is None:
-            return
-
-        core_v1 = self._core_v1
-
-        def stream_logs() -> None:
-            pod_name: str | None = None
-            while not self._stop_log_streaming.is_set():
-                try:
-                    pods = cast(
-                        client.V1PodList,
-                        core_v1.list_namespaced_pod(
-                            namespace=self.namespace,
-                            label_selector=f"job-name={job_name}",
-                        ),
-                    )
-                    if pods.items:
-                        pod = pods.items[0]
-                        if pod.status and pod.status.phase in ("Running", "Succeeded", "Failed"):
-                            pod_name = pod.metadata.name
-                            break
-                except Exception:  # noqa: BLE001, S110
-                    pass
-                time.sleep(0.5)
-
-            if pod_name is None or self._stop_log_streaming.is_set():
-                return
-
-            try:
-                log_stream = cast(
-                    Any,
-                    core_v1.read_namespaced_pod_log(
-                        name=pod_name,
-                        namespace=self.namespace,
-                        follow=True,
-                        _preload_content=False,
-                        container="interloper",
-                    ),
-                )
-                buf = ""
-                for chunk in log_stream:
-                    if self._stop_log_streaming.is_set():
-                        break
-                    buf += chunk.decode("utf-8", errors="ignore")
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        line = line.rstrip()
-                        if not line:
-                            continue
-                        try:
-                            event = Event.from_log_line(line)
-                            if event is not None:
-                                if event.type in _RUN_EVENTS:
-                                    continue
-                                event_component_id = event.metadata.get("component_id")
-                                if event_component_id and event_component_id != target_component_id:
-                                    continue
-                                EventBus.emit_event(event)
-                        except Exception:  # noqa: BLE001, S110
-                            pass
-                buf = buf.rstrip()
-                if buf:
-                    try:
-                        event = Event.from_log_line(buf)
-                        if event is not None and event.type not in _RUN_EVENTS:
-                            event_component_id = event.metadata.get("component_id")
-                            if not event_component_id or event_component_id == target_component_id:
-                                EventBus.emit_event(event)
-                    except Exception:  # noqa: BLE001, S110
-                        pass
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-        thread = threading.Thread(target=stream_logs, daemon=True)
-        thread.start()
-        self._log_threads[job_name] = thread
-
-    def _stop_job_log_streaming(self, job_name: str, timeout: float = 1.0) -> None:
-        """Wait for the log streaming thread to finish.
-
-        Args:
-            job_name: The job whose log thread to join.
-            timeout: Maximum seconds to wait for the thread to finish.
-        """
-        thread = self._log_threads.pop(job_name, None)
-        if thread is not None:
-            thread.join(timeout=timeout)

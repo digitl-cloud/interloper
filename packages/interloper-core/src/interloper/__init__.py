@@ -77,7 +77,7 @@ from interloper.rest import (
     SinglePagePaginator,
 )
 from interloper.retry import RetryPolicy
-from interloper.runner import AsyncRunner, MultiProcessRunner, Runner, RunResult, SerialRunner
+from interloper.runner import AsyncRunner, Runner, RunResult, SerialRunner
 from interloper.schema import Schema, schema
 from interloper.serializable import Serializable, Spec
 from interloper.source import Source, SourceDefinition, source
@@ -127,7 +127,6 @@ __all__ = [
     "MaterializationStrategy",
     "Maturity",
     "MemoryDestination",
-    "MultiProcessRunner",
     "Normalizer",
     "OAuth2Auth",
     "OAuth2ClientCredentialsAuth",

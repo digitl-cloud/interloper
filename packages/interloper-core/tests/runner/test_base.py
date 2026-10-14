@@ -37,7 +37,8 @@ class TestRegistry:
     def test_all_workspace_runners_are_discovered(self):
         # Built-ins register through core's own pyproject; docker/k8s through
         # theirs — asserting the discovery end to end.
-        assert {"async", "serial", "multi_process", "docker", "kubernetes"} <= set(RUNNERS.keys())
+        assert {"async", "serial", "docker", "kubernetes"} <= set(RUNNERS.keys())
+        assert "multi_process" not in set(RUNNERS.keys())
 
     def test_registry_maps_keys_to_classes(self):
         registry = dict(RUNNERS.items())
@@ -242,18 +243,6 @@ class TestPreflightValidation:
         result = await AsyncRunner().run(dag, window)
 
         assert result.status is ExecutionStatus.COMPLETED
-
-    def test_non_enabled_partitioned_assets_are_exempt(self):
-        # Upstream dependencies are hydrated read-only (enabled=False);
-        # they must not force a partition onto an otherwise unpartitioned run.
-        @il.asset(partitioning=TimePartitionConfig(column="date"))
-        def upstream() -> list[dict[str, Any]]:
-            return [{"date": "2026-01-01"}]
-
-        asset = upstream(id="upstream", destinations=[il.MemoryDestination()])
-        asset.enabled = False
-
-        AsyncRunner()._preflight(il.DAG(asset), None)
 
     async def test_every_failing_operation_is_listed(self):
         @il.asset(partitioning=TimePartitionConfig(column="date"))
@@ -461,13 +450,3 @@ class TestFinalizeCancelsPending:
         assert len(canceled_events) == 5
         run_failed_index = next(i for i, event in enumerate(events) if event.type is il.EventType.RUN_FAILED)
         assert all(events.index(event) < run_failed_index for event in canceled_events)
-
-
-class TestStateAccess:
-    """``state`` is only available inside a run."""
-
-    def test_before_a_run_it_is_an_actionable_error(self):
-        from interloper.errors import RunnerError
-
-        with pytest.raises(RunnerError, match="State not initialized"):
-            _ = AsyncRunner().state

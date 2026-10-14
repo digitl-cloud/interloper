@@ -1,23 +1,24 @@
-"""Abstract base runner and shared infrastructure."""
+"""Runner: configuration a run is made from."""
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from abc import abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, NoReturn
+from contextlib import nullcontext
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from opentelemetry.trace import StatusCode
-from pydantic import Field, PrivateAttr
+from pydantic import Field
 from typing_extensions import Self
 
-from interloper.errors import ConfigError, PartitionError, RunnerError
-from interloper.events import Event, EventBus
+from interloper.errors import ConfigError
+from interloper.events import Event
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.registry import Registry
 from interloper.runner.results import ExecutionStatus, RunResult
-from interloper.runner.state import RunState
+from interloper.runner.run import Run
+from interloper.runner.subscription import RunSubscription
 from interloper.serializable import Serializable
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, extract_metadata, inject_metadata
@@ -31,12 +32,13 @@ RUNNERS: Registry[type[Runner]] = Registry("interloper.runners")
 
 
 class Runner(Serializable):
-    """Abstract base class for all runners.
+    """Configuration a run is made from: how many operations run at once, where, and what a failure does.
 
-    Async-native: `run` is a coroutine. It owns the ``on_event``
-    subscription lifecycle and delegates the actual DAG walk to the
-    subclass `_run`. ``await`` it from async code, or drive it from a
-    sync entrypoint with `interloper.run`:
+    A runner holds nothing per run, so one runner serves any number of runs,
+    concurrently too. Each kind of runner names its kind of `Run`, which owns
+    the walk, what the run holds, and where an operation executes. ``await``
+    `run` from async code, or drive it from a sync entrypoint with
+    `interloper.run`:
 
     ```py
     result = await runner.run(dag)     # async
@@ -44,11 +46,11 @@ class Runner(Serializable):
     ```
     """
 
+    Run: ClassVar[type[Run]]
+
     fail_fast: bool = False
     reraise: bool = True
     on_event: Callable[[Event], None] | None = Field(default=None, exclude=True, repr=False)
-
-    _state: RunState | None = PrivateAttr(default=None)
 
     # -- Construction ----------------------------------------------------------
 
@@ -81,20 +83,12 @@ class Runner(Serializable):
             raise ConfigError(f"Runner '{settings.type}' does not resolve to a {cls.__name__}")
         return runner_cls(**settings.config)
 
-    # -- State -----------------------------------------------------------------
+    # -- Public API ------------------------------------------------------------
 
     @property
-    def state(self) -> RunState:
-        """The current run state.
-
-        Raises:
-            RunnerError: If state has not been initialized via ``run()``.
-        """
-        if self._state is None:
-            raise RunnerError("State not initialized")
-        return self._state
-
-    # -- Public API ------------------------------------------------------------
+    @abstractmethod
+    def capacity(self) -> int:
+        """How many operations a run executes at once."""
 
     async def run(
         self,
@@ -102,180 +96,54 @@ class Runner(Serializable):
         window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> RunResult:
-        """Materialize the DAG and return the result.
+        """Run the DAG and return the result.
 
-        Subscribes the ``on_event`` handler (if any) for the duration of the
-        run, delegates to `_run`, then flushes pending events and
-        unsubscribes — so every emitted event is delivered before returning.
-
-        The subscription is scoped to this run: the EventBus is a
-        process-wide singleton, so when several runs execute concurrently
-        (e.g. the in-process launcher) every handler would otherwise
-        receive every run's events. The run's ``run_id`` is assigned here
-        (before any event is emitted) and only events carrying it in their
-        metadata are delivered to ``on_event``.
+        Events carrying the run's id reach ``on_event`` (when set) before this
+        returns: the EventBus is process-wide, so several runs in one process
+        would otherwise reach every handler. The run is traced as
+        ``interloper.runner.run``, under the parent span the metadata or the
+        environment carries. Operation failures are recorded on the result;
+        with ``reraise`` set, the first one is raised once the run has finished.
 
         Args:
-            dag: The DAG to execute.
-            window: Partition or window to scope the run.
-            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+            dag: The DAG to run.
+            window: The window the run covers; a partition is accepted as the window of one.
+            metadata: Run-level metadata (``run_id``, ``backfill_id``, ...); a
+                ``run_id`` is generated when absent.
 
         Returns:
-            A RunResult summarizing the execution outcome.
+            The run's result.
         """
         window = PartitionWindow.of(window)
         metadata = dict(metadata or {})
         metadata.setdefault("run_id", str(uuid.uuid4()))
-        run_id = metadata["run_id"]
-
-        # Remote parent: metadata in-process, environment across containers.
-        parent_context = extract_metadata(metadata) or context_from_env()
-
-        handler: Callable[[Event], None] | None = None
-        if self.on_event is not None:
-            on_event = self.on_event
-
-            def handler(event: Event) -> None:
-                if event.metadata.get("run_id") == run_id:
-                    on_event(event)
-
-            EventBus.subscribe(handler)
-        try:
-            span_attrs = attributes.from_metadata(metadata)
-            span_attrs[attributes.RUNNER_TYPE] = self.key
-            if window is not None:
-                span_attrs[attributes.PARTITION] = str(window)
+        subscription = RunSubscription(self.on_event, metadata["run_id"]) if self.on_event else nullcontext()
+        async with subscription:
+            parent = extract_metadata(metadata) or context_from_env()
             with tracer().start_as_current_span(
-                "interloper.runner.run", context=parent_context, attributes=span_attrs
+                "interloper.runner.run", context=parent, attributes=self._span_attributes(metadata, window)
             ) as span:
                 inject_metadata(metadata)
-                result = await self._run(dag, window, metadata)
-                # Runners swallow asset failures into the result; surface them.
+                async with self.Run(self, dag, window, metadata) as run:
+                    result = await run.walk()
                 if result.status is ExecutionStatus.FAILED:
                     span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
-                return result
-        finally:
-            if handler is not None:
-                await asyncio.to_thread(EventBus.flush, 5.0)
-                EventBus.unsubscribe(handler)
+        if self.reraise:
+            run.reraise()
+        return result
 
-    # TODO: find a better name as the main method to abstract for a runner.
-    @abstractmethod
-    async def _run(
-        self,
-        dag: DAG,
-        window: PartitionWindow | None,
-        metadata: dict[str, Any] | None,
-    ) -> RunResult:
-        """Walk the DAG and return the result (implemented by subclasses).
+    def _span_attributes(self, metadata: dict[str, Any], window: PartitionWindow | None) -> dict[str, str]:
+        """The run span's attributes: the metadata's, the runner's key and the window.
 
         Args:
-            dag: The DAG to execute.
-            window: Partition or window to scope the run.
-            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
+            metadata: Run-level metadata.
+            window: The run's window.
 
         Returns:
-            A RunResult summarizing the execution outcome.
+            The attributes.
         """
-
-    # -- Hooks -----------------------------------------------------------------
-
-    def _on_start(self) -> None:
-        """Lifecycle hook called before a run begins (e.g. create pools)."""
-
-    def _on_end(self) -> None:
-        """Lifecycle hook called after a run ends (e.g. shutdown pools)."""
-
-    # -- Shared helpers --------------------------------------------------------
-
-    def _init_run(
-        self,
-        dag: DAG,
-        window: PartitionWindow | None,
-        metadata: dict[str, Any] | None,
-    ) -> None:
-        """Initialize run state and start the run.
-
-        Args:
-            dag: The DAG to execute.
-            window: Partition or window to scope the run.
-            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
-        """
-        self._preflight(dag, window)
-        self._state = RunState(dag, metadata=metadata)
-        self.state.start_run(window)
-
-    def _finalize_run(
-        self,
-        error: str | None = None,
-    ) -> RunResult:
-        """Finalize the run and return the result.
-
-        Every operation still non-terminal at this point (in flight under a
-        fail-fast break, or never submitted) is recorded as canceled first,
-        so no execution outlives its run without a terminal event.
-
-        Args:
-            error: Run-level error message, set only when the walk machinery
-                itself failed (deadlock, invalid DAG state, runner bug).
-                ``None`` for every other outcome — failed operations carry
-                their own detail on their execution info and events.
-
-        Returns:
-            A RunResult summarizing the execution outcome.
-        """
-        self.state.cancel_pending()
-        status = ExecutionStatus.FAILED if (self.state.failed_operations or error) else ExecutionStatus.COMPLETED
-        executions = self.state.end_run(status, error)
-
-        return RunResult(
-            window=self.state.window,
-            status=status,
-            executions=executions,
-            execution_time=self.state.elapsed_time or 0,
-        )
-
-    def _reraise_first_failure(self) -> NoReturn:
-        """Re-raise a failed operation's exception for the direct caller.
-
-        Called after the run is finalized, when ``reraise`` is set and at
-        least one operation failed — so events and results are complete
-        before the exception surfaces. The first failed operation's original
-        exception is re-raised when the runner had it in-process.
-
-        Raises:
-            RunnerError: Carrying the recorded error message, when the
-                failure happened in another process and only its message
-                crossed back.
-        """
-        operation = self.state.failed_operations[0]
-        info = self.state.executions[operation.id]
-        if info.exception is not None:
-            raise info.exception
-        raise RunnerError(f"Operation '{operation.key}' failed: {info.error}")
-
-    def _preflight(self, dag: DAG, window: PartitionWindow | None) -> None:
-        """Check the run's window against every enabled partitioned operation before anything executes.
-
-        A run whose window no operation can serve fails as a whole, listing every failing
-        operation, instead of failing the offending operations while the rest of the DAG
-        executes.
-
-        Args:
-            dag: The DAG whose operations are checked.
-            window: The run's window, ``None`` for an unscoped run.
-
-        Raises:
-            PartitionError: If the window is not valid for at least one enabled partitioned
-                operation, naming each one with its own predicate.
-        """
-        problems: list[str] = []
-        for operation in dag.operations:
-            if not operation.enabled or operation.partitioning is None:
-                continue
-            try:
-                operation.partitioning.check(window)
-            except PartitionError as error:
-                problems.append(f"'{operation.key}' {error}")
-        if problems:
-            raise PartitionError("The run's window is not valid for every operation: " + "; ".join(problems))
+        span_attributes = attributes.from_metadata(metadata)
+        span_attributes[attributes.RUNNER_TYPE] = self.key
+        if window is not None:
+            span_attributes[attributes.PARTITION] = str(window)
+        return span_attributes

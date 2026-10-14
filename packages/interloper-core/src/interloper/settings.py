@@ -30,16 +30,16 @@ PREFIX = "INTERLOPER_"
 class RunnerSettings(BaseSettings):
     """Runner settings: the runner type and its own configuration.
 
-    Built-in types: ``async`` (default, in-process concurrency via ``max_workers``),
-    ``serial`` (``async`` with a single slot), ``multi_process``. The ``docker``
-    and ``kubernetes`` runners register through their own packages.
+    Built-in types: ``async`` (default, in-process concurrency via ``max_workers``)
+    and ``serial`` (``async`` with a single slot). The ``docker`` and
+    ``kubernetes`` runners register through their own packages.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUNNER_")
 
     type: str = Field(
         default="async",
-        description="Registry key of the runner: `async`, `serial`, `multi_process`, or one another package registers.",
+        description="Registry key of the runner: `async`, `serial`, or one another package registers.",
     )
     config: dict[str, Any] = Field(default_factory=dict, description="Keyword arguments for the runner class.")
 

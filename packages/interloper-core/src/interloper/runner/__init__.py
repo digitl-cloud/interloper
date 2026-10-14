@@ -1,22 +1,21 @@
-"""Runner module for DAG execution orchestration."""
+"""Runners: configuration a run is made from, and the run that walks a DAG."""
 
-from interloper.runner.async_runner import AsyncRunner
+from interloper.runner.async_runner import AsyncRunner, InProcessRun
 from interloper.runner.base import RUNNERS, Runner
-from interloper.runner.multi_process import MultiProcessRunner
 from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
+from interloper.runner.run import Run
 from interloper.runner.serial import SerialRunner
 from interloper.runner.state import RunState
-from interloper.runner.sync_runner import SyncRunner
 
 __all__ = [
     "RUNNERS",
     "AsyncRunner",
     "ExecutionInfo",
     "ExecutionStatus",
-    "MultiProcessRunner",
+    "InProcessRun",
+    "Run",
     "RunResult",
     "RunState",
     "Runner",
     "SerialRunner",
-    "SyncRunner",
 ]

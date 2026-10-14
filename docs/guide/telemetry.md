@@ -81,7 +81,7 @@ A failed operation sets its span status to error, and so does a run that swallow
 into a failed result.
 
 Trace context propagates automatically: the run span's context rides `metadata["traceparent"]`
-into every event and into `MultiProcessRunner` workers, and `TRACEPARENT` / `TRACESTATE`
+into every event, and `TRACEPARENT` / `TRACESTATE`
 environment variables carry it into spawned processes. `child_process_env()` builds the
 environment a child needs (trace context plus the `INTERLOPER_OTEL_*` configuration, with the
 service name reset to `interloper-run`). httpx2 client spans are enabled when the httpx2

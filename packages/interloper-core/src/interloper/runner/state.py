@@ -1,12 +1,12 @@
-"""Run state tracking and dynamic operation scheduling."""
+"""RunState: the state machine of a run's operations."""
 
 from __future__ import annotations
 
-import datetime as dt
 import uuid
 from typing import TYPE_CHECKING, Any
 
 from interloper.events import Event, EventBus, EventType
+from interloper.operation.base import OperationContext
 from interloper.runner.results import ExecutionInfo, ExecutionStatus
 
 if TYPE_CHECKING:
@@ -15,22 +15,24 @@ if TYPE_CHECKING:
     from interloper.partitioning.base import PartitionWindow
 
 
-# Fixed namespace for deterministic operation-event ids. A given lifecycle
-# event is uniquely identified by ``(run_id, component_id, event_type)``;
-# deriving the event id from that triple makes the *same* logical event
-# collapse to a single row when it is produced more than once — e.g. a child
-# container emits its own ``operation_failed`` and the host also authors one
-# as a fallback, or the host bulk-emits ``operation_queued`` and the child
-# re-emits it. Combined with the idempotent (``ON CONFLICT (id) DO NOTHING``)
-# event save, this dedups without any cross-process coordination.
 class RunState:
-    """Tracks operation execution state and decides which operations are ready.
+    """The operations of one run: their statuses, attempts and results, and the events their transitions emit.
 
-    Used by runners to dynamically schedule operations based on dependency
-    completion rather than static DAG levels.
+    Every transition is one verb, and emits its operation-lifecycle event with
+    a deterministic id. With ``reports_progress`` off, a start and a retry are
+    recorded without an event: the operation executes in a child process that
+    reports its own, while every verdict is still recorded, and its terminal
+    event authored, here.
 
-    All state mutations occur on the asyncio event loop's single thread,
-    so no locking is required.
+    Event ids derive from ``(run_id, component_id, event_type, attempt)``, so
+    the *same* logical event collapses to one row when more than one party
+    produces it: a container's child emits its own ``operation_failed`` and
+    the host authors one from the exit status, or both emit
+    ``operation_queued``. With the idempotent event save, this dedups without
+    any cross-process coordination.
+
+    Every transition happens on the run's event loop thread, so no locking is
+    required.
     """
 
     _OPERATION_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
@@ -38,352 +40,147 @@ class RunState:
     def __init__(
         self,
         dag: DAG,
-        metadata: dict[str, Any] | None = None,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        *,
+        reports_progress: bool = True,
     ) -> None:
-        """Initialize the run state.
+        """Track a DAG's operations for one run, roots ready.
 
         Args:
-            dag: The DAG to track.
-            metadata: Arbitrary metadata (e.g. run_id, backfill_id).
-                A ``run_id`` is generated automatically if not provided.
+            dag: The DAG the run walks.
+            window: The window the run covers, ``None`` when unscoped.
+            metadata: Run-level metadata, carrying the ``run_id``.
+            reports_progress: Whether starts and retries emit events here.
         """
         self.dag = dag
-        self.metadata: dict[str, Any] = metadata or {}
-        if "run_id" not in self.metadata:
-            self.metadata["run_id"] = str(uuid.uuid4())
+        self.window = window
+        self.metadata = metadata
+        self.reports_progress = reports_progress
+        self.executions: dict[str, ExecutionInfo] = {
+            operation.id: ExecutionInfo(
+                component_id=operation.id,
+                component_key=operation.key,
+                status=ExecutionStatus.QUEUED if operation.enabled else ExecutionStatus.SKIPPED,
+            )
+            for operation in dag.operations
+        }
+        for operation in dag.operations:
+            self._promote(operation.id)
 
-        self.executions: dict[str, ExecutionInfo] = {}
-        self.attempts: dict[str, int] = {operation.id: 1 for operation in dag.operations}
-        self.window: PartitionWindow | None = None
-        self.start_time: dt.datetime | None = None
-        self.end_time: dt.datetime | None = None
-
-        self._initialize_operations()
-
-    # -- Properties ------------------------------------------------------------
+    # -- Views -----------------------------------------------------------------
 
     @property
     def run_id(self) -> str:
-        """The run ID."""
+        """The run's id, from its metadata."""
         return self.metadata["run_id"]
 
     @property
-    def backfill_id(self) -> str | None:
-        """The backfill ID, if set."""
-        return self.metadata.get("backfill_id")
+    def ready(self) -> list[Operation]:
+        """The operations whose dependencies are met and that have not started, in DAG order."""
+        return self._with_status(ExecutionStatus.READY)
 
     @property
-    def elapsed_time(self) -> float | None:
-        """Elapsed wall-clock time of the run in seconds, or None if not finished."""
-        if self.end_time and self.start_time:
-            return (self.end_time - self.start_time).total_seconds()
-        return None
+    def completed(self) -> list[Operation]:
+        """The operations that completed, in DAG order."""
+        return self._with_status(ExecutionStatus.COMPLETED)
 
     @property
-    def queued_operations(self) -> list[Operation]:
-        """List of operations waiting to be scheduled."""
-        return self._operations_with_status(ExecutionStatus.QUEUED)
+    def failed(self) -> list[Operation]:
+        """The operations that failed, in DAG order."""
+        return self._with_status(ExecutionStatus.FAILED)
 
     @property
-    def ready_operations(self) -> list[Operation]:
-        """List of operations whose dependencies are met and can be executed."""
-        return self._operations_with_status(ExecutionStatus.READY)
-
-    @property
-    def running_operations(self) -> list[Operation]:
-        """List of operations currently being executed."""
-        return self._operations_with_status(ExecutionStatus.RUNNING)
-
-    @property
-    def completed_operations(self) -> list[Operation]:
-        """List of operations that completed successfully."""
-        return self._operations_with_status(ExecutionStatus.COMPLETED)
-
-    @property
-    def failed_operations(self) -> list[Operation]:
-        """List of operations that failed."""
-        return self._operations_with_status(ExecutionStatus.FAILED)
-
-    # -- Run lifecycle ---------------------------------------------------------
-
-    def start_run(self, window: PartitionWindow | None) -> None:
-        """Record the run start time and emit RUN_STARTED + OPERATION_QUEUED events.
-
-        Args:
-            window: Partition or window the run is scoped to, or
-                ``None`` for an unpartitioned run. Stamped on every event this
-                state emits.
-        """
-        self.window = window
-        self.start_time = dt.datetime.now(dt.timezone.utc)
-        self.end_time = None
-
-        EventBus.emit(
-            EventType.RUN_STARTED,
-            metadata={
-                **self.metadata,
-                "window": str(self.window) if self.window else None,
-                "message": f"Run started ({len(self.dag.operations)} operations)",
-            },
-        )
-
-        for operation in self.dag.operations:
-            info = self.executions[operation.id]
-            if info.status in (ExecutionStatus.QUEUED, ExecutionStatus.READY):
-                self._emit_operation_event(
-                    EventType.OPERATION_QUEUED,
-                    {
-                        **self._operation_event_metadata(operation),
-                        "message": f"Operation '{operation.key}' queued",
-                    },
-                )
-
-    def end_run(
-        self,
-        status: ExecutionStatus,
-        error: str | None = None,
-    ) -> dict[str, ExecutionInfo]:
-        """Record the run end time, emit a terminal event, and return the executions.
-
-        Args:
-            status: Terminal status of the run; anything other than
-                ``COMPLETED`` emits ``RUN_FAILED``.
-            error: Run-level error message included in the terminal event, or
-                ``None`` when there is no specific error to report.
-
-        Returns:
-            A copy of the execution info dictionary.
-        """
-        self.end_time = dt.datetime.now(dt.timezone.utc)
-
-        event_type = EventType.RUN_COMPLETED if status == ExecutionStatus.COMPLETED else EventType.RUN_FAILED
-        if status == ExecutionStatus.COMPLETED:
-            message = f"Run completed ({len(self.completed_operations)}/{len(self.dag.operations)} succeeded)"
-        else:
-            failed_count = len(self.failed_operations)
-            message = f"Run failed: {error}" if error else f"Run failed ({failed_count} operation(s) failed)"
-
-        EventBus.emit(
-            event_type,
-            metadata={
-                **self.metadata,
-                "window": str(self.window) if self.window else None,
-                "error": error,
-                "message": message,
-            },
-        )
-
-        return self.executions.copy()
-
-    def is_run_complete(self) -> bool:
-        """Check whether every operation has reached a terminal state.
-
-        Returns:
-            True if all operations are completed, failed, canceled, or skipped.
-        """
+    def done(self) -> bool:
+        """Whether every operation reached a final status."""
         return all(info.is_terminal for info in self.executions.values())
 
-    # -- Operation state transitions ---------------------------------------------
-
-    def mark_running(self, operation: Operation, *, emit: bool = True) -> None:
-        """Transition an operation to RUNNING.
+    def context(self, operation: Operation) -> OperationContext:
+        """The facts an operation executes with: its own window, the DAG and the run's metadata.
 
         Args:
-            operation: The operation that started.
-            emit: Emit ``OPERATION_STARTED`` on the EventBus.  Set to
-                ``False`` for cross-process runners where the child
-                process emits the event itself.
-        """
-        self.executions[operation.id].mark_running()
-
-        if emit:
-            self._emit_operation_event(
-                EventType.OPERATION_STARTED,
-                {
-                    **self._operation_event_metadata(operation),
-                    "message": f"Operation '{operation.key}' started",
-                },
-            )
-
-    def mark_completed(
-        self, operation: Operation, *, emit: bool = True, effects: OperationResult | None = None
-    ) -> None:
-        """Transition an operation to COMPLETED and promote ready dependents.
-
-        Args:
-            operation: The operation that completed.
-            emit: Emit ``OPERATION_COMPLETED`` on the EventBus.  Set to
-                ``False`` for cross-process runners where the child
-                process emits the event itself.
-            effects: The operation's returned effects, recorded on the
-                execution info for the platform to persist.
-        """
-        self.executions[operation.id].mark_completed()
-        self.executions[operation.id].effects = effects
-        self._promote_dependents(operation.id)
-
-        if emit:
-            self._emit_operation_event(
-                EventType.OPERATION_COMPLETED,
-                {
-                    **self._operation_event_metadata(operation),
-                    "message": f"Operation '{operation.key}' completed",
-                },
-            )
-
-    def mark_canceled(self, operation: Operation, *, emit: bool = True) -> None:
-        """Transition an operation to CANCELED.
-
-        Args:
-            operation: The operation that was canceled.
-            emit: Emit ``OPERATION_CANCELED`` on the EventBus.  Set to
-                ``False`` for cross-process runners where the child
-                process emits the event itself.
-        """
-        self.executions[operation.id].mark_canceled()
-
-        if emit:
-            self._emit_operation_event(
-                EventType.OPERATION_CANCELED,
-                {
-                    **self._operation_event_metadata(operation),
-                    "message": f"Operation '{operation.key}' canceled",
-                },
-            )
-
-    def cancel_pending(self) -> list[Operation]:
-        """Cancel every operation that has not reached a terminal state.
-
-        Called when the walk ends before the DAG is exhausted (a fail-fast
-        break or a machinery abort). Operations still queued or ready were
-        never submitted, so no task or future will ever give them a terminal
-        event; without this sweep they stay non-terminal forever.
+            operation: The operation about to execute.
 
         Returns:
-            The operations that were canceled, in DAG order.
+            Its context.
         """
-        pending = [operation for operation in self.dag.operations if not self.executions[operation.id].is_terminal]
-        for operation in pending:
-            self.mark_canceled(operation)
-        return pending
+        return OperationContext(window=operation.effective_window(self.window), dag=self.dag, metadata=self.metadata)
 
-    def mark_failed(
-        self,
-        operation: Operation,
-        error: str,
-        tb: str | None = None,
-        *,
-        emit: bool = True,
-        effects: OperationResult | None = None,
-        exception: Exception | None = None,
-    ) -> None:
-        """Transition an operation to FAILED and cancel downstream dependents.
+    # -- Transitions -------------------------------------------------------------
+
+    def queue(self) -> None:
+        """Announce every operation that will execute (``OPERATION_QUEUED``)."""
+        for operation in self.dag.operations:
+            if self.executions[operation.id].status in (ExecutionStatus.QUEUED, ExecutionStatus.READY):
+                self._emit(EventType.OPERATION_QUEUED, operation, f"Operation '{operation.key}' queued")
+
+    def start(self, operation: Operation) -> None:
+        """Mark an operation's attempt running (``OPERATION_STARTED``).
 
         Args:
-            operation: The operation that failed.
-            error: Error message describing the failure.
-            tb: Optional formatted traceback string.
-            emit: Emit ``OPERATION_FAILED`` and ``OPERATION_CANCELED`` events
-                on the EventBus.  Set to ``False`` for cross-process runners
-                where the child process emits the events itself.
-            effects: The operation's failure effects, recorded on the
-                execution info for the platform to persist.
-            exception: The original exception, kept in memory only so
-                ``reraise`` can re-raise it faithfully; ``None`` when the
-                failure happened in another process.
+            operation: The operation starting an attempt.
         """
-        self.executions[operation.id].mark_failed(error, tb=tb, exception=exception)
-        self.executions[operation.id].effects = effects
-        canceled = self._propagate_failure(operation.id)
+        self.executions[operation.id].start()
+        if self.reports_progress:
+            self._emit(EventType.OPERATION_STARTED, operation, f"Operation '{operation.key}' started")
 
-        if emit:
-            metadata: dict[str, Any] = {
-                **self._operation_event_metadata(operation),
-                "error": error,
-                "message": f"Operation '{operation.key}' failed: {error}",
-            }
-            if tb:
-                metadata["traceback"] = tb
-            self._emit_operation_event(EventType.OPERATION_FAILED, metadata)
+    def retry(self, operation: Operation, error: str) -> None:
+        """Record a failed attempt that will be retried (``OPERATION_RETRIED``), and count the next one.
 
-            for key in canceled:
-                canceled_operation = self.dag.operation_map[key]
-                self._emit_operation_event(
-                    EventType.OPERATION_CANCELED,
-                    {
-                        **self._operation_event_metadata(canceled_operation),
-                        "message": (f"Operation '{type(self.dag.operation_map[key]).key}' canceled (upstream failure)"),
-                    },
-                )
-
-    def mark_retried(self, operation: Operation, error: str, *, emit: bool = True) -> None:
-        """Record a failed attempt that will be retried, and open the next one.
-
-        A retried attempt is not a verdict: the execution keeps its current
-        status, nothing downstream is canceled, and ``OPERATION_FAILED`` stays
-        reserved for an exhausted budget. Advancing the counter is what makes
-        the next attempt's events distinct from this one's.
+        A retried attempt is not a verdict: the operation keeps its status,
+        nothing downstream is canceled, and ``OPERATION_FAILED`` stays reserved
+        for an exhausted budget. Counting the next attempt is what makes its
+        events distinct from this one's.
 
         Args:
             operation: The operation whose attempt failed.
-            error: Error message describing the failed attempt.
-            emit: Emit ``OPERATION_RETRIED`` on the EventBus.  Set to ``False``
-                for cross-process runners where the child emits its own events.
+            error: The attempt's error.
         """
-        attempt = self.attempts[operation.id]
-        if emit:
-            self._emit_operation_event(
-                EventType.OPERATION_RETRIED,
-                {
-                    **self._operation_event_metadata(operation),
-                    "error": error,
-                    "message": f"Operation '{operation.key}' failed on attempt {attempt}, retrying: {error}",
-                },
-            )
-        self.attempts[operation.id] = attempt + 1
+        info = self.executions[operation.id]
+        if self.reports_progress:
+            message = f"Operation '{operation.key}' failed on attempt {info.attempt}, retrying: {error}"
+            self._emit(EventType.OPERATION_RETRIED, operation, message, error=error)
+        info.attempt += 1
 
-    # -- Internals -------------------------------------------------------------
+    def finish(self, operation: Operation, result: OperationResult) -> None:
+        """Record what an operation came to.
 
-    def _initialize_operations(self) -> None:
-        """Initialize all operations as QUEUED, then promote root operations to READY."""
-        for operation in self.dag.operations:
-            status = ExecutionStatus.SKIPPED if not operation.enabled else ExecutionStatus.QUEUED
-            self.executions[operation.id] = ExecutionInfo(
-                component_id=operation.id,
-                component_key=operation.key,
-                status=status,
-            )
+        Completed: its dependents whose every predecessor is done become ready
+        (``OPERATION_COMPLETED``). Failed: its dependents are canceled
+        (``OPERATION_FAILED``, then ``OPERATION_CANCELED`` for each).
 
-        # Promote operations whose predecessors are all skipped (or empty)
+        Args:
+            operation: The operation that finished.
+            result: What it came to.
+        """
+        self.executions[operation.id].finish(result)
+        if result.succeeded:
+            for successor_id in self.dag.successors.get(operation.id, []):
+                self._promote(successor_id)
+            self._emit(EventType.OPERATION_COMPLETED, operation, f"Operation '{operation.key}' completed")
+            return
+        canceled = self._cancel_dependents(operation.id)
+        extra = {"traceback": result.traceback} if result.traceback else {}
+        message = f"Operation '{operation.key}' failed: {result.error}"
+        self._emit(EventType.OPERATION_FAILED, operation, message, error=result.error, **extra)
+        for dependent in canceled:
+            message = f"Operation '{dependent.key}' canceled (upstream failure)"
+            self._emit(EventType.OPERATION_CANCELED, dependent, message)
+
+    def cancel_pending(self) -> None:
+        """Cancel every operation that never reached a final status (``OPERATION_CANCELED``).
+
+        Called when the walk ends before the DAG is exhausted (a fail-fast stop
+        or a fault of the runner): without it, operations never started would
+        stay non-terminal forever.
+        """
         for operation in self.dag.operations:
             info = self.executions[operation.id]
-            if info.status != ExecutionStatus.QUEUED:
-                continue
-            preds = self.dag.predecessors.get(operation.id, [])
-            if all(self.executions[p].status == ExecutionStatus.SKIPPED for p in preds):
-                info.status = ExecutionStatus.READY
+            if not info.is_terminal:
+                info.cancel()
+                self._emit(EventType.OPERATION_CANCELED, operation, f"Operation '{operation.key}' canceled")
 
-    def _operations_with_status(self, status: ExecutionStatus) -> list[Operation]:
-        """Return all operations matching the given execution status.
-
-        Args:
-            status: The execution status to filter on.
-
-        Returns:
-            Operations whose current status equals ``status``, in DAG order.
-        """
-        return [operation for operation in self.dag.operations if self.executions[operation.id].status == status]
-
-    def _operation_event_metadata(self, operation: Operation) -> dict[str, Any]:
-        """Build event metadata for an operation state transition.
-
-        Args:
-            operation: The operation the event is about.
-
-        Returns:
-            The operation's event metadata, carrying the attempt the event belongs to.
-        """
-        return operation.event_metadata(self.metadata, self.window, attempt=self.attempts[operation.id])
+    # -- Event ids ---------------------------------------------------------------
 
     @staticmethod
     def operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:
@@ -412,68 +209,66 @@ class RunState:
             key = f"{key}:{attempt}"
         return str(uuid.uuid5(RunState._OPERATION_EVENT_NS, key))
 
-    def _emit_operation_event(self, event_type: EventType, metadata: dict[str, Any]) -> None:
-        """Emit an operation-lifecycle event with a deterministic id.
+    # -- Internals -----------------------------------------------------------------
 
-        The id is derived from ``(run_id, component_id, event_type, attempt)``
-        so the same logical event dedups across producers (host fallback vs
-        child, or the duplicate ``operation_queued``) while a retried node's
-        attempts stay distinct.  ``metadata`` must carry ``component_id``.
+    def _with_status(self, status: ExecutionStatus) -> list[Operation]:
+        """The operations with a status, in DAG order.
 
         Args:
-            event_type: The operation-lifecycle event type to emit.
-            metadata: Event metadata, as built by ``_operation_event_metadata``;
-                must carry a ``component_id`` key, and an ``attempt`` for any
-                node past its first.
-        """
-        event = Event(
-            type=event_type,
-            metadata=metadata,
-            id=self.operation_event_id(
-                self.run_id,
-                str(metadata["component_id"]),
-                event_type,
-                attempt=int(metadata.get("attempt", 1)),
-            ),
-        )
-        EventBus.emit_event(event)
-
-    def _promote_dependents(self, completed_key: str) -> None:
-        """Promote queued successors to READY if all their predecessors are done.
-
-        Args:
-            completed_key: Id of the operation that just completed, whose
-                successors are candidates for promotion.
-        """
-        completed_keys = {
-            k
-            for k, info in self.executions.items()
-            if info.status in (ExecutionStatus.COMPLETED, ExecutionStatus.SKIPPED)
-        }
-        for successor_key in self.dag.successors.get(completed_key, []):
-            info = self.executions[successor_key]
-            if info.status != ExecutionStatus.QUEUED:
-                continue
-            preds = self.dag.predecessors.get(successor_key, [])
-            if all(p in completed_keys for p in preds):
-                info.status = ExecutionStatus.READY
-
-    def _propagate_failure(self, failed_key: str) -> list[str]:
-        """Recursively mark all downstream dependents as CANCELED.
-
-        Args:
-            failed_key: Id of the operation that failed, whose transitive
-                successors are canceled.
+            status: The status to select.
 
         Returns:
-            List of operation ids that were canceled.
+            The matching operations.
         """
-        canceled: list[str] = []
-        for successor_key in self.dag.successors.get(failed_key, []):
-            info = self.executions[successor_key]
+        return [operation for operation in self.dag.operations if self.executions[operation.id].status is status]
+
+    def _promote(self, operation_id: str) -> None:
+        """Make a queued operation ready once every predecessor completed or was skipped.
+
+        Args:
+            operation_id: The operation to consider.
+        """
+        info = self.executions[operation_id]
+        if info.status is not ExecutionStatus.QUEUED:
+            return
+        predecessors = self.dag.predecessors.get(operation_id, [])
+        done = (ExecutionStatus.COMPLETED, ExecutionStatus.SKIPPED)
+        if all(self.executions[predecessor].status in done for predecessor in predecessors):
+            info.status = ExecutionStatus.READY
+
+    def _cancel_dependents(self, operation_id: str) -> list[Operation]:
+        """Cancel everything transitively downstream of a failed operation that has not finished.
+
+        Args:
+            operation_id: The failed operation.
+
+        Returns:
+            The canceled operations, depth first.
+        """
+        canceled: list[Operation] = []
+        for successor_id in self.dag.successors.get(operation_id, []):
+            info = self.executions[successor_id]
             if info.is_terminal:
                 continue
-            info.mark_canceled()
-            canceled.append(successor_key)
-            canceled.extend(self._propagate_failure(successor_key))
+            info.cancel()
+            canceled.append(self.dag.operation_map[successor_id])
+            canceled.extend(self._cancel_dependents(successor_id))
         return canceled
+
+    def _emit(self, event_type: EventType, operation: Operation, message: str, **extra: Any) -> None:
+        """Emit an operation-lifecycle event with its deterministic id.
+
+        Args:
+            event_type: The lifecycle event.
+            operation: The operation it is about.
+            message: The event's message.
+            **extra: More metadata (``error``, ``traceback``).
+        """
+        attempt = self.executions[operation.id].attempt
+        metadata = {
+            **operation.event_metadata(self.metadata, self.window, attempt=attempt),
+            **extra,
+            "message": message,
+        }
+        event_id = self.operation_event_id(self.run_id, operation.id, event_type, attempt=attempt)
+        EventBus.emit_event(Event(type=event_type, metadata=metadata, id=event_id))

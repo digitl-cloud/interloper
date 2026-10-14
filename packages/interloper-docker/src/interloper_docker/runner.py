@@ -1,70 +1,212 @@
-"""Docker-based runner that executes each asset in its own container.
+"""DockerRunner: each operation in its own container.
 
-Each submitted asset runs inside a fresh container. A mini-DAG comprising
-the target asset and all its upstream ancestors is sent to the container
-via inline JSON so the asset can resolve its upstream dependencies from IO
-without recomputing them.
-
-**Real-time events** are streamed via **stderr** using the ``@EVENT:``
-prefix (see :class:`~interloper.events.StderrEventHandler`).  Events for
-the target asset are forwarded to the host EventBus; events for
-disabled parent assets and container-internal ``RUN_*`` events
-are dropped.  The host updates internal state with ``emit=False`` to
-avoid duplicate events.
+A container runs its operation's mini-DAG (the operation and its upstream
+ancestors, the ancestors read-only) through ``interloper run --format
+inline``, so the operation resolves its upstreams from their destinations
+without recomputing them. The container reports its operation's progress as
+``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
+container runs; the host authors the operation's terminal event itself, from
+the container's exit code, so an operation whose container dies without a
+word still ends.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import logging
-import threading
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 import docker
-from docker.client import DockerClient
 from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
-from interloper.events import Event, EventBus, EventType
-from interloper.operation import Operation
-from interloper.partitioning import PartitionWindow
-from interloper.runner.sync_runner import SyncRunner
+from interloper.events import EventLogReader
+from interloper.operation import Operation, OperationResult
+from interloper.runner.base import Runner
+from interloper.runner.run import Run
 from interloper.telemetry.propagation import child_process_env
-from pydantic import Field, PrivateAttr
+from pydantic import Field
+
+if TYPE_CHECKING:
+    from interloper.dag.base import DAG
+    from interloper.partitioning import PartitionWindow
 
 logger = logging.getLogger(__name__)
 
-# Events emitted by the container's inner run — not forwarded to the host
-# because the host manages its own run lifecycle.
-_RUN_EVENTS = frozenset(
-    {
-        EventType.RUN_STARTED,
-        EventType.RUN_COMPLETED,
-        EventType.RUN_FAILED,
-    }
-)
 
+class ContainerRun(Run):
+    """One run of a DockerRunner: each operation in its own container, its events read from the container's log.
 
-class DockerRunner(SyncRunner):
-    """Execute assets as individual Docker containers.
-
-    For each asset, constructs a mini-DAG comprising the asset and all its
-    upstream ancestors. The mini-DAG is sent to the container via inline JSON.
-    Inside the container, all non-target assets are marked as
-    ``enabled=False`` to avoid recomputation while still enabling
-    IO-based dependency resolution.
-
-    Events are emitted by the container process and streamed to the host
-    via stderr.  The host forwards them to its EventBus (for persistence
-    by the scheduler) and updates internal state silently (``emit=False``)
-    to avoid duplicate events.
-
-    The blocking container-polling walk is offloaded to a thread, so the
-    runner satisfies the async-native ``run()`` contract::
-
-        result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
-        # or, from a sync edge: il.run(DockerRunner(image=...).run(dag))
+    Following a container (start it, forward its log, read its exit code)
+    blocks, so each one is followed on a thread of the run's polling pool,
+    one thread per container.
     """
+
+    runner: DockerRunner
+    reports_progress = False
+
+    def __init__(
+        self, runner: DockerRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
+    ) -> None:
+        """Open the Docker client and a polling pool sized to the runner's capacity.
+
+        Args:
+            runner: The runner this is a run of.
+            dag: The DAG to walk.
+            window: The window the run covers, ``None`` when unscoped.
+            metadata: Run-level metadata, carrying the ``run_id``.
+        """
+        super().__init__(runner, dag, window, metadata)
+        self.docker = docker.from_env()
+        self.polling = ThreadPoolExecutor(max_workers=runner.max_containers)
+
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Run the operation in its own container, followed on the polling pool.
+
+        Args:
+            operation: The operation to execute.
+
+        Returns:
+            Its result.
+        """
+        # The child continues the run's trace, which only this context carries onto the pool thread.
+        follow = partial(contextvars.copy_context().run, self.follow, operation)
+        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
+
+    def follow(self, operation: Operation) -> OperationResult:
+        """Start the operation's container, forward its log's events until it exits, then read its exit code.
+
+        Args:
+            operation: The operation the container executes.
+
+        Returns:
+            An empty result for exit code 0; otherwise a failure naming the
+            code, or why the container could not be started or waited on.
+        """
+        try:
+            container = self.launch(operation)
+        except Exception as error:  # noqa: BLE001 - a container that cannot start fails its operation
+            return OperationResult(error=format_exception(error))
+        try:
+            self.forward_log(container, operation)
+            status_code = container.wait().get("StatusCode", 1)
+        except Exception as error:  # noqa: BLE001 - losing the container fails its operation, never the run
+            return OperationResult(error=format_exception(error))
+        finally:
+            if self.runner.auto_remove:
+                self.remove(container)
+        if status_code == 0:
+            return OperationResult()
+        exited = RunnerError(f"Container {container.short_id} exited with code {status_code}")
+        return OperationResult(error=format_exception(exited))
+
+    def launch(self, operation: Operation) -> Container:
+        """Start the operation's container, detached.
+
+        Args:
+            operation: The operation the container executes.
+
+        Returns:
+            The running container.
+        """
+        return self.docker.containers.run(
+            image=self.runner.image,
+            name=self.name(operation),
+            command=self.command(operation),
+            environment=self.runner.environment(),
+            volumes=self.runner.mounts() or None,
+            labels={"interloper.component_id": operation.id},
+            remove=False,
+            detach=True,
+            stdout=True,
+            stderr=True,
+        )
+
+    def forward_log(self, container: Container, operation: Operation) -> None:
+        """Forward the operation's events from the container's log until the log ends.
+
+        A stream that breaks is logged and ends the forwarding: the exit code,
+        not the log, decides the operation's verdict.
+
+        Args:
+            container: The running container.
+            operation: The operation it executes.
+        """
+        reader = EventLogReader(operation.id, label=f"container {container.short_id}")
+        try:
+            for chunk in container.logs(stream=True, follow=True, stdout=False, stderr=True):
+                reader.feed(chunk)
+        except Exception:
+            logger.debug("Log stream of container %s ended early", container.short_id, exc_info=True)
+        reader.close()
+
+    def remove(self, container: Container) -> None:
+        """Remove a finished container; a failure to is logged, never failing its operation.
+
+        Args:
+            container: The container to remove.
+        """
+        try:
+            container.remove()
+        except Exception:
+            logger.warning("Removing container %s failed", container.short_id, exc_info=True)
+
+    def command(self, operation: Operation) -> list[str]:
+        """The command the container runs: its operation's mini-DAG through ``interloper run --format inline``.
+
+        Args:
+            operation: The operation the container executes.
+
+        Returns:
+            The argv, with the operation's own window as ``--date`` or
+            ``--start-date``/``--end-date``.
+        """
+        spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
+        command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
+        window = operation.effective_window(self.state.window)
+        if window is not None and len(window) == 1:
+            command.extend(["--date", window.first.id])
+        elif window is not None:
+            command.extend(["--start-date", window.first.id, "--end-date", window.last.id])
+        return command
+
+    def name(self, operation: Operation) -> str:
+        """A container name unique to this operation and run.
+
+        Args:
+            operation: The operation the container executes.
+
+        Returns:
+            ``interloper_run_<run>_<operation>``, each id cut to 8 characters.
+        """
+        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}"
+
+    async def close(self) -> None:
+        """Release the polling pool.
+
+        A canceled run returns at once: whatever is still being followed
+        finishes on its thread in the background.
+        """
+        self.polling.shutdown(wait=False)
+
+
+class DockerRunner(Runner):
+    """Execute each operation in its own Docker container, ``max_containers`` at a time.
+
+    The container runs the image's ``interloper`` CLI on the operation's
+    mini-DAG; the host forwards the container's events and records its exit
+    code:
+
+    ```py
+    result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
+    # or, from a sync edge: il.run(DockerRunner(image=...).run(dag))
+    ```
+    """
+
+    Run = ContainerRun
 
     image: str = "interloper:latest-worker"
     max_containers: int = 4
@@ -74,299 +216,34 @@ class DockerRunner(SyncRunner):
     reraise: bool = False
     auto_remove: bool = True
 
-    _docker: DockerClient = PrivateAttr()
-    _poll_pool: ThreadPoolExecutor | None = PrivateAttr(default=None)
-    _log_threads: dict[str, threading.Thread] = PrivateAttr(default_factory=dict)
-    _stop_log_streaming: threading.Event = PrivateAttr(default_factory=threading.Event)
-    _container_map: dict[Future[Any], Container] = PrivateAttr(default_factory=dict)
-
-    def model_post_init(self, context: Any) -> None:
-        """Initialize Docker client after model initialization.
-
-        Args:
-            context: Pydantic's post-init context, unused.
-
-        """
-        super().model_post_init(context)
-        self._docker = docker.from_env()
-
-    # -- Scheduling primitives -------------------------------------------------
-
     @property
-    def _capacity(self) -> int:
-        """Maximum number of concurrent containers.
-
-        Returns:
-            The configured worker count.
-
-        """
+    def capacity(self) -> int:
+        """How many containers a run executes at once: ``max_containers``."""
         return self.max_containers
 
-    def _on_start(self) -> None:
-        """Create the polling thread pool."""
-        self._stop_log_streaming.clear()
-        self._poll_pool = ThreadPoolExecutor(max_workers=self.max_containers)
-
-    def _on_end(self) -> None:
-        """Shut down log streaming and the polling pool."""
-        self._stop_log_streaming.set()
-        for thread in self._log_threads.values():
-            thread.join(timeout=2.0)
-        self._log_threads.clear()
-        if self._poll_pool is not None:
-            self._poll_pool.shutdown(wait=True, cancel_futures=False)
-            self._poll_pool = None
-        self._container_map.clear()
-
-    def _submit_operation(
-        self,
-        operation: Operation,
-        window: PartitionWindow | None,
-    ) -> Future[Any]:
-        """Launch an asset in a Docker container and return a polling Future.
-
-        Args:
-            operation: The operation to run in its own container.
-            window: The window to materialize, narrowed to the operation's own; ``None`` for an
-                unpartitioned operation.
+    def environment(self) -> dict[str, str]:
+        """The environment every container gets.
 
         Returns:
-            A Future that raises :class:`RunnerError` on container failure.
-
-        Raises:
-            RunnerError: If the container cannot be created.
-
+            ``env_vars``, the switch that makes the child report its events on
+            stderr, and the trace context the child continues.
         """
-        if self._poll_pool is None:
-            raise RunnerError("Poll pool not initialized")
+        environment = dict(self.env_vars)
+        environment["INTERLOPER_EVENTS_TO_STDERR"] = "true"
+        environment.update(child_process_env())
+        return environment
 
-        mini_dag = self.state.dag.mini_dag(operation.id)
-        dag_spec = mini_dag.to_spec().model_dump(mode="json")
-
-        cmd = self._build_command(dag_spec, operation.effective_window(window), self.state.run_id)
-        name = self._build_name(operation)
-        env = self._build_env()
-        volumes = self._build_volumes()
-
-        # emit=False: the container emits ASSET_STARTED via stderr
-        self.state.mark_running(operation, emit=False)
-
-        try:
-            container = self._docker.containers.run(
-                image=self.image,
-                name=name,
-                command=cmd,
-                environment=env,
-                volumes=volumes or None,
-                labels={"interloper.component_id": operation.id},
-                remove=False,
-                detach=True,
-                stdout=True,
-                stderr=True,
-            )
-        except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
-            # Container never started — emit from the host
-            self.state.mark_failed(operation, format_exception(e))
-            done: Future[None] = Future()
-            done.set_result(None)
-            return done
-
-        self._start_log_streaming(container, target_component_id=operation.id)
-
-        future = self._poll_pool.submit(self._poll_container, container)
-        self._container_map[future] = container
-        return future
-
-    def _handle_completed(self, future: Future[Any], operation: Operation) -> None:
-        """Process a completed container future and author the terminal event.
-
-        The host authors the terminal event itself (``emit=True``) from the
-        authoritative container exit status instead of trusting the child to
-        have emitted one.  Deterministic event ids keep this idempotent: the
-        child's own (richer) terminal was persisted first and the host's emit
-        dedups away (``ON CONFLICT DO NOTHING``); if the child died without
-        reporting one, the host's event is the only terminal, so the asset no
-        longer orphans as ``running``.  Assets already terminal (e.g. marked
-        failed during ``_submit_operation``) are skipped.
-
-        Args:
-            future: The polling future that has completed.
-            operation: The operation the container ran.
-
-        """
-        container = self._container_map.pop(future, None)
-        if container is not None:
-            self._stop_container_log_streaming(container)
-
-        info = self.state.executions.get(operation.id)
-        if not (info and info.is_terminal):
-            try:
-                future.result()
-            except Exception as e:  # noqa: BLE001 — one operation's failure must not abort the run
-                self.state.mark_failed(operation, format_exception(e), emit=True, exception=e)
-            else:
-                self.state.mark_completed(operation, emit=True)
-
-        if container is not None and self.auto_remove:
-            try:
-                container.remove()
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-    # -- Container polling -----------------------------------------------------
-
-    def _poll_container(self, container: Container) -> None:
-        """Block until the container exits; raise on failure.
-
-        Args:
-            container: The container to wait on.
-
-        Raises:
-            RunnerError: If the container exits with a non-zero code.
-        """
-        result = container.wait()
-        status_code = result.get("StatusCode", 1)
-        if status_code != 0:
-            cid = (container.id or "unknown")[:12]
-            raise RunnerError(f"Container {cid} exited with code {status_code}")
-
-    # -- Command and environment builders --------------------------------------
-
-    def _build_command(
-        self,
-        dag_spec: dict[str, Any],
-        window: PartitionWindow | None,
-        run_id: str,
-    ) -> list[str]:
-        """Build the CLI command for asset execution in a container.
-
-        Args:
-            dag_spec: The serialized DAG the container reconstructs.
-            window: The window to materialize, narrowed to the operation's own; ``None`` for an
-                unpartitioned operation.
-            run_id: The run the container reports against.
+    def mounts(self) -> dict[str, dict[str, str]]:
+        """The volumes every container mounts, in docker-py's shape.
 
         Returns:
-            The argv the container entrypoint is started with.
-
+            The mounts keyed by host path; ``"host:container"`` entries are
+            mounted read-write.
         """
-        cmd = [
-            "interloper",
-            "run",
-            "--format",
-            "inline",
-            f"--run-id={run_id}",
-            json.dumps(dag_spec),
-        ]
-
-        if window is not None:
-            if len(window) == 1:
-                cmd.extend(["--date", window.first.id])
-            else:
-                cmd.extend(["--start-date", window.first.id, "--end-date", window.last.id])
-
-        return cmd
-
-    def _build_env(self) -> dict[str, str]:
-        """Build the environment variables for the container.
-
-        Returns:
-            The environment each operation container receives.
-
-        """
-        env = dict(self.env_vars)
-        env["INTERLOPER_EVENTS_TO_STDERR"] = "true"
-        env.update(child_process_env())
-        return env
-
-    def _build_volumes(self) -> dict[str, dict[str, str]]:
-        """Build the volume mounts for the container.
-
-        Returns:
-            The mounts keyed by host path, in docker-py's shape.
-
-        """
-        volumes: dict[str, dict[str, str]] = {}
         if isinstance(self.volumes, dict):
-            volumes.update(self.volumes)
-        elif isinstance(self.volumes, list):
-            for volume in self.volumes:
-                parts = volume.split(":")
-                volumes[parts[0]] = {"bind": parts[1], "mode": "rw"}
-        return volumes
-
-    def _build_name(self, operation: Operation) -> str:
-        """Build the name for the container.
-
-        Args:
-            operation: The operation the container runs.
-
-        Returns:
-            A container name unique to this operation and run.
-
-        """
-        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}"
-
-    # -- Real-time event streaming (stderr) ------------------------------------
-
-    def _start_log_streaming(self, container: Container, *, target_component_id: str) -> None:
-        """Stream events from the container's stderr to the host EventBus.
-
-        Only events belonging to the **target asset** are forwarded.
-        Events for disabled parent assets in the mini-DAG and
-        container-internal ``RUN_*`` events are dropped.
-
-        Args:
-            container: The Docker container to stream from.
-            target_component_id: Only forward events with this ``asset_id``.
-        """
-        cid = (container.id or "???")[:12]
-
-        def stream_logs() -> None:
-            buf = ""
-            try:
-                for chunk in container.logs(stream=True, follow=True, stdout=False, stderr=True):
-                    if self._stop_log_streaming.is_set():
-                        break
-                    buf += chunk.decode("utf-8", errors="ignore")
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        line = line.rstrip()
-                        if not line:
-                            continue
-                        try:
-                            event = Event.from_log_line(line)
-                            if event is not None:
-                                if event.type in _RUN_EVENTS:
-                                    continue
-                                event_component_id = event.metadata.get("component_id")
-                                if event_component_id and event_component_id != target_component_id:
-                                    continue
-                                EventBus.emit_event(event)
-                                continue
-                        except Exception:  # noqa: BLE001, S110
-                            pass
-                        logger.debug("[container %s] %s", cid, line)
-            except Exception:  # noqa: BLE001, S110
-                pass
-            buf = buf.rstrip()
-            if buf:
-                logger.debug("[container %s] %s", cid, buf)
-
-        thread = threading.Thread(target=stream_logs, daemon=True)
-        thread.start()
-        if container.id is not None:
-            self._log_threads[container.id] = thread
-
-    def _stop_container_log_streaming(self, container: Container) -> None:
-        """Stop and clean up the log streaming thread for a container.
-
-        Args:
-            container: The container whose log thread is stopped.
-
-        """
-        if container.id is None:
-            return
-        thread = self._log_threads.pop(container.id, None)
-        if thread is not None:
-            thread.join(timeout=1.0)
+            return dict(self.volumes)
+        mounts: dict[str, dict[str, str]] = {}
+        for volume in self.volumes:
+            host, bind = volume.split(":")[:2]
+            mounts[host] = {"bind": bind, "mode": "rw"}
+        return mounts
