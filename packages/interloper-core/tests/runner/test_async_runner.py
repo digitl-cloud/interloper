@@ -10,8 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import RunnerError
 from interloper.events import Event
-from interloper.runner.async_runner import AsyncRunner, InProcessRun
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import AsyncRun, AsyncRunner, ExecutionStatus, RunState
 
 
 class TestFailFast:
@@ -232,7 +231,7 @@ class TestMachineryErrors:
         async def exploding(self, operation):
             raise MemoryError("scheduler bug")
 
-        monkeypatch.setattr(InProcessRun, "execute", exploding)
+        monkeypatch.setattr(AsyncRun, "execute", exploding)
 
         result = await AsyncRunner(reraise=False).run(self._dag())
 
@@ -250,3 +249,55 @@ class TestMachineryErrors:
 
         with pytest.raises(KeyError, match="missing-field"):
             await AsyncRunner(reraise=True).run(dag)
+
+
+def test_the_run_kind_is_named_after_its_runner():
+    """The async runner's run kind is ``AsyncRun``."""
+    from interloper.runner import AsyncRun
+
+    assert il.AsyncRunner.Run is AsyncRun
+
+
+async def test_a_retried_attempt_starts_with_its_own_event_id():
+    """Each attempt's lifecycle events carry their own deterministic ids."""
+    calls: list[int] = []
+
+    @il.asset(retry=il.RetryPolicy(max_attempts=2, delay=0.0, jitter=0.0))
+    def flaky() -> list[dict[str, Any]]:
+        calls.append(1)
+        if len(calls) == 1:
+            raise ValueError("transient")
+        return [{"x": 1}]
+
+    events: list[Event] = []
+    await AsyncRunner(on_event=events.append).run(
+        il.DAG(flaky(id="flaky", destinations=[il.MemoryDestination()])), metadata={"run_id": "run-1"}
+    )
+
+    started = [event for event in events if event.type is il.EventType.OPERATION_STARTED]
+    assert [event.metadata["attempt"] for event in started] == [1, 2]
+    assert started[1].id == RunState.operation_event_id("run-1", "flaky", il.EventType.OPERATION_STARTED, attempt=2)
+    assert started[0].id != started[1].id
+
+
+async def test_a_fail_fast_run_repeats_no_event_id():
+    """A fail-fast run cancels the rest without recording any event twice."""
+
+    @il.asset()
+    def boom() -> list[dict[str, Any]]:
+        raise ValueError("nope")
+
+    @il.asset()
+    def fine() -> list[dict[str, Any]]:
+        return [{"x": 1}]
+
+    events: list[Event] = []
+    dag = il.DAG(
+        boom(id="boom", destinations=[il.MemoryDestination()]),
+        fine(id="fine-1", destinations=[il.MemoryDestination()]),
+        fine(id="fine-2", destinations=[il.MemoryDestination()]),
+    )
+    await AsyncRunner(max_workers=1, fail_fast=True, on_event=events.append).run(dag)
+
+    ids = [event.id for event in events]
+    assert len(ids) == len(set(ids))

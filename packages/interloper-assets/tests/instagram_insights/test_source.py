@@ -17,9 +17,8 @@ from typing import Any, ClassVar
 import httpx2
 import interloper as il
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.instagram_insights import constants, schemas
@@ -80,7 +79,7 @@ def _child(key: str) -> Any:
 
 def _reconcile(key: str, rows: list[dict[str, Any]]) -> Any:
     child = _child(key)
-    return Representation.of(child.normalizer.normalize(rows)).reconcile(child.schema).iloc[0]
+    return TableData.from_data(child.normalizer.normalize(rows)).reconcile(child.schema).iloc[0]
 
 
 class TestSource:

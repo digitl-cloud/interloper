@@ -7,8 +7,8 @@ import datetime as dt
 import pytest
 
 from interloper.operation.base import OperationResult
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
-from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
+from interloper.partitioning import TimePartition, TimePartitionWindow
+from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 
 
 def _info(status: ExecutionStatus = ExecutionStatus.QUEUED, key: str = "source.asset") -> ExecutionInfo:

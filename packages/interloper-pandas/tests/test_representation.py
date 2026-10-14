@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from interloper.errors import SchemaError
-from interloper.representation import Representation
+from interloper.representation import TableData
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -30,7 +30,7 @@ class TestResolution:
     """The DataFrame representation claims DataFrames."""
 
     def test_dataframe_resolves_to_the_dataframe_representation(self):
-        assert isinstance(Representation.of(pd.DataFrame()).representation, DataFrameRepresentation)
+        assert isinstance(TableData.from_data(pd.DataFrame()).representation, DataFrameRepresentation)
 
 
 class TestDataFrameRepresentation:
@@ -41,7 +41,7 @@ class TestDataFrameRepresentation:
         assert rep.matches(pd.DataFrame())
         assert not rep.matches([{"a": 1}])
 
-    def test_to_records_maps_missing_values_to_none(self):
+    def test_to_rows_maps_missing_values_to_none(self):
         rep = DataFrameRepresentation()
         df = pd.DataFrame(
             {
@@ -51,12 +51,12 @@ class TestDataFrameRepresentation:
                 "i": pd.array([1, None], dtype="Int64"),
             }
         )
-        rows = rep.to_records(df)
+        rows = rep.to_rows(df)
         assert rows[1] == {"f": None, "t": None, "s": None, "i": None}
         assert rows[0]["i"] == 1
 
-    def test_from_records_materializes_dataframe(self):
-        df = DataFrameRepresentation().from_records([{"a": 1}, {"a": 2}])
+    def test_from_rows_materializes_dataframe(self):
+        df = DataFrameRepresentation().from_rows([{"a": 1}, {"a": 2}])
         assert isinstance(df, pd.DataFrame)
         assert df["a"].tolist() == [1, 2]
 

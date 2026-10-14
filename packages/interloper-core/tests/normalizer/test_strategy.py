@@ -10,5 +10,5 @@ class TestMaterializationStrategy:
         assert list(MaterializationStrategy) == [MaterializationStrategy.STRICT, MaterializationStrategy.RECONCILE]
 
     def test_the_retired_auto_value_reads_as_reconcile(self):
-        # Stored configs and manifests written before 0.80 spell the default "auto".
+        # Stored configs and manifests written before 0.78 spell the default "auto".
         assert MaterializationStrategy("auto") is MaterializationStrategy.RECONCILE

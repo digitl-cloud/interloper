@@ -44,7 +44,7 @@ il.DAG(source).materialize(il.TimePartition(dt.date(2026, 1, 15)))
 A time partition is a **period identified by its start**. `TimeGranularity` says how long the
 period lasts and owns every piece of time arithmetic:
 
-| Granularity | Partition id | Period |
+| Granularity | Partition key | Period |
 |-------------|--------------|--------|
 | `HOUR` | `2026-08-21T13` | one hour, labelled in UTC |
 | `DAY` | `2026-08-21` | one day |
@@ -68,14 +68,14 @@ list(g.period_range(start, end))          # period starts, inclusive
 
 Rows of a partition may carry values anywhere inside the period (a monthly partition holding
 daily dates), so destinations scope by the partition's half-open **bounds**, never by equality
-on the id.
+on the key.
 
 ## Partitions and windows
 
 ```py
 partition = il.TimePartition(dt.date(2026, 5, 20), il.TimeGranularity.MONTH)
 partition.value          # 2026-05-01, normalized to the period start
-partition.id             # "2026-05"
+partition.key            # "2026-05"
 partition.bounds         # (2026-05-01, 2026-06-01)
 partition.window         # the one-partition window
 partition.filter("date") # the bounds, as a database selects them
@@ -96,7 +96,7 @@ bare partition as the window of one.
 window a schedule should cover: `offset` partitions back from the current one, `lookback`
 partitions long, clamped to `start`, or `None` when clamping leaves nothing. `now` may be an
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
-calendar, while hour windows are always UTC because hour ids are UTC labels.
+calendar, while hour windows are always UTC because hour keys are UTC labels.
 
 ## List partitioning
 
@@ -109,10 +109,10 @@ def sales(self, context: il.ExecutionContext) -> list[dict]:
     return [{"region": region, **row} for row in fetch_sales(region)]
 ```
 
-The values are the partition ids, in the declared order. A window is a contiguous range of that
+The values are the partition keys, in the declared order. A window is a contiguous range of that
 order: `config.window("eu", "us")` covers `eu` and `us`, and a backfill from the first value to
 the last covers everything. Databases select a list partition by membership, the file and object
-destinations key storage by its id. Platform support for list backfills and the run form is a
+destinations key storage by its key. Platform support for list backfills and the run form is a
 follow-up; today a list-partitioned asset runs through `asset.run`, `dag.materialize` and the
 CLI.
 
@@ -144,7 +144,7 @@ not allow windows.
 
 | Accessor | Gives you | Raises when |
 |----------|-----------|-------------|
-| `context.partition` | The window's only `Partition`: `.id`, and `.bounds` or `.value` by kind | not partitioned, no window given, or the window covers several partitions |
+| `context.partition` | The window's only `Partition`: `.key`, and `.bounds` or `.value` by kind | not partitioned, no window given, or the window covers several partitions |
 | `context.window` | The `PartitionWindow`: `.start`, `.end`, `len()`, iteration | not partitioned, or no window given |
 | `context.partition_date` | `partition.value` as a `date` | not time-partitioned at `DAY`, or the window covers several partitions |
 

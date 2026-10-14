@@ -52,7 +52,7 @@ _RESERVED_CLASSVARS = frozenset({"kind", "relations", "internal_fields", "asset_
 
 
 # -- Specs ---------------------------------------------------------------------
-_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_ENVIRONMENT_VARIABLE_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 class Spec(BaseModel):
@@ -208,9 +208,9 @@ class Spec(BaseModel):
         if isinstance(value, Serializable):
             return value.to_spec().model_dump(mode="json")
         if isinstance(value, (list, tuple)):
-            return [cls.dump_value(v) for v in value]
+            return [cls.dump_value(entry) for entry in value]
         if isinstance(value, dict):
-            return {k: cls.dump_value(v) for k, v in value.items()}
+            return {key: cls.dump_value(entry) for key, entry in value.items()}
         return to_jsonable_python(value)
 
     @classmethod
@@ -231,18 +231,18 @@ class Spec(BaseModel):
         """
         if isinstance(value, str):
 
-            def sub(match: re.Match[str]) -> str:
+            def substitute(match: re.Match[str]) -> str:
                 name = match.group(1)
                 if name not in os.environ:
                     missing.add(name)
                     return match.group(0)
                 return os.environ[name]
 
-            return _ENV_VAR_RE.sub(sub, value)
+            return _ENVIRONMENT_VARIABLE_PATTERN.sub(substitute, value)
         if isinstance(value, dict):
-            return {k: cls._interpolate_env(v, missing) for k, v in value.items()}
+            return {key: cls._interpolate_env(entry, missing) for key, entry in value.items()}
         if isinstance(value, list):
-            return [cls._interpolate_env(v, missing) for v in value]
+            return [cls._interpolate_env(entry, missing) for entry in value]
         return value
 
     def reconstruct(
@@ -585,10 +585,10 @@ class Serializable(BaseModel):
         super().__pydantic_init_subclass__(**kwargs)
         fields = cls.__pydantic_fields__
         order: dict[str, None] = {}
-        for klass in reversed(cls.__mro__):
-            klass_fields = getattr(klass, "__pydantic_fields__", {})
-            for field_name in inspect.get_annotations(klass):
-                if field_name in fields and field_name in klass_fields:
+        for base in reversed(cls.__mro__):
+            base_fields = getattr(base, "__pydantic_fields__", {})
+            for field_name in inspect.get_annotations(base):
+                if field_name in fields and field_name in base_fields:
                     order.setdefault(field_name, None)
         reordered = {field_name: fields[field_name] for field_name in order}
         reordered.update({field_name: info for field_name, info in fields.items() if field_name not in reordered})
@@ -732,23 +732,31 @@ class Serializable(BaseModel):
                 entries[name] = info
                 annotations[name] = cls.model_fields[name].annotation
             else:
-                raise TypeError(cls._refusal(name, accepted=sorted({*classvars, *cls.model_fields})))
+                raise TypeError(cls._refusal(name))
         return entries, annotations
 
     @classmethod
-    def _refusal(cls, name: str, *, accepted: list[str]) -> str:
+    def _settable(cls) -> list[str]:
+        """The names a decorator may set on this class: its public ClassVars and its fields.
+
+        Returns:
+            The names, sorted.
+        """
+        return sorted({*cls._classvars(), *cls.model_fields})
+
+    @classmethod
+    def _refusal(cls, name: str) -> str:
         """Say why a decorator setting is refused, naming the subclass that declares it when one does.
 
         Args:
             name: The refused setting.
-            accepted: The settings this class accepts.
 
         Returns:
-            The error message.
+            The error message, listing the settings this class accepts.
         """
         declaring = cls._subclass_declaring(name)
-        hint = f"; {declaring.__name__} declares it, subclass it" if declaring is not None else ""
-        return f"{cls.__name__} does not accept '{name}'{hint}; accepted: {accepted}"
+        hint = f"; '{name}' is a setting of {declaring.__name__}" if declaring is not None else ""
+        return f"{cls.__name__} does not accept '{name}'{hint}; accepted: {cls._settable()}"
 
     @classmethod
     def _subclass_declaring(cls, name: str) -> type[Serializable] | None:
@@ -871,15 +879,15 @@ class Serializable(BaseModel):
         Returns:
             The resolved class.
         """
-        return cls._resolve_import(path, ref=path)
+        return cls._resolve_import(path, reference=path)
 
     @classmethod
-    def _resolve_import(cls, path: str, *, ref: str) -> type[Self]:
+    def _resolve_import(cls, path: str, *, reference: str) -> type[Self]:
         """Import *path* and check the result against the receiving class.
 
         Args:
             path: Dotted or composite import path to import.
-            ref: The reference as the caller wrote it, quoted in the error
+            reference: The reference as the caller wrote it, quoted in the error
                 message: a catalog key, say, rather than the resolved path.
 
         Returns:
@@ -890,7 +898,7 @@ class Serializable(BaseModel):
         """
         resolved = import_from_path(path)
         if not isinstance(resolved, type) or not issubclass(resolved, cls):
-            raise TypeError(f"'{ref}' does not resolve to a {cls.__name__} class")
+            raise TypeError(f"'{reference}' does not resolve to a {cls.__name__} class")
         return cast("type[Self]", resolved)
 
     @classmethod
@@ -989,7 +997,7 @@ class Serializable(BaseModel):
         properties = schema.get("properties")
         if not properties:
             return {}
-        declared = [name for klass in cls.__mro__ for name in inspect.get_annotations(klass) if name in properties]
+        declared = [name for base in cls.__mro__ for name in inspect.get_annotations(base) if name in properties]
         order = list(dict.fromkeys([*(name for name in properties if name not in declared), *declared]))
         schema["properties"] = {name: properties[name] for name in order}
         return schema

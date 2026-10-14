@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from interloper.utils.json import json_default, replace_non_finite
+from interloper.utils import json_default, replace_non_finite
 
 
 class TestReplaceNonFinite:
@@ -55,3 +55,10 @@ class TestJsonDefault:
     def test_unsupported_raises(self):
         with pytest.raises(TypeError):
             json_default(object())
+
+
+def test_the_utils_package_exports_the_json_helpers():
+    """The JSON helpers import from the package, like the other utilities."""
+    from interloper.utils import json_default, replace_non_finite
+
+    assert callable(json_default) and callable(replace_non_finite)

@@ -6,10 +6,9 @@ from pathlib import Path
 import pytest
 
 import interloper as il
-from interloper.destination import IOContext
-from interloper.destination.file import FileDestination
+from interloper.destination import FileDestination, IOContext
 from interloper.errors import DataNotFoundError
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import TimePartition, TimePartitionWindow
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date", allow_window=True))

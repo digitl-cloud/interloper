@@ -5,10 +5,9 @@ import datetime
 import pytest
 
 import interloper as il
-from interloper.destination import IOContext
-from interloper.destination.memory import MemoryDestination
+from interloper.destination import IOContext, MemoryDestination
 from interloper.errors import ConfigError
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import TimePartition, TimePartitionWindow
 
 
 @il.asset(partitioning=il.TimePartitionConfig(column="date"))
@@ -79,3 +78,17 @@ class TestViews:
 
         with pytest.raises(ConfigError, match="does not support views"):
             destination.create_view(rows(), "SELECT 1")
+
+
+def test_storage_paths_are_unchanged_by_the_rename():
+    """A partitioned write lands under ``<column>=<partition key>``, as before."""
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def daily() -> list[dict]:
+        return [{"date": datetime.date(2026, 1, 15), "x": 1}]
+
+    destination = MemoryDestination()
+
+    il.DAG(daily(destinations=[destination])).materialize(TimePartition(datetime.date(2026, 1, 15)))
+
+    assert any("date=2026-01-15" in path for path in MemoryDestination._storage)

@@ -125,17 +125,29 @@ class RunResult:
     @property
     def completed_ids(self) -> list[str]:
         """Ids of the operations that completed successfully."""
-        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.COMPLETED]
+        return [
+            operation_id
+            for operation_id, execution in self.executions.items()
+            if execution.status == ExecutionStatus.COMPLETED
+        ]
 
     @property
     def failed_ids(self) -> list[str]:
         """Ids of the operations that failed."""
-        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.FAILED]
+        return [
+            operation_id
+            for operation_id, execution in self.executions.items()
+            if execution.status == ExecutionStatus.FAILED
+        ]
 
     @property
     def canceled_ids(self) -> list[str]:
         """Ids of the operations that were canceled (downstream of a failure)."""
-        return [k for k, v in self.executions.items() if v.status == ExecutionStatus.CANCELED]
+        return [
+            operation_id
+            for operation_id, execution in self.executions.items()
+            if execution.status == ExecutionStatus.CANCELED
+        ]
 
     def __str__(self) -> str:
         """Human-friendly summary string.

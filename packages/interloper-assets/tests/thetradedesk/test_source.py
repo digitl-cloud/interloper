@@ -13,9 +13,8 @@ import datetime as dt
 from typing import Any
 
 from interloper.asset import Asset
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 
 from interloper_assets.thetradedesk import schemas
 from interloper_assets.thetradedesk.source import TheTradeDesk, TheTradeDeskNormalizer
@@ -65,9 +64,9 @@ class TestNormalizer:
     def test_row_conforms_to_schema(self):
         df = _normalizer().normalize([_ROW])
         assert set(df.columns) <= set(schemas.AdGroupsStats.model_fields)
-        view = Representation.of(df)
-        conformed = view.reconcile(schemas.AdGroupsStats)
-        Representation.of(conformed).reconcile(schemas.AdGroupsStats, strict=True)  # must not raise
+        table = TableData.from_data(df)
+        conformed = table.reconcile(schemas.AdGroupsStats)
+        TableData.from_data(conformed).reconcile(schemas.AdGroupsStats, strict=True)  # must not raise
         record = conformed.to_dict("records")[0]
         assert record["impressions"] == 1000
         assert record["player_25pct_complete"] == 7

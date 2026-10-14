@@ -47,12 +47,13 @@ from interloper.partitioning import (
     TimePartitionWindow,
 )
 from interloper.registry import Registry
-from interloper.resource import Resource, ResourceDefinition
-from interloper.resource.fields import (
+from interloper.resource import (
     CronField,
     FetchField,
     InputField,
     JsonField,
+    Resource,
+    ResourceDefinition,
     SecretField,
     SelectField,
     TextField,

@@ -19,7 +19,7 @@ from uuid import UUID
 
 import httpx2
 from interloper.component import KINDS
-from interloper.connection.base import Connection
+from interloper.connection import Connection
 from interloper.errors import (
     CatalogKeyError,
     ComponentDriftError,
@@ -31,7 +31,7 @@ from interloper.errors import (
 )
 from interloper.oauth import OAuthAppCredentials
 from interloper.settings import AppSettings
-from interloper.utils.concurrency import invoke
+from interloper.utils import invoke
 from interloper_db import ComponentQuery
 from pydantic import ValidationError
 

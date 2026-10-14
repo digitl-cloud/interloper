@@ -101,7 +101,7 @@ class CampaignMatcher(il.Source):
                 context.logger.warning(f"No data for upstream '{leg.asset.qualified_key}' in this partition; skipped")
                 continue
             source = leg.asset.source
-            for row in leg.records:
+            for row in leg.rows:
                 name = _first(row, "campaign_name", "name", "campaign")
                 rows.append(
                     {

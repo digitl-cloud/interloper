@@ -11,7 +11,7 @@ from google.cloud import storage
 from google.cloud.exceptions import NotFound
 from google.oauth2 import service_account
 from interloper.destination import ObjectStoreDestination, StoredObject, destination
-from interloper.resource.fields import FetchField
+from interloper.resource import FetchField
 
 from interloper_google_cloud.connection import GoogleCloudConnection
 

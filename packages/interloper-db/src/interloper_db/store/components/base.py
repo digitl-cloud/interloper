@@ -32,14 +32,14 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import (
     CatalogKeyError,
     ConfigError,
     InUseError,
     NotFoundError,
 )
-from interloper.partitioning.time import TimeGranularity
+from interloper.partitioning import TimeGranularity
 from sqlalchemy import Engine, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select

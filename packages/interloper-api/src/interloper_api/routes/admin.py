@@ -541,7 +541,7 @@ def _runner_defaults(runner_type: str) -> dict[str, Any]:
         Allowlisted field names mapped to their default value, empty when the
         type is unregistered.
     """
-    from interloper.runner.base import RUNNERS
+    from interloper.runner import RUNNERS
 
     runner_cls = RUNNERS.get(runner_type)
     if runner_cls is None:

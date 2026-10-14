@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import NotFoundError
-from interloper.runner.state import RunState
+from interloper.runner import RunState
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 

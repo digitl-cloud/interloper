@@ -15,9 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.awin.schemas import Transactions
@@ -92,6 +91,6 @@ class TestSpecRoundtripAndReconcile:
         ]
         normalized = child.normalizer.normalize(rows)
         assert "commission_amount" in normalized.columns
-        reconciled = Representation.of(normalized).reconcile(Transactions)
+        reconciled = TableData.from_data(normalized).reconcile(Transactions)
         assert float(reconciled.loc[0, "commission_amount"]) == 120.0
         assert reconciled.loc[0, "commission_currency"] == "EUR"

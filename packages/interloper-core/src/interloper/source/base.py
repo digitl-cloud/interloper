@@ -130,18 +130,28 @@ class Source(Component, Workload):
     def body_from_function(cls, fn: FunctionType) -> ClassBody:
         """Read a decorated function into a source body: what it returns are the assets.
 
-        The function is called once, for the asset classes it returns (one or a
-        list); its annotated parameters become configuration fields, their
-        defaults the field defaults.
+        The function is called once, for the asset classes it returns (one, a
+        list, or nothing for a source without assets); its annotated parameters
+        become configuration fields, their defaults the field defaults.
 
         Args:
             fn: The decorated function.
 
         Returns:
             The body carrying ``asset_types`` and the fields.
+
+        Raises:
+            TypeError: If the function returned anything but nothing, an asset
+                class or a list of them, naming what it returned.
         """
         returned = fn()
-        asset_types = returned if isinstance(returned, list) else [returned] if isinstance(returned, type) else []
+        asset_types = [] if returned is None else returned if isinstance(returned, list) else [returned]
+        for item in asset_types:
+            if not (isinstance(item, type) and issubclass(item, Asset)):
+                kind = item.__name__ if isinstance(item, type) else type(item).__name__
+                raise TypeError(
+                    f"Source function '{fn.__name__}' returned {kind!r}; return an asset class or a list of them"
+                )
         members: dict[str, Any] = {"asset_types": asset_types}
         annotations: dict[str, Any] = {}
         hints = getattr(fn, "__annotations__", {})
@@ -164,8 +174,8 @@ class Source(Component, Workload):
         - ``dict[str, dict]``: an override map keyed by asset key, where
           each value is the ``init`` payload for that asset.  The source
           is the unit of reconstruction: for every entry in
-          ``asset_types`` we build ``asset_cls(**overrides)``, defaulting
-          unmapped keys to a bare ``asset_cls()``.
+          ``asset_types`` we build ``asset_class(**overrides)``, defaulting
+          unmapped keys to a bare ``asset_class()``.
 
         This is what ``Source.to_spec()`` emits and what
         ``Spec.reconstruct()`` hands back in after the walker has resolved
@@ -187,10 +197,10 @@ class Source(Component, Workload):
             return data
 
         instances: list[Asset] = []
-        for asset_cls in cls.asset_types:
-            if asset_cls.key not in assets:
+        for asset_class in cls.asset_types:
+            if asset_class.key not in assets:
                 continue
-            instances.append(asset_cls(**assets[asset_cls.key]))
+            instances.append(asset_class(**assets[asset_class.key]))
         data["assets"] = instances
         return data
 
@@ -216,7 +226,10 @@ class Source(Component, Workload):
             self.assets = [cls() for cls in self.asset_types]
         for asset in self.assets:
             if asset.parent is not None and asset.parent is not self:
-                raise ConfigError(f"Asset '{asset.key}' already belongs to source '{asset.parent.qualified_key}'")
+                raise ConfigError(
+                    f"Asset '{asset.key}' already belongs to source '{asset.parent.qualified_key}'; "
+                    f"give this source its overrides instead: assets={{'{asset.key}': {{...}}}}"
+                )
             asset.parent = self
         self._check_locations()
         self._bind_siblings()
@@ -346,8 +359,8 @@ class Source(Component, Workload):
         """
         own = super().definition()
         assets = []
-        for asset_cls in cls.asset_types:
-            asset = asset_cls.definition()
+        for asset_class in cls.asset_types:
+            asset = asset_class.definition()
             maturity = Maturity.least(asset.maturity, own.maturity)
             assets.append(asset.model_copy(update={"source_key": cls.key, "maturity": maturity}))
         return SourceDefinition(**dict(own), assets=assets)
@@ -372,20 +385,20 @@ class Source(Component, Workload):
         """
         listed: list[type[Asset]] = list(cls.__dict__.get("asset_types", []))
         declared = [value for value in cls.__dict__.values() if isinstance(value, type) and issubclass(value, Asset)]
-        collected = listed + [asset_cls for asset_cls in declared if asset_cls not in listed]
+        collected = listed + [asset_class for asset_class in declared if asset_class not in listed]
         if not collected:
             return
-        for asset_cls in collected:
-            owner = asset_cls._source_type
+        for asset_class in collected:
+            owner = asset_class._source_type
             if owner is not None and owner is not cls:
-                raise TypeError(f"Asset '{asset_cls.__name__}' already belongs to source '{owner.__name__}'")
-            current = inspect.getattr_static(cls, asset_cls.key, asset_cls)
-            if current is not asset_cls:
+                raise TypeError(f"Asset '{asset_class.__name__}' already belongs to source '{owner.__name__}'")
+            current = inspect.getattr_static(cls, asset_class.key, asset_class)
+            if current is not asset_class:
                 raise TypeError(
-                    f"Source '{cls.__name__}' cannot expose asset '{asset_cls.key}': the name is taken by {current!r}"
+                    f"Source '{cls.__name__}' cannot expose asset '{asset_class.key}': the name is taken by {current!r}"
                 )
-            asset_cls._source_type = cls
-            setattr(cls, asset_cls.key, asset_cls)
+            asset_class._source_type = cls
+            setattr(cls, asset_class.key, asset_class)
         cls.asset_types = collected
 
     @classmethod
@@ -401,17 +414,17 @@ class Source(Component, Workload):
             Asset key to a map of relation name to the sibling asset key that
             fills it; assets with no sibling wiring are absent.
         """
-        siblings = {asset_cls.key for asset_cls in cls.asset_types}
+        siblings = {asset_class.key for asset_class in cls.asset_types}
         bindings: dict[str, dict[str, str]] = {}
-        for asset_cls in cls.asset_types:
-            for name, relation in asset_cls.relations.items():
+        for asset_class in cls.asset_types:
+            for name, relation in asset_class.relations.items():
                 if "asset" not in relation.kinds:
                     continue
                 declared_keys = relation.keys
                 for declared in declared_keys:
                     expected = ComponentIdentity.resolve(declared, own_source_key=cls.key)
-                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_cls.key:
-                        bindings.setdefault(asset_cls.key, {})[name] = expected.key
+                    if expected.source_key == cls.key and expected.key in siblings and expected.key != asset_class.key:
+                        bindings.setdefault(asset_class.key, {})[name] = expected.key
         return bindings
 
     def _bind_siblings(self) -> None:

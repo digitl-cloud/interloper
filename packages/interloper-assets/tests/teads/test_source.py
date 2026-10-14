@@ -20,9 +20,8 @@ import interloper as il
 import pandas as pd
 import pytest
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.teads import constants, schemas
@@ -76,7 +75,7 @@ class TestSpecRoundtripAndReconcile:
         rows = list(csv.DictReader(CSV.splitlines()))
         normalized = child.normalizer.normalize(rows)
         assert set(normalized.columns) == set(schemas.CreativesStats.model_fields)
-        reconciled = Representation.of(normalized).reconcile(schemas.CreativesStats)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.CreativesStats)
         row = reconciled.loc[0]
         assert row["day"] == dt.date(2026, 6, 14)
         assert int(row["campaign_id"]) == 111 and int(row["line_id"]) == 333

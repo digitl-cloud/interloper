@@ -7,7 +7,7 @@ from functools import cached_property
 import clickhouse_connect
 from clickhouse_connect.driver.client import Client
 from interloper.connection import Connection, connection
-from interloper.resource.fields import InputField, SecretField, fetch_field_provider
+from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 

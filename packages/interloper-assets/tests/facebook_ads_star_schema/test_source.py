@@ -7,7 +7,7 @@ from pathlib import Path
 
 import interloper as il
 import pytest
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus
 
 from interloper_assets.facebook_ads.source import FacebookAds, FacebookAdsConnection
 from interloper_assets.facebook_ads_star_schema.source import FacebookAdsStarSchema

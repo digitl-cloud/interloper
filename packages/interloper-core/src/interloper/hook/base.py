@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from interloper.source.base import Source
 
 #: Event types a hook may subscribe to: a run's verdict, or a backfill's.
-HookEvent = Literal["run_completed", "run_failed", "backfill_completed", "backfill_failed"]
-HOOK_EVENT_TYPES: tuple[str, ...] = get_args(HookEvent)
+_HookEvent = Literal["run_completed", "run_failed", "backfill_completed", "backfill_failed"]
+HOOK_EVENT_TYPES: tuple[str, ...] = get_args(_HookEvent)
 
 
 class HookContext(BaseModel):
@@ -86,7 +86,7 @@ class Hook(Component):
         ["source", "asset", "job"], many=True, optional=True, on_delete="detach"
     )
 
-    events: list[HookEvent] = Field(
+    events: list[_HookEvent] = Field(
         default=["run_failed"],
         min_length=1,
         description="Outcomes this hook reacts to",

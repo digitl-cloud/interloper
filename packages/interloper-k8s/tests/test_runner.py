@@ -13,13 +13,12 @@ import urllib3
 from interloper.events import Event, EventType
 from interloper.events.stderr import EVENT_LINE_PREFIX
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner import RunState
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus, RunState
 from kubernetes import client, config
 from kubernetes.client import V1Job, V1JobStatus, V1ObjectMeta, V1Pod, V1PodList, V1PodStatus
 from kubernetes.client.exceptions import ApiException
 
-from interloper_k8s.runner import JobRun, KubernetesRunner
+from interloper_k8s.runner import KubernetesRun, KubernetesRunner
 
 
 class FakeCluster:
@@ -208,7 +207,7 @@ class TestCommand:
     def _command(connect: Any, asset: il.Asset, window: Any) -> list[str]:
         connect()
         dag = il.DAG(asset)
-        run = JobRun(KubernetesRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
+        run = KubernetesRun(KubernetesRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
         return run.command(dag.operations[0])
 
     def test_an_unscoped_run_adds_no_flags(self, connect, asset):
@@ -250,3 +249,10 @@ class TestCommand:
         command = self._command(connect, asset, TimePartition(dt.date(2026, 1, 1)))
 
         assert len(command) == 6
+
+
+def test_the_run_kind_is_named_after_its_runner():
+    """The Kubernetes runner's run kind is ``KubernetesRun``."""
+    from interloper_k8s.runner import KubernetesRun, KubernetesRunner
+
+    assert KubernetesRunner.Run is KubernetesRun

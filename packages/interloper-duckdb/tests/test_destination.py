@@ -8,8 +8,7 @@ from typing import Any
 import interloper as il
 import pandas as pd
 import pytest
-from interloper.destination import IOContext
-from interloper.destination.database import TableReference
+from interloper.destination import IOContext, TableReference
 from interloper.errors import DataNotFoundError
 from interloper.partitioning import (
     ListPartition,

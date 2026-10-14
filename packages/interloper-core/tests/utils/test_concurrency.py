@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from interloper.utils.concurrency import RLock, ThreadLocal, bounded_gather, invoke, run
+from interloper.utils import RLock, ThreadLocal, bounded_gather, invoke, run
 
 
 class TestBoundedGather:

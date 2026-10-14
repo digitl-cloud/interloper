@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from interloper.partitioning.time import TimePartitionWindow
+from interloper.partitioning import TimePartitionWindow
 
 from interloper_db.models import Component, Run, RunStatus
 from interloper_db.store.components import ComponentStatus

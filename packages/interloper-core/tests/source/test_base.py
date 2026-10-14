@@ -11,10 +11,10 @@ from pydantic import ValidationError
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
-from interloper.component.base import Component
+from interloper.component import Component
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.serializable import Spec
-from interloper.source.base import SourceDefinition
+from interloper.source import SourceDefinition
 
 # -- Fixtures ------------------------------------------------------------------
 
@@ -526,6 +526,18 @@ class TestAssets:
 
         with pytest.raises(ValidationError, match=r"already belongs to source"):
             FakeSourceWithAssets(assets=[other.assets[0]])
+
+    def test_the_refusal_says_how_to_give_a_source_an_asset(self):
+        other = FakeSourceWithAssets()
+
+        with pytest.raises(ValidationError, match=r"assets=\{'fake_first': \{\.\.\.\}\}"):
+            FakeSourceWithAssets(assets=[other.assets[0]])
+
+    def test_reconfiguring_the_assets_is_refused(self):
+        source = FakeSourceWithAssets()
+
+        with pytest.raises(TypeError, match=r"assets"):
+            source(assets=[])
 
     def test_a_copy_owns_copies_of_the_assets(self):
         source = FakeSourceWithAssets()

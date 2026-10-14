@@ -11,8 +11,7 @@ import pytest
 import interloper as il
 from interloper.events import Event, EventBus, EventType
 from interloper.operation import OperationResult
-from interloper.runner.results import ExecutionStatus
-from interloper.runner.state import RunState
+from interloper.runner import ExecutionStatus, RunState
 
 
 class ChainSource(il.Source):

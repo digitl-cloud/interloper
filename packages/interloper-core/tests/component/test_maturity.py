@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from interloper.component.maturity import Maturity
+from interloper.component import Maturity
 
 
 class TestLeast:

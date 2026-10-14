@@ -35,7 +35,7 @@ class RunState:
     required.
     """
 
-    _OPERATION_EVENT_NS = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
+    _OPERATION_EVENT_NAMESPACE = uuid.UUID("a3f1c2d4-5b6e-4a7c-9d8f-0e1a2b3c4d5e")
 
     def __init__(
         self,
@@ -207,7 +207,7 @@ class RunState:
         key = f"{run_id}:{component_id}:{event_type.value}"
         if attempt > 1:
             key = f"{key}:{attempt}"
-        return str(uuid.uuid5(RunState._OPERATION_EVENT_NS, key))
+        return str(uuid.uuid5(RunState._OPERATION_EVENT_NAMESPACE, key))
 
     # -- Internals -----------------------------------------------------------------
 

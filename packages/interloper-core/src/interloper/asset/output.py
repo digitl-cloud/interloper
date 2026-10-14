@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from interloper.errors import AssetError, RepresentationError
 from interloper.normalizer import MaterializationStrategy
-from interloper.representation import Representation, View
+from interloper.representation import TableData
 from interloper.telemetry.tracer import tracer
 from interloper.utils.data import is_empty
 
@@ -112,7 +112,7 @@ class Output:
         if schema is None and strategy is MaterializationStrategy.STRICT:
             raise AssetError(f"Asset '{asset.key}': strategy='strict' requires a schema.")
         try:
-            view = Representation.of(data)
+            table = TableData.from_data(data)
         except RepresentationError as error:
             if schema is None:
                 return cls(data)
@@ -121,24 +121,24 @@ class Output:
             ) from error
         if schema is None:
             with tracer().start_as_current_span("interloper.asset.infer_schema", attributes=asset._span_attributes()):
-                return cls(data, cls._infer(view))
+                return cls(data, cls._infer(table))
         with tracer().start_as_current_span("interloper.representation.reconcile", attributes=asset._span_attributes()):
-            return cls(view.reconcile(schema, strict=strategy is MaterializationStrategy.STRICT), schema)
+            return cls(table.reconcile(schema, strict=strategy is MaterializationStrategy.STRICT), schema)
 
     @staticmethod
-    def _infer(view: View) -> type[Schema] | None:
+    def _infer(table: TableData) -> type[Schema] | None:
         """Best-effort schema inference, metadata for destinations that must never fail a run.
 
         Args:
-            view: The data bound to its representation.
+            table: The data bound to its representation.
 
         Returns:
             The inferred schema, or ``None`` when the data is empty or
             inference fails.
         """
-        if is_empty(view.data):
+        if is_empty(table.data):
             return None
         try:
-            return view.infer()
+            return table.infer()
         except Exception:  # noqa: BLE001 - inference is best-effort metadata
             return None

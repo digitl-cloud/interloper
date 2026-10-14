@@ -6,7 +6,7 @@ from typing import ClassVar
 
 import interloper as il
 import pytest
-from interloper.destination.database import DatabaseDestination
+from interloper.destination import DatabaseDestination
 from interloper.errors import ConfigError
 
 from interloper_assets.google_analytics_4.source import GoogleAnalytics4Export

@@ -15,11 +15,10 @@ from typing import Any, Literal, NoReturn
 import httpx2
 import interloper as il
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.connection.base import Connection
+from interloper.connection import Connection
 from interloper.errors import ConnectionCheckError, format_exception
-from interloper.resource.fields import is_fetch_field_provider
-from interloper.utils.concurrency import invoke
-from interloper.utils.imports import import_from_path
+from interloper.resource import is_fetch_field_provider
+from interloper.utils import import_from_path, invoke
 from pydantic import BaseModel, Field, ValidationError
 
 from interloper_api.dependencies import CatalogDep, EditorDep, require_viewer

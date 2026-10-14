@@ -6,7 +6,7 @@ from functools import cached_property
 
 import sqlalchemy
 from interloper.connection import Connection, connection
-from interloper.resource.fields import SecretField, fetch_field_provider
+from interloper.resource import SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
 from sqlalchemy.engine import Engine
 

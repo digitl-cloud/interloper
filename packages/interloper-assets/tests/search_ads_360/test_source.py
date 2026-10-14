@@ -20,9 +20,8 @@ import httpx2
 import interloper as il
 import pytest
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.search_ads_360 import constants, schemas
@@ -160,7 +159,7 @@ class TestReconcile:
 
     def test_campaign_row(self):
         normalized = _asset("campaigns_stats").normalizer.normalize([CAMPAIGN_ROW])
-        row = Representation.of(normalized).reconcile(schemas.CampaignsStats).iloc[0]
+        row = TableData.from_data(normalized).reconcile(schemas.CampaignsStats).iloc[0]
         assert row["campaign_id"] == "456"
         assert row["campaign_advertising_channel_type"] == "SEARCH"
         assert row["customer_account_type"] == "GOOGLE_ADS"
@@ -174,7 +173,7 @@ class TestReconcile:
 
     def test_customer_client_row(self):
         normalized = _asset("customer_clients").normalizer.normalize([{**CUSTOMER_CLIENT_ROW, "date": DAY}])
-        row = Representation.of(normalized).reconcile(schemas.CustomerClients).iloc[0]
+        row = TableData.from_data(normalized).reconcile(schemas.CustomerClients).iloc[0]
         assert row["customer_id"] == "111"
         assert row["customer_descriptive_name"] == "Acme MCC"
         assert row["customer_client_id"] == "222"

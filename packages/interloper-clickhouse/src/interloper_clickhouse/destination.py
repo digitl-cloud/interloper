@@ -11,16 +11,13 @@ from collections.abc import Sequence
 from typing import Any
 
 import pandas as pd
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import PartitionConfig
-from interloper.partitioning.base import Partition
-from interloper.partitioning.time import TimePartition
-from interloper.representation import Representation
-from interloper.resource.fields import InputField
+from interloper.partitioning import Partition, PartitionConfig, PartitionFilter, TimePartition
+from interloper.representation import TableData
+from interloper.resource import InputField
 from interloper.schema import FieldSpec
-from interloper.utils.data import is_empty
-from interloper.utils.json import json_default, replace_non_finite
+from interloper.utils import is_empty, json_default, replace_non_finite
 
 from interloper_clickhouse.connection import ClickHouseConnection
 from interloper_clickhouse.partitioning import partition_key, same_key
@@ -249,7 +246,7 @@ class ClickHouseDestination(DatabaseDestination):
         Returns:
             The effective schema's specs, or those of a schema inferred from the data.
         """
-        return list((context.schema or Representation.of(data).infer()).field_specs())
+        return list((context.schema or TableData.from_data(data).infer()).field_specs())
 
     def _load(
         self,
@@ -272,7 +269,7 @@ class ClickHouseDestination(DatabaseDestination):
             data: The data in its native representation.
             settings: ClickHouse settings for the insert; defaults to none.
         """
-        frame = Representation.of(data).to("dataframe")
+        frame = TableData.from_data(data).to("dataframe")
         extras = [str(c) for c in frame.columns if str(c) not in columns]
         if extras:
             warnings.warn(
@@ -540,13 +537,13 @@ def _partition_value(partition: Partition) -> str:
         if isinstance(value, datetime.datetime):
             return value.strftime("%Y-%m-%d %H:%M:%S")
         return value.isoformat()
-    return partition.id
+    return partition.key
 
 
 def _predicate(where: PartitionFilter, columns: dict[str, str]) -> tuple[str, dict[str, Any]]:
     """Render a partition filter as a predicate with server-side bound parameters.
 
-    Each parameter is typed as the column, so ClickHouse parses a partition id
+    Each parameter is typed as the column, so ClickHouse parses a partition key
     that arrives as text into a ``Date32`` or an ``Int64``. Against a
     ``String`` column, date and datetime bounds are rendered in ISO 8601, the
     form the rows carry.

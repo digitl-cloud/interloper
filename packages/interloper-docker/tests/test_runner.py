@@ -15,10 +15,9 @@ import requests
 from interloper.events import Event, EventType
 from interloper.events.stderr import EVENT_LINE_PREFIX
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner import RunState
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus, RunState
 
-from interloper_docker.runner import ContainerRun, DockerRunner
+from interloper_docker.runner import DockerRun, DockerRunner
 
 
 class FakeContainer:
@@ -174,7 +173,7 @@ class TestCommand:
     def _command(monkeypatch: pytest.MonkeyPatch, asset: il.Asset, window: Any) -> list[str]:
         monkeypatch.setattr(docker, "from_env", lambda: FakeDocker(None))
         dag = il.DAG(asset)
-        run = ContainerRun(DockerRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
+        run = DockerRun(DockerRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
         return run.command(dag.operations[0])
 
     def test_an_unscoped_run_adds_no_flags(self, monkeypatch, asset):
@@ -216,3 +215,10 @@ class TestCommand:
         command = self._command(monkeypatch, asset, TimePartition(dt.date(2026, 1, 1)))
 
         assert len(command) == 6
+
+
+def test_the_run_kind_is_named_after_its_runner():
+    """The Docker runner's run kind is ``DockerRun``."""
+    from interloper_docker.runner import DockerRun, DockerRunner
+
+    assert DockerRunner.Run is DockerRun

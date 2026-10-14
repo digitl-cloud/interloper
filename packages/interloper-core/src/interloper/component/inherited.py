@@ -74,10 +74,11 @@ class InheritedSetting:
     def install(cls, component: type[Component]) -> None:
         """Install the descriptor over every inherited field of a component class.
 
-        A field is inherited when any class in the MRO marks it ``x-inherit``:
-        a subclass redeclaring the field (what a decorator generates for
-        ``@il.asset(dataset=...)``) carries a fresh ``FieldInfo`` without the
-        marker, and must keep reading through its owner.
+        A field is inherited when any class in the MRO marks it ``x-inherit``.
+        A decorator setting (``@il.asset(dataset=...)``) copies the field's
+        ``FieldInfo`` and keeps the marker; a subclass redeclaring the field
+        by hand carries a fresh one without it, and must keep reading through
+        its owner, hence the walk over the MRO.
 
         Args:
             component: The class Pydantic has just built.

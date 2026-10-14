@@ -13,10 +13,17 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
-from interloper.destination import IOContext, PartitionFilter
+from interloper.destination import IOContext
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
-from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionWindow
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    PartitionFilter,
+    PartitionWindow,
+    TimeGranularity,
+    TimePartition,
+    TimePartitionWindow,
+)
 from interloper.schema import Schema
 from pydantic import BaseModel, Field, ValidationError
 

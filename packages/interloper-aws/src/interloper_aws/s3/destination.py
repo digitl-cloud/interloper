@@ -8,7 +8,7 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 from interloper.destination import ObjectStoreDestination, StoredObject, destination
-from interloper.resource.fields import FetchField
+from interloper.resource import FetchField
 
 from interloper_aws.connection import AWSConnection
 

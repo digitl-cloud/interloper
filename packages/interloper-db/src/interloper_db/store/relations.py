@@ -24,7 +24,7 @@ from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 import interloper as il
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import ConfigError, NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select

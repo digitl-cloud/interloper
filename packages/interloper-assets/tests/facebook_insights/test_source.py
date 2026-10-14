@@ -17,9 +17,8 @@ import httpx2
 import interloper as il
 import pytest
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_insights.connection import FacebookInsightsConnection
@@ -68,7 +67,7 @@ def _child(key: str) -> Any:
 
 def _reconcile(key: str, rows: list[dict[str, Any]]) -> Any:
     child = _child(key)
-    return Representation.of(child.normalizer.normalize(rows)).reconcile(child.schema)
+    return TableData.from_data(child.normalizer.normalize(rows)).reconcile(child.schema)
 
 
 PAGE_INSIGHTS = [

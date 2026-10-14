@@ -25,7 +25,7 @@ from interloper.utils import add_months, coerce_to_date, coerce_to_datetime
 class TimeGranularity(str, Enum):
     """The length of the period one time partition covers.
 
-    Partition ids are ISO-8601 prefixes (``2026``, ``2026-08``, ``2026-08-21``, ``2026-08-21T13``):
+    Partition keys are ISO-8601 prefixes (``2026``, ``2026-08``, ``2026-08-21``, ``2026-08-21T13``):
     they sort chronologically as strings, embed in paths unchanged, and each shape names its
     granularity, which is what `TimePartition.from_key` relies on.
     """
@@ -37,7 +37,7 @@ class TimeGranularity(str, Enum):
 
     @property
     def key_format(self) -> str:
-        """The ``strptime`` shape of this granularity's partition id."""
+        """The ``strptime`` shape of this granularity's partition key."""
         return {
             TimeGranularity.HOUR: "%Y-%m-%dT%H",
             TimeGranularity.DAY: "%Y-%m-%d",
@@ -135,21 +135,21 @@ class TimeGranularity(str, Enum):
         return last.year - first.year
 
     def format(self, value: object) -> str:
-        """Render a value as a partition id.
+        """Render a value as a partition key.
 
         Args:
-            value: Any value inside the period the id names.
+            value: Any value inside the period the key names.
 
         Returns:
-            The canonical id of the period containing *value*.
+            The canonical key of the period containing *value*.
         """
         return self.truncate(value).strftime(self.key_format)
 
     def parse(self, key: str) -> dt.date:
-        """Parse a partition id back into the period's start.
+        """Parse a partition key back into the period's start.
 
         Args:
-            key: A partition id in this granularity's own format (see `key_format`).
+            key: A partition key in this granularity's own format (see `key_format`).
 
         Returns:
             The period's first instant.
@@ -165,27 +165,21 @@ class TimeGranularity(str, Enum):
             ) from error
         return parsed if self is TimeGranularity.HOUR else parsed.date()
 
-    def period_range(self, start: dt.date, end: dt.date, reversed: bool = False) -> Generator[dt.date, None, None]:
+    def period_range(self, start: dt.date, end: dt.date) -> Generator[dt.date, None, None]:
         """Yield the start of each period from *start* to *end* inclusive.
 
         Args:
             start: Start of the range (truncated to this granularity).
             end: End of the range (truncated to this granularity).
-            reversed: When True, yield periods from end to start.
 
         Yields:
             Each period's first instant.
         """
         first = self.truncate(start)
         last = self.truncate(end)
-        if reversed:
-            while last >= first:
-                yield last
-                last = self.advance(last, -1)
-        else:
-            while first <= last:
-                yield first
-                first = self.advance(first, 1)
+        while first <= last:
+            yield first
+            first = self.advance(first, 1)
 
 
 # -- Time partitions -----------------------------------------------------------
@@ -205,19 +199,19 @@ class TimePartition(Partition):
 
     @classmethod
     def from_key(cls, key: str) -> TimePartition:
-        """Parse a partition id, inferring its granularity from the shape.
+        """Parse a partition key, inferring its granularity from the shape.
 
-        The id shapes are mutually unambiguous, so the key alone carries the granularity: storage
+        The key shapes are mutually unambiguous, so the key alone carries the granularity: storage
         and transport need one string, not a pair.
 
         Args:
-            key: A partition id in any granularity's format.
+            key: A partition key in any granularity's format.
 
         Returns:
             The partition the key names.
 
         Raises:
-            PartitionError: If *key* matches no known id shape.
+            PartitionError: If *key* matches no known key shape.
         """
         for granularity in TimeGranularity:
             try:
@@ -232,8 +226,8 @@ class TimePartition(Partition):
         object.__setattr__(self, "value", self.granularity.truncate(self.value))
 
     @property
-    def id(self) -> str:
-        """The partition's canonical id (see `TimeGranularity.format`)."""
+    def key(self) -> str:
+        """The partition's canonical key (see `TimeGranularity.format`)."""
         return self.granularity.format(self.value)
 
     @property
@@ -250,7 +244,7 @@ class TimePartition(Partition):
         """The rows inside this period.
 
         Rows may carry values anywhere inside the period (a monthly partition whose rows hold
-        daily dates), so the filter is the half-open bounds, never the id.
+        daily dates), so the filter is the half-open bounds, never the key.
 
         Args:
             column: The partition column the rows carry.
@@ -270,9 +264,9 @@ class TimePartition(Partition):
         Returns:
             The partition's slice of the data.
         """
-        from interloper.representation import Representation
+        from interloper.representation import TableData
 
-        return Representation.of(data).filter_range(column, *self.bounds)
+        return TableData.from_data(data).filter_range(column, *self.bounds)
 
 
 @dataclass(frozen=True)
@@ -358,7 +352,7 @@ class TimePartitionWindow(PartitionWindow):
         The caller's timezone reaches the window through *now*: passing an aware datetime
         localized to a zone makes DAY, MONTH and YEAR windows follow that zone's calendar. HOUR
         windows are the deliberate exception: an aware *now* is normalized back to UTC (see
-        `coerce_to_datetime`), because hour partition ids are naive-UTC labels and zones on a
+        `coerce_to_datetime`), because hour partition keys are naive-UTC labels and zones on a
         fractional offset do not align to UTC hour boundaries at all.
 
         Args:
@@ -411,6 +405,14 @@ class TimePartitionConfig(PartitionConfig):
         object.__setattr__(self, "granularity", TimeGranularity(self.granularity))
         if self.start is not None:
             object.__setattr__(self, "start", self.granularity.truncate(self.start))
+
+    def __str__(self) -> str:
+        """Describe the partitioning, as an error message names it.
+
+        Returns:
+            ``partitioned by <granularity>``, e.g. ``partitioned by day``.
+        """
+        return f"partitioned by {self.granularity.value}"
 
     def _check(self, window: PartitionWindow) -> None:
         """Require a time window of this granularity that does not reach before ``start``.
@@ -465,7 +467,7 @@ class TimePartitionConfig(PartitionConfig):
         """
         assert isinstance(first, TimePartition) and isinstance(last, TimePartition)
         if last.value < first.value:
-            raise PartitionError(f"window ends before it starts: {first.id!r} to {last.id!r}")
+            raise PartitionError(f"window ends before it starts: {first.key!r} to {last.key!r}")
         return TimePartitionWindow(first.value, last.value, self.granularity)
 
     def compatible(self, other: PartitionConfig) -> bool:

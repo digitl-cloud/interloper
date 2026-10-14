@@ -2,18 +2,16 @@
 
 import re
 
-_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
+_KEY_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
 
 _CAMEL_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
 _ACRONYM_BOUNDARY = re.compile(r"([A-Z]+)([A-Z][a-z])")
 
-_SLUG_SEPARATORS = re.compile(r"[_\s:.]+")
-_SLUG_COLLAPSE = re.compile(r"-+")
 
 _LABEL_SEPARATORS = re.compile(r"[_\-:]+")
 _LABEL_BOUNDARY = re.compile(r"([a-z])([A-Z])")
 
-_SNAKE_NON_ALNUM = re.compile(r"[^a-zA-Z0-9]+")
+_SNAKE_NON_ALPHANUMERIC = re.compile(r"[^a-zA-Z0-9]+")
 _SNAKE_COLLAPSE = re.compile(r"_+")
 
 _IDENTIFIER_INVALID = re.compile(r"[^a-z0-9_]+")
@@ -28,7 +26,7 @@ def validate_key(key: str) -> None:
     Raises:
         ValueError: If the key is invalid.
     """
-    if not _KEY_RE.match(key):
+    if not _KEY_PATTERN.match(key):
         message = (
             f"Key '{key}' is invalid. Must start with a letter and contain only letters, numbers, and underscores."
         )
@@ -51,22 +49,6 @@ def to_identifier(text: str) -> str:
     if not text:
         return ""
     return _IDENTIFIER_INVALID.sub("_", text.lower()).strip("_")
-
-
-def to_slug_case(text: str) -> str:
-    """Convert text to a URL/key-safe slug (lowercase, hyphen-separated).
-
-    Args:
-        text: The text to convert.
-
-    Returns:
-        The converted text.
-    """
-    if not text:
-        return ""
-    text = _CAMEL_BOUNDARY.sub(r"\1-\2", text).lower()
-    text = _SLUG_SEPARATORS.sub("-", text)
-    return _SLUG_COLLAPSE.sub("-", text).strip("-")
 
 
 def to_label(text: str) -> str:
@@ -98,5 +80,5 @@ def to_snake_case(text: str) -> str:
         return ""
     text = _ACRONYM_BOUNDARY.sub(r"\1_\2", text)
     text = _CAMEL_BOUNDARY.sub(r"\1_\2", text)
-    text = _SNAKE_NON_ALNUM.sub("_", text)
+    text = _SNAKE_NON_ALPHANUMERIC.sub("_", text)
     return _SNAKE_COLLAPSE.sub("_", text).strip("_").lower()

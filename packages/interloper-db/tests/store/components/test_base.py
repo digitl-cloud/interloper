@@ -17,7 +17,7 @@ from interloper.errors import (
     InUseError,
     NotFoundError,
 )
-from interloper.partitioning.time import TimeGranularity
+from interloper.partitioning import TimeGranularity
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, event

@@ -128,7 +128,7 @@ class CSVFormat(FileFormat):
             One dict per data row.
         """
         reader = csv.DictReader(io.StringIO(payload.decode()))
-        return [{k: (None if v == "" else v) for k, v in row.items()} for row in reader]
+        return [{key: (None if value == "" else value) for key, value in row.items()} for row in reader]
 
 
 class ParquetFormat(FileFormat):
@@ -193,7 +193,9 @@ class ParquetFormat(FileFormat):
         return pq.read_table(pa.BufferReader(payload)).to_pylist()
 
 
-FORMATS: dict[str, FileFormat] = {fmt.key: fmt for fmt in (ParquetFormat(), JSONLFormat(), CSVFormat())}
+FORMATS: dict[str, FileFormat] = {
+    file_format.key: file_format for file_format in (ParquetFormat(), JSONLFormat(), CSVFormat())
+}
 
 
 def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
@@ -208,38 +210,38 @@ def _spec_to_arrow_field(spec: FieldSpec) -> pa.Field:
     import pyarrow as pa
 
     if spec.fields is not None:
-        arrow_type: pa.DataType = pa.struct([_spec_to_arrow_field(sub) for sub in spec.fields])
+        arrow_type: pa.DataType = pa.struct([_spec_to_arrow_field(child) for child in spec.fields])
     else:
-        arrow_type = _py_type_to_arrow_type(spec.type)
+        arrow_type = _python_type_to_arrow_type(spec.type)
     if spec.repeated:
         arrow_type = pa.list_(arrow_type)
     return pa.field(spec.name, arrow_type, nullable=spec.nullable)
 
 
-def _is_concrete_type(py_type: Any) -> bool:
-    """Return whether *py_type* is a real class the Arrow mapping can use.
+def _is_concrete_type(python_type: Any) -> bool:
+    """Return whether *python_type* is a real class the Arrow mapping can use.
 
     ``typing.Any`` is excluded explicitly: on Python 3.11+ it *is* an
     ``isinstance(..., type)``, but it types nothing.
 
     Args:
-        py_type: The declared type to test.
+        python_type: The declared type to test.
 
     Returns:
         True when the type is a concrete class.
 
     """
-    return py_type is not Any and isinstance(py_type, type)
+    return python_type is not Any and isinstance(python_type, type)
 
 
-def _py_type_to_arrow_type(py_type: Any) -> pa.DataType:
+def _python_type_to_arrow_type(python_type: Any) -> pa.DataType:
     """Map a Python *type* (from a FieldSpec) to an Arrow type.
 
     Mirrors the BigQuery mapping (``Decimal`` to NUMERIC precision/scale) so
     parquet files load into BigQuery without casts.
 
     Args:
-        py_type: The declared Python type.
+        python_type: The declared Python type.
 
     Returns:
         The Arrow type.
@@ -247,21 +249,21 @@ def _py_type_to_arrow_type(py_type: Any) -> pa.DataType:
     """
     import pyarrow as pa
 
-    if not _is_concrete_type(py_type):
+    if not _is_concrete_type(python_type):
         return pa.string()  # typing.Any or unresolvable annotations
-    if issubclass(py_type, bool):
+    if issubclass(python_type, bool):
         return pa.bool_()
-    if issubclass(py_type, int):
+    if issubclass(python_type, int):
         return pa.int64()
-    if issubclass(py_type, float):
+    if issubclass(python_type, float):
         return pa.float64()
-    if issubclass(py_type, Decimal):
+    if issubclass(python_type, Decimal):
         return pa.decimal128(38, 9)
-    if issubclass(py_type, datetime.datetime):
+    if issubclass(python_type, datetime.datetime):
         return pa.timestamp("us")
-    if issubclass(py_type, datetime.date):
+    if issubclass(python_type, datetime.date):
         return pa.date32()
-    if issubclass(py_type, bytes):
+    if issubclass(python_type, bytes):
         return pa.binary()
     return pa.string()
 
@@ -286,6 +288,9 @@ def _stringify_untyped(rows: list[dict[str, Any]], specs: list[FieldSpec]) -> li
     if not untyped:
         return rows
     return [
-        {k: (str(v) if k in untyped and v is not None and not isinstance(v, str) else v) for k, v in row.items()}
+        {
+            key: (str(value) if key in untyped and value is not None and not isinstance(value, str) else value)
+            for key, value in row.items()
+        }
         for row in rows
     ]

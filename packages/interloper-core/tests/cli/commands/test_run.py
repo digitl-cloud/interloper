@@ -390,7 +390,7 @@ def test_an_unexpected_spec_failure_is_reported_cleanly(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A reconstruct crash the spec layer does not classify still exits, not tracebacks."""
-    from interloper.dag.base import DAG
+    from interloper.dag import DAG
 
     spec = _write_spec(tmp_path, f"path: {SOURCE_PATH}\n")
     monkeypatch.setattr(

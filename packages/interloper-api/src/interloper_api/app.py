@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import (
     ComponentDriftError,
     ConfigError,

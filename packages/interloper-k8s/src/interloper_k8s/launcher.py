@@ -8,7 +8,7 @@ import os
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 

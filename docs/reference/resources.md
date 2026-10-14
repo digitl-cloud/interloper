@@ -7,6 +7,8 @@ Resources are the configurable, persistable components (connections, configs, de
 ::: interloper.ResourceDefinition
 
 ::: interloper.config.decorator.config
+    options:
+      force_inspection: true
 
 ::: interloper.Config
 

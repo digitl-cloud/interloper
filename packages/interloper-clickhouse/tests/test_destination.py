@@ -11,8 +11,14 @@ import pandas as pd
 import pytest
 from interloper.destination import IOContext
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow, TimeGranularity
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    PartitionWindow,
+    TimeGranularity,
+    TimePartition,
+    TimePartitionWindow,
+)
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
 

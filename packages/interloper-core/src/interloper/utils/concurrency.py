@@ -58,16 +58,16 @@ class RLock:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         """Release the lock.
 
         Args:
-            exc_type: The exception type, if the block raised; unused.
-            exc: The exception, if the block raised; unused.
-            tb: The traceback, if the block raised; unused.
+            exception_type: The exception type, if the block raised; unused.
+            exception: The exception, if the block raised; unused.
+            traceback: The traceback, if the block raised; unused.
         """
         self._lock.release()
 
@@ -219,11 +219,11 @@ async def bounded_gather(coros: Iterable[Coroutine[Any, Any, _T]], *, limit: int
 
     semaphore = asyncio.Semaphore(limit)
 
-    async def _guarded(coro: Coroutine[Any, Any, _T]) -> _T:
+    async def _guarded(coroutine: Coroutine[Any, Any, _T]) -> _T:
         async with semaphore:
-            return await coro
+            return await coroutine
 
-    return await asyncio.gather(*(_guarded(c) for c in coros))
+    return await asyncio.gather(*(_guarded(coroutine) for coroutine in coros))
 
 
 async def invoke(fn: Any, *args: Any, **kwargs: Any) -> Any:

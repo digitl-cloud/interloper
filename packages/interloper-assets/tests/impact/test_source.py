@@ -13,9 +13,8 @@ import datetime as dt
 from typing import Any
 
 import pandas as pd
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.impact import schemas
@@ -80,4 +79,4 @@ class TestSpecRoundtripAndReconcile:
         df = _to_df([record], dt.date(2026, 6, 10))
         normalized = child.normalizer.normalize(df)
         assert {"id", "campaign_id", "sub_id_1", "amount", "date"} <= set(normalized.columns)
-        Representation.of(normalized).reconcile(schemas.Actions)  # must not raise
+        TableData.from_data(normalized).reconcile(schemas.Actions)  # must not raise

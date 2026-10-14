@@ -11,7 +11,7 @@ import interloper as il
 from interloper.errors import SpecError
 from interloper.normalizer import Normalizer
 from interloper.serializable import Serializable, SerializationContext, Spec
-from interloper.source.base import Source
+from interloper.source import Source
 
 # -- Fixtures ------------------------------------------------------------------
 
@@ -459,7 +459,9 @@ class TestSortSettings:
         assert "'dataset'" in str(error.value)
 
     def test_an_unknown_name_names_the_subclass_declaring_it(self):
-        with pytest.raises(TypeError, match=r"Connection does not accept 'oauth'.*OAuthConnection declares it"):
+        with pytest.raises(
+            TypeError, match=r"Connection does not accept 'oauth'.*'oauth' is a setting of OAuthConnection"
+        ):
             il.Connection._sort_settings({"oauth": None})
 
     def test_a_schema_routes_its_key(self):

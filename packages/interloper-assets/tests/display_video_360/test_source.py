@@ -15,9 +15,8 @@ from typing import Any
 
 import pytest
 from interloper.asset import Asset
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.display_video_360 import schemas, source
@@ -109,9 +108,9 @@ class TestReports:
     def test_parsed_report_conforms_to_schema(self):
         rows = _parse_report_csv(_REPORT_CSV)
         normalized = _source().normalizer.normalize(rows)
-        view = Representation.of(normalized)
-        df = view.reconcile(schemas.LineItemsStats)
-        Representation.of(df).reconcile(schemas.LineItemsStats, strict=True)  # must not raise
+        table = TableData.from_data(normalized)
+        df = table.reconcile(schemas.LineItemsStats)
+        TableData.from_data(df).reconcile(schemas.LineItemsStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["active_view_pct_viewable_impressions"] == "85.5"
         assert record["impressions"] == 100
@@ -130,9 +129,9 @@ class TestNormalizerMapping:
         fields = set(schemas.Partners.model_fields)
         assert set(normalized.columns) == fields - {"date"}
 
-        view = Representation.of(normalized)
-        df = view.reconcile(schemas.Partners)
-        Representation.of(df).reconcile(schemas.Partners, strict=True)  # must not raise
+        table = TableData.from_data(normalized)
+        df = table.reconcile(schemas.Partners)
+        TableData.from_data(df).reconcile(schemas.Partners, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["ad_server_config_measurement_config_dv_360_to_cm_cost_reporting_enabled"] is True
         assert record["data_access_config_sdf_config_admin_email"] == "admin@digitl.com"

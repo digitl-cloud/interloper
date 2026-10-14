@@ -15,7 +15,7 @@ from contextvars import ContextVar
 from typing import Any
 from uuid import UUID
 
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper_db import Store
 from interloper_toolkit import ToolkitContext
 from mcp.server.auth.middleware.auth_context import get_access_token

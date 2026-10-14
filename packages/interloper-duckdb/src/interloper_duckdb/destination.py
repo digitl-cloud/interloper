@@ -12,10 +12,11 @@ from typing import Any, ClassVar
 
 import duckdb
 import pandas as pd
-from interloper.destination import DatabaseDestination, Destination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, Destination, IOContext, destination
 from interloper.errors import DataNotFoundError
-from interloper.representation import Representation
-from interloper.resource.fields import InputField
+from interloper.partitioning import PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import InputField
 from interloper.schema import FieldSpec
 from pydantic import PrivateAttr
 
@@ -162,7 +163,7 @@ class DuckDBDestination(DatabaseDestination):
     def _predicate(self, where: PartitionFilter, types: dict[str, str]) -> tuple[str, list[Any]]:
         """Render a partition filter as a parameterised predicate.
 
-        Each parameter is cast to the column's type, so a partition id that
+        Each parameter is cast to the column's type, so a partition key that
         arrives as a string compares against a ``DATE`` or ``BIGINT`` column.
         Against a ``VARCHAR`` column, date and datetime bounds are rendered in
         ISO 8601 (``T`` separator), the form the rows carry, since DuckDB's
@@ -209,14 +210,14 @@ class DuckDBDestination(DatabaseDestination):
         with self._cursor() as cursor:
             columns = self._columns(cursor, table, dataset)
             if not columns:
-                schema = context.schema or Representation.of(data).infer()
+                schema = context.schema or TableData.from_data(data).infer()
                 self._create_table(cursor, table, dataset, schema.field_specs())
                 columns = self._columns(cursor, table, dataset)
             if not columns:
                 raise RuntimeError(f"Table '{self._schema(dataset)}.{table}' could not be created.")
 
             ref = self.qualified_name(table, dataset)
-            frame = Representation.of(data).to("dataframe")
+            frame = TableData.from_data(data).to("dataframe")
             extras = [str(c) for c in frame.columns if str(c) not in columns]
             if extras:
                 warnings.warn(

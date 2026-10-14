@@ -25,19 +25,18 @@ from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
 from interloper.events import EventLogReader
 from interloper.operation import Operation, OperationResult
-from interloper.runner.base import Runner
-from interloper.runner.run import Run
+from interloper.runner import Run, Runner
 from interloper.telemetry.propagation import child_process_env
 from pydantic import Field
 
 if TYPE_CHECKING:
-    from interloper.dag.base import DAG
+    from interloper.dag import DAG
     from interloper.partitioning import PartitionWindow
 
 logger = logging.getLogger(__name__)
 
 
-class ContainerRun(Run):
+class DockerRun(Run):
     """One run of a DockerRunner: each operation in its own container, its events read from the container's log.
 
     Following a container (start it, forward its log, read its exit code)
@@ -168,9 +167,9 @@ class ContainerRun(Run):
         command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
         window = operation.effective_window(self.state.window)
         if window is not None and len(window) == 1:
-            command.extend(["--date", window.first.id])
+            command.extend(["--date", window.first.key])
         elif window is not None:
-            command.extend(["--start-date", window.first.id, "--end-date", window.last.id])
+            command.extend(["--start-date", window.first.key, "--end-date", window.last.key])
         return command
 
     def name(self, operation: Operation) -> str:
@@ -206,7 +205,7 @@ class DockerRunner(Runner):
     ```
     """
 
-    Run = ContainerRun
+    Run = DockerRun
 
     image: str = "interloper:latest-worker"
     max_containers: int = 4

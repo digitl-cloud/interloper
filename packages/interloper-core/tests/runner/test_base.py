@@ -12,16 +12,8 @@ import interloper as il
 from interloper.errors import ConfigError, PartitionError
 from interloper.events import Event
 from interloper.normalizer import Normalizer
-from interloper.partitioning.time import (
-    TimeGranularity,
-    TimePartition,
-    TimePartitionConfig,
-    TimePartitionWindow,
-)
-from interloper.runner.async_runner import AsyncRunner
-from interloper.runner.base import RUNNERS
-from interloper.runner.results import ExecutionStatus
-from interloper.runner.serial import SerialRunner
+from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
+from interloper.runner import RUNNERS, AsyncRunner, ExecutionStatus, SerialRunner
 from interloper.settings import RunnerSettings
 
 
@@ -235,7 +227,7 @@ class TestPreflightValidation:
 
         @il.asset(partitioning=TimePartitionConfig(column="date", allow_window=True))
         def windowed(context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"date": partition.id} for partition in context.window]
+            return [{"date": partition.key} for partition in context.window]
 
         dag = il.DAG(windowed(id="windowed", destinations=[il.MemoryDestination()]))
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 3))
@@ -450,3 +442,17 @@ class TestFinalizeCancelsPending:
         assert len(canceled_events) == 5
         run_failed_index = next(i for i, event in enumerate(events) if event.type is il.EventType.RUN_FAILED)
         assert all(events.index(event) < run_failed_index for event in canceled_events)
+
+
+async def test_reraise_is_recorded_on_the_run_span(span_exporter):
+    """A reraised failure is recorded on the run span before it leaves the runner."""
+
+    @il.asset
+    def broken() -> list[dict[str, Any]]:
+        raise KeyError("missing")
+
+    with pytest.raises(KeyError):
+        await AsyncRunner(reraise=True).run(il.DAG(broken(id="broken", destinations=[il.MemoryDestination()])))
+
+    run_span = next(span for span in span_exporter.get_finished_spans() if span.name == "interloper.runner.run")
+    assert any(event.name == "exception" for event in run_span.events)

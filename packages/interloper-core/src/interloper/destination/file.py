@@ -19,7 +19,7 @@ class FileDestination(Destination):
 
     Data is stored under ``{base_path}/{dataset}/{table}/data.pkl``
     (or ``{base_path}/{table}/data.pkl`` when no dataset is set).
-    Partitioned assets add a ``{column}={id}`` subdirectory; the partition
+    Partitioned assets add a ``{column}={key}`` subdirectory; the partition
     dispatch (including window splitting) is `Destination`'s.
 
     Unlike `CSVDestination` this stores
@@ -52,14 +52,14 @@ class FileDestination(Destination):
                 whole.
 
         Returns:
-            ``.../data.pkl``, inside a ``{column}={id}`` subdirectory for
+            ``.../data.pkl``, inside a ``{column}={key}`` subdirectory for
             partitions.
         """
         base = self._asset_path(context)
         if partition is None:
             return base / "data.pkl"
         assert context.asset.partitioning
-        return base / f"{context.asset.partitioning.column}={partition.id}" / "data.pkl"
+        return base / f"{context.asset.partitioning.column}={partition.key}" / "data.pkl"
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
         """Pickle one partition's data to its file.
@@ -73,8 +73,8 @@ class FileDestination(Destination):
         """
         path = self._partition_path(context, partition)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("wb") as f:
-            pickle.dump(data, f)
+        with path.open("wb") as file:
+            pickle.dump(data, file)
 
     def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
         """Unpickle one partition's file.
@@ -94,8 +94,8 @@ class FileDestination(Destination):
         path = self._partition_path(context, partition)
         if not path.exists():
             raise DataNotFoundError(f"No data file for '{context.asset}': {path}")
-        with path.open("rb") as f:
-            return pickle.load(f)
+        with path.open("rb") as file:
+            return pickle.load(file)
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         """Return row counts grouped by partition by scanning pickle files on disk.
@@ -123,7 +123,7 @@ class FileDestination(Destination):
                 partition_value = entry.name.split("=", 1)[1]
                 data_file = entry / "data.pkl"
                 if data_file.exists():
-                    with data_file.open("rb") as f:
-                        data = pickle.load(f)
+                    with data_file.open("rb") as file:
+                        data = pickle.load(file)
                     counts[partition_value] = len(data) if isinstance(data, list) else 1
         return counts

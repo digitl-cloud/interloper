@@ -14,9 +14,8 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_ads import constants, schemas
@@ -97,7 +96,7 @@ class TestSpecRoundtripAndReconcile:
         ]
         normalized = child.normalizer.normalize(rows)
         assert "actions_link_click" in normalized.columns
-        out = Representation.of(normalized).reconcile(schemas.AdsStats)
+        out = TableData.from_data(normalized).reconcile(schemas.AdsStats)
         assert int(out.loc[0, "actions_link_click"]) == 7
 
     def test_sparse_row_passes_validation(self):
@@ -107,14 +106,14 @@ class TestSpecRoundtripAndReconcile:
         optional, so absent action types are not 'Field required' errors.
         """
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
-        Representation.of(df).reconcile(schemas.AdsStats, strict=True)  # must not raise
+        TableData.from_data(df).reconcile(schemas.AdsStats, strict=True)  # must not raise
 
     def test_entity_row_flattens_creative_and_reconciles(self):
         child = self._child("ads")
         rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
         normalized = child.normalizer.normalize(rows)
         assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
-        Representation.of(normalized).reconcile(schemas.Ads)  # must not raise
+        TableData.from_data(normalized).reconcile(schemas.Ads)  # must not raise
 
 
 class TestSchemaParity:

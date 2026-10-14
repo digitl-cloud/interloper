@@ -135,26 +135,26 @@ class Step:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        exception_traceback: TracebackType | None,
     ) -> bool:
         """Close the span and emit the completed or failed event.
 
         Args:
-            exc_type: The exception type, if the body raised.
-            exc: The exception, if the body raised.
-            tb: The traceback, if the body raised.
+            exception_type: The exception type, if the body raised.
+            exception: The exception, if the body raised.
+            exception_traceback: The traceback, if the body raised.
 
         Returns:
             ``False``, so an exception propagates.
         """
-        self._span.__exit__(exc_type, exc, tb)
-        if exc is None:
+        self._span.__exit__(exception_type, exception, exception_traceback)
+        if exception is None:
             message = self._kind.message("completed", self._subject)
             EventBus.emit(self._kind.completed, metadata={**self._metadata, **self._extra, "message": message})
             return False
-        error = format_exception(exc)
+        error = format_exception(exception)
         EventBus.emit(
             self._kind.failed,
             metadata={

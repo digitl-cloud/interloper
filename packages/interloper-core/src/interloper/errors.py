@@ -71,10 +71,6 @@ class AssetError(InterloperError, ValueError):
 # -- Source --------------------------------------------------------------------
 
 
-class SourceError(InterloperError, ValueError):
-    """An error in source definition or instantiation."""
-
-
 # -- Connection ----------------------------------------------------------------
 
 

@@ -14,8 +14,8 @@ from typing import Any
 from uuid import UUID
 
 from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, HydrationError
-from interloper.resource.fields import is_fetch_field_provider
-from interloper.utils.concurrency import invoke
+from interloper.resource import is_fetch_field_provider
+from interloper.utils import invoke
 
 from interloper_toolkit.authz import requires_role
 from interloper_toolkit.context import ToolkitContext

@@ -27,9 +27,9 @@ def replace_non_finite(obj: Any) -> Any:
     if isinstance(obj, float):
         return obj if math.isfinite(obj) else None
     if isinstance(obj, dict):
-        return {k: replace_non_finite(v) for k, v in obj.items()}
+        return {key: replace_non_finite(value) for key, value in obj.items()}
     if isinstance(obj, list):
-        return [replace_non_finite(v) for v in obj]
+        return [replace_non_finite(value) for value in obj]
     return obj
 
 

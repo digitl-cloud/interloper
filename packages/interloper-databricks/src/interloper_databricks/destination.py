@@ -7,7 +7,6 @@ import inspect
 import io
 import json
 import math
-import threading
 import uuid
 import warnings
 from collections.abc import Callable, Sequence
@@ -21,16 +20,14 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from databricks.sql.client import Connection as Session
 from databricks.sql.client import Cursor
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning.base import Partition
-from interloper.representation import Representation
-from interloper.resource.fields import FetchField, InputField
+from interloper.partitioning import Partition, PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import FetchField, InputField
 from interloper.schema import FieldSpec
-from interloper.utils.data import is_empty
-from interloper.utils.json import json_default, replace_non_finite
+from interloper.utils import RLock, is_empty, json_default, replace_non_finite
 from pydantic import PrivateAttr, field_validator
-from typing_extensions import Self
 
 from interloper_databricks.connection import DatabricksConnection
 from interloper_databricks.types import TIMESTAMP, VARIANT, clusterable, column_type
@@ -38,46 +35,6 @@ from interloper_databricks.types import TIMESTAMP, VARIANT, clusterable, column_
 #: Delta collects statistics on a table's first 32 columns, and a clustering
 #: key must be one of them.
 _STATS_COLUMNS = 32
-
-
-class _Lock:
-    """A re-entrant lock that a deep copy replaces with a fresh one.
-
-    A destination is deep-copied with the source it is bound to, and a bare
-    ``threading.RLock`` cannot be copied.
-    """
-
-    def __init__(self) -> None:
-        """Create the underlying lock."""
-        self._lock = threading.RLock()
-
-    def __enter__(self) -> Self:
-        """Acquire the lock.
-
-        Returns:
-            The lock.
-        """
-        self._lock.acquire()
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        """Release the lock.
-
-        Args:
-            *exc: The exception details, if the block raised; unused.
-        """
-        self._lock.release()
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> _Lock:
-        """Copy as a new, unheld lock.
-
-        Args:
-            memo: The deep-copy memo; unused.
-
-        Returns:
-            A fresh lock.
-        """
-        return _Lock()
 
 
 @dataclass(frozen=True)
@@ -144,7 +101,7 @@ class DatabricksDestination(DatabaseDestination):
         description="Unity Catalog volume the loads stage files in, as catalog.schema.volume",
     )
 
-    _lock: _Lock = PrivateAttr(default_factory=_Lock)
+    _lock: RLock = PrivateAttr(default_factory=RLock)
 
     @field_validator("staging_volume")
     @classmethod
@@ -356,10 +313,10 @@ class DatabricksDestination(DatabaseDestination):
         Returns:
             Where the file was staged and the query reading it.
         """
-        specs = (context.schema or Representation.of(data).infer()).field_specs()
+        specs = (context.schema or TableData.from_data(data).infer()).field_specs()
         self._ensure_table(table, schema, specs, context)
 
-        frame = Representation.of(data).to("dataframe")
+        frame = TableData.from_data(data).to("dataframe")
         names = [spec.name for spec in specs]
         extras = [str(c) for c in frame.columns if str(c) not in names]
         if extras:

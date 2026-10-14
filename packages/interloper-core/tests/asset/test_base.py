@@ -16,14 +16,19 @@ from pydantic import ValidationError
 
 import interloper as il
 from interloper.asset.base import AssetDefinition
-from interloper.component.base import Component
-from interloper.component.relation import ComponentIdentity
+from interloper.component import Component, ComponentIdentity
 from interloper.dag import DAG
 from interloper.errors import AssetError, ConfigError, PartitionError
 from interloper.events import Event, EventBus, EventType
-from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionConfig
-from interloper.partitioning.time import TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner.results import ExecutionStatus
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    PartitionConfig,
+    TimePartition,
+    TimePartitionConfig,
+    TimePartitionWindow,
+)
+from interloper.runner import ExecutionStatus
 from interloper.serializable import Spec
 
 # -- Fixtures ------------------------------------------------------------------
@@ -770,7 +775,7 @@ class TestWindowValidation:
 
     def test_a_list_asset_accepts_a_declared_partition(self):
         FakeAssetRegional()._check_window(ListPartition("eu").window)
-        with pytest.raises(PartitionError, match="'apac' is not one of the declared partitions"):
+        with pytest.raises(PartitionError, match="declares no partition 'apac'"):
             FakeAssetRegional()._check_window(ListPartition("apac").window)
 
     def test_run_checks_before_anything_executes(self):
@@ -1441,11 +1446,11 @@ class TestAssetPath:
 
         @il.asset(partitioning=windowed)
         def orders(context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"date": partition.id, "amount": 1} for partition in context.window]
+            return [{"date": partition.key, "amount": 1} for partition in context.window]
 
         @il.asset(partitioning=windowed)
         def totals(context: il.ExecutionContext, orders: il.Upstream) -> list[dict[str, Any]]:
-            return [{"date": partition.id, "rows": len(orders.data)} for partition in context.window]
+            return [{"date": partition.key, "rows": len(orders.data)} for partition in context.window]
 
         upstream = orders(id="orders", destinations=[mem])
         downstream = totals(id="totals", destinations=[mem], orders=upstream)

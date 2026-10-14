@@ -14,7 +14,7 @@ from interloper.destination.context import IOContext
 from interloper.errors import ConfigError
 from interloper.partitioning import PartitionFilter
 from interloper.partitioning.base import Partition
-from interloper.representation import Representation
+from interloper.representation import TableData
 from interloper.utils.data import is_empty
 
 if TYPE_CHECKING:
@@ -66,8 +66,8 @@ class DatabaseDestination(Destination):
     (as the partition renders it: bounds for a time partition, membership for a list one). The base
     owns replacing: a partition's rows are deleted before its data is
     inserted, a window in one batch. Reads come back in whatever
-    representation the backend holds natively; a consumer that wants records
-    asks `records`.
+    representation the backend holds natively; a consumer that wants rows
+    reads `Upstream.rows`.
 
     Views are the SQL family's own: a `reference` is a
     `TableReference`, a definition is SQL text in this destination's
@@ -92,8 +92,8 @@ class DatabaseDestination(Destination):
         The one hook that receives the whole context: a table created on first
         write takes its columns from ``context.schema``, its partitioning and
         description from ``context.asset``. A row backend views the data as
-        records through ``Representation.of(data).records``; a columnar one
-        converts with ``Representation.of(data).to("dataframe")`` and loads
+        rows through ``TableData.from_data(data).rows``; a columnar one
+        converts with ``TableData.from_data(data).to("dataframe")`` and loads
         natively.
 
         Args:
@@ -238,7 +238,7 @@ class DatabaseDestination(Destination):
                 )
         raise ConfigError(
             f"Destination '{self.key}' cannot query asset '{asset.qualified_key}': "
-            f"none of its destinations ({', '.join(d.key for d in destinations)}) is reachable"
+            f"none of its destinations ({', '.join(destination.key for destination in destinations)}) is reachable"
         )
 
     def create_view(self, asset: Asset, definition: str | Compilable) -> None:
@@ -385,7 +385,7 @@ class DatabaseDestination(Destination):
         if context.window is None or context.asset.partitioning is None:
             return
         column = context.asset.partitioning.column
-        columns = Representation.of(data).columns
+        columns = TableData.from_data(data).columns
         if columns and column not in columns:
             warnings.warn(
                 f"Partition column '{column}' not found in data for asset "

@@ -75,7 +75,7 @@ class EmailHook(il.Hook):
 | `event_type` | The matched outcome. |
 | `component_id` | The watched component whose run ended. |
 | `run_id` | The run. |
-| `partition_key` | The run's partition id, if any. |
+| `partition_key` | The run's partition key, if any. |
 | `backfill_id`, `start_key`, `end_key` | The backfill and its range, on a backfill event. |
 | `url` | The run's or backfill's page in the app, when `server.external_url` is set. |
 | `metadata` | Event details supplied by the operator: always `status`, `organisation_name`, `component_name` and `component_key`, plus what the event kind adds below. |

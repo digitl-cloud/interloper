@@ -16,7 +16,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import NotFoundError
-from interloper.runner.state import RunState
+from interloper.runner import RunState
 from sqlalchemy import Engine
 from sqlmodel import col, select
 

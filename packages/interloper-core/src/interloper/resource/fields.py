@@ -23,7 +23,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 #: Attribute stamped on a method by `fetch_field_provider`.
-FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
+_FETCH_FIELD_PROVIDER_ATTR = "__is_fetch_field_provider__"
 
 
 def fetch_field_provider(fn: F) -> F:
@@ -55,7 +55,7 @@ def fetch_field_provider(fn: F) -> F:
     Returns:
         The same callable, stamped as a fetch provider.
     """
-    setattr(fn, FETCH_FIELD_PROVIDER_ATTR, True)
+    setattr(fn, _FETCH_FIELD_PROVIDER_ATTR, True)
     return fn
 
 
@@ -65,7 +65,7 @@ def is_fetch_field_provider(candidate: Any) -> bool:
     Args:
         candidate: The attribute to test; anything without the provider stamp is not one.
     """
-    return bool(getattr(candidate, FETCH_FIELD_PROVIDER_ATTR, False))
+    return bool(getattr(candidate, _FETCH_FIELD_PROVIDER_ATTR, False))
 
 
 def validate_fetch_field_providers(cls: type[BaseModel], relations: dict[str, Relation]) -> None:
@@ -144,23 +144,25 @@ def strip_internal_fields(schema: dict[str, Any], extra: Iterable[str] = ()) -> 
     properties = schema.get("properties", {})
     if not internal & properties.keys():
         return schema
-    kept = {name: prop for name, prop in properties.items() if name not in internal}
+    kept = {name: property_schema for name, property_schema in properties.items() if name not in internal}
     filtered = {**schema, "properties": kept}
     if "required" in filtered:
-        filtered["required"] = [r for r in filtered["required"] if r not in internal]
+        filtered["required"] = [name for name in filtered["required"] if name not in internal]
         if not filtered["required"]:
             del filtered["required"]
     if "$defs" in filtered:
         import json
 
-        props_str = json.dumps(kept)
-        filtered["$defs"] = {k: v for k, v in filtered["$defs"].items() if f'"#/$defs/{k}"' in props_str}
+        properties_text = json.dumps(kept)
+        filtered["$defs"] = {
+            key: value for key, value in filtered["$defs"].items() if f'"#/$defs/{key}"' in properties_text
+        }
         if not filtered["$defs"]:
             del filtered["$defs"]
     return filtered
 
 
-# -- Helpers -------------------------------------------------------------------
+# -- Internals -----------------------------------------------------------------
 
 
 def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
@@ -168,8 +170,7 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
 
     Also lifts the presentation kwargs every field factory accepts:
 
-    - ``label`` becomes the JSON-schema-standard ``title`` (the form label;
-      ``title=`` keeps working as a plain pydantic passthrough).
+    - ``label`` becomes the JSON-schema-standard ``title`` (the form label).
     - ``info`` becomes ``x-info``: long explanatory text the UI renders in
       an info tooltip next to the label, keeping the inline ``description``
       short.
@@ -191,7 +192,12 @@ def _extra(kwargs: dict[str, Any], widget: str) -> dict[str, Any]:
     Returns:
         The extra dict with ``x-widget`` (and possibly ``x-info``,
         ``x-discriminator`` / ``x-inherit`` / ``x-section``) set.
+
+    Raises:
+        TypeError: If *kwargs* holds ``title``: the form label is ``label=``.
     """
+    if "title" in kwargs:
+        raise TypeError("Field factories take label=, not title=")
     extra = kwargs.pop("json_schema_extra", {})
     extra["x-widget"] = widget
     label = kwargs.pop("label", None)

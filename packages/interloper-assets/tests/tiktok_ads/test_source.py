@@ -15,9 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.tiktok_ads import schemas
@@ -102,7 +101,7 @@ class TestSpecRoundtripAndReconcile:
             }
         ]
         normalized = child.normalizer.normalize(rows)
-        reconciled = Representation.of(normalized).reconcile(schemas.AdsStats)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.AdsStats)
         assert float(reconciled.loc[0, "spend"]) == 12.5
         assert int(reconciled.loc[0, "clicks"]) == 3
         # the report's own day is the partition column; nothing is stamped on top
@@ -115,7 +114,7 @@ class TestSpecRoundtripAndReconcile:
         rows = [{"ad_id": "456", "ad_name": "My Ad", "ad_texts": ["hello"], "image_ids": ["img1"]}]
         normalized = child.normalizer.normalize(rows)
         # list fields land as JSON strings on the str-typed schema columns
-        reconciled = Representation.of(normalized).reconcile(schemas.Ads)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.Ads)
         assert reconciled.loc[0, "ad_texts"] == '["hello"]'
         assert reconciled.loc[0, "image_ids"] == '["img1"]'
 

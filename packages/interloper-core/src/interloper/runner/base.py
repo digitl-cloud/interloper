@@ -73,15 +73,15 @@ class Runner(Serializable):
             ConfigError: If no runner is registered under ``settings.type``,
                 or the registered class is not of the receiving class.
         """
-        runner_cls = RUNNERS.get(settings.type)
-        if runner_cls is None:
+        runner_class = RUNNERS.get(settings.type)
+        if runner_class is None:
             raise ConfigError(
                 f"Unknown runner: {settings.type!r} (available: {list(RUNNERS.keys())}). "
                 f"Is the matching interloper package installed?"
             )
-        if not issubclass(runner_cls, cls):
+        if not issubclass(runner_class, cls):
             raise ConfigError(f"Runner '{settings.type}' does not resolve to a {cls.__name__}")
-        return runner_cls(**settings.config)
+        return runner_class(**settings.config)
 
     # -- Public API ------------------------------------------------------------
 
@@ -128,8 +128,8 @@ class Runner(Serializable):
                     result = await run.walk()
                 if result.status is ExecutionStatus.FAILED:
                     span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
-        if self.reraise:
-            run.reraise()
+                if self.reraise:
+                    run.reraise()
         return result
 
     def _span_attributes(self, metadata: dict[str, Any], window: PartitionWindow | None) -> dict[str, str]:

@@ -33,7 +33,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import ConfigError, ConflictError, NotFoundError
-from interloper.partitioning.time import TimeGranularity, TimePartition
+from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, and_, exists, func, or_, update
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select

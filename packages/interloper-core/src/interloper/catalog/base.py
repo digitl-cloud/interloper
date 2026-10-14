@@ -56,7 +56,7 @@ class Catalog(BaseModel):
 
     # -- Lookup & export -------------------------------------------------------
 
-    def get(self, key: str, default: Any = None) -> ComponentDefinition | None:
+    def get(self, key: str) -> ComponentDefinition | None:
         """Look up a component definition by key.
 
         A bare key names a catalog entry. A source's assets are not entries:
@@ -68,28 +68,27 @@ class Catalog(BaseModel):
 
         Args:
             key: The bare or qualified component key.
-            default: Value to return if the key does not resolve.
 
         Returns:
-            The component definition, or *default* when the key does not
+            The component definition, or ``None`` when the key does not
             resolve, including a qualified key whose source does not resolve
             or does not declare the asset.
         """
         source_key, dot, asset_key = key.rpartition(".")
         if not dot:
-            return self.components.get(key, default)
+            return self.components.get(key)
         source = self.components.get(source_key)
         if isinstance(source, SourceDefinition):
             for asset in source.assets:
                 if asset.key == asset_key:
                     return asset
-        return default
+        return None
 
     def vocabulary(self, kind: str, key: str) -> dict[str, Relation]:
         """The relation vocabulary governing a persisted component row.
 
         The class definition is authoritative; a concrete class may extend
-        its anchor's vocabulary (``TriggerHook`` adds ``target``). The
+        its anchor's vocabulary (``TriggerHook`` adds ``targets``). The
         kind's anchor is the fallback when the key does not resolve to a
         matching definition (drifted keys), keeping validation fail-closed on
         the kind's shared minimum.
@@ -117,7 +116,7 @@ class Catalog(BaseModel):
         Returns:
             Sorted list of fully qualified import paths.
         """
-        return sorted(defn.path for defn in self.components.values())
+        return sorted(definition.path for definition in self.components.values())
 
     def dump(self) -> dict[str, dict[str, Any]]:
         """Serialize all definitions to JSON-compatible dicts.
@@ -125,9 +124,9 @@ class Catalog(BaseModel):
         Returns:
             Mapping from component key to serialized definition.
         """
-        return {k: v.model_dump(mode="json") for k, v in self.components.items()}
+        return {key: definition.model_dump(mode="json") for key, definition in self.components.items()}
 
-    # -- Constructors ----------------------------------------------------------
+    # -- Construction ----------------------------------------------------------
 
     @classmethod
     def from_paths(cls, paths: list[str]) -> Catalog:
@@ -202,7 +201,8 @@ class Catalog(BaseModel):
         """
         return cls(components=dict(cls._declared_definitions()))
 
-    # -- Discovery internals ---------------------------------------------------
+    # -- Internals -------------------------------------------------------------
+
     @classmethod
     def _declared_classes(cls) -> tuple[type[Component], ...]:
         """Component classes declared under ``interloper.components``.

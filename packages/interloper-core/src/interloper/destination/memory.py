@@ -82,9 +82,9 @@ class MemoryDestination(Destination):
             name: The asset's table name.
             dataset: The asset's dataset; skipped from the key when empty.
             partitioning: The asset's partition config, or ``None`` to omit the
-                ``{column}={id}`` segment.
+                ``{column}={key}`` segment.
             partition: The partition to encode, or ``None`` to omit the
-                ``{column}={id}`` segment.
+                ``{column}={key}`` segment.
 
         Returns:
             The constructed storage key string.
@@ -95,7 +95,7 @@ class MemoryDestination(Destination):
         parts.append(name)
 
         if partitioning is not None and partition is not None:
-            parts.append(f"{partitioning.column}={partition.id}")
+            parts.append(f"{partitioning.column}={partition.key}")
 
         return "/".join(parts)
 

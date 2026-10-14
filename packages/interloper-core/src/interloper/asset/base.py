@@ -324,7 +324,7 @@ class Asset(Operation, metaclass=AssetMeta):
         data.__signature__ = signature  # ty: ignore[invalid-assignment]
         return ClassBody.from_function(fn, members={"data": data})
 
-    # -- Identity & definition -------------------------------------------------
+    # -- Identity --------------------------------------------------------------
 
     @property
     def source(self) -> Source | None:
@@ -353,8 +353,9 @@ class Asset(Operation, metaclass=AssetMeta):
         Source-owned assets return the composite form
         ``"module:SourceName.AssetName"``, where the colon explicitly
         marks the module / attribute boundary.  Resolution walks the
-        attribute chain at class level via the ``AssetRef`` descriptor
-        installed on the parent source, with no instantiation required.
+        attribute chain at class level: an asset class read on its source
+        class is the class itself (see `AssetMeta`), with no instantiation
+        required.
 
         Standalone assets return the regular dotted module path.
 
@@ -362,8 +363,8 @@ class Asset(Operation, metaclass=AssetMeta):
             Import path string.
         """
         if cls._source_type is not None:
-            source_cls = cls._source_type
-            return f"{source_cls.__module__}:{source_cls.__name__}.{cls.__name__}"
+            source_class = cls._source_type
+            return f"{source_class.__module__}:{source_class.__name__}.{cls.__name__}"
         return get_object_path(cls)
 
     @classmethod
@@ -658,13 +659,16 @@ class Asset(Operation, metaclass=AssetMeta):
                     ),
                 )
                 continue
-            upstreams.append(await self._upstream(cast("Asset", node or target), window, metadata))
+            upstreams.append(await self._upstream(name, cast("Asset", node or target), window, metadata))
         return upstreams
 
-    async def _upstream(self, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]) -> Upstream:
+    async def _upstream(
+        self, name: str, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
+    ) -> Upstream:
         """Hand one upstream to ``data()``: its data, or a reference to it for a kind that reads none.
 
         Args:
+            name: The ``data()`` parameter the upstream is bound to.
             target: The upstream asset, the DAG's node when it has one.
             window: The run's window.
             metadata: Run-level metadata carried onto the emitted events.
@@ -673,7 +677,7 @@ class Asset(Operation, metaclass=AssetMeta):
             The upstream as ``data()`` receives it.
         """
         if self.reads_upstream_data:
-            return await Upstream.read(target, self, window, metadata)
+            return await Upstream.read(target, self, window, metadata, parameter=name)
         return Upstream.reference(target, self.default_destination)
 
     async def _produce(self, window: PartitionWindow | None, dag: DAG | None, metadata: dict[str, Any]) -> Output:

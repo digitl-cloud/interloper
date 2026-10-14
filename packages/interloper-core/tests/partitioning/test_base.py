@@ -7,9 +7,18 @@ import datetime as dt
 import pytest
 
 from interloper.errors import ConfigError
-from interloper.partitioning.base import Partition, PartitionConfig, PartitionFilter, PartitionWindow
-from interloper.partitioning.list import ListPartition, ListPartitionConfig, ListPartitionWindow
-from interloper.partitioning.time import TimePartition, TimePartitionConfig, TimePartitionWindow
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    ListPartitionWindow,
+    Partition,
+    PartitionConfig,
+    PartitionFilter,
+    PartitionWindow,
+    TimePartition,
+    TimePartitionConfig,
+    TimePartitionWindow,
+)
 
 
 class TestPartitionFilter:
@@ -67,7 +76,7 @@ class TestPartitionWindow:
     def test_iteration_and_length_agree(self):
         window = ListPartitionWindow("eu", "apac", ("eu", "us", "apac"))
         assert len(window) == 3
-        assert [partition.id for partition in window] == ["eu", "us", "apac"]
+        assert [partition.key for partition in window] == ["eu", "us", "apac"]
 
 
 class TestPartitionConfig:
@@ -86,7 +95,7 @@ class TestPartitionConfig:
     def test_window_parses_both_keys(self):
         config = ListPartitionConfig(column="region", values=("eu", "us", "apac"))
         window = config.window("us", "apac")
-        assert [partition.id for partition in window] == ["us", "apac"]
+        assert [partition.key for partition in window] == ["us", "apac"]
 
     def test_definition_round_trips_through_json_like_values(self):
         config = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 1))
@@ -112,3 +121,15 @@ class TestPartitionConfig:
         regions = ListPartitionConfig(column="region", values=("eu",))
         assert time.compatible(regions) is False
         assert regions.compatible(time) is False
+
+
+def test_an_unknown_field_in_a_definition_is_a_config_error():
+    """A definition carrying a field its kind does not declare is a configuration error naming it."""
+    with pytest.raises(ConfigError, match=r"does not declare: \['bogus'\]"):
+        PartitionConfig.from_definition({"kind": "time", "column": "date", "bogus": 1})
+
+
+def test_a_missing_field_in_a_definition_is_not_reported_as_undeclared():
+    """A definition lacking a required field fails on that field, not as an undeclared one."""
+    with pytest.raises(TypeError, match=r"column"):
+        PartitionConfig.from_definition({"kind": "time", "start": "2026-01-01"})

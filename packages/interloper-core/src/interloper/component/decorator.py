@@ -20,7 +20,10 @@ class Decorator(Generic[SerializableT]):
     parenthesised form needs no nested function:
 
     ```py
-    asset = Decorator(Asset)
+    class AssetDecorator(Decorator[Asset]):
+        \"\"\"Create an Asset subclass from a decorated function.\"\"\"
+
+    asset = AssetDecorator(Asset)
 
     @asset
     def rows(): ...
@@ -28,6 +31,10 @@ class Decorator(Generic[SerializableT]):
     @asset(tags=["Report"], relations={"destinations": [BigQueryDestination]})
     def users_stats(): ...
     ```
+
+    Each kind's decorator is a subclass whose docstring documents it, so
+    ``help()`` and the reference show that text, and a decorator carrying
+    settings is of the same subclass.
 
     What the settings may be is the kind's own: its public ClassVars, its
     field defaults and, for a component, ``relations=``. A class that already
@@ -64,6 +71,6 @@ class Decorator(Generic[SerializableT]):
         """
         settings = {**self.settings, **settings}
         if target is None:
-            return Decorator(self.anchor, **settings)
+            return type(self)(self.anchor, **settings)
         body = ClassBody.of(target, self.anchor)
         return (body.base or self.anchor).build_class(body, **settings)

@@ -95,7 +95,7 @@ result.execution_time      # seconds
 result.executions          # id -> ExecutionInfo
 result.completed_ids, result.failed_ids, result.canceled_ids
 print(result)
-# RunResult(status=failed, partition=2026-01-15, completed=2, failed=1, canceled=1, time=1.20s, failed=[...], canceled=[...])
+# RunResult(status=failed, window=2026-01-15, completed=2, failed=1, canceled=1, time=1.20s, failed=[...], canceled=[...])
 ```
 
 `ExecutionInfo` carries `component_id`, `component_key`, `status`, `attempt`, `start_time`,

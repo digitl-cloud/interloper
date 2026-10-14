@@ -16,9 +16,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import interloper as il
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.search_console import constants, schemas
@@ -226,8 +225,8 @@ class TestSpecRoundtripAndReconcile:
             search_types=["WEB"],
         )
         normalized = self._child("page_stats").normalizer.normalize(records)
-        reconciled = Representation.of(normalized).reconcile(schemas.PageStats)
-        Representation.of(reconciled).reconcile(schemas.PageStats, strict=True)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.PageStats)
+        TableData.from_data(reconciled).reconcile(schemas.PageStats, strict=True)
         record = reconciled.to_dict("records")[0]
         assert record["date"] == _DAY
         assert record["page"] == "https://example.com/a"
@@ -242,8 +241,8 @@ class TestSpecRoundtripAndReconcile:
         rows = [{"search_appearance": "VIDEO", "clicks": 1.0, "impressions": 9.0, "ctr": 0.111, "position": 2.5}]
         stamped = [{**row, "search_type": "web", "date": _DAY} for row in rows]
         normalized = self._child("search_appearance_stats").normalizer.normalize(stamped)
-        reconciled = Representation.of(normalized).reconcile(schemas.SearchAppearanceStats)
-        Representation.of(reconciled).reconcile(schemas.SearchAppearanceStats, strict=True)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.SearchAppearanceStats)
+        TableData.from_data(reconciled).reconcile(schemas.SearchAppearanceStats, strict=True)
         record = reconciled.to_dict("records")[0]
         assert record["date"] == _DAY
         assert record["impressions"] == 9

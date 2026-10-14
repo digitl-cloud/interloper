@@ -90,14 +90,16 @@ class TestSettings:
                 return []
 
     def test_oauth_on_a_connection_subclass_names_the_kind_that_declares_it(self):
-        with pytest.raises(TypeError, match=r"FakeSubclassOAuth does not accept 'oauth'; OAuthConnection declares it"):
+        with pytest.raises(
+            TypeError, match=r"FakeSubclassOAuth does not accept 'oauth'; 'oauth' is a setting of OAuthConnection"
+        ):
 
             @il.connection(oauth=None)
             class FakeSubclassOAuth(il.Connection):
                 pass
 
     def test_oauth_on_a_plain_connection_names_the_subclass(self):
-        with pytest.raises(TypeError, match=r"OAuthConnection declares it"):
+        with pytest.raises(TypeError, match=r"'oauth' is a setting of OAuthConnection"):
 
             @il.connection(oauth=None)
             class FakePlainOAuth:
@@ -244,3 +246,27 @@ class TestTyping:
         assert typed.token == "t"
         assert_type(FakeUntyped, type[il.Connection])
         assert_type(il.asset(tags=["x"]), Decorator[il.Asset])
+
+
+def test_a_decorator_carries_its_documentation():
+    """Each decorator instance documents itself, and a configured copy keeps the text."""
+    assert (il.asset.__doc__ or "").startswith("Create an Asset subclass from a decorated function.")
+    assert (il.source.__doc__ or "").startswith("Create a Source subclass")
+    assert il.asset(tags=["x"]).__doc__ == il.asset.__doc__
+
+
+def test_the_refusal_does_not_offer_the_identity_field():
+    """``id`` is an identity, not a setting: the refusal does not list it."""
+    with pytest.raises(TypeError) as error:
+        il.Asset._sort_settings({"nope": 1})
+
+    assert "'id'" not in str(error.value)
+
+
+def test_the_hint_names_where_a_setting_lives():
+    """A setting of another kind is refused with the kind that declares it."""
+    with pytest.raises(TypeError, match=r"'dialect' is a setting of View"):
+
+        @il.asset(dialect="bigquery")
+        def rows() -> list[dict[str, Any]]:
+            return []

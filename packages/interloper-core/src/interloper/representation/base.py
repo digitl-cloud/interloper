@@ -2,11 +2,11 @@
 
 A `Representation` answers "what kind of table is this, and how do I
 view it generically?" for exactly one data representation. It bundles the
-generic table views (records, columns, partition filtering, concatenation) with the schema
+generic table views (rows, columns, partition filtering, concatenation) with the schema
 operations on that type (validate, reconcile, infer), so core never names a
-concrete dataframe library anywhere. ``Representation.of(data)``
-binds the matching representation to the data as a `View`, whose
-``to(key)`` converts between registered representations through records.
+concrete dataframe library anywhere. ``TableData.from_data(data)``
+binds the matching representation to the data, whose
+``to(key)`` converts between registered representations through rows.
 
 Every representation — the rows built-in (``list[dict]``) included — is
 declared as a package entry point under the ``interloper.representations``
@@ -81,7 +81,7 @@ class Representation(ABC):
 
     Representations are pure mechanism: stateless, never serialized, and
     not user-configurable. ``key`` identifies the representation in the
-    registry and in ``View.to(key)``.
+    registry and in ``TableData.to(key)``.
     """
 
     key: ClassVar[str]
@@ -95,19 +95,19 @@ class Representation(ABC):
         """
 
     @abstractmethod
-    def to_records(self, data: Any) -> list[dict[str, Any]]:
-        """View *data* as ``list[dict]`` records (missing values as ``None``).
+    def to_rows(self, data: Any) -> list[dict[str, Any]]:
+        """Return *data* as ``list[dict]`` rows (missing values as ``None``).
 
         Args:
             data: The table to view, in this representation's own type.
         """
 
     @abstractmethod
-    def from_records(self, rows: list[dict[str, Any]]) -> Any:
-        """Materialize records into this representation.
+    def from_rows(self, rows: list[dict[str, Any]]) -> Any:
+        """Materialize rows into this representation.
 
         Args:
-            rows: The records to materialize, missing values given as ``None``.
+            rows: The rows to materialize, missing values given as ``None``.
         """
 
     @abstractmethod
@@ -176,17 +176,32 @@ class Representation(ABC):
             tables: The tables to join, all in this representation's own type, at least one.
         """
 
+
+@dataclass(frozen=True)
+class TableData:
+    """A representation bound to the data it holds.
+
+    The generic table views with the data already applied, so a caller reads
+    ``table.rows`` or converts with ``table.to("dataframe")`` without naming
+    the data twice.
+
+    Attributes:
+        representation: The representation matching the data.
+        data: The table itself, in that representation's own type.
+    """
+
+    representation: Representation
+    data: Any
+
     @classmethod
-    def of(cls, data: Any) -> View:
-        """Resolve the representation matching *data* and bind it to the data.
+    def from_data(cls, data: Any) -> TableData:
+        """Bind data to the registered representation that recognises it.
 
         Args:
-            data: The table whose representation to resolve.
+            data: A table in any registered representation.
 
         Returns:
-            The data viewed through its representation: ``.records``,
-            ``.columns``, ``.conformer``, the partition filters, and
-            ``.to(key)`` to convert it to any registered representation.
+            The data with its representation; rows when the data is ``list[dict]``.
 
         Raises:
             RepresentationError: If no registered representation matches the
@@ -194,29 +209,12 @@ class Representation(ABC):
         """
         for instance in REPRESENTATIONS.values():
             if instance.matches(data):
-                return View(instance, data)
+                return cls(instance, data)
         keys = ", ".join(sorted(REPRESENTATIONS))
         raise RepresentationError(
             f"No representation matches {type(data).__name__}; registered: {keys}. "
             "Return list[dict] or a registered table type, or register a representation."
         )
-
-
-@dataclass(frozen=True)
-class View:
-    """A representation bound to the data it views.
-
-    What `Representation.of` returns: the generic table views with the
-    data already applied, so a caller reads ``view.records`` or converts with
-    ``view.to("dataframe")`` without naming the data twice.
-
-    Attributes:
-        representation: The representation matching the data (rows when none matched).
-        data: The table being viewed.
-    """
-
-    representation: Representation
-    data: Any
 
     @property
     def key(self) -> str:
@@ -228,13 +226,13 @@ class View:
         return self.representation.key
 
     @property
-    def records(self) -> list[dict[str, Any]]:
-        """The data as ``list[dict]`` records (missing values as ``None``).
+    def rows(self) -> list[dict[str, Any]]:
+        """The data as ``list[dict]`` rows (missing values as ``None``).
 
         Returns:
             One mapping per row.
         """
-        return self.representation.to_records(self.data)
+        return self.representation.to_rows(self.data)
 
     @property
     def columns(self) -> list[str]:
@@ -294,7 +292,7 @@ class View:
         """Convert the data to the representation registered under *key*.
 
         Data already in the target representation is returned as is. Anything
-        else is rebuilt from its records view, the one conversion every
+        else is rebuilt from its rows, the one conversion every
         representation implements, so a new representation converts to and
         from every existing one the moment it is registered. An unknown key
         fails with the registry's error naming the registered keys.
@@ -308,10 +306,10 @@ class View:
         target = REPRESENTATIONS[key]
         if target is self.representation:
             return self.data
-        return target.from_records(self.records)
+        return target.from_rows(self.rows)
 
     def concat(self, others: list[Any]) -> Any:
-        """Return the viewed data followed by *others*, as one table.
+        """Return the data followed by *others*, as one table.
 
         Args:
             others: Further tables in the same representation, in the order they follow.
@@ -323,7 +321,7 @@ class View:
 
 
 class RowsRepresentation(Representation):
-    """The built-in ``list[dict]`` records representation."""
+    """The built-in ``list[dict]`` rows representation."""
 
     key: ClassVar[str] = "rows"
 
@@ -338,8 +336,8 @@ class RowsRepresentation(Representation):
         """
         return isinstance(data, list)
 
-    def to_records(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Rows are already records.
+    def to_rows(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return the rows as they are.
 
         Args:
             data: The table to view, in this representation's own type.
@@ -349,11 +347,11 @@ class RowsRepresentation(Representation):
         """
         return data
 
-    def from_records(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Records are already rows.
+    def from_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return the rows as they are.
 
         Args:
-            rows: The records to materialize, missing values given as ``None``.
+            rows: The rows to materialize, missing values given as ``None``.
 
         Returns:
             The rows unchanged.
@@ -398,8 +396,8 @@ class RowsRepresentation(Representation):
         Returns:
             The matching rows.
         """
-        lo, hi = iso_label(start), iso_label(end)
-        return [row for row in data if lo <= iso_label(row.get(column)) < hi]
+        lower, upper = iso_label(start), iso_label(end)
+        return [row for row in data if lower <= iso_label(row.get(column)) < upper]
 
     def reconcile(
         self, data: list[dict[str, Any]], schema: type[Schema], *, strict: bool = False

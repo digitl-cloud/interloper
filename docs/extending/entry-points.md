@@ -10,7 +10,7 @@ calls, and discovery works in every process where the package is present.
 |-------|----------|-------------|-------------|
 | `interloper.kinds` | a component kind | the anchor class | `il.KINDS`; catalog validation |
 | `interloper.components` | component classes | a class, or a module to scan | `il.Catalog.discover()` |
-| `interloper.representations` | a table representation | an instance or class | `Representation.of()`, `il.Upstream.records` |
+| `interloper.representations` | a table representation | an instance or class | `TableData.from_data()`, `il.Upstream.rows` |
 | `interloper.runners` | a runner | the class | `il.Runner.from_settings()`, `interloper.yaml` `runner.type` |
 | `interloper.oauth_providers` | an OAuth provider | an instance or class | `interloper.oauth.PROVIDERS`, `OAuthConfig` |
 

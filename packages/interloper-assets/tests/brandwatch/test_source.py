@@ -13,9 +13,8 @@ import datetime as dt
 from typing import Any
 
 from interloper.asset import Asset
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.brandwatch import constants, schemas
@@ -71,9 +70,9 @@ class TestReshape:
         assert rows[0]["views_by_logged_in_out_logged_in"] == 42
 
         normalized = DataFrameNormalizer().normalize(rows)
-        view = Representation.of(normalized)
-        df = view.reconcile(schemas.FacebookStats)
-        Representation.of(df).reconcile(schemas.FacebookStats, strict=True)  # must not raise
+        table = TableData.from_data(normalized)
+        df = table.reconcile(schemas.FacebookStats)
+        TableData.from_data(df).reconcile(schemas.FacebookStats, strict=True)  # must not raise
         record = df.to_dict("records")[0]
         assert record["date"] == dt.date(2026, 7, 10)
         assert record["engagement_rate"] == 0.12

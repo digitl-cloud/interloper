@@ -6,7 +6,7 @@ import pytest
 from pydantic import Field
 
 import interloper as il
-from interloper.component.base import Component
+from interloper.component import Component
 from interloper.component.inherited import InheritedSetting
 
 

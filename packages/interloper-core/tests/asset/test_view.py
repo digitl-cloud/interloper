@@ -8,9 +8,9 @@ from typing import Any, ClassVar
 import pytest
 
 import interloper as il
-from interloper.destination.database import DatabaseDestination, TableReference
+from interloper.destination import DatabaseDestination, TableReference
 from interloper.errors import ConfigError
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus
 
 
 class RecordingWarehouse(DatabaseDestination):

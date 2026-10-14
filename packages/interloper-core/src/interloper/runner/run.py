@@ -82,7 +82,9 @@ class Run(ABC):
         result is recorded as it lands. Under ``fail_fast`` nothing new starts
         once an operation failed; what is in flight always finishes. An
         ``execute`` that raises, rather than returning a failed result, is a
-        fault of the run itself and becomes the run's error.
+        fault of the run itself and becomes the run's error, as is one raised
+        while draining; either way the run still ends, its pending operations
+        canceled.
 
         Returns:
             The run's result.
@@ -93,7 +95,10 @@ class Run(ABC):
             await self._schedule(inflight)
         except Exception as fault:  # noqa: BLE001 - a fault of the run itself becomes the run's error
             self.fault = fault
-        await self._drain(inflight)
+        try:
+            await self._drain(inflight)
+        except Exception as fault:  # noqa: BLE001 - so is one while draining
+            self.fault = self.fault or fault
         self.state.cancel_pending()
         return self.finish(format_exception(self.fault) if self.fault is not None else None)
 
@@ -137,12 +142,16 @@ class Run(ABC):
     ) -> None:
         """Record what each finished task's operation came to; a task that raised is the run's fault.
 
+        A canceled task carries no result and no fault: it is skipped.
+
         Args:
             finished: The tasks that finished.
             inflight: The tasks in flight, by operation; the finished ones are removed.
         """
         for task in finished:
             operation = inflight.pop(task)
+            if task.cancelled():
+                continue
             fault = task.exception()
             if fault is None:
                 self.state.finish(operation, task.result())

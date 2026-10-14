@@ -331,7 +331,7 @@ class TestQuotas:
             (backfill,) = session.exec(select(Backfill)).all()
         assert backfill.component_id == fits
         assert len(_runs(store)) == 2
-        assert len(_events(store)) == 1
+        assert sorted(event.event_type for event in _events(store)) == ["backfill_started", "log"]
 
 
 # -- Granularity resolution ----------------------------------------------------

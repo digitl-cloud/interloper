@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 
 from interloper.errors import ConfigError
 from interloper.hook import Hook, HookContext
-from interloper.resource.fields import FetchField, InputField
+from interloper.resource import FetchField, InputField
 
 from interloper_slack.connection import SlackConnection
 

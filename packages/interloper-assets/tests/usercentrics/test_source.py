@@ -17,9 +17,8 @@ from typing import Any
 import httpx2
 import interloper as il
 import pytest
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.usercentrics import constants, schemas
@@ -78,7 +77,7 @@ class TestSpecRoundtripAndReconcile:
         assert isinstance(child.normalizer, DataFrameNormalizer)
         normalized = child.normalizer.normalize(list(csv.DictReader(text.splitlines())))
         assert set(normalized.columns) <= set(ASSETS[key].model_fields)
-        return Representation.of(normalized).reconcile(ASSETS[key]).loc[0]
+        return TableData.from_data(normalized).reconcile(ASSETS[key]).loc[0]
 
     def test_granular_row_reconciles(self):
         row = self._reconcile("consents_stats", GRANULAR_CSV)

@@ -30,8 +30,8 @@ source = Shop(destinations=[
 Upstream reads use the **first** resolved destination of the upstream asset.
 `default_destination_key` names a preferred one for the platform and UIs to honour.
 
-Decorators can restrict the destination **classes** an asset or source accepts; an instance of
-another class raises `DestinationError` at materialization:
+Decorators can restrict the destination **classes** an asset or source accepts; binding an
+instance of another class raises `ConfigError`:
 
 ```py
 @il.asset(relations={"destinations": [il.CSVDestination, WarehouseDestination]})
@@ -46,10 +46,10 @@ CSV files on the local filesystem, one folder per asset, one file per partition:
 
 ```
 {base_path}/{dataset}/{table}/data.csv
-{base_path}/{dataset}/{table}/{column}={partition_id}/data.csv
+{base_path}/{dataset}/{table}/{column}={partition_key}/data.csv
 ```
 
-Rows are written as records; the first row's keys become the header. CSV stores strings, so a
+Rows are written as they are; the first row's keys become the header. CSV stores strings, so a
 read reconciles the rows against the effective schema carried in the context, restoring the
 declared types and turning empty strings into `None`. Window writes are split per partition.
 
@@ -59,7 +59,7 @@ Pickled Python objects, one file per partition:
 
 ```
 {base_path}/{dataset}/{table}/data.pkl
-{base_path}/{dataset}/{table}/{column}={partition_id}/data.pkl
+{base_path}/{dataset}/{table}/{column}={partition_key}/data.pkl
 ```
 
 Same layout as `CSVDestination`, but it stores whatever the asset returned, tabular or not, so
@@ -69,7 +69,7 @@ object, which nothing can slice, is stored whole under each partition of the win
 
 ### MemoryDestination
 
-An in-process store keyed by `{dataset}/{table}/{column}={partition_id}`, shared by every
+An in-process store keyed by `{dataset}/{table}/{column}={partition_key}`, shared by every
 instance, meant for tests:
 
 ```py
@@ -113,7 +113,7 @@ class JSONDestination(il.Destination):
         base = Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
         if partition is None:
             return base / "data.json"
-        return base / f"{context.asset.partitioning.column}={partition.id}" / "data.json"
+        return base / f"{context.asset.partitioning.column}={partition.key}" / "data.json"
 
     def write_partition(self, context: il.IOContext, partition: il.Partition | None, data: Any) -> None:
         path = self._path(context, partition)
@@ -167,7 +167,7 @@ The base declares two fields, `format` (`parquet`, the default, `jsonl` or `csv`
 
 ```
 {prefix}/{dataset}/{table}/data.{ext}
-{prefix}/{dataset}/{table}/{column}={partition_id}/data.{ext}
+{prefix}/{dataset}/{table}/{column}={partition_key}/data.{ext}
 ```
 
 Behaviour the base class owns:
@@ -197,12 +197,12 @@ asset resolves to:
 
 | Hook | Called for |
 |------|-----------|
-| `insert(table, dataset, data, context)` | writing; the data arrives in its native representation; `Representation.of(data).records` views it as rows and `.to("dataframe")` converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from `context.schema` and its partitioning and description from `context.asset` |
+| `insert(table, dataset, data, context)` | writing; the data arrives in its native representation; `TableData.from_data(data).rows` reads it as rows and `.to("dataframe")` converts it for a columnar load. The one hook that gets the whole context, since a table created on first write takes its columns from `context.schema` and its partitioning and description from `context.asset` |
 | `delete(table, dataset, where)` | replacing; `where` is a `PartitionFilter` or `None` for the whole table |
 | `select(table, dataset, where)` | reading; returns whatever table type the backend produces natively |
 | `count(table, dataset, column)` | `partition_row_counts`; rows grouped by the column's values |
 
-A `PartitionFilter` is a column and either a `value` (a partition matched by its id) or half-open
+A `PartitionFilter` is a column and either a `value` (a partition matched by its key) or half-open
 `bounds` (a time partition, whose rows may carry any date inside the period). The base resolves
 it from the partition, so a backend only renders `column = value` or
 `column >= start AND column < end` in its dialect. `transaction()` is an optional context
@@ -215,7 +215,7 @@ Behaviour the base class owns:
 - **Time partitions are scoped by bounds**, not by equality, because rows of a monthly partition
   carry daily dates.
 - **Reads are native**: `read` hands back what `select` returned, a DataFrame from BigQuery, rows
-  from a row store. A consumer indifferent to the destination reads `il.Upstream.records`.
+  from a row store. A consumer indifferent to the destination reads `il.Upstream.rows`.
 - **Data arrives conformed**: the asset's conform step already put the data in the effective
   schema's canonical types, so a backend never re-validates or coerces before writing.
 - A warning is emitted when the partition column is missing from written data, since

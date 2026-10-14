@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import NamedTuple
 from uuid import UUID
 
-from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig
+from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig
 
 from interloper_db.models import Component
 

@@ -9,12 +9,14 @@ failed list, and in the batch's own verdict.
 from __future__ import annotations
 
 import builtins
+import uuid
 from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from uuid import UUID
 
+import interloper as il
 from interloper.errors import ConfigError, ConflictError, NotFoundError
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, col, func, select
@@ -30,6 +32,7 @@ from interloper_db.models import (
     RunStatus,
 )
 from interloper_db.session import commit, save, session_scope
+from interloper_db.store.events import EventStore
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.quotas import QUOTA_MAX_BACKFILL_PARTITIONS, QuotaStore
 from interloper_db.store.runs import RunStore, latest_attempt
@@ -37,6 +40,8 @@ from interloper_db.store.runs import RunStore, latest_attempt
 # Reader queries eagerly join the target so its identity survives the session;
 # not mapped on the relationship, since FOR UPDATE rejects outer joins.
 BACKFILL_LOAD_OPTIONS = (joinedload(Backfill.target),)  # ty: ignore[invalid-argument-type]
+
+_EVENT_NAMESPACE = uuid.UUID("1b2f8c6a-48bd-4f2d-8950-27b9f7ac678d")
 
 
 class BackfillQuery(PageQuery):
@@ -53,7 +58,9 @@ class BackfillQuery(PageQuery):
 class BackfillStore:
     """Store methods for backfills and the batch accounting of their runs."""
 
-    def __init__(self, engine: Engine, quotas: QuotaStore, runs: Callable[[], RunStore]) -> None:
+    def __init__(
+        self, engine: Engine, quotas: QuotaStore, runs: Callable[[], RunStore], events: EventStore
+    ) -> None:
         """Bind the facet to what it works through.
 
         Args:
@@ -61,10 +68,12 @@ class BackfillStore:
             quotas: Quota gates it enforces through.
             runs: The run facet a cancel ends in-flight runs through, read
                 lazily: that facet advances backfills, so it is built after this one.
+            events: Event facet a backfill's lifecycle is recorded through.
         """
         self._engine = engine
         self._quotas = quotas
         self._runs = runs
+        self._events = events
 
     def get(self, backfill_id: UUID, *, org_id: UUID | None = None) -> Backfill:
         """Load a backfill by ID.
@@ -213,6 +222,7 @@ class BackfillStore:
             session.add(db_backfill)
             session.flush()
             self._create_runs(db_backfill, window, billable=billable)
+            self._record(db_backfill, il.EventType.BACKFILL_STARTED, f"started ({span} partitions)")
             save(session, db_backfill, "target")
             return db_backfill
 
@@ -356,6 +366,7 @@ class BackfillStore:
             db_backfill.status = BackfillStatus.FAILED
             db_backfill.completed_at = datetime.now(timezone.utc)
             session.add(db_backfill)
+            self._record_verdict(db_backfill)
             return
 
         in_flight_count = session.exec(
@@ -378,6 +389,7 @@ class BackfillStore:
             db_backfill.status = BackfillStatus.FAILED if any_failed else BackfillStatus.SUCCESS
             db_backfill.completed_at = datetime.now(timezone.utc)
             session.add(db_backfill)
+            self._record_verdict(db_backfill)
             return
 
         for pending_run in pending_runs[: max(0, db_backfill.concurrency - in_flight_count)]:
@@ -473,6 +485,42 @@ class BackfillStore:
             db_backfill.status = BackfillStatus.CANCELED
             db_backfill.completed_at = db_backfill.hooks_evaluated_at = datetime.now(timezone.utc)
             session.add(db_backfill)
+
+    def _record_verdict(self, db_backfill: Backfill) -> None:
+        """Record how a finished backfill ended: ``BACKFILL_FAILED`` or ``BACKFILL_COMPLETED``.
+
+        Args:
+            db_backfill: The backfill, its status already final.
+        """
+        if db_backfill.status is BackfillStatus.FAILED:
+            self._record(db_backfill, il.EventType.BACKFILL_FAILED, "failed")
+        else:
+            self._record(db_backfill, il.EventType.BACKFILL_COMPLETED, "completed")
+
+    def _record(self, db_backfill: Backfill, event_type: il.EventType, outcome: str) -> None:
+        """Record a lifecycle event of a backfill, once.
+
+        The event joins the caller's session, so it commits or rolls back with
+        the transition it records, and its id is derived from the backfill and
+        the event type, so recording it again writes nothing. A backfill whose
+        target was deleted meanwhile records the event without the component.
+
+        Args:
+            db_backfill: The backfill, its target component loadable.
+            event_type: ``BACKFILL_STARTED``, ``BACKFILL_COMPLETED`` or ``BACKFILL_FAILED``.
+            outcome: What happened, completing the message ``Backfill of '<key>' <outcome>``.
+        """
+        target = db_backfill.target
+        metadata: dict[str, str] = {
+            "backfill_id": str(db_backfill.id),
+            "start_key": db_backfill.start_key,
+            "end_key": db_backfill.end_key,
+            "message": f"Backfill of '{target.key}' {outcome}" if target else f"Backfill {outcome}",
+        }
+        if target is not None:
+            metadata |= {"component_id": str(target.id), "component_kind": target.kind, "component_key": target.key}
+        event_id = str(uuid.uuid5(_EVENT_NAMESPACE, f"{db_backfill.id}:{event_type.value}"))
+        self._events.save(il.Event(type=event_type, metadata=metadata, id=event_id), db_backfill.org_id)
 
     def _create_runs(self, db_backfill: Backfill, window: TimePartitionWindow, *, billable: bool) -> None:
         """Create a backfill's runs: one per partition, the newest ``concurrency`` of them queued.

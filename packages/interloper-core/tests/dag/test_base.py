@@ -9,17 +9,15 @@ from typing import Any, ClassVar, cast
 import pytest
 
 import interloper as il
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
+from interloper.dag import DAG, DAGSpec
 from interloper.errors import (
     AssetNotFoundError,
     CircularDependencyError,
     ConfigError,
     DAGError,
 )
-from interloper.partitioning import ListPartitionConfig
-from interloper.partitioning.base import PartitionConfig
-from interloper.runner.results import ExecutionStatus
+from interloper.partitioning import ListPartitionConfig, PartitionConfig
+from interloper.runner import ExecutionStatus
 from interloper.serializable import Spec
 
 # -- Minimal asset/source fixtures used by small-topology tests ----------------
@@ -588,7 +586,7 @@ class TestGranularityAcrossEdges:
     def test_mixed_granularity_raises_even_for_read_only_upstreams(self):
         daily = FakeDaily(enabled=False)
         monthly = FakeMonthly(daily=daily)
-        with pytest.raises(DAGError, match="partitioned differently"):
+        with pytest.raises(DAGError, match="accept different windows"):
             DAG(daily, monthly)
 
     def test_equal_granularity_passes(self):
@@ -608,7 +606,7 @@ class TestGranularityAcrossEdges:
                 return None
 
         regions = Regions()
-        with pytest.raises(DAGError, match="partitioned differently"):
+        with pytest.raises(DAGError, match="accept different windows"):
             DAG(regions, DailyOverRegions(regions=regions))
 
 
@@ -1116,3 +1114,20 @@ class TestTelemetrySpans:
         run_span = spans["interloper.runner.run"]
         assert run_span.parent is not None
         assert run_span.parent.span_id == materialize.context.span_id
+
+
+def test_the_incompatible_partitioning_message_names_both_partitionings():
+    """The refusal of an edge names how each end is partitioned."""
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def daily() -> list[dict[str, Any]]:
+        return []
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+    def monthly(daily: il.Upstream) -> list[dict[str, Any]]:
+        return []
+
+    upstream = daily(id="daily", destinations=[il.MemoryDestination()])
+
+    with pytest.raises(DAGError, match=r"'daily' \(partitioned by day\).*'monthly' \(partitioned by month\)"):
+        il.DAG(upstream, monthly(id="monthly", destinations=[il.MemoryDestination()], daily=upstream))

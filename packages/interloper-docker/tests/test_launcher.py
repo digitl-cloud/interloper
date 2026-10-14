@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 
 import interloper_docker.launcher as launcher_module
 from interloper_docker.launcher import DockerLauncher

@@ -10,10 +10,11 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import DataNotFoundError
-from interloper.representation import Representation
-from interloper.resource.fields import InputField
+from interloper.partitioning import PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import InputField
 from interloper.schema import FieldSpec
 from pydantic import PrivateAttr
 from sqlalchemy import Column, MetaData, String, Table, and_, cast, func, inspect, select
@@ -185,13 +186,13 @@ class SQLDestination(DatabaseDestination):
             context: IO context carrying the effective schema.
         """
         dataset = self._resolve_dataset(dataset)
-        view = Representation.of(data)
+        table_data = TableData.from_data(data)
         with self._begin() as conn:
             sql_table = self._table(table, dataset, conn)
             if sql_table is None:
-                schema = context.schema if context.schema is not None else view.infer()
+                schema = context.schema if context.schema is not None else table_data.infer()
                 sql_table = self._create_table(table, dataset, schema.field_specs(), conn)
-            rows = _align(view.records, [c.name for c in sql_table.columns], self._ref(table, dataset))
+            rows = _align(table_data.rows, [c.name for c in sql_table.columns], self._ref(table, dataset))
             for start in range(0, len(rows), _BATCH_SIZE):
                 conn.execute(sql_table.insert(), rows[start : start + _BATCH_SIZE])
 
@@ -327,7 +328,7 @@ def _predicate(table: Table, where: PartitionFilter) -> ColumnElement[bool]:
 def _coerce(column: Column[Any], value: Any) -> Any:
     """Coerce a filter value to the Python type a date or timestamp column binds.
 
-    A partition id arrives as a string (``"2024-01-01"``) and a day's bounds
+    A partition key arrives as a string (``"2024-01-01"``) and a day's bounds
     as dates; bound as-is against a ``DATE`` or ``TIMESTAMP`` column, they
     would be sent as ``VARCHAR`` or rejected by the dialect's type.
 

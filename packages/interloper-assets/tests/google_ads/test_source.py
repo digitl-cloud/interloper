@@ -19,9 +19,8 @@ from typing import Any
 import interloper as il
 import pytest
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.google_ads import constants, schemas
@@ -162,7 +161,7 @@ class TestReconcile:
     def _reconcile(self, monkeypatch: Any, key: str, row: Any, schema: Any) -> Any:
         asset = _asset(key, _source(monkeypatch, _FakeService([row])))
         normalized = asset.normalizer.normalize(_run(asset))
-        return Representation.of(normalized).reconcile(schema)
+        return TableData.from_data(normalized).reconcile(schema)
 
     def test_campaign_row(self, monkeypatch: Any):
         reconciled = self._reconcile(monkeypatch, "campaigns_stats", _campaign_row(), schemas.CampaignsStats)

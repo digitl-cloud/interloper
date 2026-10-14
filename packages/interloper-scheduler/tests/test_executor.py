@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConflictError, NotFoundError
-from interloper.runner.results import ExecutionInfo, ExecutionStatus, RunResult
+from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 from interloper.settings import ReaperSettings
 from interloper.telemetry.tracer import tracer
 from interloper_db import RunStatus, Store

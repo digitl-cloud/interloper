@@ -29,11 +29,11 @@ class SimpleDestination:
 
     def write_partition(self, context: il.IOContext, partition: il.Partition | None, data: Any) -> None:
         """Keep one partition's data in memory."""
-        self.store[partition.id if partition else "all"] = data
+        self.store[partition.key if partition else "all"] = data
 
     def read_partition(self, context: il.IOContext, partition: il.Partition | None) -> Any:
         """Return one partition's data."""
-        return self.store[partition.id if partition else "all"]
+        return self.store[partition.key if partition else "all"]
 
     def partition_row_counts(self, context: il.IOContext) -> dict[str, int]:
         """Count the rows held per partition."""

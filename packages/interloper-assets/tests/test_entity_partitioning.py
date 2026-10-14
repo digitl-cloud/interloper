@@ -13,7 +13,7 @@ import datetime as dt
 import inspect
 
 import interloper as il
-from interloper.source.base import Source
+from interloper.source import Source
 
 import interloper_assets
 

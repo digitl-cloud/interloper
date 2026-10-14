@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx2
 from interloper.connection import Connection, connection
-from interloper.resource.fields import SecretField, fetch_field_provider
+from interloper.resource import SecretField, fetch_field_provider
 from interloper.rest import HTTPBearerAuth, JSONCursorPaginator, RESTClient
 from pydantic_settings import SettingsConfigDict
 

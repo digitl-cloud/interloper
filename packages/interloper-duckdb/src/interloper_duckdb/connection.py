@@ -6,7 +6,7 @@ from functools import cached_property
 
 import duckdb
 from interloper.connection import Connection, connection
-from interloper.resource.fields import InputField, SecretField, fetch_field_provider
+from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
 
 _SYSTEM_SCHEMAS = ("information_schema", "pg_catalog")

@@ -1,4 +1,4 @@
-"""Event type and log level enumerations."""
+"""Event type enumeration."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class EventType(Enum):
     event inherits:
 
     - operation events carry ``component_id``, ``component_kind``,
-      ``component_key``, ``source_id``, ``window`` and
+      ``component_key``, ``parent_id``, ``window`` and
       ``message``;
     - asset data events add ``qualified_key`` to those;
     - destination I/O events add ``destination_key``;
@@ -22,7 +22,9 @@ class EventType(Enum):
       ``traceback``.
 
     The backfill and hook types are defined here so every consumer shares
-    one vocabulary, but the scheduler produces them, not the core runners.
+    one vocabulary, but the platform records them, not the core runners: the
+    backfill store records a backfill's start and verdict, the hook evaluator
+    a hook's firing.
     """
 
     HOOK_FIRED = "hook_fired"
@@ -71,11 +73,11 @@ class EventType(Enum):
     """At least one operation failed, or the walk itself broke; ``error`` is set for walk failures only."""
 
     BACKFILL_STARTED = "backfill_started"
-    """A multi-partition backfill began."""
+    """A multi-partition backfill was created. Recorded by the backfill store."""
     BACKFILL_COMPLETED = "backfill_completed"
-    """Every partition of the backfill ran."""
+    """Every partition of the backfill succeeded. Recorded by the backfill store."""
     BACKFILL_FAILED = "backfill_failed"
-    """The backfill ended with failed partitions."""
+    """The backfill ended with a failed partition, or stopped at one under fail-fast. Recorded by the backfill store."""
 
     LOG = "log"
     """A message from ``context.logger.<level>(...)`` or an ``EventLogger``; carries ``level`` and ``message``."""

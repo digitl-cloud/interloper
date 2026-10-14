@@ -21,9 +21,8 @@ from typing import Any
 
 import pandas as pd
 from interloper.asset import Asset
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper.schema import Schema
 from interloper_pandas import DataFrameNormalizer
 
@@ -90,7 +89,7 @@ class TestSpecRoundtrip:
         normalizer = child_asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(df)
-        Representation.of(normalized).reconcile(schemas.ProductsCampaignsStats)  # must not raise
+        TableData.from_data(normalized).reconcile(schemas.ProductsCampaignsStats)  # must not raise
 
 
 # Count metrics: whole numbers only across the 20 M legacy rows of the Swarovski warehouse (checked
@@ -154,6 +153,6 @@ class TestCountMetricTypes:
         normalizer = asset.normalizer
         assert normalizer is not None
         normalized = normalizer.normalize(pd.DataFrame([row]))
-        out = Representation.of(normalized).reconcile(schemas.ProductsCampaignsStats)
+        out = TableData.from_data(normalized).reconcile(schemas.ProductsCampaignsStats)
         assert pd.api.types.is_integer_dtype(out["impressions"]) and int(out.loc[0, "impressions"]) == 3
         assert pd.api.types.is_float_dtype(out["cost"])

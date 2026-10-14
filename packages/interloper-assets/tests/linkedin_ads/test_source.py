@@ -16,9 +16,8 @@ from typing import Any
 import httpx2
 import interloper as il
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 
 from interloper_assets.linkedin_ads import constants, schemas
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
@@ -110,7 +109,7 @@ class TestSpecRoundtripAndReconcile:
 
     def test_analytics_row_reconciles_with_dates_and_typed_metrics(self):
         child = self._child("ads_stats")
-        reconciled = Representation.of(child.normalizer.normalize([ANALYTICS_ROW])).reconcile(schemas.AdsStats)
+        reconciled = TableData.from_data(child.normalizer.normalize([ANALYTICS_ROW])).reconcile(schemas.AdsStats)
         row = reconciled.iloc[0]
         assert row["date_range_start"] == DAY
         assert row["date_range_end"] == DAY
@@ -124,7 +123,7 @@ class TestSpecRoundtripAndReconcile:
     def test_campaign_row_reconciles_with_flattened_budget_and_schedule(self):
         child = self._child("campaigns")
         normalized = child.normalizer.normalize([{**CAMPAIGN_ROW, "date": DAY}])
-        row = Representation.of(normalized).reconcile(schemas.Campaigns).iloc[0]
+        row = TableData.from_data(normalized).reconcile(schemas.Campaigns).iloc[0]
         assert int(row["id"]) == 42
         assert float(row["daily_budget_amount"]) == 18.0
         assert row["daily_budget_currency_code"] == "EUR"

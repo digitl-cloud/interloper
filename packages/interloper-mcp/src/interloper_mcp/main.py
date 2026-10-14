@@ -7,7 +7,7 @@ import logging
 import sys
 from uuid import UUID
 
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.settings import AppSettings
 from interloper_db import Store
 

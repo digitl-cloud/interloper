@@ -228,9 +228,6 @@ class TestInfer:
 
         assert spec.type is Any
 
-    def test_the_class_name_is_configurable(self):
-        assert Schema.infer([{"a": 1}], name="AdsStats").__name__ == "AdsStats"
-
     def test_empty_rows_cannot_be_inferred_from(self):
         with pytest.raises(SchemaError, match="Cannot infer schema from empty data"):
             Schema.infer([])

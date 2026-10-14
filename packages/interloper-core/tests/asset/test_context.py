@@ -86,11 +86,11 @@ class TestPartition:
     def test_the_partition_answers_its_own_scope(self) -> None:
         partition = ExecutionContext(daily(), JAN_1.window).partition
         assert isinstance(partition, TimePartition)
-        assert partition.id == "2026-01-01"
+        assert partition.key == "2026-01-01"
         assert partition.bounds == (dt.date(2026, 1, 1), dt.date(2026, 1, 2))
 
     def test_works_for_a_list_partition(self) -> None:
-        assert ExecutionContext(regional(), ListPartition("eu").window).partition.id == "eu"
+        assert ExecutionContext(regional(), ListPartition("eu").window).partition.key == "eu"
 
     def test_raises_when_unpartitioned(self) -> None:
         with pytest.raises(AttributeError, match="asset is not partitioned"):

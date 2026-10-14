@@ -29,10 +29,10 @@ from typing import Any, cast
 from uuid import UUID
 
 import interloper as il
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, NotFoundError, format_exception
 from interloper.serializable import Spec
-from interloper.source.base import SourceDefinition
+from interloper.source import SourceDefinition
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine

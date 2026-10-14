@@ -3,6 +3,8 @@
 A schema is an asset's data contract; a normalizer coerces the vendor's rows into it and a materialization strategy decides how they land.
 
 ::: interloper.schema.decorator.schema
+    options:
+      force_inspection: true
 
 ::: interloper.Schema
 

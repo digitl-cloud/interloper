@@ -15,10 +15,10 @@ every in-process operation a deadline:
 import asyncio
 
 import interloper as il
-from interloper.runner import InProcessRun
+from interloper.runner import AsyncRun
 
 
-class DeadlineRun(InProcessRun):
+class DeadlineRun(AsyncRun):
     """Every operation in this process, each within the runner's deadline."""
 
     async def execute(self, operation: il.Operation) -> il.OperationResult:

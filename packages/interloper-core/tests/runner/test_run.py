@@ -11,8 +11,7 @@ import interloper as il
 from interloper.errors import PartitionError, RunnerError
 from interloper.events import Event, EventType
 from interloper.operation import Operation, OperationResult
-from interloper.runner import Run
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus, Run, RunState
 
 
 class First(il.Asset):
@@ -204,3 +203,28 @@ class TestReraise:
 
         with pytest.raises(RunnerError, match="child failed"):
             await ScriptedRunner(reraise=True, fail_fast=False).run(_dag())
+
+
+class Other(il.Asset):
+    """An asset independent of First."""
+
+    def data(self) -> list[dict[str, Any]]:
+        return []
+
+
+async def test_a_fault_while_draining_still_cancels_and_fails_the_run(monkeypatch: pytest.MonkeyPatch):
+    """A fault raised while recording drained results still ends the run, failed, with nothing left open."""
+
+    def broken(self: RunState, operation: Operation, result: OperationResult) -> None:
+        raise RuntimeError("recording failed")
+
+    monkeypatch.setattr(RunState, "finish", broken)
+    dag = il.DAG(
+        First(id="first", destinations=[il.MemoryDestination()]),
+        Other(id="other", destinations=[il.MemoryDestination()]),
+    )
+
+    result = await ScriptedRunner(max_workers=2).run(dag)
+
+    assert result.status is ExecutionStatus.FAILED
+    assert all(info.is_terminal for info in result.executions.values())

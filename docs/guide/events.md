@@ -78,7 +78,10 @@ collapses to one when persisted.
 | Hooks | `HOOK_FIRED`, `HOOK_FAILED` |
 | User | `LOG` |
 
-Backfill and hook events are emitted by the platform, not by the core runners. Every type, with when it fires, is in
+Backfill and hook events are recorded by the platform, not by the core runners. A backfill records
+`BACKFILL_STARTED` when it is created and one verdict when it finishes: `BACKFILL_COMPLETED` when
+every partition succeeded, `BACKFILL_FAILED` when one failed (or, under fail-fast, at the first
+failure). A canceled backfill records no verdict. Every type, with when it fires, is in
 [Events](../reference/events.md).
 
 ## Logging from assets

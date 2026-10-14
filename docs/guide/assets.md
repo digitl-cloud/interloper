@@ -212,7 +212,7 @@ An asset that declares a `context` parameter receives an `ExecutionContext`:
 | `context.metadata` | The run's metadata dict (`run_id`, `backfill_id`, anything the caller passed). |
 | `context.logger` | A logger whose `debug`, `info`, `warning`, `error` emit `LOG` events attributed to the asset. |
 | `context.window` | The `PartitionWindow` the run covers; a window of one for assets without `allow_window`. |
-| `context.partition` | The window's only partition: `.id`, and `.bounds` or `.value` depending on the kind. |
+| `context.partition` | The window's only partition: `.key`, and `.bounds` or `.value` depending on the kind. |
 | `context.partition_date` | The partition value as a `date`, for daily assets only. |
 
 Each partition accessor raises an `AttributeError` explaining why it is unavailable: the asset

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any, ClassVar
 
 from interloper.errors import ConfigError, PartitionError
@@ -48,12 +48,12 @@ class PartitionFilter:
 
 
 class Partition(ABC):
-    """The storage unit: one slice of a partitioned asset, named by its id.
+    """The storage unit: one slice of a partitioned asset, named by its key.
 
     Concrete kinds are frozen dataclasses carrying the partition's ``value`` (a period start for
     a time partition, a declared string for a list one); the base declares the contract and
     types that one attribute every kind carries, so ``context.partition.value`` reads without
-    narrowing. ``str(partition)`` is the id, which is what reaches destination paths, run rows
+    narrowing. ``str(partition)`` is the key, which is what reaches destination paths, run rows
     and filters.
     """
 
@@ -61,7 +61,7 @@ class Partition(ABC):
 
     @property
     @abstractmethod
-    def id(self) -> str:
+    def key(self) -> str:
         """The partition's key."""
 
     @property
@@ -93,12 +93,12 @@ class Partition(ABC):
         """
 
     def __str__(self) -> str:
-        """Return the partition's id.
+        """Return the partition's key.
 
         Returns:
-            The id.
+            The key.
         """
-        return self.id
+        return self.key
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ class PartitionWindow(ABC):
     """The run scope: a contiguous, never empty range of a partition space.
 
     Named by its first and last partition's values; the concrete kind enumerates what lies
-    between. ``str(window)`` is the single partition's id for a window of one, and
+    between. ``str(window)`` is the single partition's key for a window of one, and
     ``"first..last"`` otherwise.
 
     Attributes:
@@ -160,14 +160,14 @@ class PartitionWindow(ABC):
         return iter(self.partitions)
 
     def __str__(self) -> str:
-        """Render the window by its partition ids.
+        """Render the window by its partition keys.
 
         Returns:
-            The single id for a window of one, else ``"first..last"``.
+            The single key for a window of one, else ``"first..last"``.
         """
         if len(self) == 1:
-            return self.first.id
-        return f"{self.first.id}..{self.last.id}"
+            return self.first.key
+        return f"{self.first.key}..{self.last.key}"
 
     @classmethod
     def of(cls, scope: Partition | PartitionWindow | None) -> PartitionWindow | None:
@@ -213,6 +213,14 @@ class PartitionConfig(ABC):
         super().__init_subclass__(**kwargs)
         if "kind" in cls.__dict__:
             PartitionConfig._kinds[cls.kind] = cls
+
+    def __str__(self) -> str:
+        """Describe the partitioning, as an error message names it.
+
+        Returns:
+            ``partitioned by <kind>``; a kind refines it.
+        """
+        return f"partitioned by {self.kind}"
 
     def check(self, window: PartitionWindow | None) -> None:
         """Validate the window a run was given against this partitioning.
@@ -305,10 +313,15 @@ class PartitionConfig(ABC):
             The partitioning, of the kind the definition names.
 
         Raises:
-            ConfigError: If the definition names no registered kind.
+            ConfigError: If the definition names no registered kind, or carries
+                a field its kind does not declare.
         """
         kind = definition.get("kind")
-        config_cls = cls._kinds.get(kind) if isinstance(kind, str) else None
-        if config_cls is None:
+        config_class = cls._kinds.get(kind) if isinstance(kind, str) else None
+        if config_class is None:
             raise ConfigError(f"Partitioning definition names no known kind: {kind!r} (known: {sorted(cls._kinds)})")
-        return config_cls(**{name: value for name, value in definition.items() if name != "kind"})
+        arguments = {name: value for name, value in definition.items() if name != "kind"}
+        unknown = sorted(arguments.keys() - {field.name for field in fields(config_class) if field.init})
+        if unknown:
+            raise ConfigError(f"Partitioning definition of kind {kind!r} has fields it does not declare: {unknown}")
+        return config_class(**arguments)

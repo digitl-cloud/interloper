@@ -14,7 +14,7 @@ from interloper_db import Store
 from opentelemetry import context as otel_context
 
 if TYPE_CHECKING:
-    from interloper.catalog.base import Catalog
+    from interloper.catalog import Catalog
     from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
 
 logger = logging.getLogger(__name__)

@@ -69,7 +69,7 @@ class FieldSpec:
         # Unwrap Optional / unions with None
         if get_origin(annotation) in (Union, types.UnionType):
             args = get_args(annotation)
-            non_none = [a for a in args if a is not type(None)]
+            non_none = [argument for argument in args if argument is not type(None)]
             nullable = len(non_none) < len(args)
             annotation = non_none[0] if len(non_none) == 1 else Any
 
@@ -80,14 +80,15 @@ class FieldSpec:
             inner = get_args(annotation)
             annotation = inner[0] if inner else Any
             if get_origin(annotation) in (Union, types.UnionType):
-                non_none = [a for a in get_args(annotation) if a is not type(None)]
+                non_none = [argument for argument in get_args(annotation) if argument is not type(None)]
                 annotation = non_none[0] if len(non_none) == 1 else Any
 
         # Nested model -> sub-field specs
         fields: tuple[FieldSpec, ...] | None = None
         if isinstance(annotation, type) and issubclass(annotation, BaseModel):
             fields = tuple(
-                cls.from_annotation(n, f.annotation, f.description) for n, f in annotation.model_fields.items()
+                cls.from_annotation(field_name, field.annotation, field.description)
+                for field_name, field in annotation.model_fields.items()
             )
 
         return FieldSpec(
@@ -166,11 +167,7 @@ class Schema(Serializable):
     # -- Data operations -------------------------------------------------------
 
     @classmethod
-    def infer(
-        cls,
-        rows: list[dict[str, Any]],
-        name: str = "InferredSchema",
-    ) -> type[Self]:
+    def infer(cls, rows: list[dict[str, Any]]) -> type[Self]:
         """Infer a Schema subclass from a list of row dicts.
 
         Examines the values across all rows for each key and maps Python types
@@ -179,7 +176,6 @@ class Schema(Serializable):
 
         Args:
             rows: Non-empty list of dicts to infer from.
-            name: Class name for the generated model.
 
         Returns:
             A dynamically created Schema subclass.
@@ -193,19 +189,19 @@ class Schema(Serializable):
         # Collect all non-None types seen for each key
         key_types: dict[str, set[type]] = {}
         for row in rows:
-            for k, v in row.items():
-                if k not in key_types:
-                    key_types[k] = set()
-                if v is not None:
-                    key_types[k].add(type(v))
+            for key, value in row.items():
+                if key not in key_types:
+                    key_types[key] = set()
+                if value is not None:
+                    key_types[key].add(type(value))
 
         # Build field definitions: (type | None, default_value)
         field_definitions: dict[str, Any] = {}
         for key, types_seen in key_types.items():
-            field_type = cls._resolve_field_type(types_seen)
+            field_type = cls._widen_types(types_seen)
             field_definitions[key] = (field_type | None, None)
 
-        return create_model(name, __base__=cls, **field_definitions)
+        return create_model("InferredSchema", __base__=cls, **field_definitions)
 
     @classmethod
     def validate_rows(
@@ -235,7 +231,7 @@ class Schema(Serializable):
                         f"Schema validation failed on row {i}: extra fields not in schema: {sorted(extra)}"
                     )
                 missing = schema_fields - set(row.keys())
-                required_missing = {k for k in missing if cls.model_fields[k].is_required()}
+                required_missing = {key for key in missing if cls.model_fields[key].is_required()}
                 if required_missing:
                     raise SchemaError(
                         f"Schema validation failed on row {i}: missing required fields: {sorted(required_missing)}"
@@ -244,9 +240,9 @@ class Schema(Serializable):
                 # Non-strict validation tolerates extra columns; strict mode
                 # has already rejected them above. Filter before validating so
                 # unknown keys never reach component construction.
-                cls.model_validate({k: v for k, v in row.items() if k in cls.model_fields})
-            except ValidationError as e:
-                raise SchemaError(f"Schema validation failed on row {i}: {e}") from e
+                cls.model_validate({key: value for key, value in row.items() if key in cls.model_fields})
+            except ValidationError as error:
+                raise SchemaError(f"Schema validation failed on row {i}: {error}") from error
 
     @classmethod
     def reconcile(
@@ -262,7 +258,7 @@ class Schema(Serializable):
         for nullable fields), and scalar ``str`` fields are stringified
         up front since pydantic's lax mode never coerces *to* ``str``.
 
-        This is more permissive than `validate` — it actively
+        This is more permissive than `validate_rows`: it actively
         transforms data to match the schema rather than rejecting mismatches.
 
         Args:
@@ -282,29 +278,29 @@ class Schema(Serializable):
         fields = {spec.name: cls.model_fields[spec.name] for spec in specs}
         adapters = {name: TypeAdapter(field.annotation) for name, field in fields.items()}
         coercers = {
-            spec.name: RECONCILERS[spec.type]
+            spec.name: _RECONCILERS[spec.type]
             for spec in specs
-            if spec.type in RECONCILERS and not spec.repeated and spec.fields is None
+            if spec.type in _RECONCILERS and not spec.repeated and spec.fields is None
         }
 
         dropped: set[str] = set()
         result: list[dict[str, Any]] = []
         for i, row in enumerate(rows):
             dropped.update(row.keys() - fields.keys())
-            out: dict[str, Any] = {}
+            reconciled: dict[str, Any] = {}
             for name, adapter in adapters.items():
                 if name not in row and not fields[name].is_required():
-                    out[name] = fields[name].get_default(call_default_factory=True)
+                    reconciled[name] = fields[name].get_default(call_default_factory=True)
                     continue
                 value = row.get(name)
                 if name in coercers:
                     value = coercers[name](value)
                 try:
                     # dump_python round-trips nested models back to plain dicts.
-                    out[name] = adapter.dump_python(adapter.validate_python(value))
-                except ValidationError as e:
-                    raise SchemaError(f"Reconciliation failed on row {i}: {e}") from e
-            result.append(out)
+                    reconciled[name] = adapter.dump_python(adapter.validate_python(value))
+                except ValidationError as error:
+                    raise SchemaError(f"Reconciliation failed on row {i}: {error}") from error
+            result.append(reconciled)
         if dropped:
             logger.warning(
                 "Reconciliation to schema '%s' dropped fields not in the schema: %s", cls.__name__, sorted(dropped)
@@ -314,7 +310,7 @@ class Schema(Serializable):
     # -- Internals -------------------------------------------------------------
 
     @staticmethod
-    def _resolve_field_type(types_seen: set[type]) -> type:
+    def _widen_types(types_seen: set[type]) -> type:
         """Resolve a set of observed Python types into a single Pydantic-compatible type.
 
         Rules:
@@ -378,6 +374,6 @@ def _coerce_str_value(value: Any) -> Any:
 #: Pre-coercions applied before pydantic validation, keyed by the scalar
 #: spec type. Fills the gaps in pydantic's lax conversion table — which
 #: coerces between scalars in every direction except *to* ``str``.
-RECONCILERS: dict[type, Callable[[Any], Any]] = {
+_RECONCILERS: dict[type, Callable[[Any], Any]] = {
     str: _coerce_str_value,
 }

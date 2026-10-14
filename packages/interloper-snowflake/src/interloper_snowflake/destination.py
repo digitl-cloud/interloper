@@ -13,13 +13,13 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.representation import Representation
-from interloper.resource.fields import FetchField, InputField
+from interloper.partitioning import PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import FetchField, InputField
 from interloper.schema import FieldSpec
-from interloper.utils.concurrency import RLock, ThreadLocal
-from interloper.utils.data import is_empty
+from interloper.utils import RLock, ThreadLocal, is_empty
 from pydantic import PrivateAttr
 from snowflake.connector import SnowflakeConnection as Session
 from snowflake.connector.cursor import SnowflakeCursor
@@ -283,11 +283,11 @@ class SnowflakeDestination(DatabaseDestination):
             Where the file was staged and the columns it carries.
         """
         schema = self._resolve_dataset(dataset)
-        specs = (context.schema or Representation.of(data).infer()).field_specs()
+        specs = (context.schema or TableData.from_data(data).infer()).field_specs()
         self._ensure_table(table, schema, specs)
         stage = self._ensure_stage(schema)
 
-        frame = Representation.of(data).to("dataframe")
+        frame = TableData.from_data(data).to("dataframe")
         names = [spec.name for spec in specs]
         extras = [str(c) for c in frame.columns if str(c) not in names]
         if extras:

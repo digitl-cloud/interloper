@@ -149,9 +149,6 @@ class ConsoleEventHandler:
         Returns:
             The formatted message string.
         """
-        m = event.metadata
-        component_key = m.get("qualified_key") or m.get("component_key") or "-"
-        message = m.get("message") or m.get("error") or "-"
         if event.type is EventType.LOG:
-            return f"{component_key}: {message}"
-        return f"{event.type.value.upper():<16} {component_key}  {message}"
+            return f"{event.subject}: {event.summary}"
+        return f"{event.type.value.upper():<16} {event.subject}  {event.summary}"

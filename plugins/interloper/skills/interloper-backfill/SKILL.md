@@ -33,7 +33,7 @@ https://docs.interloper.dev/guide/partitioning/
    runner = il.AsyncRunner(fail_fast=False, reraise=False, on_event=on_event)
    results = {}
    for partition in il.TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 10)):   # newest first
-       results[partition.id] = il.run(runner.run(dag, partition))
+       results[partition.key] = il.run(runner.run(dag, partition))
    redo = {k: [e.component_key for e in r.executions.values() if e.status is not il.ExecutionStatus.COMPLETED]
            for k, r in results.items() if r.status is not il.ExecutionStatus.COMPLETED}   # failed and canceled
    ```
@@ -51,7 +51,7 @@ https://docs.interloper.dev/guide/partitioning/
 
    ```py
    window = il.TimePartitionWindow(dt.date(2026, 5, 1), dt.date(2026, 8, 1), granularity=il.TimeGranularity.MONTH)
-   il.run(runner.run(dag, window))                # 4 monthly partitions, ids 2026-08 ... 2026-05
+   il.run(runner.run(dag, window))                # 4 monthly partitions, keys 2026-08 ... 2026-05
    ```
 
    Month and year bounds are the first day of the period. A DAG with one asset lacking
@@ -90,7 +90,7 @@ https://docs.interloper.dev/guide/partitioning/
 |------|-----|
 | Runner defaults | `AsyncRunner`: `fail_fast=True, reraise=False, max_workers=...`; `SerialRunner` same flags; the abstract `Runner` defaults to `fail_fast=False, reraise=True` |
 | Outcome of one run | `result.status`, `result.executions` (dict of operation id to `component_key`, `status`, `error`), the id lists `completed_ids` / `failed_ids` / `canceled_ids`, `execution_time` |
-| Partition count of a window | `len(window)`; `str(window)` is `start..end`, or the partition id for a window of one, and events report the same under `window` |
+| Partition count of a window | `len(window)`; `str(window)` is `start..end`, or the partition key for a window of one, and events report the same under `window` |
 | Hourly partitions | `il.TimeGranularity.HOUR`, keys like `2026-01-15T13` |
 | Parallel partitions | run several `runner.run(dag, partition)` coroutines with `asyncio.gather`, or use the platform's backfill with its concurrency cap |
 | Progress events | `RUN_STARTED`/`RUN_COMPLETED`/`RUN_FAILED` carry `window` and `message`; `OPERATION_FAILED` carries `component_key`, `error`, `traceback` |

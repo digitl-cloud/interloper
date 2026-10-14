@@ -24,14 +24,13 @@ from typing import TYPE_CHECKING, Any
 from interloper.errors import RunnerError, format_exception
 from interloper.events import EventLogReader
 from interloper.operation import Operation, OperationResult
-from interloper.runner.base import Runner
-from interloper.runner.run import Run
+from interloper.runner import Run, Runner
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
 from pydantic import Field
 
 if TYPE_CHECKING:
-    from interloper.dag.base import DAG
+    from interloper.dag import DAG
     from interloper.partitioning import PartitionWindow
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 _STARTED = frozenset({"Running", "Succeeded", "Failed"})
 
 
-class JobRun(Run):
+class KubernetesRun(Run):
     """One run of a KubernetesRunner: each operation in its own Job, its events read from the pod's log.
 
     Following a Job blocks, so each one is followed on a thread of the run's
@@ -250,9 +249,9 @@ class JobRun(Run):
         command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
         window = operation.effective_window(self.state.window)
         if window is not None and len(window) == 1:
-            command.extend(["--date", window.first.id])
+            command.extend(["--date", window.first.key])
         elif window is not None:
-            command.extend(["--start-date", window.first.id, "--end-date", window.last.id])
+            command.extend(["--start-date", window.first.key, "--end-date", window.last.key])
         return command
 
     def name(self, operation: Operation) -> str:
@@ -287,7 +286,7 @@ class KubernetesRunner(Runner):
     ```
     """
 
-    Run = JobRun
+    Run = KubernetesRun
 
     image: str
     namespace: str = "default"

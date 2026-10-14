@@ -6,8 +6,7 @@ from typing import Any, ClassVar
 import pytest
 
 import interloper as il
-from interloper.destination import IOContext
-from interloper.destination.database import DatabaseDestination, TableReference
+from interloper.destination import DatabaseDestination, IOContext, TableReference
 from interloper.errors import ConfigError
 from interloper.partitioning import (
     ListPartition,
@@ -15,9 +14,10 @@ from interloper.partitioning import (
     ListPartitionWindow,
     PartitionFilter,
     PartitionWindow,
+    TimePartition,
+    TimePartitionWindow,
 )
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
-from interloper.representation import Representation
+from interloper.representation import TableData
 
 
 class RecordingDatabase(DatabaseDestination):
@@ -31,7 +31,7 @@ class RecordingDatabase(DatabaseDestination):
         object.__setattr__(self, "calls", [])  # noqa: PLC2801 - bypasses pydantic's __setattr__
 
     def insert(self, table, dataset, data, context):
-        self.calls.append(("insert", (table, dataset, Representation.of(data).records)))
+        self.calls.append(("insert", (table, dataset, TableData.from_data(data).rows)))
 
     def delete(self, table, dataset, where):
         self.calls.append(("delete", (table, dataset, where)))

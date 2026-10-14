@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from interloper.operation.base import Operation
 
 
-class InProcessRun(Run):
+class AsyncRun(Run):
     """One run of an AsyncRunner: every operation executes in this process, on its event loop.
 
     A sync ``data()`` is offloaded to a thread by the asset itself, so one
@@ -49,7 +49,7 @@ class AsyncRunner(Runner):
     ```
     """
 
-    Run = InProcessRun
+    Run = AsyncRun
 
     max_workers: int = 4
     fail_fast: bool = True

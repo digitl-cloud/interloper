@@ -16,13 +16,14 @@ import google.auth
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.representation import Representation
-from interloper.resource.fields import InputField
+from interloper.partitioning import PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import InputField
 from interloper.rest import RESTClient
 from interloper.schema import FieldSpec
-from interloper.utils.json import json_default, replace_non_finite
+from interloper.utils import json_default, replace_non_finite
 
 from interloper_google_cloud.connection import GoogleCloudConnection
 
@@ -237,8 +238,8 @@ class GoogleSheetsDestination(DatabaseDestination):
             context: IO context carrying the effective schema.
         """
         title = self._title(table, dataset)
-        view = Representation.of(data)
-        schema = context.schema if context.schema is not None else view.infer()
+        table_data = TableData.from_data(data)
+        schema = context.schema if context.schema is not None else table_data.infer()
         columns = [spec.name for spec in schema.field_specs()]
 
         rows: list[list[Any]] = []
@@ -251,14 +252,14 @@ class GoogleSheetsDestination(DatabaseDestination):
         if not existing:
             rows.append(header)
 
-        extras = [column for column in dict.fromkeys([*columns, *view.columns]) if column not in header]
+        extras = [column for column in dict.fromkeys([*columns, *table_data.columns]) if column not in header]
         if extras:
             warnings.warn(
                 f"Columns {extras} are not in the schema for '{title}' and will not be written.",
                 UserWarning,
                 stacklevel=2,
             )
-        rows.extend([_cell(record.get(column)) for column in header] for record in view.records)
+        rows.extend([_cell(record.get(column)) for column in header] for record in table_data.rows)
         self.api.append(title, rows)
 
     def delete(self, table: str, dataset: str | None, where: PartitionFilter | None) -> None:

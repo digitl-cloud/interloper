@@ -1,19 +1,10 @@
-"""Dynamic import helpers and import-guard decorator."""
+"""Dynamic import helpers."""
 
-import importlib.util
-from collections.abc import Callable
-from typing import Any, TypeVar, cast, overload
-
-T = TypeVar("T")
-F = TypeVar("F", bound=Callable[..., Any])
-C = TypeVar("C", bound=type[Any])
+import importlib
+from typing import Any
 
 
-@overload
-def import_from_path(path: str) -> Any: ...
-@overload
-def import_from_path(path: str, target_type: type[T]) -> T: ...
-def import_from_path(path: str, target_type: type[T] | None = None) -> Any:
+def import_from_path(path: str) -> Any:
     """Import an object from a path.
 
     Two forms are supported:
@@ -30,14 +21,9 @@ def import_from_path(path: str, target_type: type[T] | None = None) -> Any:
 
     Args:
         path: Dotted or composite import path.
-        target_type: If provided, validates the imported object is an
-            instance of this type.
 
     Returns:
         The imported object.
-
-    Raises:
-        ValueError: If *target_type* is given and the object does not match.
     """
     if ":" in path:
         module_path, attribute_chain = path.split(":", 1)
@@ -47,10 +33,6 @@ def import_from_path(path: str, target_type: type[T] | None = None) -> Any:
     target: Any = importlib.import_module(module_path)
     for attribute in attribute_chain.split("."):
         target = getattr(target, attribute)
-
-    if target_type is not None and not isinstance(target, target_type):
-        message = f"Object at '{path}' is not a {target_type.__name__}"
-        raise ValueError(message)
     return target
 
 
@@ -64,43 +46,3 @@ def get_object_path(target: Any) -> str:
         Dotted path string like ``"module.submodule.ClassName"``.
     """
     return f"{target.__module__}.{target.__name__}"
-
-
-def require_import(import_name: str, error_message: str) -> Callable[[F | C], F | C]:
-    """Decorator that defers an ``ImportError`` until the decorated object is used.
-
-    Works with both classes and functions. For classes the check runs at
-    instantiation; for functions it runs at call time.
-
-    Args:
-        import_name: Top-level package name to look for (e.g. ``"pandas"``).
-        error_message: Message for the ``ImportError`` raised when the package
-            is missing.
-
-    Returns:
-        A decorator that wraps the target class or function.
-    """
-
-    def decorator(target: F | C) -> F | C:
-        if isinstance(target, type):
-            original_new = target.__new__
-
-            def checked_new(cls: type[Any], *args: Any, **kwargs: Any) -> Any:
-                if importlib.util.find_spec(import_name) is None:
-                    raise ImportError(error_message)
-                if original_new is object.__new__:
-                    return object.__new__(cls)
-                return original_new(cls, *args, **kwargs)
-
-            target.__new__ = staticmethod(checked_new)  # ty: ignore[invalid-assignment]
-            return cast(C, target)
-        else:
-
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                if importlib.util.find_spec(import_name) is None:
-                    raise ImportError(error_message)
-                return target(*args, **kwargs)
-
-            return cast(F, wrapper)
-
-    return decorator

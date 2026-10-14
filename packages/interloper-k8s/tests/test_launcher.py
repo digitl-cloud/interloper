@@ -12,7 +12,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import pytest
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
 from kubernetes import client, config
 

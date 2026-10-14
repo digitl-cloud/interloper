@@ -14,9 +14,8 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
@@ -66,7 +65,7 @@ class TestSpecRoundtrip:
         row: dict[str, object] = dict.fromkeys(ADS_COLUMNS)
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        Representation.of(normalized).reconcile(AdsStats)  # must not raise
+        TableData.from_data(normalized).reconcile(AdsStats)  # must not raise
 
     def test_campaigns_row_conforms_after_roundtrip(self):
         child = self._child_asset("campaigns_stats")
@@ -75,4 +74,4 @@ class TestSpecRoundtrip:
         row: dict[str, object] = dict.fromkeys(CAMPAIGNS_COLUMNS)
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
-        Representation.of(normalized).reconcile(CampaignsStats)  # must not raise
+        TableData.from_data(normalized).reconcile(CampaignsStats)  # must not raise

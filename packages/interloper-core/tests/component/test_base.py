@@ -921,7 +921,7 @@ class TestPublicApi:
 
     def test_public_relation_names(self) -> None:
         from interloper.asset.upstream import Upstream
-        from interloper.component.relation import ComponentIdentity, Relation
+        from interloper.component import ComponentIdentity, Relation
 
         assert il.Relation is Relation
         assert il.ComponentIdentity is ComponentIdentity

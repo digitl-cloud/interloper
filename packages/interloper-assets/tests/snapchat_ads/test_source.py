@@ -13,9 +13,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.snapchat_ads import schemas
@@ -99,10 +98,10 @@ class TestSpecRoundtripAndReconcile:
         child = self._child("ads_stats")
         rows = _with_date([{"id": "ad1", "type": "AD", "stats": {"impressions": "100"}}], dt.date(2026, 6, 10))
         normalized = child.normalizer.normalize(rows)
-        out = Representation.of(normalized).reconcile(schemas.AdsStats)
+        out = TableData.from_data(normalized).reconcile(schemas.AdsStats)
         assert int(out.loc[0, "impressions"]) == 100
 
     def test_ads_entity_conforms_after_roundtrip(self):
         child = self._child("ads")
         normalized = child.normalizer.normalize([{"id": "ad1", "name": "My Ad"}])
-        Representation.of(normalized).reconcile(schemas.Ads)  # must not raise
+        TableData.from_data(normalized).reconcile(schemas.Ads)  # must not raise

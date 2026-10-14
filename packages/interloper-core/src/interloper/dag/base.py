@@ -45,7 +45,7 @@ class DAGSpec(BaseModel):
         """Reconstruct the DAG from its spec.
 
         Each source spec materialises a live source (with its assets
-        pre-bound through ``Source.model_post_init`` and ``_resolve``),
+        pre-bound through ``Source.model_post_init``),
         and each standalone asset spec materialises a bare asset.  All
         reconstructed items are then handed to the `DAG`
         constructor which re-infers the dependency graph from the
@@ -135,7 +135,7 @@ class DAG:
                 seen.add(operation.id)
             raise DAGError(f"Duplicate operation id found: {duplicates}")
 
-        self._resolve_declared()
+        self._bind_declared()
         self._include_read_only_upstreams()
 
         for operation in self.operations:
@@ -166,7 +166,7 @@ class DAG:
         # Bind-time validation is what makes the cast sound: only an asset is accepted here.
         return cast("list[Asset]", targets)
 
-    def _resolve_declared(self) -> None:
+    def _bind_declared(self) -> None:
         """Bind the declared upstream keys nothing has bound yet.
 
         For every materializing asset and every unbound upstream relation that
@@ -216,7 +216,7 @@ class DAG:
         """Add every bound upstream the run itself does not materialize.
 
         A materializing node reads its upstreams through the DAG's own node
-        (see `_read_upstreams`), so an
+        (see `Asset._upstreams`), so an
         upstream nobody in the run materializes still has to be one: it joins
         as a disabled copy, same id, same bindings, same parent,
         which the runners skip and the dependent reads. Those copies never
@@ -247,7 +247,7 @@ class DAG:
         the DAG is what can answer whether a bound upstream is actually
         running in this graph.
         """
-        nodes = {id: node for id, node in self.operation_map.items() if isinstance(node, Component)}
+        nodes = {operation_id: node for operation_id, node in self.operation_map.items() if isinstance(node, Component)}
         for operation in self.operations:
             if operation.enabled and isinstance(operation, Component):
                 operation.validate_relations(nodes)
@@ -295,12 +295,12 @@ class DAG:
                 one, or if the two ends of an edge do not accept the same
                 windows.
         """
-        for operation_id, preds in self.predecessors.items():
+        for operation_id, predecessors in self.predecessors.items():
             operation = self.operation_map[operation_id]
             if not operation.reads_upstream_data:
                 continue
-            for pred_id in preds:
-                upstream = self.operation_map[pred_id]
+            for predecessor_id in predecessors:
+                upstream = self.operation_map[predecessor_id]
                 if upstream.partitioning is not None and operation.partitioning is None:
                     raise DAGError(
                         f"Invalid upstream: partitioned asset '{upstream.key}' "
@@ -312,8 +312,9 @@ class DAG:
                     and not upstream.partitioning.compatible(operation.partitioning)
                 ):
                     raise DAGError(
-                        f"Invalid upstream: '{upstream.key}' and its dependent '{operation.key}' are partitioned "
-                        "differently; a run has one window, so both ends of an edge must accept the same windows."
+                        f"Invalid upstream: '{upstream.key}' ({upstream.partitioning}) and its dependent "
+                        f"'{operation.key}' ({operation.partitioning}) accept different windows; a run has one "
+                        "window, so both ends of an edge must accept the same windows."
                     )
 
     # -- Traversal -------------------------------------------------------------
@@ -337,7 +338,8 @@ class DAG:
             CircularDependencyError: If a cycle is detected.
         """
         in_degree = {
-            key: sum(1 for pred in preds if pred in self.predecessors) for key, preds in self.predecessors.items()
+            key: sum(1 for predecessor in predecessors if predecessor in self.predecessors)
+            for key, predecessors in self.predecessors.items()
         }
         current_level = sorted(key for key, degree in in_degree.items() if degree == 0)
         levels: list[list[Operation]] = []
@@ -349,8 +351,8 @@ class DAG:
             next_level: list[str] = []
             for operation_id in current_level:
                 processed += 1
-                for dependent_id, preds in self.predecessors.items():
-                    if operation_id in preds:
+                for dependent_id, predecessors in self.predecessors.items():
+                    if operation_id in predecessors:
                         in_degree[dependent_id] -= 1
                         if in_degree[dependent_id] == 0:
                             next_level.append(dependent_id)
@@ -432,10 +434,10 @@ class DAG:
         """
         from interloper.runner.async_runner import AsyncRunner
 
-        span_attrs: dict[str, Any] = {attributes.DAG_OPERATION_COUNT: len(self.operations)}
+        span_attributes: dict[str, Any] = {attributes.DAG_OPERATION_COUNT: len(self.operations)}
         if window is not None:
-            span_attrs[attributes.PARTITION] = str(window)
-        with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attrs) as span:
+            span_attributes[attributes.PARTITION] = str(window)
+        with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attributes) as span:
             result = await AsyncRunner().run(dag=self, window=window)
             # A failed run is returned, not raised; without this the trace's
             # root span reads OK while the failure sits on a descendant.

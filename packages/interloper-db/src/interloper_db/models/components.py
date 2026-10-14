@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 from interloper.errors import ConfigError, HydrationError, format_exception
-from interloper.utils.time import assume_utc
+from interloper.utils import assume_utc
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlalchemy.orm.base import NO_VALUE, instance_state
 from sqlmodel import Column, LargeBinary, Relationship, SQLModel, text

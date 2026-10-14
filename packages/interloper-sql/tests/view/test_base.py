@@ -9,9 +9,9 @@ from typing import Any, ClassVar
 import ibis
 import interloper as il
 import pytest
-from interloper.destination.database import DatabaseDestination
+from interloper.destination import DatabaseDestination
 from interloper.errors import ConfigError
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus
 
 from interloper_sql import ibis_view, union
 from interloper_sql.view.base import IbisDefinition

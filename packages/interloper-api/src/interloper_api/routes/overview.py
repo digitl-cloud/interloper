@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
-from interloper.utils.time import assume_utc
+from interloper.utils import assume_utc
 from interloper_db import ComponentStatus
 from interloper_db.store import insights
 from pydantic import BaseModel

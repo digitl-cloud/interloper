@@ -30,20 +30,35 @@ class Event:
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
+    @property
+    def subject(self) -> str:
+        """What the event is about: its qualified key, else its component key, else ``"-"``.
+
+        Returns:
+            The key the event names, or ``"-"``.
+        """
+        return self.metadata.get("qualified_key") or self.metadata.get("component_key") or "-"
+
+    @property
+    def summary(self) -> str:
+        """What the event says: its message, else its error, else ``"-"``.
+
+        Returns:
+            The message the event carries, or ``"-"``.
+        """
+        return self.metadata.get("message") or self.metadata.get("error") or "-"
+
     def __str__(self) -> str:
         """Return a human-readable summary line for logging.
 
         Returns:
             A single line of ``time  TYPE  component_key  message``.
         """
-        m = self.metadata
-        ts = self.timestamp.strftime("%H:%M:%S.%f")[:-3]
-        component_key = m.get("qualified_key") or m.get("component_key") or "-"
-        message = m.get("message") or m.get("error") or "-"
+        timestamp = self.timestamp.strftime("%H:%M:%S.%f")[:-3]
         label = self.type.value.upper()
-        if self.type is EventType.LOG and m.get("level"):
-            label = f"LOG.{m['level']}"
-        return f"{ts}  {label:<30}  {component_key}  {message}"
+        if self.type is EventType.LOG and self.metadata.get("level"):
+            label = f"LOG.{self.metadata['level']}"
+        return f"{timestamp}  {label:<30}  {self.subject}  {self.summary}"
 
     # -- Serialization ---------------------------------------------------------
 
@@ -85,28 +100,28 @@ class Event:
         Raises:
             EventError: If required fields are missing or have invalid values.
         """
-        type_val = data.get("type")
-        if type_val is None:
+        type_value = data.get("type")
+        if type_value is None:
             raise EventError("Missing required field 'type' in Event")
         try:
-            event_type = EventType(type_val)
-        except ValueError as e:
-            raise EventError(f"Invalid event type '{type_val}' in Event") from e
+            event_type = EventType(type_value)
+        except ValueError as error:
+            raise EventError(f"Invalid event type '{type_value}' in Event") from error
 
-        timestamp_val = data.get("timestamp")
-        if timestamp_val is None:
+        timestamp_value = data.get("timestamp")
+        if timestamp_value is None:
             raise EventError("Missing required field 'timestamp' in Event")
-        if isinstance(timestamp_val, str):
+        if isinstance(timestamp_value, str):
             try:
-                timestamp = dt.datetime.fromisoformat(timestamp_val)
-            except ValueError as e:
-                raise EventError(f"Invalid timestamp format: {timestamp_val!r}") from e
-        elif isinstance(timestamp_val, dt.datetime):
-            timestamp = timestamp_val
+                timestamp = dt.datetime.fromisoformat(timestamp_value)
+            except ValueError as error:
+                raise EventError(f"Invalid timestamp format: {timestamp_value!r}") from error
+        elif isinstance(timestamp_value, dt.datetime):
+            timestamp = timestamp_value
         else:
-            raise EventError(f"Invalid timestamp value for Event: {timestamp_val!r}")
+            raise EventError(f"Invalid timestamp value for Event: {timestamp_value!r}")
 
-        metadata = {k: v for k, v in data.items() if k not in ("event_id", "type", "timestamp")}
+        metadata = {key: value for key, value in data.items() if key not in ("event_id", "type", "timestamp")}
 
         event_id = data.get("event_id")
         if event_id is not None:
@@ -129,14 +144,9 @@ class Event:
     def from_log_line(cls, line: str) -> Event | None:
         """Try to parse an `Event` from a log line.
 
-        Recognises two formats:
-
-        1. **Prefixed** — ``@EVENT:{...}`` (written by
-           `StderrEventHandler`).
-        2. **Bare JSON** — ``{...}`` (legacy / testing convenience).
-
-        Lines that match neither pattern, or whose JSON is malformed, are
-        silently ignored and ``None`` is returned.
+        An event line is ``@EVENT:{...}``, as `StderrEventHandler` writes
+        it. Any other line, or one whose JSON is malformed, is not an event
+        and ``None`` is returned.
 
         Args:
             line: A single log line (may include trailing newline).
@@ -150,10 +160,9 @@ class Event:
         if not line:
             return None
 
-        if line.startswith(EVENT_LINE_PREFIX):
-            line = line[len(EVENT_LINE_PREFIX) :]
-        elif not line.startswith("{"):
+        if not line.startswith(EVENT_LINE_PREFIX):
             return None
+        line = line[len(EVENT_LINE_PREFIX) :]
 
         try:
             return cls.from_json(line)

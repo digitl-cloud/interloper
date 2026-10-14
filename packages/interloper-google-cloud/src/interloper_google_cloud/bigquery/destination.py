@@ -15,11 +15,11 @@ import pandas as pd
 from google.cloud import bigquery
 from google.cloud.exceptions import Conflict, NotFound
 from google.oauth2 import service_account
-from interloper.destination import DatabaseDestination, Destination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, Destination, IOContext, destination
 from interloper.errors import ConfigError, DataNotFoundError
-from interloper.partitioning import PartitionConfig, TimeGranularity, TimePartitionConfig
-from interloper.representation import Representation
-from interloper.resource.fields import FetchField, InputField, SelectField
+from interloper.partitioning import PartitionConfig, PartitionFilter, TimeGranularity, TimePartitionConfig
+from interloper.representation import TableData
+from interloper.resource import FetchField, InputField, SelectField
 
 from interloper_google_cloud.bigquery.types import TIME_PARTITIONABLE, column_type, parameter_type, to_fields
 from interloper_google_cloud.connection import GoogleCloudConnection
@@ -281,7 +281,7 @@ class BigQueryDestination(DatabaseDestination):
     def insert(self, table: str, dataset: str | None, data: Any, context: IOContext) -> None:
         """Insert data into BigQuery through one Parquet load job, whatever its representation.
 
-        The data is converted to a DataFrame (``Representation.of(data).to("dataframe")``)
+        The data is converted to a DataFrame (``TableData.from_data(data).to("dataframe")``)
         and loaded with ``load_table_from_dataframe``. The effective schema
         from the IO context (declared on the asset, or inferred during
         conform) drives both table DDL and the load job's schema, so the
@@ -299,7 +299,7 @@ class BigQueryDestination(DatabaseDestination):
             data: The data in its native representation.
             context: IO context carrying the asset and effective schema.
         """
-        frame = Representation.of(data).to("dataframe")
+        frame = TableData.from_data(data).to("dataframe")
         bq_schema = to_fields(context.schema.field_specs()) if context.schema is not None else None
         description = _asset_description(context.asset)
         partitioning = context.asset.partitioning
@@ -630,7 +630,7 @@ def _partition_param(
 ) -> bigquery.ScalarQueryParameter:
     """Build a partition-predicate query parameter, typed from the table.
 
-    Partition values arrive as strings (``Partition.id``) or as the period
+    Partition values arrive as strings (``Partition.key``) or as the period
     bounds of a time partition (dates/datetimes), but the column may be
     DATE / TIMESTAMP / INTEGER — BigQuery does not coerce a STRING parameter
     in a comparison predicate, so the parameter type must match the actual

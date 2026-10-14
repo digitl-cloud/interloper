@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from interloper.asset.base import AssetDefinition
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.component import Relation
 from interloper.settings import AppSettings
 
@@ -157,3 +157,8 @@ class TestVocabulary:
         source = DemoSource()
         by_key = {asset.key: asset for asset in source.assets}
         assert by_key["e"].bound("b") is by_key["b"]
+
+
+def test_get_returns_none_for_an_unknown_key():
+    """An unknown key resolves to ``None``."""
+    assert Catalog.discover().get("no_such_component") is None

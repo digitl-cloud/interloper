@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from interloper.utils.data import is_empty
+from interloper.utils import is_empty
 
 
 class _FrameLike:

@@ -1,5 +1,7 @@
 """Tests for the error formatting helpers."""
 
+import importlib
+
 import pytest
 from pydantic import BaseModel, ValidationError
 
@@ -86,3 +88,10 @@ class TestQuotaExceededError:
 
         assert str(error) == "Too many sources"
         assert (error.quota, error.limit, error.used) == ("max_sources", 10, 10)
+
+
+def test_source_error_is_gone():
+    """``SourceError`` was never raised; it is not part of the error vocabulary."""
+    errors = importlib.import_module("interloper.errors")
+
+    assert not hasattr(errors, "SourceError")

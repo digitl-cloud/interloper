@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from interloper.job.cron import CronJob
-from interloper.partitioning.time import TimeGranularity
+from interloper.job import CronJob
+from interloper.partitioning import TimeGranularity
 
 
 class TestTimezone:

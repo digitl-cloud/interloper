@@ -16,9 +16,8 @@ from typing import Any
 
 import pandas as pd
 from interloper.asset import Asset
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_selling_partner import schemas
@@ -95,7 +94,7 @@ class TestSpecRoundtrip:
         assert "sellable_on_hand_inventory_cost_amount" in normalized.columns
         assert "aged_90_plus_days_sellable_inventory_cost_amount" in normalized.columns
 
-        Representation.of(normalized).reconcile(schemas.VendorInventoryRetailManufacturingStats)  # must not raise
+        TableData.from_data(normalized).reconcile(schemas.VendorInventoryRetailManufacturingStats)  # must not raise
 
 
 class TestForecastingSnapshots:
@@ -151,6 +150,6 @@ class TestForecastingSnapshots:
         ]
         normalizer = asset.normalizer
         assert normalizer is not None
-        out = Representation.of(normalizer.normalize(rows)).reconcile(schemas.VendorForecastingRetailStats)
+        out = TableData.from_data(normalizer.normalize(rows)).reconcile(schemas.VendorForecastingRetailStats)
         assert str(out.loc[0, "forecast_generation_date"])[:10] == "2026-09-13"
         assert set(out.columns) == set(schemas.VendorForecastingRetailStats.model_fields)

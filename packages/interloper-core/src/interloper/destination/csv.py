@@ -11,7 +11,7 @@ from interloper.destination.context import IOContext
 from interloper.destination.decorator import destination
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
-from interloper.representation import Representation
+from interloper.representation import TableData
 
 
 @destination(name="CSV")
@@ -20,10 +20,10 @@ class CSVDestination(Destination):
 
     Data is stored under ``{base_path}/{dataset}/{table}/data.csv``
     (or ``{base_path}/{table}/data.csv`` when no dataset is set).
-    Partitioned assets add a ``{column}={id}`` subdirectory; the partition
+    Partitioned assets add a ``{column}={key}`` subdirectory; the partition
     dispatch (including window splitting) is `Destination`'s.
 
-    Data is viewed as ``list[dict]`` records through its registered
+    Data is read as ``list[dict]`` rows through its registered
     representation on write (each dict is a row; the keys of the first dict
     determine the CSV headers).
 
@@ -52,17 +52,17 @@ class CSVDestination(Destination):
                 whole.
 
         Returns:
-            ``.../data.csv``, inside a ``{column}={id}`` subdirectory for
+            ``.../data.csv``, inside a ``{column}={key}`` subdirectory for
             partitions.
         """
         base = self._asset_path(context)
         if partition is None:
             return base / "data.csv"
         assert context.asset.partitioning
-        return base / f"{context.asset.partitioning.column}={partition.id}" / "data.csv"
+        return base / f"{context.asset.partitioning.column}={partition.key}" / "data.csv"
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        """Write one partition's data as CSV (converted to records through its representation).
+        """Write one partition's data as CSV (converted to rows through its representation).
 
         Args:
             context: IO context whose asset supplies the dataset, table, and
@@ -71,7 +71,7 @@ class CSVDestination(Destination):
                 unpartitioned whole.
             data: The partition's slice of the data, in its native representation.
         """
-        rows = Representation.of(data).records
+        rows = TableData.from_data(data).rows
         self._write_csv(self._partition_path(context, partition), rows)
 
     def read_partition(self, context: IOContext, partition: Partition | None) -> list[dict[str, Any]]:
@@ -101,8 +101,8 @@ class CSVDestination(Destination):
             file_path.write_text("")
             return
         fieldnames = list(data[0].keys())
-        with file_path.open("w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+        with file_path.open("w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(data)
 
@@ -126,11 +126,11 @@ class CSVDestination(Destination):
         """
         if not file_path.exists():
             raise DataNotFoundError(f"Data file not found: {file_path}")
-        with file_path.open(newline="") as f:
-            reader = csv.DictReader(f)
+        with file_path.open(newline="") as file:
+            reader = csv.DictReader(file)
             rows: list[dict[str, Any]] = list(reader)
         if context.schema is not None:
-            rows = [{k: (None if v == "" else v) for k, v in row.items()} for row in rows]
+            rows = [{key: (None if value == "" else value) for key, value in row.items()} for row in rows]
             rows = context.schema.reconcile(rows)
         return rows
 
@@ -154,6 +154,6 @@ class CSVDestination(Destination):
                 partition_value = entry.name.split("=", 1)[1]
                 data_file = entry / "data.csv"
                 if data_file.exists():
-                    with data_file.open(newline="") as f:
-                        counts[partition_value] = sum(1 for _ in csv.DictReader(f))
+                    with data_file.open(newline="") as file:
+                        counts[partition_value] = sum(1 for _ in csv.DictReader(file))
         return counts

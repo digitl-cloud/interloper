@@ -6,8 +6,8 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from interloper.errors import PartitionError
-from interloper.partitioning.base import PartitionFilter
-from interloper.partitioning.time import (
+from interloper.partitioning import (
+    PartitionFilter,
     TimeGranularity,
     TimePartition,
     TimePartitionConfig,
@@ -127,7 +127,7 @@ class TestTimePartitionFromKey:
         partition = TimePartition.from_key(key)
         assert partition.granularity is granularity
         assert partition.value == value
-        assert partition.id == key
+        assert partition.key == key
 
     def test_rejects_an_unknown_shape(self) -> None:
         with pytest.raises(PartitionError, match="matches no granularity"):
@@ -138,10 +138,6 @@ class TestPeriodRange:
     def test_yields_each_day_inclusive(self) -> None:
         values = list(TimeGranularity.DAY.period_range(dt.date(2026, 1, 1), dt.date(2026, 1, 3)))
         assert values == [dt.date(2026, 1, 1), dt.date(2026, 1, 2), dt.date(2026, 1, 3)]
-
-    def test_reversed_yields_newest_first(self) -> None:
-        values = list(TimeGranularity.DAY.period_range(dt.date(2026, 1, 1), dt.date(2026, 1, 3), reversed=True))
-        assert values == [dt.date(2026, 1, 3), dt.date(2026, 1, 2), dt.date(2026, 1, 1)]
 
     def test_steps_by_granularity(self) -> None:
         values = list(TimeGranularity.MONTH.period_range(dt.date(2026, 1, 15), dt.date(2026, 3, 2)))
@@ -187,7 +183,7 @@ class TestTimePartitionConfigContract:
         config.check(TimePartitionWindow(dt.date(2026, 1, 10), dt.date(2026, 1, 20)))
 
     def test_check_rejects_a_list_window(self) -> None:
-        from interloper.partitioning.list import ListPartition
+        from interloper.partitioning import ListPartition
 
         with pytest.raises(PartitionError, match="expects a time window"):
             TimePartitionConfig(column="date").check(ListPartition("eu").window)
@@ -228,7 +224,7 @@ class TestTimePartition:
         assert TimePartition(dt.date(2026, 1, 1)).granularity is TimeGranularity.DAY
 
     def test_id_is_the_iso_date(self) -> None:
-        assert TimePartition(dt.date(2026, 1, 1)).id == "2026-01-01"
+        assert TimePartition(dt.date(2026, 1, 1)).key == "2026-01-01"
 
     def test_value_is_truncated_to_the_period_start(self) -> None:
         partition = TimePartition(dt.date(2026, 5, 20), TimeGranularity.MONTH)
@@ -252,8 +248,8 @@ class TestTimePartition:
 class TestTimePartitionWindow:
     def test_partitions_are_oldest_first(self) -> None:
         window = TimePartitionWindow(dt.date(2026, 1, 1), dt.date(2026, 1, 3))
-        assert [partition.id for partition in window] == ["2026-01-01", "2026-01-02", "2026-01-03"]
-        assert window.first.id == "2026-01-01" and window.last.id == "2026-01-03"
+        assert [partition.key for partition in window] == ["2026-01-01", "2026-01-02", "2026-01-03"]
+        assert window.first.key == "2026-01-01" and window.last.key == "2026-01-03"
 
     def test_partitions_carry_the_window_granularity(self) -> None:
         window = TimePartitionWindow(start=dt.date(2026, 1, 1), end=dt.date(2026, 1, 2))
@@ -353,3 +349,11 @@ class TestTimePartitionWindowLookback:
     def test_offset_cannot_be_negative(self) -> None:
         with pytest.raises(ValueError, match="cannot be negative"):
             TimePartitionWindow.lookback(self.NOW, lookback=1, offset=-1)
+
+
+def test_a_partition_is_identified_by_its_key():
+    """A partition is named by its key, not an ``id``."""
+    partition = TimePartition(dt.date(2026, 1, 15))
+
+    assert partition.key == "2026-01-15"
+    assert not hasattr(partition, "id")

@@ -5,15 +5,14 @@ from __future__ import annotations
 import pytest
 
 from interloper.errors import PartitionError
-from interloper.partitioning.base import PartitionFilter
-from interloper.partitioning.list import ListPartition, ListPartitionConfig, ListPartitionWindow
+from interloper.partitioning import ListPartition, ListPartitionConfig, ListPartitionWindow, PartitionFilter
 
 REGIONS = ("eu", "us", "apac")
 
 
 class TestListPartition:
     def test_id_is_the_value(self):
-        assert ListPartition("eu").id == "eu"
+        assert ListPartition("eu").key == "eu"
 
     def test_filter_is_membership_of_its_value(self):
         assert ListPartition("eu").filter("region") == PartitionFilter("region", values=("eu",))
@@ -63,7 +62,7 @@ class TestListPartitionConfig:
 
     def test_partitions_are_every_value_in_order(self):
         config = ListPartitionConfig(column="region", values=REGIONS)
-        assert [partition.id for partition in config.partitions] == list(REGIONS)
+        assert [partition.key for partition in config.partitions] == list(REGIONS)
 
     def test_partition_parses_a_declared_key(self):
         assert ListPartitionConfig(column="region", values=REGIONS).partition("us") == ListPartition("us")
@@ -86,13 +85,13 @@ class TestListPartitionConfig:
 
     def test_check_rejects_an_undeclared_partition(self):
         config = ListPartitionConfig(column="region", values=("eu", "us"))
-        with pytest.raises(PartitionError, match="'apac' is not one of the declared partitions"):
+        with pytest.raises(PartitionError, match="declares no partition 'apac'"):
             config.check(ListPartitionWindow("apac", "apac", ("apac",)))
 
     def test_check_rejects_a_window_of_another_kind(self):
         import datetime as dt
 
-        from interloper.partitioning.time import TimePartition
+        from interloper.partitioning import TimePartition
 
         with pytest.raises(PartitionError, match="expects a list window"):
             ListPartitionConfig(column="region", values=REGIONS).check(TimePartition(dt.date(2026, 1, 1)).window)
@@ -101,3 +100,25 @@ class TestListPartitionConfig:
         config = ListPartitionConfig(column="region", values=REGIONS)
         assert config.compatible(ListPartitionConfig(column="market", values=REGIONS)) is True
         assert config.compatible(ListPartitionConfig(column="region", values=("eu",))) is False
+
+
+def test_a_partition_is_identified_by_its_key():
+    """A partition is named by its key, not an ``id``."""
+    partition = ListPartition("eu")
+
+    assert partition.key == "eu"
+    assert not hasattr(partition, "id")
+
+
+def test_a_string_is_not_a_list_of_values():
+    """A bare string is refused rather than read as its characters."""
+    with pytest.raises(TypeError, match=r"a sequence of values"):
+        ListPartitionConfig(column="region", values="eu")  # ty: ignore[invalid-argument-type]
+
+
+def test_an_undeclared_value_reads_as_a_sentence_about_the_asset():
+    """The refusal completes ``Asset '<key>' ...``: it starts with the verb."""
+    config = ListPartitionConfig(column="region", values=("eu", "us"))
+
+    with pytest.raises(PartitionError, match=r"^declares no partition 'apac'"):
+        config.check(ListPartition("apac").window)

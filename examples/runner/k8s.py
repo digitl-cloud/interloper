@@ -1,6 +1,5 @@
 """Example script demonstrating Docker backfiller."""
 
-import asyncio
 import datetime as dt
 
 import dotenv
@@ -22,5 +21,5 @@ runner = KubernetesRunner(
     image_pull_policy="Never",  # when running locally
     namespace="interloper",
 )
-result = asyncio.run(runner.run(dag, partition))
+result = il.run(runner.run(dag, partition))
 print(result)

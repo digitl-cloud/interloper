@@ -42,7 +42,7 @@ class TestPartitions:
     def test_a_window_is_its_partitions_oldest_first(self):
         window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 9))
         context = IOContext(asset=daily(), window=window)
-        assert [p.id if p else None for p in context.partitions] == ["2026-09-07", "2026-09-08", "2026-09-09"]
+        assert [p.key if p else None for p in context.partitions] == ["2026-09-07", "2026-09-08", "2026-09-09"]
 
 
 class TestSlices:
@@ -56,14 +56,14 @@ class TestSlices:
         rows = [{"date": "2026-09-07", "v": 1}, {"date": "2026-09-08", "v": 2}, {"date": "2026-09-08", "v": 3}]
         window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 8))
         pairs = IOContext(asset=daily(), window=window).slices(rows)
-        sliced = {p.id if p else None: chunk for p, chunk in pairs}
+        sliced = {p.key if p else None: chunk for p, chunk in pairs}
         assert sliced == {"2026-09-07": [rows[0]], "2026-09-08": rows[1:]}
 
     def test_a_list_window_slices_by_value(self):
         rows = [{"region": "eu", "v": 1}, {"region": "us", "v": 2}, {"region": "apac", "v": 3}]
         window = ListPartitionWindow("eu", "us", ("eu", "us", "apac"))
         pairs = IOContext(asset=regional(), window=window).slices(rows)
-        assert [(p.id if p else None, chunk) for p, chunk in pairs] == [("eu", [rows[0]]), ("us", [rows[1]])]
+        assert [(p.key if p else None, chunk) for p, chunk in pairs] == [("eu", [rows[0]]), ("us", [rows[1]])]
 
     def test_a_window_over_an_unpartitioned_asset_is_a_config_error(self):
         window = TimePartitionWindow(datetime.date(2026, 9, 7), datetime.date(2026, 9, 8))
@@ -72,7 +72,7 @@ class TestSlices:
 
 
 def test_a_list_partition_keys_memory_storage_by_its_id() -> None:
-    """The built-in destinations key storage by ``partition.id``, which a list partition provides."""
+    """The built-in destinations key storage by ``partition.key``, which a list partition provides."""
     il.MemoryDestination.clear()
     destination = il.MemoryDestination()
     context = IOContext(asset=regional(), window=ListPartition("eu").window)

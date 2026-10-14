@@ -53,9 +53,9 @@ class EventBus:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    inst = super().__new__(cls)
-                    inst._initialized = False
-                    cls._instance = inst
+                    bus = super().__new__(cls)
+                    bus._initialized = False
+                    cls._instance = bus
         return cls._instance
 
     def __init__(self) -> None:
@@ -73,7 +73,7 @@ class EventBus:
         self._start_worker()
         atexit.register(EventBus.shutdown)
 
-    # -- Public static API -----------------------------------------------------
+    # -- Public API ------------------------------------------------------------
 
     @staticmethod
     def emit(event_type: EventType, *, metadata: dict[str, Any] | None = None) -> None:
@@ -112,9 +112,9 @@ class EventBus:
             event_types: If provided, only events of these types are delivered.
                 ``None`` means all event types.
         """
-        inst = EventBus()
-        with inst._handler_lock:
-            inst._handlers[handler] = event_types
+        bus = EventBus()
+        with bus._handler_lock:
+            bus._handlers[handler] = event_types
 
     @staticmethod
     def unsubscribe(handler: Callable[[Event], None]) -> None:
@@ -123,9 +123,9 @@ class EventBus:
         Args:
             handler: Handler to remove.
         """
-        inst = EventBus()
-        with inst._handler_lock:
-            inst._handlers.pop(handler, None)
+        bus = EventBus()
+        with bus._handler_lock:
+            bus._handlers.pop(handler, None)
 
     @staticmethod
     def flush(timeout: float | None = None) -> bool:
@@ -139,9 +139,9 @@ class EventBus:
         Returns:
             ``True`` if the flush completed, ``False`` on timeout.
         """
-        inst = EventBus()
+        bus = EventBus()
         done = threading.Event()
-        inst._queue.put(_Sentinel(done=done))
+        bus._queue.put(_Sentinel(done=done))
         return done.wait(timeout)
 
     @staticmethod
@@ -150,18 +150,18 @@ class EventBus:
 
         Safe to call multiple times (idempotent).
         """
-        inst = EventBus()
-        if inst._shutdown_flag.is_set():
+        bus = EventBus()
+        if bus._shutdown_flag.is_set():
             return
 
-        inst._shutdown_flag.set()
+        bus._shutdown_flag.set()
 
-        if inst._worker is not None and inst._worker.is_alive():
+        if bus._worker is not None and bus._worker.is_alive():
             try:
-                inst._queue.join()
+                bus._queue.join()
             except Exception:  # noqa: BLE001, S110
                 pass
-            inst._worker.join(timeout=2.0)
+            bus._worker.join(timeout=2.0)
 
     # -- Internals -------------------------------------------------------------
 
@@ -197,7 +197,9 @@ class EventBus:
 
             try:
                 with self._handler_lock:
-                    targets = [h for h, types in self._handlers.items() if types is None or item.type in types]
+                    targets = [
+                        handler for handler, types in self._handlers.items() if types is None or item.type in types
+                    ]
                 for handler in targets:
                     try:
                         handler(item)

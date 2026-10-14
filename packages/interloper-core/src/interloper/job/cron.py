@@ -27,20 +27,20 @@ class CronJob(Job):
     partitions back from the current one it ends, and ``lookback`` how many it
     spans. With daily targets, the defaults (``offset=1``, ``lookback=1``) mean
     "yesterday only" — the job timezone's yesterday. Hourly windows are always
-    UTC-derived regardless of ``timezone`` (hour partition ids are UTC labels,
+    UTC-derived regardless of ``timezone`` (hour partition keys are UTC labels,
     see `lookback`).
     Each firing is a backfill over that window, and ``concurrency`` is how many
     of its partitions are in flight at once, newest first.
     """
 
     cron: str = CronField(
-        title="Cron expression",
+        label="Cron expression",
         description="When the job runs, on the job timezone's clock",
         section="Operation",
     )
     timezone: str = TimezoneField(
         default="UTC",
-        title="Timezone",
+        label="Timezone",
         description="IANA timezone the schedule is evaluated in",
         section="Operation",
     )

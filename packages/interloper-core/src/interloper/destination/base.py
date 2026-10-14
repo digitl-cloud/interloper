@@ -9,7 +9,7 @@ from interloper.component import Component
 from interloper.destination.context import IOContext
 from interloper.errors import ConfigError
 from interloper.partitioning.base import Partition
-from interloper.representation import Representation
+from interloper.representation import TableData
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
@@ -103,7 +103,7 @@ class Destination(Component):
         parts = [self.read_partition(context, partition) for partition in context.partitions]
         if len(parts) == 1:
             return parts[0]
-        return Representation.of(parts[0]).concat(parts[1:])
+        return TableData.from_data(parts[0]).concat(parts[1:])
 
     @abstractmethod
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:

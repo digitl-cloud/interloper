@@ -83,19 +83,22 @@ class Normalizer(Serializable):
         rows = data
 
         if self.replace_empty_dicts:
-            rows = [{k: (None if isinstance(v, dict) and not v else v) for k, v in row.items()} for row in rows]
+            rows = [
+                {key: (None if isinstance(value, dict) and not value else value) for key, value in row.items()}
+                for row in rows
+            ]
 
         if self.flatten_max_level is None or self.flatten_max_level > 0:
             rows = [self._flatten_dict(row) for row in rows]
 
         if self.replace_empty_strings:
-            rows = [{k: (None if v == "" else v) for k, v in row.items()} for row in rows]
+            rows = [{key: (None if value == "" else value) for key, value in row.items()} for row in rows]
 
         if self.drop_na_columns and rows:
             rows = self._drop_na_columns(rows)
 
         if self.normalize_columns_names:
-            rows = [{self.column_name(k): v for k, v in row.items()} for row in rows]
+            rows = [{self.column_name(key): value for key, value in row.items()} for row in rows]
 
         if self.fill_missing:
             rows = self._fill_missing_keys(rows)
@@ -126,14 +129,14 @@ class Normalizer(Serializable):
 
     def _flatten_dict(
         self,
-        d: dict[str, Any],
+        row: dict[str, Any],
         parent_key: str = "",
         level: int = 0,
     ) -> dict[str, Any]:
         """Flatten nested dicts using separator-joined keys.
 
         Args:
-            d: The dict to flatten.
+            row: The dict to flatten.
             parent_key: Key prefix accumulated from the enclosing levels; empty
                 at the top level.
             level: Current nesting depth, compared against
@@ -143,12 +146,12 @@ class Normalizer(Serializable):
             A flat dict with separator-joined keys.
         """
         items: list[tuple[str, Any]] = []
-        for k, v in d.items():
-            new_key = f"{parent_key}{self.flatten_separator}{k}" if parent_key else k
-            if isinstance(v, dict) and (self.flatten_max_level is None or level < self.flatten_max_level):
-                items.extend(self._flatten_dict(v, new_key, level + 1).items())
+        for key, value in row.items():
+            new_key = f"{parent_key}{self.flatten_separator}{key}" if parent_key else key
+            if isinstance(value, dict) and (self.flatten_max_level is None or level < self.flatten_max_level):
+                items.extend(self._flatten_dict(value, new_key, level + 1).items())
             else:
-                items.append((new_key, v))
+                items.append((new_key, value))
         return dict(items)
 
     @staticmethod
@@ -167,11 +170,11 @@ class Normalizer(Serializable):
         # Preserve insertion order of keys
         all_keys: dict[str, None] = {}
         for row in rows:
-            for k in row:
-                all_keys.setdefault(k, None)
+            for key in row:
+                all_keys.setdefault(key, None)
 
         key_set = all_keys.keys()
-        return [{k: row.get(k) for k in key_set} for row in rows]
+        return [{key: row.get(key) for key in key_set} for row in rows]
 
     @staticmethod
     def _drop_na_columns(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -188,7 +191,7 @@ class Normalizer(Serializable):
         for row in rows:
             all_keys.update(row.keys())
 
-        na_keys = {k for k in all_keys if all(row.get(k) is None for row in rows)}
-        if not na_keys:
+        null_keys = {key for key in all_keys if all(row.get(key) is None for row in rows)}
+        if not null_keys:
             return rows
-        return [{k: v for k, v in row.items() if k not in na_keys} for row in rows]
+        return [{key: value for key, value in row.items() if key not in null_keys} for row in rows]

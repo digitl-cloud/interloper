@@ -29,10 +29,10 @@ def coerce_to_date(value: object) -> dt.date:
     if isinstance(value, str):
         try:
             return dt.date.fromisoformat(value)
-        except ValueError as e:
+        except ValueError as error:
             raise TypeError(
                 f"Could not parse value {value!r} as a date: expected an ISO-8601 date string (YYYY-MM-DD)."
-            ) from e
+            ) from error
     raise TypeError(f"Expected a `datetime.date` or an ISO-8601 date string, got {type(value).__name__}: {value!r}.")
 
 
@@ -64,10 +64,10 @@ def coerce_to_datetime(value: object) -> dt.datetime:
     if isinstance(value, str):
         try:
             return coerce_to_datetime(dt.datetime.fromisoformat(value))
-        except ValueError as e:
+        except ValueError as error:
             raise TypeError(
                 f"Could not parse value {value!r} as a datetime: expected an ISO-8601 datetime string."
-            ) from e
+            ) from error
     raise TypeError(
         f"Expected a `datetime.datetime` or an ISO-8601 datetime string, got {type(value).__name__}: {value!r}."
     )
@@ -97,7 +97,7 @@ def assume_utc(value: dt.datetime) -> dt.datetime:
         value: The timestamp to normalise, aware or naive.
 
     Returns:
-        An aware datetime; an already-aware *ts* is returned unchanged.
+        An aware datetime; an already-aware *value* is returned unchanged.
     """
     return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
 

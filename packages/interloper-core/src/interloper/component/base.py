@@ -582,17 +582,23 @@ class Component(Serializable):
             The reconfigured copy.
 
         Raises:
-            TypeError: If a name is neither a field nor a declared relation.
+            TypeError: If a name is neither a field nor a declared relation, or
+                names a field holding owned components.
         """
         cls = type(self)
         unknown = sorted(name for name in changes if name not in cls.model_fields and name not in cls.relations)
         if unknown:
             raise TypeError(f"{cls.__name__} has no field or relation named: {', '.join(unknown)}")
+        owned = self._owned_by_field()
+        for name in changes:
+            if name in owned:
+                raise TypeError(
+                    f"{cls.__name__}.{name} is owned: build a new {cls.__name__} with its overrides instead"
+                )
         copy = self.model_copy()
         copy._bound = {name: list(targets) for name, targets in self._bound.items()}
-        owned = self._owned_by_field()
         if owned:
-            children = [child for kids in owned.values() for child in kids]
+            children = [child for owned_children in owned.values() for child in owned_children]
             memo: dict[int, Any] = {id(self): copy}
             for component in (self, *children):
                 for targets in component._bound.values():
@@ -618,7 +624,7 @@ class Component(Serializable):
         list for a ``many`` relation and a single value otherwise, each target
         written as `SerializationContext.emit` decides; a relation with
         nothing bound is left out. The components this one owns (see
-        `children`) travel inside this spec, under the field that holds
+        `owned`) travel inside this spec, under the field that holds
         them, as a map of key to init carrying the child's id: an owned
         component never has a spec of its own.
 
@@ -697,7 +703,7 @@ class Component(Serializable):
             from interloper.errors import CatalogKeyError
 
             raise CatalogKeyError(f"Unknown catalog key '{key}'")
-        return cls._resolve_import(definition.path, ref=key)
+        return cls._resolve_import(definition.path, reference=key)
 
     # -- Definition ------------------------------------------------------------
 
@@ -733,6 +739,15 @@ class Component(Serializable):
         )
 
     # -- Settings --------------------------------------------------------------
+
+    @classmethod
+    def _settable(cls) -> list[str]:
+        """The names a decorator may set on this kind, its identity ``id`` left out.
+
+        Returns:
+            The names, sorted.
+        """
+        return [name for name in super()._settable() if name != "id"]
 
     @classmethod
     def _sort_settings(cls, settings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -841,8 +856,8 @@ class Component(Serializable):
     def _collect(cls) -> None:
         """Merge the class's declared relations and install their descriptors.
 
-        The class-creation step, run from ``__init_subclass__`` and again by a
-        decorator that adds relations to a built class; never called by hand.
+        The class-creation step, run from ``__init_subclass__``; never called
+        by hand.
         Three declaration forms feed one map, in increasing precedence:
 
         - an annotation naming a component class

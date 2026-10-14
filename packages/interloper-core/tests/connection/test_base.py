@@ -12,7 +12,7 @@ from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuth
 from interloper.oauth import OAuthConfig
 from interloper.operation import OperationContext
 from interloper.resource import InputField, SecretField
-from interloper.utils.concurrency import invoke
+from interloper.utils import invoke
 
 
 class TestConnection:

@@ -8,8 +8,9 @@ from unittest.mock import MagicMock
 import interloper as il
 import pytest
 from google.cloud import bigquery
-from interloper.destination import IOContext, PartitionFilter, TableReference
+from interloper.destination import IOContext, TableReference
 from interloper.errors import ConfigError
+from interloper.partitioning import PartitionFilter
 from interloper.schema import Schema
 from pydantic import BaseModel, Field
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import Depends
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper_db import Store
 
 _store: Store | None = None

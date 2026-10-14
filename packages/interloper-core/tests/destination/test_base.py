@@ -5,6 +5,7 @@
 # class, not a lazy string.
 
 import datetime
+import importlib
 from typing import Any, ClassVar
 
 import pytest
@@ -12,8 +13,7 @@ import pytest
 import interloper as il
 from interloper.destination import IOContext
 from interloper.errors import ConfigError
-from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import Partition, PartitionWindow, TimePartition, TimePartitionWindow
 
 
 class FakeConnection(il.Connection):
@@ -109,11 +109,11 @@ class RecordingPartitions(il.Destination):
         object.__setattr__(self, "calls", [])  # noqa: PLC2801 - bypasses pydantic's __setattr__
 
     def write_partition(self, context: IOContext, partition: Partition | None, data: Any) -> None:
-        self.calls.append(("write", partition.id if partition else None, data))
+        self.calls.append(("write", partition.key if partition else None, data))
 
     def read_partition(self, context: IOContext, partition: Partition | None) -> Any:
-        self.calls.append(("read", partition.id if partition else None, None))
-        return {"partition": partition.id if partition else None}
+        self.calls.append(("read", partition.key if partition else None, None))
+        return {"partition": partition.key if partition else None}
 
     def partition_row_counts(self, context: IOContext) -> dict[str, int]:
         return {}
@@ -280,3 +280,11 @@ class TestViewHooks:
     def test_create_view_refuses_by_default(self):
         with pytest.raises(ConfigError, match="does not support views"):
             RecordingPartitions(id="r").create_view(plain_asset(), "SELECT 1")
+
+
+def test_partition_filter_has_one_home():
+    """``PartitionFilter`` lives in ``interloper.partitioning`` only; ``Compilable`` is internal."""
+    package = importlib.import_module("interloper.destination")
+
+    assert not hasattr(package, "PartitionFilter")
+    assert not hasattr(package, "Compilable")

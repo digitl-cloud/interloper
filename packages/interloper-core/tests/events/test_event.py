@@ -150,14 +150,6 @@ class TestFromLogLine:
         assert parsed.id == original.id
         assert parsed.metadata == {"run_id": "r1"}
 
-    def test_a_bare_json_line_is_parsed(self) -> None:
-        original = Event(type=EventType.RUN_COMPLETED)
-
-        parsed = Event.from_log_line(original.to_json())
-
-        assert parsed is not None
-        assert parsed.type is EventType.RUN_COMPLETED
-
     @pytest.mark.parametrize(
         "line",
         [
@@ -187,3 +179,18 @@ def test_stderr_handler_writes_a_prefixed_line(capsys: pytest.CaptureFixture[str
     parsed = Event.from_log_line(line)
     assert parsed is not None
     assert parsed.id == event.id
+
+
+def test_a_bare_json_line_is_not_an_event():
+    """Only ``@EVENT:`` lines are events; a bare JSON line is not."""
+    event = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
+
+    assert Event.from_log_line(event.to_json()) is None
+
+
+def test_subject_and_summary_fall_back_in_order():
+    """``subject`` falls back to the component key, ``summary`` to the error, both to ``"-"``."""
+    event = Event(type=EventType.LOG, metadata={"component_key": "orders", "error": "boom"})
+
+    assert (event.subject, event.summary) == ("orders", "boom")
+    assert (Event(type=EventType.LOG).subject, Event(type=EventType.LOG).summary) == ("-", "-")

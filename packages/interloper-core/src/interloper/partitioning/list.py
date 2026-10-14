@@ -14,13 +14,13 @@ class ListPartition(Partition):
     """One declared value of a list partitioning.
 
     Attributes:
-        value: The declared value, which is also the partition's id.
+        value: The declared value, which is also the partition's key.
     """
 
     value: str
 
     @property
-    def id(self) -> str:
+    def key(self) -> str:
         """The partition's key: its value."""
         return self.value
 
@@ -50,9 +50,9 @@ class ListPartition(Partition):
         Returns:
             The partition's slice of the data.
         """
-        from interloper.representation import Representation
+        from interloper.representation import TableData
 
-        return Representation.of(data).filter_eq(column, self.value)
+        return TableData.from_data(data).filter_eq(column, self.value)
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ class ListPartitionWindow(PartitionWindow):
         Returns:
             A membership filter on every value of the window.
         """
-        return PartitionFilter(column, values=tuple(partition.id for partition in self.partitions))
+        return PartitionFilter(column, values=tuple(partition.key for partition in self.partitions))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -134,8 +134,12 @@ class ListPartitionConfig(PartitionConfig):
         """Normalise ``values`` to a tuple and refuse an unusable list.
 
         Raises:
-            ValueError: If the list is empty, holds a duplicate, or holds an empty string.
+            TypeError: If ``values`` is a string rather than a sequence of them.
+            ValueError: If the list is empty, holds a duplicate, or holds an
+                empty string.
         """
+        if isinstance(self.values, str):
+            raise TypeError(f"List partitioning values are a sequence of values, not the string {self.values!r}.")
         values = tuple(self.values)
         object.__setattr__(self, "values", values)
         if not values:
@@ -144,6 +148,14 @@ class ListPartitionConfig(PartitionConfig):
             raise ValueError(f"List partitioning declares a duplicate value: {values!r}.")
         if any(not isinstance(value, str) or not value for value in values):
             raise ValueError(f"List partitioning values are non-empty strings: {values!r}.")
+
+    def __str__(self) -> str:
+        """Describe the partitioning, as an error message names it.
+
+        Returns:
+            ``partitioned by list [...]``, the declared values in order.
+        """
+        return f"partitioned by list {list(self.values)}"
 
     @property
     def partitions(self) -> list[Partition]:
@@ -162,8 +174,8 @@ class ListPartitionConfig(PartitionConfig):
         if not isinstance(window, ListPartitionWindow):
             raise PartitionError(f"expects a list window, but the run was given a {type(window).__name__}")
         for partition in window:
-            if partition.id not in self.values:
-                raise PartitionError(f"'{partition.id}' is not one of the declared partitions {list(self.values)}")
+            if partition.key not in self.values:
+                raise PartitionError(f"declares no partition {partition.key!r} (declared: {list(self.values)})")
 
     def partition(self, key: str) -> ListPartition:
         """Parse a key into the declared partition it names.
@@ -194,9 +206,9 @@ class ListPartitionConfig(PartitionConfig):
         Raises:
             PartitionError: If *last* comes before *first* in the declared order.
         """
-        if self.values.index(last.id) < self.values.index(first.id):
-            raise PartitionError(f"window ends before it starts: {first.id!r} to {last.id!r}")
-        return ListPartitionWindow(first.id, last.id, self.values)
+        if self.values.index(last.key) < self.values.index(first.key):
+            raise PartitionError(f"window ends before it starts: {first.key!r} to {last.key!r}")
+        return ListPartitionWindow(first.key, last.key, self.values)
 
     def compatible(self, other: PartitionConfig) -> bool:
         """Whether *other* is a list partitioning over the same values.

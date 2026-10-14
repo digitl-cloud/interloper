@@ -19,9 +19,8 @@ from typing import Any
 import httpx2
 import interloper as il
 import pytest
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.pinterest_ads import constants, schemas
@@ -132,7 +131,7 @@ class TestReconcile:
                 "TOTAL_CLICKTHROUGH": 12,
             }
         ]
-        reconciled = Representation.of(child.normalizer.normalize(rows)).reconcile(schemas.AdsStats)
+        reconciled = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.AdsStats)
         row = reconciled.iloc[0]
         assert row["date"] == DAY
         assert row["ad_id"] == "687000000001"
@@ -159,7 +158,7 @@ class TestReconcile:
         normalized = child.normalizer.normalize(rows)
         assert "video_3sec_views_1" in normalized.columns
         assert "total_video_15sec_unique_views" in normalized.columns
-        reconciled = Representation.of(normalized).reconcile(schemas.VideosStatsByTargeting)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.VideosStatsByTargeting)
         row = reconciled.iloc[0]
         assert row["targeting_type"] == "APPTYPE"
         assert row["targeting_value"] == "iphone"
@@ -184,7 +183,7 @@ class TestReconcile:
             }
         ]
         normalized = child.normalizer.normalize(rows)
-        reconciled = Representation.of(normalized).reconcile(schemas.Campaigns)
+        reconciled = TableData.from_data(normalized).reconcile(schemas.Campaigns)
         row = reconciled.iloc[0]
         assert row["created_time"] == dt.datetime(2025, 9, 14, tzinfo=dt.timezone.utc)
         assert float(row["daily_spend_cap"]) == 25000000.0
@@ -202,7 +201,7 @@ class TestReconcile:
                 "date": DAY,
             }
         ]
-        reconciled = Representation.of(child.normalizer.normalize(rows)).reconcile(schemas.AdGroups)
+        reconciled = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.AdGroups)
         row = reconciled.iloc[0]
         assert json.loads(row["targeting_spec_apptype"]) == ["iphone", "web"]
         assert row["targeting_spec_minimum_age"] == "25"
@@ -213,7 +212,7 @@ class TestReconcile:
         rows = [
             {"id": "549759962542", "owner": {"id": "9", "username": "brand"}, "permissions": ["ADMIN"], "date": DAY}
         ]
-        reconciled = Representation.of(child.normalizer.normalize(rows)).reconcile(schemas.AdAccounts)
+        reconciled = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.AdAccounts)
         row = reconciled.iloc[0]
         assert (row["owner_id"], row["owner_username"]) == ("9", "brand")
         assert json.loads(row["permissions"]) == ["ADMIN"]

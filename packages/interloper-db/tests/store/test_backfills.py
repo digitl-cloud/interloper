@@ -687,3 +687,110 @@ class TestStacks:
 
         # The successor is queued, so the batch still has work in flight.
         assert store.backfills.get(backfill_id).status == "running"
+
+
+def _lifecycle(store: Store, backfill_id: UUID) -> list[Event]:
+    """The backfill's lifecycle events, oldest first.
+
+    Args:
+        store: The store under test.
+        backfill_id: The backfill whose events are read.
+
+    Returns:
+        The events carrying its id.
+    """
+    with Session(store.engine) as session:
+        events = session.exec(select(Event).order_by(col(Event.timestamp).asc())).all()
+        return [event for event in events if (event.data or {}).get("backfill_id") == str(backfill_id)]
+
+
+class TestLifecycleEvents:
+    """A backfill records when it starts and how it ends."""
+
+    def test_creating_a_backfill_records_that_it_started(self, store: Store):
+        component_id = _component(store, kind="job")
+        backfill = store.backfills.create(
+            _ORG_ID, component_id=component_id, start_key="2026-01-01", end_key="2026-01-02"
+        )
+
+        [started] = _lifecycle(store, backfill.id)
+        assert started.event_type == "backfill_started"
+        assert (started.component_id, started.component_key, started.run_id) == (component_id, "job", None)
+        assert started.data is not None
+        assert (started.data["start_key"], started.data["end_key"]) == ("2026-01-01", "2026-01-02")
+
+    def test_finishing_records_completed(self, store: Store):
+        backfill = _backfill(store, days=2, concurrency=2)
+        for run_id in _run_statuses(store, backfill.id):
+            store.runs.complete(run_id, success=True)
+
+        assert [event.event_type for event in _lifecycle(store, backfill.id)] == [
+            "backfill_started",
+            "backfill_completed",
+        ]
+
+    def test_a_failure_records_failed(self, store: Store):
+        backfill = _backfill(store, days=2, concurrency=2)
+        run_ids = list(_run_statuses(store, backfill.id))
+        store.runs.complete(run_ids[0], success=False)
+        store.runs.complete(run_ids[1], success=True)
+
+        assert [event.event_type for event in _lifecycle(store, backfill.id)][-1] == "backfill_failed"
+
+    def test_a_fail_fast_failure_records_failed(self, store: Store):
+        backfill = store.backfills.create(
+            _ORG_ID,
+            component_id=_component(store, kind="job"),
+            start_key="2026-01-01",
+            end_key="2026-01-03",
+            concurrency=1,
+            fail_fast=True,
+        )
+        first = next(run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued")
+        store.runs.complete(first, success=False)
+
+        assert [event.event_type for event in _lifecycle(store, backfill.id)] == [
+            "backfill_started",
+            "backfill_failed",
+        ]
+
+    def test_the_terminal_event_is_recorded_once(self, store: Store):
+        backfill = _backfill(store, days=1, concurrency=1)
+        for run_id in _run_statuses(store, backfill.id):
+            store.runs.complete(run_id, success=True)
+
+        store.backfills.advance(backfill.id, failed=False)
+
+        assert [event.event_type for event in _lifecycle(store, backfill.id)].count("backfill_completed") == 1
+
+    def test_a_refused_backfill_records_no_event(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+        def refuse(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("refused")
+
+        monkeypatch.setattr("interloper_db.store.backfills.save", refuse)
+        with pytest.raises(RuntimeError, match="refused"):
+            _backfill(store, days=1)
+
+        with Session(store.engine) as session:
+            assert session.exec(select(Event).where(Event.event_type == "backfill_started")).all() == []
+
+    def test_a_deleted_target_still_records_the_verdict(self, store: Store):
+        backfill = _backfill(store, days=1, concurrency=1)
+        with Session(store.engine) as session:
+            row = session.get(Backfill, backfill.id)
+            assert row is not None
+            row.component_id = None
+            session.add(row)
+            session.commit()
+        for run_id in _run_statuses(store, backfill.id):
+            store.runs.complete(run_id, success=True)
+
+        completed = _lifecycle(store, backfill.id)[-1]
+        assert (completed.event_type, completed.component_id) == ("backfill_completed", None)
+        assert completed.message == "Backfill completed"
+
+    def test_canceling_records_nothing(self, store: Store):
+        backfill = _backfill(store, days=2)
+        store.backfills.cancel(backfill.id)
+
+        assert [event.event_type for event in _lifecycle(store, backfill.id)] == ["backfill_started"]

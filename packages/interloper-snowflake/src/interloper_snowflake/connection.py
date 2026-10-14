@@ -7,7 +7,7 @@ from typing import Any
 
 import snowflake.connector
 from interloper.connection import Connection, connection
-from interloper.resource.fields import InputField, SecretField, fetch_field_provider
+from interloper.resource import InputField, SecretField, fetch_field_provider
 from pydantic_settings import SettingsConfigDict
 from snowflake.connector import SnowflakeConnection as Session
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import ibis
 from interloper.asset import Output, Upstream, View
-from interloper.destination.database import TableReference
+from interloper.destination import TableReference
 from interloper.errors import ConfigError
 
 from interloper_sql.view.types import IBIS_DIALECTS, ibis_schema
@@ -55,10 +55,13 @@ class IbisView(View):
     compiles it for its own dialect.
     """
 
-    async def _upstream(self, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]) -> Upstream:
+    async def _upstream(
+        self, name: str, target: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
+    ) -> Upstream:
         """Turn the upstream's table reference into a typed Ibis table.
 
         Args:
+            name: The ``data()`` parameter the upstream is bound to.
             target: The upstream asset.
             window: Forwarded; a reference has no scope.
             metadata: Forwarded.
@@ -69,7 +72,7 @@ class IbisView(View):
         Raises:
             ConfigError: If the upstream declares no schema, or its reference is not a table.
         """
-        upstream = await super()._upstream(target, window, metadata)
+        upstream = await super()._upstream(name, target, window, metadata)
         reference = upstream.data
         if not isinstance(reference, TableReference):
             raise ConfigError(f"Upstream '{upstream.asset.qualified_key}' is not a table: {reference!r}")

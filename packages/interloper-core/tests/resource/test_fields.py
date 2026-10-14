@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import interloper as il
-from interloper.resource.fields import is_fetch_field_provider
+from interloper.resource import is_fetch_field_provider
 
 
 class Conn(il.Connection):
@@ -166,3 +166,16 @@ def test_a_field_is_not_inherited_by_default():
     """A field reads only its own value unless marked."""
     field = il.InputField(default=None)
     assert "x-inherit" not in field.json_schema_extra
+
+
+def test_the_resource_package_exports_every_field_factory():
+    """``CronField`` and ``TimezoneField`` import from the package, like the other factories."""
+    from interloper.resource import CronField, TimezoneField
+
+    assert callable(CronField) and callable(TimezoneField)
+
+
+def test_a_field_factory_takes_label_not_title():
+    """``title=`` is refused with the name of the keyword that replaced it."""
+    with pytest.raises(TypeError, match=r"label="):
+        il.InputField(title="Name")

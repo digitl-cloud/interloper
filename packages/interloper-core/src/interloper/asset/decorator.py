@@ -9,59 +9,67 @@ from interloper.asset.reference import Reference
 from interloper.asset.view import View
 from interloper.component.decorator import Decorator
 
-asset = Decorator(Asset)
-"""Create an Asset subclass from a decorated function.
 
-The decorated function may be sync or ``async``. Sync functions are offloaded to
-a worker thread at materialization time; ``async`` functions are awaited
-natively on the event loop:
+class AssetDecorator(Decorator[Asset]):
+    """Create an Asset subclass from a decorated function.
 
-```py
-@asset
-def users(**kwargs):
-    return fetch_users()
+    The decorated function may be sync or ``async``. Sync functions are offloaded to
+    a worker thread at materialization time; ``async`` functions are awaited
+    natively on the event loop:
 
-@asset
-async def events(**kwargs):
-    return await fetch_events()
+    ```py
+    @asset
+    def users(**kwargs):
+        return fetch_users()
 
-@asset(tags=["Report"], schema=UsersStats, relations={"destinations": [BigQueryDestination]})
-def users_stats(config: MyConfig, connection: MyConn) -> Any:
-    return fetch_stats()
-```
+    @asset
+    async def events(**kwargs):
+        return await fetch_events()
 
-Every parameter of the decorated function declares a relation, inferred from its
-annotation; ``relations`` is for the declarations an annotation cannot express,
-such as a cross-source or many-valued upstream. It maps a ``data()`` parameter
-name to a `Relation`, a component class (the shorthand for a relation on it), or
-a list of component classes narrowing the relation `Asset` declares under that
-name; explicit declarations win over the inferred ones.
+    @asset(tags=["Report"], schema=UsersStats, relations={"destinations": [BigQueryDestination]})
+    def users_stats(config: MyConfig, connection: MyConn) -> Any:
+        return fetch_stats()
+    ```
 
-Every other keyword is definition metadata or behaviour: the public ClassVars and
-field defaults `Asset` declares (``key``, ``name``, ``icon``, ``tags``,
-``schema``, ``partitioning``, ``dataset``, ``normalizer``,
-``materialization_strategy``, ...). An unknown name is a ``TypeError`` at
-decoration. The result is an Asset subclass with the function as its ``data()``.
-"""
+    Every parameter of the decorated function declares a relation, inferred from its
+    annotation; ``relations`` is for the declarations an annotation cannot express,
+    such as a cross-source or many-valued upstream. It maps a ``data()`` parameter
+    name to a `Relation`, a component class (the shorthand for a relation on it), or
+    a list of component classes narrowing the relation `Asset` declares under that
+    name; explicit declarations win over the inferred ones.
 
-view = Decorator(View)
-"""Create a View subclass from a decorated function.
+    Every other keyword is definition metadata or behaviour: the public ClassVars and
+    field defaults `Asset` declares (``key``, ``name``, ``icon``, ``tags``,
+    ``schema``, ``partitioning``, ``dataset``, ``normalizer``,
+    ``materialization_strategy``, ...). An unknown name is a ``TypeError`` at
+    decoration. The result is an Asset subclass with the function as its ``data()``.
+    """
 
-Like `asset`, but the function returns the view's definition instead of its
-rows: SQL text in the destination's dialect, or anything the destination
-compiles. Each upstream parameter receives the destination's reference to that
-upstream in ``data``:
 
-```py
-@il.view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
-def order_totals(orders: list[il.Upstream]) -> str:
-    return " UNION ALL ".join(f"SELECT date, total FROM {upstream.data.name}" for upstream in orders)
-```
+asset = AssetDecorator(Asset)
 
-It takes the settings `asset` takes, plus ``dialect`` to pin raw SQL to one
-warehouse dialect, and returns a View subclass with the function as its
-``data()``.
-"""
+
+class ViewDecorator(Decorator[View]):
+    """Create a View subclass from a decorated function.
+
+    Like `asset`, but the function returns the view's definition instead of its
+    rows: SQL text in the destination's dialect, or anything the destination
+    compiles. Each upstream parameter receives the destination's reference to that
+    upstream in ``data``:
+
+    ```py
+    @il.view(relations={"orders": il.Relation("asset", "shop.orders", many=True)})
+    def order_totals(orders: list[il.Upstream]) -> str:
+        return " UNION ALL ".join(f"SELECT date, total FROM {upstream.data.name}" for upstream in orders)
+    ```
+
+    It takes the settings `asset` takes, plus ``dialect`` to pin raw SQL to one
+    warehouse dialect, and returns a View subclass with the function as its
+    ``data()``.
+    """
+
+
+view = ViewDecorator(View)
 
 
 def reference(*, table: str, **overrides: Any) -> Decorator[Reference]:

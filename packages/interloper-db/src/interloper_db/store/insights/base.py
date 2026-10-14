@@ -15,10 +15,10 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from interloper.catalog.base import Catalog
+from interloper.catalog import Catalog
 from interloper.errors import ConfigError, NotFoundError
-from interloper.job.cron import CronJob
-from interloper.partitioning.time import TimeGranularity, TimePartition
+from interloper.job import CronJob
+from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
 from sqlmodel import col, func, select

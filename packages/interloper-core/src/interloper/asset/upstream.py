@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from interloper.destination.context import IOContext
 from interloper.errors import AssetError, DataNotFoundError, format_exception
 from interloper.events import EventBus, EventType, Step, StepKind
-from interloper.representation import Representation
+from interloper.representation import TableData
 from interloper.telemetry import attributes as telemetry_attributes
 from interloper.utils.concurrency import invoke
 
@@ -27,7 +27,7 @@ class Upstream:
             ``identity`` and ``id`` tell the upstreams apart.
         data: The data read from the upstream's destination for the run's
             partition, in whatever representation that destination holds
-            natively (records from a file destination, a DataFrame from
+            natively (rows from a file destination, a DataFrame from
             BigQuery). ``None`` when the upstream has nothing materialized
             where the destination looks (no table or object for that
             partition at all); a ``LOG`` warning names the upstream. An existing
@@ -42,8 +42,8 @@ class Upstream:
     data: Any
 
     @property
-    def records(self) -> list[dict[str, Any]]:
-        """The data as records, whatever representation the destination handed back.
+    def rows(self) -> list[dict[str, Any]]:
+        """The data as rows, whatever representation the destination handed back.
 
         The one line a consumer needs to be indifferent to where its upstream
         is stored: a DataFrame and a list of rows both come out as
@@ -54,11 +54,17 @@ class Upstream:
         """
         if self.data is None:
             return []
-        return Representation.of(self.data).records
+        return TableData.from_data(self.data).rows
 
     @classmethod
     async def read(
-        cls, upstream: Asset, reader: Asset, window: PartitionWindow | None, metadata: dict[str, Any]
+        cls,
+        upstream: Asset,
+        reader: Asset,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        *,
+        parameter: str,
     ) -> Upstream:
         """Read an upstream's data from its default destination for the window it consumes.
 
@@ -71,6 +77,8 @@ class Upstream:
             reader: The asset reading it, whose identity the events carry.
             window: The run's window, narrowed here to what *upstream* consumes.
             metadata: Run-level metadata carried onto the emitted events.
+            parameter: The reader's ``data()`` parameter the upstream is bound
+                to, which the missing-data warning names.
 
         Returns:
             The upstream with its data.
@@ -99,8 +107,8 @@ class Upstream:
                     window,
                     level="WARNING",
                     message=(
-                        f"Asset '{reader.key}' found no data in upstream '{upstream.qualified_key}' at {window}; "
-                        "it is passed with data=None"
+                        f"Asset '{reader.key}' found no data in upstream '{upstream.qualified_key}' "
+                        f"for parameter '{parameter}' at {window}; it is passed with data=None"
                     ),
                 ),
             )

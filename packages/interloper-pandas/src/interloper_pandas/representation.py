@@ -41,8 +41,8 @@ class DataFrameRepresentation(Representation):
         """
         return isinstance(data, pd.DataFrame)
 
-    def to_records(self, data: pd.DataFrame) -> list[dict[str, Any]]:
-        """View the DataFrame as null-safe records (``NaN``/``NaT`` → ``None``).
+    def to_rows(self, data: pd.DataFrame) -> list[dict[str, Any]]:
+        """Return the DataFrame as null-safe rows (``NaN``/``NaT`` → ``None``).
 
         Args:
             data: The DataFrame to view.
@@ -50,13 +50,13 @@ class DataFrameRepresentation(Representation):
         Returns:
             Rows as a list of dicts.
         """
-        return dataframe_to_records(data)
+        return dataframe_to_rows(data)
 
-    def from_records(self, rows: list[dict[str, Any]]) -> pd.DataFrame:
-        """Materialize records into a DataFrame.
+    def from_rows(self, rows: list[dict[str, Any]]) -> pd.DataFrame:
+        """Materialize rows into a DataFrame.
 
         Args:
-            rows: The records to materialize.
+            rows: The rows to materialize.
 
         Returns:
             A pandas ``DataFrame``.
@@ -106,8 +106,8 @@ class DataFrameRepresentation(Representation):
         """Reconcile using vectorized column-wise casts from the field specs.
 
         Non-strict runs no per-row pydantic validation, so it scales to
-        warehouse-sized frames. Strict first validates a null-safe records
-        view (``NaN``/``NaT`` as ``None``, so missing numeric values pass
+        warehouse-sized frames. Strict first validates the frame as
+        null-safe rows (``NaN``/``NaT`` as ``None``, so missing numeric values pass
         nullable fields) and refuses extra or missing columns. Uses nullable
         pandas dtypes (``Int64``, ``Float64``, ``boolean``, ``string``) so
         missing values survive as ``pd.NA``.
@@ -127,7 +127,7 @@ class DataFrameRepresentation(Representation):
         """
         data = _encode_json_str_columns(data, schema)
         if strict:
-            schema.validate_rows(dataframe_to_records(data), strict=True)
+            schema.validate_rows(dataframe_to_rows(data), strict=True)
         specs = schema.field_specs()
         dropped = set(data.columns) - {spec.name for spec in specs}
         if dropped:
@@ -320,8 +320,8 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
     return series
 
 
-def dataframe_to_records(data: pd.DataFrame) -> list[dict[str, Any]]:
-    """Convert a DataFrame to a null-safe ``list[dict]`` records view.
+def dataframe_to_rows(data: pd.DataFrame) -> list[dict[str, Any]]:
+    """Convert a DataFrame to a null-safe ``list[dict]`` of rows.
 
     Unlike ``DataFrame.to_dict("records")``, missing values (``NaN``, ``NaT``,
     ``pd.NA``) are mapped to ``None`` so the rows are valid against nullable

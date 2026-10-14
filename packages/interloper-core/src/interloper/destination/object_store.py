@@ -12,7 +12,7 @@ from interloper.destination.context import IOContext
 from interloper.destination.formats import FORMATS, FileFormat
 from interloper.errors import DataNotFoundError
 from interloper.partitioning.base import Partition
-from interloper.representation import Representation
+from interloper.representation import TableData
 from interloper.resource.fields import InputField, SelectField
 from interloper.schema import FieldSpec
 
@@ -116,7 +116,7 @@ class ObjectStoreDestination(Destination):
             The backend's URI for the object, such as ``s3://bucket/name``.
         """
 
-    # -- Helpers ---------------------------------------------------------------
+    # -- Internals -------------------------------------------------------------
 
     @property
     def _format(self) -> FileFormat:
@@ -147,13 +147,13 @@ class ObjectStoreDestination(Destination):
             partition: The partition being addressed, or ``None`` for the whole.
 
         Returns:
-            ``.../data.{ext}``, inside a ``{column}={id}`` segment for
+            ``.../data.{ext}``, inside a ``{column}={key}`` segment for
             partitions.
         """
         parts = [self._asset_prefix(context)]
         if partition is not None:
             assert context.asset.partitioning
-            parts.append(f"{context.asset.partitioning.column}={partition.id}")
+            parts.append(f"{context.asset.partitioning.column}={partition.key}")
         parts.append(f"data.{self._format.extension}")
         return "/".join(parts)
 
@@ -191,11 +191,11 @@ class ObjectStoreDestination(Destination):
             partition: The partition being written, or ``None`` for the whole.
             data: The rows to write.
         """
-        rows = Representation.of(data).records
+        rows = TableData.from_data(data).rows
         if partition is not None:
             assert context.asset.partitioning
             column = context.asset.partitioning.column
-            rows = [{k: v for k, v in row.items() if k != column} for row in rows]
+            rows = [{key: value for key, value in row.items() if key != column} for row in rows]
 
         payload = self._format.serialize(rows, self._effective_specs(context, partition))
         self.put_object(
@@ -233,7 +233,7 @@ class ObjectStoreDestination(Destination):
         if partition is not None:
             assert context.asset.partitioning
             column = context.asset.partitioning.column
-            rows = [{**row, column: partition.id} for row in rows]
+            rows = [{**row, column: partition.key} for row in rows]
         if context.schema is not None:
             rows = context.schema.reconcile(rows)
         return rows

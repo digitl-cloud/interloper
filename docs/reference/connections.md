@@ -3,6 +3,8 @@
 A connection holds the credentials a source authenticates with; the OAuth variants renew them through a provider.
 
 ::: interloper.connection.decorator.connection
+    options:
+      force_inspection: true
 
 ::: interloper.Connection
 

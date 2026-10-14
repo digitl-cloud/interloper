@@ -11,8 +11,13 @@ import pytest
 import sqlalchemy
 from interloper.destination import IOContext
 from interloper.errors import DataNotFoundError
-from interloper.partitioning import ListPartition, ListPartitionConfig, PartitionWindow
-from interloper.partitioning.time import TimePartition, TimePartitionWindow
+from interloper.partitioning import (
+    ListPartition,
+    ListPartitionConfig,
+    PartitionWindow,
+    TimePartition,
+    TimePartitionWindow,
+)
 from interloper.schema import Schema
 from pydantic import Field
 from sqlalchemy import Column, Date, DateTime, MetaData, Table, Text, event, exc

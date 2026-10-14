@@ -105,7 +105,7 @@ A DAG orders the assets by dependency and runs them:
 dag = il.DAG(shop)
 result = dag.materialize()
 print(result)
-# RunResult(status=completed, partition=None, completed=3, failed=0, canceled=0, time=0.02s)
+# RunResult(status=completed, window=None, completed=3, failed=0, canceled=0, time=0.02s)
 ```
 
 `dag.materialize()` uses the default `AsyncRunner`, which runs independent assets concurrently.

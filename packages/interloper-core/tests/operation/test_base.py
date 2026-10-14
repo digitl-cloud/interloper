@@ -11,7 +11,7 @@ import interloper as il
 from interloper.component import Component
 from interloper.errors import DAGError
 from interloper.operation import Operation, OperationContext, OperationResult
-from interloper.runner.results import ExecutionStatus
+from interloper.runner import ExecutionStatus
 
 
 class _NoopOperation(Operation):

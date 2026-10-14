@@ -26,7 +26,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
    from pathlib import Path
 
    import interloper as il
-   from interloper.representation import Representation
+   from interloper.representation import TableData
 
    @il.destination(name="JSONL files")
    class JSONLDestination(il.Destination):
@@ -36,10 +36,10 @@ Reference: https://docs.interloper.dev/guide/destinations/
            base = Path(self.base_path) / (context.asset.dataset or "") / context.asset.table
            if partition is None:
                return base / "data.jsonl"
-           return base / f"{context.asset.partitioning.column}={partition.id}" / "data.jsonl"
+           return base / f"{context.asset.partitioning.column}={partition.key}" / "data.jsonl"
 
        def write_partition(self, context, partition, data) -> None:
-           rows = Representation.of(data).records                   # list[dict] from any representation
+           rows = TableData.from_data(data).rows                   # list[dict] from any representation
            path = self._path(context, partition)
            path.parent.mkdir(parents=True, exist_ok=True)
            path.write_text("".join(json.dumps(row, default=str) + "\n" for row in rows))
@@ -54,15 +54,16 @@ Reference: https://docs.interloper.dev/guide/destinations/
            return {p.name.split("=", 1)[1]: sum(1 for _ in (p / "data.jsonl").open()) for p in base.glob(f"{column}=*")}
    ```
 
-   Layout convention: `{base_path}/{dataset}/{table}/{column}={partition_id}/data.<ext>`.
+   Layout convention: `{base_path}/{dataset}/{table}/{column}={partition_key}/data.<ext>`.
    Reconcile on read against `context.schema`: destinations store strings, dependent assets
    expect the schema's types.
 
-2. **Databases**: `from interloper.destination import DatabaseDestination, PartitionFilter` (not
-   exported on `il`). Implement four hooks, each starting with `(table, dataset, ...)`:
-   `insert(table, dataset, data, context)` (view the data as rows with
-   `Representation.of(data).records`, or convert it for a native load with
-   `Representation.of(data).to("dataframe")`; `context.schema` and
+2. **Databases**: `from interloper.destination import DatabaseDestination` and
+   `from interloper.partitioning import PartitionFilter` (neither exported on `il`). Implement four
+   hooks, each starting with `(table, dataset, ...)`:
+   `insert(table, dataset, data, context)` (read the data as rows with
+   `TableData.from_data(data).rows`, or convert it for a native load with
+   `TableData.from_data(data).to("dataframe")`; `context.schema` and
    `context.asset.partitioning` are what a table created on first write is shaped from),
    `delete(table, dataset, where)`, `select(table, dataset, where)` and `count(table, dataset,
    column)`. `where` is `None` for the whole table or a `PartitionFilter`: render `where.value` as
@@ -71,7 +72,7 @@ Reference: https://docs.interloper.dev/guide/destinations/
    exist yet, since `write` skips empty data and a read or delete can come first; override
    `transaction()` to make delete-then-insert atomic. The base always deletes a partition before
    inserting it, so a rewrite never duplicates. `select` returns whatever your client produces
-   natively (a DataFrame, an Arrow table, rows); consumers that want rows read `leg.records`.
+   natively (a DataFrame, an Arrow table, rows); consumers that want rows read `leg.rows`.
 
 3. **Verify** with a two-asset daily source:
 
@@ -99,9 +100,9 @@ Reference: https://docs.interloper.dev/guide/destinations/
 | Need | Use |
 |------|-----|
 | Fields of `IOContext` | `asset`, `window` (a `PartitionWindow` or `None`; `partition.window` for one partition), `metadata`, `schema` |
-| Rows from a DataFrame or list | `Representation.of(data).records` |
-| A DataFrame from rows or a DataFrame | `Representation.of(data).to("dataframe")` |
-| Rows the consumer can iterate whatever the destination | `leg.records` on an `il.Upstream` |
+| Rows from a DataFrame or list | `TableData.from_data(data).rows` |
+| A DataFrame from rows or a DataFrame | `TableData.from_data(data).to("dataframe")` |
+| Rows the consumer can iterate whatever the destination | `leg.rows` on an `il.Upstream` |
 | Credentials for the sink | a connection relation: `connection: MyConnection` on the class body, or `relations={"connection": il.Relation(MyConnection)}` on the decorator |
 | Cached client on the instance | private attribute `_client: Client | None = None`, plain assignment works |
 | Built-ins to imitate | `il.CSVDestination` (partitioned files), `il.FileDestination` (same layout, pickled objects), `il.MemoryDestination` |

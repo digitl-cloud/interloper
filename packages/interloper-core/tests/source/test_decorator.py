@@ -154,7 +154,7 @@ class TestFunctionForm:
 
         assert [asset.key for asset in wrapper().assets] == ["solo"]
 
-    def test_a_function_returning_nothing_usable_yields_no_assets(self):
+    def test_a_function_returning_nothing_yields_no_assets(self):
         @il.source
         def empty() -> None:
             pass
@@ -205,3 +205,12 @@ class TestDecoratedSubclass:
         assert source.Orders is source.assets[0]
         assert type(source.Orders).key == "orders"
         assert il.Serializable.resolve_path(built.Orders.classpath()) is built.Orders
+
+
+def test_a_source_function_returning_something_else_is_refused():
+    """A source function returns asset classes; anything else is named in the refusal."""
+    with pytest.raises(TypeError, match=r"returned 'str'"):
+
+        @il.source
+        def broken() -> Any:
+            return "not assets"

@@ -13,12 +13,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import mssql_python
-from interloper.destination import DatabaseDestination, IOContext, PartitionFilter, destination
+from interloper.destination import DatabaseDestination, IOContext, destination
 from interloper.errors import DataNotFoundError
-from interloper.representation import Representation
-from interloper.resource.fields import FetchField, InputField
+from interloper.partitioning import PartitionFilter
+from interloper.representation import TableData
+from interloper.resource import FetchField, InputField
 from interloper.schema import FieldSpec
-from interloper.utils.json import json_default, replace_non_finite
+from interloper.utils import json_default, replace_non_finite
 from pydantic import PrivateAttr
 
 from interloper_azure.connection import AzureConnection
@@ -285,14 +286,14 @@ class FabricWarehouseDestination(DatabaseDestination):
             context: IO context carrying the asset and effective schema.
         """
         schema = self._schema(dataset)
-        view = Representation.of(data)
+        table_data = TableData.from_data(data)
         with self._session() as session:
             columns = self._columns(session, table, schema)
             if not columns:
-                specs = (context.schema or view.infer()).field_specs()
+                specs = (context.schema or table_data.infer()).field_specs()
                 self._create_table(session, table, schema, specs)
                 columns = self._columns(session, table, schema)
-            keys, rows = _align(view.records, columns, f"{schema}.{table}")
+            keys, rows = _align(table_data.rows, columns, f"{schema}.{table}")
             if not keys or not rows:
                 return
             self._begin()
@@ -489,7 +490,7 @@ def _predicate(where: PartitionFilter) -> tuple[str, list[Any]]:
     """Render a partition filter as a parameterised predicate.
 
     No cast is needed: T-SQL converts a parameter to the column's type when
-    that type ranks higher, so a ``'2024-01-01'`` partition id compares as a
+    that type ranks higher, so a ``'2024-01-01'`` partition key compares as a
     ``date``.
 
     Args:

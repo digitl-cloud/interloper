@@ -9,7 +9,7 @@ from typing import Any
 import httpx2
 from google.auth import crypt, jwt
 from interloper.connection import Connection, connection
-from interloper.resource.fields import JsonField, fetch_field_provider
+from interloper.resource import JsonField, fetch_field_provider
 from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 

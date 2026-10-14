@@ -17,9 +17,8 @@ from typing import Any
 import httpx2
 import interloper as il
 from interloper.asset.context import ExecutionContext
-from interloper.dag import DAGSpec
-from interloper.dag.base import DAG
-from interloper.representation import Representation
+from interloper.dag import DAG, DAGSpec
+from interloper.representation import TableData
 
 from interloper_assets.linkedin_organic.connection import LinkedinOrganicConnection
 from interloper_assets.linkedin_organic.source import LinkedinOrganic, LinkedinOrganicNormalizer
@@ -66,7 +65,7 @@ def _child(key: str) -> Any:
 def _reconcile(key: str, rows: list[dict[str, Any]]) -> Any:
     child = _child(key)
     normalized = child.normalizer.normalize([{**row, "date": DAY} for row in rows])
-    return Representation.of(normalized).reconcile(child.schema).iloc[0]
+    return TableData.from_data(normalized).reconcile(child.schema).iloc[0]
 
 
 FOLLOWER_ROW = {
