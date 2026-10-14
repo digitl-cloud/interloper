@@ -28,20 +28,27 @@ def _load_dotenv() -> None:
         pass
 
 
-def build_parser() -> argparse.ArgumentParser:
-    """Assemble the ``interloper`` parser with every installed command, sorted by name.
+def build_parser(command: str | None = None) -> argparse.ArgumentParser:
+    """Assemble the ``interloper`` parser: the named command alone, or every installed one sorted by name.
 
-    The documentation site renders the CLI reference from this parser, so
-    every flag's ``help`` and every command's ``description`` is user-facing
-    copy.
+    Building one command imports one package, so ``interloper run`` neither
+    pays for nor breaks on an installed api or app. The documentation site
+    renders the CLI reference from the full parser, so every flag's ``help``
+    and every command's ``description`` is user-facing copy.
+
+    Args:
+        command: The command the process runs; ``None``, or a name no
+            package registers, builds every command (for the usage and its
+            error).
 
     Returns:
         The root parser.
     """
     parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
     subparsers = parser.add_subparsers(dest="command")
-    for _name, register in sorted(COMMANDS.items()):
-        register(subparsers)
+    register = COMMANDS.get(command) if command else None
+    for _name, register_command in [(command, register)] if register else COMMANDS.items():
+        register_command(subparsers)
     return parser
 
 
@@ -49,7 +56,7 @@ def main() -> None:
     """Run one command: load ``.env``, activate settings and telemetry, call the handler, shut down."""
     _load_dotenv()
 
-    parser = build_parser()
+    parser = build_parser(next((argument for argument in sys.argv[1:] if not argument.startswith("-")), None))
     args = parser.parse_args()
 
     if args.command is None:

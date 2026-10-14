@@ -9,12 +9,15 @@ who consumes it.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable, Iterator
-from importlib.metadata import entry_points
+from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
 
 
 class Registry(Generic[T]):
@@ -24,6 +27,11 @@ class Registry(Generic[T]):
     from *group* on first lookup. Registration is first-wins and idempotent.
     *adopt* transforms a loaded entry into its ``(name, object)`` pair —
     the default keeps the entry name and object as declared.
+
+    One installed package never takes the others down: an entry point that
+    fails to load or adopt is skipped with a warning naming it. Without
+    *adopt*, an entry's name is its key, so a lookup by name loads only the
+    entry points declared under that name; a listing loads them all.
     """
 
     def __init__(
@@ -43,6 +51,8 @@ class Registry(Generic[T]):
         self._adopt = adopt
         self._entries: dict[str, T] = {}
         self._loaded = group is None
+        self._loaded_names: set[str] = set()
+        self._failures: dict[str, str] = {}
         self._load_lock = threading.RLock()
 
     def register(self, name: str, entry: T) -> None:
@@ -63,7 +73,8 @@ class Registry(Generic[T]):
         Returns:
             The registered object, or ``None`` if unknown.
         """
-        self._load()
+        if name not in self._entries:
+            self._load(name if self._adopt is None else None)
         return self._entries.get(name)
 
     def __getitem__(self, name: str) -> T:
@@ -79,6 +90,8 @@ class Registry(Generic[T]):
             KeyError: If the name has no entry.
         """
         entry = self.get(name)
+        if entry is None and name in self._failures:
+            raise KeyError(f"'{name}' is declared in entry-point group '{self._group}' but {self._failures[name]}")
         if entry is None:
             available = ", ".join(self.keys())
             where = f" in entry-point group '{self._group}'" if self._group else ""
@@ -151,23 +164,53 @@ class Registry(Generic[T]):
         """
         return self.get(name) is not None
 
-    def _load(self) -> None:
-        """Populate from the entry-point group (once, thread-safely).
+    def _load(self, name: str | None = None) -> None:
+        """Populate from the entry-point group, each entry point once, thread-safely.
 
         First lookups can race from worker threads (e.g. several assets
         conforming concurrently), so loading is serialized and ``_loaded``
         flips only after every entry registered — a concurrent reader either
         loads itself or waits, never observing a partially-populated registry.
-        A failed load leaves ``_loaded`` unset so the next lookup retries
-        instead of latching the registry empty.
+        Reading the group's metadata failing leaves the registry unloaded, so
+        the next lookup retries instead of latching it empty.
+
+        Args:
+            name: Load only the entry points declared under this name, or
+                every one when ``None``.
         """
-        if self._loaded or self._group is None:
+        if self._loaded or self._group is None or name in self._loaded_names:
             return
         with self._load_lock:
-            if self._loaded:
+            if self._loaded or name in self._loaded_names:
                 return
             for entry_point in entry_points(group=self._group):
-                loaded = entry_point.load()
-                name, entry = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
-                self.register(name, entry)
-            self._loaded = True
+                if entry_point.name in self._loaded_names or name not in (None, entry_point.name):
+                    continue
+                self._load_entry(entry_point)
+            if name is None:
+                self._loaded = True
+            else:
+                self._loaded_names.add(name)
+
+    def _load_entry(self, entry_point: EntryPoint) -> None:
+        """Load and register one entry point, skipping it with a warning when it fails.
+
+        Args:
+            entry_point: The entry point to load.
+        """
+        try:
+            loaded = entry_point.load()
+            name, entry = self._adopt(entry_point.name, loaded) if self._adopt else (entry_point.name, loaded)
+        except Exception as error:
+            self._failures[entry_point.name] = f"failed to load: {type(error).__name__}: {error}"
+            logger.warning(
+                "Skipping entry point '%s' (%s) of group '%s', which failed to load: %s: %s",
+                entry_point.name,
+                entry_point.value,
+                self._group,
+                type(error).__name__,
+                error,
+            )
+            logger.debug("Loading entry point '%s' failed", entry_point.name, exc_info=True)
+        else:
+            self.register(name, entry)

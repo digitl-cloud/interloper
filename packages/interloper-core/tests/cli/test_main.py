@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from interloper.cli import main as cli_main
+from interloper.registry import Registry
 from interloper.settings import AppSettings
 
 
@@ -137,14 +138,25 @@ class TestBuildParser:
         assert list(subparsers.choices) == sorted(subparsers.choices)
         assert {"app", "db", "launch", "run"} <= set(subparsers.choices)
 
-    def test_a_broken_command_entry_point_fails_loudly(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def broken(_subparsers: Any) -> None:
-            raise ImportError("interloper_broken needs a dependency that is not installed")
+    def test_naming_a_command_builds_that_command_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def unrelated(_subparsers: Any) -> None:
+            raise AssertionError("an unrelated command was built")
 
-        monkeypatch.setattr(cli_main.COMMANDS, "items", lambda: (("broken", broken),))
+        commands: Registry[Any] = Registry()
+        commands.register("run", lambda subparsers: subparsers.add_parser("run", description="Run."))
+        commands.register("api", unrelated)
+        monkeypatch.setattr(cli_main, "COMMANDS", commands)
 
-        with pytest.raises(ImportError, match="interloper_broken"):
-            cli_main.build_parser()
+        parser = cli_main.build_parser("run")
+
+        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        assert list(subparsers.choices) == ["run"]
+
+    def test_an_unknown_command_builds_every_command_for_the_usage_error(self) -> None:
+        parser = cli_main.build_parser("not-a-command")
+
+        subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        assert {"db", "run"} <= set(subparsers.choices)
 
     def test_main_does_not_know_any_command(self) -> None:
         import inspect

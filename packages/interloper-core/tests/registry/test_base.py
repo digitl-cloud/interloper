@@ -103,7 +103,7 @@ class TestEntryPoints:
         with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "A")]) as eps:
             assert registry.get("alpha") == "A"
             assert registry.keys() == ("alpha",)
-        eps.assert_called_once_with(group="test.group")
+        eps.assert_called_with(group="test.group")
 
     def test_no_group_never_loads(self):
         registry: Registry[str] = Registry()
@@ -122,16 +122,54 @@ class TestEntryPoints:
         with mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "a")]):
             assert registry.get("alpha!") == "A"
 
-    def test_adopt_errors_propagate(self):
+    def test_an_entry_failing_to_adopt_is_skipped_with_a_warning(self, caplog):
         def adopt(name: str, entry: object) -> tuple[str, str]:
-            raise TypeError(f"bad entry: {name}")
+            if name == "broken":
+                raise TypeError(f"bad entry: {name}")
+            return name, str(entry)
 
         registry: Registry[str] = Registry("test.group", adopt=adopt)
+        declared = [self._entry_point("broken", "b"), self._entry_point("alpha", "a")]
+        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+            assert registry.keys() == ("alpha",)
+        assert "'broken'" in caplog.text
+        assert "TypeError: bad entry: broken" in caplog.text
+
+    def test_an_entry_failing_to_import_is_skipped_with_a_warning(self, caplog):
+        broken = self._entry_point("broken", None)
+        broken.load.side_effect = ImportError("cannot import name 'Old' from 'interloper'")
+        registry: Registry[str] = Registry("test.group")
+        declared = [broken, self._entry_point("alpha", "A")]
+        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+            assert registry.get("alpha") == "A"
+            assert registry.keys() == ("alpha",)
+        assert "cannot import name 'Old'" in caplog.text
+
+    def test_a_lookup_of_an_entry_that_failed_names_its_error(self):
+        broken = self._entry_point("kubernetes", None)
+        broken.load.side_effect = ImportError("No module named 'kubernetes'")
+        registry: Registry[str] = Registry("test.group")
         with (
-            mock.patch("interloper.registry.base.entry_points", return_value=[self._entry_point("alpha", "a")]),
-            pytest.raises(TypeError, match="bad entry: alpha"),
+            mock.patch("interloper.registry.base.entry_points", return_value=[broken]),
+            pytest.raises(KeyError, match="failed to load: ImportError: No module named 'kubernetes'"),
         ):
-            registry.get("alpha")
+            registry["kubernetes"]
+
+    def test_a_lookup_by_name_loads_only_that_names_entries(self):
+        unrelated = self._entry_point("beta", "B")
+        registry: Registry[str] = Registry("test.group")
+        declared = [self._entry_point("alpha", "A"), unrelated]
+        with mock.patch("interloper.registry.base.entry_points", return_value=declared):
+            assert registry.get("alpha") == "A"
+            unrelated.load.assert_not_called()
+            assert registry.keys() == ("alpha", "beta")
+        unrelated.load.assert_called_once()
+
+    def test_a_lookup_by_name_through_adopt_loads_everything(self):
+        renamed = self._entry_point("alpha", "a")
+        registry: Registry[str] = Registry("test.group", adopt=lambda name, entry: (f"{name}!", entry))
+        with mock.patch("interloper.registry.base.entry_points", return_value=[renamed]):
+            assert registry.get("alpha!") == "a"
 
     def test_failed_load_retries_on_next_lookup(self):
         # A transient load failure must not latch the registry empty forever.
