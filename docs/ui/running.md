@@ -71,6 +71,19 @@ that, as described in [Catalog](../guide/catalog.md) and
 The same recipe works on a loaded image when you want everything it ships plus your own
 components.
 
+## One process per role
+
+Each role starts through the command its package contributes, which is what the images run:
+
+```sh
+interloper api --no-create-tables          # the api image: the HTTP API
+interloper scheduler --no-create-tables    # the scheduler image: cron (with hooks and renewal), worker, reaper
+```
+
+`interloper scheduler` takes `--no-cron`, `--no-worker` and `--no-reaper` to split its services
+across replicas: cron and the reaper are singletons, the worker scales out, and replicas split
+the work through row locks.
+
 ## One process
 
 ```sh
@@ -78,8 +91,8 @@ interloper app --api --cron --worker --reaper
 ```
 
 runs every service in one process against the configured Postgres, serving the UI on port 3000.
-Each service can be toggled off and scaled out on its own: replicas of cron, the worker, the reaper
-and hook evaluation split the work through row locks. `--dev` runs the Nuxt dev server with hot reload instead of the built assets.
+It needs `interloper-app` installed. Each service can be toggled off on its own, and `--dev` runs
+the Nuxt dev server with hot reload instead of the built assets.
 
 ## Configuration
 
@@ -118,7 +131,8 @@ interloper db init          # create the database, tables and run migrations; id
 interloper db upgrade       # migrate an existing database to head
 ```
 
-`interloper app` also creates missing tables on startup unless `--no-create-tables` is passed.
+The serving commands (`interloper api`, `interloper scheduler`, `interloper app`) also create missing tables on
+startup unless `--no-create-tables` is passed.
 
 ## Local development
 

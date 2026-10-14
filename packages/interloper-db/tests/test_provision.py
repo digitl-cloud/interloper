@@ -396,3 +396,32 @@ class TestDropDatabase:
         drop_database(dsn)
 
         assert record == {} or "dsn" not in record
+
+
+class TestBootstrap:
+    """One procedure brings a database up: ensure it, bind the engine, create the tables."""
+
+    def test_ensures_binds_and_creates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[tuple[str, Any]] = []
+        engine = object()
+
+        def init_engine(dsn: str, statement_timeout: float | None = None) -> object:
+            calls.append(("init", statement_timeout))
+            return engine
+
+        monkeypatch.setattr(provision_module, "ensure_database", lambda dsn: calls.append(("ensure", dsn)))
+        monkeypatch.setattr(provision_module, "init_engine", init_engine)
+        monkeypatch.setattr(provision_module, "create_all", lambda bound: calls.append(("create", bound)))
+
+        assert provision_module.bootstrap("postgresql://db/x", statement_timeout=30) is engine
+        assert calls == [("ensure", "postgresql://db/x"), ("init", 30), ("create", engine)]
+
+    def test_create_tables_false_skips_the_tables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        created: list[Any] = []
+        monkeypatch.setattr(provision_module, "ensure_database", lambda dsn: None)
+        monkeypatch.setattr(provision_module, "init_engine", lambda dsn, statement_timeout=None: object())
+        monkeypatch.setattr(provision_module, "create_all", created.append)
+
+        provision_module.bootstrap("postgresql://db/x", create_tables=False)
+
+        assert created == []

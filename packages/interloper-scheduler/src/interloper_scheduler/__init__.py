@@ -14,6 +14,7 @@ from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
 from interloper_scheduler.queue import QueueController
 from interloper_scheduler.reaper import Reaper
 from interloper_scheduler.renewal import RenewalController
+from interloper_scheduler.services import scheduler_services
 
 __all__ = [
     "LAUNCHERS",
@@ -25,4 +26,5 @@ __all__ = [
     "Reaper",
     "RenewalController",
     "RunExecutor",
+    "scheduler_services",
 ]

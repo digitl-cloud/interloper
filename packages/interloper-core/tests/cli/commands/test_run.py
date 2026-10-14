@@ -326,11 +326,11 @@ class TestRunPathsMode:
             _cmd_run(_args(target=[f"{FakeRunSource.__module__}.NotDefinedHere"]))
 
     def test_a_non_class_target_is_rejected(self) -> None:
-        with pytest.raises(SystemExit, match="did not resolve to a class"):
+        with pytest.raises(SystemExit, match="is not a Source or Asset class"):
             _cmd_run(_args(target=[f"{FakeRunSource.__module__}.SOURCE_PATH"]))
 
     def test_an_unrelated_class_is_rejected(self) -> None:
-        with pytest.raises(SystemExit, match="not a Source, Asset, or Destination subclass"):
+        with pytest.raises(SystemExit, match="is not a Source or Asset class"):
             _cmd_run(_args(target=f"{argparse.__name__}.Namespace".split(",")))
 
 
@@ -370,20 +370,13 @@ class TestPrintPlan:
     def test_renders_runner_partition_and_generations(self, capsys: pytest.CaptureFixture[str]) -> None:
         from interloper.cli.commands.run import _print_plan
 
-        _print_plan(il.DAG(FakeRunSource()), None, "AsyncRunner", "")
+        _print_plan(il.DAG(FakeRunSource()), None, "AsyncRunner")
 
         out = capsys.readouterr().out
         assert "Runner:    AsyncRunner" in out
         assert "Window:    (none)" in out
         assert "1. fake_run_source.one" in out
         assert "Run:" not in out
-
-    def test_a_named_run_is_labelled(self, capsys: pytest.CaptureFixture[str]) -> None:
-        from interloper.cli.commands.run import _print_plan
-
-        _print_plan(il.DAG(FakeRunSource()), None, "AsyncRunner", "nightly")
-
-        assert "Run:       nightly" in capsys.readouterr().out
 
 
 def test_an_unexpected_spec_failure_is_reported_cleanly(
@@ -401,3 +394,14 @@ def test_an_unexpected_spec_failure_is_reported_cleanly(
 
     with pytest.raises(SystemExit, match="failed to reconstruct spec"):
         _cmd_run(_args(file=str(spec)))
+
+
+def test_file_and_format_are_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
+    """``-f`` with ``--format`` is refused by the parser instead of ignoring ``--format``."""
+    parser = argparse.ArgumentParser()
+    register(parser.add_subparsers(dest="command"))
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["run", "-f", "spec.yaml", "--format", "inline"])
+
+    assert "not allowed with argument" in capsys.readouterr().err

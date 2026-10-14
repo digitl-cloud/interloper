@@ -11,8 +11,7 @@ from zoneinfo import ZoneInfo
 import httpx2
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import RedirectResponse
-from interloper.errors import NotFoundError
-from interloper_db import Organisation, Profile, Store
+from interloper_db import NotFoundError, Organisation, Profile, Store
 from interloper_db.models import AuthSession
 from pydantic import BaseModel, Field
 

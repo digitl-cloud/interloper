@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -22,16 +23,6 @@ def _no_active_settings() -> Iterator[None]:
     """
     yield
     AppSettings.clear_active()
-
-
-class TestHasPackage:
-    """Importability probe backing the ``requires`` declarations."""
-
-    def test_importable_package(self) -> None:
-        assert cli_main._has_package("interloper") is True
-
-    def test_missing_package(self) -> None:
-        assert cli_main._has_package("interloper_not_a_package") is False
 
 
 class TestLoadDotenv:
@@ -53,50 +44,6 @@ class TestLoadDotenv:
         # An install without python-dotenv must still start the CLI.
         monkeypatch.setitem(sys.modules, "dotenv", None)
         cli_main._load_dotenv()
-
-
-class TestEnforceRequires:
-    """Command requirement validation."""
-
-    def test_satisfied_requirements_pass(self) -> None:
-        args = argparse.Namespace(command="run", requires=["interloper"])
-        cli_main._enforce_requires(args)
-
-    def test_missing_requirement_exits_naming_the_package(self) -> None:
-        args = argparse.Namespace(command="db", requires=["interloper_missing"])
-        with pytest.raises(SystemExit, match=r"command 'db' requires package\(s\): interloper_missing"):
-            cli_main._enforce_requires(args)
-
-    def test_requires_any_passes_when_one_is_present(self) -> None:
-        args = argparse.Namespace(command="app", requires_any=[["interloper_missing", "interloper"]])
-        cli_main._enforce_requires(args)
-
-    def test_requires_any_exits_when_the_whole_group_is_missing(self) -> None:
-        args = argparse.Namespace(command="app", requires_any=[["nope_a", "nope_b"]])
-        with pytest.raises(SystemExit, match=r"requires at least one of: nope_a, nope_b"):
-            cli_main._enforce_requires(args)
-
-    def test_requires_when_only_applies_to_enabled_flags(self) -> None:
-        args = argparse.Namespace(command="app", api=False, requires_when={"api": ["interloper_missing"]})
-        cli_main._enforce_requires(args)
-
-    def test_requires_when_enforced_for_an_enabled_flag(self) -> None:
-        args = argparse.Namespace(command="app", api=True, requires_when={"api": ["interloper_missing"]})
-        with pytest.raises(SystemExit, match="interloper_missing"):
-            cli_main._enforce_requires(args)
-
-    def test_missing_packages_are_deduplicated_and_sorted(self) -> None:
-        args = argparse.Namespace(
-            command="app",
-            requires=["zzz_missing", "aaa_missing"],
-            api=True,
-            requires_when={"api": ["zzz_missing"]},
-        )
-        with pytest.raises(SystemExit, match=r"requires package\(s\): aaa_missing, zzz_missing$"):
-            cli_main._enforce_requires(args)
-
-    def test_no_declarations_is_a_no_op(self) -> None:
-        cli_main._enforce_requires(argparse.Namespace(command="run"))
 
 
 class TestMain:
@@ -138,22 +85,22 @@ class TestMain:
 
     def test_dispatches_to_the_command_handler(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: list[argparse.Namespace] = []
-        monkeypatch.setattr(sys, "argv", ["interloper", "launch", "0" * 8 + "-0000-0000-0000-" + "0" * 12])
+        monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
         monkeypatch.setattr(
-            "interloper.cli.commands.launch._cmd_launch",
+            "interloper.cli.commands.run._cmd_run",
             seen.append,
         )
 
         cli_main.main()
 
         assert len(seen) == 1
-        assert str(seen[0].run_id) == "00000000-0000-0000-0000-000000000000"
+        assert seen[0].target == ["pkg.Asset"]
 
     def test_activates_settings_for_the_duration_of_the_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
         active: list[AppSettings | None] = []
-        monkeypatch.setattr(sys, "argv", ["interloper", "launch", "11111111-1111-1111-1111-111111111111"])
+        monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
         monkeypatch.setattr(
-            "interloper.cli.commands.launch._cmd_launch",
+            "interloper.cli.commands.run._cmd_run",
             lambda args: active.append(AppSettings._active),
         )
 
@@ -163,51 +110,12 @@ class TestMain:
         # The activation is scoped to the command: nothing leaks to the process.
         assert AppSettings._active is None
 
-    def test_app_command_folds_cli_overrides_into_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        ports: list[int] = []
-        monkeypatch.setattr(sys, "argv", ["interloper", "app", "--port", "4321", "--no-api"])
-        monkeypatch.setattr(
-            "interloper.cli.commands.app._cmd_app",
-            lambda args: ports.append(AppSettings.get().server.port),
-        )
-
-        cli_main.main()
-
-        assert ports == [4321]
-
-    def test_group_command_without_a_subcommand_prints_its_help(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
-    ) -> None:
-        monkeypatch.setattr(sys, "argv", ["interloper", "db"])
-
-        cli_main.main()
-
-        out = capsys.readouterr().out
-        assert "usage: interloper db" in out
-        assert "upgrade" in out
-
-    def test_unsatisfied_requirement_aborts_before_running(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        called: list[bool] = []
-        monkeypatch.setattr(sys, "argv", ["interloper", "launch", "22222222-2222-2222-2222-222222222222"])
-        monkeypatch.setattr(
-            "interloper.cli.commands.launch._cmd_launch",
-            lambda args: called.append(True),
-        )
-        monkeypatch.setattr(cli_main, "_has_package", lambda name: False)
-
-        with pytest.raises(SystemExit, match="requires"):
-            cli_main.main()
-
-        assert called == []
-
     def test_telemetry_is_shut_down_even_when_the_handler_raises(
         self, monkeypatch: pytest.MonkeyPatch, isolated_process_state: dict[str, list[bool]]
     ) -> None:
-        monkeypatch.setattr(sys, "argv", ["interloper", "launch", "33333333-3333-3333-3333-333333333333"])
+        monkeypatch.setattr(sys, "argv", ["interloper", "run", "pkg.Asset"])
         monkeypatch.setattr(
-            "interloper.cli.commands.launch._cmd_launch",
+            "interloper.cli.commands.run._cmd_run",
             lambda args: (_ for _ in ()).throw(RuntimeError("boom")),
         )
 
@@ -222,11 +130,28 @@ class TestMain:
 class TestBuildParser:
     """The parser the CLI runs on, and the documentation renders from."""
 
-    def test_registers_every_command(self) -> None:
+    def test_the_parser_holds_every_installed_command_sorted(self) -> None:
         parser = cli_main.build_parser()
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
 
-        assert list(subparsers.choices) == ["run", "db", "app", "launch"]
+        assert list(subparsers.choices) == sorted(subparsers.choices)
+        assert {"app", "db", "launch", "run"} <= set(subparsers.choices)
+
+    def test_a_broken_command_entry_point_fails_loudly(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def broken(_subparsers: Any) -> None:
+            raise ImportError("interloper_broken needs a dependency that is not installed")
+
+        monkeypatch.setattr(cli_main.COMMANDS, "items", lambda: (("broken", broken),))
+
+        with pytest.raises(ImportError, match="interloper_broken"):
+            cli_main.build_parser()
+
+    def test_main_does_not_know_any_command(self) -> None:
+        import inspect
+
+        source = inspect.getsource(cli_main)
+        assert "requires" not in source
+        assert '"app"' not in source
 
     def test_every_command_and_flag_carries_user_facing_copy(self) -> None:
         parser = cli_main.build_parser()

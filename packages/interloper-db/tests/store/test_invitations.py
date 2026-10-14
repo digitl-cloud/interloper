@@ -6,10 +6,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session as SQLSession
 
+from interloper_db import NotFoundError
 from interloper_db.models import Invitation
 from interloper_db.store import PageQuery, Store
 

@@ -6,10 +6,11 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from interloper_db import NotFoundError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import RelationQuery, Store
 

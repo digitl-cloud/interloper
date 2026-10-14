@@ -18,6 +18,10 @@ dependencies = [
 docker = ["interloper-docker"]
 k8s = ["interloper-k8s"]
 
+[project.entry-points."interloper.cli"]
+launch = "interloper_scheduler.cli:register_launch"
+scheduler = "interloper_scheduler.cli:register_scheduler"
+
 [project.entry-points."interloper.launchers"]
 in_process = "interloper_scheduler.launcher:InProcessLauncher"
 

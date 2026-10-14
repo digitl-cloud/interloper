@@ -231,8 +231,9 @@ One version for all packages, released together to PyPI.
 
 ## Platform
 
-`interloper app` runs the API, cron controller, queue worker and reaper against Postgres,
-configured by `interloper.yaml` and `INTERLOPER_*` variables. Images are on
+`interloper api` serves the API and `interloper scheduler` runs the cron controller, queue worker
+and reaper against Postgres, configured by `interloper.yaml` and `INTERLOPER_*` variables;
+`interloper app` runs them all in one process, with the web UI. Images are on
 [GHCR](https://github.com/orgs/digitl-cloud/packages?repo_name=interloper) as
 `interloper-<role>:<version>` for `api`, `scheduler`, `core`, `mcp` and `frontend`, each
 (bar the frontend) in two variants: the bare tag is **loaded**, carrying the role's packages

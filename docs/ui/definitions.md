@@ -153,7 +153,7 @@ and `last_renewal_error`, hooks show `last_fired_at` and `last_error`. Propertie
 Persisted components reference catalog keys. When a key no longer resolves, because the class
 was renamed or removed (`missing`) or is not enabled in this deployment's catalog (`disabled`),
 the component is shown with a drift status instead of failing to load, and the Sources page
-offers a confirmed cleanup. See `ComponentDriftError` in [Errors](../reference/errors.md).
+offers a confirmed cleanup. See `interloper_db.ComponentDriftError` in [Errors](../reference/errors.md).
 
 ## What a package author gets
 

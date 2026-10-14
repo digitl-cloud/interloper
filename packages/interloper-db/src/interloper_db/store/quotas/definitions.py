@@ -20,11 +20,11 @@ from datetime import datetime
 from typing import ClassVar
 from uuid import UUID
 
-from interloper.errors import QuotaExceededError
 from interloper.registry import Registry
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 
+from interloper_db.errors import QuotaExceededError
 from interloper_db.models import Component
 from interloper_db.store.quotas.metering import METRIC_SUCCESSFUL_RUNS, METRICS, UsageLedger
 

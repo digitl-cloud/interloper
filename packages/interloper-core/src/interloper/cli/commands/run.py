@@ -16,8 +16,7 @@ Input formats
   This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
   child container.
 * ``--format paths <path>...`` — one or more dotted import paths that
-  resolve to Source, Asset, or Destination classes.  The resolved
-  classes are instantiated and passed to ``DAG(*items)``.
+  resolve to Source or Asset classes, built into a DAG by `DAG.from_paths`.
 
 The runner is the one configured in ``AppSettings.runner`` (top-level
 ``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
@@ -66,13 +65,14 @@ def register(
         description="Execute a DAG directly with the configured runner, without persistence. "
         "The exit status is non-zero on invalid input, an import failure, or a run that did not complete.",
     )
-    run_parser.add_argument(
+    source = run_parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--format",
         choices=["inline", "paths"],
         default="paths",
         help="Input format: 'inline' for a DAGSpec JSON string, 'paths' for dotted import paths",
     )
-    run_parser.add_argument(
+    source.add_argument(
         "-f",
         "--file",
         default=None,
@@ -145,7 +145,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
     import os
 
     from interloper.cli.console import configure_console_logging
-    from interloper.dag import DAGSpec
+    from interloper.dag import DAG, DAGSpec
+    from interloper.errors import DAGError, PartitionError, SpecError
     from interloper.events import EventBus, StderrEventHandler
     from interloper.runner import ExecutionStatus, Runner
     from interloper.settings import AppSettings
@@ -172,40 +173,38 @@ def _cmd_run(args: argparse.Namespace) -> None:
         if args.file is not None:
             if args.target:
                 raise SystemExit("Error: --file cannot be combined with positional targets.")
-            from interloper.dag.base import DAG as _DAG
-            from interloper.errors import DAGError, SpecError
-
             try:
-                dag = _DAG.from_spec_file(args.file)
-            except (SpecError, DAGError) as exc:
-                raise SystemExit(f"Error: {exc}") from exc
-            except Exception as exc:
-                raise SystemExit(f"Error: failed to reconstruct spec '{args.file}': {exc}") from exc
+                dag = DAG.from_spec_file(args.file)
+            except (SpecError, DAGError) as error:
+                raise SystemExit(f"Error: {error}") from error
+            except Exception as error:
+                raise SystemExit(f"Error: failed to reconstruct spec '{args.file}': {error}") from error
         elif args.format == "inline":
             if len(args.target) != 1:
                 raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
-            from interloper.dag.base import DAG
-
             try:
                 spec = DAGSpec.model_validate_json(args.target[0])
-            except Exception as exc:
-                raise SystemExit(f"Error: failed to parse inline DAGSpec: {exc}") from exc
+            except Exception as error:
+                raise SystemExit(f"Error: failed to parse inline DAGSpec: {error}") from error
             dag = DAG.from_spec(spec)
         else:
             if not args.target:
-                raise SystemExit("Error: provide one or more import paths, or a manifest via --file.")
-            dag = _dag_from_paths(args.target)
+                raise SystemExit("Error: provide one or more import paths, or a spec via --file.")
+            try:
+                dag = DAG.from_paths(args.target)
+            except DAGError as error:
+                raise SystemExit(f"Error: {error}") from error
 
         window = _resolve_window(args, dag)
         runner = Runner.from_settings(settings.runner)
 
         if args.dry_run:
-            _print_plan(dag, window, type(runner).__name__, "")
+            _print_plan(dag, window, type(runner).__name__)
             return
 
         # -- Console event output (interactive mode only) ----------------------
         # Events become records on the ``interloper.run`` logger, so the
-        # basicConfig above governs their visibility and format.  In
+        # console logging set up above governs their visibility and format.  In
         # container mode the StderrEventHandler already owns stderr with
         # ``@EVENT:`` lines for the host to re-parse; printing on the host
         # side covers child events too, since cross-process runners re-emit
@@ -228,13 +227,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
             type(runner).__name__,
         )
 
-        from interloper.errors import PartitionError
-
         runner.on_event = on_event
         try:
             result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
-        except PartitionError as exc:
-            raise SystemExit(f"Error: {exc}") from exc
+        except PartitionError as error:
+            raise SystemExit(f"Error: {error}") from error
 
         logger.info("Run completed: %s", result.status.name)
 
@@ -250,73 +247,21 @@ def _cmd_run(args: argparse.Namespace) -> None:
 # -- Internals -----------------------------------------------------------------
 
 
-def _dag_from_paths(paths: list[str]) -> DAG:
-    """Build a DAG from dotted import paths.
-
-    Each path is resolved via ``import_from_path`` and classified as a
-    Source, Asset, or Destination.  The resolved items are passed to
-    ``DAG(*items)``.
-
-    Args:
-        paths: Dotted import paths, each resolving to a Source, Asset, or
-            Destination class.
-
-    Returns:
-        A freshly-built DAG.
-
-    Raises:
-        SystemExit: If any path fails to import or resolves to an
-            unsupported type.
-    """
-    from interloper.asset.base import Asset
-    from interloper.dag.base import DAG
-    from interloper.destination.base import Destination
-    from interloper.source.base import Source
-    from interloper.utils.imports import import_from_path
-
-    items: list[object] = []
-    for path in paths:
-        try:
-            imported = import_from_path(path)
-        except (ImportError, AttributeError) as exc:
-            raise SystemExit(f"Error: failed to import '{path}': {exc}") from exc
-
-        if not isinstance(imported, type):
-            raise SystemExit(f"Error: '{path}' did not resolve to a class")
-        if not issubclass(imported, (Source, Asset, Destination)):
-            raise SystemExit(f"Error: '{path}' is not a Source, Asset, or Destination subclass")
-
-        items.append(imported())
-
-    return DAG(*items)  # ty: ignore[invalid-argument-type]
-
-
-def _print_plan(
-    dag: DAG,
-    window: PartitionWindow | None,
-    runner_name: str,
-    name: str,
-) -> None:
+def _print_plan(dag: DAG, window: PartitionWindow | None, runner_name: str) -> None:
     """Print the resolved run plan to stdout without executing it.
 
     Args:
         dag: The resolved DAG, printed as its topological generations.
         window: The window to run for; ``None`` prints as ``(none)``.
         runner_name: Class name of the configured runner.
-        name: Run name; omitted from the output when empty.
     """
     enabled = [operation for operation in dag.operations if operation.enabled]
-    lines: list[str] = []
-    if name:
-        lines.append(f"Run:       {name}")
-    lines.extend(
-        [
-            f"Runner:    {runner_name}",
-            f"Window:    {window if window is not None else '(none)'}",
-            f"Operations: {len(enabled)} enabled / {len(dag.operations)} total",
-            "",
-        ]
-    )
+    lines = [
+        f"Runner:    {runner_name}",
+        f"Window:    {window if window is not None else '(none)'}",
+        f"Operations: {len(enabled)} enabled / {len(dag.operations)} total",
+        "",
+    ]
     for level, generation in enumerate(dag.topological_generations(), start=1):
         lines.append(f"  {level}. {', '.join(operation.qualified_key for operation in generation)}")
     print("\n".join(lines))
@@ -362,5 +307,5 @@ def _resolve_window(args: argparse.Namespace, dag: DAG) -> PartitionWindow | Non
     start_key, end_key = (args.date, args.date) if has_date else (args.start_date, args.end_date)
     try:
         return partitioning.window(start_key, end_key)
-    except PartitionError as exc:
-        raise SystemExit(f"Error: {exc}") from exc
+    except PartitionError as error:
+        raise SystemExit(f"Error: {error}") from error

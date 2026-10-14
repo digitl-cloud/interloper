@@ -5,8 +5,9 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 
+from interloper_db import NotFoundError
 from interloper_db.store import PageQuery, Store
 
 

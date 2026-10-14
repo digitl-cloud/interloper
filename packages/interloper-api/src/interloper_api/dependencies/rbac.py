@@ -7,8 +7,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from interloper.errors import NotFoundError
-from interloper_db import Profile, Role, Store
+from interloper_db import NotFoundError, Profile, Role, Store
 
 from interloper_api.dependencies.auth import get_current_user, get_org_id
 from interloper_api.dependencies.state import get_store

@@ -13,8 +13,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from interloper.errors import NotFoundError
-from interloper_db import Page, PageQuery, Role, TokenQuery
+from interloper_db import NotFoundError, Page, PageQuery, Role, TokenQuery
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (

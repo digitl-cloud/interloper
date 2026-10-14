@@ -13,9 +13,10 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from interloper.errors import CatalogKeyError, ComponentDriftError, ConfigError, HydrationError
+from interloper.errors import CatalogKeyError, ConfigError
 from interloper.resource import is_fetch_field_provider
 from interloper.utils import invoke
+from interloper_db import ComponentDriftError, HydrationError
 
 from interloper_toolkit.authz import requires_role
 from interloper_toolkit.context import ToolkitContext

@@ -134,3 +134,18 @@ def test_telemetry_metric_export_interval_env_override(monkeypatch: pytest.Monke
     settings = AppSettings()
 
     assert settings.otel.metric_export_interval == 5
+
+
+def test_dsn_escapes_user_and_password():
+    """Reserved characters in the credentials do not break the connection string."""
+    settings = PostgresSettings(user="me@corp", password="p@ss:w/rd%", host="db", port=5432, database="interloper")
+
+    assert settings.dsn == "postgresql://me%40corp:p%40ss%3Aw%2Frd%25@db:5432/interloper"
+
+
+def test_location_names_the_target_without_credentials():
+    """``location`` is what a message may show: host, port and database."""
+    settings = PostgresSettings(user="me", password="secret", host="db", port=5433, database="warehouse")
+
+    assert settings.location == "db:5433/warehouse"
+    assert "secret" not in settings.location

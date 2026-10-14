@@ -1131,3 +1131,20 @@ def test_the_incompatible_partitioning_message_names_both_partitionings():
 
     with pytest.raises(DAGError, match=r"'daily' \(partitioned by day\).*'monthly' \(partitioned by month\)"):
         il.DAG(upstream, monthly(id="monthly", destinations=[il.MemoryDestination()], daily=upstream))
+
+
+class TestFromPaths:
+    """A DAG built from dotted import paths."""
+
+    def test_builds_from_workload_classes(self):
+        dag = DAG.from_paths([f"{__name__}.FakeAsset"])
+
+        assert [operation.key for operation in dag.operations] == ["fake_asset"]
+
+    def test_an_unimportable_path_is_a_dag_error(self):
+        with pytest.raises(DAGError, match=r"failed to import 'nowhere\.Missing'"):
+            DAG.from_paths(["nowhere.Missing"])
+
+    def test_a_non_workload_is_a_dag_error(self):
+        with pytest.raises(DAGError, match="not a Source or Asset"):
+            DAG.from_paths(["interloper.MemoryDestination"])

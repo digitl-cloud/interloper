@@ -35,10 +35,10 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from interloper.settings import AppSettings
 from interloper.telemetry.tracer import meter
-from interloper_db import BackfillStatus, EventQuery, RelationQuery, RunStatus, Store
+from interloper_db import BackfillStatus, EventQuery, NotFoundError, RelationQuery, RunStatus, Store
 from interloper_db.models import Backfill, Component, Run
 
 from interloper_scheduler.controller import Controller

@@ -32,12 +32,13 @@ from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
 import interloper as il
-from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, and_, exists, func, or_, update
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
 
+from interloper_db.errors import ConflictError, NotFoundError
 from interloper_db.models import OPEN_RUN_STATUSES, TERMINAL_RUN_STATUSES, Component, Event, Overdue, Run, RunStatus
 from interloper_db.session import commit, database_now, save, session_scope
 from interloper_db.store.page import Page, PageQuery

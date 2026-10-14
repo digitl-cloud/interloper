@@ -12,10 +12,11 @@ from uuid import uuid4
 
 import pydantic
 import pytest
-from interloper.errors import ConfigError, HydrationError
+from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session, select
 
+from interloper_db import HydrationError
 from interloper_db.models import Component, ComponentRelation
 
 _ORG = uuid4()

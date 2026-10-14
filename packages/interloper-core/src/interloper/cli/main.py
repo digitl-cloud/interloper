@@ -1,29 +1,15 @@
-"""Interloper CLI entry point."""
+"""Interloper CLI entry point: every command is contributed through the ``interloper.cli`` group."""
 
 from __future__ import annotations
 
 import argparse
-import importlib
 import sys
+from collections.abc import Callable
 
-from interloper.cli.runtime import apply_cli_overrides
+from interloper.registry import Registry
 from interloper.settings import AppSettings
 
-
-def _has_package(name: str) -> bool:
-    """Check if a package is importable.
-
-    Args:
-        name: Importable module/package name (e.g. ``interloper_db``).
-
-    Returns:
-        True if the package can be imported.
-    """
-    try:
-        importlib.import_module(name)
-        return True
-    except ImportError:
-        return False
+COMMANDS: Registry[Callable[[argparse._SubParsersAction], None]] = Registry("interloper.cli")
 
 
 def _load_dotenv() -> None:
@@ -42,43 +28,8 @@ def _load_dotenv() -> None:
         pass
 
 
-def _enforce_requires(args: argparse.Namespace) -> None:
-    """Validate command requirements declared by the parser.
-
-    Args:
-        args: Parsed CLI arguments, carrying the ``requires``, ``requires_any``,
-            and ``requires_when`` defaults set by the selected command.
-
-    Raises:
-        SystemExit: If required packages are not available.
-    """
-    missing: list[str] = []
-
-    required_packages: list[str] = list(getattr(args, "requires", []))
-    for package in required_packages:
-        if not _has_package(package):
-            missing.append(package)
-
-    required_any_groups: list[list[str]] = list(getattr(args, "requires_any", []))
-    for group in required_any_groups:
-        if not any(_has_package(package) for package in group):
-            options = ", ".join(group)
-            raise SystemExit(f"Error: command '{args.command}' requires at least one of: {options}")
-
-    required_when: dict[str, list[str]] = dict(getattr(args, "requires_when", {}))
-    for flag, packages in required_when.items():
-        if getattr(args, flag, False) is True:
-            for package in packages:
-                if not _has_package(package):
-                    missing.append(package)
-
-    if missing:
-        formatted = ", ".join(sorted(set(missing)))
-        raise SystemExit(f"Error: command '{args.command}' requires package(s): {formatted}")
-
-
 def build_parser() -> argparse.ArgumentParser:
-    """Assemble the ``interloper`` parser with every command registered.
+    """Assemble the ``interloper`` parser with every installed command, sorted by name.
 
     The documentation site renders the CLI reference from this parser, so
     every flag's ``help`` and every command's ``description`` is user-facing
@@ -89,21 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(prog="interloper", description="Interloper CLI")
     subparsers = parser.add_subparsers(dest="command")
-
-    from interloper.cli.commands.app import register as register_app
-    from interloper.cli.commands.db import register as register_db
-    from interloper.cli.commands.launch import register as register_launch
-    from interloper.cli.commands.run import register as register_run
-
-    register_run(subparsers)
-    register_db(subparsers)
-    register_app(subparsers)
-    register_launch(subparsers)
+    for _name, register in sorted(COMMANDS.items()):
+        register(subparsers)
     return parser
 
 
 def main() -> None:
-    """CLI entry point for interloper."""
+    """Run one command: load ``.env``, activate settings and telemetry, call the handler, shut down."""
     _load_dotenv()
 
     parser = build_parser()
@@ -113,22 +56,13 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
 
-    _enforce_requires(args)
-
-    settings = AppSettings.get()
-    if args.command == "app":
-        settings = apply_cli_overrides(args, settings)
-    AppSettings.activate(settings)
+    AppSettings.activate(AppSettings.get())
 
     from interloper.telemetry import init_telemetry, shutdown_telemetry
 
-    init_telemetry(settings.otel)
-
+    init_telemetry(AppSettings.get().otel)
     try:
-        if hasattr(args, "handler"):
-            args.handler(args)
-        else:
-            parser.parse_args([args.command, "--help"])
+        args.handler(args)
     finally:
         shutdown_telemetry()
         AppSettings.clear_active()

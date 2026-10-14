@@ -16,13 +16,14 @@ from typing import Any
 from uuid import UUID
 
 from interloper.catalog import Catalog
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from interloper.job import CronJob
 from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, String, case, cast
 from sqlalchemy import select as sa_select
 from sqlmodel import col, func, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
     Component,

@@ -108,11 +108,15 @@ printed; see [Events](events.md#events-across-processes).
 
 ## Other commands
 
-| Command | Requires | Purpose |
-|---------|----------|---------|
-| `interloper db init\|reset\|upgrade\|downgrade` | `interloper-db` | Database provisioning and migrations. |
-| `interloper app` | `interloper-db`, plus `interloper-api` and `interloper-scheduler` for the corresponding services | Run the API, cron controller, queue worker and reaper. |
-| `interloper launch <run_id>` | `interloper-db`, `interloper-scheduler` | Execute one persisted run. |
+Each platform package contributes its own commands, so a command exists exactly when its
+package is installed:
 
-A command whose packages are missing exits with a message naming them. Every flag is listed in
-[CLI](../reference/cli.md).
+| Command | Package | Purpose |
+|---------|---------|---------|
+| `interloper api` | `interloper-api` | Serve the HTTP API: the api role's command. |
+| `interloper scheduler` | `interloper-scheduler` | Run cron (with hooks and credential renewal), the queue worker and the reaper: the scheduler role's command. |
+| `interloper launch <run_id>` | `interloper-scheduler` | Execute one persisted run. |
+| `interloper db init\|reset\|upgrade\|downgrade` | `interloper-db` | Database provisioning and migrations. |
+| `interloper app` | `interloper-app` | The API, the scheduler's services and the frontend in one process, for local development and single-process deployments (`--dev` runs the Nuxt dev server). |
+
+Every flag is listed in [CLI](../reference/cli.md).

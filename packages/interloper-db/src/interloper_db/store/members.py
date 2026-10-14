@@ -10,11 +10,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import Role, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery

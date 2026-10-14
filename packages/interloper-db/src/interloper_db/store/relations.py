@@ -25,10 +25,11 @@ from uuid import UUID
 
 import interloper as il
 from interloper.catalog import Catalog
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, session_scope
 from interloper_db.store.page import Page, PageQuery

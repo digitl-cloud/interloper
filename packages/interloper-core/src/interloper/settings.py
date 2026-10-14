@@ -14,6 +14,7 @@ the documentation site renders, so it is user-facing copy.
 from __future__ import annotations
 
 from typing import Annotated, Any, ClassVar, Literal
+from urllib.parse import quote
 
 from pydantic import Field, field_validator
 from pydantic_settings import (
@@ -120,8 +121,22 @@ class PostgresSettings(BaseSettings):
 
     @property
     def dsn(self) -> str:
-        """Assemble a PostgreSQL connection string from individual fields."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+        """The PostgreSQL connection string, user and password percent-encoded.
+
+        Returns:
+            ``postgresql://user:password@host:port/database``.
+        """
+        credentials = f"{quote(self.user, safe='')}:{quote(self.password, safe='')}"
+        return f"postgresql://{credentials}@{self.host}:{self.port}/{self.database}"
+
+    @property
+    def location(self) -> str:
+        """The database this connects to, safe to print: no credentials.
+
+        Returns:
+            ``host:port/database``.
+        """
+        return f"{self.host}:{self.port}/{self.database}"
 
 
 class AuthSettings(BaseSettings):

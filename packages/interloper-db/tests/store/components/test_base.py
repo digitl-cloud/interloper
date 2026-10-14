@@ -9,20 +9,14 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from cryptography.fernet import InvalidToken
-from interloper.errors import (
-    CatalogKeyError,
-    ComponentDriftError,
-    ConfigError,
-    HydrationError,
-    InUseError,
-    NotFoundError,
-)
+from interloper.errors import CatalogKeyError, ConfigError
 from interloper.partitioning import TimeGranularity
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, event
 from sqlmodel import Session, select
 
+from interloper_db import ComponentDriftError, HydrationError, InUseError, NotFoundError
 from interloper_db.models import Component
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import ComponentStatus
@@ -837,7 +831,7 @@ class TestQuotaGates:
         return Store(catalog=il.Catalog.from_assets([DemoSource]), quota_defaults=SimpleNamespace(**limits))
 
     def test_source_limit_blocks_creation(self, component_db: Engine):
-        from interloper.errors import QuotaExceededError
+        from interloper_db import QuotaExceededError
 
         store = self._store(max_sources=1)
         store.components.create(_ORG, kind="source", key="demo_source", children=["a"])
@@ -847,8 +841,7 @@ class TestQuotaGates:
         assert (excinfo.value.limit, excinfo.value.used) == (1, 1)
 
     def test_source_limit_org_override_wins(self, component_db: Engine):
-        from interloper.errors import QuotaExceededError
-
+        from interloper_db import QuotaExceededError
         from interloper_db.models import Quota
 
         store = self._store(max_sources=1)
@@ -861,7 +854,7 @@ class TestQuotaGates:
             store.components.create(_ORG, kind="source", key="demo_source", children=["a"], config={"dataset": "3"})
 
     def test_asset_limit_blocks_large_child_set(self, component_db: Engine):
-        from interloper.errors import QuotaExceededError
+        from interloper_db import QuotaExceededError
 
         store = self._store(max_assets_per_source=2)
         source = store.components.create(_ORG, kind="source", key="demo_source", children=["a", "b"])

@@ -13,12 +13,13 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, NotFoundError
+from interloper.errors import ConfigError
 from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col
 
+from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
 from interloper_db.models import (
     AuthSession,

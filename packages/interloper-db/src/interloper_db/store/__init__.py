@@ -40,7 +40,7 @@ the scope it reads in (``org_id``, a parent id) and a query object extending
 :class:`PageQuery`, and returns a :class:`Page`.
 
 Every facet keeps the same error contract. Anything addressed by primary key
-— ``get``, and every mutation — raises :class:`~interloper.errors.NotFoundError`
+— ``get``, and every mutation — raises :class:`~interloper_db.errors.NotFoundError`
 when the row is absent, so the caller writes the happy path and the API turns
 one exception into one 404. Returning ``None`` is reserved for lookups where
 absence is an ordinary answer rather than a failure: resolving a session token,

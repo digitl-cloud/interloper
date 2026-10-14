@@ -8,11 +8,11 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import NotFoundError
 from interloper.runner import RunState
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
+from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
 from interloper_db.models import Event, Run
 from interloper_db.store import EventQuery, Page, Store

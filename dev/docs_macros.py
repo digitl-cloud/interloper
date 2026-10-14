@@ -116,7 +116,7 @@ def cli_reference() -> str:
 
     Returns:
         Markdown: one section per command (and per nested subcommand) with
-        its description, requirements and argument table.
+        its description and argument table.
     """
     from interloper.cli.main import build_parser
 
@@ -126,7 +126,7 @@ def cli_reference() -> str:
 
 
 def _command(
-    parser: argparse.ArgumentParser, name: str, level: int, help: str | None, inherited: list[str] | None = None
+    parser: argparse.ArgumentParser, name: str, level: int, help: str | None
 ) -> str:
     """Render one command.
 
@@ -136,29 +136,17 @@ def _command(
         level: The heading level.
         help: The one-line help the parent lists the command with, used when
             the command declares no description of its own.
-        inherited: The packages the parent command already requires, which
-            the subcommand does not repeat.
 
     Returns:
         Markdown for the command and, nested one level deeper, its subcommands.
     """
     lines = [f"{'#' * level} `{name}`", "", parser.description or help or "", ""]
-    requires = [package for package in parser._defaults.get("requires", []) if package not in (inherited or [])]
-    required_when = parser._defaults.get("requires_when", {})
-    if requires or required_when:
-        parts = [f"`{package}`" for package in requires]
-        parts += [
-            f"`{package}` with `--{flag.replace('_', '-')}`"
-            for flag, packages in required_when.items()
-            for package in packages
-        ]
-        lines += [f"Requires {', '.join(parts)}.", ""]
     rows = [_argument_row(action) for action in parser._actions if _is_documented(action)]
     if rows:
         lines += ["| Argument | Meaning |", "|----------|---------|", *rows, ""]
     for sub_name, sub_parser, sub_help in _subcommands(parser):
         lines.append(
-            _command(sub_parser, f"{name} {sub_name}", level + 1, sub_help, parser._defaults.get("requires", []))
+            _command(sub_parser, f"{name} {sub_name}", level + 1, sub_help)
         )
     return "\n".join(lines)
 

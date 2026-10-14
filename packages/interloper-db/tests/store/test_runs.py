@@ -14,12 +14,13 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.errors import ConfigError
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
+from interloper_db import ConflictError, NotFoundError
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
 from interloper_db.store import EventQuery, PageQuery, RunQuery, Store

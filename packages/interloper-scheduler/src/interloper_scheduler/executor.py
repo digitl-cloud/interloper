@@ -20,13 +20,13 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import ConflictError, NotFoundError, format_exception
+from interloper.errors import format_exception
 from interloper.runner import ExecutionStatus, Runner
 from interloper.settings import AppSettings, ReaperSettings
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, inject_metadata
 from interloper.telemetry.tracer import tracer
-from interloper_db import ExecutionQuery, Store
+from interloper_db import ConflictError, ExecutionQuery, NotFoundError, Store
 from interloper_db.models import Run
 from opentelemetry.context import Context
 from opentelemetry.trace import Link, get_current_span

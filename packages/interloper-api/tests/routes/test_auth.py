@@ -18,7 +18,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import NotFoundError
+from interloper_db import NotFoundError
 
 from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_auth_config, get_current_user, get_session_context, get_store

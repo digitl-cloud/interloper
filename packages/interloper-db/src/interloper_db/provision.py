@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 import interloper_db.models as _models  # noqa: F401 — ensure all models are registered
-from interloper_db.engine import get_engine
+from interloper_db.engine import get_engine, init_engine
 
 
 def upgrade(engine: Engine | None = None, revision: str = "head") -> None:
@@ -110,6 +110,28 @@ def ensure_database(dsn: str) -> None:
         if not exists:
             connection.execute(text(f'CREATE DATABASE "{db_name}"'))
     engine.dispose()
+
+
+def bootstrap(dsn: str, *, statement_timeout: float | None = None, create_tables: bool = True) -> Engine:
+    """Bring a database up: ensure it exists, bind the process engine, create the tables.
+
+    ``create_all`` is idempotent and serialized by an advisory lock, so
+    concurrent bootstraps are safe; production deploys run ``interloper db
+    init`` once and start the serving commands with ``create_tables=False``.
+
+    Args:
+        dsn: The PostgreSQL connection string.
+        statement_timeout: Seconds after which the server cancels a statement; ``None`` keeps the server's setting.
+        create_tables: Whether to create the tables and run the migrations.
+
+    Returns:
+        The bound engine.
+    """
+    ensure_database(dsn)
+    engine = init_engine(dsn, statement_timeout=statement_timeout)
+    if create_tables:
+        create_all(engine)
+    return engine
 
 
 def drop_database(dsn: str) -> None:

@@ -12,11 +12,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
+from interloper_db.errors import NotFoundError
 from interloper_db.models import PersonalAccessToken, Profile
 from interloper_db.session import save, session_scope
 from interloper_db.store.members import MemberStore

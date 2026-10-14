@@ -9,10 +9,11 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from interloper.errors import ConfigError, QuotaExceededError
+from interloper.errors import ConfigError
 from interloper.utils import month_start
 from sqlmodel import Session
 
+from interloper_db import QuotaExceededError
 from interloper_db.models import Component, Quota, Run
 from interloper_db.store import Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger

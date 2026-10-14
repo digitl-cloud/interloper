@@ -30,7 +30,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.catalog import Catalog
-from interloper.errors import CatalogKeyError, ComponentDriftError, HydrationError, NotFoundError, format_exception
+from interloper.errors import CatalogKeyError, format_exception
 from interloper.serializable import Spec
 from interloper.source import SourceDefinition
 from interloper.telemetry import attributes
@@ -38,6 +38,7 @@ from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
 from sqlmodel import select
 
+from interloper_db.errors import ComponentDriftError, HydrationError, NotFoundError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import session_scope
 

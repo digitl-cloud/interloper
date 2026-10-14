@@ -1,6 +1,14 @@
 """Interloper database persistence: SQLModel schema, engine, provisioning, and store."""
 
 from interloper_db.engine import get_engine, init_engine
+from interloper_db.errors import (
+    ComponentDriftError,
+    ConflictError,
+    HydrationError,
+    InUseError,
+    NotFoundError,
+    QuotaExceededError,
+)
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
     OPEN_RUN_STATUSES,
@@ -24,7 +32,7 @@ from interloper_db.models import (
     Usage,
     UserOrganisation,
 )
-from interloper_db.provision import create_all, downgrade, ensure_database, upgrade
+from interloper_db.provision import bootstrap, create_all, downgrade, ensure_database, upgrade
 from interloper_db.store import (
     BackfillQuery,
     ComponentQuery,
@@ -53,16 +61,21 @@ __all__ = [
     "BackfillQuery",
     "BackfillStatus",
     "Component",
+    "ComponentDriftError",
     "ComponentQuery",
     "ComponentReading",
     "ComponentRelation",
     "ComponentStatus",
+    "ConflictError",
     "DeleteImpact",
     "Event",
     "EventQuery",
     "Execution",
     "ExecutionQuery",
+    "HydrationError",
+    "InUseError",
     "Invitation",
+    "NotFoundError",
     "Organisation",
     "OrganisationQuery",
     "Overdue",
@@ -72,6 +85,7 @@ __all__ = [
     "Profile",
     "ProfileQuery",
     "Quota",
+    "QuotaExceededError",
     "RelationQuery",
     "Role",
     "Run",
@@ -82,6 +96,7 @@ __all__ = [
     "Usage",
     "UsageQuery",
     "UserOrganisation",
+    "bootstrap",
     "create_all",
     "downgrade",
     "ensure_database",

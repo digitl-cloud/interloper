@@ -24,8 +24,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from interloper.component import KINDS
-from interloper.errors import ComponentDriftError, DataNotFoundError
-from interloper_db import Component, ComponentQuery, ComponentStatus, DeleteImpact, Page, Store
+from interloper.errors import DataNotFoundError
+from interloper_db import Component, ComponentDriftError, ComponentQuery, ComponentStatus, DeleteImpact, Page, Store
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (

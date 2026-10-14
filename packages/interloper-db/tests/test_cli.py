@@ -1,34 +1,42 @@
-"""Tests for ``interloper.cli.commands.db``."""
+"""Tests for ``interloper_db.cli``."""
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
-import interloper_db
-import interloper_db.provision
-import interloper_db.store
 import pytest
+from interloper.settings import AppSettings, AuthSettings, PostgresSettings
 
-from interloper.cli.commands import db as db_command
-from interloper.settings import AppSettings, AuthSettings
+from interloper_db import cli as db_command
+
+
+@pytest.fixture(autouse=True)
+def _no_active_settings() -> Iterator[None]:
+    """Leave no activated settings behind for the rest of the suite.
+
+    Yields:
+        ``None``; the teardown clears the active settings.
+    """
+    yield
+    AppSettings.clear_active()
 
 
 @pytest.fixture
 def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
-    """Replace every ``interloper_db`` entry point the commands reach for.
+    """Replace every database procedure the commands reach for.
 
     Args:
-        monkeypatch: Fixture used to swap the module-level functions.
+        monkeypatch: Fixture used to swap the module-level names.
 
     Returns:
-        Recorded arguments, keyed by function name.
+        Recorded arguments, keyed by procedure name.
     """
     recorded: dict[str, list[Any]] = {
-        "ensure_database": [],
+        "bootstrap": [],
         "init_engine": [],
-        "create_all": [],
         "drop_database": [],
         "upgrade": [],
         "downgrade": [],
@@ -40,7 +48,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
         """Store stand-in whose profiles facet records the emails it is asked to promote."""
 
         def __init__(self, *, catalog: object, engine: object) -> None:
-            """Check the store is bound to the command's engine.
+            """Check the store is bound to the bootstrapped engine.
 
             Args:
                 catalog: The empty catalog the command builds.
@@ -61,14 +69,16 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict[str, list[Any]]:
             recorded["promote_super_admins"].append(list(emails))
             return [SimpleNamespace(email=email) for email in emails]
 
-    monkeypatch.setattr(interloper_db, "ensure_database", lambda dsn: recorded["ensure_database"].append(dsn))
-    monkeypatch.setattr(interloper_db, "init_engine", lambda dsn: (recorded["init_engine"].append(dsn), engine_)[1])
-    monkeypatch.setattr(interloper_db, "create_all", lambda *a: recorded["create_all"].append(a))
-    monkeypatch.setattr(interloper_db, "upgrade", lambda revision: recorded["upgrade"].append(revision))
-    monkeypatch.setattr(interloper_db, "downgrade", lambda revision: recorded["downgrade"].append(revision))
-    monkeypatch.setattr(interloper_db.provision, "drop_database", lambda dsn: recorded["drop_database"].append(dsn))
-    monkeypatch.setattr(interloper_db.store, "Store", RecordingStore)
-    recorded["engine"] = [engine_]
+    def bootstrap(dsn: str, **kwargs: Any) -> object:
+        recorded["bootstrap"].append((dsn, kwargs))
+        return engine_
+
+    monkeypatch.setattr(db_command, "bootstrap", bootstrap)
+    monkeypatch.setattr(db_command, "init_engine", lambda dsn: recorded["init_engine"].append(dsn))
+    monkeypatch.setattr(db_command, "drop_database", lambda dsn: recorded["drop_database"].append(dsn))
+    monkeypatch.setattr(db_command, "upgrade", lambda revision: recorded["upgrade"].append(revision))
+    monkeypatch.setattr(db_command, "downgrade", lambda revision: recorded["downgrade"].append(revision))
+    monkeypatch.setattr(db_command, "Store", RecordingStore)
     return recorded
 
 
@@ -79,7 +89,7 @@ def _parse(*argv: str) -> argparse.Namespace:
         argv: The argument vector after the ``interloper`` program name.
 
     Returns:
-        The parsed namespace, carrying the handler and requirement defaults.
+        The parsed namespace, carrying the handler.
     """
     parser = argparse.ArgumentParser(prog="interloper")
     db_command.register(parser.add_subparsers(dest="command"))
@@ -89,15 +99,20 @@ def _parse(*argv: str) -> argparse.Namespace:
 class TestRegister:
     """Parser wiring for the ``db`` command group."""
 
-    def test_every_subcommand_declares_the_db_requirement(self) -> None:
-        for argv in (["db"], ["db", "init"], ["db", "reset"], ["db", "upgrade"], ["db", "downgrade"]):
-            assert _parse(*argv).requires == ["interloper_db"]
-
     def test_subcommands_bind_their_handlers(self) -> None:
         assert _parse("db", "init").handler is db_command._cmd_init
         assert _parse("db", "reset").handler is db_command._cmd_reset
         assert _parse("db", "upgrade").handler is db_command._cmd_upgrade
         assert _parse("db", "downgrade").handler is db_command._cmd_downgrade
+
+    def test_bare_db_prints_its_help(self, capsys: pytest.CaptureFixture[str]) -> None:
+        args = _parse("db")
+
+        args.handler(args)
+
+        out = capsys.readouterr().out
+        assert "usage: interloper db" in out
+        assert "upgrade" in out
 
     def test_revision_defaults(self) -> None:
         assert _parse("db", "upgrade").revision == "head"
@@ -115,14 +130,10 @@ class TestRegister:
 class TestInit:
     """``interloper db init``."""
 
-    def test_ensures_the_database_then_creates_tables(
-        self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_bootstraps_the_database(self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]) -> None:
         db_command._cmd_init(_parse("db", "init"))
 
-        assert len(calls["ensure_database"]) == 1
-        assert calls["init_engine"] == calls["ensure_database"]
-        assert calls["create_all"] == [(calls["engine"][0],)]
+        assert calls["bootstrap"] == [(AppSettings.get().postgres.dsn, {})]
         assert "Done." in capsys.readouterr().out
 
     def test_promotes_the_configured_super_admins(
@@ -140,36 +151,50 @@ class TestInit:
         out = capsys.readouterr().out
         assert "Promoted ada@example.com to super-admin." in out
         assert "Promoted bob@example.com to super-admin." in out
+
+    def test_init_never_prints_the_password(
+        self,
+        calls: dict[str, list[Any]],
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        settings = AppSettings(postgres=PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
+        monkeypatch.setattr(AppSettings, "_active", settings)
+
+        db_command._cmd_init(_parse("db", "init"))
+
+        out = capsys.readouterr().out
+        assert "s3cret-pw" not in out
+        assert "db:5432/x" in out
 
 
 class TestReset:
     """``interloper db reset``."""
 
-    def test_drops_and_recreates_when_confirmed_by_flag(
+    def test_drops_and_bootstraps_when_confirmed_by_flag(
         self, calls: dict[str, list[Any]], capsys: pytest.CaptureFixture[str]
     ) -> None:
         db_command._cmd_reset(_parse("db", "reset", "--yes"))
 
         assert len(calls["drop_database"]) == 1
-        assert len(calls["ensure_database"]) == 1
-        assert calls["create_all"] == [(calls["engine"][0],)]
+        assert len(calls["bootstrap"]) == 1
         assert "Done." in capsys.readouterr().out
 
-    def test_promotes_the_configured_super_admins(
+    def test_reset_never_prints_the_password(
         self,
         calls: dict[str, list[Any]],
         capsys: pytest.CaptureFixture[str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        settings = AppSettings(auth=AuthSettings(super_admin_emails=["ada@example.com", "bob@example.com"]))
+        settings = AppSettings(postgres=PostgresSettings(user="me", password="s3cret-pw", host="db", database="x"))
         monkeypatch.setattr(AppSettings, "_active", settings)
+        prompts: list[str] = []
+        monkeypatch.setattr("builtins.input", lambda prompt: prompts.append(prompt) or "y")
 
-        db_command._cmd_init(_parse("db", "init"))
+        db_command._cmd_reset(_parse("db", "reset"))
 
-        assert calls["promote_super_admins"] == [["ada@example.com", "bob@example.com"]]
-        out = capsys.readouterr().out
-        assert "Promoted ada@example.com to super-admin." in out
-        assert "Promoted bob@example.com to super-admin." in out
+        assert "s3cret-pw" not in prompts[0] + capsys.readouterr().out
+        assert "db:5432/x" in prompts[0]
 
     @pytest.mark.parametrize("answer", ["y", "YES", "Yes"])
     def test_prompt_accepts_affirmative_answers(

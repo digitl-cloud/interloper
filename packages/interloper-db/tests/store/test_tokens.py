@@ -10,10 +10,10 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 
+from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
 from interloper_db.models import Organisation, PersonalAccessToken, Profile, UserOrganisation
 from interloper_db.store import Store, TokenQuery

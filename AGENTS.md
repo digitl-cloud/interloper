@@ -6,17 +6,17 @@ Python monorepo (uv workspace under `packages/`) plus a bundled Nuxt SPA. Provid
 
 ```
 packages/
-  interloper-core/           framework: assets, sources, DAG, runners, IO, partitioning
+  interloper-core/           framework: assets, sources, DAG, runners, IO, partitioning, the `run` command
   interloper-assets/         pre-built source definitions (bing, facebook, google, …)
   interloper-pandas/         pandas DataFrame normalizer/adapter
-  interloper-db/             database persistence layer
+  interloper-db/             database persistence layer, platform errors, `interloper db`
   interloper-google-cloud/   BigQuery destination
   interloper-docker/         Docker runner + backfiller
   interloper-k8s/            Kubernetes runner + backfiller
-  interloper-scheduler/      cron + queue worker + reaper (singleton process)
-  interloper-api/            FastAPI HTTP backend — reads catalog metadata only, never executes assets
+  interloper-scheduler/      cron + queue worker + reaper; `interloper scheduler`, `interloper launch`
+  interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
   interloper-agent/          AI agent (Google ADK)
-  interloper-app/            Nuxt SPA + Python package that serves it as static assets
+  interloper-app/            Nuxt SPA + Python package serving it; `interloper app` (all roles in one process)
 examples/                    runnable usage examples
 chart/                       Helm chart
 docker/                      uv-sync.sh helper and nginx template

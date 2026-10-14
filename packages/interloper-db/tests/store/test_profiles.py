@@ -5,8 +5,8 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from interloper.errors import NotFoundError
 
+from interloper_db import NotFoundError
 from interloper_db.store import ProfileQuery, Store
 
 

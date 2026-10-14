@@ -15,12 +15,13 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.errors import ConfigError
 from interloper.partitioning import TimePartition, TimePartitionWindow
 from sqlalchemy import Engine
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, col, func, select
 
+from interloper_db.errors import ConflictError, NotFoundError
 from interloper_db.models import (
     ACTIVE_BACKFILL_STATUSES,
     OPEN_RUN_STATUSES,

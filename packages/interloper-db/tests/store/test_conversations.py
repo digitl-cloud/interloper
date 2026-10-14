@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
-from interloper.errors import NotFoundError
 from sqlmodel import Session
 
+from interloper_db import NotFoundError
 from interloper_db.models import Conversation
 from interloper_db.store import PageQuery, Store
 

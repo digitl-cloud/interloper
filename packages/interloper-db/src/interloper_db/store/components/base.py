@@ -33,17 +33,13 @@ from uuid import UUID
 
 import interloper as il
 from interloper.catalog import Catalog
-from interloper.errors import (
-    CatalogKeyError,
-    ConfigError,
-    InUseError,
-    NotFoundError,
-)
+from interloper.errors import CatalogKeyError, ConfigError
 from interloper.partitioning import TimeGranularity
 from sqlalchemy import Engine, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
+from interloper_db.errors import InUseError, NotFoundError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.components.hydration import Hydrator
@@ -121,7 +117,7 @@ class DeleteImpact:
     """What deleting a set of components does to the components bound to them.
 
     Each entry is a ``{id, kind, key, name}`` mapping, the shape
-    :class:`~interloper.errors.InUseError` reports. A referrer that blocks
+    :class:`~interloper_db.errors.InUseError` reports. A referrer that blocks
     through any relation is listed only as blocking.
     """
 

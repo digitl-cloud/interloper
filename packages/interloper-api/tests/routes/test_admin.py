@@ -15,8 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import NotFoundError
-from interloper_db import OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
+from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 

@@ -18,6 +18,7 @@ from interloper.runner.results import ExecutionStatus, RunResult
 from interloper.serializable import SerializationContext, Spec
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
+from interloper.utils import import_from_path
 
 if TYPE_CHECKING:
     from interloper.catalog.base import Catalog
@@ -541,6 +542,30 @@ class DAG:
             if not isinstance(root, Workload):
                 raise DAGError(f"'{getattr(root, 'kind', type(root).__name__)}' components are not runnable")
         return cls(*cast("list[Workload]", roots))
+
+    @classmethod
+    def from_paths(cls, paths: list[str]) -> DAG:
+        """Build a DAG from dotted import paths, one Source or Asset class each.
+
+        Args:
+            paths: Dotted (or composite ``module:Class``) import paths.
+
+        Returns:
+            The DAG over one default instance of each class.
+
+        Raises:
+            DAGError: If a path fails to import, or names something other than a Source or Asset class.
+        """
+        workloads: list[type[Workload]] = []
+        for path in paths:
+            try:
+                imported = import_from_path(path)
+            except (ImportError, AttributeError) as error:
+                raise DAGError(f"failed to import '{path}': {error}") from error
+            if not (isinstance(imported, type) and issubclass(imported, Workload)):
+                raise DAGError(f"'{path}' is not a Source or Asset class")
+            workloads.append(imported)
+        return cls(*workloads)
 
     # -- Subgraph --------------------------------------------------------------
 

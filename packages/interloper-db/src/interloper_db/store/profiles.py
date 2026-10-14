@@ -11,11 +11,11 @@ import builtins
 from collections.abc import Iterable
 from uuid import UUID
 
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine, delete, func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import AuthSession, Invitation, PersonalAccessToken, Profile, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery

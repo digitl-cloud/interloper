@@ -21,11 +21,11 @@ from typing import Any, cast
 
 import interloper as il
 from croniter import croniter
-from interloper.errors import ConfigError, QuotaExceededError
+from interloper.errors import ConfigError
 from interloper.job import CronJob
 from interloper.partitioning import TimePartitionWindow
 from interloper.telemetry.tracer import meter
-from interloper_db import Store
+from interloper_db import QuotaExceededError, Store
 from interloper_db.models import Component
 
 from interloper_scheduler.controller import Controller

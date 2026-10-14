@@ -5,7 +5,7 @@ import importlib
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from interloper.errors import ConflictError, InUseError, NotFoundError, QuotaExceededError, format_exception
+from interloper.errors import AssetNotFoundError, format_exception
 
 
 def test_format_exception_prefixes_type_name():
@@ -41,57 +41,13 @@ def test_format_exception_validation_error_omits_input_values():
     assert "\n" not in message
 
 
-class TestNotFoundError:
-    """A missing record, reported in the words it was raised with."""
-
-    def test_the_message_is_not_quoted_like_a_key_error(self):
-        assert str(NotFoundError("Run 1 not found")) == "Run 1 not found"
-
-    def test_it_still_catches_as_a_key_error(self):
-        with pytest.raises(KeyError):
-            raise NotFoundError("Run 1 not found")
-
-
-class TestConflictError:
-    """A request that is well-formed but refused by the record's current state."""
-
-    def test_a_refused_deletion_is_a_conflict(self):
-        assert issubclass(InUseError, ConflictError)
-
-    def test_it_still_catches_as_a_value_error(self):
-        with pytest.raises(ValueError, match="already success"):
-            raise ConflictError("Run 1 is already success")
-
-
-class TestInUseError:
-    """A delete refused because other records point at the target."""
-
-    def test_referrers_are_carried_for_the_api_to_surface(self):
-        referrers: list[dict[str, str | None]] = [
-            {"id": "1", "kind": "job", "key": "nightly", "name": "Nightly"}
-        ]
-
-        error = InUseError("Still referenced", referrers=referrers)
-
-        assert str(error) == "Still referenced"
-        assert error.referrers == referrers
-
-    def test_no_referrers_becomes_an_empty_list(self):
-        assert InUseError("Still referenced").referrers == []
-
-
-class TestQuotaExceededError:
-    """The structured fields an HTTP 429 renders from."""
-
-    def test_the_quota_context_is_carried(self):
-        error = QuotaExceededError("Too many sources", quota="max_sources", limit=10, used=10)
-
-        assert str(error) == "Too many sources"
-        assert (error.quota, error.limit, error.used) == ("max_sources", 10, 10)
-
-
 def test_source_error_is_gone():
     """``SourceError`` was never raised; it is not part of the error vocabulary."""
     errors = importlib.import_module("interloper.errors")
 
     assert not hasattr(errors, "SourceError")
+
+
+def test_asset_not_found_reads_without_key_error_quotes():
+    """``str`` of an ``AssetNotFoundError`` is its message, not ``KeyError``'s quoted repr."""
+    assert str(AssetNotFoundError("Asset 'x' not found")) == "Asset 'x' not found"

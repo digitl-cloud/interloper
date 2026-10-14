@@ -8,10 +8,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import (
-    CatalogKeyError,
+from interloper.errors import CatalogKeyError, ConfigError
+from interloper_db import (
     ComponentDriftError,
-    ConfigError,
     ConflictError,
     HydrationError,
     InUseError,

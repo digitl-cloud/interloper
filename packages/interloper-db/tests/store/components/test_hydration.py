@@ -14,12 +14,12 @@ from uuid import UUID, uuid4
 import interloper as il
 import pydantic
 import pytest
-from interloper.errors import ComponentDriftError, HydrationError
 from interloper.serializable import Spec
 from interloper_assets.demo.source import DemoSource, demo_asset
 from sqlalchemy import Engine
 from sqlmodel import Session
 
+from interloper_db import ComponentDriftError, HydrationError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.store import ComponentQuery, RelationQuery, Store
 from interloper_db.store.components import Hydrator

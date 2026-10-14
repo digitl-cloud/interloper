@@ -13,10 +13,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine, delete, update
 from sqlmodel import col, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import (
     AuthSession,
     Component,

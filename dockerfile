@@ -270,12 +270,12 @@ RUN pnpm exec nuxt prepare && NUXT_PRESET=static pnpm build
 FROM runtime-exec AS scheduler
 COPY --from=build-scheduler --chown=app:app /interloper/.venv /interloper/.venv
 USER app
-CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
+CMD ["interloper", "scheduler", "--no-create-tables"]
 
 FROM runtime AS scheduler-slim
 COPY --from=build-scheduler-slim --chown=app:app /interloper/.venv /interloper/.venv
 USER app
-CMD ["interloper", "app", "--no-api", "--cron", "--worker", "--reaper", "--no-create-tables"]
+CMD ["interloper", "scheduler", "--no-create-tables"]
 
 # ── core (the framework; also the per-asset Job target) ───────
 FROM runtime-exec AS core
@@ -293,13 +293,13 @@ FROM runtime AS api
 COPY --from=build-api --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 EXPOSE 3000
-CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
+CMD ["interloper", "api", "--no-create-tables"]
 
 FROM runtime AS api-slim
 COPY --from=build-api-slim --chown=app:app /interloper/.venv /interloper/.venv
 USER app
 EXPOSE 3000
-CMD ["interloper", "app", "--api", "--no-cron", "--no-worker", "--no-reaper", "--no-create-tables"]
+CMD ["interloper", "api", "--no-create-tables"]
 
 # ── mcp (streamable-HTTP MCP server; horizontally scalable) ───
 FROM runtime AS mcp

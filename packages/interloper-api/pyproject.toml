@@ -26,6 +26,9 @@ otel = [
     "opentelemetry-instrumentation-fastapi>=0.65b0",
 ]
 
+[project.entry-points."interloper.cli"]
+api = "interloper_api.cli:register"
+
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]
 build-backend = "uv_build"

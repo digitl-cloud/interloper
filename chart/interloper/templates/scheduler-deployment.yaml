@@ -34,11 +34,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["interloper"]
           args:
-            - app
-            - --no-api
-            - --cron
-            - --worker
-            - --reaper
+            - scheduler
             - --no-create-tables
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}

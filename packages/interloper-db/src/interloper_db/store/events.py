@@ -15,11 +15,11 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import NotFoundError
 from interloper.runner import RunState
 from sqlalchemy import Engine
 from sqlmodel import col, select
 
+from interloper_db.errors import NotFoundError
 from interloper_db.models import Event, Run
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery

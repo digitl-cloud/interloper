@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
-from interloper.errors import NotFoundError
 from sqlalchemy import Engine
 from sqlmodel import Session as SQLSession
 from sqlmodel import select
 
+from interloper_db import NotFoundError
 from interloper_db.models import (
     Backfill,
     Component,

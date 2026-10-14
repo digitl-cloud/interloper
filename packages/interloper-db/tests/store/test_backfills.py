@@ -13,12 +13,12 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError, ConflictError, NotFoundError
+from interloper.errors import ConfigError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col, select
 
-from interloper_db import BackfillStatus, RunStatus
+from interloper_db import BackfillStatus, ConflictError, NotFoundError, RunStatus
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
 from interloper_db.store import BackfillQuery, Store
