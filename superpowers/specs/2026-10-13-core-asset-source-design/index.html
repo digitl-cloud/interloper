@@ -1,0 +1,2671 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-13-core-asset-source-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Core phase 2: Asset and Source - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#core-phase-2-asset-and-source" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Core phase 2: Asset and Source
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="core-phase-2-asset-and-source">Core phase 2: Asset and Source<a class="headerlink" href="#core-phase-2-asset-and-source" title="Permanent link">&para;</a></h1>
+<p>Date: 2026-10-13. Status: approved in conversation, implementation pending.</p>
+<p>Phase 2 of the interloper-core consolidation programme (five stacked phases: scope, contexts and
+observation; Asset and Source; the runner family; Component, Serializable and decorators; the
+surface sweep). Phase 1 settled the execution spine. This phase settles how a source and its
+assets relate at definition time: how an asset gets what it leaves unset, how an asset is
+reached, how <code>Asset</code> is divided by concern, and how a component is reconfigured.</p>
+<p>Scope: <code>interloper.component</code> (a new <code>inherited</code> concern, <code>Component.__call__</code>, the relation read
+path, <code>to_spec</code>), <code>interloper.resource.fields</code> (one flag), <code>interloper.serializable</code> (one read),
+<code>interloper.asset</code> (<code>base</code>, a new <code>output</code> module, <code>upstream</code>, <code>view</code>, <code>reference</code>, the
+decorators), <code>interloper.source</code> (<code>base</code>, <code>decorator</code>), <code>interloper.operation</code> (<code>retry</code>), and the
+consumers those seams reach: the interloper-sql <code>IbisView</code>, the db store's hydration and child
+sync, the API's row counts, interloper-assets, the docs and the plugin skills. Built on phase 1 as
+rebased onto main 0.111.0 (views, references, <code>Source.table</code>, <code>Source.format</code>).</p>
+<hr />
+<h2 id="1-problem">1. Problem<a class="headerlink" href="#1-problem" title="Permanent link">&para;</a></h2>
+<p>A source copies five settings into each asset when it is built (<code>Source._resolve</code>: <code>dataset</code>,
+<code>default_destination_key</code>, <code>normalizer</code>, <code>retry</code>, <code>materialization_strategy</code>) and pushes its
+relation bindings into each asset (<code>on_rebind</code> calling <code>trickle</code>). Copies go stale, and every
+consumer that cares works around it. Each row below was reproduced against the branch:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Behaviour</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>An asset declaring <code>materialization_strategy=RECONCILE</code> under a <code>STRICT</code> source becomes <code>strict</code></td>
+<td>The copy cannot tell the default from an explicit value</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>source(default_destination_key="warehouse")</code>: the copy has it, its assets keep <code>''</code></td>
+<td>Copied once, at construction</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>source(normalizer=N)</code>: the copy has it, its assets keep none</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>source.retry = RetryPolicy(...)</code> after construction never reaches the assets</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>source.dataset = "other"</code> after construction never reaches the assets</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>source.to_spec()</code> writes every copied value into each asset's payload, freezing it</td>
+<td>Same</td>
+</tr>
+</tbody>
+</table>
+<p>The workarounds: <code>Source.__call__</code> re-points <code>dataset</code> by comparing values and unbinds what it
+had pushed; <code>to_spec</code> strips pushed bindings back out of child payloads through
+<code>Component._trickled</code>; <code>_resolve</code> also formats <code>{field}</code> templates into each asset's dataset and
+skips the table check for references.</p>
+<p>Reaching an asset takes four mechanisms: an <code>AssetRef</code> descriptor replacing each asset written in
+a source body, <code>Source.__getattr__</code> for assets given in <code>asset_types</code>, <code>Source.asset_def</code> for
+definitions, and <code>_source_type</code> stamped in three places (the source's subclass hook and both
+branches of <code>@il.source</code>). Statically, <code>Shop().orders</code> types as <code>type[Asset]</code>, which is why the
+tests carry <code># ty: ignore[unresolved-attribute]</code> on body-declared asset access.</p>
+<p><code>asset/base.py</code> is 955 lines and mixes seven concerns: reading the <code>data()</code> signature,
+reconfiguration, the entry points, input assembly, upstream reads, output shaping, and destination
+IO. Output shaping stores the run's schema on the instance (<code>_effective_schema</code>), written by
+conform and read back by the write: two concurrent runs of one instance race on it. <code>View</code>,
+<code>IbisView</code> and <code>Reference</code> extend <code>Asset</code> by overriding its private helpers (<code>_read_upstreams</code>,
+<code>_normalize_and_conform</code>, <code>materialize_async</code>) and add their own (<code>_definition</code>,
+<code>_view_destination</code>), so moving a helper silently breaks a kind.</p>
+<p><code>Asset.__call__</code> and <code>Source.__call__</code> each hand-list their keyword arguments with <code>None</code> meaning
+"unchanged", plus a sentinel for <code>normalizer</code> and the opposite rule for relations.</p>
+<hr />
+<h2 id="2-decisions">2. Decisions<a class="headerlink" href="#2-decisions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Effective on read.</strong> An inherited setting reads its effective value: <code>asset.dataset</code> is the
+  asset's own value, else what its source hands it. The field stores the override only, so specs
+  and configs carry overrides only. Same pattern relations already use.</li>
+<li><strong>One owner seam.</strong> What an owned component inherits is decided by its owner, in one method;
+  <code>Source</code> overrides it for <code>dataset</code> alone, to fill templates. Location stays named by the source:
+  <code>Source.table</code> for the table, <code>Source.inherited</code> for the dataset.</li>
+<li><strong>Asset classes are their own descriptor</strong>, through their metaclass, as a <code>Relation</code> is.</li>
+<li><strong><code>Asset</code> is divided by owner</strong>: the signature is read once, output is a value, an upstream reads
+  itself, and the asset kinds vary through three named hooks.</li>
+<li><strong>One reconfiguration</strong> on <code>Component</code>: naming something changes it, leaving it out keeps it.</li>
+<li>Removed: <code>AssetRef</code>, <code>Source.__getattr__</code>, <code>Source.asset_def</code>, <code>Source.select</code>,
+  <code>Source._resolve</code>, <code>Component._trickled</code>, <code>Asset._effective_schema</code>, <code>Asset._destinations</code>,
+  <code>Asset._validate_destination</code>, <code>View._view_destination</code>, <code>View._definition</code>.</li>
+<li>Persisted contracts unchanged: the spec YAML shape (<code>assets</code> as key to init, <code>{ref: id}</code>), the
+  definition JSON shape, event type strings, <code>x-*</code> extras (one added), the CLI.</li>
+</ul>
+<hr />
+<h2 id="3-one-cascade-rule">3. One cascade rule<a class="headerlink" href="#3-one-cascade-rule" title="Permanent link">&para;</a></h2>
+<p>An owned component reads what it leaves unset from its owner, settings and relations alike.
+Nothing is copied down.</p>
+<h3 id="31-settings">3.1 Settings<a class="headerlink" href="#31-settings" title="Permanent link">&para;</a></h3>
+<p>The house field factories (<code>InputField</code>, <code>SelectField</code>, and the others built on <code>_extra</code>) take
+<code>inherit=True</code>, rendered as <code>x-inherit</code>, beside <code>discriminator=True</code> and <code>section=</code>. A field so
+marked defaults to <code>None</code>, meaning unset, and reads through a descriptor <code>Component</code> installs for
+every marked field once Pydantic has built the class:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">Asset</span><span class="p">(</span><span class="n">Operation</span><span class="p">):</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">InputField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inherit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">default_destination_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">InputField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inherit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">normalizer</span><span class="p">:</span> <span class="n">Normalizer</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s2">"x-inherit"</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">materialization_strategy</span><span class="p">:</span> <span class="n">MaterializationStrategy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">SelectField</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">inherit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">Operation</span><span class="p">(</span><span class="n">Component</span><span class="p">,</span> <span class="n">Workload</span><span class="p">):</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">retry</span><span class="p">:</span> <span class="n">RetryPolicy</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s2">"x-inherit"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="o">...</span><span class="p">})</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">json_schema_extra</span><span class="o">=</span><span class="p">{</span><span class="s2">"x-inherit"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="o">...</span><span class="p">})</span>
+</span></code></pre></div>
+<p>The read, in <code>component/inherited.py</code>:</p>
+<ol>
+<li>The stored value, a blank string counting as unset (persisted forms save <code>""</code>).</li>
+<li>With an owner: <code>owner.inherited(child, name, own)</code>, whatever the stored value was.</li>
+<li>Without one: the stored value, <code>None</code> when unset.</li>
+</ol>
+<p><code>Component.inherited(child, name, own)</code> returns <code>own</code> when set, else the owner's own effective
+value under that name when the owner declares it, else <code>None</code>. Every inherited setting already
+reads <code>None</code> as its neutral value (the destination's default dataset, the first destination, no
+normalizer, no retry, and reconcile, since conform only tests <code>is STRICT</code>), so <code>inherit=True</code> needs
+no default of its own. <code>enabled</code> is the one inherited field with a non-<code>None</code> default: it is never
+unset, so its read always reaches the owner with the stored value, and the owner decides.</p>
+<p>The descriptor never affects storage: Pydantic validates into and serializes from <code>__dict__</code>,
+equality and copies compare stored values, and <code>model_fields_set</code> is untouched. Reading a marked
+field on the class returns <code>None</code>.</p>
+<p>Bug 1 is gone by construction: an asset's strategy defaults to <code>None</code>, so an explicit <code>RECONCILE</code>
+stays <code>RECONCILE</code>. Bugs 2 to 5 are gone because nothing is copied.</p>
+<h3 id="32-templates-and-the-sources-location">3.2 Templates and the source's location<a class="headerlink" href="#32-templates-and-the-sources-location" title="Permanent link">&para;</a></h3>
+<p><code>Source</code> overrides <code>inherited</code> for <code>dataset</code> and <code>enabled</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">inherited</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">child</span><span class="p">:</span> <span class="n">Component</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">own</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"dataset"</span><span class="p">:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">own</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"enabled"</span><span class="p">:</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">own</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">inherited</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">own</span><span class="p">)</span>
+</span></code></pre></div>
+<p><code>Source</code> gains <code>enabled: bool = True</code>, listed in <code>internal_fields</code> so the config form is unchanged:
+an asset runs only when it and its source are both enabled. <code>source(enabled=False)</code>, the documented
+way to put a read-only source in a run, keeps working through <code>Component.__call__</code>, and replaces
+<code>select=[]</code> wherever a test made every asset of a source read-only.</p>
+<p>So an asset's dataset is its own or its source's, a <code>{field}</code> template filled with the source's
+fields either way, and the source key when neither is set. <code>Source.dataset</code> becomes
+<code>InputField(default=None, ...)</code> and stops being rewritten to the key at construction. Its
+<code>validate_key</code> check stays in <code>model_post_init</code>, now on <code>self.dataset or self.key</code>, so the error a
+caller sees is unchanged.</p>
+<p>The table check main introduced ("the result is validated when the source resolves its assets")
+stays a construction-time check: <code>Source.model_post_init</code> validates <code>asset.table</code> for every asset
+that is not a <code>Reference</code>, as <code>_resolve</code> does today.</p>
+<h3 id="33-relations">3.3 Relations<a class="headerlink" href="#33-relations" title="Permanent link">&para;</a></h3>
+<p><code>bound(name)</code> keeps meaning "what this component holds itself", and it is what specs, the db store
+and <code>validate_relations</code> count as owned.</p>
+<ul>
+<li>The attribute read (<code>Relation.__get__</code>) returns the own binding, else the owner's targets under
+  the same name that this relation accepts (every accepted target for a <code>many</code> relation, the
+  first otherwise), the same filter <code>trickle</code> applies today.</li>
+<li><code>resolve(name)</code> is that, else the relation's fallback.</li>
+<li><code>validate_relations</code> counts a relation filled through the owner as filled.</li>
+<li><code>Source.on_rebind</code> stops trickling into its assets; it keeps trickling into its destinations.
+  <code>Job.on_rebind</code> is unchanged. Both are pushes into components that are not owned, and belong
+  with <code>Component</code> in phase 4.</li>
+</ul>
+<h3 id="34-removed">3.4 Removed<a class="headerlink" href="#34-removed" title="Permanent link">&para;</a></h3>
+<p><code>Source._resolve</code> (its parent pointer and table check move to <code>model_post_init</code>),
+<code>Component._trickled</code> and its use in <code>to_spec</code>, the dataset re-point and the unbinding in
+<code>Source.__call__</code>.</p>
+<h3 id="35-specs-and-persistence">3.5 Specs and persistence<a class="headerlink" href="#35-specs-and-persistence" title="Permanent link">&para;</a></h3>
+<p><code>Serializable._fields_init</code> reads stored values (<code>__dict__</code>), not attributes, so a spec carries
+overrides only (bug 6). Platform asset rows are created with only their key and hold overrides
+already: no migration. A spec written by an earlier version carries the copied values, which now
+read as explicit overrides with the same values; they differ only if the source changes later,
+which is the staleness this phase removes.</p>
+<hr />
+<h2 id="4-reaching-an-asset">4. Reaching an asset<a class="headerlink" href="#4-reaching-an-asset" title="Permanent link">&para;</a></h2>
+<p>An asset class is its own descriptor. <code>AssetMeta</code>, the metaclass of <code>Asset</code> (a subclass of
+Pydantic's model metaclass), defines <code>__get__</code>:</p>
+<ul>
+<li>read on a class: the asset class (<code>Shop.orders</code>), which is what composite import paths
+  (<code>module:Shop.orders</code>) walk;</li>
+<li>read on a <code>Source</code> instance: that instance's live asset of that key (<code>Shop().orders</code>);</li>
+<li>read on any other instance: the asset class, plain Python behaviour (a test class holding
+  <code>asset_cls = users</code>, another component).</li>
+</ul>
+<p>Its overloads type the instance read as <code>Asset</code>, so <code>ty</code> resolves <code>Shop().orders.connection</code>.
+<code>Source</code> lists <code>AssetMeta</code> in <code>ignored_types</code>.</p>
+<p>Collection happens once, in <code>Source.__init_subclass__</code>: the asset classes written in the body and
+the ones in <code>asset_types</code> (which the function form of <code>@il.source</code> fills) form <code>asset_types</code>; a
+listed asset is installed as a class attribute under its key; and each asset class's owning source
+is set there, so neither <code>@il.source</code> builder sets it. A key colliding with another attribute of
+the source, and an asset class already owned by another source, are <code>TypeError</code>s at definition.
+A standalone asset is untouched: it owns no source, reads no owner, and keeps its dotted path.</p>
+<p>Body-declared assets are the typed form; an asset given only in <code>asset_types</code> works at runtime and
+is invisible to <code>ty</code>. The sources guide says so.</p>
+<p>Removed: <code>AssetRef</code>, <code>Source.__getattr__</code>, the descriptor swap in <code>_collect_asset_types</code>,
+<code>Source.asset_def</code> (no callers), <code>Source.select</code> and <code>_apply_select</code> (platform rows narrow a source
+through the <code>assets</code> override map, which stays the only way). <code>source.assets</code>, <code>asset_types</code>, the
+<code>assets</code> spec map and <code>sibling_bindings</code> are unchanged.</p>
+<hr />
+<h2 id="5-asset-by-concern">5. Asset by concern<a class="headerlink" href="#5-asset-by-concern" title="Permanent link">&para;</a></h2>
+<h3 id="51-the-signature-read-once">5.1 The signature, read once<a class="headerlink" href="#51-the-signature-read-once" title="Permanent link">&para;</a></h3>
+<p><code>Asset._collect</code> already walks <code>data()</code> to infer relations. It also records the parameters the
+call fills, in order, as <code>_parameters: ClassVar[tuple[str, ...]]</code>: <code>context</code>, <code>source</code>, and the
+relation names. <code>_build_kwargs</code> iterates it instead of calling <code>inspect.signature</code> on every run
+with its own reserved names. <code>_RESERVED_PARAMETERS</code> stays the one list. A subclass inheriting
+<code>data()</code> inherits the record.</p>
+<h3 id="52-output-is-a-value">5.2 Output is a value<a class="headerlink" href="#52-output-is-a-value" title="Permanent link">&para;</a></h3>
+<p><code>asset/output.py</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Output</span><span class="p">:</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">data</span><span class="p">:</span> <span class="n">Any</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">schema</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">Schema</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="nd">@classmethod</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">from_result</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">asset</span><span class="p">:</span> <span class="n">Asset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Output</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p><code>from_result</code> is today's unwrap, normalize, then conform or infer, with the same spans. It replaces
+<code>_unwrap</code>, <code>_normalize_and_conform</code>, <code>_conform</code> and <code>_infer_schema</code>; <code>_effective_schema</code> is gone,
+and so is the race.</p>
+<h3 id="53-upstreams-read-themselves">5.3 Upstreams read themselves<a class="headerlink" href="#53-upstreams-read-themselves" title="Permanent link">&para;</a></h3>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@classmethod</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">read</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">upstream</span><span class="p">:</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">reader</span><span class="p">:</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">window</span><span class="p">:</span> <span class="n">PartitionWindow</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Upstream</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nd">@classmethod</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">reference</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">upstream</span><span class="p">:</span> <span class="n">Asset</span><span class="p">,</span> <span class="n">destination</span><span class="p">:</span> <span class="n">Destination</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Upstream</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<p><code>read</code> narrows the window to the upstream's, opens the <code>DEST_READ</code> step on the reader's metadata,
+and turns <code>DataNotFoundError</code> into <code>data=None</code> with the warning event; any other failure raises
+<code>AssetError</code> as today. <code>reference</code> is <code>Upstream(upstream, destination.reference(upstream))</code>.
+<code>Asset</code> keeps the short loop that looks each bound upstream up in the DAG and skips one absent from
+it, with its warning.</p>
+<h3 id="54-three-hooks-for-the-kinds">5.4 Three hooks for the kinds<a class="headerlink" href="#54-three-hooks-for-the-kinds" title="Permanent link">&para;</a></h3>
+<p>Materializing is one pipeline in <code>Asset</code>: upstreams, then <code>data()</code>, then output, then landing.
+The kinds vary through three hooks, and override nothing else:</p>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th><code>Asset</code></th>
+<th><code>View</code></th>
+<th><code>IbisView</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>async _upstream(target, window, metadata) -&gt; Upstream</code></td>
+<td><code>Upstream.read(...)</code> when <code>reads_upstream_data</code>, else <code>Upstream.reference(target, self.default_destination)</code></td>
+<td>inherited: the class flag selects the reference</td>
+<td>wraps the reference as a typed Ibis table</td>
+</tr>
+<tr>
+<td><code>_output(result) -&gt; Output</code></td>
+<td><code>Output.from_result(result, self)</code></td>
+<td><code>Output(result, None)</code></td>
+<td>checks the expression, wraps it in <code>IbisDefinition</code></td>
+</tr>
+<tr>
+<td><code>async _land(output, window, metadata)</code></td>
+<td>one <code>DEST_WRITE</code> step per destination, skipping an empty output with its warning</td>
+<td><code>create_view</code> in a <code>DEST_WRITE</code> step on <code>"view '&lt;key&gt;'"</code></td>
+<td>inherited</td>
+</tr>
+</tbody>
+</table>
+<p><code>run_async</code> returns <code>output.data</code>; <code>materialize_async</code> lands the output and returns its data.
+<code>reads_upstream_data</code> is the one fact both the DAG and <code>_upstream</code> read. <code>View.materialize_async</code>,
+<code>_read_upstreams</code>, <code>_normalize_and_conform</code>, <code>_definition</code> and <code>_view_destination</code> go;
+<code>View.validate_relations</code> keeps its one-destination and dialect checks, reading
+<code>self.destinations</code>. <code>Reference</code> keeps its one override, <code>materialize_async</code>, returning <code>None</code>:
+it never runs. A view's <code>run()</code> now returns what <code>_output</code> produced, so an <code>IbisView</code> returns its
+<code>IbisDefinition</code> (its <code>expression</code> holds what <code>data()</code> returned).</p>
+<h3 id="55-destinations">5.5 Destinations<a class="headerlink" href="#55-destinations" title="Permanent link">&para;</a></h3>
+<p><code>_read_destination</code> becomes the public property <code>default_destination</code> (the destination whose key
+is <code>default_destination_key</code>, else the first; <code>AssetError</code> when there is none), read by
+<code>Upstream.read</code>, <code>_upstream</code> and <code>partition_row_counts</code>. <code>_destinations</code> and
+<code>_validate_destination</code> are removed: every binding goes through <code>_replace_binding</code>, which checks
+acceptance, and hydration binds through the constructor.</p>
+<p>Kept on <code>Asset</code>: relation inference, <code>classpath</code>, <code>definition</code>, reconfiguration (section 6), the
+entry points and <code>execute</code> (their shape is phase 3's), input assembly, the window check, the hooks.</p>
+<hr />
+<h2 id="6-one-reconfiguration">6. One reconfiguration<a class="headerlink" href="#6-one-reconfiguration" title="Permanent link">&para;</a></h2>
+<p><code>Asset.__call__</code> and <code>Source.__call__</code> become one <code>Component.__call__(**changes)</code>:</p>
+<ul>
+<li>A field name sets the field, validated against its type through Pydantic's assignment
+  validator. On an inherited field, <code>None</code> means "inherit again".</li>
+<li>A relation name rebinds through the write path: one component, a list, or <code>None</code> to clear.</li>
+<li>Any other name is a <code>TypeError</code>.</li>
+</ul>
+<p>The copy keeps its own bindings (a new dict, the same targets) and its owner; the components it
+owns are deep-copied and pointed at the copy.</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">asset</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">asset</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="s2">"sandbox"</span><span class="p">,</span> <span class="n">normalizer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">source</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="s2">"raw_v2"</span><span class="p">,</span> <span class="n">connection</span><span class="o">=</span><span class="n">other_connection</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Changes: <code>None</code> no longer means "unchanged" (no source code passes it). <code>source(enabled=False)</code>
+keeps its meaning, now as a field of the source its assets read through (section 3.2).</p>
+<hr />
+<h2 id="7-consumers">7. Consumers<a class="headerlink" href="#7-consumers" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>interloper-sql</strong>: <code>IbisView</code> moves from <code>_read_upstreams</code> and <code>_definition</code> to <code>_upstream</code> and
+  <code>_output</code>.</li>
+<li><strong>interloper-db</strong>: hydration still builds the <code>assets</code> map, from rows that hold overrides only;
+  the <code>(dataset, table)</code> collision check reads effective values through the descriptor;
+  <code>asset_types</code> and <code>sibling_bindings</code> unchanged. Tests using <code>select</code> change.</li>
+<li><strong>interloper-api</strong>: <code>partition_row_counts</code> unchanged.</li>
+<li><strong>interloper-app</strong>: an asset's <code>materialization_strategy</code> renders empty, meaning inherit; the
+  source's nullable select already renders that way. No app change.</li>
+<li><strong>interloper-assets</strong>: no source change; the <code># ty: ignore[unresolved-attribute]</code> on
+  body-declared asset access go.</li>
+<li><strong>Docs</strong>: <code>guide/sources.md</code> (the cascade, templates, the body form as the typed form, no
+  <code>select</code>), <code>guide/assets.md</code> (reconfiguration, <code>Output</code>, <code>default_destination</code>), the views
+  guide where it names the removed hooks, the extending pages, the plugin skills that name
+  <code>select</code>, <code>asset_def</code> or <code>__call__</code>, and the upgrade table row.</li>
+</ul>
+<hr />
+<h2 id="8-errors">8. Errors<a class="headerlink" href="#8-errors" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Definition time, <code>TypeError</code>: an asset key colliding with a source attribute; an asset class
+  owned by a second source; the signature errors as today.</li>
+<li>Reconfiguration: <code>TypeError</code> for an unknown name; Pydantic <code>ValidationError</code> for a wrong value.</li>
+<li>Relations: <code>ConfigError</code>, from the same write path.</li>
+<li><code>Source.dataset</code> failing <code>validate_key</code>: the same <code>ValueError</code> as today, from <code>model_post_init</code>.</li>
+</ul>
+<hr />
+<h2 id="9-out-of-scope-follow-ups">9. Out of scope, follow-ups<a class="headerlink" href="#9-out-of-scope-follow-ups" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Trickling into non-owned components (a source's destinations, a job's targets): phase 4.</li>
+<li>The entry point family (<code>run</code>, <code>run_async</code>, <code>materialize</code>, <code>materialize_async</code>, <code>execute</code>) and the
+  operation lifecycle: phase 3.</li>
+<li><code>Source.table</code>'s reference branch stays as main designed it.</li>
+</ul>
+<hr />
+<h2 id="10-testing">10. Testing<a class="headerlink" href="#10-testing" title="Permanent link">&para;</a></h2>
+<p>Mirror layout, red then green per unit.</p>
+<ul>
+<li><code>tests/component/test_inherited.py</code>: own value; the owner's; <code>None</code> standalone; blank string as
+  unset; the owner seam called with the stored value; storage, equality, copy and dump see stored
+  values only; the class read.</li>
+<li><code>tests/resource/test_fields.py</code>: <code>inherit=True</code> renders <code>x-inherit</code>.</li>
+<li><code>tests/component/test_base.py</code>: relation read-through (single, many, accepts filter);
+  <code>resolve</code> falling back after the owner; <code>validate_relations</code> through the owner; <code>to_spec</code> with
+  overrides only; <code>__call__</code> (fields, validation, inherited <code>None</code>, relations, unknown names, owned
+  components copied and re-pointed).</li>
+<li><code>tests/source/test_base.py</code>: the six rows of section 1 as regression tests; a disabled source
+  disabling its assets, an asset disabled alone; templates through
+  <code>inherited</code>; the construction-time dataset and table checks; <code>AssetMeta</code> on the
+  class, on a source instance, on another holder, and for a listed asset; both definition errors;
+  <code>select</code>, <code>asset_def</code>, <code>__getattr__</code> and <code>AssetRef</code> gone.</li>
+<li><code>tests/asset/test_base.py</code>: <code>_parameters</code>; <code>default_destination</code>; two concurrent runs of one
+  instance producing different schemas; <code>run_async</code> and <code>materialize_async</code> over the hooks.</li>
+<li><code>tests/asset/test_output.py</code>, <code>tests/asset/test_upstream.py</code>: the moved logic.</li>
+<li><code>tests/asset/test_view.py</code>, <code>tests/asset/test_reference.py</code>: the hooks; the write step's events.</li>
+<li>interloper-sql <code>tests/view/test_base.py</code>: <code>IbisView</code> over <code>_upstream</code> and <code>_output</code>.</li>
+<li>interloper-db: a hydration round trip with overrides only; the collision check through the
+  descriptor.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>

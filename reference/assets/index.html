@@ -1899,7 +1899,7 @@
   <a href="#interloper.asset.decorator.asset" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;asset
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;asset
       </span>
     </span>
   </a>
@@ -1934,6 +1934,28 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;table
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Asset.default_destination" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;default_destination
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Asset.body_from_function" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;body_from_function
       </span>
     </span>
   </a>
@@ -2172,6 +2194,28 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;records
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Upstream.read" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;read
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Upstream.reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;reference
       </span>
     </span>
   </a>
@@ -2661,35 +2705,24 @@
 <p>An asset is a unit of data: a function or class that produces it, the context it runs in, and the upstream handles it reads other assets through.</p>
 
 
-<div class="doc doc-object doc-function">
+<div class="doc doc-object doc-attribute">
+
 
 
 <h2 id="interloper.asset.decorator.asset" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">asset</span>
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">asset</span>
 
 
 <a href="#interloper.asset.decorator.asset" class="headerlink" title="Permanent link">&para;</a></h2>
-          <div class="doc-overloads">
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">asset</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">]</span>
-</span></code></pre></div><div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">asset</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">relations</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]],</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">]]</span>
-</span></code></pre></div>          </div>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">asset</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">fn</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">/</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">relations</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">**</span><span class="n">overrides</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">]</span> <span class="o">|</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">]]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">asset</span> <span class="o">=</span> <span class="n"><span title="interloper.component.decorator.Decorator">Decorator</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
 
         <p>Create an Asset subclass from a decorated function.</p>
-<p>The decorated function may be sync or <code>async</code>. Sync functions are
-offloaded to a worker thread at materialization time; <code>async</code> functions
-are awaited natively on the event loop:</p>
+<p>The decorated function may be sync or <code>async</code>. Sync functions are offloaded to
+a worker thread at materialization time; <code>async</code> functions are awaited
+natively on the event loop:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@asset</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">users</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">return</span> <span class="n">fetch_users</span><span class="p">()</span>
@@ -2702,109 +2735,17 @@ are awaited natively on the event loop:</p>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">def</span><span class="w"> </span><span class="nf">users_stats</span><span class="p">(</span><span class="n">config</span><span class="p">:</span> <span class="n">MyConfig</span><span class="p">,</span> <span class="n">connection</span><span class="p">:</span> <span class="n">MyConn</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">return</span> <span class="n">fetch_stats</span><span class="p">()</span>
 </span></code></pre></div>
-<p>Every parameter of the decorated function declares a relation, inferred
-from its annotation (see <code>_collect</code>);
-<code>relations</code> is for the declarations an annotation cannot express, such as
-a cross-source or many-valued upstream.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>fn</code>
-            </td>
-            <td>
-                  <code><span title="collections.abc.Callable">Callable</span>[..., <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The function to turn into an asset, passed positionally when the
-decorator is used bare. <code>None</code> in the parenthesised form, which
-returns a decorator instead.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>relations</code>
-            </td>
-            <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Relation name, keyed by <code>data()</code> parameter name, to a
-<code>Relation</code>, a component class
-(the shorthand for a relation on it), or a list of component
-classes narrowing the relation <code>Asset</code>
-declares under that name. Explicit declarations win over the ones
-inferred from the annotations.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>**overrides</code>
-            </td>
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Definition metadata and behaviour: the public ClassVars
-and field defaults <code>Asset</code> declares
-(<code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>, <code>schema</code>,
-<code>partitioning</code>, <code>dataset</code>, <code>normalizer</code>,
-<code>materialization_strategy</code>, ...); see the class. An unknown name
-is a <code>TypeError</code> at decoration.</p>
-              </div>
-            </td>
-            <td>
-                  <code>{}</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="type">type</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a>] | <span title="collections.abc.Callable">Callable</span>[..., <span title="type">type</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a>]]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>An Asset subclass with the function as its <code>data()</code> method.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
+<p>Every parameter of the decorated function declares a relation, inferred from its
+annotation; <code>relations</code> is for the declarations an annotation cannot express,
+such as a cross-source or many-valued upstream. It maps a <code>data()</code> parameter
+name to a <code>Relation</code>, a component class (the shorthand for a relation on it), or
+a list of component classes narrowing the relation <code>Asset</code> declares under that
+name; explicit declarations win over the inferred ones.</p>
+<p>Every other keyword is definition metadata or behaviour: the public ClassVars and
+field defaults <code>Asset</code> declares (<code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>,
+<code>schema</code>, <code>partitioning</code>, <code>dataset</code>, <code>normalizer</code>,
+<code>materialization_strategy</code>, ...). An unknown name is a <code>TypeError</code> at
+decoration. The result is an Asset subclass with the function as its <code>data()</code>.</p>
 
     </div>
 
@@ -2908,8 +2849,133 @@ uses its class key.</p>
 
 </div>
 
+<div class="doc doc-object doc-attribute">
 
 
+
+<h3 id="interloper.Asset.default_destination" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">default_destination</span>
+
+
+<a href="#interloper.Asset.default_destination" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">default_destination</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Destination&lt;/span&gt;" href="../destinations/#interloper.Destination">Destination</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The destination downstream readers load this asset from.</p>
+<p>The destination whose key is <code>default_destination_key</code> when one is
+set and bound, else the first bound destination.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;AssetError&lt;/span&gt;" href="../errors/#interloper.errors.AssetError">AssetError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the asset has no destination at all.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Asset.body_from_function" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">body_from_function</span>
+
+
+<a href="#interloper.Asset.body_from_function" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">body_from_function</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n"><span title="types.FunctionType">FunctionType</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="interloper.serializable.ClassBody">ClassBody</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a decorated function into an asset body: the function becomes <code>data()</code>.</p>
+<p>A function whose first parameter is <code>self</code> is a method asset: it
+receives the asset's source as <code>self</code>. The generated <code>data()</code> wraps
+the function in the <code>functools.wraps</code> sense, so relation inference reads
+the original's annotations through <code>__wrapped__</code> and the stamped
+<code>__signature__</code> is what the parameters read as; an async function
+gives an async <code>data()</code>, which the run awaits on its loop.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>fn</code>
+            </td>
+            <td>
+                  <code><span title="types.FunctionType">FunctionType</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The decorated function.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="interloper.serializable.ClassBody">ClassBody</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The body carrying the generated <code>data()</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -3226,11 +3292,9 @@ API.</p>
     <div class="doc doc-contents ">
 
         <p>Execute the asset and return the result without writing to destination.</p>
-<p>Resolves the context and everything the declared relations fill
-(upstreams through the DAG), then runs the data function. Sync
-<code>data()</code> functions are automatically offloaded to a thread via
-<code>asyncio.to_thread</code>; async <code>data()</code> functions are awaited
-natively.</p>
+<p>Resolves the context and the inputs, runs <code>data()</code> and shapes its
+result (see <code>_produce</code>); a sync <code>data()</code> is offloaded to a thread,
+an async one awaited.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -4117,7 +4181,7 @@ window was given, or the window covers several partitions.</p>
             <td>
               <div class="doc-md-description">
                 <p>The upstream asset the data was read from; its <code>source</code>,
-<code>identity</code> and <code>id</code> tell the legs apart.</p>
+<code>identity</code> and <code>id</code> tell the upstreams apart.</p>
               </div>
             </td>
           </tr>
@@ -4133,7 +4197,7 @@ partition, in whatever representation that destination holds
 natively (records from a file destination, a DataFrame from
 BigQuery). <code>None</code> when the upstream has nothing materialized
 where the destination looks (no table or object for that
-partition at all); a <code>LOG</code> warning names the leg. An existing
+partition at all); a <code>LOG</code> warning names the upstream. An existing
 but empty partition is not this case: it arrives as whatever the
 destination returns for an empty read (an empty list or frame),
 not <code>None</code>. For a view, the destination's reference to the
@@ -4180,7 +4244,7 @@ data: a view reads nothing.</p>
         <p>The data as records, whatever representation the destination handed back.</p>
 <p>The one line a consumer needs to be indifferent to where its upstream
 is stored: a DataFrame and a list of rows both come out as
-<code>list[dict]</code>, and a leg with nothing materialized comes out empty.</p>
+<code>list[dict]</code>, and an upstream with nothing materialized comes out empty.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -4211,6 +4275,251 @@ is stored: a DataFrame and a list of rows both come out as
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Upstream.read" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">read</span>
+
+
+<a href="#interloper.Upstream.read" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">read</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">upstream</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">reader</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">window</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a></span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">],</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Upstream&lt;/span&gt;" href="./#interloper.Upstream">Upstream</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read an upstream's data from its default destination for the window it consumes.</p>
+<p>Nothing materialized where the destination looks is not a failure: the
+upstream is handed over with <code>data=None</code> and a warning event, and the
+reader decides what that means. Any other failure fails the reader.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>upstream</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The asset whose data is read.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>reader</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The asset reading it, whose identity the events carry.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>window</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The run's window, narrowed here to what <em>upstream</em> consumes.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>metadata</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Run-level metadata carried onto the emitted events.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Upstream&lt;/span&gt;" href="./#interloper.Upstream">Upstream</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The upstream with its data.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;AssetError&lt;/span&gt;" href="../errors/#interloper.errors.AssetError">AssetError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the read fails for any reason other than missing data.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Upstream.reference" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">reference</span>
+
+
+<a href="#interloper.Upstream.reference" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">reference</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">upstream</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></span><span class="p">,</span> <span class="n">destination</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Destination&lt;/span&gt;" href="../destinations/#interloper.Destination">Destination</a></span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Upstream&lt;/span&gt;" href="./#interloper.Upstream">Upstream</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Refer to an upstream's table instead of reading it, for a kind that reads no data.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>upstream</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="./#interloper.Asset">Asset</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The asset referred to.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>destination</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Destination&lt;/span&gt;" href="../destinations/#interloper.Destination">Destination</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The destination whose handle on the upstream is wanted.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Upstream&lt;/span&gt;" href="./#interloper.Upstream">Upstream</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The upstream with the destination's reference as its data.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 
 

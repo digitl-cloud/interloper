@@ -2053,17 +2053,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#interloper.Job.on_rebind" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;on_rebind
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -2643,10 +2632,10 @@ Trigger fields are inert declarative intent: the framework carries them,
 and an operator (the scheduler) acts on them. The workload itself
 compiles to the same <code>DAG</code> that every other
 entry point executes.</p>
-<p>A job also carries workload-level defaults, cascading to its targets the
-way a source cascades to its assets: every relation the job holds fills
-the same relation on any target (and any destination) that leaves it
-unbound, <code>destinations</code> included.</p>
+<p>A job also carries workload-level defaults: every relation the job holds
+is the default for the same relation on any target that resolves none,
+<code>destinations</code> included. The default applies where the job runs
+(<code>operations</code>), on a copy of the target; the target itself is never changed.</p>
 
 
 
@@ -2682,7 +2671,7 @@ unbound, <code>destinations</code> included.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The targets' operations, flattened.</p>
+        <p>The targets' operations, each target run with this job's bindings where it resolves none.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -2702,61 +2691,6 @@ unbound, <code>destinations</code> included.</p>
               <div class="doc-md-description">
                 <p>Every operation the job's targets provide.</p>
               </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Job.on_rebind" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">on_rebind</span>
-
-
-<a href="#interloper.Job.on_rebind" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_rebind</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Trickle this job's bindings into its targets and destinations whenever one changes.</p>
-<p>A binding is the only moment this can run: relation keyword arguments
-reach a component after <code>model_post_init</code>, so a job knows neither
-its targets nor its destinations before this hook has seen them.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The relation name whose binding changed; every relation the
-job holds trickles, so the name itself is not read.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
             </td>
           </tr>
       </tbody>

@@ -2469,9 +2469,11 @@ point runs. Acting on the schedule is the job of the platform scheduler, outside
 </tr>
 </tbody>
 </table>
-<p>Cascading works exactly like a source's: a job-level destination reaches every target without
-one. A job subclass that declares a further relation (a connection, say) cascades it the same
-way, into every target and destination declaring the same relation name and leaving it unbound.</p>
+<p>A job's destinations are the default for every target that resolves none: a source with its own
+destinations, or an asset whose source has some, keeps them. The default applies where the job
+runs (<code>job.operations()</code>, <code>il.DAG(job)</code>), on a copy of the target, so the target itself is never
+changed and two jobs sharing it each run it with their own. A job subclass that declares a
+further relation (a connection, say) is a default for its targets the same way.</p>
 <p><code>JobState</code> (<code>next_run_at</code>, <code>last_run_at</code>) is the job's machine-owned state, written by the
 scheduler. Editing a job's config clears <code>next_run_at</code>, so the next tick re-derives the schedule
 from the new spec rather than firing once more at the slot the old one produced.</p>
@@ -2556,7 +2558,7 @@ under that target's own relation name, in the target's own <code>init</code>:</p
 </span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">            </span><span class="nt">access_token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${FB_TOKEN}</span>
 </span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">            </span><span class="nt">app_id</span><span class="p">:</span><span class="w"> </span><span class="s">"1"</span>
 </span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a><span class="w">            </span><span class="nt">app_secret</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${FB_SECRET}</span>
-</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="w">        </span><span class="nt">select</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">campaigns</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">ads_stats</span><span class="p p-Indicator">]</span>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a><span class="w">        </span><span class="nt">assets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">campaigns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{},</span><span class="nt"> ads_stats</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{}}</span>
 </span></code></pre></div>
 <p><code>interloper run -f job.yaml --date 2026-01-15</code> reconstructs it and runs its DAG. See
 <a href="../specs/">Specs and serialization</a> and <a href="../cli/">CLI</a>. A scheduled job is the same document

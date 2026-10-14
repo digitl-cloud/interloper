@@ -1926,7 +1926,7 @@
   <a href="#interloper.source.decorator.source" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-function"></code>&nbsp;source
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;source
       </span>
     </span>
   </a>
@@ -1944,6 +1944,17 @@
   
     <nav class="md-nav" aria-label="Source">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Source.body_from_function" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;body_from_function
+      </span>
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#interloper.Source.model_post_init" class="md-nav__link">
@@ -1968,10 +1979,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Source.on_rebind" class="md-nav__link">
+  <a href="#interloper.Source.inherited" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;on_rebind
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;inherited
       </span>
     </span>
   </a>
@@ -2016,17 +2027,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;sibling_bindings
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#interloper.Source.asset_def" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;asset_def
       </span>
     </span>
   </a>
@@ -2528,138 +2528,36 @@
 <p>A source owns a set of assets and the connection, config and destinations they share.</p>
 
 
-<div class="doc doc-object doc-function">
+<div class="doc doc-object doc-attribute">
+
 
 
 <h2 id="interloper.source.decorator.source" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <span class="doc doc-object-name doc-function-name">source</span>
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">source</span>
 
 
 <a href="#interloper.source.decorator.source" class="headerlink" title="Permanent link">&para;</a></h2>
-          <div class="doc-overloads">
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">source</span><span class="p">(</span><span class="n">target</span><span class="p">:</span> <span class="n"><span title="type">type</span></span> <span class="o">|</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a></span><span class="p">]</span>
-</span></code></pre></div><div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">source</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">relations</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="o">...</span><span class="p">,</span> <span class="o">**</span><span class="n">overrides</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="type">type</span></span> <span class="o">|</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]],</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a></span><span class="p">]]</span>
-</span></code></pre></div>          </div>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">source</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">target</span><span class="p">:</span> <span class="n"><span title="type">type</span></span> <span class="o">|</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">/</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">relations</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="o">**</span><span class="n">overrides</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a></span><span class="p">]</span> <span class="o">|</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a></span><span class="p">]]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n"><span title="interloper.component.decorator.Decorator">Decorator</span></span><span class="p">(</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a></span><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
 
         <p>Create a Source subclass from a decorated class or function.</p>
 <p>A decorated class declares its configuration fields, its assets (methods
-carrying <code>@asset</code>) and its helpers; a decorated function returns the
-asset classes and turns its own annotated parameters into configuration
-fields:</p>
+carrying <code>@asset</code>) and its helpers; a decorated function returns the asset
+classes and turns its own annotated parameters into configuration fields:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@source</span><span class="p">(</span><span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Advertising"</span><span class="p">],</span> <span class="n">dataset</span><span class="o">=</span><span class="s2">"raw_shop"</span><span class="p">,</span> <span class="n">relations</span><span class="o">=</span><span class="p">{</span><span class="s2">"connection"</span><span class="p">:</span> <span class="n">ShopConnection</span><span class="p">})</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shop</span><span class="p">(</span><span class="n">Source</span><span class="p">):</span> <span class="o">...</span>
 </span></code></pre></div>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>target</code>
-            </td>
-            <td>
-                  <code><span title="type">type</span> | <span title="collections.abc.Callable">Callable</span>[..., <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The decorated class or function when used bare; <code>None</code> when
-used with arguments, in which case a decorator is returned.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>relations</code>
-            </td>
-            <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Relation name to a
-<code>Relation</code>, a component class
-(the shorthand for a relation on it), or a list of component
-classes narrowing the relation
-<code>Source</code> declares under that name.
-Explicit declarations win over the ones read from the class
-annotations.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>**overrides</code>
-            </td>
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Definition metadata and behaviour: the public ClassVars
-and field defaults <code>Source</code> declares
-(<code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>, <code>dataset</code>,
-<code>default_destination_key</code>, <code>normalizer</code>,
-<code>materialization_strategy</code>, ...); see the class. An unknown name
-is a <code>TypeError</code> at decoration.</p>
-              </div>
-            </td>
-            <td>
-                  <code>{}</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="type">type</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a>] | <span title="collections.abc.Callable">Callable</span>[..., <span title="type">type</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Source&lt;/span&gt;" href="./#interloper.Source">Source</a>]]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>A Source subclass with discovered assets.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
+<p><code>relations</code> maps a relation name to a <code>Relation</code>, a component class (the
+shorthand for a relation on it), or a list of component classes narrowing the
+relation <code>Source</code> declares under that name; explicit declarations win over the
+ones read from the class annotations.</p>
+<p>Every other keyword is definition metadata or behaviour: the public ClassVars and
+field defaults <code>Source</code> declares (<code>key</code>, <code>name</code>, <code>icon</code>, <code>tags</code>,
+<code>dataset</code>, <code>default_destination_key</code>, <code>normalizer</code>,
+<code>materialization_strategy</code>, ...). An unknown name is a <code>TypeError</code> at
+decoration. The result is a Source subclass with its assets discovered.</p>
 
     </div>
 
@@ -2691,10 +2589,13 @@ declares a relation the source's assets inherit, and <code>asset_types</code>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">connection</span><span class="p">:</span> <span class="n">MyConnection</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">asset_types</span> <span class="o">=</span> <span class="p">[</span><span class="n">Users</span><span class="p">,</span> <span class="n">Orders</span><span class="p">]</span>
 </span></code></pre></div>
-<p>Access assets by key via attribute access:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">MySource</span><span class="p">()</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">source</span><span class="o">.</span><span class="n">users</span>  <span class="c1"># returns the Asset with key "users"</span>
+<p>An asset is reached by its key: on the class it is the asset class, on an
+instance the live asset (see <code>AssetMeta</code>):</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">MySource</span><span class="o">.</span><span class="n">users</span>      <span class="c1"># the asset class</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">MySource</span><span class="p">()</span><span class="o">.</span><span class="n">users</span>    <span class="c1"># this source's Asset with key "users"</span>
 </span></code></pre></div>
+<p>Assets written in the class body are the typed form; one given only in
+<code>asset_types</code> is reached the same way at runtime.</p>
 
 
 
@@ -2720,6 +2621,83 @@ declares a relation the source's assets inherit, and <code>asset_types</code>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="interloper.Source.body_from_function" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">body_from_function</span>
+
+
+<a href="#interloper.Source.body_from_function" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">body_from_function</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n"><span title="types.FunctionType">FunctionType</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="interloper.serializable.ClassBody">ClassBody</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a decorated function into a source body: what it returns are the assets.</p>
+<p>The function is called once, for the asset classes it returns (one or a
+list); its annotated parameters become configuration fields, their
+defaults the field defaults.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>fn</code>
+            </td>
+            <td>
+                  <code><span title="types.FunctionType">FunctionType</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The decorated function.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="interloper.serializable.ClassBody">ClassBody</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The body carrying <code>asset_types</code> and the fields.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="interloper.Source.model_post_init" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">model_post_init</span>
 
@@ -2730,9 +2708,9 @@ declares a relation the source's assets inherit, and <code>asset_types</code>
 
     <div class="doc doc-contents ">
 
-        <p>Build the source's assets, resolve their defaults and wire them to each other.</p>
+        <p>Build the source's assets, own them, check where they land, and wire them to each other.</p>
 <p>The assets are incomplete when built here: this source's own relation
-kwargs are bound, and trickled into them, only after
+kwargs, which they read through it, are bound only after
 <code>model_post_init</code> returns. That is why nothing is validated at
 construction; <code>validate_relations</code> cascades into each asset
 when the DAG or reconstruction asks, with everything this source can
@@ -2765,6 +2743,29 @@ fill already bound.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;ConfigError&lt;/span&gt;" href="../errors/#interloper.errors.ConfigError">ConfigError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If an asset already belongs to another source.</p>
+              </div>
             </td>
           </tr>
       </tbody>
@@ -2840,20 +2841,24 @@ forwarded to each asset's own check; see
 <div class="doc doc-object doc-function">
 
 
-<h3 id="interloper.Source.on_rebind" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">on_rebind</span>
+<h3 id="interloper.Source.inherited" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">inherited</span>
 
 
-<a href="#interloper.Source.on_rebind" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_rebind</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+<a href="#interloper.Source.inherited" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">inherited</span><span class="p">(</span><span class="n">child</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="../components/#interloper.Component">Component</a></span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n">own</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Any">Any</span></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Trickle this source's bindings into its assets and destinations whenever one changes.</p>
-<p>A binding is the moment this can run: relation keyword arguments reach
-a component after <code>model_post_init</code> has already built its assets, so
-without this hook a source's connection would never reach them.</p>
+        <p>What one of this source's assets reads for an inherited setting.</p>
+<p>The dataset is part of an asset's location, which the source names
+(as <code>table</code> names the rest): the asset's own dataset, else this
+source's, else this source's key, with any <code>{field}</code> filled from
+this source's fields by <code>format</code>. Every other setting but <code>enabled</code>
+is handed down as <code>Component.inherited</code> does.</p>
+<p>An asset runs only while it and this source are both enabled, which is
+how <code>source(enabled=False)</code> puts a read-only source in a run.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2869,6 +2874,22 @@ without this hook a source's connection would never reach them.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
+                <code>child</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="../components/#interloper.Component">Component</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The asset reading the setting.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>name</code>
             </td>
             <td>
@@ -2876,12 +2897,50 @@ without this hook a source's connection would never reach them.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The relation name whose binding changed; every relation the
-source holds trickles, so the name itself is not read.</p>
+                <p>The setting's field name.</p>
               </div>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>own</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The asset's stored value, <code>None</code> while unset.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The effective value of the setting for <em>child</em>.</p>
+              </div>
             </td>
           </tr>
       </tbody>
@@ -3112,109 +3171,6 @@ persists the same wiring; connector code never needs it.</p>
             <td>
               <div class="doc-md-description">
                 <p>fills it; assets with no sibling wiring are absent.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Source.asset_def" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">asset_def</span>
-
-
-<a href="#interloper.Source.asset_def" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">asset_def</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;AssetDefinition&lt;/span&gt;" href="../assets/#interloper.AssetDefinition">AssetDefinition</a></span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Look up an asset definition by key.</p>
-<p>Public for platform code that holds a key; connector code never needs it.</p>
-<p>Returns an <code>AssetDefinition</code> with <code>source_key</code> set,
-so callers can use <code>.qualified_key</code> for cross-source references:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">FacebookAds</span><span class="o">.</span><span class="n">asset_def</span><span class="p">(</span><span class="s2">"campaigns"</span><span class="p">)</span><span class="o">.</span><span class="n">qualified_key</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># → "facebook_ads.campaigns"</span>
-</span></code></pre></div>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>key</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The asset key (snake_cased class name).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;AssetDefinition&lt;/span&gt;" href="../assets/#interloper.AssetDefinition">AssetDefinition</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The asset definition with source context.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="KeyError">KeyError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If no asset matches the key.</p>
               </div>
             </td>
           </tr>

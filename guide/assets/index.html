@@ -2656,10 +2656,16 @@ afterwards. See <a href="../dependencies/#how-wiring-works">Dependencies</a>.</p
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">strict</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">materialization_strategy</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">MaterializationStrategy</span><span class="o">.</span><span class="n">STRICT</span><span class="p">)</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">bare</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">normalizer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>           <span class="c1"># None explicitly clears the normalizer</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">bare</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">normalizer</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>           <span class="c1"># unset: the source's normalizer, or none</span>
 </span></code></pre></div>
-<p>Every keyword of the call means "leave unchanged" when omitted, except a relation name: passing
-one at all changes it, since <code>None</code> there clears the binding.</p>
+<p>Naming a field or a relation changes it, leaving it out keeps it; <code>None</code> clears a relation and
+makes a setting the asset inherits from its source inherit again. An asset owned by a source
+reads its <code>dataset</code>, <code>default_destination_key</code>, <code>normalizer</code>, <code>materialization_strategy</code>,
+<code>retry</code> and unbound relations through the source on every read (see
+<a href="../sources/#what-assets-read-through-their-source">Sources</a>), and runs only while the source is
+enabled too.</p>
+<p><code>asset.default_destination</code> is the destination downstream assets read it from: the one whose key
+is <code>default_destination_key</code>, else the first.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">rewired</span> <span class="o">=</span> <span class="n">asset</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">OtherConnection</span><span class="p">(</span><span class="o">...</span><span class="p">),</span> <span class="n">campaigns</span><span class="o">=</span><span class="p">[</span><span class="n">fb</span><span class="o">.</span><span class="n">campaigns</span><span class="p">,</span> <span class="n">tt</span><span class="o">.</span><span class="n">campaigns</span><span class="p">])</span>
 </span></code></pre></div>
 <p>Unknown keyword arguments raise <code>TypeError</code> rather than being silently dropped.</p>

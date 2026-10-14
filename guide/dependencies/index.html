@@ -2749,10 +2749,10 @@ does not exist.</p>
 </table>
 <p><code>validate_relations(nodes)</code> is the check behind the three <code>ConfigError</code> rows. Constructing a
 component binds what it is given and checks each binding, but not that every required relation is
-bound: components are wired piecewise (a source trickles into its assets, a manifest binds its
-references once every component exists), so the check runs where the graph is whole. The DAG runs
-it with its own nodes; loading a manifest runs it without <code>nodes</code> on each root, which is what lets
-a relation only the graph can fill stay unbound until then.</p>
+bound: components are wired piecewise (a source's assets read its bindings through it, a manifest
+binds its references once every component exists), so the check runs where the graph is whole. The
+DAG runs it with its own nodes; loading a manifest runs it without <code>nodes</code> on each root, which is
+what lets a relation only the graph can fill stay unbound until then.</p>
 <p>A non-partitioned asset never depends on a partitioned one because a partitioned upstream is
 read one partition at a time, which an unpartitioned downstream cannot express. A run has one
 partition scope, so both ends of an edge must agree on granularity, read-only upstreams

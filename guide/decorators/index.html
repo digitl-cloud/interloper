@@ -2655,45 +2655,36 @@ they mean something only as constructor arguments.</p>
 </tbody>
 </table>
 <h2 id="instance-reconfiguration">Instance reconfiguration<a class="headerlink" href="#instance-reconfiguration" title="Permanent link">&para;</a></h2>
-<p>Calling an instance returns a copy; omitted keywords mean "unchanged".</p>
+<p>Calling any component instance returns a copy, with one rule: naming a field or a relation
+changes it, leaving it out keeps it.</p>
 <table>
 <thead>
 <tr>
-<th><code>asset(...)</code></th>
-<th><code>source(...)</code></th>
+<th>Keyword</th>
+<th>Effect on the copy</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>id</code></td>
-<td></td>
+<td>any field (<code>dataset</code>, <code>enabled</code>, <code>normalizer</code>, <code>id</code>, ...)</td>
+<td>set, validated as an assignment</td>
 </tr>
 <tr>
-<td><code>dataset</code></td>
-<td><code>dataset</code> (re-points assets that inherited the old value)</td>
+<td>an inherited field set to <code>None</code> (<code>asset(dataset=None)</code>)</td>
+<td>inherits again from the source</td>
 </tr>
 <tr>
-<td><code>default_destination_key</code></td>
-<td><code>default_destination_key</code></td>
+<td>any relation name</td>
+<td>rebound; <code>None</code> clears it</td>
 </tr>
 <tr>
-<td><code>enabled</code></td>
-<td><code>enabled</code> (applied to every asset)</td>
-</tr>
-<tr>
-<td><code>materialization_strategy</code></td>
-<td><code>materialization_strategy</code></td>
-</tr>
-<tr>
-<td><code>normalizer</code> (<code>None</code> clears)</td>
-<td><code>normalizer</code></td>
-</tr>
-<tr>
-<td>any relation name (replaced; <code>None</code> clears)</td>
-<td>any relation name (replaced; <code>None</code> clears, and repoints what was trickled)</td>
+<td>anything else</td>
+<td><code>TypeError</code></td>
 </tr>
 </tbody>
 </table>
+<p>A source's copy carries copies of its assets, still wired to each other; every connection and
+destination they read is shared. <code>source(enabled=False)</code> makes every asset of the copy read-only.</p>
 <h2 id="oauthconfig"><code>OAuthConfig</code><a class="headerlink" href="#oauthconfig" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

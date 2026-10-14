@@ -2539,8 +2539,8 @@ need to live in the file. A manifest is one component, nested, and is exactly <c
 </span><span id="__span-4-31"><a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">            </span><span class="nt">ads_stats</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">ref</span><span class="p">:</span><span class="w"> </span><span class="nv">fb-ads-stats</span><span class="p p-Indicator">}]</span><span class="w">     </span><span class="c1"># the asset has a parent: always a reference</span>
 </span></code></pre></div>
 <p>Without the explicit <code>ads_stats:</code> line the DAG binds every <code>facebook_ads.ads_stats</code> node it holds. Neither
-target declares <code>destinations</code>: the job's cascade into every target that has none, so a target
-writes its own only to use something else. A parentless component mentioned a second time is a
+target declares <code>destinations</code>: the job's are the default for every target that has none, so a
+target writes its own only to use something else. A parentless component mentioned a second time is a
 reference too (<code>destinations: [{ref: bq}]</code> on a target that needs the same destination as
 another one but not the job's), which is the one reference rule, with no flag.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">job</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">Job</span><span class="o">.</span><span class="n">from_spec_file</span><span class="p">(</span><span class="s2">"daily.yaml"</span><span class="p">)</span>
@@ -2560,8 +2560,8 @@ YAML it is one document per root, separated by <code>---</code>:</p>
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">dag_spec</span><span class="o">.</span><span class="n">model_dump</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="s2">"json"</span><span class="p">)</span>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">dag</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">DAG</span><span class="o">.</span><span class="n">from_spec</span><span class="p">(</span><span class="n">DAGSpec</span><span class="p">(</span><span class="o">**</span><span class="n">payload</span><span class="p">))</span>
 </span></code></pre></div>
-<p>It is what <code>MultiProcessRunner</code> ships to its workers and what <code>interloper run --format inline</code>
-accepts. The override map is built from the DAG's <strong>actual</strong> asset instances, so a parent the run
+<p>It is what the Docker and Kubernetes runners ship to each container, and what
+<code>interloper run --format inline</code> accepts. The override map is built from the DAG's <strong>actual</strong> asset instances, so a parent the run
 only reads travels as its own document carrying that one asset with <code>enabled: false</code>,
 and stays read-only after the round-trip.</p>
 <h2 id="what-makes-something-serializable">What makes something serializable<a class="headerlink" href="#what-makes-something-serializable" title="Permanent link">&para;</a></h2>

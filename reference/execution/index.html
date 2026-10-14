@@ -2213,10 +2213,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper.Runner.state" class="md-nav__link">
+  <a href="#interloper.Runner.capacity" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;state
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;capacity
       </span>
     </span>
   </a>
@@ -2259,6 +2259,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="AsyncRunner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper.AsyncRunner.capacity" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;capacity
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2266,17 +2283,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;SerialRunner
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#interloper.MultiProcessRunner" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-class"></code>&nbsp;MultiProcessRunner
       </span>
     </span>
   </a>
@@ -2463,6 +2469,34 @@
       </span>
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="OperationResult">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper.OperationResult.succeeded" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;succeeded
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.OperationResult.from_execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_execution
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3654,11 +3688,12 @@ under their own ids, read instead of executed.</p>
 
 
 
-        <p>Abstract base class for all runners.</p>
-<p>Async-native: <code>run</code> is a coroutine. It owns the <code>on_event</code>
-subscription lifecycle and delegates the actual DAG walk to the
-subclass <code>_run</code>. <code>await</code> it from async code, or drive it from a
-sync entrypoint with <code>interloper.run</code>:</p>
+        <p>Configuration a run is made from: how many operations run at once, where, and what a failure does.</p>
+<p>A runner holds nothing per run, so one runner serves any number of runs,
+concurrently too. Each kind of runner names its kind of <code>Run</code>, which owns
+the walk, what the run holds, and where an operation executes. <code>await</code>
+<code>run</code> from async code, or drive it from a sync entrypoint with
+<code>interloper.run</code>:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">)</span>     <span class="c1"># async</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">))</span>   <span class="c1"># sync edge</span>
 </span></code></pre></div>
@@ -3685,40 +3720,17 @@ sync entrypoint with <code>interloper.run</code>:</p>
 
 
 
-<h3 id="interloper.Runner.state" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">state</span>
+<h3 id="interloper.Runner.capacity" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">capacity</span>
 
 
-<a href="#interloper.Runner.state" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">state</span><span class="p">:</span> <span class="n"><span title="interloper.runner.state.RunState">RunState</span></span>
+<a href="#interloper.Runner.capacity" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">capacity</span><span class="p">:</span> <span class="n"><span title="int">int</span></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>The current run state.</p>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;RunnerError&lt;/span&gt;" href="../errors/#interloper.errors.RunnerError">RunnerError</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If state has not been initialized via <code>run()</code>.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>How many operations a run executes at once.</p>
 
     </div>
 
@@ -3846,16 +3858,13 @@ or the registered class is not of the receiving class.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Materialize the DAG and return the result.</p>
-<p>Subscribes the <code>on_event</code> handler (if any) for the duration of the
-run, delegates to <code>_run</code>, then flushes pending events and
-unsubscribes — so every emitted event is delivered before returning.</p>
-<p>The subscription is scoped to this run: the EventBus is a
-process-wide singleton, so when several runs execute concurrently
-(e.g. the in-process launcher) every handler would otherwise
-receive every run's events. The run's <code>run_id</code> is assigned here
-(before any event is emitted) and only events carrying it in their
-metadata are delivered to <code>on_event</code>.</p>
+        <p>Run the DAG and return the result.</p>
+<p>Events carrying the run's id reach <code>on_event</code> (when set) before this
+returns: the EventBus is process-wide, so several runs in one process
+would otherwise reach every handler. The run is traced as
+<code>interloper.runner.run</code>, under the parent span the metadata or the
+environment carries. Operation failures are recorded on the result;
+with <code>reraise</code> set, the first one is raised once the run has finished.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3878,7 +3887,7 @@ metadata are delivered to <code>on_event</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The DAG to execute.</p>
+                <p>The DAG to run.</p>
               </div>
             </td>
             <td>
@@ -3894,7 +3903,7 @@ metadata are delivered to <code>on_event</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Partition or window to scope the run.</p>
+                <p>The window the run covers; a partition is accepted as the window of one.</p>
               </div>
             </td>
             <td>
@@ -3910,7 +3919,8 @@ metadata are delivered to <code>on_event</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Arbitrary metadata (e.g. run_id, backfill_id).</p>
+                <p>Run-level metadata (<code>run_id</code>, <code>backfill_id</code>, ...); a
+<code>run_id</code> is generated when absent.</p>
               </div>
             </td>
             <td>
@@ -3936,7 +3946,7 @@ metadata are delivered to <code>on_event</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A RunResult summarizing the execution outcome.</p>
+                <p>The run's result.</p>
               </div>
             </td>
           </tr>
@@ -3974,22 +3984,11 @@ metadata are delivered to <code>on_event</code>.</p>
 
 
 
-        <p>Async-native, in-process runner — the single DAG-walking engine.</p>
-<p>Schedules ready operations as <code>asyncio</code> tasks bounded by an
-<code>asyncio.Semaphore</code>. It subsumes both serial and thread-pool execution:</p>
-<ul>
-<li><code>AsyncRunner(max_workers=1)</code> — serial execution (deterministic ordering).</li>
-<li><code>AsyncRunner(max_workers=4)</code> — concurrent execution (default).</li>
-</ul>
-<p>Sync <code>data()</code> functions are automatically offloaded to threads via
-<code>asyncio.to_thread</code>, while async <code>data()</code> functions run natively
-on the event loop. Either way, exactly one event loop is created per
-run (not per asset):</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># async</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncRunner</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">)</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># sync edge (scripts, REPL, notebooks)</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">result</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">AsyncRunner</span><span class="p">(</span><span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">))</span>
+        <p>Run every operation in this process: <code>max_workers</code> at a time, sync ones offloaded to threads.</p>
+<p><code>AsyncRunner(max_workers=1)</code> is serial and deterministic (see
+<code>SerialRunner</code>); the default runs four operations at once:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">AsyncRunner</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">)</span>   <span class="c1"># async</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">il</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">AsyncRunner</span><span class="p">(</span><span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">))</span>                 <span class="c1"># sync edge</span>
 </span></code></pre></div>
 
 
@@ -4009,6 +4008,26 @@ run (not per asset):</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="interloper.AsyncRunner.capacity" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">capacity</span>
+
+
+<a href="#interloper.AsyncRunner.capacity" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">capacity</span><span class="p">:</span> <span class="n"><span title="int">int</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How many operations a run executes at once: <code>max_workers</code>.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -4040,69 +4059,11 @@ run (not per asset):</p>
 
 
         <p>Execute operations one at a time in dependency order.</p>
-<p>The simplest runner — deterministic, easy to debug. It is the async
+<p>The simplest runner: deterministic, easy to debug. It is the async
 engine with a single concurrency slot, so there is never more than one
 operation in flight:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">SerialRunner</span><span class="p">(</span><span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">)</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># or, from a sync edge: il.run(SerialRunner().run(dag))</span>
-</span></code></pre></div>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="interloper.MultiProcessRunner" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <span class="doc doc-object-name doc-class-name">MultiProcessRunner</span>
-
-
-<a href="#interloper.MultiProcessRunner" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">MultiProcessRunner</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents first">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="interloper.runner.sync_runner.SyncRunner">SyncRunner</span></code></p>
-
-
-
-        <p>Process-based parallel runner.</p>
-<p>Executes independent operations concurrently using a process pool.
-Each operation is serialized via <code>DAGSpec</code>,
-reconstructed in a child process, and executed there.  State
-tracking remains in the main process.</p>
-<p>Use this runner when operations perform CPU-bound work or when
-you need true parallelism (bypassing the GIL):</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">MultiProcessRunner</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">on_event</span><span class="o">=</span><span class="n">log_event</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">dag</span><span class="p">)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># or, from a sync edge: il.run(MultiProcessRunner().run(dag))</span>
 </span></code></pre></div>
 
 
@@ -4373,7 +4334,10 @@ its own.</p>
 will run": a disabled operation stays in the graph, ordering whatever
 depends on it, and does not execute. <code>Asset</code> adds the half only an
 asset has, which is that a disabled one is read-only and its downstreams
-resolve its data from its destination instead of recomputing it.</p>
+resolve its data from its destination instead of recomputing it.
+<code>enabled</code> and <code>retry</code> are inherited: an owned operation reads them
+through its owner, which decides (a source's assets run only while the
+source is enabled; one left without a retry policy uses its owner's).</p>
 <p><code>capture_traceback</code> controls whether a failed execution's traceback
 is attached to its failure event; off for operations whose raw errors
 embed secrets (credential exchanges carry them in URLs).</p>
@@ -4876,21 +4840,25 @@ outputs; operations without dependencies ignore it.</p>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">error</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">config</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="n"><span title="dict">dict</span></span><span class="p">(),</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">state</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="n"><span title="dict">dict</span></span><span class="p">(),</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">traceback</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">exception</span><span class="p">:</span> <span class="n"><span title="BaseException">BaseException</span></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
 
 
 
-        <p>What an operation hands back for the platform to persist.</p>
+        <p>What an operation came to: the effects the platform persists, and the verdict.</p>
 <p><code>config</code> fields are merged into the target component's stored config
 (through its encryption path) and <code>state</code> fields onto its
 machine-owned state: how an operation's effects reach the row without
-the operation knowing the store. <code>error</code> carries the
-persistence-safe message of a failed execution, set by
-<code>Operation.failure</code>; success paths leave it unset (terminal
-status is the runner's, not the operation's).</p>
+the operation knowing the store. An operation's <code>execute</code> returns one
+carrying its effects, and its <code>failure</code> hook one carrying the
+persistence-safe <code>error</code>. The attempt loop (<code>from_execution</code>) completes
+a failure with the <code>traceback</code> (when the operation's class allows one)
+and the original <code>exception</code>, kept in memory only so a runner can
+re-raise it. An unset <code>error</code> means the operation succeeded.</p>
 
 
 
@@ -4910,8 +4878,188 @@ status is the runner's, not the operation's).</p>
 
 
 
+<div class="doc doc-object doc-attribute">
 
 
+
+<h3 id="interloper.OperationResult.succeeded" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">succeeded</span>
+
+
+<a href="#interloper.OperationResult.succeeded" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">succeeded</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the operation succeeded, which is whether no error is set.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>True</code> when <code>error</code> is unset.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+    </div>
+
+</div>
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.OperationResult.from_execution" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_execution</span>
+
+
+<a href="#interloper.OperationResult.from_execution" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_execution</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operation</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">context</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationContext&lt;/span&gt;" href="./#interloper.OperationContext">OperationContext</a></span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">on_retry</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="str">str</span></span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">on_restart</span><span class="p">:</span> <span class="n"><span title="collections.abc.Callable">Callable</span></span><span class="p">[[],</span> <span class="kc">None</span><span class="p">],</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Execute an operation under its retry policy and return what it came to.</p>
+<p>Each attempt runs inside the <code>interloper.operation.execute</code> span. A
+failure is retried when the operation's <code>RetryPolicy</code> allows another
+attempt and <code>Operation.retryable</code> agrees: <code>on_retry</code> is told the
+error as it happens, the policy's backoff is slept, <code>on_restart</code> is
+told the next attempt starts, and the operation executes again. Any
+other failure becomes the operation's <code>failure</code> result, completed with
+the formatted error when the hook left it empty, the traceback when the
+class's <code>capture_traceback</code> allows, and the original exception.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>operation</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The operation to execute.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationContext&lt;/span&gt;" href="./#interloper.OperationContext">OperationContext</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The facts it executes with.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>on_retry</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Callable">Callable</span>[[<span title="str">str</span>], None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Told the formatted error of each attempt that will be
+retried, before its backoff.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>on_restart</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Callable">Callable</span>[[], None]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Told when the next attempt starts, after the backoff.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result: the operation's own on success, its failure otherwise.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 
 

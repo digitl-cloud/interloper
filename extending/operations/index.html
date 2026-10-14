@@ -2497,7 +2497,7 @@ off because provider errors embed secrets in URLs.</p>
 bound to that asset, which is what <code>upstream_relations()</code> reports. <code>invoke</code> calls a sync or
 async callable uniformly.</p>
 <h2 id="where-effects-go">Where effects go<a class="headerlink" href="#where-effects-go" title="Permanent link">&para;</a></h2>
-<p>Runners record the returned <code>OperationResult</code> on the node's <code>ExecutionInfo.effects</code>. In the
+<p>Runners record the returned <code>OperationResult</code> on the node's <code>ExecutionInfo.result</code>. In the
 core that is where it ends; the platform's run executor reads the effects after the run and
 applies them to the stored component. The default <code>failure()</code> formats the exception with
 pydantic input values stripped, so secrets in validation errors never reach an event.</p>

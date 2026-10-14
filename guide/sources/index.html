@@ -802,10 +802,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#selecting-assets" class="md-nav__link">
+  <a href="#narrowing-and-disabling" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Selecting assets
+        Narrowing and disabling
       </span>
     </span>
   </a>
@@ -818,10 +818,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-cascades-to-assets" class="md-nav__link">
+  <a href="#what-assets-read-through-their-source" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        What cascades to assets
+        What assets read through their source
       </span>
     </span>
   </a>
@@ -2601,69 +2601,71 @@ class form is preferred for anything configurable.</p>
 <p>Every declared relation is a constructor keyword under its own name; a list binds several
 targets, <code>None</code> binds nothing. Attribute access reads what is bound (<code>source.connection</code>), and
 <code>bind</code>, <code>unbind</code> and assignment change it afterwards.</p>
-<p>Assets are attributes:</p>
+<p>Assets are attributes, under their key:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">FacebookAds</span><span class="o">.</span><span class="n">campaigns</span>          <span class="c1"># the asset definition (class)</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">source</span><span class="o">.</span><span class="n">campaigns</span>               <span class="c1"># the live asset instance owned by this source</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">source</span><span class="o">.</span><span class="n">campaigns</span><span class="o">.</span><span class="n">materialize</span><span class="p">()</span>
 </span></code></pre></div>
+<p>An asset class is its own descriptor: read on the class it is the class, read on an instance
+the live asset. Assets written in the class body are the typed form (<code>source.campaigns</code> types
+as <code>Asset</code>); an asset given only in <code>asset_types</code> is reached the same way at runtime, but a type
+checker cannot see it. An asset class belongs to one source: listing it in a second is a
+<code>TypeError</code> at definition.</p>
 <h3 id="reconfiguring">Reconfiguring<a class="headerlink" href="#reconfiguring" title="Permanent link">&para;</a></h3>
-<p>Calling an instance returns a deep copy with overrides applied; the original is untouched:</p>
+<p>Calling an instance returns a copy with the named changes applied; the original is untouched:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">destinations</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">CSVDestination</span><span class="p">(</span><span class="n">base_path</span><span class="o">=</span><span class="s2">"./staging"</span><span class="p">))</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">read_only</span> <span class="o">=</span> <span class="n">source</span><span class="p">(</span><span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Accepted keywords: <code>dataset</code>, <code>default_destination_key</code>, <code>enabled</code> (applied to every
-asset), <code>normalizer</code>, <code>materialization_strategy</code>, and any relation name. A fixed keyword left
-out means "unchanged"; a relation name passed at all changes it, since <code>None</code> there clears the
-binding. Rebinding a relation also repoints the assets that had received it by trickle, leaving
-an asset that bound the relation itself alone.</p>
-<h3 id="selecting-assets">Selecting assets<a class="headerlink" href="#selecting-assets" title="Permanent link">&para;</a></h3>
-<p><code>select</code> limits which assets a run materializes. Unselected assets stay in the source as
-read-only dependencies, so wiring still validates and their stored output is still readable:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">select</span><span class="o">=</span><span class="p">[</span><span class="s2">"campaigns"</span><span class="p">,</span> <span class="s2">"ads_stats"</span><span class="p">])</span>
+<p>The rule is the one every component follows: naming a field or a relation changes it, leaving it
+out keeps it. <code>None</code> clears a relation, and makes a setting the assets inherit inherit again. The
+copy's assets are copied with it, still wired to each other, while the connections and
+destinations they read are shared.</p>
+<h3 id="narrowing-and-disabling">Narrowing and disabling<a class="headerlink" href="#narrowing-and-disabling" title="Permanent link">&para;</a></h3>
+<p>A source built with <code>enabled=False</code> makes every one of its assets read-only: they stay in a run
+as dependencies, so wiring still validates and their stored output is still readable. An asset
+can also be disabled alone (<code>source.campaigns(enabled=False)</code>). To build a source with only some
+of its assets, pass the <code>assets</code> override map, which is what the platform persists:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">source</span> <span class="o">=</span> <span class="n">FacebookAds</span><span class="p">(</span><span class="n">account_id</span><span class="o">=</span><span class="s2">"act_123"</span><span class="p">,</span> <span class="n">assets</span><span class="o">=</span><span class="p">{</span><span class="s2">"campaigns"</span><span class="p">:</span> <span class="p">{},</span> <span class="s2">"ads_stats"</span><span class="p">:</span> <span class="p">{}})</span>
 </span></code></pre></div>
-<p>An unknown key raises <code>SourceError</code>.</p>
-<h2 id="what-cascades-to-assets">What cascades to assets<a class="headerlink" href="#what-cascades-to-assets" title="Permanent link">&para;</a></h2>
-<p>At construction the source fills in whatever its assets did not set themselves:</p>
+<h2 id="what-assets-read-through-their-source">What assets read through their source<a class="headerlink" href="#what-assets-read-through-their-source" title="Permanent link">&para;</a></h2>
+<p>An asset never holds a copy of its source's settings or bindings: it reads what it leaves unset
+through the source, on every read, so a change to the source reaches its assets at once.</p>
 <table>
 <thead>
 <tr>
-<th>Source setting</th>
-<th>Asset receives it when</th>
+<th>Asset reads</th>
+<th>When it leaves unset</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>dataset</code> (defaults to the source key)</td>
-<td>the asset's <code>dataset</code> is empty</td>
+<td><code>dataset</code> (the source's, else the source key; <code>{field}</code> templates filled from the source)</td>
+<td>its own <code>dataset</code></td>
 </tr>
 <tr>
-<td><code>destinations</code></td>
-<td>the asset has none</td>
+<td><code>default_destination_key</code>, <code>normalizer</code>, <code>materialization_strategy</code>, <code>retry</code></td>
+<td>its own</td>
 </tr>
 <tr>
-<td><code>default_destination_key</code></td>
-<td>the asset's is empty</td>
+<td><code>enabled</code></td>
+<td>never unset: an asset runs only while it and its source are enabled</td>
 </tr>
 <tr>
-<td><code>normalizer</code></td>
-<td>the asset has none</td>
-</tr>
-<tr>
-<td><code>materialization_strategy</code></td>
-<td>the asset is still on <code>AUTO</code></td>
+<td>any relation, such as <code>connection</code> or <code>destinations</code></td>
+<td>its own binding</td>
 </tr>
 </tbody>
 </table>
-<p>Relations trickle by name: for every relation the asset declares under a name the source has
-bound, and leaves unbound itself, the source binds whichever of its own targets that relation
-accepts. Destinations receive the same pass, so a <code>GoogleCloudConnection</code> set on the source
-reaches a <code>BigQueryDestination</code> that declares a <code>connection</code> relation. It re-runs on every
-<code>bind()</code>, so a destination bound after the assets exist still propagates.</p>
+<p>A relation is read by name, filtered by what the asset's relation accepts. A binding the asset
+holds itself always wins, and a spec carries only what an asset set itself. Nothing is written
+into the source's destinations: a destination configures its own connection.</p>
 <p>An asset relation that names a sibling (a bare key) is bound at construction too, from the
 source's own asset instances. Anything reaching outside the source is left to the
 <a href="../dependencies/#how-wiring-works">DAG</a>.</p>
 <h2 id="dataset-and-table-naming">Dataset and table naming<a class="headerlink" href="#dataset-and-table-naming" title="Permanent link">&para;</a></h2>
-<p>Every asset materializes into <code>dataset.table</code>. The dataset is the source's <code>dataset</code> (or key).
+<p>Every asset materializes into <code>dataset.table</code>. The dataset is the asset's own, else the
+source's <code>dataset</code>, else the source key; either may name a source field in braces
+(<code>"analytics_{property_id}"</code>).
 The table is computed by <code>Source.table()</code>:</p>
 <ul>
 <li>Without a discriminator: the asset key (<code>campaigns</code>).</li>
@@ -2681,8 +2683,8 @@ raises <code>TypeError</code>.</p>
 <h2 id="definitions">Definitions<a class="headerlink" href="#definitions" title="Permanent link">&para;</a></h2>
 <p><code>FacebookAds.definition()</code> returns a <code>SourceDefinition</code>: key, name, description, tags, the JSON
 Schema of its configuration fields, its declared relations, and one <code>AssetDefinition</code> per
-asset. <code>FacebookAds.asset_def("campaigns")</code> returns a single asset's definition with its
-qualified key. This is what the <a href="../catalog/">catalog</a> is built from.</p>
+asset. <code>FacebookAds.campaigns.definition()</code> returns a single asset's. This is what the
+<a href="../catalog/">catalog</a> is built from.</p>
 <h2 id="sources-are-workloads">Sources are workloads<a class="headerlink" href="#sources-are-workloads" title="Permanent link">&para;</a></h2>
 <p>A source is a <code>Workload</code>: <code>il.DAG(source)</code> flattens it into its assets. Runners never execute a
 source, only its assets.</p>

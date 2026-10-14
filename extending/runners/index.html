@@ -1641,10 +1641,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-base-class" class="md-nav__link">
+  <a href="#the-two-classes" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        The base class
+        The two classes
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-walk" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The walk
       </span>
     </span>
   </a>
@@ -1656,17 +1667,6 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         RunState
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#two-shapes" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Two shapes
       </span>
     </span>
   </a>
@@ -2401,75 +2401,44 @@
 
 
 <h1 id="runners">Runners<a class="headerlink" href="#runners" title="Permanent link">&para;</a></h1>
-<p>A runner walks a DAG: it decides which operations are ready, executes them within a concurrency
-budget, records outcomes, and returns a <code>RunResult</code>. The core ships in-process and
-multi-process runners; container runners in companion packages are built on the same base. This
-page describes the contract for writing one.</p>
-<h2 id="the-base-class">The base class<a class="headerlink" href="#the-base-class" title="Permanent link">&para;</a></h2>
-<p><code>il.Runner</code> is <code>Serializable</code>, so a runner's configuration is fields on the class. It owns the
-public <code>run()</code>:</p>
-<ol>
-<li>Assign a <code>run_id</code> when the metadata carries none.</li>
-<li>Subscribe the <code>on_event</code> handler, filtered to this run's events.</li>
-<li>Open the <code>interloper.runner.run</code> span, restoring a parent context from metadata or the
-   environment.</li>
-<li>Delegate to <code>_run()</code>.</li>
-<li>Flush the event bus and unsubscribe.</li>
-</ol>
-<p>Subclasses implement <code>_run(dag, window, metadata) -&gt; RunResult</code>. Shared helpers:</p>
-<table>
-<thead>
-<tr>
-<th>Helper</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>_init_run(dag, window, metadata)</code></td>
-<td><code>_preflight(dag, window)</code>, which asks every enabled partitioned operation's config to check the window, then create the <code>RunState</code> and emit <code>RUN_STARTED</code> and <code>OPERATION_QUEUED</code>.</td>
-</tr>
-<tr>
-<td><code>_finalize_run(error=None)</code></td>
-<td>Emit the terminal run event and build the <code>RunResult</code>.</td>
-</tr>
-<tr>
-<td><code>_reraise_first_failure()</code></td>
-<td>Re-raise the first failed operation's exception (or <code>RunnerError</code> with its message).</td>
-</tr>
-<tr>
-<td><code>_on_start()</code>, <code>_on_end()</code></td>
-<td>Lifecycle hooks around the walk (create and shut down pools).</td>
-</tr>
-<tr>
-<td><code>state</code></td>
-<td>The <code>RunState</code>.</td>
-</tr>
-</tbody>
-</table>
-<h2 id="runstate">RunState<a class="headerlink" href="#runstate" title="Permanent link">&para;</a></h2>
-<p><code>RunState</code> tracks per-operation <code>ExecutionInfo</code> and answers scheduling questions:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">state</span><span class="o">.</span><span class="n">ready_operations</span>        <span class="c1"># dependencies satisfied, not yet submitted</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">state</span><span class="o">.</span><span class="n">running_operations</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">state</span><span class="o">.</span><span class="n">failed_operations</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">state</span><span class="o">.</span><span class="n">is_run_complete</span><span class="p">()</span>       <span class="c1"># every operation terminal</span>
+<p>A runner is configuration: how many operations run at once, where they execute, and what a
+failure does. Each call to <code>runner.run(dag)</code> makes a <code>Run</code> from it, which walks the DAG once,
+records what every operation came to, and returns a <code>RunResult</code>. A runner holds nothing per run,
+so one runner serves any number of runs, concurrently too. This page describes the contract for
+writing one.</p>
+<h2 id="the-two-classes">The two classes<a class="headerlink" href="#the-two-classes" title="Permanent link">&para;</a></h2>
+<p>A runner names its kind of run, and the run says where an operation executes. A run that gives
+every in-process operation a deadline:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">interloper</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">il</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">interloper.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">InProcessRun</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">state</span><span class="o">.</span><span class="n">mark_running</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">state</span><span class="o">.</span><span class="n">mark_completed</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">effects</span><span class="o">=</span><span class="n">result</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">state</span><span class="o">.</span><span class="n">mark_failed</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">tb</span><span class="o">=...</span><span class="p">,</span> <span class="n">effects</span><span class="o">=...</span><span class="p">,</span> <span class="n">exception</span><span class="o">=...</span><span class="p">)</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">state</span><span class="o">.</span><span class="n">mark_canceled</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">DeadlineRun</span><span class="p">(</span><span class="n">InProcessRun</span><span class="p">):</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="sd">"""Every operation in this process, each within the runner's deadline."""</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">Operation</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">il</span><span class="o">.</span><span class="n">OperationResult</span><span class="p">:</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>            <span class="k">return</span> <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">wait_for</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">operation</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">runner</span><span class="o">.</span><span class="n">deadline</span><span class="p">)</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">TimeoutError</span><span class="p">:</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>            <span class="k">return</span> <span class="n">il</span><span class="o">.</span><span class="n">OperationResult</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">"Operation '</span><span class="si">{</span><span class="n">operation</span><span class="o">.</span><span class="n">key</span><span class="si">}</span><span class="s2">' exceeded </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">runner</span><span class="o">.</span><span class="n">deadline</span><span class="si">}</span><span class="s2">s"</span><span class="p">)</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="k">class</span><span class="w"> </span><span class="nc">DeadlineRunner</span><span class="p">(</span><span class="n">il</span><span class="o">.</span><span class="n">AsyncRunner</span><span class="p">):</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="sd">"""An AsyncRunner whose operations each get a deadline."""</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">Run</span> <span class="o">=</span> <span class="n">DeadlineRun</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">deadline</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">600.0</span>
 </span></code></pre></div>
-<p>Completing an operation promotes its dependents to ready; failing one cancels everything
-downstream. Non-enabled operations start as <code>SKIPPED</code> and count as satisfied
-predecessors. Each transition emits the matching <code>OPERATION_*</code> event with a deterministic id
-(<code>emit=False</code> skips the emission for runners whose child process emits it itself). All
-mutations happen on the event loop thread, so no locking is needed.</p>
-<h2 id="two-shapes">Two shapes<a class="headerlink" href="#two-shapes" title="Permanent link">&para;</a></h2>
-<p><strong>In-process, async-native</strong>: extend <code>AsyncRunner</code> or copy its loop. It submits ready
-operations as asyncio tasks bounded by a semaphore and executes each through
-<code>operation.execute(OperationContext(...))</code>, consulting <code>operation.failure(error)</code> on exceptions.</p>
-<p><strong>Out-of-process</strong>: extend <code>SyncRunner</code>, which offloads a blocking, <code>concurrent.futures</code>-based
-walk to a worker thread. Implement:</p>
+<p><code>Runner</code> is <code>Serializable</code>, so its configuration is fields on the class; a new kind of runner
+subclasses <code>il.Runner</code>, declares <code>Run</code> and the <code>capacity</code> property (how many operations a run
+executes at once), and inherits <code>fail_fast</code>, <code>reraise</code> and <code>on_event</code>. <code>Runner.run</code> does the rest:
+it assigns a <code>run_id</code> when the metadata carries none, delivers the run's events to <code>on_event</code>,
+opens the <code>interloper.runner.run</code> span (restoring a parent from the metadata or the
+environment), makes the run, walks it, closes it, and re-raises when <code>reraise</code> asks.</p>
+<p>A <code>Run</code> implements:</p>
 <table>
 <thead>
 <tr>
@@ -2479,44 +2448,66 @@ walk to a worker thread. Implement:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>_capacity</code> (property)</td>
-<td>Maximum operations in flight.</td>
+<td><code>execute(operation) -&gt; OperationResult</code></td>
+<td>Execute one operation where this kind of run executes it, and return what it came to. An operation's own failure is a result with its <code>error</code> set, never an exception; an <code>execute</code> that raises is a fault of the run itself and fails the whole run.</td>
 </tr>
 <tr>
-<td><code>_submit_operation(operation, scope) -&gt; Future</code></td>
-<td>Hand the operation to your executor (a process pool, a container API) and return a future. Call <code>state.mark_running</code> yourself.</td>
+<td><code>close()</code></td>
+<td>Release what the run holds (pools, clients). Optional; a failure here is logged and never masks the run's result.</td>
 </tr>
 <tr>
-<td><code>_handle_completed(future, operation)</code></td>
-<td>Interpret the future's result and call <code>mark_completed</code> or <code>mark_failed</code>. The default treats a raising future as failure.</td>
-</tr>
-<tr>
-<td><code>_handle_flushed(future, operation)</code></td>
-<td>Same, for futures collected while flushing after a fail-fast break or an abort.</td>
-</tr>
-<tr>
-<td><code>_on_start()</code>, <code>_on_end()</code></td>
-<td>Create and tear down the executor.</td>
+<td><code>reports_progress</code></td>
+<td>Class attribute, <code>True</code> by default. Set it to <code>False</code> when each operation executes in a child process that reports its own start and retries (see below).</td>
 </tr>
 </tbody>
 </table>
-<p><code>MultiProcessRunner</code> is the reference: it serializes the DAG to a <code>DAGSpec</code> once, submits
-<code>(operation_id, dag_spec, scope, metadata)</code> to a process pool, and its worker reconstructs the
-DAG, executes the node and returns <code>(id, success, error, traceback, effects)</code>. Effects travel
-back as plain dicts and are re-wrapped in <code>OperationResult</code>.</p>
+<p>What a run holds while it lasts (a pool, a client) is its attributes, set up in <code>__init__</code>
+after <code>super().__init__(...)</code>, which checks the run's window against every enabled partitioned
+operation before anything is emitted.</p>
+<h2 id="the-walk">The walk<a class="headerlink" href="#the-walk" title="Permanent link">&para;</a></h2>
+<p><code>Run.walk()</code> is the same for every kind of run. It emits <code>RUN_STARTED</code> and <code>OPERATION_QUEUED</code>,
+starts every ready operation while fewer than <code>capacity</code> are in flight, records each result as it
+lands, stops starting new ones after a failure under <code>fail_fast</code> (what is in flight always
+finishes), cancels whatever never started, and emits <code>RUN_COMPLETED</code> or <code>RUN_FAILED</code>.</p>
+<p><code>OperationResult.from_execution(operation, context, on_retry=..., on_restart=...)</code> is the attempt
+loop an in-process run uses: it executes the operation inside its span, retries it under its
+<code>RetryPolicy</code> while <code>operation.retryable(error)</code> agrees, and turns a final failure into the
+operation's <code>failure(error)</code> result, completed with the traceback (when the operation's class
+allows one) and the original exception, so <code>reraise</code> can raise it.</p>
+<h2 id="runstate">RunState<a class="headerlink" href="#runstate" title="Permanent link">&para;</a></h2>
+<p><code>run.state</code> holds every operation's <code>ExecutionInfo</code> and moves it through one verb per transition,
+each emitting its <code>OPERATION_*</code> event with a deterministic id:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">state</span><span class="o">.</span><span class="n">ready</span>                        <span class="c1"># dependencies met, not started</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">state</span><span class="o">.</span><span class="n">completed</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">failed</span>      <span class="c1"># in DAG order</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">state</span><span class="o">.</span><span class="n">done</span>                         <span class="c1"># every operation terminal</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">state</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>           <span class="c1"># the OperationContext it executes with</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">state</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>             <span class="c1"># RUNNING; OPERATION_STARTED</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">state</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>      <span class="c1"># OPERATION_RETRIED; the next attempt</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">state</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>    <span class="c1"># COMPLETED or FAILED; promotes or cancels its dependents</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">state</span><span class="o">.</span><span class="n">cancel_pending</span><span class="p">()</span>             <span class="c1"># cancels everything not yet terminal</span>
+</span></code></pre></div>
+<p>The walk calls <code>start</code>, <code>finish</code> and <code>cancel_pending</code>; a run's <code>execute</code> only reports retries
+(<code>retry</code>, then <code>start</code> for the next attempt). Non-enabled operations start as <code>SKIPPED</code> and count
+as satisfied predecessors. <code>RunState</code> is not thread-safe: call it from the run's event loop only,
+never from a thread an <code>execute</code> hands work to.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.runners"</span><span class="k">]</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">ray</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.runner:RayRunner"</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.runners"</span><span class="k">]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">deadline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.runner:DeadlineRunner"</span>
 </span></code></pre></div>
 <p><code>il.Runner.from_settings(settings.runner)</code> resolves <code>runner.type</code> in the <code>RUNNERS</code> registry and
 constructs the class with <code>runner.config</code>, so a registered runner is selectable from
 <code>interloper.yaml</code> and the CLI without further wiring.</p>
 <h2 id="events-from-children">Events from children<a class="headerlink" href="#events-from-children" title="Permanent link">&para;</a></h2>
-<p>A child process has its own event bus. Have it run under <code>INTERLOPER_EVENTS_TO_STDERR=true</code> (the
-CLI then subscribes a <code>StderrEventHandler</code>), read its stderr on the host, and turn
-<code>@EVENT:</code> lines back into events with <code>Event.from_log_line()</code> and <code>EventBus.emit_event()</code>.
-Deterministic operation event ids make the host's own terminal events and the child's collapse
-into one when persisted. Pass <code>child_process_env()</code> into the child for trace continuity.</p>
+<p>A run that executes each operation in a child process (the Docker and Kubernetes runners) sets
+<code>reports_progress = False</code>: the child reports its operation's start, retries and asset steps
+itself, and the host records them silently. Have the child run
+<code>interloper run --format inline --run-id=&lt;id&gt; &lt;spec&gt;</code> under <code>INTERLOPER_EVENTS_TO_STDERR=true</code>
+(the CLI then subscribes a <code>StderrEventHandler</code>), and feed its log through an
+<code>EventLogReader(operation.id, label=...)</code>, which forwards that operation's <code>@EVENT:</code> lines to the
+host's event bus. The host still records the verdict and emits the terminal event; deterministic
+operation event ids make the host's and the child's collapse into one when persisted. Pass
+<code>child_process_env()</code> into the child for trace continuity.</p>
 
 
 

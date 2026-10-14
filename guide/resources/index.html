@@ -903,10 +903,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#trickling" class="md-nav__link">
+  <a href="#reading-through-the-source" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Trickling
+        Reading through the source
       </span>
     </span>
   </a>
@@ -2505,7 +2505,8 @@ annotation naming a component class declares a relation rather than a pydantic f
 holds one instance, and a method asset reads it as <code>self.connection</code>, since it receives the source
 as <code>self</code>. An asset declares a resource of its own, like <code>config</code> above, only for what its source
 does not hold; declaring <code>connection: ShopConnection</code> on the asset as well is legal, and the
-source <a href="#trickling">trickles</a> its instance into it, but it says twice what the source says once.</p>
+asset <a href="#reading-through-the-source">reads the source's instance</a>, but it says twice what the
+source says once.</p>
 <h2 id="explicit-relations">Explicit relations<a class="headerlink" href="#explicit-relations" title="Permanent link">&para;</a></h2>
 <p><code>il.Relation</code> is what says anything beyond "a resource of this class fills this name". Use it on
 the decorator, keyed by parameter name, or as a typed class attribute:</p>
@@ -2540,10 +2541,11 @@ relation that holds no binding, <code>resolve(name)</code> falls back, in order:
 </ol>
 <p>A <code>many</code> relation never falls back: <code>resolve(name)</code> on it is exactly <code>bound(name)</code>, an empty list
 when nothing is bound.</p>
-<p>A fallback is never bound, so an explicit binding or a later trickle always wins over it, and
-<code>to_spec()</code> never carries an auto-instantiated component. Attribute access reads bindings only:
-<code>asset.connection</code> is <code>None</code> while nothing is bound, where the same relation injected into
-<code>data()</code> goes through <code>resolve()</code> and receives the fallback. Because a resource is built at the
+<p>A fallback is never bound, so an explicit binding, or one read through the owning source,
+always wins over it, and <code>to_spec()</code> never carries an auto-instantiated component. Attribute
+access reads bindings only, the asset's own or its source's: <code>asset.connection</code> is <code>None</code> while
+neither holds one, where the same relation injected into <code>data()</code> goes through <code>resolve()</code> and
+receives the fallback. Because a resource is built at the
 moment it is read, a credential that is neither bound nor in the environment surfaces as a
 pydantic validation error from the read that needed it, not at build time.</p>
 <h2 id="relations-on-sources-and-destinations">Relations on sources and destinations<a class="headerlink" href="#relations-on-sources-and-destinations" title="Permanent link">&para;</a></h2>
@@ -2557,18 +2559,20 @@ not accept, or two of them to a single-valued relation, raises <code>ConfigError
 reads what is bound (<code>source.connection</code>), and assignment rebinds atomically.</p>
 <p>Once every explicit target is in place, the component checks itself: a non-optional relation that
 is unbound and cannot fill itself is a <code>ConfigError</code>.</p>
-<h2 id="trickling">Trickling<a class="headerlink" href="#trickling" title="Permanent link">&para;</a></h2>
-<p>A source fills the unbound relations of its assets and destinations from its own bindings, by
-relation name, keeping only the targets the child's own relation accepts. A <a href="../jobs/">job</a> does
-the same for its targets. A binding the child already holds is never touched.</p>
+<h2 id="reading-through-the-source">Reading through the source<a class="headerlink" href="#reading-through-the-source" title="Permanent link">&para;</a></h2>
+<p>An asset never holds a copy of its source's bindings: a relation it leaves unbound reads the
+source's targets under the same name, keeping only those its own relation accepts. A binding the
+asset holds itself always wins.</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">shop</span> <span class="o">=</span> <span class="n">Shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">),</span> <span class="n">destinations</span><span class="o">=</span><span class="p">[</span><span class="n">warehouse</span><span class="p">])</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shop</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"connection"</span><span class="p">)</span>     <span class="c1"># the source's connection instance</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">shop</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">connection</span>              <span class="c1"># the source's connection instance</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">shop</span><span class="o">.</span><span class="n">revenue</span><span class="o">.</span><span class="n">bound</span><span class="p">(</span><span class="s2">"connection"</span><span class="p">)</span>     <span class="c1"># None: the asset holds none of its own</span>
 </span></code></pre></div>
-<p>Trickling re-runs on every <code>bind()</code> of the parent, so a destination bound after the assets exist
-still reaches them. Reconfiguring a source repoints what it had trickled and leaves what an asset
-bound itself alone:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">))</span>    <span class="c1"># a copy, its assets repointed</span>
+<p>Because nothing is copied, rebinding the source, or reconfiguring it, reaches its assets at once:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">staging</span> <span class="o">=</span> <span class="n">shop</span><span class="p">(</span><span class="n">connection</span><span class="o">=</span><span class="n">ShopConnection</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">"..."</span><span class="p">))</span>    <span class="c1"># a copy; its assets read the new one</span>
 </span></code></pre></div>
+<p>Components a source does not own still receive its bindings by trickling: a source fills the
+unbound relations of its destinations, and a <a href="../jobs/">job</a> those of its targets, by relation
+name, on every <code>bind()</code>.</p>
 <h2 id="describing-a-resource">Describing a resource<a class="headerlink" href="#describing-a-resource" title="Permanent link">&para;</a></h2>
 <p><code>ReportingConfig.definition()</code> returns a <code>ResourceDefinition</code> with the JSON Schema of the
 user-facing fields (<code>config_schema</code>) and, in <code>relations</code>, one entry per declared relation with

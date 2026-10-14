@@ -1947,6 +1947,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Component.inherited" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;inherited
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Component.instance_name" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2002,17 +2013,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Component.on_rebind" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;on_rebind
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#interloper.Component.bound" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2035,17 +2035,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Component.trickle" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;trickle
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#interloper.Component.validate_relations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2061,6 +2050,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;to_spec
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Component.from_init" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_init
       </span>
     </span>
   </a>
@@ -2937,8 +2937,8 @@ reaching Pydantic, which knows nothing about relations: a list or tuple
 binds every element, <code>None</code> binds nothing. Each binding is checked
 as it is made (see <code>bind</code>); whether every relation that must be
 bound is bound is a question for whoever assembles the graph, since
-components are wired piecewise (a source trickles into its assets,
-reconstruction binds references once the document is whole), so
+components are wired piecewise (a source's assets read its bindings
+through it, reconstruction binds references once the document is whole), so
 <code>validate_relations</code> is called at those boundaries, not here.</p>
 <p>Unknown kwargs are a loud error rather than pydantic's silent
 <code>extra="ignore"</code> drop: a misnamed field would otherwise vanish, and a
@@ -3055,10 +3055,7 @@ is what <code>identity</code> reads.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The components this one owns, which travel inside its own spec.</p>
-<p>Ownership is not declared: a component held in one of this
-component's fields whose <code>parent</code> is this component is owned.
-A source's assets are the one case today.</p>
+        <p>The components this one owns (a source's assets), which travel inside its own spec.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -3205,6 +3202,126 @@ for sources, the per-instance asset table names.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Component.inherited" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">inherited</span>
+
+
+<a href="#interloper.Component.inherited" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">inherited</span><span class="p">(</span><span class="n">child</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="./#interloper.Component">Component</a></span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n">own</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing.Any">Any</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>What an owned component reads for one of its inherited settings.</p>
+<p>The one seam a cascade goes through: an owned component never holds a
+copy of what it inherits, it asks its owner on every read. The base
+hands down this component's own effective value; an owner that names
+part of its children's location overrides it (see <code>Source.inherited</code>).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>child</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="./#interloper.Component">Component</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The owned component reading the setting.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The setting's field name.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>own</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The child's stored value, <code>None</code> while unset.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><em>own</em> when set, else this component's own value under <em>name</em> when</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>it declares such a field, else <code>None</code>.</p>
+              </div>
             </td>
           </tr>
       </tbody>
@@ -3514,8 +3631,7 @@ caller may splat an empty list.</p>
         <p>Detach components from one of this component's declared relations.</p>
 <p>Detaching nothing the relation holds is a no-op; otherwise what remains
 goes through the same write path as <code>bind</code>, so the same checks
-apply (a non-optional relation cannot be emptied, <code>ConfigError</code>) and
-<code>on_rebind</code> runs.</p>
+apply (a non-optional relation cannot be emptied, <code>ConfigError</code>).</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3560,65 +3676,6 @@ are ignored.</p>
             </td>
             <td>
                   <code>()</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Component.on_rebind" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">on_rebind</span>
-
-
-<a href="#interloper.Component.on_rebind" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">on_rebind</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>React to one of this component's relations having been rebound.</p>
-<p>Called once after every write to a binding, whichever way it was
-written: a constructor kwarg, <code>bind</code>, <code>unbind</code>, attribute
-assignment, or a parent's <code>trickle</code>. The new binding is already
-in place, so <code>bound</code> reads it. The base does nothing; override
-it to cascade, the way a source trickles its bindings into its assets
-and destinations and a job into its targets.</p>
-<p>Binding on <code>self</code> from inside the hook re-enters it; bind on other
-components only.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>name</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The relation name whose binding changed.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
             </td>
           </tr>
       </tbody>
@@ -3727,9 +3784,10 @@ components only.</p>
     <div class="doc doc-contents ">
 
         <p>What one of this component's declared relations actually resolves to.</p>
-<p>Unlike <code>bound</code>, this falls back to what the relation can fill
-itself with when nothing is bound, so a relation with a fallback (a config
-whose every field is defaulted, say) works without a binding.</p>
+<p>Unlike <code>bound</code>, this reads through the owner (see <code>_targets</code>) and then
+falls back to what the relation can fill itself with, so a relation
+with a fallback (a config whose every field is defaulted, say) works
+without a binding.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3778,7 +3836,7 @@ whose every field is defaulted, say) works without a binding.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The bound value when there is one, otherwise the relation's</p>
+                <p>What the relation holds or reads through its owner, otherwise the</p>
               </div>
             </td>
           </tr>
@@ -3788,7 +3846,7 @@ whose every field is defaulted, say) works without a binding.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>fallback for a single-valued relation and an empty list for a</p>
+                <p>relation's fallback for a single-valued relation and an empty list</p>
               </div>
             </td>
           </tr>
@@ -3798,64 +3856,8 @@ whose every field is defaulted, say) works without a binding.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>many</code> one.</p>
+                <p>for a <code>many</code> one.</p>
               </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Component.trickle" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">trickle</span>
-
-
-<a href="#interloper.Component.trickle" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">trickle</span><span class="p">(</span><span class="n">child</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="./#interloper.Component">Component</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Fill a child's unbound relations from this component's own bindings.</p>
-<p>For every relation the child declares under a name this component has
-itself bound, and that the child leaves unbound, this binds whichever
-of the parent's targets the child's relation <code>accepts</code>
-(every accepted target for a <code>many</code> relation, the first accepted one
-otherwise). A binding the child already holds is never touched.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>child</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Component&lt;/span&gt;" href="./#interloper.Component">Component</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The component to trickle this component's bindings into.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
             </td>
           </tr>
       </tbody>
@@ -3982,9 +3984,7 @@ written as <code>SerializationContext.emit</code> decides; a relation with
 nothing bound is left out. The components this one owns (see
 <code>children</code>) travel inside this spec, under the field that holds
 them, as a map of key to init carrying the child's id: an owned
-component never has a spec of its own. A binding a child holds that
-is identical to this component's own is left out of the child's
-payload, since the same trickle refills it on reconstruction.</p>
+component never has a spec of its own.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -4035,6 +4035,100 @@ payload, since the same trickle refills it on reconstruction.</p>
             <td>
               <div class="doc-md-description">
                 <p>A Spec capturing this instance's state, identity and bindings.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Component.from_init" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_init</span>
+
+
+<a href="#interloper.Component.from_init" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_init</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">init</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">],</span> <span class="n">context</span><span class="p">:</span> <span class="n"><span title="interloper.serializable.base.SerializationContext">SerializationContext</span></span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing_extensions.Self">Self</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build a component from a loaded init, holding its references back for the document to bind.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>init</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Constructor keyword arguments, nested specs already built and
+every <code>{"ref": id}</code> still a mapping.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><span title="interloper.serializable.base.SerializationContext">SerializationContext</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The document being read: it keeps the held references and
+the instance, so a later reference finds it.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing_extensions.Self">Self</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The component, its references not yet bound.</p>
               </div>
             </td>
           </tr>

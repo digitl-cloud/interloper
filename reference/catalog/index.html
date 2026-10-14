@@ -2294,6 +2294,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#interloper.Serializable.body_from_function" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;body_from_function
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.Serializable.classpath" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2342,6 +2353,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_spec
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Serializable.from_init" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_init
       </span>
     </span>
   </a>
@@ -3397,35 +3419,18 @@ field declared on the model.</p>
 
 
 <a href="#interloper.Serializable.build_class" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">build_class</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">decorated</span><span class="p">:</span> <span class="n"><span title="type">type</span></span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">classvars</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">fields</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="typing_extensions.Self">Self</span></span><span class="p">]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">build_class</span><span class="p">(</span><span class="n">body</span><span class="p">:</span> <span class="n"><span title="interloper.serializable.body.ClassBody">ClassBody</span></span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">:</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><span title="typing_extensions.Self">Self</span></span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>Build a subclass of this class from a decorated class.</p>
-<p>The decorator-support factory. The invariant: <strong>decorators build
-classes, they never mutate finalized ones.</strong>  Field defaults always
-pass through the Pydantic metaclass so they become real field
-definitions: a plain <code>setattr</code> on a built pydantic class would
-leave <code>model_fields</code> (and therefore every instance) on the old
-default.</p>
-<p>Two construction paths:</p>
-<ul>
-<li>The decorated class already extends the receiving class: field
-  defaults (when present) produce a new subclass via
-  <code>pydantic.create_model</code> with the parent's annotations;
-  ClassVars are stamped on the result (plain class attributes, no
-  pydantic machinery involved).</li>
-<li>The decorated class does <strong>not</strong> extend it: a new class is
-  created via <code>type()</code> that inherits from the receiving class and
-  carries over the decorated class's members and annotations, with
-  decorator fields annotated from the receiver's field definitions.</li>
-</ul>
+        <p>Build a new class from a decorated target's body and a decorator's settings.</p>
+<p>The one construction every decorator goes through: decorators build
+classes, they never modify one. Everything goes into the namespace of
+one new class, so the metaclass sees field defaults as fields and
+<code>__init_subclass__</code> collects relations and validates settings where
+they are written. A target already extending this class is the base of
+the new one, which keeps its key and kind (<code>rebuild</code>).</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3441,14 +3446,14 @@ default.</p>
       <tbody>
           <tr class="doc-section-item">
             <td>
-                <code>decorated</code>
+                <code>body</code>
             </td>
             <td>
-                  <code><span title="type">type</span></code>
+                  <code><span title="interloper.serializable.body.ClassBody">ClassBody</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The decorated class to transform.</p>
+                <p>What the decorated target contributes.</p>
               </div>
             </td>
             <td>
@@ -3457,35 +3462,18 @@ default.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>classvars</code>
+                <code>**settings</code>
             </td>
             <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Class-level attributes (key, name, tags, …).</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>fields</code>
-            </td>
-            <td>
-                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+                  <code><span title="typing.Any">Any</span></code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Field default overrides (dataset, normalizer, …); every
-key must be an existing field on the receiving class.</p>
+                <p>The decorator's settings (see <code>_sort_settings</code>).</p>
               </div>
             </td>
             <td>
-                  <code>None</code>
+                  <code>{}</code>
             </td>
           </tr>
       </tbody>
@@ -3507,8 +3495,59 @@ key must be an existing field on the receiving class.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>A subclass of the receiving class.</p>
+                <p>The new class.</p>
               </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Serializable.body_from_function" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">body_from_function</span>
+
+
+<a href="#interloper.Serializable.body_from_function" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">body_from_function</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n"><span title="types.FunctionType">FunctionType</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="interloper.serializable.body.ClassBody">ClassBody</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Read a decorated function into a class body; a kind decorating functions overrides it.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>fn</code>
+            </td>
+            <td>
+                  <code><span title="types.FunctionType">FunctionType</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The decorated function.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
             </td>
           </tr>
       </tbody>
@@ -3530,8 +3569,7 @@ key must be an existing field on the receiving class.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If a decorator field is not a field of the receiving
-class.</p>
+                <p>Always: this kind decorates a class.</p>
               </div>
             </td>
           </tr>
@@ -3877,6 +3915,98 @@ not carry; <code>None</code> makes such a reference an error.</p>
               <div class="doc-md-description">
                 <p>If the spec reconstructs to an instance that is not
 of the receiving class.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Serializable.from_init" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_init</span>
+
+
+<a href="#interloper.Serializable.from_init" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_init</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">init</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">],</span> <span class="n">context</span><span class="p">:</span> <span class="n"><span title="interloper.serializable.base.SerializationContext">SerializationContext</span></span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="typing_extensions.Self">Self</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Build an instance from a spec's loaded init, as one step of reconstructing a document.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>init</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Constructor keyword arguments, nested specs already built.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><span title="interloper.serializable.base.SerializationContext">SerializationContext</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The document being read; a plain serializable needs nothing from it.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="typing_extensions.Self">Self</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The instance.</p>
               </div>
             </td>
           </tr>
