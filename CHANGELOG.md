@@ -2,6 +2,66 @@
 
 <!-- version list -->
 
+## v0.113.0 (2026-10-14)
+
+### Bug Fixes
+
+- **chart**: The scheduler image and pod name their services
+  ([`c3a0b4b`](https://github.com/digitl-cloud/interloper/commit/c3a0b4b67e0a5aa2c46aa9c8af8a1e99a7cd79d4))
+
+- **destination**: One hook direction per family, non-tabular windows read per partition, concat
+  optional
+  ([`f6efec4`](https://github.com/digitl-cloud/interloper/commit/f6efec43747da00105b47a8a9d68154ffb1a1f4c))
+
+- **registry**: A broken plugin is skipped with a warning, a command loads only its own package
+  ([`c32930d`](https://github.com/digitl-cloud/interloper/commit/c32930d3740b1572b7ed41b534a21501a3308509))
+
+- **runner**: Runs open inside the walk, a canceled operation fails, child verdicts land on the last
+  attempt
+  ([`6754612`](https://github.com/digitl-cloud/interloper/commit/6754612bd2535e741457e77876cee3a6b5a3652f))
+
+### Code Style
+
+- Format the repository with ruff
+  ([`668a35c`](https://github.com/digitl-cloud/interloper/commit/668a35cb5cffade44e316aaba7f1d31347036c8a))
+
+### Continuous Integration
+
+- Check formatting in pre-commit, make check-python and CI
+  ([`694d1e7`](https://github.com/digitl-cloud/interloper/commit/694d1e75459c40344c81a73d617b50d82bd9b6b7))
+
+### Documentation
+
+- **runner**: A child process runs on its host's version
+  ([`2ea828a`](https://github.com/digitl-cloud/interloper/commit/2ea828a835505015a19fb2a1ccd6003bc7a5abf6))
+
+### Refactoring
+
+- Platform commands and errors live in their packages, one command per role
+  ([`6740ff7`](https://github.com/digitl-cloud/interloper/commit/6740ff76dfa0f80d6988db6856dfa03ec29d4dd7))
+
+- **core**: Assets read through their source, one way to reach them, Asset by concern
+  ([`c3006d5`](https://github.com/digitl-cloud/interloper/commit/c3006d5fb0b7b0e89b0650000dc9a4fbe71776e8))
+
+- **core**: One decorator, one build path, no pushes into shared components
+  ([`9379904`](https://github.com/digitl-cloud/interloper/commit/93799041286342a770e648134b4aa29c03bcddb9))
+
+- **core**: One name per concept, one way in, backfills record their lifecycle
+  ([`84ee308`](https://github.com/digitl-cloud/interloper/commit/84ee308c935778c18a2962dd9b77060d662f922b))
+
+- **core**: One run scope, partitioning kinds and observed steps
+  ([`bd36e6b`](https://github.com/digitl-cloud/interloper/commit/bd36e6b25b58919bd0874ea6308704f30a04bc3c))
+
+- **core**: One walk, one attempt loop, runners as configuration
+  ([`9cb4d10`](https://github.com/digitl-cloud/interloper/commit/9cb4d10f8592be5e1dd55d37de0d3f9fbe808d03))
+
+### Breaking Changes
+
+- The api and scheduler images run `interloper api` and `interloper scheduler` (move chart and
+  images together); the platform errors import from interloper_db; `interloper app` needs
+  interloper-app installed.
+
+
 ## v0.112.0 (2026-10-13)
 
 ### Bug Fixes
