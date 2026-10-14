@@ -24,7 +24,7 @@ from interloper_assets.facebook_ads.source import PIVOT_COLUMNS, FacebookActions
 
 
 def _source() -> Any:
-    return FacebookAds(id="src-1", account_id="123")
+    return FacebookAds(id="src-1", account_id="123")  # ty: ignore[missing-argument]
 
 
 class TestSourceNormalizer:

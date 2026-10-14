@@ -75,7 +75,7 @@ def _clear_memory() -> None:
 
 
 def test_relation_is_a_many_valued_wildcard() -> None:
-    relation = CampaignMatcher.campaign_matches.relations["campaigns"]  # ty: ignore[unresolved-attribute]
+    relation = CampaignMatcher.campaign_matches.relations["campaigns"]
     assert (relation.kind, relation.key, relation.many, relation.optional) == ("asset", "*.dim_campaigns", True, False)
 
 

@@ -9,14 +9,13 @@ single per-kind authority every kind-level question reads from.
 
 from __future__ import annotations
 
-import inspect
 import sys
 import uuid
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, ClassVar, ForwardRef
 
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from typing_extensions import Self
 
 from interloper.component.inherited import InheritedSetting
@@ -25,7 +24,6 @@ from interloper.component.relation import ComponentIdentity, Relation, unwrap_op
 from interloper.errors import ConfigError
 from interloper.registry import Registry
 from interloper.serializable.base import IgnoredDescriptor, Serializable, SerializationContext, Spec
-from interloper.utils.annotations import classvar_type, is_classvar, type_adapter
 from interloper.utils.text import to_label, to_snake_case
 
 if TYPE_CHECKING:
@@ -57,11 +55,6 @@ def _adopt_kind(name: str, loaded: Any) -> tuple[str, type[Component]]:
 
 
 KINDS: Registry[type[Component]] = Registry(_KINDS_ENTRY_POINT, adopt=_adopt_kind)
-
-# ClassVars carrying the framework's own machinery: never a decorator setting,
-# whatever their annotation says. `relations` has its own channel, the rest are
-# collected, not declared.
-_RESERVED_CLASSVARS = frozenset({"kind", "relations", "internal_fields", "asset_types", "model_config"})
 
 
 # -- Definitions ---------------------------------------------------------------
@@ -129,9 +122,8 @@ class Component(Serializable):
         ``kind`` is set only for direct children of ``Component``
         (``Source``, ``Asset``, ``Config``, ...).  Further subclasses
         inherit their parent's ``kind`` unless they explicitly declare one.
-        (``key`` derivation comes from `Serializable`.) The settings
-        the class body declares are checked against their types here, so a
-        wrong one fails where it is written.
+        (``key`` derivation and the check of the settings the class body
+        declares come from `Serializable`.)
 
         Args:
             **kwargs: Class-creation keyword arguments, passed through to ``super()``.
@@ -140,7 +132,6 @@ class Component(Serializable):
         if "kind" not in cls.__dict__ and any(base is Component for base in cls.__bases__):
             cls.kind = to_snake_case(cls.__name__)
         cls._collect()
-        cls._validate_classvars()
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -151,7 +142,7 @@ class Component(Serializable):
         against the declaring module, Pydantic reads them against the full
         defining scope. An annotation naming a component class that
         `_collect` did not turn into a relation therefore became a plain
-        field, silently: no trickle, no ``{ref}``, and two classes differing
+        field, silently: no binding, no ``{ref}``, and two classes differing
         only in declaration order behaving differently. Both that and an
         annotation Pydantic could not resolve at all are refused here. Every
         field marked ``x-inherit`` then gets its read-through descriptor (see
@@ -295,11 +286,7 @@ class Component(Serializable):
 
     @property
     def owned(self) -> list[Component]:
-        """The components this one owns, which travel inside its own spec.
-
-        Ownership is not declared: a component held in one of this
-        component's fields whose `parent` is this component is owned.
-        A source's assets are the one case today.
+        """The components this one owns (a source's assets), which travel inside its own spec.
 
         Returns:
             The owned components, in field order; empty for a component that
@@ -441,8 +428,7 @@ class Component(Serializable):
 
         Detaching nothing the relation holds is a no-op; otherwise what remains
         goes through the same write path as `bind`, so the same checks
-        apply (a non-optional relation cannot be emptied, ``ConfigError``) and
-        `on_rebind` runs.
+        apply (a non-optional relation cannot be emptied, ``ConfigError``).
 
         Args:
             name: The relation name as declared on the class.
@@ -455,23 +441,6 @@ class Component(Serializable):
         if len(remaining) == len(current):
             return
         self._replace_binding(name, tuple(remaining))
-
-    def on_rebind(self, name: str) -> None:
-        """React to one of this component's relations having been rebound.
-
-        Called once after every write to a binding, whichever way it was
-        written: a constructor kwarg, `bind`, `unbind`, attribute
-        assignment, or a parent's `trickle`. The new binding is already
-        in place, so `bound` reads it. The base does nothing; override
-        it to cascade, the way a source trickles its bindings into its
-        destinations and a job into its targets.
-
-        Binding on ``self`` from inside the hook re-enters it; bind on other
-        components only.
-
-        Args:
-            name: The relation name whose binding changed.
-        """
 
     def bound(self, name: str) -> Component | list[Component] | None:
         """What is explicitly bound to one of this component's declared relations.
@@ -517,7 +486,7 @@ class Component(Serializable):
         An owned component never holds a copy of its owner's bindings; it
         reads them here. The owner's targets under the same name are filtered
         by what this relation `accepts`, every accepted one for a ``many``
-        relation and the first otherwise, the filter `trickle` applies.
+        relation and the first otherwise.
 
         Args:
             name: The relation name as declared on the class.
@@ -537,27 +506,6 @@ class Component(Serializable):
             if relation.accepts(target.kind, target.identity, owner=self.identity)
         ]
         return accepted if relation.many else accepted[:1]
-
-    def trickle(self, child: Component) -> None:
-        """Fill a child's unbound relations from this component's own bindings.
-
-        For every relation the child declares under a name this component has
-        itself bound, and that the child leaves unbound, this binds whichever
-        of the parent's targets the child's relation `accepts`
-        (every accepted target for a ``many`` relation, the first accepted one
-        otherwise). A binding the child already holds, or reads through its
-        own owner (a job's asset target reading its source's destinations),
-        is never touched.
-
-        Args:
-            child: The component to trickle this component's bindings into.
-        """
-        for name, relation in type(child).relations.items():
-            if child._targets(name) or name not in self._bound:
-                continue
-            accepted = [t for t in self._bound[name] if relation.accepts(t.kind, t.identity, owner=child.identity)]
-            if accepted:
-                child.bind(name, *(accepted if relation.many else accepted[:1]))
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check that every relation this component holds is sound.
@@ -701,6 +649,23 @@ class Component(Serializable):
         return self._build_spec(init=init or None).model_copy(update={"id": self.id})
 
     @classmethod
+    def from_init(cls, init: dict[str, Any], context: SerializationContext) -> Self:
+        """Build a component from a loaded init, holding its references back for the document to bind.
+
+        Args:
+            init: Constructor keyword arguments, nested specs already built and
+                every ``{"ref": id}`` still a mapping.
+            context: The document being read: it keeps the held references and
+                the instance, so a later reference finds it.
+
+        Returns:
+            The component, its references not yet bound.
+        """
+        instance = cls(**context.hold(init))
+        context.add(instance)
+        return instance
+
+    @classmethod
     def resolve_key(cls, key: str, catalog: Catalog | None = None) -> type[Self]:
         """Resolve a catalog key to a component class of this (sub)class.
 
@@ -767,51 +732,110 @@ class Component(Serializable):
             relations=dict(cls.relations),
         )
 
-    # -- Internals -------------------------------------------------------------
+    # -- Settings --------------------------------------------------------------
 
     @classmethod
-    def _classvars(cls) -> dict[str, Any]:
-        """The public ClassVars this class can be given, name to declared type.
+    def _sort_settings(cls, settings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Sort a decorator's settings, the ``relations=`` channel included.
 
-        Every name some class in the MRO annotates ``ClassVar``, neither
-        private nor reserved: what a decorator may set, and what
-        `_validate_classvars` checks. The type comes from the most
-        derived annotation; it is ``None`` when that annotation is a bare or
-        unresolvable ``ClassVar``, or redeclares the name as a field, and such
-        a name is not validated.
+        Relations are written into the namespace's ``relations`` dict, which
+        `_collect` merges when the class is created, so they win over the
+        relations its annotations declare and are collected once.
+
+        Args:
+            settings: The decorator's settings, name to value; ``relations``
+                maps relation names to a `Relation`, a component class, or a
+                list of component classes narrowing a relation this class declares.
 
         Returns:
-            Each settable name to its declared type, or ``None``.
-        """
-        declared: dict[str, Any] = {}
-        for base in reversed(cls.__mro__):
-            for name, hint in inspect.get_annotations(base).items():
-                if name.startswith("_") or name in _RESERVED_CLASSVARS:
-                    continue
-                if is_classvar(hint):
-                    declared[name] = classvar_type(hint, base)
-                elif name in declared:
-                    declared[name] = None
-        return declared
-
-    @classmethod
-    def _validate_classvars(cls) -> None:
-        """Check every setting this class defines itself against its declared type.
-
-        Values are checked, never rewritten: the class keeps what was
-        declared, and readers that need a coerced form (a definition, say)
-        convert it themselves.
+            The namespace entries, and the annotations to add for them.
 
         Raises:
-            TypeError: If a setting's value does not match its declared type.
+            TypeError: If a setting names the identity field or a relation.
         """
-        for name, declared in cls._classvars().items():
-            if declared is None or name not in cls.__dict__:
+        settings = dict(settings)
+        relations = settings.pop("relations", None) or {}
+        for name in settings:
+            if name == "id":
+                raise TypeError(f"{cls.__name__} does not accept 'id': an id is given to each instance")
+            if name in cls.relations:
+                raise TypeError(
+                    f"{cls.__name__} declares '{name}' as a relation; pass it through relations={{\"{name}\": ...}}"
+                )
+        entries, annotations = super()._sort_settings(settings)
+        if relations:
+            entries["relations"] = cls._declared_relations(relations)
+        return entries, annotations
+
+    @classmethod
+    def _subclass_declaring(cls, name: str) -> type[Serializable] | None:
+        """The closest class of this kind declaring *name*, searched from the kind's anchor.
+
+        A setting another class of the same kind declares is usually on a sibling,
+        not a subclass: a `Connection` subclass refused ``oauth`` is pointed at
+        `OAuthConnection`, which extends `Connection` beside it.
+
+        Args:
+            name: The setting looked for.
+
+        Returns:
+            The class, or ``None`` when no class of this kind declares it.
+        """
+        anchor = cls.anchor()
+        if anchor is cls:
+            return super()._subclass_declaring(name)
+        return anchor._subclass_declaring(name)
+
+    @classmethod
+    def _declared_relations(cls, relations: dict[str, Any]) -> dict[str, Relation]:
+        """Read the ``relations=`` channel into the relations it declares.
+
+        Three value forms: a `Relation`, kept as written; a component class,
+        the same shorthand the annotation form is (``Relation(cls)``); a
+        non-empty list or tuple of component classes, meaning "the relation
+        this class already declares under this name, its key list narrowed to
+        these classes' keys".
+
+        Args:
+            relations: The channel as written, name to value.
+
+        Returns:
+            Name to relation, ready for the namespace.
+
+        Raises:
+            TypeError: If a value is none of the three forms, if a narrowing list
+                names a relation this class does not declare, or if one of its
+                classes is of a kind that relation does not accept.
+        """
+        declared: dict[str, Relation] = {}
+        for name, value in relations.items():
+            if isinstance(value, Relation):
+                declared[name] = value
                 continue
-            try:
-                type_adapter(declared).validate_python(cls.__dict__[name])
-            except ValidationError as error:
-                raise TypeError(f"{cls.__name__}.{name}: {error.errors()[0]['msg']}") from None
+            if isinstance(value, type) and issubclass(value, Component):
+                declared[name] = Relation(value)
+                continue
+
+            classes = list(value) if isinstance(value, (list, tuple)) else []
+            if not classes or not all(isinstance(target, type) and issubclass(target, Component) for target in classes):
+                raise TypeError(
+                    f"Relation '{name}' accepts a Relation, a Component class, or a non-empty list of "
+                    f"Component classes, got {value!r}"
+                )
+            relation = cls.relations.get(name)
+            if relation is None:
+                raise TypeError(
+                    f"{cls.__name__} declares no relation named '{name}' to narrow; declared: {sorted(cls.relations)}"
+                )
+            for target in classes:
+                if target.kind not in relation.kinds:
+                    raise TypeError(
+                        f"Relation '{name}' accepts kinds {relation.kinds}, not '{target.kind}' ({target.__name__})"
+                    )
+            declared[name] = relation.model_copy(update={"key": [target.key for target in classes]})
+        return declared
+
+    # -- Internals -------------------------------------------------------------
 
     @classmethod
     def _collect(cls) -> None:
@@ -953,8 +977,7 @@ class Component(Serializable):
         The one write path: `bind` and `Relation.__set__` both
         land here, so the rules hold whichever way a binding is written.
         Everything is checked before ``_bound`` is touched, so a rejected
-        write leaves the previous binding exactly as it was, and
-        `on_rebind` runs once the new binding is in place.
+        write leaves the previous binding exactly as it was.
 
         Args:
             name: The relation name as declared on the class.
@@ -975,7 +998,6 @@ class Component(Serializable):
             if all(target is not held for held in deduplicated):
                 deduplicated.append(target)
         self._bound[name] = deduplicated
-        self.on_rebind(name)
 
     def _relation(self, name: str) -> Relation:
         """Look up one of this component's declared relations by name.
@@ -995,17 +1017,13 @@ class Component(Serializable):
         return declared[name]
 
     def _owned_by_field(self) -> dict[str, list[Component]]:
-        """The owned components, keyed by the field that holds them.
+        """The components this one owns, keyed by the field that holds them; none for a component.
+
+        Ownership is the part-of relationship, and a source's assets are its one
+        case: `Source` overrides this. An owned component travels inside its
+        owner's spec and is copied with it.
 
         Returns:
-            Field name to the owned components it holds; fields holding none
-            are absent.
+            Field name to the owned components it holds; empty.
         """
-        owned: dict[str, list[Component]] = {}
-        for name in type(self).model_fields:
-            value = getattr(self, name)
-            items = value if isinstance(value, list) else [value]
-            children = [item for item in items if isinstance(item, Component) and item.parent is self]
-            if children:
-                owned[name] = children
-        return owned
+        return {}

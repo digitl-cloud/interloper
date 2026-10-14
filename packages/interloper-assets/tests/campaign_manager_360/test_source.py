@@ -44,7 +44,7 @@ Grand Total:,,,90,85.5,300,15
 
 
 def _source() -> Any:
-    return CampaignManager360(id="src-1", profile_id="111", account_id="222")
+    return CampaignManager360(id="src-1", profile_id="111", account_id="222")  # ty: ignore[missing-argument]
 
 
 def _normalizer() -> CampaignManager360Normalizer:

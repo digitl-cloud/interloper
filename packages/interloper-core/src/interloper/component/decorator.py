@@ -1,206 +1,69 @@
-"""The decorator engine: the three channels every component decorator carries.
-
-A decorator is the function form of a class body, and a class body says three
-kinds of thing, so `decorate` carries exactly three channels and nothing
-else:
-
-1. **Definition metadata and behaviour**, as plain keyword arguments: the
-   anchor's public ``ClassVar`` annotations (``key``, ``name``, ``icon``,
-   ``tags``, ``schema``, ``partitioning``, ``oauth``,
-   ...) and its Pydantic field defaults (``dataset``,
-   ``default_destination_key``, ``normalizer``, ``materialization_strategy``,
-   ...). `_route` sorts them by introspecting the anchor, so nothing is
-   hand-maintained per kind and an unknown name is refused at decoration.
-2. **Relations**, as ``relations=``, the only relation channel:
-   `_relations` reads a `Relation`,
-   a component class, or a list of component classes narrowing a relation the
-   anchor already declares.
-3. **The kind's own build step**, as ``build=``: how a function becomes
-   ``data()``, how a function returning asset classes becomes a source, how a
-   decorated class is subclassed or stamped in place.
-"""
+"""Decorator: the one way a decorator builds a class of its kind."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar, overload
 
-from interloper.component.base import Component
-from interloper.component.relation import Relation
+from interloper.serializable import ClassBody, Serializable
 
-ComponentT = TypeVar("ComponentT", bound=Component)
-
-# The identity field is per-instance, so it is a constructor argument and never
-# a class-level default.
-_IDENTITY_FIELD = "id"
+SerializableT = TypeVar("SerializableT", bound=Serializable)
+SubclassT = TypeVar("SubclassT", bound=Serializable)
 
 
-def decorate(
-    anchor: type[Component],
-    target: Any,
-    *,
-    build: Callable[..., type[ComponentT]],
-    relations: dict[str, Any] | None = None,
-    **overrides: Any,
-) -> type[ComponentT]:
-    """Route a decorator's three channels and hand them to the kind's build step.
+class Decorator(Generic[SerializableT]):
+    """A decorator building classes of one kind, used bare or with settings.
 
-    The routing introspects the decorated class when it already extends the
-    anchor, and the anchor itself otherwise: a decorated subclass may carry
-    ClassVars and fields the anchor never declares (``materialization_strategy``
-    on a ``DatabaseDestination``, ``oauth`` on an ``OAuthConnection``), and those
-    are legitimate overrides.
+    Called with a target (a class or a function), it reads the target into a
+    `ClassBody` and builds a new class of its kind from it with the settings it
+    carries. Called with settings, it returns a decorator carrying them, so the
+    parenthesised form needs no nested function:
 
-    Args:
-        anchor: The kind's anchor class, the authority on what the decorator
-            accepts and on the relations a narrowing list may narrow.
-        target: The decorated function or class, passed through to ``build``.
-        build: The kind's build step, called as
-            ``build(target, classvars=..., fields=..., relations=...)``.
-        relations: The ``relations=`` channel, name to
-            `Relation`, component class,
-            or list of component classes. ``None`` declares none.
-        **overrides: Definition metadata and behaviour: the anchor's public
-            ClassVars and field defaults (see the anchor class for what it
-            declares).
+    ```py
+    asset = Decorator(Asset)
 
-    Returns:
-        Whatever the build step built, a subclass of the anchor.
+    @asset
+    def rows(): ...
+
+    @asset(tags=["Report"], relations={"destinations": [BigQueryDestination]})
+    def users_stats(): ...
+    ```
+
+    What the settings may be is the kind's own: its public ClassVars, its
+    field defaults and, for a component, ``relations=``. A class that already
+    extends the kind is the one consulted, so a subclass's own settings
+    (``oauth`` on an ``OAuthConnection``) are accepted.
     """
-    declaring = target if isinstance(target, type) and issubclass(target, anchor) else anchor
-    classvars, fields = _route(declaring, overrides)
-    declared = _relations(declaring, relations or {})
-    built = build(target, classvars=classvars, fields=fields, relations=declared)
-    built._validate_classvars()
-    return built
 
+    def __init__(self, anchor: type[SerializableT], **settings: Any) -> None:
+        """Make a decorator for one kind.
 
-def declare(cls: type[ComponentT], relations: dict[str, Relation]) -> type[ComponentT]:
-    """Add a decorator's relations to an already-built class, for a kind's build step.
+        Args:
+            anchor: The kind the decorator builds.
+            **settings: The settings every class it builds receives.
+        """
+        self.anchor = anchor
+        self.settings = settings
 
-    The build step of every kind whose decorator takes a class ends here, and
-    nothing outside the decorator layer calls it: the class collected its
-    relations when it was created, before the decorator had a chance to add
-    any, so it collects again.
+    @overload
+    def __call__(self, target: type[SubclassT], /) -> type[SubclassT]: ...
+    @overload
+    def __call__(self, target: type | Callable[..., Any], /) -> type[SerializableT]: ...
+    @overload
+    def __call__(self, /, *, relations: dict[str, Any] | None = ..., **overrides: Any) -> Decorator[SerializableT]: ...
+    def __call__(self, target: Any = None, /, **settings: Any) -> Any:
+        """Build a class from a target, or return a decorator carrying more settings.
 
-    Args:
-        cls: The class the build step produced.
-        relations: The relations the decorator declares, name to relation.
+        Args:
+            target: The decorated class or function; ``None`` in the
+                parenthesised form.
+            **settings: More settings, added to the ones this decorator carries.
 
-    Returns:
-        The same class, its relations merged and their descriptors reinstalled.
-    """
-    if relations:
-        cls.relations = {**cls.relations, **relations}
-        cls._collect()
-    return cls
-
-
-# -- Internals -----------------------------------------------------------------
-
-
-def _route(anchor: type[Component], overrides: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Sort a decorator's plain keyword arguments into ClassVars and field defaults.
-
-    A name is a ClassVar when some class in the anchor's MRO annotates it
-    ``ClassVar`` and it is neither private nor reserved; a field when the
-    anchor declares it as a Pydantic field other than the identity one. A name
-    that is both says two contradictory things (the ClassVar reads on the
-    class, the field on every instance), so it is refused rather than routed to
-    one of them.
-
-    Args:
-        anchor: The class the routing introspects, the anchor of the kind or
-            the decorated subclass of it.
-        overrides: The decorator's plain keyword arguments, name to value.
-
-    Returns:
-        The ClassVars to stamp on the built class and the field defaults to
-        override on it, in that order.
-
-    Raises:
-        TypeError: If a name is both a ClassVar and a field, or neither.
-    """
-    classvar_names = set(anchor._classvars())
-    field_names = {name for name in anchor.model_fields if name != _IDENTITY_FIELD}
-
-    classvars: dict[str, Any] = {}
-    fields: dict[str, Any] = {}
-    for name, value in overrides.items():
-        if name in classvar_names and name in field_names:
-            raise TypeError(
-                f"{anchor.__name__} declares '{name}' both as a ClassVar and a field, "
-                f"so the decorator cannot tell which one to set"
-            )
-        if name in classvar_names:
-            classvars[name] = value
-        elif name in field_names:
-            fields[name] = value
-        elif name in anchor.relations:
-            raise TypeError(
-                f"{anchor.__name__} declares '{name}' as a relation; pass it through relations={{\"{name}\": ...}}"
-            )
-        else:
-            accepted = sorted(classvar_names | field_names)
-            raise TypeError(f"{anchor.__name__} does not accept '{name}'; accepted: {accepted}")
-    return classvars, fields
-
-
-def _relations(anchor: type[Component], relations: dict[str, Any]) -> dict[str, Relation]:
-    """Read the ``relations=`` channel into the relations it declares.
-
-    Three value forms: a `Relation`,
-    kept as written; a component class, the same shorthand the annotation form
-    is (``Relation(cls)``); a non-empty list or tuple of component classes,
-    meaning "the relation the anchor already declares under this name, its key
-    list narrowed to these classes' keys".
-
-    Args:
-        anchor: The class whose declared relations a narrowing list narrows.
-        relations: The channel as written, name to value.
-
-    Returns:
-        Name to relation, ready for the build step to declare.
-
-    Raises:
-        TypeError: If a value is none of the three forms, if a narrowing list
-            names a relation the anchor does not declare, or if one of its
-            classes is of a kind that relation does not accept.
-    """
-    declared: dict[str, Relation] = {}
-    for name, value in relations.items():
-        if isinstance(value, Relation):
-            declared[name] = value
-            continue
-        if _is_component(value):
-            declared[name] = Relation(value)
-            continue
-
-        classes = list(value) if isinstance(value, (list, tuple)) else []
-        if not classes or not all(_is_component(cls) for cls in classes):
-            raise TypeError(
-                f"Relation '{name}' accepts a Relation, a Component class, or a non-empty list of "
-                f"Component classes, got {value!r}"
-            )
-        relation = anchor.relations.get(name)
-        if relation is None:
-            raise TypeError(
-                f"{anchor.__name__} declares no relation named '{name}' to narrow; declared: {sorted(anchor.relations)}"
-            )
-        for cls in classes:
-            if cls.kind not in relation.kinds:
-                raise TypeError(f"Relation '{name}' accepts kinds {relation.kinds}, not '{cls.kind}' ({cls.__name__})")
-        declared[name] = relation.model_copy(update={"key": [cls.key for cls in classes]})
-    return declared
-
-
-def _is_component(value: Any) -> bool:
-    """Whether a value is a component class.
-
-    Args:
-        value: The value to test.
-
-    Returns:
-        True when the value is a subclass of `Component`.
-    """
-    return isinstance(value, type) and issubclass(value, Component)
+        Returns:
+            The built class, or the decorator carrying the settings.
+        """
+        settings = {**self.settings, **settings}
+        if target is None:
+            return Decorator(self.anchor, **settings)
+        body = ClassBody.of(target, self.anchor)
+        return (body.base or self.anchor).build_class(body, **settings)

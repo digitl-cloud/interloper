@@ -32,7 +32,7 @@ from interloper_assets.amazon_ads.source import AmazonAds
 
 
 def _source() -> Any:
-    return AmazonAds(id="src-1", profile_id="123")
+    return AmazonAds(id="src-1", profile_id="123")  # ty: ignore[missing-argument]
 
 
 class TestSourceNormalizer:

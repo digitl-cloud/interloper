@@ -22,16 +22,19 @@ from collections.abc import Callable, Collection, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
-from pydantic import BaseModel, ConfigDict, model_validator
-from pydantic.fields import FieldInfo
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from typing_extensions import Self
 
+from interloper.utils.annotations import classvar_type, is_classvar, type_adapter
 from interloper.utils.imports import get_object_path, import_from_path
 from interloper.utils.text import to_snake_case
 
 if TYPE_CHECKING:
+    from types import FunctionType
+
     from interloper.catalog.base import Catalog
     from interloper.component.base import Component
+    from interloper.serializable.body import ClassBody
 
 
 class IgnoredDescriptor:
@@ -40,6 +43,12 @@ class IgnoredDescriptor:
     Any descriptor extending this class is automatically excluded from Pydantic
     model field processing via ``Component.model_config["ignored_types"]``.
     """
+
+
+# ClassVars carrying the framework's own machinery: never a decorator setting,
+# whatever their annotation says. `relations` has its own channel, the rest are
+# collected, not declared.
+_RESERVED_CLASSVARS = frozenset({"kind", "relations", "internal_fields", "asset_types", "model_config"})
 
 
 # -- Specs ---------------------------------------------------------------------
@@ -277,31 +286,50 @@ class Spec(BaseModel):
         """
         owns = context is None
         context = SerializationContext(resolve=resolve) if context is None else context
-
-        def load(value: Any) -> Any:
-            if isinstance(value, dict):
-                if ("path" in value or "key" in value) and value.keys() <= {"path", "key", "id", "init"}:
-                    return Spec(**value).reconstruct(catalog, context=context)
-                return {name: load(entry) for name, entry in value.items()}
-            if isinstance(value, list):
-                return [load(entry) for entry in value]
-            return value
-
-        from interloper.component.base import Component
-
-        cls = Component.resolve_key(self.key, catalog) if self.key else Serializable.resolve_path(self.path)
-        kwargs: dict[str, Any] = {"id": self.id} if self.id else {}
-        for name, value in (self.init or {}).items():
-            kwargs[name] = load(value)
-
-        if not issubclass(cls, Component):
-            return cls(**kwargs)
-
-        instance = cls(**context.hold(kwargs))
-        context.add(instance)
+        cls = self._resolve(catalog)
+        init: dict[str, Any] = {"id": self.id} if self.id else {}
+        init.update({name: self._load(value, catalog, context) for name, value in (self.init or {}).items()})
+        instance = cls.from_init(init, context)
         if owns:
             context.bind()
         return instance
+
+    def _resolve(self, catalog: Catalog | None) -> type[Serializable]:
+        """The class this spec names: a catalog ``key`` resolves to a component, a ``path`` imports.
+
+        Args:
+            catalog: Catalog used to resolve a ``key``; ``None`` builds the
+                settings-configured one when a key is first met.
+
+        Returns:
+            The class to build.
+        """
+        if self.key:
+            from interloper.component.base import Component
+
+            return Component.resolve_key(self.key, catalog)
+        return Serializable.resolve_path(self.path)
+
+    @classmethod
+    def _load(cls, value: Any, catalog: Catalog | None, context: SerializationContext) -> Any:
+        """Load one init value: a nested spec is built, a mapping or list walked, anything else kept.
+
+        Args:
+            value: The value as the document carries it.
+            catalog: Catalog used to resolve ``key`` references in nested specs.
+            context: The document being read.
+
+        Returns:
+            The loaded value; a ``{"ref": id}`` stays a mapping, for the
+            component holding it to hold back.
+        """
+        if isinstance(value, dict):
+            if ("path" in value or "key" in value) and value.keys() <= {"path", "key", "id", "init"}:
+                return cls(**value).reconstruct(catalog, context=context)
+            return {name: cls._load(entry, catalog, context) for name, entry in value.items()}
+        if isinstance(value, list):
+            return [cls._load(entry, catalog, context) for entry in value]
+        return value
 
 
 # -- Serialization context -----------------------------------------------------
@@ -523,6 +551,9 @@ class Serializable(BaseModel):
         new one: it keeps the key it inherits, so a key declared in the class
         body survives the decorator.
 
+        The settings the class body declares are checked against their types
+        here, so a wrong one fails where it is written.
+
         Args:
             rebuild: Whether the class rebuilds an existing declaration rather
                 than declaring a new one; set only by `build_class`.
@@ -532,6 +563,7 @@ class Serializable(BaseModel):
         super().__init_subclass__(**kwargs)
         if not rebuild and "key" not in cls.__dict__:
             cls.key = to_snake_case(cls.__name__)
+        cls._validate_classvars()
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -587,152 +619,168 @@ class Serializable(BaseModel):
         super().__init__(**data)
 
     @classmethod
-    def build_class(
-        cls,
-        decorated: type,
-        *,
-        classvars: dict[str, Any] | None = None,
-        fields: dict[str, Any] | None = None,
-    ) -> type[Self]:
-        """Build a subclass of this class from a decorated class.
+    def build_class(cls, body: ClassBody, **settings: Any) -> type[Self]:
+        """Build a new class from a decorated target's body and a decorator's settings.
 
-        The decorator-support factory. The invariant: **decorators build
-        classes, they never mutate finalized ones.**  Field defaults always
-        pass through the Pydantic metaclass so they become real field
-        definitions: a plain ``setattr`` on a built pydantic class would
-        leave ``model_fields`` (and therefore every instance) on the old
-        default.
-
-        Two construction paths:
-
-        - The decorated class already extends the receiving class: field
-          defaults (when present) produce a new subclass via
-          `pydantic.create_model` with the parent's annotations;
-          ClassVars are stamped on the result (plain class attributes, no
-          pydantic machinery involved).
-        - The decorated class does **not** extend it: a new class is
-          created via ``type()`` that inherits from the receiving class and
-          carries over the decorated class's members and annotations, with
-          decorator fields annotated from the receiver's field definitions.
+        The one construction every decorator goes through: decorators build
+        classes, they never modify one. Everything goes into the namespace of
+        one new class, so the metaclass sees field defaults as fields and
+        ``__init_subclass__`` collects relations and validates settings where
+        they are written. A target already extending this class is the base of
+        the new one, which keeps its key and kind (``rebuild``).
 
         Args:
-            decorated: The decorated class to transform.
-            classvars: Class-level attributes (key, name, tags, …).
-            fields: Field default overrides (dataset, normalizer, …); every
-                key must be an existing field on the receiving class.
+            body: What the decorated target contributes.
+            **settings: The decorator's settings (see `_sort_settings`).
 
         Returns:
-            A subclass of the receiving class.
+            The new class.
+        """
+        entries, annotations = cls._sort_settings(settings)
+        base = body.base or cls
+        namespace: dict[str, Any] = {
+            **body.members,
+            **entries,
+            "__module__": body.module,
+            "__qualname__": body.qualname,
+            "__annotations__": {**annotations, **body.annotations},
+        }
+        if body.doc:
+            namespace["__doc__"] = body.doc
+        return cast("type[Self]", type(base)(body.name, (base,), namespace, rebuild=body.base is not None))
+
+    # -- Settings --------------------------------------------------------------
+
+    @classmethod
+    def _classvars(cls) -> dict[str, Any]:
+        """The public ClassVars this class can be given, name to declared type.
+
+        Every name some class in the MRO annotates ``ClassVar``, neither
+        private nor reserved: what a decorator may set, and what
+        `_validate_classvars` checks. The type comes from the most
+        derived annotation; it is ``None`` when that annotation is a bare or
+        unresolvable ``ClassVar``, or redeclares the name as a field, and such
+        a name is not validated.
+
+        Returns:
+            Each settable name to its declared type, or ``None``.
+        """
+        declared: dict[str, Any] = {}
+        for base in reversed(cls.__mro__):
+            for name, hint in inspect.get_annotations(base).items():
+                if name.startswith("_") or name in _RESERVED_CLASSVARS:
+                    continue
+                if is_classvar(hint):
+                    declared[name] = classvar_type(hint, base)
+                elif name in declared:
+                    declared[name] = None
+        return declared
+
+    @classmethod
+    def _validate_classvars(cls) -> None:
+        """Check every setting this class defines itself against its declared type.
+
+        Values are checked, never rewritten: the class keeps what was
+        declared, and readers that need a coerced form (a definition, say)
+        convert it themselves.
 
         Raises:
-            TypeError: If a decorator field is not a field of the receiving
-                class.
+            TypeError: If a setting's value does not match its declared type.
         """
-        from pydantic import create_model
-
-        already_subclass = any(isinstance(b, type) and issubclass(b, cls) for b in decorated.__bases__)
-
-        # A decorated subclass may carry fields the receiving class doesn't
-        # declare (e.g. DatabaseDestination traits behind @destination), so
-        # validate against the class whose definitions the overrides target.
-        target = cast("type[Self]", decorated) if already_subclass else cls
-        for field_name in fields or {}:
-            if field_name not in target.model_fields:
-                raise TypeError(f"Decorator field '{field_name}' is not a field of {target.__name__}.")
-
-        if already_subclass:
-            result_cls = cast("type[Self]", decorated)
-            if fields:
-                # Override only the default, keeping the parent FieldInfo:
-                # a bare (annotation, value) pair would build a fresh
-                # FieldInfo and silently drop the field's title, description
-                # and json_schema_extra (x-widget, x-info, …).
-                field_definitions: dict[str, Any] = {
-                    name: (info.annotation, info) for name, info in cls._override_defaults(result_cls, fields).items()
-                }
-                result_cls = create_model(
-                    decorated.__name__,
-                    __base__=result_cls,
-                    __module__=decorated.__module__,
-                    __cls_kwargs__={"rebuild": True},
-                    **field_definitions,
-                )
-                result_cls.__qualname__ = decorated.__qualname__
-                result_cls.__doc__ = decorated.__doc__
-            if classvars:
-                for name, value in classvars.items():
-                    setattr(result_cls, name, value)
-            return result_cls
-
-        # Plain class: build a new class that inherits from the receiver.
-        namespace: dict[str, Any] = {}
-
-        for name, value in decorated.__dict__.items():
-            if name.startswith("__"):
+        for name, declared in cls._classvars().items():
+            if declared is None or name not in cls.__dict__:
                 continue
-            namespace[name] = value
+            try:
+                type_adapter(declared).validate_python(cls.__dict__[name])
+            except ValidationError as error:
+                raise TypeError(f"{cls.__name__}.{name}: {error.errors()[0]['msg']}") from None
 
-        if classvars:
-            namespace.update(classvars)
-        if fields:
-            # Merged FieldInfos, not bare values: a bare `field = value` in
-            # the namespace replaces the receiver's FieldInfo wholesale,
-            # dropping title/description/json_schema_extra.
-            namespace.update(cls._override_defaults(cls, fields))
+    @classmethod
+    def _sort_settings(cls, settings: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Turn a decorator's settings into the namespace entries of the class it builds.
 
-        namespace["__module__"] = decorated.__module__
-        namespace["__qualname__"] = decorated.__qualname__
-
-        # Carry over annotations so Pydantic sees declared fields.
-        if own := inspect.get_annotations(decorated):
-            namespace.setdefault("__annotations__", {}).update(own)
-
-        # Annotate decorator fields from the receiver's field definitions so
-        # the metaclass registers them as field default overrides.
-        if fields:
-            annotations = namespace.setdefault("__annotations__", {})
-            for field_name in fields:
-                if field_name not in annotations:
-                    annotations[field_name] = cls.model_fields[field_name].annotation
-
-        # Annotate classvars as ClassVar so Pydantic doesn't treat them as
-        # model fields.  Without this, a bare `tags = ["Cloud"]` in the
-        # namespace triggers a PydanticUserError for non-annotated attributes.
-        if classvars:
-            annotations = namespace.setdefault("__annotations__", {})
-            for cv_name in classvars:
-                if cv_name not in annotations:
-                    annotations[cv_name] = ClassVar
-
-        result_cls = type(decorated.__name__, (cls,), namespace)
-
-        if decorated.__doc__:
-            result_cls.__doc__ = decorated.__doc__
-
-        return cast("type[Self]", result_cls)
-
-    # -- Identity --------------------------------------------------------------
-
-    @staticmethod
-    def _override_defaults(owner: type[BaseModel], overrides: dict[str, Any]) -> dict[str, FieldInfo]:
-        """Copy *owner*'s FieldInfos with new defaults, keeping all other metadata.
+        A public ClassVar (see `_classvars`) stays a value: the class's bases
+        already annotate it, so it needs no annotation and is validated where
+        the class is created. A field default becomes a copy of the field's
+        ``FieldInfo`` with the new default (title, description and
+        ``json_schema_extra`` kept), annotated with the field's type.
 
         Args:
-            owner: The model whose ``model_fields`` supply the FieldInfo to copy;
-                every override key must name one of its fields.
-            overrides: Field name → new default value. Any ``default_factory``
-                on the copied FieldInfo is cleared so the value wins.
+            settings: The decorator's settings, name to value.
 
         Returns:
-            Field name → copied FieldInfo carrying the override as its default.
+            The namespace entries, and the annotations to add for them.
+
+        Raises:
+            TypeError: If a name is both a ClassVar and a field, or neither.
         """
-        infos: dict[str, FieldInfo] = {}
-        for name, value in overrides.items():
-            info = copy.deepcopy(owner.model_fields[name])
-            info.default = value
-            info.default_factory = None
-            infos[name] = info
-        return infos
+        classvars = cls._classvars()
+        entries: dict[str, Any] = {}
+        annotations: dict[str, Any] = {}
+        for name, value in settings.items():
+            if name in classvars and name in cls.model_fields:
+                raise TypeError(
+                    f"{cls.__name__} declares '{name}' both as a ClassVar and a field, "
+                    f"so the decorator cannot tell which one to set"
+                )
+            if name in classvars:
+                entries[name] = value
+            elif name in cls.model_fields:
+                info = copy.deepcopy(cls.model_fields[name])
+                info.default = value
+                info.default_factory = None
+                entries[name] = info
+                annotations[name] = cls.model_fields[name].annotation
+            else:
+                raise TypeError(cls._refusal(name, accepted=sorted({*classvars, *cls.model_fields})))
+        return entries, annotations
+
+    @classmethod
+    def _refusal(cls, name: str, *, accepted: list[str]) -> str:
+        """Say why a decorator setting is refused, naming the subclass that declares it when one does.
+
+        Args:
+            name: The refused setting.
+            accepted: The settings this class accepts.
+
+        Returns:
+            The error message.
+        """
+        declaring = cls._subclass_declaring(name)
+        hint = f"; {declaring.__name__} declares it, subclass it" if declaring is not None else ""
+        return f"{cls.__name__} does not accept '{name}'{hint}; accepted: {accepted}"
+
+    @classmethod
+    def _subclass_declaring(cls, name: str) -> type[Serializable] | None:
+        """The closest subclass declaring *name* as a ClassVar or a field, breadth first.
+
+        Args:
+            name: The setting looked for.
+
+        Returns:
+            The subclass, or ``None`` when none declares it.
+        """
+        frontier = list(cls.__subclasses__())
+        while frontier:
+            subclass = frontier.pop(0)
+            if name in subclass._classvars() or name in subclass.model_fields:
+                return subclass
+            frontier.extend(subclass.__subclasses__())
+        return None
+
+    @classmethod
+    def body_from_function(cls, fn: FunctionType) -> ClassBody:
+        """Read a decorated function into a class body; a kind decorating functions overrides it.
+
+        Args:
+            fn: The decorated function.
+
+        Raises:
+            TypeError: Always: this kind decorates a class.
+        """
+        raise TypeError(f"{cls.__name__} decorates a class, not a function")
+
+    # -- Identity --------------------------------------------------------------
 
     def __str__(self) -> str:
         """Human-readable representation: ``Name (key: k)``.
@@ -878,6 +926,19 @@ class Serializable(BaseModel):
         if not isinstance(instance, cls):
             raise TypeError(f"'{spec.key or spec.path}' does not reconstruct to a {cls.__name__}")
         return instance
+
+    @classmethod
+    def from_init(cls, init: dict[str, Any], context: SerializationContext) -> Self:
+        """Build an instance from a spec's loaded init, as one step of reconstructing a document.
+
+        Args:
+            init: Constructor keyword arguments, nested specs already built.
+            context: The document being read; a plain serializable needs nothing from it.
+
+        Returns:
+            The instance.
+        """
+        return cls(**init)
 
     @classmethod
     def from_spec_file(

@@ -21,13 +21,13 @@ def _clear_memory() -> None:
 
 
 def test_performance_fans_in_every_star_schema_fact() -> None:
-    relation = CampaignPerformanceAnalysis.campaign_performance.relations["performance"]  # ty: ignore[unresolved-attribute]
+    relation = CampaignPerformanceAnalysis.campaign_performance.relations["performance"]
     assert relation.keys == ["*.fact_ad_performance", "*.fact_ad_group_performance", "*.fact_campaign_performance"]
     assert (relation.many, relation.optional) == (True, True)
 
 
 def test_matches_is_the_single_optional_matcher_output() -> None:
-    relation = CampaignPerformanceAnalysis.campaign_performance.relations["matches"]  # ty: ignore[unresolved-attribute]
+    relation = CampaignPerformanceAnalysis.campaign_performance.relations["matches"]
     assert (relation.key, relation.many, relation.optional) == ("campaign_matcher.campaign_matches", False, True)
 
 

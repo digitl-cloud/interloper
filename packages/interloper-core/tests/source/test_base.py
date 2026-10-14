@@ -313,17 +313,16 @@ class TestSourceRelations:
         assert "FakeOrphan" in str(excinfo.value)
         assert "orders" in str(excinfo.value)
 
-    def test_destination_bound_after_construction_still_trickles(self):
+    def test_a_destination_bound_after_construction_keeps_its_own_connection(self):
         class FakeConnectedDestination(FakeDestination):
             connection: FakeConnection | None = il.Relation(FakeConnection, optional=True)
 
-        connection = FakeConnection(token="secret")
         destination = FakeConnectedDestination()
-        source = Shop(connection=connection)
+        source = Shop(connection=FakeConnection(token="secret"))
         source.bind("destinations", destination)
-        assert destination.connection is connection
+        assert destination.connection is None
 
-    def test_destination_assigned_after_construction_still_trickles(self):
+    def test_a_destination_assigned_after_construction_reaches_the_assets(self):
         destination = FakeDestination()
         source = Shop(connection=FakeConnection(token="secret"))
         source.destinations = [destination]
@@ -515,6 +514,27 @@ class TestAssets:
         asset = FakeSourceWithAssets.asset_types[0]()
         source = FakeSourceWithAssets(assets=[asset])
         assert source.assets == [asset]
+
+    def test_a_source_owns_its_assets(self):
+        source = FakeSourceWithAssets()
+
+        assert source.owned == source.assets
+        assert all(asset.parent is source for asset in source.assets)
+
+    def test_an_asset_of_another_source_is_refused(self):
+        other = FakeSourceWithAssets()
+
+        with pytest.raises(ValidationError, match=r"already belongs to source"):
+            FakeSourceWithAssets(assets=[other.assets[0]])
+
+    def test_a_copy_owns_copies_of_the_assets(self):
+        source = FakeSourceWithAssets()
+
+        copy = source(dataset="other")
+
+        assert [asset.id for asset in copy.assets] == [asset.id for asset in source.assets]
+        assert all(asset.parent is copy for asset in copy.assets)
+        assert all(asset.parent is source for asset in source.assets)
 
     def test_an_asset_is_reachable_by_key(self):
         source = FakeSourceWithAssets()
@@ -796,17 +816,19 @@ class TestInheritedSettings:
         source = FakeTrickleSource()
         assert source.assets[0].source is source
 
-    def test_trickles_into_bound_destinations(self):
+    def test_a_destination_keeps_its_own_connection(self):
         class FakeConnectedDestination(FakeDestination):
             connection: FakeConnection | None = il.Relation(FakeConnection, optional=True)
 
         class FakeConnectedSource(il.Source):
             connection: FakeConnection
 
-        connection = FakeConnection(token="secret")
         destination = FakeConnectedDestination()
-        FakeConnectedSource(connection=connection, destinations=[destination])
-        assert destination.connection is connection
+        source = FakeConnectedSource(connection=FakeConnection(token="secret"), destinations=[destination])
+        [held] = source.destinations
+        assert isinstance(held, FakeConnectedDestination)
+        assert destination.connection is None
+        assert held.connection is None
 
 
 # -- __call__ reconfiguration --------------------------------------------------

@@ -24,6 +24,16 @@ OVERRIDES: dict[str, Any] = {
 }
 
 
+class FakeDecoratedShop(il.Source):
+    """A source decorated after the fact."""
+
+    class Orders(il.Asset):
+        """Orders."""
+
+        def data(self) -> list[dict[str, Any]]:
+            return []
+
+
 # -- Tests ---------------------------------------------------------------------
 
 
@@ -183,3 +193,15 @@ class TestFunctionForm:
 
         assert google_ads.key == "google_ads"
         assert google_ads.__module__ == __name__
+
+
+class TestDecoratedSubclass:
+    def test_a_decorated_source_subclass_keeps_its_assets(self):
+        built = il.source(tags=["Shop"])(FakeDecoratedShop)
+
+        source = built()
+
+        assert built.Orders is FakeDecoratedShop.Orders
+        assert source.Orders is source.assets[0]
+        assert type(source.Orders).key == "orders"
+        assert il.Serializable.resolve_path(built.Orders.classpath()) is built.Orders

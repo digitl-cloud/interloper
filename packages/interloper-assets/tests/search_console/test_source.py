@@ -67,7 +67,7 @@ def _connection(client: Any) -> SearchConsoleConnection:
 
 def _source(client: Any = None, site_url: str = "sc-domain:example.com") -> Any:
     if client is None:
-        return SearchConsole(id="src-1", site_url=site_url)
+        return SearchConsole(id="src-1", site_url=site_url)  # ty: ignore[missing-argument]
     return SearchConsole(id="src-1", site_url=site_url, connection=_connection(client))
 
 

@@ -20,10 +20,12 @@ A pydantic model with:
   as the DAG ever passes one.
 - **`config_schema()`**: the JSON Schema of user-facing fields, with framework fields and the
   class's `internal_fields` stripped.
-- **`build_class(decorated, classvars=..., fields=...)`**: the factory behind every decorator.
-  It builds a subclass from a decorated class, stamping class-level attributes and overriding
-  field defaults through the pydantic metaclass so `model_fields` stays correct. Decorators
-  build classes; they never mutate finalized ones.
+- **`build_class(body, **settings)`**: the one construction behind every decorator. A decorator
+  reads its target into a `ClassBody` (a class as written, or a function read by the kind's
+  `body_from_function`) and gets one new class back, with every setting in its namespace: public
+  `ClassVar`s as values, field defaults as fields, relations in the `relations` dict. A class
+  that already extends the kind becomes the base of the new one and keeps its key and kind.
+  Decorators build classes; they never modify one.
 
 Runners, normalizers and schemas are `Serializable` without being components.
 
@@ -126,23 +128,7 @@ definition rather than a component silently missing a relation.
 | `unbind(name, *targets)` | Detaches. Refused when it would empty a non-optional relation. |
 | `bound(name)` | What the component holds itself: a list for `many`, the single component or `None`. |
 | `resolve(name)` | What a reader gets: the own binding, else what the owner holds under the same name and this relation accepts, else the relation's fallback for a single-valued relation and an empty list for a `many` one. Attribute access reads the same, without the fallback. Fallbacks are never bound. |
-| `trickle(child)` | Fills a child's unbound relations from this component's own bindings, by name, keeping only what the child's relation accepts. Never overrides an explicit binding. For components that are not owned (a source's destinations, a job's targets); an owned one reads through its owner instead. |
 | `validate_relations(nodes=None)` | Unbound non-optional without a fallback, several targets on a single-valued relation, a target the relation does not accept, and (with `nodes`) a non-optional asset target absent from the run. |
-
-**Extension point**: `on_rebind(name)` is called once after every write to a binding, whichever
-way it was written (constructor kwarg, `bind`, `unbind`, attribute assignment, a parent's
-`trickle`), with the new binding already in place. The base does nothing. A kind that cascades its
-wiring into components it does not own overrides it; this is how a source's connection reaches its
-destinations (its assets read it through the source and need nothing):
-
-```py
-class Source(Component):
-    def on_rebind(self, name: str) -> None:
-        for destination in self.destinations:
-            self.trickle(destination)
-```
-
-Bind on other components from inside the hook, never on `self`: that would re-enter it.
 
 **Inherited settings**: a field declared with `inherit=True` on a field factory (or
 `json_schema_extra={"x-inherit": True}` on a plain `Field`) stores only the component's own value,
@@ -162,8 +148,7 @@ and to disable its assets while it is disabled. Specs and configs carry stored v
 A relation name is also a constructor keyword and an assignable attribute; assignment goes
 through `Relation.__set__`, which shares `bind`'s single write path: the replacement is checked
 before the existing binding is touched (so a rejected assignment leaves the previous one exactly
-as it was), duplicates collapse, clearing a non-optional relation raises `ConfigError`, and
-whatever the owner cascades into its children is cascaded again.
+as it was), duplicates collapse, and clearing a non-optional relation raises `ConfigError`.
 
 `definition().relations` exports each relation for the catalog and the UI: `kind`, `key`,
 `many`, `optional`, `on_delete`.
@@ -207,11 +192,7 @@ order in which it comes up.
         storage: il.Destination
     ```
 
-4. **Override `on_rebind` only if the kind cascades its wiring.** A source pushes its connection
-   into its assets, a job its destinations into its targets. A kind whose bindings are its own
-   business leaves the base hook alone.
-
-5. **Register the anchor.** One line in `pyproject.toml`; the catalog raises `ConfigError` for a
+4. **Register the anchor.** One line in `pyproject.toml`; the catalog raises `ConfigError` for a
    component whose kind it does not know.
 
     ```toml
@@ -219,7 +200,7 @@ order in which it comes up.
     report = "my_package.report:Report"
     ```
 
-6. **Check `definition()`.** It is what the catalog, the API and the app read: `config_schema`
+5. **Check `definition()`.** It is what the catalog, the API and the app read: `config_schema`
    from the fields, `relations` from the declarations, `state_schema` from `state_model` if the
    kind has machine-owned state. If the definition says what you meant, the kind is done.
 
@@ -228,32 +209,24 @@ exposes `run()`. See [Operations](operations.md).
 
 ## Writing a decorator
 
-A kind that wants `@il.report(...)` sugar wraps the one decorator engine,
-`interloper.component.decorator.decorate`. The engine routes three channels and nothing else:
-plain keyword arguments are matched against the anchor (a public `ClassVar` becomes a class
-attribute, a pydantic field a default, anything else a `TypeError` naming what is accepted),
-`relations=` declares relations (an `il.Relation`, a component class, or a list of classes
-narrowing a relation the anchor declares), and `build=` is the kind's own step: how the
-decorated thing becomes a class.
+A kind that wants `@il.report(...)` sugar makes one `Decorator` for it, and documents it with an
+attribute docstring (the reference renders it):
 
 ```py
-from interloper.component.decorator import declare, decorate
+from interloper.component import Decorator
 
-
-def report(cls=None, /, *, relations=None, **overrides):
-    if cls is not None:
-        return decorate(Report, cls, build=_build_report, relations=relations, **overrides)
-    return lambda cls: decorate(Report, cls, build=_build_report, relations=relations, **overrides)
-
-
-def _build_report(cls, *, classvars, fields, relations):
-    return declare(Report.build_class(cls, classvars=classvars, fields=fields), relations)
+report = Decorator(Report)
+"""Create a Report subclass from a decorated class."""
 ```
 
-`build_class` builds a subclass with the class attributes stamped and the field defaults
-overridden through the pydantic metaclass, so `model_fields` stays correct; `declare` adds the
-decorator's relations to it. Nothing is hand-listed: what the decorator accepts is what the
-anchor declares, so a new `ClassVar` on `Report` is a new decorator option with no other change.
+The decorator works bare (`@report`) or with settings (`@report(name="Weekly")`, which returns a
+decorator carrying them). What it accepts is what the kind declares: a public `ClassVar` becomes
+a class attribute, a pydantic field a default, `relations=` declares relations (an
+`il.Relation`, a component class, or a list of classes narrowing a relation the kind declares),
+and anything else is a `TypeError` naming what is accepted. Nothing is hand-listed, so a new
+`ClassVar` on `Report` is a new decorator option with no other change. A kind that decorates
+functions, as `Asset` and `Source` do, overrides `body_from_function` to say what a function
+becomes.
 
 ## Definitions in the catalog
 

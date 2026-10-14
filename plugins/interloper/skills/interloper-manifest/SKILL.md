@@ -97,9 +97,8 @@ https://docs.interloper.dev/guide/jobs/
 - **`key:` instead of `path:`** needs the package installed with an `interloper.components`
   entry point; a bare module is always `path: module.Class`.
 - **Dump a spec to learn the shape**: `yaml.safe_dump(job.to_spec().model_dump(mode="json"))`
-  from a Python-built `Job(...)`. The dump is exhaustive (generated ids, defaults, the cascaded
-  destinations repeated on every target and asset); keep only what differs from defaults and
-  from what cascades.
+  from a Python-built `Job(...)`. The dump is exhaustive (generated ids, defaults); keep only
+  what differs from defaults and from what cascades.
 - **CLI flags**: `--dry-run`, `--date KEY` (`2026-01-15`, `2026-01`, `2026`, `2026-01-15T13`),
   `--start-date/--end-date` (one windowed run), `--events json`, `-v`, `-q`, `--run-id`.
 

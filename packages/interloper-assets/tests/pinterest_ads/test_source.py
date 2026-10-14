@@ -35,7 +35,7 @@ DAY = dt.date(2026, 9, 14)
 
 
 def _source() -> Any:
-    return PinterestAds(id="src-1", account_id="549759962542")
+    return PinterestAds(id="src-1", account_id="549759962542")  # ty: ignore[missing-argument]
 
 
 def _asset(key: str) -> Any:

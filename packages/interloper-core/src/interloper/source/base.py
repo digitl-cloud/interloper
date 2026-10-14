@@ -16,10 +16,12 @@ from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.operation import Operation, Workload
 from interloper.resource.fields import InputField, SelectField
 from interloper.retry import RetryPolicy
-from interloper.serializable import IgnoredDescriptor
+from interloper.serializable import ClassBody, IgnoredDescriptor
 from interloper.utils.text import to_identifier, validate_key
 
 if TYPE_CHECKING:
+    from types import FunctionType
+
     from interloper.destination import Destination
 
 
@@ -124,6 +126,33 @@ class Source(Component, Workload):
         super().__init_subclass__(**kwargs)
         cls._collect_asset_types()
 
+    @classmethod
+    def body_from_function(cls, fn: FunctionType) -> ClassBody:
+        """Read a decorated function into a source body: what it returns are the assets.
+
+        The function is called once, for the asset classes it returns (one or a
+        list); its annotated parameters become configuration fields, their
+        defaults the field defaults.
+
+        Args:
+            fn: The decorated function.
+
+        Returns:
+            The body carrying ``asset_types`` and the fields.
+        """
+        returned = fn()
+        asset_types = returned if isinstance(returned, list) else [returned] if isinstance(returned, type) else []
+        members: dict[str, Any] = {"asset_types": asset_types}
+        annotations: dict[str, Any] = {}
+        hints = getattr(fn, "__annotations__", {})
+        for name, parameter in inspect.signature(fn).parameters.items():
+            if name in ("self", "context", "kwargs") or name not in hints:
+                continue
+            annotations[name] = hints[name]
+            if parameter.default is not inspect.Parameter.empty:
+                members[name] = parameter.default
+        return ClassBody.from_function(fn, members=members, annotations=annotations)
+
     @model_validator(mode="before")
     @classmethod
     def _apply_asset_overrides(cls, data: Any) -> Any:
@@ -178,14 +207,27 @@ class Source(Component, Workload):
         Args:
             context: Pydantic's post-init context, forwarded untouched to
                 ``super().model_post_init``.
+
+        Raises:
+            ConfigError: If an asset already belongs to another source.
         """
         super().model_post_init(context)
         if not self.assets:
             self.assets = [cls() for cls in self.asset_types]
         for asset in self.assets:
+            if asset.parent is not None and asset.parent is not self:
+                raise ConfigError(f"Asset '{asset.key}' already belongs to source '{asset.parent.qualified_key}'")
             asset.parent = self
         self._check_locations()
         self._bind_siblings()
+
+    def _owned_by_field(self) -> dict[str, list[Component]]:
+        """A source owns its assets.
+
+        Returns:
+            ``{"assets": ...}``, the assets in order.
+        """
+        return {"assets": list(self.assets)}
 
     def validate_relations(self, nodes: Mapping[str, Component] | None = None) -> None:
         """Check this source's own relations, then cascade into every materializing asset.
@@ -207,19 +249,6 @@ class Source(Component, Workload):
         for asset in self.assets:
             if asset.enabled:
                 asset.validate_relations(nodes)
-
-    def on_rebind(self, name: str) -> None:
-        """Trickle this source's bindings into its destinations whenever one changes.
-
-        Its assets need nothing: they read what they leave unbound through
-        the source.
-
-        Args:
-            name: The relation name whose binding changed; every relation the
-                source holds trickles, so the name itself is not read.
-        """
-        for destination in self.destinations:
-            self.trickle(destination)
 
     if TYPE_CHECKING:
 

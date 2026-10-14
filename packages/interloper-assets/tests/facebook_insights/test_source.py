@@ -36,7 +36,7 @@ def _connection() -> FacebookInsightsConnection:
 
 def _source(connection: FacebookInsightsConnection | None = None) -> Any:
     if connection is None:
-        return FacebookInsights(id="src-1", page_id="42")
+        return FacebookInsights(id="src-1", page_id="42")  # ty: ignore[missing-argument]
     return FacebookInsights(id="src-1", page_id="42", connection=connection)
 
 

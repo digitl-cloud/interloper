@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -40,10 +40,10 @@ class Job(Component, Workload):
     compiles to the same `DAG` that every other
     entry point executes.
 
-    A job also carries workload-level defaults, cascading to its targets the
-    way a source cascades to its assets: every relation the job holds fills
-    the same relation on any target (and any destination) that leaves it
-    unbound, ``destinations`` included.
+    A job also carries workload-level defaults: every relation the job holds
+    is the default for the same relation on any target that resolves none,
+    ``destinations`` included. The default applies where the job runs
+    (`operations`), on a copy of the target; the target itself is never changed.
     """
 
     icon: ClassVar[str] = "carbon:event-schedule"
@@ -73,25 +73,35 @@ class Job(Component, Workload):
     )
 
     def operations(self) -> list[Operation]:
-        """The targets' operations, flattened.
+        """The targets' operations, each target run with this job's bindings where it resolves none.
 
         Returns:
             Every operation the job's targets provide.
         """
-        return [operation for target in self.targets for operation in target.operations()]
+        return [operation for target in self.targets for operation in self._run_as(target).operations()]
 
-    def on_rebind(self, name: str) -> None:
-        """Trickle this job's bindings into its targets and destinations whenever one changes.
+    def _run_as(self, target: Source | Asset) -> Source | Asset:
+        """The target as this job runs it: a copy carrying the job's bindings it lacks, or itself.
 
-        A binding is the only moment this can run: relation keyword arguments
-        reach a component after ``model_post_init``, so a job knows neither
-        its targets nor its destinations before this hook has seen them.
+        For every relation the job binds other than ``targets``, a target that
+        declares a relation of that name and resolves nothing under it (so a
+        source's own destinations, and an owned asset's source-provided ones,
+        win) receives the job's targets it accepts: every one for a ``many``
+        relation, the first otherwise. The target itself is never modified.
 
         Args:
-            name: The relation name whose binding changed; every relation the
-                job holds trickles, so the name itself is not read.
+            target: One of the job's targets.
+
+        Returns:
+            The target, or a copy of it (same ids) carrying what it lacks.
         """
-        for target in self.targets:
-            self.trickle(target)
-        for destination in self.destinations:
-            self.trickle(destination)
+        lent: dict[str, Any] = {}
+        for name in type(self).relations:
+            relation = type(target).relations.get(name)
+            if name == "targets" or relation is None or target._targets(name):
+                continue
+            owner = target.identity
+            accepted = [held for held in self._targets(name) if relation.accepts(held.kind, held.identity, owner=owner)]
+            if accepted:
+                lent[name] = accepted if relation.many else accepted[0]
+        return target(**lent) if lent else target

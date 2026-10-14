@@ -110,8 +110,8 @@ init:
 ```
 
 Without the explicit `ads_stats:` line the DAG binds every `facebook_ads.ads_stats` node it holds. Neither
-target declares `destinations`: the job's cascade into every target that has none, so a target
-writes its own only to use something else. A parentless component mentioned a second time is a
+target declares `destinations`: the job's are the default for every target that has none, so a
+target writes its own only to use something else. A parentless component mentioned a second time is a
 reference too (`destinations: [{ref: bq}]` on a target that needs the same destination as
 another one but not the job's), which is the one reference rule, with no flag.
 

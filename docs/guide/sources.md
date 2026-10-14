@@ -146,9 +146,8 @@ through the source, on every read, so a change to the source reaches its assets 
 | any relation, such as `connection` or `destinations` | its own binding |
 
 A relation is read by name, filtered by what the asset's relation accepts. A binding the asset
-holds itself always wins, and a spec carries only what an asset set itself. The source still
-trickles its bindings into its destinations, so a `GoogleCloudConnection` set on the source
-reaches a `BigQueryDestination` that declares a `connection` relation.
+holds itself always wins, and a spec carries only what an asset set itself. Nothing is written
+into the source's destinations: a destination configures its own connection.
 
 An asset relation that names a sibling (a bare key) is bound at construction too, from the
 source's own asset instances. Anything reaching outside the source is left to the

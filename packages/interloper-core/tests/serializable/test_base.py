@@ -28,6 +28,11 @@ class FakeOtherSerializable(Serializable):
     value: str = ""
 
 
+@il.destination(tags=["Cloud"])
+class FakeRoundTripDestination(il.MemoryDestination):
+    """A destination a decorator rebuilds."""
+
+
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message=r'Field name "name" in "ShadowingSerializable" shadows an attribute')
 
@@ -375,6 +380,22 @@ class TestBuildClass:
 
 # -- Spec.dump_value -----------------------------------------------------------
 
+    def test_a_class_body_key_survives_a_decorator_classvar(self):
+        @il.connection(name="Search Ads 360")
+        class FakeSearchAds360Connection(il.Connection):
+            key = "search_ads_360_connection"
+
+        assert FakeSearchAds360Connection.key == "search_ads_360_connection"
+
+    def test_a_decorated_subclass_round_trips(self):
+        instance = FakeRoundTripDestination()
+
+        restored = il.Destination.from_spec(instance.to_spec())
+
+        assert FakeRoundTripDestination.__bases__[0].__name__ == "FakeRoundTripDestination"
+        assert type(restored) is FakeRoundTripDestination
+        assert Serializable.resolve_path(FakeRoundTripDestination.classpath()) is FakeRoundTripDestination
+
 
 class TestDumpSpecValue:
     """Serializable values must survive the spec round-trip with their class.
@@ -411,3 +432,47 @@ class TestDumpSpecValue:
         dumped = Spec.dump_value(some_asset(id="a1"))
         assert dumped["id"] == "a1"
         assert "path" in dumped
+
+
+class TestSortSettings:
+    """A decorator's settings, sorted by the class they configure."""
+
+    def test_a_classvar_stays_a_value_and_is_not_annotated(self):
+        entries, annotations = il.Asset._sort_settings({"tags": ["Report"]})
+
+        assert entries == {"tags": ["Report"]}
+        assert annotations == {}
+
+    def test_a_field_default_keeps_the_field_metadata(self):
+        entries, annotations = il.Source._sort_settings({"dataset": "raw"})
+
+        info = entries["dataset"]
+        assert info.default == "raw"
+        assert info.description == il.Source.model_fields["dataset"].description
+        assert annotations == {"dataset": il.Source.model_fields["dataset"].annotation}
+
+    def test_an_unknown_name_lists_the_accepted_ones(self):
+        with pytest.raises(TypeError, match=r"Asset does not accept 'nope'") as error:
+            il.Asset._sort_settings({"nope": 1})
+
+        assert "'tags'" in str(error.value)
+        assert "'dataset'" in str(error.value)
+
+    def test_an_unknown_name_names_the_subclass_declaring_it(self):
+        with pytest.raises(TypeError, match=r"Connection does not accept 'oauth'.*OAuthConnection declares it"):
+            il.Connection._sort_settings({"oauth": None})
+
+    def test_a_schema_routes_its_key(self):
+        entries, _ = il.Schema._sort_settings({"key": "custom"})
+
+        assert entries == {"key": "custom"}
+
+
+class TestFromInit:
+    def test_a_plain_serializable_is_built_from_its_init(self):
+        context = SerializationContext()
+
+        normalizer = Normalizer.from_init({"flatten_max_level": 2}, context)
+
+        assert normalizer.flatten_max_level == 2
+        assert context.components == {}

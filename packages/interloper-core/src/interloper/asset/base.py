@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import warnings
 from collections.abc import Sized
@@ -26,6 +27,7 @@ from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.partitioning import Partition, PartitionWindow
 from interloper.resource.fields import SelectField
 from interloper.schema import Schema
+from interloper.serializable import ClassBody
 from interloper.telemetry import attributes as telemetry_attributes
 from interloper.telemetry.tracer import tracer
 from interloper.utils import concurrency
@@ -35,6 +37,8 @@ from interloper.utils.imports import get_object_path
 from interloper.utils.text import to_identifier
 
 if TYPE_CHECKING:
+    from types import FunctionType
+
     from interloper.dag import DAG
     from interloper.source import Source
 
@@ -283,6 +287,42 @@ class Asset(Operation, metaclass=AssetMeta):
             f"{cls.__name__}.data() parameter '{name}' is neither a Component class nor il.Upstream; "
             "nothing can fill it"
         )
+
+    @classmethod
+    def body_from_function(cls, fn: FunctionType) -> ClassBody:
+        """Read a decorated function into an asset body: the function becomes ``data()``.
+
+        A function whose first parameter is ``self`` is a method asset: it
+        receives the asset's source as ``self``. The generated ``data()`` wraps
+        the function in the `functools.wraps` sense, so relation inference reads
+        the original's annotations through ``__wrapped__`` and the stamped
+        ``__signature__`` is what the parameters read as; an async function
+        gives an async ``data()``, which the run awaits on its loop.
+
+        Args:
+            fn: The decorated function.
+
+        Returns:
+            The body carrying the generated ``data()``.
+        """
+        signature = inspect.signature(fn)
+        method = next(iter(signature.parameters), None) == "self"
+        if inspect.iscoroutinefunction(fn):
+
+            async def data(self: Asset, **kwargs: Any) -> Any:
+                return await fn(*([self.source] if method else []), **kwargs)
+
+        else:
+
+            def data(self: Asset, **kwargs: Any) -> Any:
+                return fn(*([self.source] if method else []), **kwargs)
+
+        functools.update_wrapper(data, fn)
+        if not method:
+            self_parameter = inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            signature = signature.replace(parameters=[self_parameter, *signature.parameters.values()])
+        data.__signature__ = signature  # ty: ignore[invalid-assignment]
+        return ClassBody.from_function(fn, members={"data": data})
 
     # -- Identity & definition -------------------------------------------------
 

@@ -46,9 +46,9 @@ class TestConnectionDecorator:
     def test_oauth_kwarg_rejected_on_plain_connection(self):
         # OAuth lives on OAuthConnection; a class that resolves to a plain
         # Connection (here a bare class) is rejected.
-        with pytest.raises(TypeError, match=r"requires subclassing OAuthConnection"):
+        with pytest.raises(TypeError, match=r"OAuthConnection declares it"):
 
-            @connection(oauth=OAuthConfig("amazon"))  # ty: ignore[invalid-argument-type]
+            @connection(oauth=OAuthConfig("amazon"))
             class MyConn:
                 host: str = "h"
 

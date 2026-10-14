@@ -23,7 +23,7 @@ from interloper_assets.snapchat_ads.source import SnapchatAds, SnapchatStatsNorm
 
 
 def _source() -> Any:
-    return SnapchatAds(id="src-1", account_id="acc-1")
+    return SnapchatAds(id="src-1", account_id="acc-1")  # ty: ignore[missing-argument]
 
 
 class TestSource:

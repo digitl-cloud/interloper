@@ -84,7 +84,7 @@ def test_upstreams_arrive_as_typed_ibis_tables_and_the_definition_compiles_for_t
     sql = _run(Reporting(destinations=[warehouse]), Shop(account_id="1", destinations=[warehouse], enabled=False))
     assert '"shop"."orders__1"' in sql
     assert "SUM(" in sql
-    assert isinstance(Reporting.totals, type) and issubclass(Reporting.totals, il.View)  # ty: ignore[unresolved-attribute]
+    assert isinstance(Reporting.totals, type) and issubclass(Reporting.totals, il.View)
 
 
 def test_union_stamps_a_column_per_upstream():

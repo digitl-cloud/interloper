@@ -87,19 +87,19 @@ def _rows(warehouse, table: str) -> list[dict]:
 
 class TestWiring:
     def test_relations_are_the_placeholders(self):
-        fact = FacebookAdsStarSchema.fact_ad_performance.relations["ads_stats"]  # ty: ignore[unresolved-attribute]
+        fact = FacebookAdsStarSchema.fact_ad_performance.relations["ads_stats"]
         assert (fact.key, fact.many, fact.optional) == ("facebook_ads.ads_stats", True, True)
-        campaigns = FacebookAdsStarSchema.dim_campaigns.relations["campaigns"]  # ty: ignore[unresolved-attribute]
+        campaigns = FacebookAdsStarSchema.dim_campaigns.relations["campaigns"]
         assert campaigns.key == ["facebook_ads.campaigns", "facebook_ads.campaigns_stats"]
-        assert FacebookAdsStarSchema.dim_accounts.relations["fact_ad_performance"].key == "fact_ad_performance"  # ty: ignore[unresolved-attribute]
+        assert FacebookAdsStarSchema.dim_accounts.relations["fact_ad_performance"].key == "fact_ad_performance"
 
     def test_views_are_unpartitioned_and_tagged(self):
         for asset in FacebookAdsStarSchema.asset_types:
             assert issubclass(asset, il.View)
             assert asset.partitioning is None
             assert asset.schema is not None
-        assert FacebookAdsStarSchema.fact_ad_performance.tags == ["Fact"]  # ty: ignore[unresolved-attribute]
-        assert FacebookAdsStarSchema.dim_campaigns.tags == ["Dimension"]  # ty: ignore[unresolved-attribute]
+        assert FacebookAdsStarSchema.fact_ad_performance.tags == ["Fact"]
+        assert FacebookAdsStarSchema.dim_campaigns.tags == ["Dimension"]
 
 
 class TestOnDuckDB:

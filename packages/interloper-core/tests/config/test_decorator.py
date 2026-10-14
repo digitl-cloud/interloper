@@ -66,27 +66,27 @@ class TestParameterizedForm:
     """``@config(...)`` with catalog metadata."""
 
     def test_every_classvar_is_applied(self) -> None:
-        @config(key="custom", name="Custom Config", icon="carbon:settings", tags=["Testing"])  # ty: ignore[invalid-argument-type]
+        @config(key="custom", name="Custom Config", icon="carbon:settings", tags=["Testing"])
         class Other:
             """Plain class decorated with full metadata."""
 
             timeout: int = 30
 
-        assert Other.key == "custom"  # ty: ignore[unresolved-attribute]
-        assert Other.name == "Custom Config"  # ty: ignore[unresolved-attribute]
-        assert Other.icon == "carbon:settings"  # ty: ignore[unresolved-attribute]
-        assert Other.tags == ["Testing"]  # ty: ignore[unresolved-attribute]
-        assert Other(timeout=5).timeout == 5  # ty: ignore[unknown-argument]
+        assert Other.key == "custom"
+        assert Other.name == "Custom Config"
+        assert Other.icon == "carbon:settings"
+        assert Other.tags == ["Testing"]
+        assert Other(timeout=5).timeout == 5  # ty: ignore[unknown-argument, unresolved-attribute]
 
     def test_omitted_metadata_falls_back_to_the_defaults(self) -> None:
-        @config(name="Just A Name")  # ty: ignore[invalid-argument-type]
+        @config(name="Just A Name")
         class Other:
             """Plain class decorated with a name only."""
 
             timeout: int = 30
 
-        assert Other.key == "other"  # ty: ignore[unresolved-attribute]
-        assert Other.name == "Just A Name"  # ty: ignore[unresolved-attribute]
+        assert Other.key == "other"
+        assert Other.name == "Just A Name"
 
     def test_a_config_subclass_keeps_its_type_through_the_parameterized_form(self) -> None:
         @config(key="scoped")

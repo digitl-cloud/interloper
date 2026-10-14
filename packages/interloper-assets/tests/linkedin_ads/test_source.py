@@ -31,7 +31,7 @@ DAY = dt.date(2026, 9, 15)
 
 def _source(connection: LinkedinAdsConnection | None = None) -> Any:
     if connection is None:
-        return LinkedinAds(id="src-1", account_id="123")
+        return LinkedinAds(id="src-1", account_id="123")  # ty: ignore[missing-argument]
     return LinkedinAds(id="src-1", account_id="123", connection=connection)
 
 

@@ -24,9 +24,11 @@ il.DAG(job).materialize(partition)
 | `enabled` | A disabled job is kept but not scheduled. |
 | `tags` | Free-form labels. |
 
-Cascading works exactly like a source's: a job-level destination reaches every target without
-one. A job subclass that declares a further relation (a connection, say) cascades it the same
-way, into every target and destination declaring the same relation name and leaving it unbound.
+A job's destinations are the default for every target that resolves none: a source with its own
+destinations, or an asset whose source has some, keeps them. The default applies where the job
+runs (`job.operations()`, `il.DAG(job)`), on a copy of the target, so the target itself is never
+changed and two jobs sharing it each run it with their own. A job subclass that declares a
+further relation (a connection, say) is a default for its targets the same way.
 
 `JobState` (`next_run_at`, `last_run_at`) is the job's machine-owned state, written by the
 scheduler. Editing a job's config clears `next_run_at`, so the next tick re-derives the schedule

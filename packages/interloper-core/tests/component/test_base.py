@@ -16,7 +16,7 @@ from interloper.component.base import (
     _adopt_kind,
 )
 from interloper.errors import ConfigError
-from interloper.serializable import Spec
+from interloper.serializable import SerializationContext, Spec
 
 # -- Fixtures ------------------------------------------------------------------
 
@@ -353,6 +353,21 @@ class TestValidateClassvars:
         assert settings["maturity"] is il.Maturity
         assert "kind" not in settings and "relations" not in settings
 
+    def test_relations_are_sorted_into_the_namespace(self):
+        relation = il.Relation("asset", "orders", optional=True)
+
+        entries, _ = il.Asset._sort_settings({"relations": {"upstream": relation}})
+
+        assert entries == {"relations": {"upstream": relation}}
+
+    def test_the_identity_field_is_never_a_setting(self):
+        with pytest.raises(TypeError, match=r"does not accept 'id'"):
+            il.Asset._sort_settings({"id": "fixed"})
+
+    def test_a_relation_name_points_at_the_relation_channel(self):
+        with pytest.raises(TypeError, match=r'relations=\{"destinations": \.\.\.\}'):
+            il.Asset._sort_settings({"destinations": [il.MemoryDestination]})
+
 
 class TestCollect:
     def test_annotation_becomes_relation(self):
@@ -533,84 +548,17 @@ class TestSetAttrRelations:
         assert widget.connection is connection
 
 
-# -- Relation trickle and validation --------------------------------------------
-
-
-class Child(il.Asset):
-    """Asset declaring a connection relation."""
-
-    connection: Conn | None = il.Relation(Conn, optional=True)
-
-    def data(self, context: il.ExecutionContext) -> list[dict]:
-        return []
+# -- Ownership and validation --------------------------------------------------
 
 
 class TestOwned:
-    def test_owned_is_a_component_in_a_field_whose_parent_is_this_one(self) -> None:
+    def test_a_component_owns_nothing_even_when_a_held_one_points_at_it(self) -> None:
         child = FakeOtherComponent(value="c")
         holder = FakeComponent(child=child)
-        assert holder.owned == []
-
         child.parent = holder
-        assert holder.owned == [child]
-        init = holder.to_spec().init or {}
-        assert init["child"] == {child.key: {"value": "c", "id": child.id}}
 
-
-class TestOnRebind:
-    def test_every_write_path_calls_the_hook_with_the_binding_in_place(self) -> None:
-        seen: list[tuple[str, Any]] = []
-
-        class Watchful(il.Source):
-            connection: Conn
-            config: Cfg | None = il.Relation(Cfg, optional=True)
-
-            def on_rebind(self, name: str) -> None:
-                seen.append((name, self.bound(name)))
-
-        conn, cfg = Conn(api_secret="s"), Cfg()
-        widget = Watchful(connection=conn)
-        widget.bind("config", cfg)
-        widget.unbind("config", cfg)
-        widget.config = cfg
-        parent = Widget(connection=conn, config=Cfg())
-        parent.trickle(widget)
-
-        assert seen == [("connection", conn), ("config", cfg), ("config", None), ("config", cfg)]
-
-    def test_the_base_hook_does_nothing(self) -> None:
-        assert Widget(connection=Conn(api_secret="s")).on_rebind("connection") is None
-
-
-class TestTrickle:
-    def test_fills_unbound_same_name(self) -> None:
-        conn = Conn(api_secret="s")
-        parent = Widget(connection=conn)
-        child = Child()
-        parent.trickle(child)
-        assert child.connection is conn
-
-    def test_never_overrides_explicit_binding(self) -> None:
-        own = Conn(api_secret="s")
-        parent = Widget(connection=Conn(api_secret="s"))
-        child = Child(connection=own)
-        parent.trickle(child)
-        assert child.connection is own
-
-    def test_skips_targets_the_child_rejects(self) -> None:
-        class Other(il.Connection):
-            """Another connection kind."""
-
-        class Picky(il.Asset):
-            connection: Other | None = il.Relation(Other, optional=True)
-
-            def data(self, context: il.ExecutionContext) -> list[dict]:
-                return []
-
-        parent = Widget(connection=Conn(api_secret="s"))
-        child = Picky()
-        parent.trickle(child)
-        assert child.connection is None
+        assert holder.owned == []
+        assert (holder.to_spec().init or {})["child"]["path"] == FakeOtherComponent.classpath()
 
 
 class TestValidateRelations:
@@ -1012,3 +960,13 @@ class TestEventMetadata:
         component.parent = parent
         assert component.event_metadata({})["parent_id"] == "p1"
         assert component.event_metadata({})["qualified_key"] == f"{FakeComponent.key}.{FakeComponent.key}"
+
+
+class TestFromInit:
+    def test_a_component_holds_its_references_and_is_registered(self) -> None:
+        context = SerializationContext()
+
+        widget = Widget.from_init({"connection": {"ref": "c1"}}, context)
+
+        assert context.components[widget.id] is widget
+        assert widget.bound("connection") is None

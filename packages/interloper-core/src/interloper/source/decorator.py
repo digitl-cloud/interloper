@@ -1,180 +1,30 @@
-"""Decorator for creating Source subclasses from classes or functions."""
+"""The source decorator: a Source subclass from a decorated class or function."""
 
 from __future__ import annotations
 
-import inspect
-from collections.abc import Callable
-from typing import Any, overload
-
-from interloper.asset import Asset
-from interloper.component.decorator import declare, decorate
-from interloper.component.relation import Relation
+from interloper.component.decorator import Decorator
 from interloper.source.base import Source
 
+source = Decorator(Source)
+"""Create a Source subclass from a decorated class or function.
 
-@overload
-def source(target: type | Callable[..., Any], /) -> type[Source]: ...
-@overload
-def source(
-    *,
-    relations: dict[str, Any] = ...,
-    **overrides: Any,
-) -> Callable[[type | Callable[..., Any]], type[Source]]: ...
-def source(
-    target: type | Callable[..., Any] | None = None,
-    /,
-    *,
-    relations: dict[str, Any] | None = None,
-    **overrides: Any,
-) -> type[Source] | Callable[..., type[Source]]:
-    """Create a Source subclass from a decorated class or function.
+A decorated class declares its configuration fields, its assets (methods
+carrying ``@asset``) and its helpers; a decorated function returns the asset
+classes and turns its own annotated parameters into configuration fields:
 
-    A decorated class declares its configuration fields, its assets (methods
-    carrying ``@asset``) and its helpers; a decorated function returns the
-    asset classes and turns its own annotated parameters into configuration
-    fields:
+```py
+@source(tags=["Advertising"], dataset="raw_shop", relations={"connection": ShopConnection})
+class Shop(Source): ...
+```
 
-    ```py
-    @source(tags=["Advertising"], dataset="raw_shop", relations={"connection": ShopConnection})
-    class Shop(Source): ...
-    ```
+``relations`` maps a relation name to a `Relation`, a component class (the
+shorthand for a relation on it), or a list of component classes narrowing the
+relation `Source` declares under that name; explicit declarations win over the
+ones read from the class annotations.
 
-    Args:
-        target: The decorated class or function when used bare; ``None`` when
-            used with arguments, in which case a decorator is returned.
-        relations: Relation name to a
-            `Relation`, a component class
-            (the shorthand for a relation on it), or a list of component
-            classes narrowing the relation
-            `Source` declares under that name.
-            Explicit declarations win over the ones read from the class
-            annotations.
-        **overrides: Definition metadata and behaviour: the public ClassVars
-            and field defaults `Source` declares
-            (``key``, ``name``, ``icon``, ``tags``, ``dataset``,
-            ``default_destination_key``, ``normalizer``,
-            ``materialization_strategy``, ...); see the class. An unknown name
-            is a ``TypeError`` at decoration.
-
-    Returns:
-        A Source subclass with discovered assets.
-    """
-    if target is not None:
-        return decorate(Source, target, build=_build_source, relations=relations, **overrides)
-
-    def wrapper(target: type | Callable[..., Any]) -> type[Source]:
-        return decorate(Source, target, build=_build_source, relations=relations, **overrides)
-
-    return wrapper
-
-
-# -- Internals -----------------------------------------------------------------
-
-
-def _build_source(
-    target: type | Callable[..., Any],
-    *,
-    classvars: dict[str, Any],
-    fields: dict[str, Any],
-    relations: dict[str, Relation],
-) -> type[Source]:
-    """Route to the class-based or function-based builder, then declare the relations.
-
-    Args:
-        target: The decorated class or function.
-        classvars: Class-level attributes to stamp on the built class.
-        fields: Field default overrides for the built class.
-        relations: Relations the decorator declares, name to relation.
-
-    Returns:
-        A dynamically created Source subclass.
-    """
-    if inspect.isclass(target):
-        source_cls = _build_source_from_class(target, classvars=classvars, fields=fields)
-    else:
-        source_cls = _build_source_from_fn(target, classvars=classvars, fields=fields)
-    return declare(source_cls, relations)
-
-
-def _build_source_from_fn(
-    fn: Callable[..., Any],
-    *,
-    classvars: dict[str, Any],
-    fields: dict[str, Any],
-) -> type[Source]:
-    """Build a Source subclass from a decorated function.
-
-    Calls the function and expects it to return a list of ``type[Asset]``.
-
-    Args:
-        fn: The decorated function. Its annotated parameters become config
-            fields on the built class, and its return value supplies the assets.
-        classvars: Class-level attributes to stamp on the built class.
-        fields: Field default overrides for the built class.
-
-    Returns:
-        A dynamically created Source subclass.
-    """
-    result = fn()
-    assets: list[type[Asset]] = []
-    if isinstance(result, list):
-        assets = result
-    elif isinstance(result, type) and issubclass(result, Asset):
-        assets = [result]
-
-    namespace: dict[str, Any] = {"asset_types": assets}
-    namespace.update(classvars)
-    namespace.update(fields)
-    namespace["__module__"] = fn.__module__
-    namespace["__qualname__"] = fn.__qualname__  # ty: ignore[unresolved-attribute]
-
-    annotations: dict[str, Any] = {}
-    for field_name in fields:
-        if field_name in Source.model_fields:
-            annotations[field_name] = Source.model_fields[field_name].annotation
-
-    # Extract config fields from function signature annotations.
-    # Parameters with Field helpers (InputField, FetchField, etc.) become
-    # Pydantic fields on the Source class, rendered as the config form.
-    signature = inspect.signature(fn)
-    fn_annotations = fn.__annotations__ if hasattr(fn, "__annotations__") else {}
-    for parameter_name, parameter in signature.parameters.items():
-        if parameter_name in ("self", "context", "kwargs"):
-            continue
-        if parameter_name in fn_annotations:
-            annotations[parameter_name] = fn_annotations[parameter_name]
-            if parameter.default is not inspect.Parameter.empty:
-                namespace[parameter_name] = parameter.default
-
-    if annotations:
-        namespace["__annotations__"] = annotations
-
-    source_cls = type(fn.__name__, (Source,), namespace)  # ty: ignore[unresolved-attribute]
-
-    if fn.__doc__:
-        source_cls.__doc__ = fn.__doc__
-
-    return source_cls
-
-
-def _build_source_from_class(
-    cls: type,
-    *,
-    classvars: dict[str, Any],
-    fields: dict[str, Any],
-) -> type[Source]:
-    """Build a Source subclass from a decorated class.
-
-    Asset subclasses defined in the class body (via ``@asset`` on methods)
-    are collected, and owned, by `Source._collect_asset_types` as the class
-    is created. Field annotations are handled by ``Source.build_class``.
-
-    Args:
-        cls: The decorated class.
-        classvars: Class-level attributes to stamp on the built class.
-        fields: Field default overrides for the built class.
-
-    Returns:
-        A dynamically created Source subclass.
-    """
-    return Source.build_class(cls, classvars=classvars, fields=fields)
+Every other keyword is definition metadata or behaviour: the public ClassVars and
+field defaults `Source` declares (``key``, ``name``, ``icon``, ``tags``,
+``dataset``, ``default_destination_key``, ``normalizer``,
+``materialization_strategy``, ...). An unknown name is a ``TypeError`` at
+decoration. The result is a Source subclass with its assets discovered.
+"""

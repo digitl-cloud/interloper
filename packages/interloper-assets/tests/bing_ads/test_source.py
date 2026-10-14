@@ -29,7 +29,7 @@ from interloper_assets.bing_ads.source import BingAds, _translate_soap_fault
 
 
 def _source() -> Any:
-    return BingAds(id="src-1", account_id="123")
+    return BingAds(id="src-1", account_id="123")  # ty: ignore[missing-argument]
 
 
 class TestSourceNormalizer:

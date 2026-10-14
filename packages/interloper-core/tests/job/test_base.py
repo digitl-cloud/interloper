@@ -180,46 +180,83 @@ class TestSpec:
 
 
 class TestWorkloadDefaults:
-    """Job-level relations cascade to targets and destinations."""
+    """A job's destinations are the default for its targets, where the job runs."""
 
-    def test_destinations_cascade_to_targets_without_their_own(self):
+    @staticmethod
+    def _destinations(job: il.Job) -> dict[str, list[il.Destination]]:
+        assets = [operation for operation in job.operations() if isinstance(operation, il.Asset)]
+        return {asset.key: list(asset.destinations) for asset in assets}
+
+    def test_a_target_without_destinations_runs_with_the_jobs(self):
         destination = FakeJobDestination()
-        job = il.Job(targets=[FakeSource()], destinations=[destination])
-        assert job.targets[0].destinations == [destination]
+        target = FakeSource()
 
-    def test_explicit_target_destinations_win(self):
+        job = il.Job(targets=[target], destinations=[destination])
+
+        assert all(found == [destination] for found in self._destinations(job).values())
+        assert target.destinations == []
+
+    def test_a_targets_own_destinations_win(self):
         own = FakeJobDestination()
         job = il.Job(targets=[FakeSource(destinations=[own])], destinations=[FakeOtherJobDestination()])
-        assert job.targets[0].destinations == [own]
+
+        assert all(found == [own] for found in self._destinations(job).values())
 
     def test_an_owned_asset_target_keeps_its_sources_destinations(self):
         own = FakeJobDestination()
-        source = FakeSource(destinations=[own])
-        asset = source.assets[0]
-        il.Job(targets=[asset], destinations=[FakeOtherJobDestination()])
-        assert asset.destinations == [own]
+        asset = FakeSource(destinations=[own]).assets[0]
+
+        job = il.Job(targets=[asset], destinations=[FakeOtherJobDestination()])
+
+        assert self._destinations(job) == {asset.key: [own]}
         assert asset.bound("destinations") == []
 
-    def test_a_destination_bound_after_construction_still_cascades(self):
+    def test_an_owned_asset_target_without_destinations_runs_with_the_jobs(self):
         destination = FakeJobDestination()
-        job = il.Job(targets=[FakeSource()])
-        job.bind("destinations", destination)
-        assert job.targets[0].destinations == [destination]
+        source = FakeSource()
+        asset = source.assets[0]
 
-    def test_a_destination_assigned_after_construction_still_cascades(self):
-        destination = FakeJobDestination()
-        job = il.Job(targets=[FakeSource()])
-        job.destinations = [destination]
-        assert job.targets[0].destinations == [destination]
+        [operation] = il.Job(targets=[asset], destinations=[destination]).operations()
 
-    def test_targets_assigned_after_construction_receive_the_cascade(self):
-        destination = FakeJobDestination()
-        target = FakeSource()
-        job = il.Job(destinations=[destination])
-        job.targets = [target]
-        assert target.destinations == [destination]
+        assert isinstance(operation, il.Asset)
+        assert list(operation.destinations) == [destination]
+        assert operation.parent is source
+        assert operation.dataset == asset.dataset
+        assert asset.bound("destinations") == []
 
-    def test_destinations_cascade_to_asset_targets(self):
+    def test_a_standalone_asset_target_runs_with_the_jobs(self):
         destination = FakeJobDestination()
+
         job = il.Job(targets=[FakeStandaloneAsset()], destinations=[destination])
-        assert job.targets[0].destinations == [destination]
+
+        assert all(found == [destination] for found in self._destinations(job).values())
+
+    def test_destinations_given_after_construction_still_apply(self):
+        destination = FakeJobDestination()
+        job = il.Job(targets=[FakeSource()])
+
+        job.destinations = [destination]
+
+        assert all(found == [destination] for found in self._destinations(job).values())
+
+    def test_two_jobs_sharing_a_target_each_run_it_with_their_own(self):
+        target = FakeSource()
+        first, second = FakeJobDestination(), FakeOtherJobDestination()
+
+        one = il.Job(targets=[target], destinations=[first])
+        two = il.Job(targets=[target], destinations=[second])
+
+        assert all(found == [first] for found in self._destinations(one).values())
+        assert all(found == [second] for found in self._destinations(two).values())
+        assert target.destinations == []
+
+    def test_compiling_twice_yields_the_same_ids_and_leaves_the_targets_alone(self):
+        target = FakeSource()
+        job = il.Job(targets=[target], destinations=[FakeJobDestination()])
+
+        first, second = job.operations(), job.operations()
+        first[0].enabled = False
+
+        assert [operation.id for operation in first] == [operation.id for operation in second]
+        assert second[0].enabled
+        assert all(asset.enabled for asset in target.assets)

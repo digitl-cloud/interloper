@@ -76,7 +76,7 @@ class TestDefinition:
         assert Reporting.order_totals.dialect is None  # ty: ignore[unresolved-attribute]
 
     def test_upstream_relations_are_inferred_as_for_assets(self):
-        relation = Reporting.daily_totals.relations["order_totals"]  # ty: ignore[unresolved-attribute]
+        relation = Reporting.daily_totals.relations["order_totals"]
         assert (relation.kind, relation.key, relation.many) == ("asset", "order_totals", False)
 
 
