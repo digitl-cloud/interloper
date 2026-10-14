@@ -2673,11 +2673,11 @@ one at all changes it, since <code>None</code> there clears the binding.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>asset.run(partition, dag, metadata)</code></td>
+<td><code>asset.run(window, dag, metadata)</code></td>
 <td>Execute, normalize, conform. Return the data. Write nothing.</td>
 </tr>
 <tr>
-<td><code>asset.materialize(partition, dag, metadata)</code></td>
+<td><code>asset.materialize(window, dag, metadata)</code></td>
 <td>Everything <code>run</code> does, then write to every destination. Returns the data, or <code>None</code> when the asset is disabled.</td>
 </tr>
 <tr>
@@ -2686,15 +2686,15 @@ one at all changes it, since <code>None</code> there clears the binding.</p>
 </tr>
 </tbody>
 </table>
-<p><code>partition</code> is required for partitioned assets and ignored (with a warning) for unpartitioned
-ones. <code>dag</code> is required when the asset has a bound upstream, because upstream data is read through
-the DAG's own node. <code>metadata</code> is a free-form dict (run id, backfill id) carried onto every event
+<p><code>window</code> is required for partitioned assets and ignored for unpartitioned ones; a bare partition
+is accepted as the window of one. <code>dag</code> is required when the asset has a bound upstream, because
+upstream data is read through the DAG's own node. <code>metadata</code> is a free-form dict (run id, backfill id) carried onto every event
 the run emits.</p>
 <p>An asset that produces no data skips its destination writes and emits a warning log event
 rather than writing an empty table.</p>
 <h2 id="what-happens-on-materialize">What happens on materialize<a class="headerlink" href="#what-happens-on-materialize" title="Permanent link">&para;</a></h2>
 <ol>
-<li>The partition scope is validated against the asset's partitioning.</li>
+<li>The run's window is checked by the asset's partitioning.</li>
 <li>Every relation is resolved: a resource to what is bound or its fallback, an upstream to an
    <code>il.Upstream</code> read from its destination.</li>
 <li><code>data()</code> runs, wrapped in <code>asset_data_*</code> events and a tracing span.</li>
@@ -2716,8 +2716,8 @@ rather than writing an empty table.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>context.asset_key</code></td>
-<td>The asset's key.</td>
+<td><code>context.asset</code></td>
+<td>The asset executing: <code>key</code>, <code>table</code>, <code>dataset</code>, <code>source</code>, <code>partitioning</code>.</td>
 </tr>
 <tr>
 <td><code>context.metadata</code></td>
@@ -2728,12 +2728,12 @@ rather than writing an empty table.</p>
 <td>A logger whose <code>debug</code>, <code>info</code>, <code>warning</code>, <code>error</code> emit <code>LOG</code> events attributed to the asset.</td>
 </tr>
 <tr>
-<td><code>context.partition</code></td>
-<td>The <code>Partition</code> this run covers: <code>.value</code>, <code>.id</code>, <code>.granularity</code>, <code>.bounds</code>.</td>
+<td><code>context.window</code></td>
+<td>The <code>PartitionWindow</code> the run covers; a window of one for assets without <code>allow_window</code>.</td>
 </tr>
 <tr>
-<td><code>context.window</code></td>
-<td>The <code>PartitionWindow</code>, for assets declaring <code>allow_window=True</code>. A single partition is presented as a one-partition window.</td>
+<td><code>context.partition</code></td>
+<td>The window's only partition: <code>.id</code>, and <code>.bounds</code> or <code>.value</code> depending on the kind.</td>
 </tr>
 <tr>
 <td><code>context.partition_date</code></td>
@@ -2742,7 +2742,7 @@ rather than writing an empty table.</p>
 </tbody>
 </table>
 <p>Each partition accessor raises an <code>AttributeError</code> explaining why it is unavailable: the asset
-is not partitioned, no partition was given, the run holds a window, or the granularity is not
+is not partitioned, no window was given, the window covers several partitions, or the granularity is not
 daily. See <a href="../partitioning/">Partitioning</a>.</p>
 <h2 id="identity">Identity<a class="headerlink" href="#identity" title="Permanent link">&para;</a></h2>
 <table>

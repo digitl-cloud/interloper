@@ -2665,7 +2665,8 @@ DAG, and a hydrated one is never overwritten by construction.</p>
 travels inside its own source's document. See <a href="../specs/">Specs</a>.</p>
 <h2 id="reading-upstream-data">Reading upstream data<a class="headerlink" href="#reading-upstream-data" title="Permanent link">&para;</a></h2>
 <p>Each leg is read from the upstream's <code>default_destination_key</code> destination, or its first, scoped
-to the partition the run consumes. <code>il.Upstream</code> carries the asset and its data, plus one accessor:</p>
+to the window the upstream consumes, joined into one table when it covers several partitions.
+<code>il.Upstream</code> carries the asset and its data, plus one accessor:</p>
 <table>
 <thead>
 <tr>

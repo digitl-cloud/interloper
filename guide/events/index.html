@@ -2492,9 +2492,9 @@ has been delivered.</p>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">event</span><span class="o">.</span><span class="n">id</span>           <span class="c1"># stable id, preserved across serialization</span>
 </span></code></pre></div>
 <p>Metadata always carries what the producer knows: <code>run_id</code>, <code>component_id</code>, <code>component_kind</code>,
-<code>component_key</code>, <code>qualified_key</code>, <code>source_id</code>, <code>partition_or_window</code>, plus <code>message</code> and, on
-failures, <code>error</code> and <code>traceback</code>. Destination events add <code>destination_key</code>; log events add
-<code>level</code>.</p>
+<code>component_key</code>, <code>qualified_key</code>, <code>window</code> and, when the component has an owner, <code>parent_id</code>,
+plus <code>message</code> and, on failures, <code>error</code> and <code>traceback</code>. Destination events add
+<code>destination_key</code>, writes add <code>rows</code>, log events add <code>level</code>, operation events add <code>attempt</code>.</p>
 <p>Events serialize with <code>to_dict()</code> / <code>to_json()</code> and parse back with <code>Event.from_dict()</code> /
 <code>Event.from_json()</code>. Operation lifecycle events get a <strong>deterministic id</strong> derived from run,
 component and type, so the same logical event produced twice (a child process and its host)

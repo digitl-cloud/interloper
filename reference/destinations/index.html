@@ -2067,17 +2067,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper.IOContext.window" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-attribute"></code>&nbsp;window
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#interloper.IOContext.partitions" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2860,8 +2849,8 @@ whole of an unpartitioned asset. The contract is three hooks:
 <code>write_partition</code> and <code>read_partition</code> for a single
 partition, and <code>partition_row_counts</code> for the coverage view.
 <code>write</code> and <code>read</code> own the rest, splitting a window write into
-one call per partition and gathering a window read into one result per
-partition, so a destination is partition-correct by construction. A
+one call per partition and joining a window read into one table, so a
+destination is partition-correct by construction. A
 backend that does not store per partition (a database that clears each
 partition and inserts a window in one batch) overrides <code>write</code> or
 <code>read</code> instead. Two more hooks, <code>reference</code> and <code>create_view</code>, serve
@@ -3100,7 +3089,7 @@ unpartitioned whole is one call receiving the data as is.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>IO context carrying the target asset, the partition or window,
+                <p>IO context carrying the target asset, the window,
 and the effective schema.</p>
               </div>
             </td>
@@ -3145,7 +3134,10 @@ and the effective schema.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Read data for the context's partition, or window.</p>
+        <p>Read the data the context covers, as one table.</p>
+<p>Every partition in <code>context.partitions</code> is read through <code>read_partition</code>; several are
+joined through the data's representation, so a window comes back as one table in whatever
+type the destination holds natively.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3168,8 +3160,7 @@ and the effective schema.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>IO context carrying the target asset, the partition or window,
-and the effective schema.</p>
+                <p>IO context carrying the target asset, the window and the effective schema.</p>
               </div>
             </td>
             <td>
@@ -3195,17 +3186,7 @@ and the effective schema.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The partition's data; a window returns one result per partition, in</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>window order.</p>
+                <p>One table, whatever the window.</p>
               </div>
             </td>
           </tr>
@@ -3483,12 +3464,10 @@ destination's own terms.</p>
 <a href="#interloper.IOContext" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">IOContext</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">asset</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Asset&lt;/span&gt;" href="../assets/#interloper.Asset">Asset</a></span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">partition_or_window</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Partition&lt;/span&gt;" href="../partitioning/#interloper.Partition">Partition</a></span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a></span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="n"><span title="dict">dict</span></span><span class="p">(),</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">schema</span><span class="p">:</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Schema&lt;/span&gt;" href="../schema/#interloper.Schema">Schema</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">window</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a></span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">metadata</span><span class="p">:</span> <span class="n"><span title="dict">dict</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="typing.Any">Any</span></span><span class="p">]</span> <span class="o">=</span> <span class="n"><span title="dict">dict</span></span><span class="p">(),</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">schema</span><span class="p">:</span> <span class="n"><span title="type">type</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Schema&lt;/span&gt;" href="../schema/#interloper.Schema">Schema</a></span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -3496,16 +3475,12 @@ destination's own terms.</p>
 
 
         <p>Immutable context passed to <code>Destination.read</code> and <code>Destination.write</code>.</p>
-<p>Carries the target asset, optional partition or window, and arbitrary metadata
-so that destination implementations can resolve the correct storage location.</p>
-<p><code>schema</code> is the <em>effective</em> schema of the data being written or read:
-the asset's declared schema when set, otherwise the schema inferred during
-conform. Destinations use it for DDL, typed load jobs, and restoring
-types on read. <code>None</code> when no schema could be resolved.</p>
-<p>A destination stores data per <strong>partition</strong>, <code>None</code> standing for the
-unpartitioned whole; <code>partitions</code> and <code>slices</code> spell that out
-for the three shapes <code>partition_or_window</code> can take, so no destination
-branches on them itself.</p>
+<p>Carries the target asset, the window the call covers and the run metadata, so a destination
+resolves the storage location, plus the <em>effective</em> schema of the data: the asset's declared
+schema when set, otherwise the one inferred during conform, <code>None</code> when none could be
+resolved. Destinations use it for DDL, typed loads and restoring types on read.</p>
+<p>A destination stores data per <strong>partition</strong>, <code>None</code> standing for the unpartitioned whole;
+<code>partitions</code> and <code>slices</code> spell that out, so no destination branches on the window itself.</p>
 
 
 
@@ -3529,59 +3504,6 @@ branches on them itself.</p>
 
 
 
-<h3 id="interloper.IOContext.window" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">window</span>
-
-
-<a href="#interloper.IOContext.window" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">window</span><span class="p">:</span> <span class="n"><span title="bool">bool</span></span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Whether this context spans several partitions.</p>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="bool">bool</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>True for a partition window, False for one partition or the</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="bool">bool</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>unpartitioned whole.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
 <h3 id="interloper.IOContext.partitions" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-attribute"></code>            <span class="doc doc-object-name doc-attribute-name">partitions</span>
 
@@ -3592,7 +3514,7 @@ branches on them itself.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The partitions this context covers, in window order.</p>
+        <p>The partitions this context covers, first to last.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -3610,17 +3532,7 @@ branches on them itself.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>[None]</code> for the unpartitioned whole, <code>[partition]</code> for one</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Partition&lt;/span&gt;" href="../partitioning/#interloper.Partition">Partition</a> | None]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>partition, one entry per partition for a window.</p>
+                <p><code>[None]</code> for the unpartitioned whole, else the window's partitions.</p>
               </div>
             </td>
           </tr>
@@ -3648,9 +3560,8 @@ branches on them itself.</p>
     <div class="doc doc-contents ">
 
         <p>Pair each partition with its slice of <em>data</em>.</p>
-<p>A window's data is split on the asset's partition column through the
-data's representation; a single partition, or the whole, receives the
-data as is.</p>
+<p>A window of several partitions is split on the asset's partition column through the
+data's representation; a single partition, or the whole, receives the data as is.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3722,8 +3633,8 @@ data as is.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If a window is written for an asset that declares no
-partitioning, since nothing says which column to slice on.</p>
+                <p>If a window of several partitions is written for an asset that declares
+no partitioning, since nothing says which column to slice on.</p>
               </div>
             </td>
           </tr>

@@ -2832,7 +2832,7 @@ metadata noted on a member comes on top of the run-level metadata
 event inherits:</p>
 <ul>
 <li>operation events carry <code>component_id</code>, <code>component_kind</code>,
-  <code>component_key</code>, <code>source_id</code>, <code>partition_or_window</code> and
+  <code>component_key</code>, <code>source_id</code>, <code>window</code> and
   <code>message</code>;</li>
 <li>asset data events add <code>qualified_key</code> to those;</li>
 <li>destination I/O events add <code>destination_key</code>;</li>
@@ -3214,7 +3214,7 @@ one vocabulary, but the scheduler produces them, not the core runners.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The walk begins. Carries <code>partition_or_window</code> and <code>message</code>.</p>
+        <p>The walk begins. Carries <code>window</code> and <code>message</code>.</p>
 
     </div>
 

@@ -2407,7 +2407,7 @@ Sources and jobs are workloads only; every operation is trivially the workload o
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">OperationContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span> <span class="o">...</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">failure</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span> <span class="o">...</span>
 </span></code></pre></div>
-<p><code>OperationContext</code> carries the facts an execution is scoped to: <code>partition_or_window</code>, the
+<p><code>OperationContext</code> carries the facts an execution is scoped to: the <code>window</code>, the
 <code>dag</code> (how a node reaches upstream outputs), and the run <code>metadata</code>.</p>
 <p><code>OperationResult</code> is what an operation hands back for the platform to persist: <code>config</code> fields
 to merge into the component's stored configuration, <code>state</code> fields to stamp onto its
@@ -2461,14 +2461,14 @@ plain defaults that make any subclass a valid node; <code>Asset</code> overrides
 <td>the partition config</td>
 </tr>
 <tr>
-<td><code>effective_partition(scope)</code></td>
-<td>scope if partitioned else <code>None</code></td>
+<td><code>effective_window(window)</code></td>
+<td>the window if partitioned else <code>None</code></td>
 <td>same</td>
 </tr>
 <tr>
-<td><code>_event_metadata(metadata, scope)</code></td>
-<td>component identity</td>
-<td>adds <code>qualified_key</code>, <code>source_id</code></td>
+<td><code>event_metadata(metadata, window, **extra)</code></td>
+<td>from <code>Component</code>: identity, window, <code>parent_id</code></td>
+<td>same</td>
 </tr>
 </tbody>
 </table>

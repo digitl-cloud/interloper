@@ -2572,8 +2572,8 @@ instance, meant for tests:</p>
 <td>The asset being read or written. <code>asset.table</code>, <code>asset.dataset</code>, <code>asset.partitioning</code> name the storage location.</td>
 </tr>
 <tr>
-<td><code>partition_or_window</code></td>
-<td>The partition or window of this call, or <code>None</code> for an unpartitioned asset.</td>
+<td><code>window</code></td>
+<td>The window of this call, or <code>None</code> for an unpartitioned asset; <code>context.partitions</code> lists its partitions, <code>None</code> standing for the whole.</td>
 </tr>
 <tr>
 <td><code>schema</code></td>
@@ -2622,7 +2622,7 @@ and implement the two partition hooks. Both may be sync or <code>async def</code
 instantiated. <code>partition_row_counts</code> feeds <code>asset.partition_row_counts()</code> and the coverage view.</p>
 <p><code>write()</code> and <code>read()</code> are the base class's: a window write is split into one <code>write_partition</code> call
 per partition, slicing the data through its <a href="../../extending/representations/">representation</a>
-on the partition column; a window read returns one result per partition, newest first. A
+on the partition column; a window read is joined into one table through the data's representation, oldest partition first. A
 destination written this way is partition-correct by construction, and <code>CSVDestination</code>,
 <code>FileDestination</code>, <code>MemoryDestination</code> and <code>ObjectStoreDestination</code>, the base of <code>GCSDestination</code> and
 <code>S3Destination</code>, are all built exactly like this. The partitions a context covers are on the context

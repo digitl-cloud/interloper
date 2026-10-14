@@ -2416,7 +2416,7 @@ public <code>run()</code>:</p>
 <li>Delegate to <code>_run()</code>.</li>
 <li>Flush the event bus and unsubscribe.</li>
 </ol>
-<p>Subclasses implement <code>_run(dag, partition_or_window, metadata) -&gt; RunResult</code>. Shared helpers:</p>
+<p>Subclasses implement <code>_run(dag, window, metadata) -&gt; RunResult</code>. Shared helpers:</p>
 <table>
 <thead>
 <tr>
@@ -2426,8 +2426,8 @@ public <code>run()</code>:</p>
 </thead>
 <tbody>
 <tr>
-<td><code>_init_run(dag, scope, metadata)</code></td>
-<td>Preflight validation, then create the <code>RunState</code> and emit <code>RUN_STARTED</code> and <code>OPERATION_QUEUED</code>.</td>
+<td><code>_init_run(dag, window, metadata)</code></td>
+<td><code>_preflight(dag, window)</code>, which asks every enabled partitioned operation's config to check the window, then create the <code>RunState</code> and emit <code>RUN_STARTED</code> and <code>OPERATION_QUEUED</code>.</td>
 </tr>
 <tr>
 <td><code>_finalize_run(error=None)</code></td>
