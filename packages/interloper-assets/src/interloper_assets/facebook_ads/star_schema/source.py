@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ibis
 import interloper as il
-from interloper_sql import ibis_view, union
+from interloper_sql import ibis_view, latest, union
 
 from interloper_assets.facebook_ads.star_schema import schemas
 
@@ -27,22 +27,6 @@ FACT_COLUMNS = (
     "reach",
     "spend",
 )
-
-
-def _latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
-    """One row per *key*, the first in *order*; shared by the three dimensions.
-
-    Args:
-        rows: Candidate rows, several per key.
-        key: The column one row is kept per value of.
-        *order: The sort that puts the row to keep first, such as the source
-            tier then the latest date.
-
-    Returns:
-        The kept rows, without the ranking column.
-    """
-    ranked = rows.mutate(rank=ibis.row_number().over(group_by=key, order_by=list(order)))
-    return ranked.filter(ranked["rank"] == 0).drop("rank")
 
 
 @il.source(
@@ -123,7 +107,7 @@ class FacebookAdsStarSchema(il.Source):
             from_facts(fact_ad_performance.data),
             distinct=False,
         )
-        return _latest(rows, "campaign_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
+        return latest(rows, "campaign_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimAds,
@@ -162,10 +146,10 @@ class FacebookAdsStarSchema(il.Source):
         rows = ibis.union(
             *(from_entity(upstream.data) for upstream in ads), from_facts(fact_ad_performance.data), distinct=False
         )
-        return _latest(rows, "ad_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
+        return latest(rows, "ad_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
 
     @ibis_view(schema=schemas.DimAccounts, tags=["Dimension"])
     def dim_accounts(self, fact_ad_performance: il.Upstream) -> ibis.Table:
         """One row per ad account with its name and currency, from the facts."""
         rows = fact_ad_performance.data.select("account_id", "account_name", "account_currency", "date")
-        return _latest(rows, "account_id", rows["date"].desc())
+        return latest(rows, "account_id", rows["date"].desc())

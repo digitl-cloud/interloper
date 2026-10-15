@@ -152,3 +152,19 @@ def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upst
             values[name] = ibis.literal(stamped, type="int64") if is_integer else ibis.literal(stamped)
         tables.append(table.mutate(**values))
     return ibis.union(*tables, distinct=False).select(*names, *stamps)
+
+
+def latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
+    """One row per *key*, the first in *order*: the dimension pattern over candidate rows.
+
+    Args:
+        rows: Candidate rows, several per key.
+        key: The column one row is kept per value of.
+        *order: The sort that puts the row to keep first, such as a source
+            tier then the latest date.
+
+    Returns:
+        The kept rows, without the ranking column.
+    """
+    ranked = rows.mutate(rank=ibis.row_number().over(group_by=key, order_by=list(order)))
+    return ranked.filter(ranked["rank"] == 0).drop("rank")
