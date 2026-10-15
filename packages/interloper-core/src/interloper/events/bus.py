@@ -19,10 +19,12 @@ class _Sentinel:
 
     Used by `EventBus.flush` to block until the queue is drained up to
     this point.  The ``done`` event is set by the worker thread when it
-    dequeues the sentinel.
+    dequeues the sentinel.  `EventBus.shutdown` places one with ``stop``
+    set, on which the worker exits once everything ahead of it is delivered.
     """
 
     done: threading.Event
+    stop: bool = False
 
 
 class EventBus:
@@ -157,6 +159,7 @@ class EventBus:
         bus._shutdown_flag.set()
 
         if bus._worker is not None and bus._worker.is_alive():
+            bus._queue.put(_Sentinel(done=threading.Event(), stop=True))
             try:
                 bus._queue.join()
             except Exception:  # noqa: BLE001, S110
@@ -180,19 +183,15 @@ class EventBus:
             self._worker.start()
 
     def _process_events(self) -> None:
-        """Worker loop: dequeue events and dispatch to handlers until shutdown."""
+        """Worker loop: dequeue events and dispatch to handlers until a stop sentinel."""
         while True:
-            if self._shutdown_flag.is_set() and self._queue.empty():
-                break
-
-            try:
-                item = self._queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
+            item = self._queue.get()
 
             if isinstance(item, _Sentinel):
                 item.done.set()
                 self._queue.task_done()
+                if item.stop:
+                    return
                 continue
 
             try:
