@@ -79,7 +79,7 @@ def _materialize(warehouse, *accounts: il.Source) -> il.Source:
 
 
 def _rows(warehouse, table: str) -> list[dict]:
-    frame = warehouse.select(table, "facebook_ads_star_schema", None)
+    frame = warehouse.select(table, "facebook_ads", None)
     if "date" in frame:
         frame["date"] = frame["date"].dt.date
     return frame.sort_values(list(frame.columns)).to_dict("records")
@@ -104,6 +104,11 @@ class TestWiring:
     def test_the_source_is_shown_under_facebook_ads(self):
         assert FacebookAdsStarSchema.group == "facebook_ads"
         assert FacebookAdsStarSchema.definition().group == "facebook_ads"
+
+    def test_the_views_land_in_the_platforms_dataset_by_default(self):
+        star = FacebookAdsStarSchema()
+        assert star.dataset == "facebook_ads"
+        assert star.fact_ad_performance.dataset == "facebook_ads"
 
 
 class TestOnDuckDB:
