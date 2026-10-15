@@ -9,7 +9,9 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="icon:thetradedesk", maturity="alpha", group="the_trade_desk")
+@il.source(
+    tags=["Analytics"], icon="icon:thetradedesk", maturity="alpha", group="the_trade_desk", dataset="the_trade_desk"
+)
 class TheTradeDeskStarSchema(il.Source):
     """Star schema over every The Trade Desk partner (placeholder, not yet implemented).
 

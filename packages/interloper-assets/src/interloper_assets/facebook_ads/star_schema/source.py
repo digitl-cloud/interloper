@@ -45,9 +45,15 @@ def _latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
     return ranked.filter(ranked["rank"] == 0).drop("rank")
 
 
-@il.source(tags=["Analytics"], icon="logos:facebook", maturity="alpha", group="facebook_ads")
+@il.source(
+    tags=["Analytics"],
+    icon="logos:facebook",
+    maturity="alpha",
+    group="facebook_ads",
+    dataset="facebook_ads",
+)
 class FacebookAdsStarSchema(il.Source):
-    """Star schema over every Facebook Ads account, as views in the warehouse.
+    """Star schema over every Facebook Ads account, as views beside the raw tables.
 
     The fact unions each account's ad performance; the dimensions take each
     campaign from its latest entity row, else its latest report, else the
