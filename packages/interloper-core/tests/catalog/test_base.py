@@ -80,7 +80,7 @@ class TestEnablement:
 
 
 class TestGroups:
-    """A definition's group names a key the catalog holds."""
+    """A definition's group is where the app shows it: a key of the catalog, or any name."""
 
     def test_a_group_names_another_definition(self):
         @il.source
@@ -95,13 +95,13 @@ class TestGroups:
         assert catalog.components["fake_platform_star_schema"].group == "fake_platform"
         assert catalog.components["fake_platform"].group == "fake_platform"
 
-    def test_a_group_outside_the_catalog_is_refused(self):
-        @il.source(group="fake_missing_platform")
-        class FakeOrphanStarSchema(il.Source):
+    def test_a_group_need_not_be_a_catalog_key(self):
+        @il.source(group="cross_platform")
+        class FakeCrossPlatformAnalysis(il.Source):
             pass
 
-        with pytest.raises(ValueError, match="groups under 'fake_missing_platform', which is not in the catalog"):
-            Catalog.from_assets([FakeOrphanStarSchema])
+        catalog = Catalog.from_assets([FakeCrossPlatformAnalysis])
+        assert catalog.components["fake_cross_platform_analysis"].group == "cross_platform"
 
 
 class TestKindContract:
