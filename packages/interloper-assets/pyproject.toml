@@ -43,7 +43,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "**/schemas/**" = ["E501", "D100", "D101"]
-"src/interloper_assets/*/*/source.py" = ["DOC201"]
+"src/interloper_assets/*/*/source.py" = ["DOC201", "DOC501"]
 "src/interloper_assets/*/assets.py" = ["DOC201"]
 "src/interloper_assets/*/*.py" = ["D100"]
 "src/interloper_assets/*/*/*.py" = ["D100"]

@@ -13,7 +13,7 @@ from interloper.destination import DatabaseDestination
 from interloper.errors import ConfigError
 from interloper.runner import ExecutionStatus
 
-from interloper_sql import ibis_view, union
+from interloper_sql import ibis_view, latest, union
 from interloper_sql.view.base import IbisDefinition
 from interloper_sql.view.types import IBIS_DIALECTS
 
@@ -201,6 +201,14 @@ def test_a_ibis_view_runs_on_duckdb(tmp_path: Path):
     assert result.status is ExecutionStatus.COMPLETED
     frame = warehouse.select("totals", "reporting", None).sort_values("date")
     assert frame["total"].tolist() == [15.0, 5.0]
+
+
+def test_latest_keeps_the_first_row_per_key_in_the_given_order():
+    table = ibis.table({"key": "string", "tier": "int64", "date": "date"}, name="rows")
+    kept = latest(table, "key", table["tier"].asc(), table["date"].desc())
+    assert list(kept.columns) == ["key", "tier", "date"]
+    sql = ibis.to_sql(kept, dialect="duckdb")
+    assert "ROW_NUMBER() OVER" in sql and "PARTITION BY" in sql and "ORDER BY" in sql
 
 
 def test_union_keeps_only_the_named_columns():
