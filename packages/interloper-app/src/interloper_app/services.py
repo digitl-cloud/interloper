@@ -283,14 +283,19 @@ class ParentWatchdog:
     turns into a shutdown, instead of running on as an orphan.
     """
 
-    def __init__(self) -> None:
-        """Remember the parent this process started under."""
+    def __init__(self, interval: float = 1.0) -> None:
+        """Remember the parent this process started under.
+
+        Args:
+            interval: Seconds between two checks of the parent.
+        """
         self._parent = os.getppid()
+        self._interval = interval
         self._stopping = threading.Event()
 
     def start(self) -> None:
-        """Poll the parent once a second until stopped or reparented."""
-        while not self._stopping.wait(1.0):
+        """Poll the parent every ``interval`` seconds until stopped or reparented."""
+        while not self._stopping.wait(self._interval):
             if os.getppid() != self._parent:
                 logger.info("Parent process died; shutting down.")
                 return
