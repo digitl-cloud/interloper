@@ -9,7 +9,7 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="icon:criteo", maturity="alpha")
+@il.source(tags=["Analytics"], icon="icon:criteo", maturity="alpha", group="criteo")
 class CriteoStarSchema(il.Source):
     """Star schema over every Criteo advertiser (placeholder, not yet implemented).
 

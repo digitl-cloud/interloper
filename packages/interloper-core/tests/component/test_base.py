@@ -231,6 +231,16 @@ class TestDefinition:
 
         assert FakeBetaChild.definition().maturity is il.Maturity.BETA
 
+    def test_group_defaults_to_the_components_own_key(self):
+        assert FakeComponent.group is None
+        assert FakeComponent.definition().group == FakeComponent.key
+
+    def test_group_declared_in_the_class_body_is_defined(self):
+        class FakeGroupedComponent(Component):
+            group = "fake_component"
+
+        assert FakeGroupedComponent.definition().group == "fake_component"
+
     def test_an_unknown_maturity_fails_where_it_is_written(self):
         with pytest.raises(TypeError, match=r"FakeTypoComponent\.maturity: Input should be"):
 

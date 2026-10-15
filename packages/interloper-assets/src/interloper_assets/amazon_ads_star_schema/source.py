@@ -9,7 +9,7 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="icon:amazon", maturity="alpha")
+@il.source(tags=["Analytics"], icon="icon:amazon", maturity="alpha", group="amazon_ads")
 class AmazonAdsStarSchema(il.Source):
     """Star schema over every Amazon Ads profile (placeholder, not yet implemented).
 

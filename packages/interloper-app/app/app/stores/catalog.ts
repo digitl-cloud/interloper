@@ -47,6 +47,11 @@ export const useCatalogStore = defineStore('catalog', () => {
         return catalog.value[key]?.name ?? key
     }
 
+    /** Key of the definition a type is grouped under, the type's own key when it declares none. */
+    function groupOf(key: string): string {
+        return catalog.value[key]?.group || key
+    }
+
     /** All source definitions from the catalog. */
     const sourceDefinitions = computed<SourceDefinition[]>(() =>
         definitionsForKind('source') as SourceDefinition[],
@@ -107,6 +112,7 @@ export const useCatalogStore = defineStore('catalog', () => {
         fetchCatalog,
         definitionsForKind,
         typeName,
+        groupOf,
         getSourceDefinition,
         getAssetDefinition,
         getDestinationDefinition,

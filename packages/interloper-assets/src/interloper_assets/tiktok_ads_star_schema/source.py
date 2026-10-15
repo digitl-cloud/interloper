@@ -9,7 +9,7 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="logos:tiktok-icon", maturity="alpha")
+@il.source(tags=["Analytics"], icon="logos:tiktok-icon", maturity="alpha", group="tiktok_ads")
 class TiktokAdsStarSchema(il.Source):
     """Star schema over every TikTok Ads advertiser (placeholder, not yet implemented).
 

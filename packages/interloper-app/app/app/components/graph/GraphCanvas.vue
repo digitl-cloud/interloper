@@ -129,16 +129,21 @@ function childEntries(sourceId: string): GraphAssetEntry[] {
 const standaloneEntries = computed(() => assetEntries.value.filter(e => e.source === null))
 
 // ── Source-type groups ──
-// A group only forms for catalog keys with ≥2 instances; singleton types keep
-// rendering their source at top level, so grouping is a no-op until duplicates exist.
+// Sources group under their type's `group` (its own key unless the definition
+// declares another, as a star schema does its platform). A group only forms
+// with ≥2 members; singleton types keep rendering their source at top level,
+// so grouping is a no-op until duplicates exist.
+const catalogStore = useCatalogStore()
+
 const groups = computed(() => {
     const map = new Map<string, GraphSourceEntry[]>()
     if (props.groupBy !== 'type') return map
     const byKey = new Map<string, GraphSourceEntry[]>()
     for (const entry of sourceEntries.value) {
-        const list = byKey.get(entry.source.key)
+        const groupKey = catalogStore.groupOf(entry.source.key)
+        const list = byKey.get(groupKey)
         if (list) list.push(entry)
-        else byKey.set(entry.source.key, [entry])
+        else byKey.set(groupKey, [entry])
     }
     for (const [key, entries] of byKey) {
         if (entries.length > 1) map.set(`type:${key}`, entries)
@@ -485,6 +490,7 @@ const nodes = computed<Node[]>(() => {
 
     // Group nodes first — VueFlow requires parents before their children.
     for (const [groupId, members] of groups.value) {
+        const groupKey = groupId.slice('type:'.length)
         const pos = sourceLayout.value.positions.get(groupId) ?? { x: 0, y: 0 }
         const open = isGroupExpanded(groupId)
         const dims = getGroupDimensions(groupId)
@@ -497,8 +503,8 @@ const nodes = computed<Node[]>(() => {
             height: dims.height,
             connectable: false,
             data: {
-                groupKey: members[0]!.source.key,
-                sourceDefn: members[0]!.sourceDefn,
+                groupKey,
+                sourceDefn: catalogStore.getSourceDefinition(groupKey) ?? members[0]!.sourceDefn,
                 members,
                 open,
                 layers: Math.min(MAX_LAYERS, members.length),

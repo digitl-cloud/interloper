@@ -39,7 +39,7 @@ function sourceDriftBadge(sourceId: string) {
 
 const columns: TableColumn<CollectionRow>[] = [
     { id: 'title', header: 'Name' },
-    { id: 'source_type', accessorKey: 'sourceKey' },
+    { id: 'source_type', accessorKey: 'groupKey' },
     { id: 'source_id', accessorKey: 'sourceId' },
     { id: 'asset_id', accessorKey: 'assetId' },
     { id: 'lastRun', header: 'Last Run' },
@@ -187,8 +187,8 @@ function toggleAllExpanded() {
     if (allExpanded.value) {
         const next: Record<string, boolean> = {}
         for (const d of filteredData.value) {
-            next[`source_type:${d.sourceKey}`] = true
-            next[`source_type:${d.sourceKey}>source_id:${d.sourceId}`] = true
+            next[`source_type:${d.groupKey}`] = true
+            next[`source_type:${d.groupKey}>source_id:${d.sourceId}`] = true
         }
         expanded.value = next
     }
@@ -251,15 +251,15 @@ function onRowClick(row: any) {
                              size="xs"
                              :icon="row.getIsExpanded() ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
                              @click.stop="row.toggleExpanded()" />
-                    <UIcon :name="typeInfoByKey.get(row.original.sourceKey)?.icon ?? 'i-lucide-database'"
+                    <UIcon :name="typeInfoByKey.get(row.original.groupKey)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
-                    <span class="font-semibold">{{ typeInfoByKey.get(row.original.sourceKey)?.name ?? row.original.sourceKey }}</span>
-                    <MaturityBadge :maturity="typeInfoByKey.get(row.original.sourceKey)?.maturity" />
+                    <span class="font-semibold">{{ typeInfoByKey.get(row.original.groupKey)?.name ?? row.original.groupKey }}</span>
+                    <MaturityBadge :maturity="typeInfoByKey.get(row.original.groupKey)?.maturity" />
                     <UBadge color="neutral"
                             variant="soft"
                             class="ml-2">
-                        {{ typeInfoByKey.get(row.original.sourceKey)?.sourceCount ?? 0 }}
-                        {{ (typeInfoByKey.get(row.original.sourceKey)?.sourceCount ?? 0) === 1 ? 'source' : 'sources' }}
+                        {{ typeInfoByKey.get(row.original.groupKey)?.sourceCount ?? 0 }}
+                        {{ (typeInfoByKey.get(row.original.groupKey)?.sourceCount ?? 0) === 1 ? 'source' : 'sources' }}
                     </UBadge>
                 </div>
                 <!-- Source group header (depth 1) -->
