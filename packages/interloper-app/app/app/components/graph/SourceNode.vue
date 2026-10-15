@@ -76,6 +76,7 @@ const shouldFade = computed(() => !container.value && isDragging.value && !isCom
 
 const { confirm } = useConfirm()
 const componentsStore = useComponentsStore()
+const catalogStore = useCatalogStore()
 const { getWarnings } = useAssetWarnings()
 const { getBadgeForSource } = useDestinationBadge()
 const { sourceDrift, statusBadge } = useDrift()
@@ -125,6 +126,11 @@ const isMaterializing = computed(() =>
 
 const headHeight = computed(() => props.nested ? 64 : 84)
 const showChip = computed(() => !!props.source.discriminator && props.source.discriminator !== props.source.name)
+const typeName = computed(() => catalogStore.typeName(props.source.key))
+// A top-level source leads with its type like a group card does; a nested one sits
+// under its group's header, which already names the type, so it leads with its name.
+const title = computed(() => props.nested ? props.source.name : typeName.value)
+const showName = computed(() => !props.nested && props.source.name?.toLowerCase() !== typeName.value.toLowerCase())
 const frameClass = computed(() => [
     collapsed.value && 'graph-raise',
     // With layers folded under it the card is no longer what the stack casts from.
@@ -199,12 +205,18 @@ const frameClass = computed(() => [
                              :class="nested ? 'gap-[5px]' : 'gap-[7px]'">
                             <div class="flex max-w-full items-center gap-[7px]">
                                 <span class="truncate font-semibold tracking-tight text-highlighted"
-                                      :class="nested ? 'text-[13px]' : 'text-sm'">{{ source.name }}</span>
+                                      :class="nested ? 'text-[13px]' : 'text-sm'">{{ title }}</span>
                                 <span class="shrink-0 rounded-full"
                                       :class="[nested ? 'size-1.5' : 'size-[7px]', statusDotClass(status?.state ?? 'idle')]" />
                             </div>
-                            <span v-if="showChip"
-                                  class="id-chip max-w-full truncate">{{ source.discriminator }}</span>
+                            <div v-if="showName || showChip"
+                                 class="flex max-w-full items-center gap-1.5">
+                                <span v-if="showName"
+                                      class="min-w-0 truncate text-xs text-muted"
+                                      :class="showChip && 'max-w-[60%] shrink-0'">{{ source.name }}</span>
+                                <span v-if="showChip"
+                                      class="id-chip min-w-0 truncate">{{ source.discriminator }}</span>
+                            </div>
                         </div>
                         <UTooltip v-if="isDrift && !collapsed"
                                   :delay-duration="0"
