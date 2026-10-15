@@ -253,6 +253,11 @@ function onRowClick(row: any) {
                     <UIcon :name="typeInfoByKey.get(row.original.groupKey)?.icon ?? 'i-lucide-database'"
                            class="size-5 shrink-0" />
                     <span class="font-semibold">{{ typeInfoByKey.get(row.original.groupKey)?.name ?? row.original.groupKey }}</span>
+                    <UTooltip :text="typeInfoByKey.get(row.original.groupKey)?.note ?? 'Not materialized yet'"
+                              :delay-duration="0">
+                        <span class="size-[7px] shrink-0 rounded-full"
+                              :class="statusDotClass(typeInfoByKey.get(row.original.groupKey)?.state ?? 'pending')" />
+                    </UTooltip>
                     <MaturityBadge :maturity="typeInfoByKey.get(row.original.groupKey)?.maturity" />
                     <UBadge color="neutral"
                             variant="soft"

@@ -3,6 +3,7 @@ import { jobTargetIds, relationIds } from '~/types/component'
 import type { Run } from '~/types/run'
 import type { Execution } from '~/types/execution'
 import { stateFromExecution } from '~/types/graph'
+import type { GraphNodeState } from '~/types/graph'
 import type { AssetDefinition, Maturity, SourceDefinition } from '~/types/catalog'
 import { kindsOf, keysOf, resourceRelations } from '~/types/catalog'
 import type { AssetWarning } from '~/composables/warnings'
@@ -168,6 +169,14 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         return execution && at ? { status: execution.status, at, runId: execution.run_id } : null
     }
 
+    /** A source's materialization state, as the graph's dot shows it: its assets' latest executions rolled up. */
+    function sourceState(source: ComponentRecord): GraphNodeState {
+        return rollupState(source.children.flatMap((a) => {
+            const execution = options.latestExecutions.value.get(a.id)
+            return execution ? [stateFromExecution(execution.status)] : []
+        }))
+    }
+
     /**
      * A source reads its assets' latest executions, loudest state first: a job
      * run fails as a whole when one asset does, so its status would paint every
@@ -186,7 +195,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
             return { status: 'failed', at: runAt, runId: run.id, note: 'The run failed before any asset executed' }
         }
 
-        const state = rollupState(executions.map(e => stateFromExecution(e.status)))
+        const state = sourceState(source)
         const carrying = executions.filter(e => e.status === state)
         const newest = carrying
             .filter(e => executionAt(e) !== null)
@@ -355,19 +364,30 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
 
     /** Display info for each type group (the catalog key sources are grouped under) present in the collection. */
     const typeInfoByKey = computed(() => {
-        const map = new Map<string, { name: string; icon: string; maturity: Maturity; sourceCount: number }>()
+        const sourceStates = new Map<string, GraphNodeState[]>()
         for (const source of options.sources.value) {
             const groupKey = catalogStore.groupOf(source.key)
-            const existing = map.get(groupKey)
-            if (existing) {
-                existing.sourceCount++
-                continue
-            }
+            sourceStates.set(groupKey, [...(sourceStates.get(groupKey) ?? []), sourceState(source)])
+        }
+
+        const map = new Map<string, {
+            name: string
+            icon: string
+            maturity: Maturity
+            sourceCount: number
+            state: GraphNodeState
+            note: string | null
+        }>()
+        for (const [groupKey, states] of sourceStates) {
+            const state = rollupState(states)
+            const carrying = states.filter(s => s === state).length
             map.set(groupKey, {
                 name: catalogStore.getSourceDefinition(groupKey)?.name ?? groupKey,
                 icon: componentIcon(groupKey, 'i-lucide-database'),
                 maturity: catalogStore.getSourceDefinition(groupKey)?.maturity ?? 'stable',
-                sourceCount: 1,
+                sourceCount: states.length,
+                state,
+                note: state === 'pending' ? null : `${statusLabel(state)}: ${carrying} of ${states.length} ${states.length === 1 ? 'source' : 'sources'}`,
             })
         }
         return map
