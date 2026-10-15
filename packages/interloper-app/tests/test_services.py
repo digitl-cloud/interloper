@@ -381,7 +381,7 @@ class TestParentWatchdog:
         # reparented and must not run on as an orphan.
         parent_pids = iter([os.getppid(), 1, 1])
         monkeypatch.setattr(os, "getppid", lambda: next(parent_pids))
-        watchdog = ParentWatchdog()
+        watchdog = ParentWatchdog(interval=0.01)
 
         thread = threading.Thread(target=watchdog.start, daemon=True)
         thread.start()
@@ -390,11 +390,11 @@ class TestParentWatchdog:
         assert not thread.is_alive()
 
     def test_a_stable_parent_keeps_running_until_stopped(self) -> None:
-        watchdog = ParentWatchdog()
+        watchdog = ParentWatchdog(interval=0.01)
         thread = threading.Thread(target=watchdog.start, daemon=True)
         thread.start()
         try:
-            thread.join(timeout=1.5)
+            thread.join(timeout=0.1)
             assert thread.is_alive()
         finally:
             watchdog.stop()
