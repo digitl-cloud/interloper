@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v0.115.0 (2026-10-15)
+
+### Bug Fixes
+
+- **app**: Collection rows expand, last run links to its run, asset panel reads the asset
+  ([`e6a5df4`](https://github.com/digitl-cloud/interloper/commit/e6a5df49614cf3c205c411c92cc028db2e60be5f))
+
+### Build System
+
+- Run the test suite in parallel, on push
+  ([`3368d44`](https://github.com/digitl-cloud/interloper/commit/3368d44c89d79cd345a141ac6978e63086b7d273))
+
+### Features
+
+- **app**: Lead an ungrouped source card with its type
+  ([`69a33bb`](https://github.com/digitl-cloud/interloper/commit/69a33bb95c682e33a3fd879916731b41cc36a438))
+
+- **assets**: A star schema lands in its platform's dataset by default
+  ([`a14b713`](https://github.com/digitl-cloud/interloper/commit/a14b7137b3cfcf82567359b7a32d289bfa430ec4))
+
+- **assets**: The Amazon Ads star schema as views, and a shared latest helper
+  ([`15922fb`](https://github.com/digitl-cloud/interloper/commit/15922fb7277d38daedff6d71897def4609726f12))
+
+### Performance Improvements
+
+- **app**: Take the parent watchdog's poll interval as an argument
+  ([`8bfcf88`](https://github.com/digitl-cloud/interloper/commit/8bfcf8844f9546601ace002eaef048d88c10dabf))
+
+- **core**: Build each class's config schema once
+  ([`770ca88`](https://github.com/digitl-cloud/interloper/commit/770ca88e69de243d515be92b2042c18ec70181d0))
+
+- **core**: Stop the event bus worker without polling
+  ([`2edcf2d`](https://github.com/digitl-cloud/interloper/commit/2edcf2dad52c4c0991eba18fd6362387141a57a8))
+
+
 ## v0.114.0 (2026-10-15)
 
 ### Bug Fixes
