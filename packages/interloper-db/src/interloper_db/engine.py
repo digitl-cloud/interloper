@@ -19,7 +19,8 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
         statement_timeout: Seconds after which the server cancels a running statement. Sent as the libpq
             ``statement_timeout`` connection option, merged into any ``connect_args`` passed. ``None`` leaves the
             server default; other backends (SQLite) ignore it.
-        **kwargs: Additional kwargs forwarded to ``create_engine``.
+        **kwargs: Additional kwargs forwarded to ``create_engine``. ``pool_pre_ping`` defaults to ``True``, so a pooled
+            connection the server or a proxy restart closed is replaced on checkout instead of failing the request.
 
     Returns:
         The SQLAlchemy engine.
@@ -38,6 +39,7 @@ def init_engine(dsn: str | None = None, statement_timeout: float | None = None, 
         option = f"-c statement_timeout={max(1, round(statement_timeout * 1000))}"
         connect_args["options"] = f"{connect_args['options']} {option}" if connect_args.get("options") else option
         kwargs["connect_args"] = connect_args
+    kwargs.setdefault("pool_pre_ping", True)
     _engine = create_engine(dsn, **kwargs)
     return _engine
 

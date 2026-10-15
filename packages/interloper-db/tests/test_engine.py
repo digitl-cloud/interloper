@@ -114,6 +114,16 @@ class TestInitEngine:
 
         assert "connect_args" not in created_kwargs
 
+    def test_pooled_connections_are_pinged_on_checkout(self) -> None:
+        engine = init_engine("sqlite://")
+
+        assert engine.pool._pre_ping is True
+
+    def test_an_explicit_pool_pre_ping_wins(self, created_kwargs: dict[str, object]) -> None:
+        init_engine("postgresql+psycopg://u:p@localhost/db", pool_pre_ping=False)
+
+        assert created_kwargs["pool_pre_ping"] is False
+
     def test_re_initializing_replaces_the_singleton(self) -> None:
         first = init_engine("sqlite://")
         second = init_engine("sqlite://")
