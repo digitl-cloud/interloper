@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v0.114.0 (2026-10-15)
+
+### Bug Fixes
+
+- **db**: Pre-ping pooled connections so a proxy restart doesn't 500
+  ([`145d570`](https://github.com/digitl-cloud/interloper/commit/145d570471d3276578cfc3cfc62f935c76ca300d))
+
+### Features
+
+- A component declares the type it is shown under, the star schemas their platform
+  ([`88d7059`](https://github.com/digitl-cloud/interloper/commit/88d7059c5807977e3c2839dbeca2bb7a857fecab))
+
+### Refactoring
+
+- **assets**: One container per platform, one folder per source
+  ([`4ae11b4`](https://github.com/digitl-cloud/interloper/commit/4ae11b4ee39693cc9ce6203d80ec1c64310537cb))
+
+- **catalog**: A group is a display fact, any name, nothing validates it
+  ([`a71ca24`](https://github.com/digitl-cloud/interloper/commit/a71ca24bcc84dfad478cf5e77abcf3b6bec0cc24))
+
+### Breaking Changes
+
+- **assets**: Module paths of every interloper_assets source changed
+  (interloper_assets.facebook_ads.source -> .facebook_ads.connector.source,
+  .facebook_ads_star_schema.source -> .facebook_ads.star_schema.source, and so on); catalog lists
+  naming paths must be updated with the image.
+
+
 ## v0.113.0 (2026-10-14)
 
 ### Bug Fixes
