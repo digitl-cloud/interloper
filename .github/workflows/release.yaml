@@ -79,7 +79,7 @@ jobs:
         run: uv run ty check
 
       - name: Pytest
-        run: uv run pytest
+        run: uv run pytest -n auto --maxprocesses 4
 
       # Runs PSR directly instead of python-semantic-release/python-semantic-release@v10:
       # the action installs its dependencies unpinned at image build, and GitPython

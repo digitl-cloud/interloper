@@ -19,7 +19,7 @@ check-python:
 	uv run ruff check packages
 	uv run ruff format --check
 	uv run ty check
-	uv run pytest
+	PYTHONDONTWRITEBYTECODE= uv run pytest -n auto --maxprocesses 4
 
 check-typescript:
 	cd packages/interloper-app/app && pnpm run lint && pnpm exec nuxt typecheck
