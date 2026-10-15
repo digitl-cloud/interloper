@@ -4781,7 +4781,10 @@ relation at an asset absent from <em>nodes</em>.</p>
 entity, just a structured projection of the class for API consumers.
 Every kind is self-describing: <code>config_schema</code> is the JSON Schema of
 its user-configurable fields, <code>relations</code> the links it declares toward
-other components, <code>maturity</code> how far it is from being relied on.</p>
+other components, <code>maturity</code> how far it is from being relied on,
+<code>group</code> where the app shows it: its own key, unless the class declares
+another, as a star schema does its platform's key. A group is a display
+fact, any name; when it is a catalog key, that definition labels it.</p>
 
 
 
@@ -6184,7 +6187,7 @@ deprecated whatever its source.</p>
 
 
 <a href="#interloper.component.base.KINDS" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f0c86dc2690</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">KINDS</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">Registry</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f82574f1fd0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
