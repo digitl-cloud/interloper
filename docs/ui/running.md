@@ -114,7 +114,7 @@ auth:
 
 catalog:
   - my_package.sources.Shop
-  - interloper_assets.facebook_ads.source.FacebookAds
+  - interloper_assets.facebook_ads.connector.source.FacebookAds
 ```
 
 The file is not interpolated: a field left out of a block is read from its `INTERLOPER_<SECTION>_<FIELD>`

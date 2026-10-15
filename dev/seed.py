@@ -58,7 +58,7 @@ SYNTHETIC_GOOGLE_ID_PREFIX = "dev:"
 
 ORG_NAME = "Dev Org"
 
-DEMO_SOURCE_KEY = "demo_source"  # catalog key of interloper_assets.demo.source.DemoSource
+DEMO_SOURCE_KEY = "demo_source"  # catalog key of interloper_assets.demo.basic.source.DemoSource
 DEMO_SOURCE_NAME = "Demo Data"
 
 DEMO_JOB_NAME = "Demo Daily"

@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
-from interloper_assets.facebook_ads.source import FacebookAds
+from interloper_assets.facebook_ads.connector.source import FacebookAds
 
 from interloper_api.app import install_error_handlers
 from interloper_api.dependencies import get_catalog, get_store, require_editor, require_viewer
@@ -347,7 +347,7 @@ class TestResolveEdgeCases:
         self, source_catalog: il.Catalog, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The FetchField names a relation the component does not declare.
-        from interloper_assets.facebook_ads.source import FacebookAds
+        from interloper_assets.facebook_ads.connector.source import FacebookAds
 
         monkeypatch.setattr(FacebookAds, "relations", {})
 

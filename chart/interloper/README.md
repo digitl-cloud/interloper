@@ -98,7 +98,7 @@ runner:
   type: async
 
 catalog:
-  - interloper_assets.demo.source.DemoSource
+  - interloper_assets.demo.basic.source.DemoSource
   - interloper_google_cloud.BigQueryDestination
 ```
 

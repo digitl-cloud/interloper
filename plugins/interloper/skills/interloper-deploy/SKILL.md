@@ -38,8 +38,8 @@ and https://docs.interloper.dev/ui/running/
      type: in_process              # runs execute inside the worker; docker / kubernetes launch a container per run
 
    catalog:                        # import paths; empty means everything installed
-     - interloper_assets.facebook_ads.source.FacebookAds
-     - interloper_assets.google_ads.source.GoogleAds
+     - interloper_assets.facebook_ads.connector.source.FacebookAds
+     - interloper_assets.google_ads.connector.source.GoogleAds
 
    otel:
      enabled: true
