@@ -86,6 +86,7 @@ class DefinitionEntry(BaseModel):
     icon: str | None = None
     tags: list[str] = []
     maturity: str = "stable"
+    group: str = ""
     asset_count: int | None = None
     in_collection: bool | None = None
     collection_count: int | None = None

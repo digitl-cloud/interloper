@@ -34,6 +34,8 @@ export interface ComponentDefinition {
     description: string
     tags: string[]
     maturity: Maturity
+    /** Key of the definition this one is shown under: its own, unless it declares another (a star schema its platform). */
+    group: string
     config_schema: Record<string, unknown>
     /** JSON Schema of the kind's machine-owned state (`{}` = stateless). */
     state_schema: Record<string, unknown>

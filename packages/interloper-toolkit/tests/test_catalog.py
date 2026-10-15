@@ -38,6 +38,11 @@ class TestCatalog:
         assert result.definitions
         assert {entry.maturity for entry in result.definitions} <= {"deprecated", "alpha", "beta", "stable"}
 
+    def test_list_definitions_reports_the_group_each_type_is_shown_under(self, ctx: ToolkitContext):
+        result = catalog_tools.list_definitions(ctx, "source")
+        assert isinstance(result, DefinitionList)
+        assert all(entry.group for entry in result.definitions)
+
     def test_unknown_definition_is_a_structured_error(self, ctx: ToolkitContext):
         result = catalog_tools.get_definition(ctx, "nope")
 

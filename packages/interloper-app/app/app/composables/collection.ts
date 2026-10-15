@@ -26,6 +26,8 @@ export interface CollectionRow {
     name: string
     icon: string
     sourceKey: string
+    /** Catalog key the source's type is grouped under, the type tier of the table. */
+    groupKey: string
     assetStatus: ComponentStatus
     tags: string[]
     maturity: Maturity
@@ -243,6 +245,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     name: assetDefn?.name ?? asset.key,
                     icon: componentIcon(asset.key),
                     sourceKey: source.key,
+                    groupKey: catalogStore.groupOf(source.key),
                     assetStatus: asset.status,
                     tags: assetDefn?.tags ?? [],
                     // The source's row already shows its maturity; an asset repeats it only when it is less mature.
@@ -289,6 +292,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
                     name: '(no assets)',
                     icon: 'i-lucide-box',
                     sourceKey: source.key,
+                    groupKey: catalogStore.groupOf(source.key),
                     assetStatus: 'ok',
                     tags: [],
                     maturity: 'stable',
@@ -344,19 +348,20 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         return map
     })
 
-    /** Display info for each source type (catalog key) present in the collection. */
+    /** Display info for each type group (the catalog key sources are grouped under) present in the collection. */
     const typeInfoByKey = computed(() => {
         const map = new Map<string, { name: string; icon: string; maturity: Maturity; sourceCount: number }>()
         for (const source of options.sources.value) {
-            const existing = map.get(source.key)
+            const groupKey = catalogStore.groupOf(source.key)
+            const existing = map.get(groupKey)
             if (existing) {
                 existing.sourceCount++
                 continue
             }
-            map.set(source.key, {
-                name: catalogStore.getSourceDefinition(source.key)?.name ?? source.key,
-                icon: componentIcon(source.key, 'i-lucide-database'),
-                maturity: catalogStore.getSourceDefinition(source.key)?.maturity ?? 'stable',
+            map.set(groupKey, {
+                name: catalogStore.getSourceDefinition(groupKey)?.name ?? groupKey,
+                icon: componentIcon(groupKey, 'i-lucide-database'),
+                maturity: catalogStore.getSourceDefinition(groupKey)?.maturity ?? 'stable',
                 sourceCount: 1,
             })
         }

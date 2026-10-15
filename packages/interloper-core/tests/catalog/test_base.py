@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import interloper as il
 from interloper.asset.base import AssetDefinition
 from interloper.catalog import Catalog
 from interloper.component import Relation
@@ -76,6 +77,31 @@ class TestEnablement:
     def test_paths_round_trip(self):
         enabled = Catalog.from_paths(["interloper_google_cloud.BigQueryDestination"])
         assert Catalog.from_paths(enabled.to_paths()).components.keys() == enabled.components.keys()
+
+
+class TestGroups:
+    """A definition's group names a key the catalog holds."""
+
+    def test_a_group_names_another_definition(self):
+        @il.source
+        class FakePlatform(il.Source):
+            pass
+
+        @il.source(group="fake_platform")
+        class FakePlatformStarSchema(il.Source):
+            pass
+
+        catalog = Catalog.from_assets([FakePlatform, FakePlatformStarSchema])
+        assert catalog.components["fake_platform_star_schema"].group == "fake_platform"
+        assert catalog.components["fake_platform"].group == "fake_platform"
+
+    def test_a_group_outside_the_catalog_is_refused(self):
+        @il.source(group="fake_missing_platform")
+        class FakeOrphanStarSchema(il.Source):
+            pass
+
+        with pytest.raises(ValueError, match="groups under 'fake_missing_platform', which is not in the catalog"):
+            Catalog.from_assets([FakeOrphanStarSchema])
 
 
 class TestKindContract:

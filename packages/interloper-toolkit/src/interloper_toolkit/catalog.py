@@ -102,6 +102,7 @@ def list_definitions(ctx: ToolkitContext, kind: str | None = None) -> Definition
                 icon=defn.get("icon"),
                 tags=defn.get("tags", []),
                 maturity=defn.get("maturity", "stable"),
+                group=defn.get("group", key),
             )
             if kind == "source":
                 count = collection_counts.get(key, 0)

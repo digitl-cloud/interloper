@@ -9,7 +9,7 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="mdi:snapchat", maturity="alpha")
+@il.source(tags=["Analytics"], icon="mdi:snapchat", maturity="alpha", group="snapchat_ads")
 class SnapchatAdsStarSchema(il.Source):
     """Star schema over every Snapchat Ads account (placeholder, not yet implemented).
 

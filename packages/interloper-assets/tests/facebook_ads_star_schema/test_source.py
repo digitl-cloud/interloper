@@ -101,6 +101,10 @@ class TestWiring:
         assert FacebookAdsStarSchema.fact_ad_performance.tags == ["Fact"]
         assert FacebookAdsStarSchema.dim_campaigns.tags == ["Dimension"]
 
+    def test_the_source_is_shown_under_facebook_ads(self):
+        assert FacebookAdsStarSchema.group == "facebook_ads"
+        assert FacebookAdsStarSchema.definition().group == "facebook_ads"
+
 
 class TestOnDuckDB:
     def test_the_fact_unions_every_account(self, warehouse):

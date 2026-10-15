@@ -9,7 +9,7 @@ import interloper as il
 PARTITIONING = il.TimePartitionConfig(column="date")
 
 
-@il.source(tags=["Analytics"], icon="icon:bing", maturity="alpha")
+@il.source(tags=["Analytics"], icon="icon:bing", maturity="alpha", group="bing_ads")
 class BingAdsStarSchema(il.Source):
     """Star schema over every Bing Ads account (placeholder, not yet implemented).
 

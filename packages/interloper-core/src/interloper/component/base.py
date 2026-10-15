@@ -65,7 +65,9 @@ class ComponentDefinition(BaseModel):
     entity, just a structured projection of the class for API consumers.
     Every kind is self-describing: ``config_schema`` is the JSON Schema of
     its user-configurable fields, ``relations`` the links it declares toward
-    other components, ``maturity`` how far it is from being relied on.
+    other components, ``maturity`` how far it is from being relied on,
+    ``group`` the key of the definition it is shown under: its own, unless
+    the class declares another, as a star schema does its platform.
     """
 
     kind: str
@@ -76,6 +78,7 @@ class ComponentDefinition(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     maturity: Maturity = Maturity.STABLE
+    group: str = ""
     config_schema: dict[str, Any] = Field(default_factory=dict)
     state_schema: dict[str, Any] = Field(default_factory=dict)
     relations: dict[str, Relation] = Field(default_factory=dict)
@@ -105,6 +108,7 @@ class Component(Serializable):
     kind: ClassVar[str] = ""
     icon: ClassVar[str] = ""
     maturity: ClassVar[Maturity] = Maturity.STABLE
+    group: ClassVar[str | None] = None
     relations: ClassVar[dict[str, Relation]] = {}
     sensitive: ClassVar[bool] = False
     state_model: ClassVar[type[BaseModel] | None] = None
@@ -733,6 +737,7 @@ class Component(Serializable):
             description=cls.__doc__ or "",
             tags=list(getattr(cls, "tags", [])),
             maturity=cls.maturity,
+            group=cls.group or cls.key,
             config_schema=cls.config_schema(),
             state_schema=cls.state_model.model_json_schema() if cls.state_model else {},
             relations=dict(cls.relations),

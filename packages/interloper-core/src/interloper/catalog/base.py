@@ -37,7 +37,7 @@ from importlib.metadata import entry_points
 from types import ModuleType
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from interloper.component import KINDS, Component, ComponentDefinition, Relation
 from interloper.errors import ConfigError
@@ -53,6 +53,25 @@ class Catalog(BaseModel):
     """Catalog of all component definitions."""
 
     components: dict[str, ComponentDefinition] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _groups_name_catalog_keys(self) -> Catalog:
+        """Refuse a definition grouped under a key the catalog does not hold.
+
+        A group is where a type is shown, so it must be a type this catalog
+        ships: a star schema listed without its platform is a configuration
+        error, not an empty group.
+
+        Returns:
+            The catalog, unchanged.
+
+        Raises:
+            ConfigError: If a definition's ``group`` is not a key of this catalog.
+        """
+        for key, definition in self.components.items():
+            if definition.group and definition.group not in self.components:
+                raise ConfigError(f"Component '{key}' groups under '{definition.group}', which is not in the catalog")
+        return self
 
     # -- Lookup & export -------------------------------------------------------
 
