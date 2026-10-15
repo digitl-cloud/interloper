@@ -67,7 +67,7 @@ Every component class describes itself through `definition()`:
 | `kind`, `key`, `path` | Identity and import path. |
 | `name`, `icon`, `description`, `tags` | Display metadata; the description is the docstring. |
 | `maturity` | `deprecated`, `alpha`, `beta` or `stable` (the default); see [Maturity](#maturity). |
-| `group` | The key of the definition this one is shown under in the app: its own, unless the class declares another (`group="facebook_ads"` on the Facebook star schema). A group must be a key of the catalog. |
+| `group` | Where the app shows this type: its own key, unless the class declares another (`group="facebook_ads"` on the Facebook star schema). A display fact, any name; when it is a catalog key, that definition's name and icon label the group. |
 | `config_schema` | JSON Schema of the user-facing [configuration fields](fields.md). |
 | `state_schema` | JSON Schema of the machine-owned state model, when the kind has one. |
 | `relations` | Every declared relation by name, with its `kind`, `key`, `many`, `optional` and `on_delete`. |

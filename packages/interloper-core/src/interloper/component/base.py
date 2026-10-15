@@ -66,8 +66,9 @@ class ComponentDefinition(BaseModel):
     Every kind is self-describing: ``config_schema`` is the JSON Schema of
     its user-configurable fields, ``relations`` the links it declares toward
     other components, ``maturity`` how far it is from being relied on,
-    ``group`` the key of the definition it is shown under: its own, unless
-    the class declares another, as a star schema does its platform.
+    ``group`` where the app shows it: its own key, unless the class declares
+    another, as a star schema does its platform's key. A group is a display
+    fact, any name; when it is a catalog key, that definition labels it.
     """
 
     kind: str
