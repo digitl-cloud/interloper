@@ -14,7 +14,8 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.settings import AppSettings, ServerSettings
-from interloper_assets.demo.source import DemoSource, demo_asset
+from interloper_assets.demo.assets import demo_asset
+from interloper_assets.demo.basic.source import DemoSource
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
 from interloper_db.models import Backfill, Component, ComponentRelation, Organisation, Quota, Run, Usage

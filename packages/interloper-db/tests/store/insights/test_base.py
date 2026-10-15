@@ -14,7 +14,9 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
-from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
+from interloper_assets.demo.assets import demo_asset
+from interloper_assets.demo.basic.source import DemoSource
+from interloper_assets.demo.monthly.source import DemoMonthlySource
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, col

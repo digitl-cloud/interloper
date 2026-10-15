@@ -259,7 +259,7 @@ runner:
 # deployment enables. Their connections and configs come along automatically;
 # leave the list empty to enable every component the images ship.
 catalog: []
-# - interloper_assets.demo.source.DemoSource
+# - interloper_assets.demo.basic.source.DemoSource
 # - interloper_google_cloud.BigQueryDestination
 
 # SMTP config for sending emails (password via secrets.smtpPassword)

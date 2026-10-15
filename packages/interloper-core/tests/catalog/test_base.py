@@ -37,7 +37,7 @@ class TestFromSettings:
         assert "amazon_ads" in catalog.components
 
     def test_configured_paths_narrow(self, monkeypatch):
-        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.source.DemoSource"])
+        stub = AppSettings.model_construct(catalog=["interloper_assets.demo.basic.source.DemoSource"])
         monkeypatch.setattr(AppSettings, "get", classmethod(lambda cls: stub))
         catalog = Catalog.from_settings()
         assert "demo_source" in catalog.components
@@ -66,12 +66,12 @@ class TestEnablement:
         assert "gcs_destination" not in catalog.components
 
     def test_asset_dependencies_of_a_source_come_along(self):
-        catalog = Catalog.from_paths(["interloper_assets.facebook_ads.source.FacebookAds"])
+        catalog = Catalog.from_paths(["interloper_assets.facebook_ads.connector.source.FacebookAds"])
         assert "facebook_ads" in catalog.components
         assert "facebook_ads_connection" in catalog.components
 
     def test_unimportable_paths_are_skipped(self):
-        catalog = Catalog.from_paths(["not_a_module.Nope", "interloper_assets.demo.source.DemoSource"])
+        catalog = Catalog.from_paths(["not_a_module.Nope", "interloper_assets.demo.basic.source.DemoSource"])
         assert "demo_source" in catalog.components
 
     def test_paths_round_trip(self):
@@ -128,7 +128,7 @@ class TestSourceOwnedAssets:
         definition = Catalog.discover().get("demo_source.a")
         assert isinstance(definition, AssetDefinition)
         # The composite path is the point: the flat key cannot name it.
-        assert definition.path == "interloper_assets.demo.source:DemoSource.a"
+        assert definition.path == "interloper_assets.demo.basic.source:DemoSource.a"
         assert definition.partitioning is not None
 
     @pytest.mark.parametrize("key", ["gone_source.a", "demo_source.not_an_asset", "cron_job.a", "gone_source.cron_job"])
@@ -175,7 +175,7 @@ class TestVocabulary:
         assert all(not relation.optional for relation in upstreams.values())
 
     def test_a_source_owned_bare_key_binds_the_sibling(self):
-        from interloper_assets.demo.source import DemoSource
+        from interloper_assets.demo.basic.source import DemoSource
 
         # The other half of the parent scoping: the bare keys the catalog
         # reports are the sibling assets the source binds at construction.

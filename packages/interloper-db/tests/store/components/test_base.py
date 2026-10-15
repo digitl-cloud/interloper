@@ -11,7 +11,9 @@ import pytest
 from cryptography.fernet import InvalidToken
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper.partitioning import TimeGranularity
-from interloper_assets.demo.source import DemoMonthlySource, DemoSource, demo_asset
+from interloper_assets.demo.assets import demo_asset
+from interloper_assets.demo.basic.source import DemoSource
+from interloper_assets.demo.monthly.source import DemoMonthlySource
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from sqlalchemy import Engine, event
 from sqlmodel import Session, select

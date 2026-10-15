@@ -104,6 +104,10 @@ stamped, how metrics are typed — is in [.claude/rules/assets.md](.claude/rules
 
 Schema classes follow the asset name: one class per file, the file named after the asset and the class its `PascalCase` (asset `ads_stats` → `class AdsStats` in `schemas/ads_stats.py`). The `demo` source is a test fixture and is exempt from these rules.
 
+### Package layout
+
+A top-level folder of `interloper_assets` is a **container**, never a source: it holds what its sources share (`connection.py`, `constants.py`) and one **source folder** per source. A source folder is `source.py` plus `schemas/` (when the source declares any), and nothing else is ever named `source.py`. The platform's own fetching source is `connector/`; a derived source is named by its key with the container's prefix stripped (`facebook_ads/star_schema/` for `facebook_ads_star_schema`, `google_analytics_4/export/` for `google_analytics_4_export`); cross-platform sources share the `campaign/` container (`campaign/matcher/`, `campaign/performance_analysis/`). Tests mirror the tree one to one (`tests/facebook_ads/star_schema/test_source.py`). Catalog keys come from class names, so a move never changes a key.
+
 ### Git flow
 
 `main` is kept strictly linear — no merge commits. Feature branches rebase onto `main`; merges into `main` are rebase-merges.

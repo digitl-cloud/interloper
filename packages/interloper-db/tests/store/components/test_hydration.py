@@ -15,7 +15,8 @@ import interloper as il
 import pydantic
 import pytest
 from interloper.serializable import Spec
-from interloper_assets.demo.source import DemoSource, demo_asset
+from interloper_assets.demo.assets import demo_asset
+from interloper_assets.demo.basic.source import DemoSource
 from sqlalchemy import Engine
 from sqlmodel import Session
 
