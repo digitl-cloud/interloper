@@ -199,9 +199,8 @@ function toggleAllExpanded() {
 
 function onRowClick(row: any) {
     if (!row.getIsGrouped()) return
-    if (row.depth === 0) row.toggleExpanded()
-    else if (row.depth === 1) emit('edit-source', row.original.sourceId)
-    else if (row.depth === 2) emit('view-asset', row.original.assetId, row.original.sourceId)
+    if (row.depth < 2) row.toggleExpanded()
+    else emit('view-asset', row.original.assetId, row.original.sourceId)
 }
 </script>
 
@@ -492,12 +491,16 @@ function onRowClick(row: any) {
                         <UTooltip :text="lastRunOf(row)!.note"
                                   :disabled="!lastRunOf(row)!.note"
                                   :delay-duration="0">
-                            <UBadge :color="statusColor(lastRunOf(row)!.status)"
-                                    :icon="statusIcon(lastRunOf(row)!.status)">
-                                {{ timeSince(new Date(lastRunOf(row)!.at)) }} ago
-                                <span v-if="lastRunOf(row)!.share"
-                                      class="opacity-75">&middot; {{ lastRunOf(row)!.share }}</span>
-                            </UBadge>
+                            <NuxtLink :to="`/executions/runs/${lastRunOf(row)!.runId}`"
+                                      @click.stop>
+                                <UBadge :color="statusColor(lastRunOf(row)!.status)"
+                                        :icon="statusIcon(lastRunOf(row)!.status)"
+                                        class="hover:opacity-80">
+                                    {{ timeSince(new Date(lastRunOf(row)!.at)) }} ago
+                                    <span v-if="lastRunOf(row)!.share"
+                                          class="opacity-75">&middot; {{ lastRunOf(row)!.share }}</span>
+                                </UBadge>
+                            </NuxtLink>
                         </UTooltip>
                     </div>
                 </template>

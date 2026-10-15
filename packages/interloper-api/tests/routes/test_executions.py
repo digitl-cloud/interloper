@@ -100,6 +100,16 @@ class TestListExecutions:
         ((_, query, _),) = store.listed
         assert query.latest is False
 
+    def test_a_components_executions_are_listed_in_the_asked_order(
+        self, client: TestClient, store: ExecutionStore
+    ) -> None:
+        component_id = uuid4()
+
+        client.get("/executions", params={"component_id": str(component_id), "sort": "-created_at"})
+
+        ((_, query, _),) = store.listed
+        assert (query.component_id, query.sort) == (component_id, "-created_at")
+
     def test_a_row_without_a_component_key_reads_as_empty(self, client: TestClient, store: ExecutionStore) -> None:
         store.rows = [_execution(component_key=None)]
 

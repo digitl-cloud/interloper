@@ -15,6 +15,7 @@ import { rollupState } from '~/composables/nodeStatus'
 export interface LastRun {
     status: string
     at: string
+    runId: string
     share?: string
     note?: string
 }
@@ -164,7 +165,7 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
     function assetLastRun(assetId: string): LastRun | null {
         const execution = options.latestExecutions.value.get(assetId)
         const at = execution && executionAt(execution)
-        return execution && at ? { status: execution.status, at } : null
+        return execution && at ? { status: execution.status, at, runId: execution.run_id } : null
     }
 
     /**
@@ -182,19 +183,23 @@ export function useCollectionRows(options: UseCollectionRowsOptions) {
         const runAt = run && (run.completed_at ?? run.started_at ?? run.created_at)
         if (run && runAt && failedBeforeExecuting(run)
             && executions.every(e => timeOf(executionAt(e)) < timeOf(run.created_at ?? runAt))) {
-            return { status: 'failed', at: runAt, note: 'The run failed before any asset executed' }
+            return { status: 'failed', at: runAt, runId: run.id, note: 'The run failed before any asset executed' }
         }
 
         const state = rollupState(executions.map(e => stateFromExecution(e.status)))
         const carrying = executions.filter(e => e.status === state)
-        const at = carrying.map(executionAt).filter(t => t !== null).sort((a, b) => timeOf(b) - timeOf(a))[0]
-        if (!at) return null
+        const newest = carrying
+            .filter(e => executionAt(e) !== null)
+            .sort((a, b) => timeOf(executionAt(b)) - timeOf(executionAt(a)))[0]
+        if (!newest) return null
+        const at = executionAt(newest)!
 
         const total = source.children.length
-        if (carrying.length === total) return { status: state, at }
+        if (carrying.length === total) return { status: state, at, runId: newest.run_id }
         return {
             status: state,
             at,
+            runId: newest.run_id,
             share: `${carrying.length}/${total}`,
             note: `${statusLabel(state)}: ${carrying.length} of ${total} assets`,
         }

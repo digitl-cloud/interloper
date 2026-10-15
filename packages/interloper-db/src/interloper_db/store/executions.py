@@ -8,7 +8,7 @@ saved, so reading it costs what the rows read cost, whatever the history.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import Engine, and_
@@ -18,15 +18,22 @@ from interloper_db.models import Component, Execution
 from interloper_db.session import session_scope
 from interloper_db.store.page import Page, PageQuery
 
+ExecutionSort = Literal["created_at", "-created_at"]
+"""An executions listing's sort: a column, ``-``-prefixed for descending."""
+
 
 class ExecutionQuery(PageQuery):
-    """Which operation executions a listing reads.
+    """Which operation executions a listing reads, and in which order.
 
     Attributes:
         latest: Keep only each component's newest execution, across runs.
+        component_id: Keep this component's executions.
+        sort: The order; ``None`` lists oldest first.
     """
 
     latest: bool = False
+    component_id: UUID | None = None
+    sort: ExecutionSort | None = None
 
 
 class ExecutionStore:
@@ -41,7 +48,7 @@ class ExecutionStore:
         self._engine = engine
 
     def list(self, org_id: UUID, query: ExecutionQuery, *, run_id: UUID | None = None) -> Page[Execution]:
-        """List an organisation's operation executions, oldest first.
+        """List an organisation's operation executions, oldest first unless *query* sorts them.
 
         Args:
             org_id: Organisation UUID.
@@ -64,7 +71,10 @@ class ExecutionStore:
             statement = select(Execution).where(Execution.org_id == org_id)
             if run_id is not None:
                 statement = statement.where(Execution.run_id == run_id)
-        order = (col(Execution.created_at), col(Execution.component_id))
+        if query.component_id is not None:
+            statement = statement.where(Execution.component_id == query.component_id)
+        created_at = col(Execution.created_at)
+        order = (created_at.desc() if query.sort == "-created_at" else created_at, col(Execution.component_id))
         with session_scope(self._engine) as session:
             return Page.read(session, statement.order_by(*order), query)
 

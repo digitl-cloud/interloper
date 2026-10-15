@@ -67,8 +67,8 @@ def list_executions(
         user: The authenticated user, required to hold at least the viewer role.
         org_id: The active organisation UUID.
         store: The Store instance.
-        query: Whether to keep only each component's newest execution, and the
-            window to read.
+        query: Whether to keep only each component's newest execution or one
+            component's, the order, and the window to read.
 
     Returns:
         The page of executions.

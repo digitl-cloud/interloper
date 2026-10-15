@@ -118,6 +118,31 @@ class TestList:
         assert [row.run_id for row in page.items] == [older]
         assert page.total == 2
 
+    def test_a_components_executions_newest_first(self, store: Store) -> None:
+        t0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        asset, other = uuid4(), uuid4()
+        runs = [uuid4() for _ in range(3)]
+        _seed(
+            [
+                *(
+                    Execution(
+                        run_id=run,
+                        component_id=asset,
+                        org_id=_ORG_ID,
+                        status="success",
+                        created_at=t0 + timedelta(hours=hour),
+                    )
+                    for hour, run in enumerate(runs)
+                ),
+                Execution(run_id=runs[2], component_id=other, org_id=_ORG_ID, status="running", created_at=t0),
+            ]
+        )
+
+        page = store.executions.list(_ORG_ID, ExecutionQuery(component_id=asset, sort="-created_at", limit=2))
+
+        assert [row.run_id for row in page.items] == [runs[2], runs[1]]
+        assert page.total == 3
+
     def test_latest_keeps_the_newest_per_asset(self, store: Store) -> None:
         """One row per asset of the org: its most recent execution, older runs and other orgs dropped."""
         other_org = uuid4()
