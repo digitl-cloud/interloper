@@ -19,6 +19,7 @@ import os
 import re
 import uuid
 from collections.abc import Callable, Collection, Iterable
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -986,6 +987,21 @@ class Serializable(BaseModel):
         lists inherited fields first, which would open every form with what a
         whole kind shares (a source's dataset, a job's retry) rather than with
         what defines the component; forms render in property order.
+
+        Returns:
+            The stripped schema, or ``{}`` when no configurable field remains,
+            as a copy the caller is free to adjust.
+        """
+        return copy.deepcopy(cls._config_schema())
+
+    @classmethod
+    @cache
+    def _config_schema(cls) -> dict[str, Any]:
+        """Build the schema `config_schema` hands out, once per class.
+
+        A class's fields are fixed once it is created, while every catalog
+        build defines its classes again: generating the schema per call would
+        put pydantic's schema generation on every build.
 
         Returns:
             The stripped schema, or ``{}`` when no configurable field remains.

@@ -174,6 +174,27 @@ class TestFieldOrdering:
 
         assert list(Leaf.config_schema()["properties"]) == ["delta", "alpha", "gamma", "name", "beta"]
 
+    def test_config_schema_is_built_once_per_class(self, monkeypatch):
+        class Cached(ShadowingSerializable):
+            gamma: str | None = None
+
+        builds = []
+        generate = Cached.model_json_schema
+        monkeypatch.setattr(Cached, "model_json_schema", lambda: builds.append(True) or generate())
+
+        Cached.config_schema()
+        Cached.config_schema()
+
+        assert len(builds) == 1
+
+    def test_config_schema_hands_out_a_copy(self):
+        class Copied(ShadowingSerializable):
+            gamma: str | None = None
+
+        Copied.config_schema()["properties"].pop("gamma")
+
+        assert "gamma" in Copied.config_schema()["properties"]
+
     def test_spec_roundtrip_with_shadowing_field(self):
         rebuilt = ShadowingSerializable.from_spec(ShadowingSerializable(name="x").to_spec())
         assert type(rebuilt) is ShadowingSerializable
