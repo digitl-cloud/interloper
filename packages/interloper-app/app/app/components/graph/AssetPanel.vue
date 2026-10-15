@@ -4,7 +4,7 @@ import { parseQualifiedKey, requiredUpstreams } from '~/types/catalog'
 import type { ComponentRecord } from '~/types/component'
 import { relationIds } from '~/types/component'
 import type { Page } from '~/composables/api'
-import type { Run } from '~/types/run'
+import type { Execution } from '~/types/execution'
 
 const props = defineProps<{
     asset: ComponentRecord
@@ -145,47 +145,47 @@ function formatType(type?: string, format?: string): string {
 // ── Latest materialization + schedule ───────────────────────────
 const { jobsForSource } = useSchedule()
 
-// Recent runs of the job that materialises this asset (newest first, max 7).
-// Fetched directly to avoid clobbering the runs store.
-const recentRuns = ref<Run[]>([])
+// This asset's own executions, not its job's runs: a run spans every asset of
+// the source, so a retry of one asset would show the others as running.
+const { latestByAssetId } = storeToRefs(useExecutionsStore())
+const recentExecutions = ref<Execution[]>([])
 
-async function fetchRecentRuns() {
-    const job = jobsForSource(props.source)[0]
-    if (!job) {
-        recentRuns.value = []
-        return
-    }
+async function fetchRecentExecutions() {
     try {
-        recentRuns.value = (await apiFetch<Page<Run>>(`/runs?component_id=${job.id}&limit=7`)).items
+        recentExecutions.value = (await apiFetch<Page<Execution>>(`/executions?component_id=${props.asset.id}&sort=-created_at&limit=7`)).items
     }
     catch {
-        recentRuns.value = []
+        recentExecutions.value = []
     }
 }
-watch(() => props.asset.id, fetchRecentRuns, { immediate: true })
+watch(
+    [() => props.asset.id, () => latestByAssetId.value.get(props.asset.id)],
+    fetchRecentExecutions,
+    { immediate: true },
+)
 
-const latestRun = computed(() => recentRuns.value[0])
+const latestExecution = computed(() => recentExecutions.value[0])
 /** Oldest → newest, for the materialization history heatmap. */
-const history = computed(() => [...recentRuns.value].reverse())
+const history = computed(() => [...recentExecutions.value].reverse())
 
 const lastRunText = computed(() => {
-    const at = latestRun.value?.completed_at ?? latestRun.value?.started_at
+    const at = latestExecution.value?.completed_at ?? latestExecution.value?.started_at
     return at ? `${timeSince(new Date(at))} ago` : null
 })
 
 /** Latest-materialization presentation: icon, label, colour. */
 const materialization = computed(() => {
-    switch (latestRun.value?.status) {
+    switch (latestExecution.value?.status) {
         case 'success': return { label: 'Healthy', icon: 'i-lucide-circle-check', color: 'text-[var(--ui-success)]', spin: false }
         case 'failed': return { label: 'Failed', icon: 'i-lucide-circle-x', color: 'text-[var(--ui-error)]', spin: false }
         case 'running': return { label: 'Running', icon: 'i-lucide-loader-circle', color: 'text-[var(--ui-info)]', spin: true }
         case 'canceled': return { label: 'Canceled', icon: 'i-lucide-circle-slash', color: 'text-[var(--ui-warning)]', spin: false }
         case undefined: return { label: 'Not materialized', icon: 'i-lucide-circle-dashed', color: 'text-dimmed', spin: false }
-        default: return { label: statusLabel(latestRun.value!.status), icon: 'i-lucide-circle-dot', color: 'text-muted', spin: false }
+        default: return { label: statusLabel(latestExecution.value!.status), icon: 'i-lucide-circle-dot', color: 'text-muted', spin: false }
     }
 })
 
-/** Job that materialises this asset (the source's first job — recent runs are fetched for it). */
+/** Job that materialises this asset (the source's first job). */
 const jobName = computed(() => jobsForSource(props.source)[0]?.name ?? null)
 
 const materializationMeta = computed(() => {
@@ -199,9 +199,9 @@ function heatColor(status: string): string {
     return color === 'neutral' ? 'var(--ui-text-dimmed)' : `var(--ui-${color})`
 }
 
-function historyTooltip(run: Run): string {
-    const elapsed = formatElapsed(run.started_at, run.completed_at)
-    return `${statusLabel(run.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(run.started_at)}`
+function historyTooltip(execution: Execution): string {
+    const elapsed = formatElapsed(execution.started_at, execution.completed_at)
+    return `${statusLabel(execution.status)}${elapsed ? ` · ${elapsed}` : ''} · ${formatDate(execution.started_at)}`
 }
 
 /** Upstream dependencies as display rows (param → resolved upstream asset). */
@@ -337,11 +337,11 @@ const dependencyRows = computed(() => {
                              class="rounded-md bg-muted p-4">
                             <div class="mb-2.5 text-xs font-medium text-muted">Materialization history</div>
                             <div class="flex gap-1.5">
-                                <div v-for="run in history"
-                                     :key="run.id"
+                                <div v-for="execution in history"
+                                     :key="execution.run_id"
                                      class="size-7 rounded-md"
-                                     :style="{ backgroundColor: heatColor(run.status) }"
-                                     :title="historyTooltip(run)" />
+                                     :style="{ backgroundColor: heatColor(execution.status) }"
+                                     :title="historyTooltip(execution)" />
                             </div>
                         </div>
                     </div>
