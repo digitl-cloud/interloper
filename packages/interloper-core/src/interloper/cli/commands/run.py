@@ -240,7 +240,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     finally:
         if stderr_handler is not None:
-            EventBus.flush(timeout=5.0)
+            EventBus.flush()
             EventBus.unsubscribe(stderr_handler)
 
 

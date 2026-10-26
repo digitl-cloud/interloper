@@ -91,9 +91,11 @@ class TestSubscription:
 
 
 class TestHandlerIsolation:
-    """One broken handler must not silence the others."""
+    """One broken handler must not silence the others, and never fails silently."""
 
-    def test_a_raising_handler_does_not_block_delivery(self, isolated_bus: type[EventBus]) -> None:
+    def test_a_raising_handler_is_logged_and_does_not_block_delivery(
+        self, isolated_bus: type[EventBus], caplog: pytest.LogCaptureFixture
+    ) -> None:
         received: list[Event] = []
 
         def broken(event: Event) -> None:
@@ -102,10 +104,12 @@ class TestHandlerIsolation:
         isolated_bus.subscribe(broken)
         isolated_bus.subscribe(received.append)
 
-        isolated_bus.emit(EventType.RUN_STARTED)
-        isolated_bus.flush(timeout=5.0)
+        with caplog.at_level("ERROR", logger="interloper.events.bus"):
+            isolated_bus.emit(EventType.RUN_STARTED)
+            isolated_bus.flush(timeout=5.0)
 
         assert len(received) == 1
+        assert "handler bug" in caplog.text and "run_started" in caplog.text
 
     def test_the_worker_survives_a_raising_handler(self, isolated_bus: type[EventBus]) -> None:
         received: list[Event] = []
