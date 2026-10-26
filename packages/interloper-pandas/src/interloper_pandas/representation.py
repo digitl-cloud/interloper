@@ -306,11 +306,21 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
         The cast Series.
 
     Raises:
-        SchemaError: If the values cannot be cast to the declared type.
+        SchemaError: If the values cannot be cast to the declared type, or a
+            datetime or date column holds numbers.
     """
     # Nested / repeated / unknown types pass through untouched.
     if spec.repeated or spec.fields is not None or spec.type is Any:
         return series
+
+    # pandas reads a number as nanoseconds since the epoch, so epoch seconds or milliseconds would
+    # land silently in January 1970; the unit has to be declared where the vendor's shape is known
+    is_number = pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series)
+    if spec.type in (datetime.datetime, datetime.date) and is_number and series.notna().any():
+        raise SchemaError(
+            f"Reconciliation failed for column '{spec.name}': it holds numbers, not {spec.type.__name__} values. "
+            "If they are epoch timestamps, declare the column in the normalizer's epoch_columns with its epoch_unit."
+        )
 
     try:
         if spec.type is bool:

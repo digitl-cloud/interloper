@@ -136,6 +136,27 @@ class TestDataFrameReconcile:
         out = DataFrameRepresentation().reconcile(df, TypedSchema)
         assert out["day"].tolist() == [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)]
 
+    def test_numbers_are_refused_for_a_timestamp_column(self):
+        class Stamped(Schema):
+            at: datetime.datetime | None = Field(...)
+
+        # epoch milliseconds read as nanoseconds would land in January 1970
+        df = pd.DataFrame({"at": [1785179053888, None]})
+        with pytest.raises(SchemaError, match="epoch_unit"):
+            DataFrameRepresentation().reconcile(df, Stamped)
+
+    def test_numbers_are_refused_for_a_date_column(self):
+        df = pd.DataFrame({"day": [20261001]})
+        with pytest.raises(SchemaError, match="epoch_unit"):
+            DataFrameRepresentation().reconcile(df, TypedSchema)
+
+    def test_an_all_null_numeric_column_still_casts_to_a_timestamp(self):
+        class Stamped(Schema):
+            at: datetime.datetime | None = Field(...)
+
+        out = DataFrameRepresentation().reconcile(pd.DataFrame({"at": [float("nan"), None]}), Stamped)
+        assert out["at"].isna().all()
+
     def test_timestamps_that_are_not_iso8601_still_fail(self):
         class Stamped(Schema):
             at: datetime.datetime | None = Field(...)
