@@ -119,6 +119,31 @@ class TestDataFrameReconcile:
         assert out["day"].tolist()[0] == datetime.date(2024, 1, 1)
         assert out["name"].tolist()[0] == "x"
 
+    def test_iso8601_timestamps_of_varying_precision_cast(self):
+        class Stamped(Schema):
+            at: datetime.datetime | None = Field(...)
+
+        df = pd.DataFrame({"at": ["2022-02-21T20:00:54Z", "2022-02-21T20:00:54.497Z", None]})
+        out = DataFrameRepresentation().reconcile(df, Stamped)
+        assert out["at"].tolist()[:2] == [
+            pd.Timestamp("2022-02-21T20:00:54", tz="UTC"),
+            pd.Timestamp("2022-02-21T20:00:54.497", tz="UTC"),
+        ]
+        assert pd.isna(out["at"].tolist()[2])
+
+    def test_iso8601_dates_of_varying_precision_cast(self):
+        df = pd.DataFrame({"day": ["2024-01-01T00:00:00Z", "2024-01-02T00:00:00.5Z"]})
+        out = DataFrameRepresentation().reconcile(df, TypedSchema)
+        assert out["day"].tolist() == [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)]
+
+    def test_timestamps_that_are_not_iso8601_still_fail(self):
+        class Stamped(Schema):
+            at: datetime.datetime | None = Field(...)
+
+        df = pd.DataFrame({"at": ["2022-02-21T20:00:54Z", "not a timestamp"]})
+        with pytest.raises(SchemaError, match="cannot cast"):
+            DataFrameRepresentation().reconcile(df, Stamped)
+
     def test_missing_nullable_column_added_and_extra_dropped(self):
         out = DataFrameRepresentation().reconcile(pd.DataFrame({"id": [1], "extra": ["drop"]}), TypedSchema)
         assert list(out.columns) == ["id", "cost", "day", "name"]

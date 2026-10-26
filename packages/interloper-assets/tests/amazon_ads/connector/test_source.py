@@ -331,6 +331,18 @@ class TestEntities:
             child: Any = next(a for a in DAGSpec(**spec_json).reconstruct().operations if type(a).key == key)
             assert type(child.normalizer).__name__ == "SponsoredDisplayEntityNormalizer", key
 
+    def test_products_lifecycle_times_conform_whatever_their_precision(self):
+        # Sponsored Products sends milliseconds only when they are not zero
+        rows = [
+            {"campaignId": "1", "extendedData": {"creationDateTime": "2022-02-21T20:00:54Z"}, "date": DAY},
+            {"campaignId": "2", "extendedData": {"creationDateTime": "2022-02-21T20:00:54.497Z"}, "date": DAY},
+        ]
+        out = _conform("products_campaigns", rows, schemas.ProductsCampaigns)
+        assert out["extended_data_creation_date_time"].tolist() == [
+            pd.Timestamp("2022-02-21T20:00:54", tz="UTC"),
+            pd.Timestamp("2022-02-21T20:00:54.497", tz="UTC"),
+        ]
+
     def test_a_products_campaign_conforms_with_its_nested_budget(self):
         row = {
             "campaignId": "1",
