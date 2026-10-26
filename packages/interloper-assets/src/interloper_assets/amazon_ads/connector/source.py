@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx2
 import interloper as il
+import pandas as pd
 import tenacity as tc
 from interloper_pandas import DataFrameNormalizer
 
@@ -157,6 +158,115 @@ def request_and_download_report(
     return report
 
 
+def _list_entities(
+    connection: AmazonAdsConnection, profile_id: str, path: str, media_type: str, key: str
+) -> list[dict]:
+    """List every Sponsored Products or Sponsored Brands entity of a list call, following its next token.
+
+    Used by the products and brands campaigns and ad groups assets. Their list
+    calls page through a ``nextToken`` in the POST body, which the client's
+    GET paginators cannot drive. Archived entities are asked for explicitly,
+    since the reports still carry their history, and the extended data adds
+    the serving status and lifecycle times.
+
+    Args:
+        connection: The Amazon Ads connection.
+        profile_id: The profile whose entities are listed, sent as the scope header.
+        path: The list call's path, such as ``/sp/campaigns/list``.
+        media_type: The resource's vendor media type, sent as both content type and accept.
+        key: The response key holding the page's entities, ``campaigns`` or ``adGroups``.
+
+    Returns:
+        Every entity, in the order the API returned them.
+    """
+    headers = {"Amazon-Advertising-API-Scope": profile_id, "Content-Type": media_type, "Accept": media_type}
+    body: dict[str, Any] = {
+        "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
+        "includeExtendedDataFields": True,
+        "maxResults": 100,
+    }
+    rows: list[dict] = []
+    while True:
+        response = connection.client.post(path, headers=headers, json=body)
+        response.raise_for_status()
+        page = response.json()
+        rows.extend(page.get(key, []))
+        if not page.get("nextToken"):
+            return rows
+        body = {**body, "nextToken": page["nextToken"]}
+
+
+def _list_display(connection: AmazonAdsConnection, profile_id: str, path: str) -> list[dict]:
+    """List every Sponsored Display entity of an extended list call, by offset until an empty page.
+
+    Used by the display campaigns and ad groups assets. The extended calls add
+    the serving status and lifecycle times to the plain list.
+
+    Args:
+        connection: The Amazon Ads connection.
+        profile_id: The profile whose entities are listed, sent as the scope header.
+        path: The extended list call's path, such as ``/sd/campaigns/extended``.
+
+    Returns:
+        Every entity, in the order the API returned them.
+    """
+    pages = connection.client.paginate(
+        path,
+        il.OffsetPaginator(limit=100, offset_param="startIndex", limit_param="count"),
+        params={"stateFilter": "enabled,paused,archived"},
+        headers={"Amazon-Advertising-API-Scope": profile_id},
+    )
+    return [row for page in pages for row in page]
+
+
+class SponsoredDisplayEntityNormalizer(DataFrameNormalizer):
+    """The source's normalization, plus Sponsored Display's compact ``YYYYMMDD`` schedule dates.
+
+    Sponsored Display sends ``startDate``/``endDate`` as ``20261001`` where the
+    other ad products send ``2026-10-01``. Strict validation reads a digits-only
+    string as a Unix timestamp and rejects it as a date, so the two columns are
+    parsed here with their explicit format; a value in any other format fails.
+    """
+
+    def normalize(self, data: Any) -> pd.DataFrame:
+        """Normalize as the source does, then parse the schedule dates.
+
+        Args:
+            data: The rows as the API returned them.
+
+        Returns:
+            The normalized frame, ``start_date`` and ``end_date`` as dates.
+        """
+        df = super().normalize(data)
+        for column in ("start_date", "end_date"):
+            if column in df.columns:
+                df[column] = pd.to_datetime(df[column], format="%Y%m%d").dt.date
+        return df
+
+
+_DISPLAY_ENTITY_NORMALIZER = SponsoredDisplayEntityNormalizer(snake_case_digits=True, flatten_max_level=1)
+
+
+def _snapshot(rows: list[dict], day: dt.date) -> list[dict]:
+    """Stamp entity rows with the snapshot day and keep their free-form tags whole.
+
+    Used by every campaigns and ad groups asset. ``tags`` is an arbitrary
+    key/value map that the source normalizer would flatten into one column per
+    advertiser key, so it is kept as one JSON string under the vendor's name.
+
+    Args:
+        rows: The entities as the API returned them.
+        day: The partition day.
+
+    Returns:
+        The rows with ``date`` set and ``tags``, when present, as JSON.
+    """
+    return [
+        {**row, **({"tags": json.dumps(row["tags"])} if row.get("tags") is not None else {}), "date": day}
+        for row in rows
+    ]
+
+
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
@@ -190,10 +300,92 @@ class AmazonAds(il.Source):
         tags=["Entity"],
     )
     def profiles(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Advertising profiles associated with the account."""
+        """The advertising profile with its marketplace, currency, timezone and account."""
         response = self.connection.client.get("/v2/profiles")
         response.raise_for_status()
-        return [{**row, "date": context.partition_date} for row in response.json()]
+        # the call lists every profile the credentials see; each source snapshots its own
+        own = [row for row in response.json() if str(row["profileId"]) == self.profile_id]
+        return [{**row, "date": context.partition_date} for row in own]
+
+    @il.asset(
+        schema=schemas.ProductsCampaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def products_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Products campaigns with their schedule, budget, bidding and serving status."""
+        rows = _list_entities(
+            self.connection, self.profile_id, "/sp/campaigns/list", "application/vnd.spCampaign.v3+json", "campaigns"
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.ProductsAdGroups,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def products_ad_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Products ad groups with their default bid and serving status."""
+        rows = _list_entities(
+            self.connection, self.profile_id, "/sp/adGroups/list", "application/vnd.spAdGroup.v3+json", "adGroups"
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.BrandsCampaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def brands_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Brands campaigns with their schedule, budget, bidding and serving status."""
+        rows = _list_entities(
+            self.connection,
+            self.profile_id,
+            "/sb/v4/campaigns/list",
+            "application/vnd.sbcampaignresource.v4+json",
+            "campaigns",
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.BrandsAdGroups,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def brands_ad_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Brands ad groups with their serving status."""
+        rows = _list_entities(
+            self.connection,
+            self.profile_id,
+            "/sb/v4/adGroups/list",
+            "application/vnd.sbadgroupresource.v4+json",
+            "adGroups",
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.DisplayCampaigns,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_DISPLAY_ENTITY_NORMALIZER,
+    )
+    def display_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Display campaigns with their schedule, budget, tactic and serving status."""
+        return _snapshot(
+            _list_display(self.connection, self.profile_id, "/sd/campaigns/extended"), context.partition_date
+        )
+
+    @il.asset(
+        schema=schemas.DisplayAdGroups,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_DISPLAY_ENTITY_NORMALIZER,
+    )
+    def display_ad_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Display ad groups with their default bid, tactic and serving status."""
+        return _snapshot(
+            _list_display(self.connection, self.profile_id, "/sd/adGroups/extended"), context.partition_date
+        )
 
     # --- Sponsored Products ---
 
@@ -661,6 +853,7 @@ class AmazonAds(il.Source):
     # --- Sponsored Television ---
 
     @il.asset(
+        schema=schemas.TelevisionCampaignsStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
@@ -683,6 +876,7 @@ class AmazonAds(il.Source):
         return data
 
     @il.asset(
+        schema=schemas.TelevisionTargetingStats,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Report"],
     )
