@@ -125,6 +125,13 @@ class Run(SQLModel, table=True):
     ``scheduled_for`` is the earliest instant the queue may claim the run,
     which is how a retry's backoff is served without a second status.
 
+    ``error`` is why the run did not succeed as a run: the fault its runner
+    reported, or the reason the platform ended it (the reaper, a failed
+    dispatch, an exhausted quota). It is ``None`` for a success, a plain
+    cancel, or a run that failed only because operations failed, whose
+    reasons are on their own verdicts. Every ending writes it, so no reader
+    looks for it in the run's events.
+
     ``hooks_evaluated_at`` is the hook evaluator's cursor: a terminal run is
     swept until it is stamped, however long it took to commit and whatever
     the scheduler was doing at the time.
@@ -187,6 +194,7 @@ class Run(SQLModel, table=True):
     heartbeat_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     completed_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     hooks_evaluated_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
+    error: str | None = None
     created_at: datetime | None = timestamp_column()
 
     backfill: Backfill | None = Relationship(back_populates="runs")
@@ -382,18 +390,18 @@ class Event(SQLModel, table=True):
             run_id=run_id,
             event_type=event.type.value,
             component_id=UUID(str(component_id)) if component_id else None,
-            component_kind=cls._sanitize_text(metadata.get("component_kind")),
-            component_key=cls._sanitize_text(metadata.get("component_key")),
-            error=cls._sanitize_text(metadata.get("error")),
-            traceback=cls._sanitize_text(metadata.get("traceback")),
-            message=cls._sanitize_text(metadata.get("message")),
-            level=cls._sanitize_text(metadata.get("level")),
+            component_kind=cls.sanitize_text(metadata.get("component_kind")),
+            component_key=cls.sanitize_text(metadata.get("component_key")),
+            error=cls.sanitize_text(metadata.get("error")),
+            traceback=cls.sanitize_text(metadata.get("traceback")),
+            message=cls.sanitize_text(metadata.get("message")),
+            level=cls.sanitize_text(metadata.get("level")),
             data=cls._sanitize_data(data),
             timestamp=event.timestamp,
         )
 
     @staticmethod
-    def _sanitize_text(value: object, *, max_len: int = MAX_EVENT_TEXT) -> str | None:
+    def sanitize_text(value: object, *, max_len: int = MAX_EVENT_TEXT) -> str | None:
         """Make a free-text event field safe to persist.
 
         Postgres ``text`` columns cannot store NUL bytes: a single one makes

@@ -59,12 +59,15 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
         engine_module._engine = None
 
 
-def _terminal_run(store: Store, component_id: UUID, *, status: RunStatus = RunStatus.SUCCESS) -> Run:
+def _terminal_run(
+    store: Store, component_id: UUID, *, status: RunStatus = RunStatus.SUCCESS, error: str | None = None
+) -> Run:
     run = store.runs.create(_ORG, component_id=component_id, partition_key="2026-07-06")
     with Session(engine_module.get_engine()) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
         db_run.status = status
+        db_run.error = error
         db_run.completed_at = dt.datetime.now(dt.timezone.utc)
         session.add(db_run)
         session.commit()
@@ -88,22 +91,6 @@ def _capture_posts(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
     monkeypatch.setattr(httpx2, "post", fake_post)
     return payloads
-
-
-def _record_run_failure(run_id: UUID, error: str) -> None:
-    """Insert the ``run_failed`` event row that carries a run's error text."""
-    with Session(engine_module.get_engine()) as session:
-        session.add(
-            EventRow(
-                id=uuid4(),
-                org_id=_ORG,
-                run_id=run_id,
-                event_type="run_failed",
-                error=error,
-                timestamp=dt.datetime.now(dt.timezone.utc),
-            )
-        )
-        session.commit()
 
 
 def _sweep(store: Store) -> HookController:
@@ -394,7 +381,7 @@ class TestHookEvaluation:
             relations={"watches": [source.id]},
         )
         run = store.runs.create(organisation.id, component_id=source.id)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         _sweep(store)
 
@@ -438,9 +425,7 @@ class TestHookEvaluation:
             config={"events": ["run_failed"], "url": "https://example.test/n"},
             relations={"watches": [source.id]},
         )
-        run = _terminal_run(store, source.id, status=RunStatus.FAILED)
-        # The error text lives on the run's event rows, not the run itself.
-        _record_run_failure(run.id, "HTTPStatusError: 429 Too Many Requests")
+        _terminal_run(store, source.id, status=RunStatus.FAILED, error="HTTPStatusError: 429 Too Many Requests")
 
         _sweep(store)
 
@@ -542,7 +527,7 @@ class TestVerdictGating:
         job = self._job(max_attempts=2, delay=0)
         self._watching_hook(store, job)
         run = store.runs.create(_ORG, component_id=job)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         _sweep(store)
 
@@ -555,7 +540,7 @@ class TestVerdictGating:
         job = self._job(max_attempts=2, delay=0)
         self._watching_hook(store, job)
         run = store.runs.create(_ORG, component_id=job)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         _sweep(store)
 
@@ -567,7 +552,7 @@ class TestVerdictGating:
         job = self._job(max_attempts=1)
         self._watching_hook(store, job)
         run = store.runs.create(_ORG, component_id=job)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         _sweep(store)
 
@@ -580,9 +565,9 @@ class TestVerdictGating:
         job = self._job(max_attempts=2, delay=0)
         self._watching_hook(store, job)
         first = store.runs.create(_ORG, component_id=job)
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
         successor = self._successor(first.id)
-        store.runs.complete(successor.id, success=True)
+        store.runs.complete(successor.id)
 
         _sweep(store)
 
@@ -594,7 +579,7 @@ class TestVerdictGating:
         job = self._job(max_attempts=1)
         self._watching_hook(store, job)
         run = store.runs.create(_ORG, component_id=job)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         _sweep(store)
 
@@ -715,10 +700,9 @@ class TestBackfillEvents:
         self._hook(store, job, "backfill_failed")
         backfill = self._backfill(store, job)
         runs = self._runs(backfill.id)
-        store.runs.complete(runs["2026-09-01"].id, success=True)
-        store.runs.complete(runs["2026-09-02"].id, success=False)
-        _record_run_failure(runs["2026-09-02"].id, "rate limited")
-        store.runs.complete(runs["2026-09-03"].id, success=False)
+        store.runs.complete(runs["2026-09-01"].id)
+        store.runs.fail(runs["2026-09-02"].id, "rate limited")
+        store.runs.fail(runs["2026-09-03"].id, "failed")
 
         _sweep(store)
         _sweep(store)
@@ -732,7 +716,7 @@ class TestBackfillEvents:
         assert payload["metadata"]["organisation_name"] is None
         assert payload["metadata"]["partitions"] == 3
         assert payload["metadata"]["counts"] == {"success": 1, "failed": 2}
-        assert payload["metadata"]["failed_partitions"] == [["2026-09-03", None], ["2026-09-02", "rate limited"]]
+        assert payload["metadata"]["failed_partitions"] == [["2026-09-03", "failed"], ["2026-09-02", "rate limited"]]
         assert self._backfill_evaluated_at(backfill.id) is not None
 
     def test_a_backfill_another_scheduler_holds_is_left_to_it(self, store: Store, monkeypatch: pytest.MonkeyPatch):
@@ -741,7 +725,7 @@ class TestBackfillEvents:
         self._hook(store, job, "backfill_completed")
         backfill = self._backfill(store, job, days=1)
         for run in self._runs(backfill.id).values():
-            store.runs.complete(run.id, success=True)
+            store.runs.complete(run.id)
         monkeypatch.setattr(store.backfills, "claim_hooks", lambda backfill_id: False)
 
         _sweep(store)
@@ -755,7 +739,7 @@ class TestBackfillEvents:
         self._hook(store, job, "backfill_completed")
         backfill = self._backfill(store, job, days=2)
         for run in self._runs(backfill.id).values():
-            store.runs.complete(run.id, success=True)
+            store.runs.complete(run.id)
 
         _sweep(store)
 
@@ -769,7 +753,7 @@ class TestBackfillEvents:
         self._hook(store, job, "run_failed")
         backfill = self._backfill(store, job, days=2)
         for run in self._runs(backfill.id).values():
-            store.runs.complete(run.id, success=False)
+            store.runs.fail(run.id, "failed")
 
         _sweep(store)
 
@@ -783,14 +767,14 @@ class TestBackfillEvents:
         self._hook(store, job, "backfill_completed", "backfill_failed")
         backfill = self._backfill(store, job, days=1)
         first = self._runs(backfill.id)["2026-09-01"]
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
 
         _sweep(store)
         assert payloads == []
 
         with Session(engine_module.get_engine()) as session:
             successor = session.exec(select(Run).where(Run.retry_of == first.id)).one()
-        store.runs.complete(successor.id, success=True)
+        store.runs.complete(successor.id)
         _sweep(store)
 
         assert [payload["event_type"] for payload in payloads] == ["backfill_completed"]
@@ -811,7 +795,7 @@ class TestBackfillEvents:
         )
         backfill = self._backfill(store, job, days=3)
         for run in self._runs(backfill.id).values():
-            store.runs.complete(run.id, success=True)
+            store.runs.complete(run.id)
 
         _sweep(store)
 
@@ -876,7 +860,7 @@ class TestSubjectUrl:
         )
         with Session(engine_module.get_engine()) as session:
             for run in session.exec(select(Run).where(Run.backfill_id == backfill.id)).all():
-                store.runs.complete(run.id, success=True)
+                store.runs.complete(run.id)
 
         _sweep(store)
 
@@ -899,7 +883,7 @@ class TestEvaluateGuards:
 
     def test_a_run_without_a_target_is_skipped(self, store: Store):
         run = store.runs.create(_ORG)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         HookController(store=store, poll_interval=999)._evaluate(store.runs.get(run.id))
 

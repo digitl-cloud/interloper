@@ -16,7 +16,7 @@ from interloper_db.models import Event as EventRow
 from interloper_db.store import UsageDrift
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from interloper_scheduler.launcher import Launcher
 from interloper_scheduler.reaper import Reaper
@@ -93,9 +93,7 @@ def _status(store: Store, run_id: UUID) -> str:
 
 
 def _error(store: Store, run_id: UUID) -> str | None:
-    with Session(store.engine) as session:
-        failure = select(EventRow.error).where(EventRow.run_id == run_id, EventRow.event_type == "run_failed")
-        return session.exec(failure).one()
+    return store.runs.get(run_id).error
 
 
 class TestRules:
@@ -163,30 +161,6 @@ class TestDiagnosis:
 
         assert f"Could not diagnose run {run_id}" in caplog.text
         assert _error(store, run_id) == "Run did not start within 600s"
-
-
-class TestTargetContext:
-    def test_reaped_run_event_carries_target_context_in_data(self, store: Store) -> None:
-        with Session(store.engine) as session:
-            target = Component(org_id=_ORG, kind="job", key="nightly", name="Nightly sync")
-            session.add(target)
-            session.commit()
-            target_id = target.id
-        run_id = _run(store, RunStatus.DISPATCHED, component_id=target_id, heartbeat_at=_ago(1200))
-
-        assert Reaper(store=store)._reap() == 1
-
-        with Session(store.engine) as session:
-            reaped_event = session.exec(
-                select(EventRow).where(EventRow.run_id == run_id, EventRow.event_type == "run_failed")
-            ).one()
-            assert reaped_event.data == {
-                "attempt": 1,
-                "target_id": str(target_id),
-                "target_kind": "job",
-                "target_key": "nightly",
-                "target_name": "Nightly sync",
-            }
 
 
 class TestTick:
@@ -303,15 +277,15 @@ class TestFailureReportingIsBestEffort:
     def test_an_unrecordable_reason_leaves_the_run_for_the_next_sweep(
         self, store: Store, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        # The reason and the verdict commit together, so a run is never failed
-        # without saying why; one the reaper could not record stays as it was
-        # and is reaped again on the next tick.
+        # A run's verdict and its operations' verdicts commit together; one
+        # the reaper could not record stays as it was and is reaped again on
+        # the next tick.
         run_id = _run(store, RunStatus.RUNNING, heartbeat_at=_ago(7200))
 
-        def broken_save(event: il.Event, org_id: UUID, run_id: UUID | None = None) -> None:
+        def broken_close(db_run: Run, *, error: str | None) -> int:
             raise RuntimeError("events table unreachable")
 
-        monkeypatch.setattr(store.events, "save", broken_save)
+        monkeypatch.setattr(store.events, "close_operations", broken_close)
 
         with caplog.at_level("ERROR", logger="interloper_scheduler.reaper"):
             assert Reaper(store=store)._reap() == 0

@@ -71,7 +71,7 @@ def _failed_run_with_many_events(org_id: Any, *, early: int = 150, error: str = 
     events += [
         _event(org_id, run_id, "asset_data_failed", early + 1, error=error),
         _event(org_id, run_id, "operation_failed", early + 2, error=error, traceback="Traceback…\nboom"),
-        _event(org_id, run_id, "run_failed", early + 3, error="Run failed (1 operation(s) failed)"),
+        _event(org_id, run_id, "run_failed", early + 3, message="Run failed (1 operation(s) failed)"),
     ]
     with Session(engine_module.get_engine()) as session:
         session.add(run)
@@ -90,8 +90,9 @@ class TestListFailures:
         assert result.status == "success"
         assert result.total == 1
         failure = result.failures[0]
-        assert failure.error_count == 2
-        assert [e.error for e in failure.errors] == ["HTTPStatusError: 429", "Run failed (1 operation(s) failed)"]
+        assert failure.run.error is None
+        assert failure.error_count == 1
+        assert [e.error for e in failure.errors] == ["HTTPStatusError: 429"]
 
     def test_errors_are_clipped_but_counted_whole(self, ctx: ToolkitContext):
         _failed_run_with_many_events(ctx.org_id, early=0, error="x" * 2_000)
@@ -133,8 +134,8 @@ class TestRunEvents:
         assert errors.status == "success"
         assert typed.status == "success"
         assert (page.count, page.total) == (8, 153)
-        assert [e.event_type for e in errors.events] == ["asset_data_failed", "operation_failed", "run_failed"]
-        assert errors.total == 3
+        assert [e.event_type for e in errors.events] == ["asset_data_failed", "operation_failed"]
+        assert errors.total == 2
         assert "traceback" not in errors.events[1].model_dump()
         assert typed.total == 1
 
@@ -199,7 +200,14 @@ class TestErrorBreakdown:
     def _seed(self, ctx: ToolkitContext) -> tuple[Any, Any]:
         job = Component(org_id=ctx.org_id, kind="job", key="amazon", name="Amazon SP")
         job_id = job.id
-        run = Run(id=uuid4(), org_id=ctx.org_id, component_id=job_id, status="failed")
+        run = Run(
+            id=uuid4(),
+            org_id=ctx.org_id,
+            component_id=job_id,
+            status="failed",
+            error="RuntimeError: destination unreachable",
+            completed_at=datetime.datetime(2026, 9, 29, 4, 0, 5, tzinfo=datetime.timezone.utc),
+        )
         run_id = run.id
         error = HTTPX = (
             "HTTPStatusError: Client error '429 Too Many Requests' for url "
@@ -210,7 +218,6 @@ class TestErrorBreakdown:
             _event(ctx.org_id, run_id, "operation_retried", 2, error=error),
             _event(ctx.org_id, run_id, "asset_data_failed", 3, error=HTTPX.replace("/1'", "/2'")),
             _event(ctx.org_id, run_id, "operation_failed", 4, error=HTTPX.replace("/1'", "/2'")),
-            _event(ctx.org_id, run_id, "run_failed", 5, error="Run failed (1 operation(s) failed)"),
         ]
         with Session(engine_module.get_engine()) as session:
             session.add_all([job, run])
@@ -360,9 +367,9 @@ class TestWrites:
     def test_retries_a_failed_run_as_the_next_attempt(self, ctx: ToolkitContext, store: Store):
         job = self._job(ctx, store)
         failed = store.runs.create(ctx.org_id, component_id=job.id)
-        store.runs.complete(failed.id, success=False)
+        store.runs.fail(failed.id, "failed")
         fine = store.runs.create(ctx.org_id, component_id=job.id)
-        store.runs.complete(fine.id, success=True)
+        store.runs.complete(fine.id)
 
         result = scheduling.retry_run(ctx, str(failed.id), scope="failed")
         not_failed = scheduling.retry_run(ctx, str(fine.id))
@@ -399,7 +406,7 @@ class TestWrites:
         viewer = dataclasses.replace(ctx, role="viewer")
         theirs = uuid4()
         run = store.runs.create(theirs)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
         backfill = store.backfills.create(
             theirs, component_id=_job_id(theirs), start_key="2026-07-01", end_key="2026-07-01"
         )

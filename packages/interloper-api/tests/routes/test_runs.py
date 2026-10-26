@@ -50,6 +50,7 @@ def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
         attempt=1,
         retry_scope=None,
         scheduled_for=None,
+        error=None,
         started_at=None,
         completed_at=None,
         created_at=None,

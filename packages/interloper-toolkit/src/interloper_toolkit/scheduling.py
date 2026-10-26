@@ -48,13 +48,13 @@ from interloper_toolkit.models import (
 from interloper_toolkit.stats import max_concurrent, window
 from interloper_toolkit.utils import clip
 
-FAILURE_EVENT_TYPES = ("operation_failed", "run_failed")
-"""The event types that record a failure's verdict once.
+FAILURE_EVENT_TYPES = ("operation_failed",)
+"""The event types that record an operation failure's verdict once.
 
 A failed attempt also writes its error on ``asset_data_failed`` /
 ``dest_write_failed``, so reading every event carrying an error counts each
-failure twice; these two are the verdicts, and ``operation_retried`` the
-attempts that were not final.
+failure twice; ``operation_failed`` is the verdict, and ``operation_retried``
+the attempts that were not final. A run's own failure is ``Run.error``.
 """
 
 _ERROR_TEXT_LIMIT = 1_000
@@ -297,16 +297,17 @@ def get_event(ctx: ToolkitContext, event_id: str) -> EventDetail | ToolError:
 
 
 def list_failures(ctx: ToolkitContext, limit: int = 10, offset: int = 0) -> FailureList | ToolError:
-    """List recent failed runs, newest first, with their error events.
+    """List recent failed runs, newest first, with their own error and their operations' error events.
 
     Args:
         limit: Maximum number of failed runs to return (default 10).
         offset: Number of failed runs to skip, for paging past the first page.
 
-    Returns the page of failed runs, each with its error count and the first
-    50 of its errors (operation and run failures, text clipped to 1k
-    characters; get_event has the full text), plus the total number of
-    failed runs.
+    Returns the page of failed runs, each with its own error (``run.error``:
+    the fault or the reason the platform ended it, empty when only operations
+    failed), its operation error count and the first 50 of those errors (text
+    clipped to 1k characters; get_event has the full text), plus the total
+    number of failed runs.
     """
     try:
         failed_runs = ctx.store.runs.failures(ctx.org_id, PageQuery(limit=limit, offset=offset))

@@ -163,21 +163,6 @@ def _runs_of(store: Store, backfill_id: UUID) -> list[Run]:
         return list(session.exec(select(Run).where(Run.backfill_id == backfill_id)).all())
 
 
-def _record_run_failure(store: Store, run_id: UUID, error: str) -> None:
-    with Session(store.engine) as session:
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=_ORG_ID,
-                run_id=run_id,
-                event_type="run_failed",
-                error=error,
-                timestamp=dt.datetime.now(dt.timezone.utc),
-            )
-        )
-        session.commit()
-
-
 def _partition_statuses(store: Store, backfill_id: UUID) -> dict[str, str]:
     with Session(store.engine) as session:
         runs = session.exec(select(Run).where(Run.backfill_id == backfill_id)).all()
@@ -254,7 +239,7 @@ class TestCreate:
         assert _partition_statuses(store, backfill.id)["2026-01-04"] == "queued"
 
         dispatched = _mark_dispatched(store, backfill.id)
-        store.runs.complete(dispatched, success=True)
+        store.runs.complete(dispatched)
 
         statuses = _partition_statuses(store, backfill.id)
         assert statuses["2026-01-04"] == "success"
@@ -398,7 +383,7 @@ class TestCancel:
         dispatched_id = _mark_dispatched(store, backfill.id)
         store.backfills.cancel(backfill.id, in_flight=False)
 
-        completed = store.runs.complete(dispatched_id, success=True)
+        completed = store.runs.complete(dispatched_id)
 
         assert completed.status == "success"
         assert store.backfills.get(backfill.id).status == "canceled"
@@ -468,8 +453,8 @@ class TestRunCounts:
         second = _backfill(store, days=1, concurrency=1)
         unrequested = _backfill(store, days=1, concurrency=1)
         queued = [run_id for run_id, status in _run_statuses(store, first.id).items() if status == "queued"]
-        store.runs.complete(queued[0], success=True)
-        store.runs.complete(queued[1], success=False)
+        store.runs.complete(queued[0])
+        store.runs.fail(queued[1], "failed")
 
         counts = store.backfills.run_counts([first.id, second.id])
 
@@ -508,12 +493,11 @@ class TestFailedPartitions:
     def test_reads_the_latest_attempt_and_its_error(self, store: Store):
         backfill = _backfill(store, days=3, concurrency=3)
         by_partition = {run.partition_key: run for run in _runs_of(store, backfill.id)}
-        store.runs.complete(by_partition["2026-01-01"].id, success=True)
+        store.runs.complete(by_partition["2026-01-01"].id)
         failed = by_partition["2026-01-02"]
-        store.runs.complete(failed.id, success=False)
-        _record_run_failure(store, failed.id, "boom")
+        store.runs.fail(failed.id, "boom")
         healed = by_partition["2026-01-03"]
-        store.runs.complete(healed.id, success=False)
+        store.runs.fail(healed.id, "failed")
         with Session(store.engine) as session:
             session.add(
                 Run(
@@ -532,10 +516,15 @@ class TestFailedPartitions:
 
     def test_lists_newest_first_and_tolerates_a_missing_error(self, store: Store):
         backfill = _backfill(store, days=2, concurrency=2)
-        for run in _runs_of(store, backfill.id):
-            store.runs.complete(run.id, success=False)
+        by_partition = {run.partition_key: run for run in _runs_of(store, backfill.id)}
+        store.runs.fail(by_partition["2026-01-01"].id, "boom")
+        with Session(store.engine) as session:
+            operations_failed = session.get_one(Run, by_partition["2026-01-02"].id)
+            operations_failed.status = RunStatus.FAILED
+            session.add(operations_failed)
+            session.commit()
 
-        assert store.backfills.failed_partitions(backfill.id) == [("2026-01-02", None), ("2026-01-01", None)]
+        assert store.backfills.failed_partitions(backfill.id) == [("2026-01-02", None), ("2026-01-01", "boom")]
 
 
 class TestProgression:
@@ -550,7 +539,7 @@ class TestProgression:
             concurrency=2,
         )
         for run_id in _run_statuses(store, backfill.id):
-            store.runs.complete(run_id, success=True)
+            store.runs.complete(run_id)
 
         assert store.backfills.get(backfill.id).status == "success"
 
@@ -564,8 +553,8 @@ class TestProgression:
             fail_fast=False,
         )
         run_ids = list(_run_statuses(store, backfill.id))
-        store.runs.complete(run_ids[0], success=False)
-        store.runs.complete(run_ids[1], success=True)
+        store.runs.fail(run_ids[0], "failed")
+        store.runs.complete(run_ids[1])
 
         finished = store.backfills.get(backfill.id)
         assert finished.status == "failed"
@@ -583,7 +572,7 @@ class TestProgression:
         )
         first = next(run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued")
 
-        store.runs.complete(first, success=False)
+        store.runs.fail(first, "failed")
 
         assert store.backfills.get(backfill.id).status == "failed"
         assert "pending" not in _run_statuses(store, backfill.id).values()
@@ -598,7 +587,7 @@ class TestProgression:
         )
         first = next(run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued")
 
-        store.runs.complete(first, success=True)
+        store.runs.complete(first)
 
         statuses = _partition_statuses(store, backfill.id)
         assert statuses["2026-01-04"] == "success"
@@ -618,7 +607,7 @@ class TestProgression:
         _mark_dispatched(store, backfill.id)
         second = _mark_dispatched(store, backfill.id)
 
-        store.runs.complete(second, success=True)
+        store.runs.complete(second)
 
         statuses = _partition_statuses(store, backfill.id)
         assert list(statuses.values()).count("queued") == 1
@@ -635,14 +624,14 @@ class TestProgression:
         _mark_dispatched(store, backfill.id)
         second = _mark_dispatched(store, backfill.id)
 
-        store.runs.complete(second, success=True)
+        store.runs.complete(second)
 
         assert store.backfills.get(backfill.id).status == "running"
 
     def test_a_completion_outside_any_backfill_is_a_no_op(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         assert store.runs.get(run.id).status == "success"
 
@@ -665,8 +654,8 @@ class TestStacks:
         target = _job_with_retry(store, max_attempts=2, delay=0)
         backfill_id, first = self._single_partition_backfill(store, target)
 
-        store.runs.complete(first.id, success=False)
-        store.runs.complete(self._successor(store, first.id).id, success=True)
+        store.runs.fail(first.id, "failed")
+        store.runs.complete(self._successor(store, first.id).id)
 
         assert store.backfills.get(backfill_id).status == "success"
 
@@ -674,8 +663,8 @@ class TestStacks:
         target = _job_with_retry(store, max_attempts=2, delay=0)
         backfill_id, first = self._single_partition_backfill(store, target)
 
-        store.runs.complete(first.id, success=False)
-        store.runs.complete(self._successor(store, first.id).id, success=False)
+        store.runs.fail(first.id, "failed")
+        store.runs.fail(self._successor(store, first.id).id, "failed")
 
         assert store.backfills.get(backfill_id).status == "failed"
 
@@ -683,7 +672,7 @@ class TestStacks:
         target = _job_with_retry(store, max_attempts=2, delay=0)
         backfill_id, first = self._single_partition_backfill(store, target)
 
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
 
         # The successor is queued, so the batch still has work in flight.
         assert store.backfills.get(backfill_id).status == "running"
@@ -701,7 +690,11 @@ def _lifecycle(store: Store, backfill_id: UUID) -> list[Event]:
     """
     with Session(store.engine) as session:
         events = session.exec(select(Event).order_by(col(Event.timestamp).asc())).all()
-        return [event for event in events if (event.data or {}).get("backfill_id") == str(backfill_id)]
+        return [
+            event
+            for event in events
+            if event.event_type.startswith("backfill_") and (event.data or {}).get("backfill_id") == str(backfill_id)
+        ]
 
 
 class TestLifecycleEvents:
@@ -722,7 +715,7 @@ class TestLifecycleEvents:
     def test_finishing_records_completed(self, store: Store):
         backfill = _backfill(store, days=2, concurrency=2)
         for run_id in _run_statuses(store, backfill.id):
-            store.runs.complete(run_id, success=True)
+            store.runs.complete(run_id)
 
         assert [event.event_type for event in _lifecycle(store, backfill.id)] == [
             "backfill_started",
@@ -732,8 +725,8 @@ class TestLifecycleEvents:
     def test_a_failure_records_failed(self, store: Store):
         backfill = _backfill(store, days=2, concurrency=2)
         run_ids = list(_run_statuses(store, backfill.id))
-        store.runs.complete(run_ids[0], success=False)
-        store.runs.complete(run_ids[1], success=True)
+        store.runs.fail(run_ids[0], "failed")
+        store.runs.complete(run_ids[1])
 
         assert [event.event_type for event in _lifecycle(store, backfill.id)][-1] == "backfill_failed"
 
@@ -747,7 +740,7 @@ class TestLifecycleEvents:
             fail_fast=True,
         )
         first = next(run_id for run_id, status in _run_statuses(store, backfill.id).items() if status == "queued")
-        store.runs.complete(first, success=False)
+        store.runs.fail(first, "failed")
 
         assert [event.event_type for event in _lifecycle(store, backfill.id)] == [
             "backfill_started",
@@ -757,7 +750,7 @@ class TestLifecycleEvents:
     def test_the_terminal_event_is_recorded_once(self, store: Store):
         backfill = _backfill(store, days=1, concurrency=1)
         for run_id in _run_statuses(store, backfill.id):
-            store.runs.complete(run_id, success=True)
+            store.runs.complete(run_id)
 
         store.backfills.advance(backfill.id, failed=False)
 
@@ -783,7 +776,7 @@ class TestLifecycleEvents:
             session.add(row)
             session.commit()
         for run_id in _run_statuses(store, backfill.id):
-            store.runs.complete(run_id, success=True)
+            store.runs.complete(run_id)
 
         completed = _lifecycle(store, backfill.id)[-1]
         assert (completed.event_type, completed.component_id) == ("backfill_completed", None)

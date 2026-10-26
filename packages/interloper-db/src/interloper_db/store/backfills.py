@@ -28,7 +28,6 @@ from interloper_db.models import (
     Backfill,
     BackfillStatus,
     Component,
-    Event,
     Run,
     RunStatus,
 )
@@ -426,8 +425,8 @@ class BackfillStore:
         """A backfill's failed partitions, newest first, each with its recorded error.
 
         A partition reads as its stack's latest attempt, so one a retry healed
-        is absent. The error is what that attempt's ``run_failed`` event
-        recorded; ``None`` when nothing was.
+        is absent. The error is that attempt's own (``Run.error``); ``None``
+        when it failed only because operations failed.
 
         Args:
             backfill_id: The backfill UUID.
@@ -442,24 +441,7 @@ class BackfillStore:
         )
         with session_scope(self._engine) as session:
             failed = session.exec(statement).all()
-            return [(run.partition_key or "", self._recorded_error(run.id)) for run in failed]
-
-    def _recorded_error(self, run_id: UUID) -> str | None:
-        """The error a run's newest ``run_failed`` event recorded.
-
-        Args:
-            run_id: The run whose failure is read.
-
-        Returns:
-            The error text, or ``None`` when no failure event carries one.
-        """
-        statement = (
-            select(Event.error)
-            .where(Event.run_id == run_id, Event.event_type == "run_failed", col(Event.error).is_not(None))
-            .order_by(col(Event.timestamp).desc())
-        )
-        with session_scope(self._engine) as session:
-            return session.exec(statement).first()
+            return [(run.partition_key or "", run.error) for run in failed]
 
     def _cancel(self, db_backfill: Backfill) -> None:
         """Cancel a backfill's not-yet-dispatched runs and terminalize it.

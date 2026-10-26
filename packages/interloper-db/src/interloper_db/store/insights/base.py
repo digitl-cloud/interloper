@@ -61,9 +61,10 @@ from interloper_db.store.insights.outcomes import Activity, JobOutcome
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.runs import RunQuery, RunStore, partition_key_range, partition_keys_overlapping
 
-# Every attempt that failed, retried ones included; step-level failures
-# (dest_write_failed and the like) repeat their operation's own verdict.
-ERROR_EVENT_TYPES = ("operation_retried", "operation_failed", "run_failed")
+# Every operation attempt that failed, retried ones included; step-level failures
+# (dest_write_failed and the like) repeat their operation's own verdict. A run's
+# own failure is on the run.
+ERROR_EVENT_TYPES = ("operation_retried", "operation_failed")
 MAX_ERROR_ROWS = 20_000
 
 
@@ -230,7 +231,12 @@ class InsightStore:
         """
         if unknown := set(group_by) - set(GROUP_KEYS):
             raise ConfigError(f"Unknown group_by key(s): {sorted(unknown)}; expected any of {list(GROUP_KEYS)}")
-        rows = self._error_rows(org_id, since=since, until=until, job_id=job_id, backfill_id=backfill_id, run_id=run_id)
+        scope = {"since": since, "until": until, "job_id": job_id, "backfill_id": backfill_id, "run_id": run_id}
+        rows = sorted(
+            [*self._error_rows(org_id, **scope), *self._run_error_rows(org_id, **scope)],
+            key=lambda row: (row.count, row.last_seen),
+            reverse=True,
+        )
         kept = rows[:MAX_ERROR_ROWS]
         return ErrorGroups(ErrorGroup.merge(kept, group_by), rows=len(kept), truncated=len(rows) > MAX_ERROR_ROWS)
 
@@ -453,6 +459,49 @@ class InsightStore:
         )
         with session_scope(self._engine) as session:
             return [ErrorRow(*row) for row in session.execute(statement).all()]  # ty: ignore[deprecated]
+
+    def _run_error_rows(
+        self,
+        org_id: UUID,
+        *,
+        since: dt.datetime | None,
+        until: dt.datetime | None,
+        job_id: UUID | None,
+        backfill_id: UUID | None,
+        run_id: UUID | None,
+    ) -> list[ErrorRow]:
+        """Failed runs that recorded an error of their own, one row each, one past the cap.
+
+        Args:
+            org_id: Organisation UUID.
+            since: Keep runs that ended at or after this instant.
+            until: Keep runs that ended before this instant.
+            job_id: Keep runs targeting this component.
+            backfill_id: Keep this backfill's runs.
+            run_id: Keep this run.
+
+        Returns:
+            The rows, the latest first, at most one past :data:`MAX_ERROR_ROWS`.
+        """
+        filters: list[Any] = [Run.org_id == org_id, Run.status == RunStatus.FAILED, col(Run.error).is_not(None)]
+        if since is not None:
+            filters.append(col(Run.completed_at) >= since)
+        if until is not None:
+            filters.append(col(Run.completed_at) < until)
+        if job_id is not None:
+            filters.append(Run.component_id == job_id)
+        if backfill_id is not None:
+            filters.append(Run.backfill_id == backfill_id)
+        if run_id is not None:
+            filters.append(Run.id == run_id)
+        statement = select(Run).where(*filters).order_by(col(Run.completed_at).desc()).limit(MAX_ERROR_ROWS + 1)
+        rows: list[ErrorRow] = []
+        with session_scope(self._engine) as session:
+            for run in session.exec(statement).all():
+                assert run.completed_at is not None, "a failed run has ended"
+                ended = run.completed_at
+                rows.append(ErrorRow(run.component_id, run.id, None, "run_failed", run.error or "", 1, ended, ended))
+        return rows
 
     def _coverage_rows(
         self, org_id: UUID, keys: Sequence[Any], *, asset_ids: Sequence[UUID] | None = None
