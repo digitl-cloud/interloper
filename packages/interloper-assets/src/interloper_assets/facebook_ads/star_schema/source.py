@@ -205,10 +205,32 @@ class FacebookAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimAccounts,
         tags=["Dimension"],
-        relations={"campaigns_stats": il.Relation("asset", "facebook_ads.campaigns_stats", many=True, optional=True)},
+        relations={
+            "ad_accounts": il.Relation("asset", "facebook_ads.ad_accounts", many=True, optional=True),
+            "campaigns_stats": il.Relation("asset", "facebook_ads.campaigns_stats", many=True, optional=True),
+        },
     )
-    def dim_accounts(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per ad account with its name and currency, from the campaign report, else the facts."""
+    def dim_accounts(
+        self,
+        ad_accounts: list[il.Upstream],
+        campaigns_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per ad account with its name, currency and timezone.
+
+        Each account comes from its entity row, else the campaign report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                account_id=ibis.literal(_account(upstream)),
+                account_name=table["name"],
+                currency=table["currency"],
+                timezone=table["timezone_name"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -236,6 +258,7 @@ class FacebookAdsStarSchema(il.Source):
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in ad_accounts),
             *(from_report(upstream) for upstream in campaigns_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
@@ -328,10 +351,33 @@ class FacebookAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimAdGroups,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "facebook_ads.ads_stats", many=True, optional=True)},
+        relations={
+            "adsets": il.Relation("asset", "facebook_ads.adsets", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "facebook_ads.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_ad_groups(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad set with its name and campaign, from the ad report, else the facts."""
+    def dim_ad_groups(
+        self, adsets: list[il.Upstream], ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream
+    ) -> ibis.Table:
+        """One row per ad set with its schedule and status: its entity row, else the ad report, else the facts."""
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                ad_group_id=table["id"].cast("string"),
+                campaign_id=table["campaign_id"].cast("string"),
+                account_id=ibis.literal(_account(upstream)),
+                ad_group_name=table["name"],
+                status=table["status"],
+                budget=ibis.null("float64"),
+                budget_type=_budget_type(table),
+                start_date=_local_date(table["start_time"]),
+                end_date=_local_date(table["end_time"]),
+                created_at=_instant(table["created_time"]),
+                updated_at=_instant(table["updated_time"]),
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -375,7 +421,10 @@ class FacebookAdsStarSchema(il.Source):
             )
 
         rows = ibis.union(
-            *(from_report(upstream) for upstream in ads_stats), from_fact(fact_ad_performance.data), distinct=False
+            *(from_entity(upstream) for upstream in adsets),
+            *(from_report(upstream) for upstream in ads_stats),
+            from_fact(fact_ad_performance.data),
+            distinct=False,
         )
         return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
