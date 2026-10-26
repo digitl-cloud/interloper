@@ -15,7 +15,7 @@ IBIS_TYPES: dict[Any, str] = {
     float: "float64",
     bool: "boolean",
     dt.date: "date",
-    dt.datetime: "timestamp",
+    dt.datetime: "timestamp('UTC')",
     Decimal: "decimal",
     bytes: "binary",
 }
