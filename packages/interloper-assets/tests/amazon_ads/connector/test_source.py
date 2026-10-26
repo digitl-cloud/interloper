@@ -218,7 +218,7 @@ def _run(source: Any, key: str) -> list[dict[str, Any]]:
 
 def _conform(key: str, rows: list[dict[str, Any]], schema: type[Schema]) -> pd.DataFrame:
     asset = next(a for a in _source().assets if type(a).key == key)
-    normalized = asset.normalizer.normalize(pd.DataFrame(rows))
+    normalized = asset.normalizer.normalize(rows)
     return TableData.from_data(normalized).reconcile(schema, strict=True)
 
 
@@ -380,6 +380,22 @@ class TestEntities:
         assert int(out.loc[0, "campaign_id"]) == 5
         assert out.loc[0, "creation_date"] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
         assert pd.isna(out.loc[0, "last_updated_date"])
+
+    def test_display_ids_become_exact_strings(self):
+        # an 18-digit id is beyond what a float holds exactly, and a missing portfolio would make the column float
+        rows = [
+            {"campaignId": 287654321098765433, "portfolioId": None, "date": DAY},
+            {"campaignId": 5, "portfolioId": 123456789012345, "date": DAY},
+        ]
+        out = _conform("display_campaigns", rows, schemas.DisplayCampaigns)
+        assert out["campaign_id"].tolist() == ["287654321098765433", "5"]
+        assert pd.isna(out.loc[0, "portfolio_id"]) and out.loc[1, "portfolio_id"] == "123456789012345"
+        groups = _conform(
+            "display_ad_groups",
+            [{"adGroupId": 287654321098765433, "campaignId": 5, "date": DAY}],
+            schemas.DisplayAdGroups,
+        )
+        assert (groups.loc[0, "ad_group_id"], groups.loc[0, "campaign_id"]) == ("287654321098765433", "5")
 
     def test_epoch_milliseconds_become_instants_on_brands_and_display(self):
         stamped = {

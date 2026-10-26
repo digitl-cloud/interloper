@@ -219,25 +219,37 @@ def _list_display(connection: AmazonAdsConnection, profile_id: str, path: str) -
     return [row for page in pages for row in page]
 
 
-class SponsoredDisplayEntityNormalizer(DataFrameNormalizer):
-    """The source's normalization, plus Sponsored Display's compact ``YYYYMMDD`` schedule dates.
+_DISPLAY_IDS = frozenset({"campaignId", "adGroupId", "portfolioId"})
 
-    Sponsored Display sends ``startDate``/``endDate`` as ``20261001`` where the
-    other ad products send ``2026-10-01``. Strict validation reads a digits-only
-    string as a Unix timestamp and rejects it as a date, so the two columns are
-    parsed here with their explicit format; a value in any other format fails.
+
+class SponsoredDisplayEntityNormalizer(DataFrameNormalizer):
+    """The source's normalization, plus Sponsored Display's numeric ids and compact ``YYYYMMDD`` dates.
+
+    Sponsored Display sends ids as numbers where the other ad products send
+    strings. They become strings row by row, before the frame is built: some
+    ids are beyond what a float holds exactly, and a column with a missing
+    value (``portfolioId``) would otherwise turn float. It also sends
+    ``startDate``/``endDate`` as ``20261001`` where the others send
+    ``2026-10-01``; strict validation reads a digits-only string as a Unix
+    timestamp, so the two columns are parsed with their explicit format, and a
+    value in any other format fails.
     """
 
     def normalize(self, data: Any) -> pd.DataFrame:
-        """Normalize as the source does, then parse the schedule dates.
+        """Stringify the ids, normalize as the source does, then parse the schedule dates.
 
         Args:
             data: The rows as the API returned them.
 
         Returns:
-            The normalized frame, ``start_date`` and ``end_date`` as dates.
+            The normalized frame, ids as strings and ``start_date``/``end_date`` as dates.
         """
-        df = super().normalize(data)
+        records = data.to_dict("records") if isinstance(data, pd.DataFrame) else data
+        rows = [
+            {key: str(value) if key in _DISPLAY_IDS and pd.notna(value) else value for key, value in row.items()}
+            for row in records
+        ]
+        df = super().normalize(rows)
         for column in ("start_date", "end_date"):
             if column in df.columns:
                 df[column] = pd.to_datetime(df[column], format="%Y%m%d").dt.date
