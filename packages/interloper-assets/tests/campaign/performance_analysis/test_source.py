@@ -20,9 +20,9 @@ def _clear_memory() -> None:
     il.MemoryDestination.clear()
 
 
-def test_performance_fans_in_every_star_schema_fact() -> None:
+def test_performance_fans_in_every_platforms_campaign_fact() -> None:
     relation = CampaignPerformanceAnalysis.campaign_performance.relations["performance"]
-    assert relation.keys == ["*.fact_ad_performance", "*.fact_ad_group_performance", "*.fact_campaign_performance"]
+    assert relation.key == "*.fact_campaign_performance"
     assert (relation.many, relation.optional) == (True, True)
 
 
@@ -44,9 +44,9 @@ def test_dag_binds_the_star_schema_facts_and_the_matcher(tmp_path: Path) -> None
 
     dag = il.DAG(facebook, trade_desk, matcher, analysis)
 
+    # the finer facts (Facebook's ad fact, The Trade Desk's ad group fact) are platform-internal
     assert set(dag.get_predecessors(analysis.campaign_performance.id)) == {
-        facebook.fact_ad_performance.id,
-        trade_desk.fact_ad_group_performance.id,
+        facebook.fact_campaign_performance.id,
         matcher.campaign_matches.id,
     }
 
