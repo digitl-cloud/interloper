@@ -2,7 +2,8 @@
 Generated interloper.yaml mounted into every pod at /etc/interloper/interloper.yaml.
 Assembled from the root-level feature blocks (agent, launcher, runner,
 catalog, smtp, auth) plus the extraConfig passthrough. Kubernetes launcher
-and runner defaults (image, namespace, service account) are auto-filled
+and runner defaults (image, namespace, service account) and the API's
+in-cluster URL run pods report to (server.internal_url) are auto-filled
 from the release context.
 
 Chart-managed sections may not appear in extraConfig (their root block is
@@ -48,6 +49,10 @@ or extraConfig.secrets would silently override the Secret-fed credentials.
   {{- if and .Values.rbac.create (not $cfg.launcher.config.service_account_name) -}}
     {{- $_ := set $cfg.launcher.config "service_account_name" (include "interloper.serviceAccountName" .) -}}
   {{- end -}}
+{{- end -}}
+{{- if not (hasKey $cfg "server") -}}{{- $_ := set $cfg "server" dict -}}{{- end -}}
+{{- if not $cfg.server.internal_url -}}
+  {{- $_ := set $cfg.server "internal_url" (printf "http://%s-api:%v" (include "interloper.fullname" .) .Values.api.service.port) -}}
 {{- end -}}
 {{- if has (default "" $cfg.runner.type) (list "kubernetes" "k8s") -}}
   {{- if not (hasKey $cfg.runner "config") -}}{{- $_ := set $cfg.runner "config" dict -}}{{- end -}}

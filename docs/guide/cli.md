@@ -106,6 +106,11 @@ is initialized from the `otel` settings for every command. In a container with
 `INTERLOPER_EVENTS_TO_STDERR=true`, events are forwarded as `@EVENT:` lines instead of being
 printed; see [Events](events.md#events-across-processes).
 
+A platform run's pod runs `interloper run` with `INTERLOPER_RUN_TOKEN` set: the spec comes from a
+file (`--format inline @<path>`), `--metadata` carries the run's ids into every event, and the
+events are reported to the API at `server.internal_url` instead of being printed; see
+[Events](events.md#persistence).
+
 ## Other commands
 
 Each platform package contributes its own commands, so a command exists exactly when its
@@ -115,7 +120,6 @@ package is installed:
 |---------|---------|---------|
 | `interloper api` | `interloper-api` | Serve the HTTP API: the api role's command. |
 | `interloper scheduler` | `interloper-scheduler` | Run cron (with hooks and credential renewal), the queue worker and the reaper: the scheduler role's command. |
-| `interloper launch <run_id>` | `interloper-scheduler` | Execute one persisted run. |
 | `interloper db init\|reset\|upgrade\|downgrade` | `interloper-db` | Database provisioning and migrations. |
 | `interloper app` | `interloper-app` | The API, the scheduler's services and the frontend in one process, for local development and single-process deployments (`--dev` runs the Nuxt dev server). |
 

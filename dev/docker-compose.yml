@@ -31,12 +31,14 @@ x-interloper-env: &interloper-env
   # Docker launcher/runner config — nested dicts, parsed from JSON env. The
   # launcher spawns a container per run; that container's DockerRunner spawns a
   # container per asset. All run on the HOST daemon (via the socket mounted into
-  # the scheduler), so they reach Postgres at host.docker.internal:5433 (the
-  # published port) — they're not on this compose network. Both use the
-  # scheduler image (built with the `docker` extra; has `interloper launch`/`run`).
-  # Only the scheduler acts on these (it runs the worker/reaper); api/seed ignore
-  # them — and only the scheduler image carries interloper-docker.
-  INTERLOPER_LAUNCHER_CONFIG: '{"image":"interloper-scheduler:dev","postgres_host":"host.docker.internal","postgres_port":5433}'
+  # the scheduler), so they report their events to the API at
+  # host.docker.internal:3001 (the published port) — they're not on this
+  # compose network, and hold no database credentials. Both use the scheduler
+  # image (built with the `docker` extra). Only the scheduler acts on these (it
+  # runs the worker/reaper); api/seed ignore them — and only the scheduler image
+  # carries interloper-docker.
+  INTERLOPER_LAUNCHER_CONFIG: '{"image":"interloper-scheduler:dev"}'
+  INTERLOPER_SERVER_INTERNAL_URL: http://host.docker.internal:3001
   INTERLOPER_RUNNER_CONFIG: '{"image":"interloper-scheduler:dev"}'
   INTERLOPER_ENCRYPTION_KEY: dev-encryption-key-not-for-production
   # Dev super-admin identity. Set INTERLOPER_DEV_USER_GOOGLE_ID (your Google
