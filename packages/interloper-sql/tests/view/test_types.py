@@ -21,7 +21,14 @@ class Rows(il.Schema):
 
 def test_every_field_type_maps_to_an_ibis_type():
     assert ibis_schema(Rows) == ibis.schema(
-        {"id": "string", "count": "int64", "amount": "float64", "flag": "boolean", "day": "date", "at": "timestamp"}
+        {
+            "id": "string",
+            "count": "int64",
+            "amount": "float64",
+            "flag": "boolean",
+            "day": "date",
+            "at": "timestamp('UTC')",
+        }
     )
 
 
