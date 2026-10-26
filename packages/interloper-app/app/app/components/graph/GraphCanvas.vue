@@ -106,6 +106,12 @@ const MAX_LAYERS = 2
 const SRC_W = ASSET_W + SRC_PAD_X * 2
 const GRP_W = SRC_W + GRP_PAD_X * 2
 
+// Stacking: expanded containers < edges < cards. An edge into a container draws
+// over its background but passes under every card. VueFlow stacks a child node
+// at max(parent, own zIndex) + 1, so an expanded nested source sits at 1.
+const EDGE_Z = 2
+const CARD_Z = 4
+
 // Actual measured heights from VueFlow's ResizeObserver
 const measuredHeights = ref(new Map<string, number>())
 
@@ -396,18 +402,21 @@ const baseEdges = computed(() => {
 // Driven solely by the open panel (selectedId), never by VueFlow node
 // selection — expanding a source is not a selection. When an asset's panel is
 // open its incident edges turn blue and nodes outside its neighbourhood fade;
-// default (nothing open) leaves every edge faint and nothing dimmed.
+// default (nothing open) leaves every edge faint and nothing dimmed. Hovering
+// an asset turns its incident edges blue too, without fading anything.
+const hoveredId = ref<string | null>(null)
+
+function incidentEdges(id: string) {
+    return baseEdges.value.filter(e => e.source === id || e.target === id)
+}
+
 const focus = computed(() => {
     const id = props.selectedId
     if (!id) return null
-    const edgeKeys = new Set<string>()
     const nodeIds = new Set<string>([id])
-    for (const e of baseEdges.value) {
-        if (e.source === id || e.target === id) {
-            edgeKeys.add(e.id)
-            nodeIds.add(e.source)
-            nodeIds.add(e.target)
-        }
+    for (const e of incidentEdges(id)) {
+        nodeIds.add(e.source)
+        nodeIds.add(e.target)
     }
     // Keep every kept node's ancestor containers un-faded — CSS opacity
     // cascades to children, so a faded ancestor would dim the node itself.
@@ -417,7 +426,16 @@ const focus = computed(() => {
         const groupId = groupOfSource.value.get(parentSource?.id ?? nodeId)
         if (groupId) nodeIds.add(groupId)
     }
-    return { edgeKeys, nodeIds }
+    return nodeIds
+})
+
+const highlightedEdges = computed(() => {
+    const keys = new Set<string>()
+    for (const id of [props.selectedId, hoveredId.value]) {
+        if (!id) continue
+        for (const e of incidentEdges(id)) keys.add(e.id)
+    }
+    return keys
 })
 
 /** Push a source node (and, when expanded, its asset children), optionally nested in a group. */
@@ -435,7 +453,7 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
         width: dims.width,
         height: dims.height,
         connectable: !container,
-        zIndex: parent ? 1 : undefined,
+        zIndex: container ? undefined : CARD_Z,
         data: {
             source,
             sourceDefn: entry.sourceDefn,
@@ -462,7 +480,7 @@ function pushSourceNodes(result: Node[], entry: GraphSourceEntry, pos: { x: numb
                     },
                     data: { asset: child.asset, assetDefn: child.assetDefn, source, status: child.status },
                     connectable: true,
-                    zIndex: parent ? 2 : 1,
+                    zIndex: CARD_Z,
                 })
             }
         }
@@ -483,6 +501,7 @@ const nodes = computed<Node[]>(() => {
                 position: { x: pos.x, y: pos.y },
                 data: { asset: entry.asset, assetDefn: entry.assetDefn, source: entry.source, status: entry.status },
                 connectable: true,
+                zIndex: CARD_Z,
             })
         }
         return applyFocus(result)
@@ -502,6 +521,7 @@ const nodes = computed<Node[]>(() => {
             width: dims.width,
             height: dims.height,
             connectable: false,
+            zIndex: open ? undefined : CARD_Z,
             data: {
                 groupKey,
                 sourceDefn: catalogStore.getSourceDefinition(groupKey) ?? members[0]!.sourceDefn,
@@ -538,6 +558,7 @@ const nodes = computed<Node[]>(() => {
             position: { x: pos.x, y: pos.y },
             data: { asset: entry.asset, assetDefn: entry.assetDefn, source: null, status: entry.status },
             connectable: true,
+            zIndex: CARD_Z,
         })
     }
 
@@ -552,22 +573,21 @@ const nodes = computed<Node[]>(() => {
 function applyFocus(result: Node[]): Node[] {
     const f = focus.value
     for (const node of result) {
-        const faded = f ? !f.nodeIds.has(node.id) : false
+        const faded = f ? !f.has(node.id) : false
         node.style = { opacity: faded ? '0.28' : '1', transition: 'opacity 0.2s ease' }
     }
     return result
 }
 
-/** Styled edges: faint gray by default; the selection's incident edges go blue, the rest dim. */
+/** Styled edges: faint gray by default; the selected or hovered asset's incident edges go blue, under a selection the rest dim. */
 const edges = computed<Edge[]>(() => {
-    const f = focus.value
     return baseEdges.value.map((e) => {
-        const active = f?.edgeKeys.has(e.id) ?? false
-        const color = !f ? 'var(--graph-edge)' : active ? 'var(--ui-primary)' : 'var(--graph-edge-dim)'
+        const active = highlightedEdges.value.has(e.id)
+        const color = active ? 'var(--ui-primary)' : focus.value ? 'var(--graph-edge-dim)' : 'var(--graph-edge)'
         return {
             ...e,
             type: 'upstream',
-            zIndex: active ? 1003 : 1001,
+            zIndex: active ? EDGE_Z + 1 : EDGE_Z,
             style: { stroke: color, strokeWidth: active ? 2.4 : 1.6, strokeLinecap: 'round' },
             markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
         }
@@ -586,6 +606,14 @@ function onNodeClick({ node }: { node: Node }) {
     else if (node.type === 'asset') {
         emit('asset-click', node.data.asset, node.data.assetDefn, node.data.source)
     }
+}
+
+function onNodeMouseEnter({ node }: { node: Node }) {
+    if (node.type === 'asset') hoveredId.value = node.id
+}
+
+function onNodeMouseLeave({ node }: { node: Node }) {
+    if (hoveredId.value === node.id) hoveredId.value = null
 }
 
 function onDeleteSource(sourceId: string) {
@@ -794,6 +822,8 @@ function onEdgeContextMenu({ edge, event }: { edge: Edge; event: MouseEvent | To
                  :connection-radius="80"
                  :auto-connect="false"
                  @node-click="onNodeClick"
+                 @node-mouse-enter="onNodeMouseEnter"
+                 @node-mouse-leave="onNodeMouseLeave"
                  @connect="onConnect"
                  @edge-context-menu="onEdgeContextMenu"
                  @pane-click="emit('pane-click')"
