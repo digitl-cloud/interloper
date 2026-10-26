@@ -78,6 +78,6 @@ async callable uniformly.
 ## Where effects go
 
 Runners record the returned `OperationResult` on the node's `ExecutionInfo.result`. In the
-core that is where it ends; the platform's run executor reads the effects after the run and
-applies them to the stored component. The default `failure()` formats the exception with
+core that is where it ends; on the platform, a run's recorder sends the effects with the run's
+own ending, and the store applies them to the stored component. The default `failure()` formats the exception with
 pydantic input values stripped, so secrets in validation errors never reach an event.

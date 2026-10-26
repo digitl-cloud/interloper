@@ -21,7 +21,7 @@ launcher:
   # type: docker
   # config:
   #   image: interloper-scheduler:latest
-  #   postgres_host: host.docker.internal
+  #   internal_url: http://host.docker.internal:3000
 
   # type: kubernetes
   # config:

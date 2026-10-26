@@ -219,11 +219,24 @@ which points at `replicaCount` or `maxUnavailable` instead.
 
 [gke-neg-500]: https://docs.cloud.google.com/kubernetes-engine/docs/troubleshooting/load-balancing#500-series-errors
 
+### Run pods
+
+A run's pod holds no database credentials and no encryption key. The
+scheduler hydrates the run's target before launching it and hands the pod
+its DAG spec, connections resolved, in a Secret owned by the run's Job, plus
+a token minted for the run. The pod reports its events to the API's
+in-cluster service (`server.internal_url`, auto-filled) with that token, and
+the platform folds the run's state from them. The scheduler therefore needs
+every connection credential the API resolves from its environment (the
+connector OAuth provider apps, the Bing Ads and Google Ads developer tokens):
+give it the same Secret through `scheduler.extraEnvFrom`. Without it, every
+run whose connections read one fails at dispatch.
+
 ### RBAC (Kubernetes launcher)
 
 `rbac.create: true` (the default) creates a ServiceAccount + Role +
-RoleBinding that let the scheduler manage Jobs and read pod logs in
-the release namespace.  The launcher config auto-wires the
+RoleBinding that let the scheduler manage Jobs, create the Secrets that
+carry their specs, and read pod logs in the release namespace.  The launcher config auto-wires the
 ServiceAccount name.  Set `rbac.create: false` if you manage RBAC
 externally — provide the ServiceAccount name via `serviceAccount.name`.
 
@@ -234,6 +247,12 @@ helm upgrade interloper chart/interloper -f values.prod.yaml
 ```
 
 DB schema migrations run automatically on scheduler startup.
+
+When upgrading to the release where run pods report through the API, roll the
+API before the scheduler, or pause the worker (`scheduler --no-worker`) for the
+rollout: a run dispatched by the new scheduler reports to the new API route,
+and a pod that keeps meeting an API replica without it for half the heartbeat
+timeout is lost.
 
 ## Uninstall
 

@@ -21,6 +21,10 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs", "jobs/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # The Kubernetes launcher hands each run's Job its DAG spec in a Secret the Job owns.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
   # The reaper and runner read Pods + logs to report container status.
   - apiGroups: [""]
     resources: ["pods", "pods/log"]

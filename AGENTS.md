@@ -13,7 +13,7 @@ packages/
   interloper-google-cloud/   BigQuery destination
   interloper-docker/         Docker runner + backfiller
   interloper-k8s/            Kubernetes runner + backfiller
-  interloper-scheduler/      cron + queue worker + reaper; `interloper scheduler`, `interloper launch`
+  interloper-scheduler/      cron + queue worker + reaper + launchers; `interloper scheduler`
   interloper-api/            FastAPI HTTP backend, `interloper api`; reads catalog metadata only, never executes assets
   interloper-agent/          AI agent (Google ADK)
   interloper-app/            Nuxt SPA + Python package serving it; `interloper app` (all roles in one process)

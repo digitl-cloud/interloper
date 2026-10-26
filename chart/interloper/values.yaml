@@ -51,7 +51,10 @@ scheduler:
   extraEnv: []
   # Extra `envFrom` sources (secretRef / configMapRef) injected verbatim. Use
   # this to bulk-map a Secret whose keys already match the desired env var
-  # names (e.g. connector OAuth provider creds) instead of one entry per key.
+  # names instead of one entry per key. The scheduler resolves each run's
+  # connections before launching it, so it needs every connection credential
+  # the API resolves from its environment (OAuth provider apps, developer
+  # tokens): mount the same Secret here.
   extraEnvFrom: []
 
 # ── Core (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
@@ -242,10 +245,13 @@ launcher:
     namespace: ""  # defaults to release namespace
     # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
     # image_pull_policy: IfNotPresent
-    # Secrets mounted as env into every run pod. Runs hydrate connections, so
-    # they need the same runtime-resolved credentials the API mounts via
-    # api.extraEnvFrom (e.g. the OAuth provider secret).
-    # env_from: [my-oauth-providers-secret]
+    # Run pods hold no database credentials: the scheduler hands each its DAG
+    # spec, connections resolved, and a token it reports its events to the
+    # API with (server.internal_url, auto-filled). The scheduler resolves the
+    # connections, so it is the one that needs the connection credentials, via
+    # scheduler.extraEnvFrom. env_from mounts Secrets into every run pod for
+    # whatever else a deployment's runs read from their environment.
+    # env_from: [my-run-secret]
     # resources:
     #   requests: {cpu: "100m", memory: "256Mi"}
     #   limits: {memory: "512Mi"}
