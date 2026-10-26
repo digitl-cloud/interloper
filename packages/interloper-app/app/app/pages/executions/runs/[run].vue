@@ -265,6 +265,13 @@ onUnmounted(() => {
                            :ui="{ body: 'flex flex-col gap-4' }">
                         <ExecutionsRunMetaStrip :run="run"
                                                 :duration="stats.duration" />
+                        <UAlert v-if="run.error"
+                                :color="run.status === 'canceled' ? 'neutral' : 'error'"
+                                variant="subtle"
+                                icon="i-lucide-circle-x"
+                                :title="run.status === 'canceled' ? 'Run canceled' : 'Run failed'"
+                                :description="run.error"
+                                :ui="{ description: 'whitespace-pre-wrap break-words font-mono text-xs' }" />
                         <ExecutionsRunStatusBar v-model:status-filter="statusFilter"
                                                 :stats="stats" />
                     </UCard>

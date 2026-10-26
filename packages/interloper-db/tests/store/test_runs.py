@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper.errors import ConfigError
+from interloper.runner import RunState
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
@@ -127,6 +128,81 @@ def _job_with_retry(store: Store, **policy: Any) -> UUID:
         return row.id
 
 
+def _running_run(store: Store) -> Run:
+    """A run over a job, dispatched and marked running.
+
+    Args:
+        store: The store under test.
+
+    Returns:
+        The running run, its target loaded.
+    """
+    run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
+    assert store.runs.claim_next() is not None
+    with Session(store.engine) as session:
+        row = session.get(Run, run.id)
+        assert row is not None
+        row.status = RunStatus.RUNNING
+        row.started_at = dt.datetime.now(dt.timezone.utc)
+        session.add(row)
+        session.commit()
+    return store.runs.get(run.id)
+
+
+def _operation_event(run: Run, event_type: il.EventType, component_id: UUID, *, attempt: int = 1) -> il.Event:
+    """One of an operation's lifecycle events, with the id the runner derives.
+
+    Args:
+        run: The run the event belongs to.
+        event_type: The operation-lifecycle event type.
+        component_id: The operation.
+        attempt: The attempt the event belongs to.
+
+    Returns:
+        The event.
+    """
+    return il.Event(
+        type=event_type,
+        metadata={"component_id": str(component_id), "component_key": "a", "attempt": attempt},
+        id=RunState.operation_event_id(str(run.id), str(component_id), event_type, attempt=attempt),
+    )
+
+
+class TestEndings:
+    """A run's endings carry their reason on the run itself."""
+
+    def test_fail_records_its_reason_on_the_run_and_authors_no_event(self, store: Store) -> None:
+        run = _running_run(store)
+
+        store.runs.fail(run.id, "boom")
+
+        failed = store.runs.get(run.id)
+        assert (failed.status, failed.error) == (RunStatus.FAILED, "boom")
+        assert store.events.list(run.org_id, EventQuery(), run_id=run.id).items == []
+
+    def test_fail_labels_a_started_operation_failed_with_the_reason(self, store: Store) -> None:
+        run = _running_run(store)
+        component_id = uuid4()
+        store.events.save(_operation_event(run, il.EventType.OPERATION_STARTED, component_id), run.org_id, run.id)
+
+        store.runs.fail(run.id, "No heartbeat since noon")
+
+        verdicts = store.events.list(run.org_id, EventQuery(event_type=["operation_failed"]), run_id=run.id).items
+        assert [event.error for event in verdicts] == ["No heartbeat since noon"]
+
+    def test_complete_records_a_success_and_warns_about_open_operations(
+        self, store: Store, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run = _running_run(store)
+        store.events.save(_operation_event(run, il.EventType.OPERATION_QUEUED, uuid4()), run.org_id, run.id)
+
+        with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
+            store.runs.complete(run.id)
+
+        assert store.runs.get(run.id).status == RunStatus.SUCCESS
+        assert str(run.id) in caplog.text and "1 open operation" in caplog.text
+
+
 class TestRunTargetOperations:
     """Run creation validates the target's operation and records billability."""
 
@@ -186,7 +262,7 @@ class TestTargetResolution:
     def test_retry_copies_the_record(self, store: Store):
         target = _component(store, kind="fake_plumbing")
         run = store.runs.create(_ORG_ID, component_id=target)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         retry = store.runs.retry(run.id)
 
@@ -205,7 +281,7 @@ class TestStackIdentity:
 
     def test_a_manual_retry_joins_its_predecessors_stack(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         retry = store.runs.retry(run.id)
 
@@ -221,7 +297,7 @@ class TestAutomaticRetry:
         target = _job_with_retry(store, max_attempts=2, delay=60)
         run = store.runs.create(_ORG_ID, component_id=target)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             successor = session.exec(select(Run).where(Run.retry_of == run.id)).one()
@@ -236,7 +312,7 @@ class TestAutomaticRetry:
         target = _job_with_retry(store, max_attempts=1)
         run = store.runs.create(_ORG_ID, component_id=target)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
@@ -245,7 +321,7 @@ class TestAutomaticRetry:
         target = _job_with_retry(store, max_attempts=3)
         run = store.runs.create(_ORG_ID, component_id=target)
 
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
@@ -254,7 +330,7 @@ class TestAutomaticRetry:
         target = _component(store, kind="job")
         run = store.runs.create(_ORG_ID, component_id=target)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
@@ -276,7 +352,7 @@ class TestAutomaticRetry:
             target = row.id
         run = store.runs.create(_ORG_ID, component_id=target)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
@@ -284,7 +360,7 @@ class TestAutomaticRetry:
     def test_a_run_whose_target_is_gone_queues_nothing(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             assert session.exec(select(Run).where(Run.retry_of == run.id)).all() == []
@@ -295,7 +371,7 @@ class TestAutomaticRetry:
         with Session(store.engine) as session:
             run = session.exec(select(Run).where(Run.backfill_id == backfill.id)).one()
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with Session(store.engine) as session:
             successor = session.exec(select(Run).where(Run.retry_of == run.id)).one()
@@ -313,10 +389,13 @@ class TestStackNativeListing:
         """
         target = _job_with_retry(store, max_attempts=2, delay=0)
         first = store.runs.create(_ORG_ID, component_id=target)
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
         with Session(store.engine) as session:
             successor = session.exec(select(Run).where(Run.retry_of == first.id)).one()
-        store.runs.complete(successor.id, success=success)
+        if success:
+            store.runs.complete(successor.id)
+        else:
+            store.runs.fail(successor.id, "failed")
         return first, successor
 
     def test_a_stack_is_one_row_at_its_latest_attempt(self, store: Store) -> None:
@@ -567,25 +646,25 @@ class TestGetAndComplete:
         # The reaper failing a run whose pod finally started must not overwrite
         # the executor's verdict, nor queue a retry of work that succeeded.
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         with pytest.raises(ConflictError, match=f"Run {run.id} is already success"):
-            store.runs.complete(run.id, success=False)
+            store.runs.fail(run.id, "failed")
         assert store.runs.get(run.id).status == "success"
 
     def test_complete_records_success(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         completed = store.runs.get(run.id)
         assert completed.status == "success"
         assert completed.completed_at is not None
 
-    def test_complete_records_failure(self, store: Store):
+    def test_fail_records_failure(self, store: Store):
         run = store.runs.create(_ORG_ID)
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         assert store.runs.get(run.id).status == "failed"
 
@@ -593,7 +672,7 @@ class TestGetAndComplete:
         missing = uuid4()
 
         with pytest.raises(NotFoundError, match=f"Run {missing} not found"):
-            store.runs.complete(missing, success=True)
+            store.runs.complete(missing)
 
 
 class TestCompletionStamping:
@@ -621,7 +700,7 @@ class TestCompletionStamping:
     def test_a_success_stamps_the_jobs_last_run_at_and_status(self, store: Store) -> None:
         component_id, run_id = self._job_run(store)
 
-        completed = store.runs.complete(run_id, success=True)
+        completed = store.runs.complete(run_id)
         assert completed.status == "success"
         assert completed.completed_at is not None
 
@@ -636,7 +715,7 @@ class TestCompletionStamping:
     def test_a_failure_stamps_a_failed_status(self, store: Store) -> None:
         component_id, run_id = self._job_run(store)
 
-        store.runs.complete(run_id, success=False)
+        store.runs.fail(run_id, "failed")
 
         with Session(store.engine) as session:
             stamped = session.get(Component, component_id)
@@ -680,9 +759,9 @@ class TestRetryValidation:
 
     def test_an_earlier_attempt_retries_the_stack_from_its_head(self, store: Store):
         first = store.runs.create(_ORG_ID)
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
         second = store.runs.retry(first.id)
-        store.runs.complete(second.id, success=False)
+        store.runs.fail(second.id, "failed")
 
         third = store.runs.retry(first.id)
 
@@ -691,16 +770,16 @@ class TestRetryValidation:
     def test_a_stack_with_an_attempt_in_flight_is_not_retried_again(self, store: Store):
         target = _job_with_retry(store, max_attempts=2, delay=60)
         run = store.runs.create(_ORG_ID, component_id=target)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with pytest.raises(ConflictError, match="latest attempt 2 is 'queued'"):
             store.runs.retry(run.id)
 
     def test_a_stack_healed_by_a_later_attempt_is_not_retried(self, store: Store):
         first = store.runs.create(_ORG_ID)
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
         second = store.runs.retry(first.id)
-        store.runs.complete(second.id, success=True)
+        store.runs.complete(second.id)
 
         with pytest.raises(ConflictError, match="latest attempt 2 is 'success'"):
             store.runs.retry(first.id)
@@ -709,7 +788,7 @@ class TestRetryValidation:
         # SQLite has no row locks, so the rival retry is written right after
         # the locked read of the head, where a concurrent commit would land.
         first = store.runs.create(_ORG_ID)
-        store.runs.complete(first.id, success=False)
+        store.runs.fail(first.id, "failed")
 
         rivals: list[Run] = []
 
@@ -731,7 +810,7 @@ class TestRetryValidation:
 
     def test_the_failed_scope_is_accepted(self, store: Store):
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         retried = store.runs.retry(run.id, scope="failed")
 
@@ -816,7 +895,7 @@ class TestRunFilters:
 
     def test_the_status_filter_narrows_the_listing(self, store: Store):
         succeeded = store.runs.create(_ORG_ID)
-        store.runs.complete(succeeded.id, success=True)
+        store.runs.complete(succeeded.id)
         store.runs.create(_ORG_ID)
 
         page = store.runs.list(_ORG_ID, RunQuery(status=[RunStatus.SUCCESS]))
@@ -953,9 +1032,7 @@ class TestClaimNext:
         for run in (first, second):
             canceled = store.runs.get(run.id)
             assert (canceled.status, canceled.hooks_evaluated_at is not None) == (RunStatus.CANCELED, True)
-        with Session(store.engine) as session:
-            messages = [event.message or "" for event in session.exec(select(Event)).all()]
-        assert len(messages) == 2 and all("quota" in message for message in messages)
+            assert "quota" in (canceled.error or "")
 
     def test_a_quota_denied_backfill_run_cancels_the_whole_backfill(self, store: Store) -> None:
         backfill = _backfill(store, days=3, concurrency=1)
@@ -990,23 +1067,22 @@ class TestStartAndFail:
 
     def test_a_terminal_run_cannot_start(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         with pytest.raises(ConflictError):
             store.runs.start(run.id)
 
-    def test_fail_records_the_reason_and_the_verdict_together(self, store: Store) -> None:
+    def test_fail_records_the_reason_on_the_run(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
 
-        failed = store.runs.fail(run.id, "pod OOMKilled", metadata={"trace": "abc"})
+        failed = store.runs.fail(run.id, "pod OOMKilled")
 
-        assert failed.status == RunStatus.FAILED
-        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["run_failed"]), run_id=run.id).items
-        assert (event.error, (event.data or {}).get("trace")) == ("pod OOMKilled", "abc")
+        assert (failed.status, failed.error) == (RunStatus.FAILED, "pod OOMKilled")
+        assert store.runs.get(run.id).error == "pod OOMKilled"
 
     def test_failing_a_terminal_run_records_nothing(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         with pytest.raises(ConflictError):
             store.runs.fail(run.id, "late reap")
@@ -1109,9 +1185,8 @@ class TestReap:
 
         reaped = store.runs.reap(run, "No heartbeat since then", heartbeat_at=heartbeat)
 
-        assert reaped is not None and reaped.status == RunStatus.FAILED
-        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["run_failed"]), run_id=run).items
-        assert event.error == "No heartbeat since then"
+        assert reaped is not None
+        assert (reaped.status, reaped.error) == (RunStatus.FAILED, "No heartbeat since then")
 
     def test_a_run_whose_heartbeat_moved_is_left_alone(self, store: Store) -> None:
         run = _running(store)
@@ -1125,7 +1200,7 @@ class TestReap:
     def test_a_run_that_ended_is_left_alone(self, store: Store) -> None:
         run = _running(store)
         heartbeat = store.runs.get(run).heartbeat_at
-        store.runs.complete(run, success=True)
+        store.runs.complete(run)
 
         assert store.runs.reap(run, "lost", heartbeat_at=heartbeat) is None
         assert store.runs.get(run).status == RunStatus.SUCCESS
@@ -1146,8 +1221,7 @@ class TestCancel:
 
         assert canceled.status == RunStatus.CANCELED
         assert canceled.completed_at is not None and canceled.hooks_evaluated_at is not None
-        [event] = store.events.list(_ORG_ID, EventQuery(event_type=["log"]), run_id=run.id).items
-        assert event.message == "Run canceled"
+        assert canceled.error is None
 
     def test_cancel_releases_the_quota_reservation(self, store: Store) -> None:
         store._quota_defaults = SimpleNamespace(max_successful_runs_per_month=5)
@@ -1179,7 +1253,7 @@ class TestCancel:
 
     def test_a_terminal_run_cannot_be_canceled(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         with pytest.raises(ConflictError):
             store.runs.cancel(run.id)
@@ -1206,7 +1280,10 @@ class TestHooksPending:
     @pytest.mark.parametrize("success", [True, False])
     def test_a_verdict_is_pending_until_marked(self, store: Store, success: bool) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=success)
+        if success:
+            store.runs.complete(run.id)
+        else:
+            store.runs.fail(run.id, "failed")
 
         assert self._pending(store) == {run.id}
         store.runs.mark_hooks_evaluated(run.id)
@@ -1220,23 +1297,23 @@ class TestHooksPending:
     def test_an_automatically_retried_failure_is_settled_with_its_successor(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID, component_id=_job_with_retry(store, max_attempts=2))
 
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         assert self._pending(store) == set()
 
     def test_a_manually_retried_failure_is_settled_with_its_successor(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
 
         retry = store.runs.retry(run.id)
 
         assert self._pending(store) == set()
-        store.runs.complete(retry.id, success=True)
+        store.runs.complete(retry.id)
         assert self._pending(store) == {retry.id}
 
     def test_every_organisation_is_read(self, store: Store) -> None:
         other = store.runs.create(uuid4())
-        store.runs.complete(other.id, success=True)
+        store.runs.complete(other.id)
 
         assert self._pending(store) == {other.id}
 
@@ -1251,7 +1328,7 @@ class TestHooksPending:
     def test_a_finished_backfill_is_pending_until_marked(self, store: Store) -> None:
         backfill = _backfill(store, days=1, concurrency=1)
         [run] = store.backfills.attempts(backfill.id)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         assert [pending.id for pending in store.backfills.hooks_pending()] == [backfill.id]
         store.backfills.mark_hooks_evaluated(backfill.id)
@@ -1259,7 +1336,7 @@ class TestHooksPending:
 
     def test_a_verdict_is_claimed_until_marked(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         assert store.runs.claim_hooks(run.id)
         store.runs.mark_hooks_evaluated(run.id)
@@ -1268,7 +1345,7 @@ class TestHooksPending:
     def test_a_finished_backfill_is_claimed_until_marked(self, store: Store) -> None:
         backfill = _backfill(store, days=1, concurrency=1)
         [run] = store.backfills.attempts(backfill.id)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
 
         assert store.backfills.claim_hooks(backfill.id)
         store.backfills.mark_hooks_evaluated(backfill.id)
@@ -1281,8 +1358,8 @@ class TestNamedReads:
     def test_recent_lists_completed_stacks_newest_completion_first(self, store: Store) -> None:
         first, second = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
         store.runs.create(_ORG_ID)
-        store.runs.complete(first.id, success=True)
-        store.runs.complete(second.id, success=False)
+        store.runs.complete(first.id)
+        store.runs.fail(second.id, "failed")
 
         recent = store.runs.recent(_ORG_ID, until=dt.datetime.now(dt.timezone.utc), limit=5)
 
@@ -1290,9 +1367,9 @@ class TestNamedReads:
 
     def test_failures_reads_the_stacks_whose_latest_attempt_failed(self, store: Store) -> None:
         failed, healed = store.runs.create(_ORG_ID), store.runs.create(_ORG_ID)
-        store.runs.complete(failed.id, success=False)
-        store.runs.complete(healed.id, success=False)
-        store.runs.complete(store.runs.retry(healed.id).id, success=True)
+        store.runs.fail(failed.id, "failed")
+        store.runs.fail(healed.id, "failed")
+        store.runs.complete(store.runs.retry(healed.id).id)
 
         page = store.runs.failures(_ORG_ID, PageQuery())
 
@@ -1300,7 +1377,7 @@ class TestNamedReads:
 
     def test_attempts_lists_a_stack_first_attempt_first(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
         retry = store.runs.retry(run.id)
 
         assert [attempt.id for attempt in store.runs.attempts(run.root_run_id)] == [run.id, retry.id]
@@ -1314,7 +1391,7 @@ class TestNamedReads:
         if transition == "dispatch":
             store.runs.claim_next()
         elif transition == "complete":
-            store.runs.complete(run.id, success=True)
+            store.runs.complete(run.id)
 
         assert store.runs.has_open(component_id) is is_open
         assert store.runs.has_open(uuid4()) is False

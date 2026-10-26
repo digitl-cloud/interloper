@@ -8,8 +8,8 @@ completion advances in the same transaction.
 
 The lifecycle is ``pending`` (a backfill's runs beyond its concurrency) →
 ``queued`` → ``dispatched`` (:meth:`RunStore.claim_next`) → ``running``
-(:meth:`RunStore.start`) → ``success``/``failed`` (:meth:`RunStore.complete`,
-:meth:`RunStore.fail`, :meth:`RunStore.reap`), or ``canceled`` from any open
+(:meth:`RunStore.start`) → ``success`` (:meth:`RunStore.complete`) or ``failed``
+(:meth:`RunStore.fail`, :meth:`RunStore.reap`), or ``canceled`` from any open
 state (:meth:`RunStore.cancel`). Every ending goes through one finishing step,
 so quota, retries, the backfill and the run's open operations settle the same
 way however the run ended.
@@ -29,9 +29,8 @@ import logging
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
-import interloper as il
 from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, and_, exists, func, or_, update
@@ -552,27 +551,22 @@ class RunStore:
             commit(session)
             return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
-    def fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> Run:
-        """Fail a run with a reason: record a ``run_failed`` event carrying it, then complete the run as failed.
+    def fail(self, run_id: UUID, error: str) -> Run:
+        """Fail a run with a reason, recorded on the run.
 
-        Both writes share one transaction, so a run is never failed without
-        its reason, nor its reason recorded on a run another writer completed:
-        a run already terminal raises the completion's ``ConflictError`` and
-        records nothing.
+        A run already terminal raises the completion's ``ConflictError`` and
+        records nothing, so a reason never lands on a run another writer ended.
 
         Args:
             run_id: The run UUID.
             error: Why the run failed, as a reader should see it.
-            metadata: The run's event metadata, when the caller carries more
-                than the row does (an executor's trace context); ``None``
-                builds it from the row and its target.
 
         Returns:
             The failed Run row.
         """
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
-            self._fail(db_run, error, metadata=metadata)
+            self._fail(db_run, error)
             commit(session)
             return db_run
 
@@ -597,7 +591,7 @@ class RunStore:
             db_run = self._lock(run_id)
             if db_run.status not in (RunStatus.DISPATCHED, RunStatus.RUNNING) or db_run.heartbeat_at != heartbeat_at:
                 return None
-            self._fail(db_run, error, metadata=None)
+            self._fail(db_run, error)
             commit(session)
             return db_run
 
@@ -617,11 +611,6 @@ class RunStore:
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
             self._finish(db_run, RunStatus.CANCELED)
-            reason = il.Event(
-                type=il.EventType.LOG,
-                metadata={**db_run.event_metadata(db_run.target), "level": "warning", "message": "Run canceled"},
-            )
-            self._events.save(reason, org_id=db_run.org_id, run_id=db_run.id)
             commit(session)
             return db_run
 
@@ -657,19 +646,18 @@ class RunStore:
             db_run.hooks_evaluated_at = datetime.now(timezone.utc)
             save(session, db_run)
 
-    def complete(self, run_id: UUID, *, success: bool) -> Run:
-        """Record a run's verdict, as its executor reached it.
+    def complete(self, run_id: UUID) -> Run:
+        """Record a run's success, as its executor reached it.
 
         Args:
             run_id: The run UUID.
-            success: Whether the run succeeded.
 
         Returns:
             The updated Run row.
         """
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
-            self._finish(db_run, RunStatus.SUCCESS if success else RunStatus.FAILED)
+            self._finish(db_run, RunStatus.SUCCESS)
             commit(session)
             return db_run
 
@@ -765,41 +753,41 @@ class RunStore:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
 
-    def _fail(self, db_run: Run, error: str, *, metadata: dict[str, Any] | None) -> None:
-        """Record a ``run_failed`` event carrying *error*, then finish the run as failed.
+    def _fail(self, db_run: Run, error: str) -> None:
+        """Finish a run as failed, for a reason no runner reported.
+
+        Nothing is written to the run's events: they are what its process
+        reported, and the reason is the run's own state.
 
         Args:
             db_run: The run, locked.
             error: Why the run failed, as a reader should see it.
-            metadata: The run's event metadata; ``None`` builds it from the
-                row and its target.
 
         Raises:
             ConflictError: If the run is already terminal; nothing is recorded.
         """
         if db_run.status in TERMINAL_RUN_STATUSES:
             raise ConflictError(f"Run {db_run.id} is already {db_run.status}")
-        if metadata is None:
-            metadata = db_run.event_metadata(db_run.target)
-        event = il.Event(type=il.EventType.RUN_FAILED, metadata={**metadata, "error": error})
-        self._events.save(event, org_id=db_run.org_id, run_id=db_run.id)
         self._finish(db_run, RunStatus.FAILED, error=error)
 
     def _finish(self, db_run: Run, status: RunStatus, *, error: str | None = None) -> None:
         """End a run: the single step every ending takes, in the caller's transaction.
 
-        Settles the quota reservation (only a success is charged), stamps the
-        target's last run on a verdict, records a verdict for every operation
-        the run left open, queues the next attempt of a failure its policy
-        allows, and advances the run's backfill. The retry is queued before the
+        Records why the run did not succeed on the run itself, settles the
+        quota reservation (only a success is charged), stamps the target's
+        last run on a verdict, records a verdict for every operation
+        the run left open (on a success that is a bug of the executor, and
+        logged), queues the next attempt of a failure its policy allows, and
+        advances the run's backfill. The retry is queued before the
         backfill advances, so the batch's in-flight count sees the successor
         and does not finalize early.
 
         Args:
             db_run: The run, locked, its target reachable.
             status: How the run ended: ``success``, ``failed`` or ``canceled``.
-            error: Why a failed run failed, carried onto the operations it
-                interrupted; ``None`` for a success or a cancel.
+            error: Why a failed run failed, recorded on the run and carried
+                onto the operations it interrupted; ``None`` for a success, a
+                cancel, or a run that failed only because operations failed.
 
         Raises:
             ConflictError: If the run is already terminal, so a late ending
@@ -814,6 +802,7 @@ class RunStore:
             else:
                 db_run.status = status
             db_run.completed_at = datetime.now(timezone.utc)
+            db_run.error = Event.sanitize_text(error)
             session.add(db_run)
 
             UsageLedger(session).settle_run(db_run, success=status == RunStatus.SUCCESS)
@@ -822,8 +811,11 @@ class RunStore:
                 db_run.target.stamp_state(last_run_at=db_run.completed_at, last_run_status=db_run.status)
                 session.add(db_run.target)
 
-            if status != RunStatus.SUCCESS:
-                self._events.close_operations(db_run, error=error)
+            closed = self._events.close_operations(db_run, error=error)
+            if closed and status == RunStatus.SUCCESS:
+                logger.warning(
+                    "Run %s succeeded with %d open operation(s); its executor should have ended them", db_run.id, closed
+                )
 
             if status == RunStatus.FAILED:
                 self._plan_retry(db_run)
@@ -876,29 +868,18 @@ class RunStore:
         return successor
 
     def _cancel_over_quota(self, db_run: Run) -> None:
-        """Cancel a quota-denied run, its backfill with it, and record why.
-
-        A canceled run is never claimed again, so the event cannot double-write.
+        """Cancel a quota-denied run, its backfill with it, and record why on the run.
 
         Args:
             db_run: The run the quota denied.
         """
         db_run.cancel()
+        db_run.error = "The organisation's monthly successful-run quota is exhausted"
         if db_run.backfill_id:
             with suppress(ConflictError):
                 self._backfills.cancel(db_run.backfill_id, in_flight=False)
-        reason = Event(
-            id=uuid4(),
-            org_id=db_run.org_id,
-            run_id=db_run.id,
-            component_id=db_run.component_id,
-            event_type="log",
-            level="warning",
-            message="Run canceled: the organisation's monthly successful-run quota is exhausted",
-            timestamp=datetime.now(timezone.utc),
-        )
         with session_scope(self._engine) as session:
-            session.add_all((db_run, reason))
+            session.add(db_run)
 
     def _filters(self, org_id: UUID, query: RunQuery) -> builtins.list[Any]:
         """The where-clauses of a runs listing.

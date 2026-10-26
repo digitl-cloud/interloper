@@ -215,16 +215,19 @@ class _RecordingStore:
             raise NotFoundError(f"Run {run_id} not found")
         return self._run
 
-    def _complete(self, run_id: UUID, success: bool) -> None:
+    def _complete(self, run_id: UUID) -> None:
+        self._end(run_id, success=True)
+
+    def _fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> None:
+        self._end(run_id, success=False)
+        self.failures.append(error)
+
+    def _end(self, run_id: UUID, *, success: bool) -> None:
         if self._complete_raises:
             raise RuntimeError("store unreachable")
         if self._already_terminal:
             raise ConflictError(f"Run {run_id} is already failed")
         self.completed.append((run_id, success))
-
-    def _fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> None:
-        self._complete(run_id, success=False)
-        self.failures.append(error)
 
 
 def _executor(store: _RecordingStore) -> RunExecutor:

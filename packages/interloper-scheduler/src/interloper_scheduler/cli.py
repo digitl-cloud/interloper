@@ -10,6 +10,7 @@ from uuid import UUID
 
 from interloper.catalog import Catalog
 from interloper.cli.console import configure_console_logging
+from interloper.errors import format_exception
 from interloper.runner import Runner
 from interloper.settings import AppSettings
 from interloper.utils import Supervisor
@@ -125,13 +126,13 @@ def _cmd_launch(args: argparse.Namespace) -> None:
         success = executor.execute(args.run_id)
     except Exception as error:
         logger.exception("Launch failed for run %s", args.run_id)
-        _mark_failed(args.run_id)
+        _mark_failed(args.run_id, error)
         raise SystemExit(1) from error
     if not success:
         raise SystemExit(1)
 
 
-def _mark_failed(run_id: UUID) -> None:
+def _mark_failed(run_id: UUID, error: BaseException) -> None:
     """Record a run that could not be launched as failed, through a store over an empty catalog.
 
     The configured catalog may be the very thing that failed to load, and
@@ -139,9 +140,10 @@ def _mark_failed(run_id: UUID) -> None:
 
     Args:
         run_id: The run.
+        error: Why the launch failed, recorded as the run's reason.
     """
     try:
-        Store.from_settings(catalog=Catalog(components={})).runs.complete(run_id, success=False)
+        Store.from_settings(catalog=Catalog(components={})).runs.fail(run_id, format_exception(error))
     except Exception:
         logger.exception("Failed to mark run %s as failed in DB", run_id)
 

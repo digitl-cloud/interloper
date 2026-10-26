@@ -38,7 +38,7 @@ import interloper as il
 from interloper.errors import ConfigError
 from interloper.settings import AppSettings
 from interloper.telemetry.tracer import meter
-from interloper_db import BackfillStatus, EventQuery, NotFoundError, RelationQuery, RunStatus, Store
+from interloper_db import BackfillStatus, NotFoundError, RelationQuery, RunStatus, Store
 from interloper_db.models import Backfill, Component, Run
 
 from interloper_scheduler.controller import Controller
@@ -234,10 +234,8 @@ class HookController(Controller):
             "attempt": run.attempt,
             "attempts": len(self._store.runs.attempts(run.root_run_id)),
         }
-        if event_type == "run_failed":
-            failures = EventQuery(event_type=[il.EventType.RUN_FAILED.value], has_error=True, limit=None)
-            if errors := self._store.events.list(run.org_id, failures, run_id=run.id).items:
-                metadata["error"] = errors[-1].error
+        if event_type == "run_failed" and run.error:
+            metadata["error"] = run.error
         return metadata
 
     def _backfill_metadata(self, backfill: Backfill, target: Component, event_type: str) -> dict[str, Any]:

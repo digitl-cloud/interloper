@@ -104,10 +104,10 @@ class TestReconcile:
 
     def test_in_sync_reports_nothing(self, store: Store, make_run: RunFactory):
         run = make_run()
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
         assert store.usage.reconcile() == []
 
     def test_a_successful_non_billable_run_is_not_drift(self, store: Store, make_run: RunFactory):
         run = make_run(billable=False)
-        store.runs.complete(run.id, success=True)
+        store.runs.complete(run.id)
         assert store.usage.reconcile() == []

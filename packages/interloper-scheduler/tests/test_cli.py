@@ -102,31 +102,31 @@ class TestScheduler:
 
 
 class FakeRuns:
-    """Records the run-completion calls the failure path makes."""
+    """Records the run failures the launch command's failure path reports."""
 
     def __init__(self, fail: bool = False) -> None:
         """Set up the recorder.
 
         Args:
-            fail: Whether ``complete`` itself should raise, mimicking a store
+            fail: Whether ``fail`` itself should raise, mimicking a store
                 that is unreachable while reporting the original failure.
         """
-        self.completed: list[tuple[UUID, bool]] = []
-        self.fail = fail
+        self.failed: list[tuple[UUID, str]] = []
+        self.unreachable = fail
 
-    def complete(self, run_id: UUID, success: bool) -> None:
-        """Record (or refuse) a completion.
+    def fail(self, run_id: UUID, error: str) -> None:
+        """Record (or refuse) a failure.
 
         Args:
-            run_id: The run being completed.
-            success: Whether the run succeeded.
+            run_id: The run being failed.
+            error: Why.
 
         Raises:
             RuntimeError: When this fake is configured to fail.
         """
-        if self.fail:
+        if self.unreachable:
             raise RuntimeError("store unreachable")
-        self.completed.append((run_id, success))
+        self.failed.append((run_id, error))
 
 
 class FakeStore:
@@ -189,7 +189,7 @@ class TestLaunch:
         cli._cmd_launch(_parse("launch", str(RUN_ID)))
 
         assert wiring["executed"] == [RUN_ID]
-        assert wiring["store"].runs.completed == []
+        assert wiring["store"].runs.failed == []
 
     def test_a_lost_run_exits_the_process(self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
         exits: list[int] = []
@@ -210,7 +210,7 @@ class TestLaunch:
         assert excinfo.value.code == 1
         # A run the executor reported on is already recorded; the command
         # must not overwrite its outcome.
-        assert wiring["store"].runs.completed == []
+        assert wiring["store"].runs.failed == []
 
     def test_a_crash_before_the_executor_marks_the_run_failed(
         self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch
@@ -226,7 +226,7 @@ class TestLaunch:
             cli._cmd_launch(_parse("launch", str(RUN_ID)))
 
         assert excinfo.value.code == 1
-        assert wiring["store"].runs.completed == [(RUN_ID, False)]
+        assert [run_id for run_id, _ in wiring["store"].runs.failed] == [RUN_ID]
 
     def test_a_catalog_failure_marks_the_launched_run_failed(
         self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch
@@ -246,7 +246,7 @@ class TestLaunch:
         with pytest.raises(SystemExit):
             cli._cmd_launch(_parse("launch", str(RUN_ID)))
 
-        assert wiring["store"].runs.completed == [(RUN_ID, False)]
+        assert [run_id for run_id, _ in wiring["store"].runs.failed] == [RUN_ID]
 
     def test_a_failing_store_does_not_mask_the_launch_failure(
         self, wiring: dict[str, Any], monkeypatch: pytest.MonkeyPatch

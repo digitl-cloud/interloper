@@ -199,7 +199,7 @@ class EventStore:
                 raise NotFoundError(f"Event {event_id} not found")
             return db_event
 
-    def close_operations(self, db_run: Run, *, error: str | None) -> None:
+    def close_operations(self, db_run: Run, *, error: str | None) -> int:
         """Record a verdict for every operation a run left without one.
 
         A run that ends outside its executor (reaped, timed out, canceled)
@@ -213,6 +213,9 @@ class EventStore:
         Args:
             db_run: The run being ended, in the caller's transaction.
             error: Why the run ended as a failure, or ``None`` for a cancel.
+
+        Returns:
+            How many verdicts were authored.
         """
         statement = (
             select(Event)
@@ -234,10 +237,12 @@ class EventStore:
                 elif attempt == current[0]:
                     current[1].append(event)
 
+            closed = 0
             for component_id, (attempt, events) in latest.items():
                 types = {event.event_type for event in events}
                 if types & _OPERATION_VERDICTS:
                     continue
+                closed += 1
                 failed = "operation_started" in types and error is not None
                 event_type = il.EventType.OPERATION_FAILED if failed else il.EventType.OPERATION_CANCELED
                 last = events[-1]
@@ -254,3 +259,4 @@ class EventStore:
                 event_id = RunState.operation_event_id(str(db_run.id), str(component_id), event_type, attempt=attempt)
                 self.save(il.Event(type=event_type, metadata=metadata, id=event_id), db_run.org_id, db_run.id)
             commit(session)
+            return closed

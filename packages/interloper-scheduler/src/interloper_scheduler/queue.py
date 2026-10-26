@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from interloper.errors import format_exception
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import meter, tracer
 from interloper_db import Store
@@ -64,10 +65,7 @@ class QueueController(Controller):
                 ):
                     self._launcher.launch(run_id)
                 self._launched_counter.add(1, {"outcome": "launched"})
-            except Exception:
+            except Exception as error:
                 logger.exception("Failed to launch run %s", run_id)
                 self._launched_counter.add(1, {"outcome": "failed"})
-                # The same terminal path as any failed run: stamps the
-                # component state and advances the backfill, so a failed
-                # dispatch never wedges its backfill.
-                self._store.runs.complete(run_id, success=False)
+                self._store.runs.fail(run_id, format_exception(error))

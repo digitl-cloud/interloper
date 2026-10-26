@@ -58,6 +58,7 @@ class RunResponse(BaseModel):
     attempt: int = 1
     retry_scope: str | None = None
     scheduled_for: dt.datetime | None = None
+    error: str | None = None
     started_at: dt.datetime | None = None
     completed_at: dt.datetime | None = None
     created_at: dt.datetime | None = None
@@ -90,6 +91,7 @@ class RunResponse(BaseModel):
             attempt=run.attempt,
             retry_scope=run.retry_scope,
             scheduled_for=run.scheduled_for,
+            error=run.error,
             started_at=run.started_at,
             completed_at=run.completed_at,
             created_at=run.created_at,

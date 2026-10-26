@@ -104,7 +104,7 @@ class RunExecutor:
             except Exception as e:
                 logger.exception("Run %s failed", run_id)
                 try:
-                    self._store.runs.fail(run_id, format_exception(e), metadata=run_metadata)
+                    self._store.runs.fail(run_id, format_exception(e))
                 except ConflictError as conflict:
                     logger.warning("Run %s was completed by another writer first: %s", run_id, conflict)
                 except Exception:
@@ -155,7 +155,7 @@ class RunExecutor:
             operations = target.operations()
             if not operations:
                 logger.info("No operations for run %s, marking success", run_id)
-                return self._complete(run_id, success=True)
+                return self._complete(run_id, il.RunResult())
 
             if retry_of:
                 successes = self._prior_successes(org_id, retry_of)
@@ -168,11 +168,10 @@ class RunExecutor:
             result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
 
         self._apply_effects(result)
-        success = result.status == ExecutionStatus.COMPLETED
         logger.info("Run %s completed: %s", run_id, result.status.name)
-        return self._complete(run_id, success=success)
+        return self._complete(run_id, result)
 
-    def _complete(self, run_id: UUID, *, success: bool) -> bool:
+    def _complete(self, run_id: UUID, result: il.RunResult) -> bool:
         """Record the run's verdict, unless another writer recorded one first.
 
         A run can be ended while it executes (reaped, timed out, canceled);
@@ -181,13 +180,17 @@ class RunExecutor:
 
         Args:
             run_id: The run to complete.
-            success: The verdict this execution reached.
+            result: What the run came to.
 
         Returns:
-            ``success`` once recorded, ``False`` when the run was already terminal.
+            Whether the run completed, once recorded; ``False`` when the run was already terminal.
         """
+        success = result.status == ExecutionStatus.COMPLETED
         try:
-            self._store.runs.complete(run_id, success=success)
+            if success:
+                self._store.runs.complete(run_id)
+            else:
+                self._store.runs.fail(run_id, f"{len(result.failed_ids)} operation(s) failed")
         except ValueError as e:
             logger.warning("Run %s was completed by another writer first: %s", run_id, e)
             return False

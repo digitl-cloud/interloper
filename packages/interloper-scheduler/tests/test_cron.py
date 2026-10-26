@@ -207,7 +207,7 @@ class TestScheduling:
         queued = next(run for run in _runs(store) if run.status == "queued")
         assert queued.id is not None
 
-        store.runs.complete(queued.id, success=True)
+        store.runs.complete(queued.id)
 
         statuses = {run.partition_key: run.status for run in _runs(store)}
         with Session(store.engine) as session:

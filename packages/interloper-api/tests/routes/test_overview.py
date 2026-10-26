@@ -242,6 +242,7 @@ def _run(
     backfill_id: UUID | None = None,
     attempt: int = 1,
     root: UUID | None = None,
+    error: str | None = None,
 ) -> Run:
     """Insert one run attempt directly, bypassing the queueing path.
 
@@ -256,6 +257,7 @@ def _run(
         backfill_id: Its backfill.
         attempt: Its attempt number.
         root: Its stack's root; defaults to itself.
+        error: Why it failed, for a failed run.
 
     Returns:
         The persisted run.
@@ -270,6 +272,7 @@ def _run(
         partition_key=partition_key,
         backfill_id=backfill_id,
         attempt=attempt,
+        error=error,
     )
     with Session(store.engine) as session:
         session.add(run)
@@ -301,28 +304,6 @@ def _execution(store: Store, run: Run, asset: Component, status: str) -> None:
                 partition_key=run.partition_key,
                 status=status,
                 created_at=run.created_at,
-            )
-        )
-        session.commit()
-
-
-def _run_failed_event(store: Store, run: Run, error: str) -> None:
-    """Record a run's failure verdict.
-
-    Args:
-        store: The store whose engine the row is written through.
-        run: The failed run.
-        error: The failure's error text.
-    """
-    with Session(store.engine) as session:
-        session.add(
-            Event(
-                id=uuid4(),
-                org_id=run.org_id,
-                run_id=run.id,
-                event_type="run_failed",
-                error=error,
-                timestamp=run.completed_at or NOW,
             )
         )
         session.commit()
@@ -529,19 +510,9 @@ class TestAttention:
         job = _job(store, member.org_id, "meta-ads-daily")
         for i in range(3):
             at = NOW - dt.timedelta(hours=1 + i)
-            run = _run(store, member.org_id, job, status="failed", started=at, completed=at)
-            with Session(store.engine) as session:
-                session.add(
-                    Event(
-                        id=uuid4(),
-                        org_id=member.org_id,
-                        run_id=run.id,
-                        event_type="run_failed",
-                        error=f"token expired\ndetail {i}",
-                        timestamp=at,
-                    )
-                )
-                session.commit()
+            _run(
+                store, member.org_id, job, status="failed", started=at, completed=at, error=f"token expired\ndetail {i}"
+            )
 
         groups = [i for i in _overview(client)["attention"] if i["kind"] == "error_group"]
 
@@ -558,10 +529,8 @@ class TestAttention:
     ):
         source = store.components.create(member.org_id, kind="source", key=Shop.key, name="shop")
         at = NOW - dt.timedelta(hours=1)
-        _run_failed_event(
-            store, _run(store, member.org_id, source.children[0], status="failed", started=at, completed=at), "boom"
-        )
-        _run_failed_event(store, _run(store, member.org_id, None, status="failed", started=at, completed=at), "gone")
+        _run(store, member.org_id, source.children[0], status="failed", started=at, completed=at, error="boom")
+        _run(store, member.org_id, None, status="failed", started=at, completed=at, error="gone")
 
         groups = [i for i in _overview(client)["attention"] if i["kind"] == "error_group"]
 
@@ -881,9 +850,9 @@ class TestAuth:
             partition_key="2026-08-12",
             attempt=2,
             root=first.id,
+            error="token expired",
         )
         _execution(store, retry, source.children[0], "failed")
-        _run_failed_event(store, retry, "token expired")
         _run(store, other, job, status="running", started=NOW - dt.timedelta(minutes=5), completed=None)
         store.backfills.create(other, component_id=job.id, start_key="2026-07-01", end_key="2026-07-03")
 

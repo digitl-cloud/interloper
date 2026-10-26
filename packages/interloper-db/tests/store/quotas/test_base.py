@@ -85,7 +85,7 @@ class TestRunCreationGate:
 
     def test_retry_blocked_at_limit(self, store: Store, org_id: UUID):
         run = store.runs.create(org_id)
-        store.runs.complete(run.id, success=False)
+        store.runs.fail(run.id, "failed")
         store._quota_defaults = _defaults(max_successful_runs_per_month=1)
         self._exhaust(store, org_id, used=1)
         with pytest.raises(QuotaExceededError, match="retry"):

@@ -99,7 +99,7 @@ class TestSettleRunUsage:
 
     def test_complete_run_charges_the_ledger(self, store: Store, usage_rows: UsageRows, make_run: RunFactory):
         run = make_run()
-        completed = store.runs.complete(run.id, success=True)
+        completed = store.runs.complete(run.id)
         assert completed.status == "success"
         (counts,) = usage_rows().values()
         assert counts == (1, 0)
