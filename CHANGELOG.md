@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v0.117.0 (2026-10-26)
+
+### Bug Fixes
+
+- **app**: Graph edges run under cards and highlight on asset hover
+  ([`e87bf15`](https://github.com/digitl-cloud/interloper/commit/e87bf154ed160e254e7286df861228182bd51860))
+
+- **pandas**: ISO 8601 timestamps of varying precision conform
+  ([`3d0791e`](https://github.com/digitl-cloud/interloper/commit/3d0791efdd69afa8a84d8d5be30d3a6e2b97cdca))
+
+### Features
+
+- **assets**: Amazon Brands and Display lifecycle times are UTC instants
+  ([`6691df9`](https://github.com/digitl-cloud/interloper/commit/6691df9947206f282613d308cc77045c7631fedb))
+
+- **assets**: Amazon Display ids are strings and dimension statuses upper-case
+  ([`1d21c3b`](https://github.com/digitl-cloud/interloper/commit/1d21c3b75d53b8e037047be375f9e62335d8b1c6))
+
+- **assets**: Facebook ad set and ad account instants and minor-unit amounts are typed
+  ([`837ef02`](https://github.com/digitl-cloud/interloper/commit/837ef0240b0d492f36f816d0b781fd3182314395))
+
+- **pandas**: Epoch timestamps declared on the normalizer, numbers refused for datetimes
+  ([`7f13043`](https://github.com/digitl-cloud/interloper/commit/7f130439d46e0fcebc2dc21585a9051a95ece77c))
+
+### Refactoring
+
+- **assets**: LinkedIn and Pinterest declare their epoch columns on the shared normalizer
+  ([`2c09310`](https://github.com/digitl-cloud/interloper/commit/2c093108ceac5ba20e876bc9cd000887e74bc935))
+
+
 ## v0.116.0 (2026-10-26)
 
 ### Bug Fixes
