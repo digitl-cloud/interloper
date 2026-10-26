@@ -215,22 +215,35 @@ def _dtype_to_py_type(series: pd.Series) -> Any:
 
 
 def _to_datetime(series: pd.Series) -> pd.Series:
-    """Parse a Series to datetime, normalizing to UTC when offsets are mixed.
+    """Parse a Series to datetime, normalizing to UTC when offsets or precision vary.
 
-    Plain ``to_datetime`` raises on mixed-timezone strings (common in API
-    responses spanning a DST boundary or differing offsets); retry with
-    ``utc=True`` to coerce those to a single UTC timezone.
+    Plain ``to_datetime`` infers one format from the first value, so it raises
+    on mixed-timezone strings (common in API responses spanning a DST boundary
+    or differing offsets) and on ISO 8601 timestamps whose precision varies
+    row to row (``…T20:00:54Z`` beside ``…T20:00:54.497Z``, as Amazon Ads
+    sends them). Each fallback runs only when the previous parse failed:
+    first ``utc=True`` for mixed offsets, then strict ISO 8601, which never
+    guesses day-first or month-first. When no fallback parses the series, the
+    first parse's ``ValueError`` propagates, since it names the offending value.
 
     Args:
         series: The Series to parse.
 
     Returns:
-        The parsed Series, in UTC when the input mixed offsets.
+        The parsed Series, in UTC when the input mixed offsets or precision.
     """
     try:
         return pd.to_datetime(series, errors="raise")
-    except ValueError:
+    except ValueError as error:
+        inferred = error
+    try:
         return pd.to_datetime(series, errors="raise", utc=True)
+    except ValueError:
+        pass
+    try:
+        return pd.to_datetime(series, errors="raise", utc=True, format="ISO8601")
+    except ValueError:
+        raise inferred from None
 
 
 def _json_encode_value(value: Any) -> Any:
