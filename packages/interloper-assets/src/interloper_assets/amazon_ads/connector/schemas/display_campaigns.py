@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class DisplayCampaigns(Schema):
-    """Sponsored Display campaign snapshot. One row per campaign and day, as the extended campaigns list returns it. Ids are numeric, as Sponsored Display sends them. Creation and update times are epoch numbers whose unit Amazon does not document, kept as sent."""
+    """Sponsored Display campaign snapshot. One row per campaign and day, as the extended campaigns list returns it. Ids are numeric, as Sponsored Display sends them. Creation and update times arrive as epoch milliseconds and are stored as UTC instants."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -31,7 +31,7 @@ class DisplayCampaigns(Schema):
     )
     rule_based_budget_value: float | None = Field(default=None, description="Budget set by the rule.")
     serving_status: str | None = Field(default=None, description="Serving status.")
-    creation_date: int | None = Field(default=None, description="When the campaign was created, as an epoch number.")
-    last_updated_date: int | None = Field(
-        default=None, description="When the campaign was last changed, as an epoch number."
+    creation_date: dt.datetime | None = Field(default=None, description="When the campaign was created, in UTC.")
+    last_updated_date: dt.datetime | None = Field(
+        default=None, description="When the campaign was last changed, in UTC."
     )

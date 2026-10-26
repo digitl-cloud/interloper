@@ -371,12 +371,38 @@ class TestEntities:
             "name": "SD",
             "state": "enabled",
             "startDate": "20261001",
-            "creationDate": 1,
+            "creationDate": 1785179053888,
+            "lastUpdatedDate": None,
             "date": DAY,
         }
         out = _conform("display_campaigns", [row], schemas.DisplayCampaigns)
         assert out.loc[0, "start_date"] == dt.date(2026, 10, 1)
         assert int(out.loc[0, "campaign_id"]) == 5
+        assert out.loc[0, "creation_date"] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
+        assert pd.isna(out.loc[0, "last_updated_date"])
+
+    def test_epoch_milliseconds_become_instants_on_brands_and_display(self):
+        stamped = {
+            "brands_campaigns": (
+                schemas.BrandsCampaigns,
+                {"extendedData": {"creationDate": 1785179053888, "lastUpdateDate": 1785265453888}},
+                ("extended_data_creation_date", "extended_data_last_update_date"),
+            ),
+            "brands_ad_groups": (
+                schemas.BrandsAdGroups,
+                {"extendedData": {"creationDate": 1785179053888, "lastUpdateDate": 1785265453888}},
+                ("extended_data_creation_date", "extended_data_last_update_date"),
+            ),
+            "display_ad_groups": (
+                schemas.DisplayAdGroups,
+                {"creationDate": 1785179053888, "lastUpdatedDate": 1785265453888},
+                ("creation_date", "last_updated_date"),
+            ),
+        }
+        for key, (schema, row, (created, updated)) in stamped.items():
+            out = _conform(key, [{"campaignId": "1", **row, "date": DAY}], schema)
+            assert out.loc[0, created] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC"), key
+            assert out.loc[0, updated] == pd.Timestamp("2026-07-28T19:04:13.888", tz="UTC"), key
 
     def test_every_entity_row_conforms_with_its_schema(self):
         cases = {

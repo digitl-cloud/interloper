@@ -244,7 +244,19 @@ class SponsoredDisplayEntityNormalizer(DataFrameNormalizer):
         return df
 
 
-_DISPLAY_ENTITY_NORMALIZER = SponsoredDisplayEntityNormalizer(snake_case_digits=True, flatten_max_level=1)
+# Sponsored Brands and Display send creation and update times as milliseconds since the epoch
+_BRANDS_ENTITY_NORMALIZER = DataFrameNormalizer(
+    snake_case_digits=True,
+    flatten_max_level=1,
+    epoch_columns=["extended_data_creation_date", "extended_data_last_update_date"],
+    epoch_unit="ms",
+)
+_DISPLAY_ENTITY_NORMALIZER = SponsoredDisplayEntityNormalizer(
+    snake_case_digits=True,
+    flatten_max_level=1,
+    epoch_columns=["creation_date", "last_updated_date"],
+    epoch_unit="ms",
+)
 
 
 def _snapshot(rows: list[dict], day: dt.date) -> list[dict]:
@@ -335,6 +347,7 @@ class AmazonAds(il.Source):
         schema=schemas.BrandsCampaigns,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
+        normalizer=_BRANDS_ENTITY_NORMALIZER,
     )
     def brands_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Sponsored Brands campaigns with their schedule, budget, bidding and serving status."""
@@ -351,6 +364,7 @@ class AmazonAds(il.Source):
         schema=schemas.BrandsAdGroups,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
+        normalizer=_BRANDS_ENTITY_NORMALIZER,
     )
     def brands_ad_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Sponsored Brands ad groups with their serving status."""
