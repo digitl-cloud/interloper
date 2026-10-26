@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Adsets(Schema):
-    """Facebook Ads ad set snapshot. One row per ad set and day: its schedule, budget, bidding, optimisation and targeting. id is the join key to adset_id in the insights tables. Budgets are numeric strings in the currency's minor units, times are ISO 8601 with the account's offset, as the Graph API returns them. Nested objects (targeting, promoted_object, bid_constraints...) are kept whole as JSON."""
+    """Facebook Ads ad set snapshot. One row per ad set and day: its schedule, budget, bidding, optimisation and targeting. id is the join key to adset_id in the insights tables. Budgets are integers in the currency's minor units; creation and update times are UTC instants; start_time and end_time keep the vendor's ISO 8601 string with the account's offset. Nested objects (targeting, promoted_object, bid_constraints...) are kept whole as JSON."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -32,22 +32,29 @@ class Adsets(Schema):
         default=None, description="What the ad set is billed on: IMPRESSIONS, LINK_CLICKS..."
     )
     brand_safety_config: str | None = Field(default=None, description="JSON of the brand-safety configuration.")
-    budget_remaining: str | None = Field(default=None, description="Remaining budget, in the currency's minor units.")
-    campaign_active_time: str | None = Field(default=None, description="How long the campaign has been running.")
+    budget_remaining: int | None = Field(
+        default=None, description="Remaining budget, in the currency's minor units (cents for EUR and USD)."
+    )
+    campaign_active_time: float | None = Field(default=None, description="How long the campaign has been running.")
     campaign_attribution: str | None = Field(default=None, description="App attribution type (SKAN or AEM).")
     campaign_id: str | None = Field(default=None, description="Campaign the ad set belongs to.")
     configured_status: str | None = Field(
         default=None, description="Status set by the advertiser: ACTIVE, PAUSED, DELETED, ARCHIVED."
     )
-    created_time: str | None = Field(default=None, description="When the ad set was created, ISO 8601 with offset.")
+    created_time: dt.datetime | None = Field(default=None, description="When the ad set was created, in UTC.")
     creative_sequence: str | None = Field(default=None, description="JSON array of ad ids in sequence order.")
-    daily_budget: str | None = Field(
-        default=None, description="Daily budget, in the currency's minor units; NULL when the ad set has none."
+    daily_budget: int | None = Field(
+        default=None,
+        description="Daily budget; NULL when the ad set has none, in the currency's minor units (cents for EUR and USD).",
     )
-    daily_min_spend_target: str | None = Field(
-        default=None, description="Daily minimum spend target when the campaign holds the budget."
+    daily_min_spend_target: int | None = Field(
+        default=None,
+        description="Daily minimum spend target when the campaign holds the budget, in the currency's minor units (cents for EUR and USD).",
     )
-    daily_spend_cap: str | None = Field(default=None, description="Daily spend cap when the campaign holds the budget.")
+    daily_spend_cap: int | None = Field(
+        default=None,
+        description="Daily spend cap when the campaign holds the budget, in the currency's minor units (cents for EUR and USD).",
+    )
     destination_type: str | None = Field(
         default=None, description="Where the ads send people: WEBSITE, APP, MESSENGER..."
     )
@@ -60,7 +67,11 @@ class Adsets(Schema):
         description="Delivery status after Facebook's own checks: ACTIVE, PAUSED, CAMPAIGN_PAUSED, IN_PROCESS, WITH_ISSUES...",
     )
     end_time: str | None = Field(
-        default=None, description="Scheduled end, ISO 8601 in the account's timezone; NULL when open-ended."
+        default=None,
+        description=(
+            "Scheduled end as the vendor sends it, ISO 8601 with the account's UTC offset; NULL when open-ended. "
+            "A string because a timestamp would store it in UTC and lose the offset; its date part is the local day."
+        ),
     )
     frequency_control_specs: str | None = Field(default=None, description="JSON array of frequency caps.")
     id: str | None = Field(default=None, description="Ad set id. Join key to adset_id in the insights tables.")
@@ -71,18 +82,21 @@ class Adsets(Schema):
     )
     issues_info: str | None = Field(default=None, description="JSON array of the ad set's delivery issues.")
     learning_stage_info: str | None = Field(default=None, description="JSON of the ad set's learning-phase status.")
-    lifetime_budget: str | None = Field(
-        default=None, description="Lifetime budget, in the currency's minor units; NULL when the ad set has none."
+    lifetime_budget: int | None = Field(
+        default=None,
+        description="Lifetime budget; NULL when the ad set has none, in the currency's minor units (cents for EUR and USD).",
     )
     lifetime_imps: int | None = Field(default=None, description="Lifetime impressions, for FIXED_CPM buying only.")
-    lifetime_min_spend_target: str | None = Field(
-        default=None, description="Lifetime minimum spend target when the campaign holds the budget."
+    lifetime_min_spend_target: int | None = Field(
+        default=None,
+        description="Lifetime minimum spend target when the campaign holds the budget, in the currency's minor units (cents for EUR and USD).",
     )
-    lifetime_spend_cap: str | None = Field(
-        default=None, description="Lifetime spend cap when the campaign holds the budget."
+    lifetime_spend_cap: int | None = Field(
+        default=None,
+        description="Lifetime spend cap when the campaign holds the budget, in the currency's minor units (cents for EUR and USD).",
     )
-    min_budget_spend_percentage: str | None = Field(
-        default=None, description="Minimum share of the campaign budget the ad set spends."
+    min_budget_spend_percentage: float | None = Field(
+        default=None, description="Minimum share of the campaign budget the ad set spends, in percent."
     )
     multi_optimization_goal_weight: str | None = Field(default=None, description="Weighting across optimisation goals.")
     name: str | None = Field(default=None, description="Ad set name.")
@@ -107,7 +121,13 @@ class Adsets(Schema):
     review_feedback: str | None = Field(default=None, description="Review feedback for dynamic creative.")
     rf_prediction_id: str | None = Field(default=None, description="Reach and frequency prediction id.")
     source_adset_id: str | None = Field(default=None, description="Ad set this one was copied from.")
-    start_time: str | None = Field(default=None, description="Scheduled start, ISO 8601 in the account's timezone.")
+    start_time: str | None = Field(
+        default=None,
+        description=(
+            "Scheduled start as the vendor sends it, ISO 8601 with the account's UTC offset. "
+            "A string because a timestamp would store it in UTC and lose the offset; its date part is the local day."
+        ),
+    )
     status: str | None = Field(
         default=None, description="Status set by the advertiser: ACTIVE, PAUSED, DELETED, ARCHIVED."
     )
@@ -121,8 +141,6 @@ class Adsets(Schema):
     time_based_ad_rotation_intervals: str | None = Field(
         default=None, description="JSON array of the time-based rotation intervals."
     )
-    updated_time: str | None = Field(
-        default=None, description="When the ad set was last changed, ISO 8601 with offset."
-    )
+    updated_time: dt.datetime | None = Field(default=None, description="When the ad set was last changed, in UTC.")
     use_new_app_click: bool | None = Field(default=None, description="Whether the new app click definition is used.")
     value_rule_set_id: str | None = Field(default=None, description="Value rule set applied to the ad set.")

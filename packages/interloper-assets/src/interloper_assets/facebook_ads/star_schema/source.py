@@ -373,8 +373,8 @@ class FacebookAdsStarSchema(il.Source):
                 budget_type=_budget_type(table),
                 start_date=_local_date(table["start_time"]),
                 end_date=_local_date(table["end_time"]),
-                created_at=_instant(table["created_time"]),
-                updated_at=_instant(table["updated_time"]),
+                created_at=table["created_time"],
+                updated_at=table["updated_time"],
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
             )

@@ -205,6 +205,32 @@ class TestNewEntities:
         out = TableData.from_data(normalized).reconcile(schemas.AdAccounts)
         assert out.loc[0, "business_name"] == "Acme GmbH"
 
+    def test_adset_instants_and_minor_unit_amounts_are_typed(self):
+        child = self._child("adsets")
+        rows = [
+            {
+                "id": "1",
+                "created_time": "2026-09-01T10:00:00+0200",
+                "updated_time": "2026-09-02T10:00:00+0200",
+                "daily_budget": "1500",
+                "budget_remaining": "0",
+                "min_budget_spend_percentage": "12.5",
+                "campaign_active_time": "86400",
+            }
+        ]
+        out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Adsets, strict=True)
+        assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
+        assert (out.loc[0, "daily_budget"], out.loc[0, "budget_remaining"]) == (1500, 0)
+        assert out.loc[0, "min_budget_spend_percentage"] == 12.5
+        assert out.loc[0, "campaign_active_time"] == 86400.0
+
+    def test_ad_account_instants_and_minor_unit_amounts_are_typed(self):
+        child = self._child("ad_accounts")
+        rows = [{"id": "act_1", "created_time": "2020-01-15T09:30:00+0100", "amount_spent": "123456", "spend_cap": "0"}]
+        out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.AdAccounts, strict=True)
+        assert out.loc[0, "created_time"] == pd.Timestamp("2020-01-15T08:30:00", tz="UTC")
+        assert (out.loc[0, "amount_spent"], out.loc[0, "spend_cap"]) == (123456, 0)
+
 
 class _FakeObject:
     def __init__(self, data: dict) -> None:

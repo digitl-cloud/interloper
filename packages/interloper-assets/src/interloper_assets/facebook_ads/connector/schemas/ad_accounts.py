@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class AdAccounts(Schema):
-    """Facebook Ads ad account snapshot. One row per ad account and day: the account's name, currency, timezone, status and billing settings. account_id is the join key to every other Facebook Ads table. Amounts are numeric strings in the account currency, as the Graph API returns them. Nested objects (business, capabilities, rf_spec...) are kept whole as JSON."""
+    """Facebook Ads ad account snapshot. One row per ad account and day: the account's name, currency, timezone, status and billing settings. account_id is the join key to every other Facebook Ads table. Amounts are integers in the currency's minor units. Nested objects (business, capabilities, rf_spec...) are kept whole as JSON."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -20,10 +20,13 @@ class AdAccounts(Schema):
         default=None, description="JSON of the objects the account can promote."
     )
     age: float | None = Field(default=None, description="How long the account has been open.")
-    amount_spent: str | None = Field(
-        default=None, description="Amount spent by the account, relative to spend_cap when one is set."
+    amount_spent: int | None = Field(
+        default=None,
+        description="Amount spent by the account, relative to spend_cap when one is set, in the currency's minor units (cents for EUR and USD).",
     )
-    balance: str | None = Field(default=None, description="Bill amount currently due.")
+    balance: int | None = Field(
+        default=None, description="Bill amount currently due, in the currency's minor units (cents for EUR and USD)."
+    )
     brand_safety_content_filter_levels: str | None = Field(
         default=None, description="JSON array of the brand-safety content filter levels applied."
     )
@@ -38,7 +41,7 @@ class AdAccounts(Schema):
         default=None, description="Whether a brand lift study can be created on the account."
     )
     capabilities: str | None = Field(default=None, description="JSON array of the account's capabilities.")
-    created_time: str | None = Field(default=None, description="When the account was created, ISO 8601 with offset.")
+    created_time: dt.datetime | None = Field(default=None, description="When the account was created, in UTC.")
     currency: str | None = Field(default=None, description="ISO currency of every amount on the account.")
     default_dsa_beneficiary: str | None = Field(
         default=None, description="Default beneficiary declared under the EU Digital Services Act."
@@ -80,8 +83,9 @@ class AdAccounts(Schema):
         default=None, description="JSON of the account's marketing messages settings."
     )
     media_agency: str | None = Field(default=None, description="Id of the media agency business on the account.")
-    min_campaign_group_spend_cap: str | None = Field(
-        default=None, description="Minimum spend cap a campaign on the account may set."
+    min_campaign_group_spend_cap: int | None = Field(
+        default=None,
+        description="Minimum spend cap a campaign on the account may set, in the currency's minor units (cents for EUR and USD).",
     )
     min_daily_budget: int | None = Field(
         default=None, description="Minimum daily budget an ad set may set, in the currency's minor units."
@@ -97,7 +101,10 @@ class AdAccounts(Schema):
     partner: str | None = Field(default=None, description="Id of the partner business on the account.")
     rf_spec: str | None = Field(default=None, description="JSON of the account's reach and frequency limits.")
     show_checkout_experience: bool | None = Field(default=None, description="Whether the checkout experience is shown.")
-    spend_cap: str | None = Field(default=None, description="Lifetime spend cap of the account; 0 when none.")
+    spend_cap: int | None = Field(
+        default=None,
+        description="Lifetime spend cap of the account; 0 when none, in the currency's minor units (cents for EUR and USD).",
+    )
     tax_id_status: int | None = Field(default=None, description="Status code of the account's tax id.")
     tax_id_type: str | None = Field(default=None, description="Type of the account's tax id.")
     timezone_id: int | None = Field(default=None, description="Meta's id of the account's timezone.")
