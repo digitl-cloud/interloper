@@ -133,3 +133,10 @@ class TestOptionalSlots:
         state._quota_defaults = None
 
         assert state.get_quota_defaults() is None
+
+    def test_the_reaper_config_round_trips(self) -> None:
+        reaper = SimpleNamespace(heartbeat_timeout=90)
+
+        state.set_reaper_config(reaper)
+
+        assert state.get_reaper_config() is reaper

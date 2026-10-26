@@ -28,6 +28,7 @@ from interloper_api.dependencies import (
     set_catalog,
     set_features,
     set_quota_defaults,
+    set_reaper_config,
     set_smtp_config,
     set_store,
 )
@@ -282,6 +283,7 @@ def _install_state(
         set_auth_config(settings.auth)
         set_smtp_config(settings.smtp)
         set_quota_defaults(settings.quota)
+        set_reaper_config(settings.reaper)
         set_admin_config(
             admin.AdminConfigResponse.from_settings(settings, features={"agent": agent_available}, catalog=catalog)
         )

@@ -13,6 +13,7 @@ import datetime as dt
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -29,7 +30,7 @@ from interloper_db import (
 )
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_run, require_viewer
 from interloper_api.routes import runs as runs_module
 
 _ORG_ID = uuid4()
@@ -72,11 +73,13 @@ class FakeStore:
         self.role: str | None = "editor"
         self.run_org_id: UUID = _ORG_ID
         self.members = SimpleNamespace(role=self._member_role)
+        self.ingested: list[tuple[UUID, il.EventBatch]] = []
         self.runs = SimpleNamespace(
             get=self._get_run,
             list=self._list_runs,
             retry=self._retry_run,
             cancel=self._cancel_run,
+            ingest=self._ingest,
         )
         self.components = SimpleNamespace()
         self.executions = SimpleNamespace(counts=lambda run_ids: {}, list=self._list_executions)
@@ -109,11 +112,27 @@ class FakeStore:
         retried.retry_scope = scope
         return retried
 
+    def _ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
+        self.ingested.append((run_id, batch))
+        return True
+
     def _cancel_run(self, run_id: UUID):
         self.cancel_calls.append(run_id)
         if self.raise_conflict is not None:
             raise ConflictError(self.raise_conflict)
         return _fake_run(run_id)
+
+
+def _any_run(run_id: UUID) -> SimpleNamespace:
+    """Stand in for a live run token, whatever the run.
+
+    Args:
+        run_id: The run the path names.
+
+    Returns:
+        The run.
+    """
+    return SimpleNamespace(id=run_id)
 
 
 def _app(store: FakeStore) -> FastAPI:
@@ -122,6 +141,7 @@ def _app(store: FakeStore) -> FastAPI:
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[require_run] = _any_run
     return app
 
 
@@ -644,3 +664,36 @@ def test_tail_page_reaches_terminal_events(events_store: EventsStore) -> None:
     items = resp.json()["items"]
     assert len(items) == 77
     assert all(e["event_type"] == "asset_completed" for e in items)
+
+
+# -- Ingest -------------------------------------------------------------------
+
+
+def test_ingest_hands_the_batch_to_the_store_and_reports_running(store: FakeStore) -> None:
+    event_id = str(uuid4())
+    event = {"event_id": event_id, "type": "log", "timestamp": "2026-10-26T10:00:00+00:00", "message": "hi"}
+    effects = {"a": {"config": {"k": 1}, "state": {}}}
+
+    response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [event], "effects": effects})
+
+    assert response.status_code == 200 and response.json() == {"running": True}
+    ((run_id, batch),) = store.ingested
+    assert run_id == _RUN_ID
+    assert [(item.id, item.metadata["message"]) for item in batch.events] == [(event_id, "hi")]
+    assert batch.effects == {"a": il.Effect(config={"k": 1})}
+
+
+def test_ingest_rejects_a_malformed_event(store: FakeStore) -> None:
+    response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [{"type": "nope"}]})
+
+    assert response.status_code == 422
+    assert store.ingested == []
+
+
+def test_ingest_rejects_a_malformed_effect(store: FakeStore) -> None:
+    response = _client(store).post(
+        f"/runs/{_RUN_ID}/events", json={"events": [], "effects": {"a": {"config": "rotated"}}}
+    )
+
+    assert response.status_code == 422
+    assert store.ingested == []
