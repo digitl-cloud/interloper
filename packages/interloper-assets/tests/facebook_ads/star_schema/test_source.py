@@ -55,9 +55,24 @@ def _seed(
     extra_fact_campaign: bool = False,
     two_report_rows: bool = False,
     two_entities: bool = False,
+    accounts_entity: bool = False,
+    adsets_entity: bool = False,
 ) -> None:
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS facebook_ads")
+    client.execute(
+        f"CREATE TABLE facebook_ads.ad_accounts__{account_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '{account_id}' AS account_id, 'Acct from entity' AS name, 'EUR' AS currency, "
+        f"'Europe/Berlin' AS timezone_name WHERE {'TRUE' if accounts_entity else 'FALSE'}"
+    )
+    client.execute(
+        f"CREATE TABLE facebook_ads.adsets__{account_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, 's1' AS id, 'Set from entity' AS name, 'c{account_id}' AS campaign_id, "
+        f"'{account_id}' AS account_id, 'ACTIVE' AS status, CAST(NULL AS VARCHAR) AS daily_budget, "
+        "'9000' AS lifetime_budget, '2026-10-01T00:00:00+0200' AS start_time, '' AS end_time, "
+        "'2026-09-01T10:00:00+0200' AS created_time, '2026-09-02T10:00:00+0200' AS updated_time "
+        f"WHERE {'TRUE' if adsets_entity else 'FALSE'}"
+    )
     client.execute(
         f"CREATE TABLE facebook_ads.ads_stats__{account_id} AS SELECT "
         f"DATE '2026-10-01' AS date_start, '{account_id}' AS account_id, 'Acct {account_id}' AS account_name, "
@@ -136,6 +151,8 @@ class TestWiring:
             "facebook_ads.campaigns_stats",
         ]
         assert FacebookAdsStarSchema.dim_ad_groups.relations["ads_stats"].key == "facebook_ads.ads_stats"
+        assert FacebookAdsStarSchema.dim_ad_groups.relations["adsets"].key == "facebook_ads.adsets"
+        assert FacebookAdsStarSchema.dim_accounts.relations["ad_accounts"].key == "facebook_ads.ad_accounts"
         assert FacebookAdsStarSchema.dim_ads.relations["ads"].key == "facebook_ads.ads"
 
     def test_views_carry_the_core_columns_first(self):
@@ -338,6 +355,36 @@ class TestOnDuckDB:
                 "effective_status": None,
             }
         ]
+
+    def test_accounts_take_the_ad_accounts_entity_with_its_timezone(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False, accounts_entity=True)
+        _materialize(warehouse, first)
+        assert _rows(warehouse, "dim_accounts") == [
+            {
+                "account_id": "111",
+                "account_name": "Acct from entity",
+                "currency": "EUR",
+                "timezone": "Europe/Berlin",
+                "as_of_date": dt.date(2026, 9, 30),
+            }
+        ]
+
+    def test_ad_groups_take_the_adsets_entity(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False, adsets_entity=True)
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_ad_groups")
+        assert (row["ad_group_id"], row["campaign_id"], row["account_id"]) == ("s1", "c111", "111")
+        assert (row["ad_group_name"], row["status"], row["budget"], row["budget_type"]) == (
+            "Set from entity",
+            "ACTIVE",
+            None,
+            "lifetime",
+        )
+        assert (row["start_date"], row["end_date"]) == (dt.date(2026, 10, 1), None)
+        assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
+        assert row["as_of_date"] == dt.date(2026, 9, 30)
 
     def test_accounts_come_from_the_report_then_the_fact(self, warehouse):
         first = _account("111", warehouse)

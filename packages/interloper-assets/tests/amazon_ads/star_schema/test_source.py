@@ -54,9 +54,46 @@ def _profile(profile_id: str, warehouse) -> il.Source:
     return AmazonAds(profile_id=profile_id, connection=connection, destinations=[warehouse], enabled=False)
 
 
-def _seed(warehouse, profile_id: str, *, entity: bool) -> None:
+def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool = False) -> None:
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS amazon_ads")
+    collected = "TRUE" if campaign_entities else "FALSE"
+    client.execute(
+        f"CREATE TABLE amazon_ads.products_campaigns__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '11{profile_id}' AS campaign_id, 'SP from entity' AS name, 'ENABLED' AS state, "
+        "55.0 AS budget_budget, 'DAILY' AS budget_budget_type, DATE '2026-09-01' AS start_date, "
+        "CAST(NULL AS DATE) AS end_date, TIMESTAMP '2026-08-01 10:00:00' AS extended_data_creation_date_time, "
+        f"TIMESTAMP '2026-08-02 10:00:00' AS extended_data_last_update_date_time WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.brands_campaigns__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '22{profile_id}' AS campaign_id, 'SB from entity' AS name, 'PAUSED' AS state, "
+        "25.0 AS budget, 'LIFETIME' AS budget_type, DATE '2026-09-15' AS start_date, DATE '2026-12-31' AS end_date "
+        f"WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.display_campaigns__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, 33{profile_id} AS campaign_id, 'SD from entity' AS name, 'enabled' AS state, "
+        "10.0 AS budget, 'daily' AS budget_type, DATE '2026-09-20' AS start_date, CAST(NULL AS DATE) AS end_date "
+        f"WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.products_ad_groups__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '1' AS ad_group_id, '11{profile_id}' AS campaign_id, "
+        "'SP group from entity' AS name, 'ENABLED' AS state, "
+        "TIMESTAMP '2026-08-01 10:00:00' AS extended_data_creation_date_time, "
+        f"TIMESTAMP '2026-08-02 10:00:00' AS extended_data_last_update_date_time WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.brands_ad_groups__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '3' AS ad_group_id, '22{profile_id}' AS campaign_id, "
+        f"'SB group from entity' AS name, 'PAUSED' AS state WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.display_ad_groups__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, 4 AS ad_group_id, 33{profile_id} AS campaign_id, 'SD group from entity' AS name, "
+        f"'enabled' AS state WHERE {collected}"
+    )
     client.execute(
         f"CREATE TABLE amazon_ads.products_campaigns_stats__{profile_id} AS SELECT * FROM (VALUES "
         f"(DATE '2026-10-01', 11{profile_id}, 'SP campaign', 'ENABLED', 50.0, 'DAILY', 'EUR', "
@@ -119,6 +156,16 @@ class TestWiring:
         fact = AmazonAdsStarSchema.fact_campaign_performance.relations["campaigns_stats"]
         assert (fact.key, fact.many, fact.optional) == (CAMPAIGN_REPORTS, True, True)
         assert AmazonAdsStarSchema.dim_campaigns.relations["campaigns_stats"].key == CAMPAIGN_REPORTS
+        assert AmazonAdsStarSchema.dim_campaigns.relations["campaigns"].key == [
+            "amazon_ads.products_campaigns",
+            "amazon_ads.brands_campaigns",
+            "amazon_ads.display_campaigns",
+        ]
+        assert AmazonAdsStarSchema.dim_ad_groups.relations["ad_groups"].key == [
+            "amazon_ads.products_ad_groups",
+            "amazon_ads.brands_ad_groups",
+            "amazon_ads.display_ad_groups",
+        ]
         ad_groups = AmazonAdsStarSchema.dim_ad_groups.relations["ad_groups_stats"]
         assert (ad_groups.key, ad_groups.many, ad_groups.optional) == (AD_GROUP_REPORTS, True, True)
         profiles = AmazonAdsStarSchema.dim_accounts.relations["profiles"]
@@ -216,6 +263,45 @@ class TestOnDuckDB:
         assert (rows["3"]["campaign_id"], rows["3"]["ad_group_name"]) == ("221", "SB group")
         assert rows["3"]["account_id"] == "1" and rows["3"]["status"] is None
         assert rows["3"]["as_of_date"] == DAY
+
+    def test_campaigns_take_their_entity_row_with_the_schedule(self, warehouse):
+        first = _profile("1", warehouse)
+        _seed(warehouse, "1", entity=False, campaign_entities=True)
+        _materialize(warehouse, first)
+        rows = {row["campaign_id"]: row for row in _rows(warehouse, "dim_campaigns")}
+        products = rows["111"]
+        assert (products["campaign_name"], products["status"], products["campaign_type"]) == (
+            "SP from entity",
+            "ENABLED",
+            "sponsored_products",
+        )
+        assert (products["budget"], products["budget_type"]) == (55.0, "DAILY")
+        assert (products["start_date"], products["end_date"]) == (dt.date(2026, 9, 1), None)
+        assert products["created_at"] == dt.datetime(2026, 8, 1, 10, 0, tzinfo=dt.timezone.utc)
+        assert products["as_of_date"] == dt.date(2026, 9, 30)
+        brands = rows["221"]
+        assert (brands["budget_type"], brands["start_date"], brands["end_date"]) == (
+            "LIFETIME",
+            dt.date(2026, 9, 15),
+            dt.date(2026, 12, 31),
+        )
+        assert brands["created_at"] is None
+        display = rows["331"]
+        assert (display["account_id"], display["campaign_type"], display["start_date"]) == (
+            "1",
+            "sponsored_display",
+            dt.date(2026, 9, 20),
+        )
+
+    def test_ad_groups_take_their_entity_row(self, warehouse):
+        first = _profile("1", warehouse)
+        _seed(warehouse, "1", entity=False, campaign_entities=True)
+        _materialize(warehouse, first)
+        rows = {row["ad_group_id"]: row for row in _rows(warehouse, "dim_ad_groups")}
+        assert (rows["1"]["ad_group_name"], rows["1"]["status"]) == ("SP group from entity", "ENABLED")
+        assert rows["1"]["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.timezone.utc)
+        assert (rows["3"]["status"], rows["3"]["as_of_date"]) == ("PAUSED", dt.date(2026, 9, 30))
+        assert (rows["4"]["campaign_id"], rows["4"]["account_id"]) == ("331", "1")
 
     def test_a_profile_takes_its_own_entity_row_over_the_facts(self, warehouse):
         first, second = _profile("1", warehouse), _profile("2", warehouse)

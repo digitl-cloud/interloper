@@ -15,7 +15,15 @@ AD_PRODUCTS = {
     "display_campaigns_stats": "sponsored_display",
     "brands_ad_groups_stats": "sponsored_brands",
     "display_ad_groups_stats": "sponsored_display",
+    "products_campaigns": "sponsored_products",
+    "brands_campaigns": "sponsored_brands",
+    "display_campaigns": "sponsored_display",
+    "products_ad_groups": "sponsored_products",
+    "brands_ad_groups": "sponsored_brands",
+    "display_ad_groups": "sponsored_display",
 }
+CAMPAIGN_ENTITIES = ["amazon_ads.products_campaigns", "amazon_ads.brands_campaigns", "amazon_ads.display_campaigns"]
+AD_GROUP_ENTITIES = ["amazon_ads.products_ad_groups", "amazon_ads.brands_ad_groups", "amazon_ads.display_ad_groups"]
 CAMPAIGN_REPORTS = [
     "amazon_ads.products_campaigns_stats",
     "amazon_ads.brands_campaigns_stats",
@@ -193,10 +201,43 @@ class AmazonAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimCampaigns,
         tags=["Dimension"],
-        relations={"campaigns_stats": il.Relation("asset", CAMPAIGN_REPORTS, many=True, optional=True)},
+        relations={
+            "campaigns": il.Relation("asset", CAMPAIGN_ENTITIES, many=True, optional=True),
+            "campaigns_stats": il.Relation("asset", CAMPAIGN_REPORTS, many=True, optional=True),
+        },
     )
-    def dim_campaigns(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per campaign with its ad product, status and budget, from its latest report, else the facts."""
+    def dim_campaigns(
+        self,
+        campaigns: list[il.Upstream],
+        campaigns_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per campaign with its ad product, status, budget and schedule.
+
+        Each campaign comes from its entity row, else its report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            # only Sponsored Products nests its budget and sends its lifecycle times as instants; the others send
+            # epoch numbers in an undocumented unit, left NULL here
+            products = upstream.asset.key == "products_campaigns"
+            return table.select(
+                campaign_id=table["campaign_id"].cast("string"),
+                account_id=ibis.literal(_account(upstream)),
+                campaign_name=table["name"],
+                status=table["state"],
+                objective=ibis.null("string"),
+                campaign_type=ibis.literal(AD_PRODUCTS[upstream.asset.key]),
+                budget=table["budget_budget"] if products else table["budget"],
+                budget_type=table["budget_budget_type"] if products else table["budget_type"],
+                start_date=table["start_date"],
+                end_date=table["end_date"],
+                created_at=table["extended_data_creation_date_time"] if products else ibis.null(INSTANT),
+                updated_at=table["extended_data_last_update_date_time"] if products else ibis.null(INSTANT),
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -249,6 +290,7 @@ class AmazonAdsStarSchema(il.Source):
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in campaigns),
             *(from_report(upstream) for upstream in campaigns_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
@@ -258,10 +300,32 @@ class AmazonAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimAdGroups,
         tags=["Dimension"],
-        relations={"ad_groups_stats": il.Relation("asset", AD_GROUP_REPORTS, many=True, optional=True)},
+        relations={
+            "ad_groups": il.Relation("asset", AD_GROUP_ENTITIES, many=True, optional=True),
+            "ad_groups_stats": il.Relation("asset", AD_GROUP_REPORTS, many=True, optional=True),
+        },
     )
-    def dim_ad_groups(self, ad_groups_stats: list[il.Upstream]) -> ibis.Table:
-        """One row per ad group with its name and campaign, from its latest report of any ad product."""
+    def dim_ad_groups(self, ad_groups: list[il.Upstream], ad_groups_stats: list[il.Upstream]) -> ibis.Table:
+        """One row per ad group with its name, campaign and status: its entity row, else its latest report."""
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            products = upstream.asset.key == "products_ad_groups"
+            return table.select(
+                ad_group_id=table["ad_group_id"].cast("string"),
+                campaign_id=table["campaign_id"].cast("string"),
+                account_id=ibis.literal(_account(upstream)),
+                ad_group_name=table["name"],
+                status=table["state"],
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                created_at=table["extended_data_creation_date_time"] if products else ibis.null(INSTANT),
+                updated_at=table["extended_data_last_update_date_time"] if products else ibis.null(INSTANT),
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -284,7 +348,11 @@ class AmazonAdsStarSchema(il.Source):
                 priority=ibis.literal(REPORT),
             )
 
-        if not ad_groups_stats:
-            raise ConfigError("no upstream bound: the ad group dimension needs at least one profile's report")
-        rows = ibis.union(*(from_report(upstream) for upstream in ad_groups_stats), distinct=False)
+        if not ad_groups and not ad_groups_stats:
+            raise ConfigError("no upstream bound: the ad group dimension needs at least one profile's ad groups")
+        rows = ibis.union(
+            *(from_entity(upstream) for upstream in ad_groups),
+            *(from_report(upstream) for upstream in ad_groups_stats),
+            distinct=False,
+        )
         return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
