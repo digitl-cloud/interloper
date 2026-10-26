@@ -17,8 +17,12 @@ child asset → normalize+validate a camelCase report row.
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 from typing import Any
 
+import httpx2
+import interloper as il
 import pandas as pd
 from interloper.asset import Asset
 from interloper.dag import DAG, DAGSpec
@@ -27,6 +31,7 @@ from interloper.schema import Schema
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.amazon_ads import constants
+from interloper_assets.amazon_ads.connection import AmazonAdsConnection
 from interloper_assets.amazon_ads.connector import schemas
 from interloper_assets.amazon_ads.connector.source import AmazonAds
 
@@ -194,3 +199,206 @@ class TestCountMetricTypes:
         out = TableData.from_data(normalized).reconcile(schemas.ProductsCampaignsStats)
         assert pd.api.types.is_integer_dtype(out["impressions"]) and int(out.loc[0, "impressions"]) == 3
         assert pd.api.types.is_float_dtype(out["cost"])
+
+
+DAY = dt.date(2026, 10, 1)
+API_URL = "https://advertising-api-eu.amazon.com"
+
+
+def _source_with_api(handler: Any) -> Any:
+    connection = AmazonAdsConnection(id="amz", client_id="cid", client_secret="x", refresh_token="x", location="EU")
+    connection.__dict__["client"] = il.RESTClient(API_URL, transport=httpx2.MockTransport(handler))
+    return AmazonAds(id="src-1", profile_id="123", connection=connection)
+
+
+def _run(source: Any, key: str) -> list[dict[str, Any]]:
+    asset = next(a for a in source.assets if type(a).key == key)
+    return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=DAY).window))
+
+
+def _conform(key: str, rows: list[dict[str, Any]], schema: type[Schema]) -> pd.DataFrame:
+    asset = next(a for a in _source().assets if type(a).key == key)
+    normalized = asset.normalizer.normalize(pd.DataFrame(rows))
+    return TableData.from_data(normalized).reconcile(schema, strict=True)
+
+
+class TestEntities:
+    """Campaigns and ad groups per ad product, mirroring each product's list call."""
+
+    def test_products_campaigns_page_through_the_next_token(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            body = json.loads(request.content)
+            if body.get("nextToken") is None:
+                page = {"campaigns": [{"campaignId": "1", "tags": {"team": "a"}}], "nextToken": "t1"}
+            else:
+                page = {"campaigns": [{"campaignId": "2"}]}
+            return httpx2.Response(200, json=page)
+
+        rows = _run(_source_with_api(handler), "products_campaigns")
+        assert [row["campaignId"] for row in rows] == ["1", "2"]
+        assert all(row["date"] == DAY for row in rows)
+        assert json.loads(rows[0]["tags"]) == {"team": "a"}
+        first, second = requests
+        assert (first.method, first.url.path) == ("POST", "/sp/campaigns/list")
+        assert first.headers["Amazon-Advertising-API-Scope"] == "123"
+        assert first.headers["Content-Type"] == "application/vnd.spCampaign.v3+json"
+        assert first.headers["Accept"] == "application/vnd.spCampaign.v3+json"
+        assert json.loads(first.content) == {
+            "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
+            "includeExtendedDataFields": True,
+            "maxResults": 100,
+        }
+        assert json.loads(second.content)["nextToken"] == "t1"
+
+    def test_brands_ad_groups_use_the_v4_resource(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"adGroups": [{"adGroupId": "7", "campaignId": "1"}]})
+
+        rows = _run(_source_with_api(handler), "brands_ad_groups")
+        assert [row["adGroupId"] for row in rows] == ["7"]
+        [request] = requests
+        assert request.url.path == "/sb/v4/adGroups/list"
+        assert request.headers["Content-Type"] == "application/vnd.sbadgroupresource.v4+json"
+
+    def test_display_campaigns_page_by_offset_until_empty(self):
+        calls: list[tuple[str, str, dict[str, str]]] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            params = dict(request.url.params)
+            calls.append((request.url.path, request.headers["Amazon-Advertising-API-Scope"], params))
+            return httpx2.Response(200, json=[{"campaignId": 5, "name": "SD"}] if params["startIndex"] == "0" else [])
+
+        rows = _run(_source_with_api(handler), "display_campaigns")
+        assert [row["campaignId"] for row in rows] == [5]
+        assert calls == [
+            (
+                "/sd/campaigns/extended",
+                "123",
+                {"startIndex": "0", "count": "100", "stateFilter": "enabled,paused,archived"},
+            ),
+            (
+                "/sd/campaigns/extended",
+                "123",
+                {"startIndex": "100", "count": "100", "stateFilter": "enabled,paused,archived"},
+            ),
+        ]
+
+    def test_every_entity_asset_calls_its_own_list(self):
+        calls = {
+            "products_campaigns": ("POST", "/sp/campaigns/list", "application/vnd.spCampaign.v3+json", "campaigns"),
+            "products_ad_groups": ("POST", "/sp/adGroups/list", "application/vnd.spAdGroup.v3+json", "adGroups"),
+            "brands_campaigns": (
+                "POST",
+                "/sb/v4/campaigns/list",
+                "application/vnd.sbcampaignresource.v4+json",
+                "campaigns",
+            ),
+            "brands_ad_groups": (
+                "POST",
+                "/sb/v4/adGroups/list",
+                "application/vnd.sbadgroupresource.v4+json",
+                "adGroups",
+            ),
+            "display_campaigns": ("GET", "/sd/campaigns/extended", None, None),
+            "display_ad_groups": ("GET", "/sd/adGroups/extended", None, None),
+        }
+        for key, (method, path, media_type, page_key) in calls.items():
+            seen: list[httpx2.Request] = []
+
+            def handler(request: httpx2.Request, seen=seen, page_key=page_key) -> httpx2.Response:
+                seen.append(request)
+                if page_key is None:
+                    return httpx2.Response(200, json=[{"id": 1}] if request.url.params["startIndex"] == "0" else [])
+                return httpx2.Response(200, json={page_key: [{"id": "1"}]})
+
+            rows = _run(_source_with_api(handler), key)
+            assert rows == [{"id": rows[0]["id"], "date": DAY}], key
+            assert (seen[0].method, seen[0].url.path) == (method, path), key
+            if media_type is not None:
+                assert seen[0].headers["Content-Type"] == media_type, key
+
+    def test_display_entities_keep_their_date_reading_normalizer_through_the_roundtrip(self):
+        for key in ("display_campaigns", "display_ad_groups"):
+            src = _source()
+            asset = next(a for a in src.assets if type(a).key == key)
+            spec_json = DAG(src).mini_dag(asset.id).to_spec().model_dump(mode="json")
+            child: Any = next(a for a in DAGSpec(**spec_json).reconstruct().operations if type(a).key == key)
+            assert type(child.normalizer).__name__ == "SponsoredDisplayEntityNormalizer", key
+
+    def test_a_products_campaign_conforms_with_its_nested_budget(self):
+        row = {
+            "campaignId": "1",
+            "name": "SP",
+            "state": "ENABLED",
+            "targetingType": "AUTO",
+            "startDate": "2026-09-01",
+            "endDate": None,
+            "budget": {"budget": 50.0, "budgetType": "DAILY", "effectiveBudget": 45.0},
+            "dynamicBidding": {
+                "strategy": "LEGACY_FOR_SALES",
+                "placementBidding": [{"placement": "X", "percentage": 10}],
+            },
+            "extendedData": {"creationDateTime": "2026-08-01T10:00:00Z", "servingStatus": "CAMPAIGN_STATUS_ENABLED"},
+            "date": DAY,
+        }
+        out = _conform("products_campaigns", [row], schemas.ProductsCampaigns)
+        assert out.loc[0, "budget_budget"] == 50.0 and out.loc[0, "budget_budget_type"] == "DAILY"
+        assert out.loc[0, "start_date"] == dt.date(2026, 9, 1)
+        assert json.loads(out.loc[0, "dynamic_bidding_placement_bidding"]) == [{"placement": "X", "percentage": 10}]
+        assert out.loc[0, "extended_data_serving_status"] == "CAMPAIGN_STATUS_ENABLED"
+
+    def test_a_display_campaign_conforms_with_its_compact_dates(self):
+        row = {
+            "campaignId": 5,
+            "name": "SD",
+            "state": "enabled",
+            "startDate": "20261001",
+            "creationDate": 1,
+            "date": DAY,
+        }
+        out = _conform("display_campaigns", [row], schemas.DisplayCampaigns)
+        assert out.loc[0, "start_date"] == dt.date(2026, 10, 1)
+        assert int(out.loc[0, "campaign_id"]) == 5
+
+    def test_every_entity_row_conforms_with_its_schema(self):
+        cases = {
+            "brands_campaigns": (schemas.BrandsCampaigns, {"campaignId": "1", "budget": 20.0, "budgetType": "DAILY"}),
+            "products_ad_groups": (schemas.ProductsAdGroups, {"adGroupId": "2", "campaignId": "1", "defaultBid": 0.5}),
+            "brands_ad_groups": (schemas.BrandsAdGroups, {"adGroupId": "3", "campaignId": "1", "state": "ENABLED"}),
+            "display_ad_groups": (schemas.DisplayAdGroups, {"adGroupId": 4, "campaignId": 5, "tactic": "T00020"}),
+        }
+        for key, (schema, row) in cases.items():
+            _conform(key, [{**row, "date": DAY}], schema)
+
+
+class TestProfiles:
+    def test_profiles_keep_only_the_sources_own_profile(self):
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            assert request.url.path == "/v2/profiles"
+            return httpx2.Response(
+                200,
+                json=[
+                    {"profileId": 123, "countryCode": "DE", "dailyBudget": 10.0, "accountInfo": {"subType": "KDP"}},
+                    {"profileId": 999, "countryCode": "FR"},
+                ],
+            )
+
+        rows = _run(_source_with_api(handler), "profiles")
+        assert [row["profileId"] for row in rows] == [123]
+        out = _conform("profiles", rows, schemas.Profiles)
+        assert out.loc[0, "daily_budget"] == 10.0 and out.loc[0, "account_info_sub_type"] == "KDP"
+        assert pd.isna(out.loc[0, "account_info_name"])
+
+
+class TestTelevisionReports:
+    def test_both_television_reports_declare_a_schema(self):
+        src = _source()
+        for key in ("television_campaigns_stats", "television_targeting_stats"):
+            asset = next(a for a in src.assets if type(a).key == key)
+            assert asset.schema is not None, key
