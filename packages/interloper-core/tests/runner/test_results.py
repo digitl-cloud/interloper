@@ -6,7 +6,7 @@ import datetime as dt
 
 import pytest
 
-from interloper.operation.base import OperationResult
+from interloper.operation.base import Effect, OperationResult
 from interloper.partitioning import TimePartition, TimePartitionWindow
 from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 
@@ -221,3 +221,18 @@ class TestRunResultStr:
 
         assert "failed=[f0, f1, f2, f3, f4 +2 more]" in rendered
         assert "canceled=[c0, c1, c2, c3, c4 +4 more]" in rendered
+
+
+class TestEffects:
+    """What a run hands the platform to persist."""
+
+    def test_collects_the_non_empty_effects_by_component_id(self) -> None:
+        result = RunResult(
+            executions={
+                "a": ExecutionInfo("a", "a", ExecutionStatus.COMPLETED, result=OperationResult(config={"k": 1})),
+                "b": ExecutionInfo("b", "b", ExecutionStatus.FAILED, result=OperationResult(error="x", state={"s": 2})),
+                "c": ExecutionInfo("c", "c", ExecutionStatus.COMPLETED, result=OperationResult()),
+                "d": ExecutionInfo("d", "d", ExecutionStatus.CANCELED),
+            }
+        )
+        assert result.effects == {"a": Effect(config={"k": 1}, state={}), "b": Effect(config={}, state={"s": 2})}

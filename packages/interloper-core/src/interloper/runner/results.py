@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from interloper.operation.base import Effect
 from interloper.partitioning.base import PartitionWindow
 
 if TYPE_CHECKING:
@@ -121,6 +122,15 @@ class RunResult:
     status: ExecutionStatus = ExecutionStatus.COMPLETED
     executions: dict[str, ExecutionInfo] = field(default_factory=dict)
     execution_time: float = 0.0
+
+    @property
+    def effects(self) -> dict[str, Effect]:
+        """The effects the platform persists, by component id: every finished execution's non-empty ones."""
+        return {
+            component_id: Effect(config=dict(info.result.config), state=dict(info.result.state))
+            for component_id, info in self.executions.items()
+            if info.result is not None and (info.result.config or info.result.state)
+        }
 
     @property
     def completed_ids(self) -> list[str]:

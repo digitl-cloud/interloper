@@ -123,6 +123,28 @@ class EventError(InterloperError, ValueError):
     """An error in event deserialization or processing."""
 
 
+class DeliveryError(InterloperError):
+    """A batch of a run's events did not reach the platform.
+
+    ``retryable`` is ``False`` when trying again cannot help: the platform
+    refused the run's token or the batch itself.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        """Describe the failure.
+
+        Args:
+            message: What went wrong.
+            retryable: Whether the delivery is worth trying again.
+        """
+        super().__init__(message)
+        self.retryable = retryable
+
+
+class RunLostError(InterloperError):
+    """A run was lost while its events were recorded: ended elsewhere, or out of reach for its liveness window."""
+
+
 # -- Runner --------------------------------------------------------------------
 
 
