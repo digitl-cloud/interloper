@@ -44,8 +44,8 @@ il.EventBus.unsubscribe(on_event)
 ```
 
 Handlers run on a background worker thread in subscription order; an exception in one handler
-is isolated from the others. `il.EventBus.flush(timeout)` blocks until everything queued so far
-has been delivered.
+is logged and isolated from the others. `il.EventBus.flush(timeout)` blocks until everything
+queued so far has been delivered; a run's own flush waits with no timeout.
 
 ## The event
 
@@ -65,6 +65,20 @@ Events serialize with `to_dict()` / `to_json()` and parse back with `Event.from_
 `Event.from_json()`. Operation lifecycle events get a **deterministic id** derived from run,
 component and type, so the same logical event produced twice (a child process and its host)
 collapses to one when persisted.
+
+## Persistence
+
+On the platform, a `RunRecorder` delivers a run's events in batches to the store, with no
+deadline: a batch is whatever accumulated while the previous delivery was in flight. The store
+folds the run's state from what it receives, so `run_started` starts the run and `run_completed`
+or `run_failed` ends it. A run's verdict is the ingestion of its own terminal event and never
+exists without the events before it. Every batch renews the run's heartbeat; a run that cannot
+deliver for half the heartbeat timeout is lost, and the reaper fails it.
+
+Why a run did not succeed is recorded on the run itself, as `Run.error`: the fault its runner
+reported, or the reason the platform ended it (the reaper, a failed dispatch, an exhausted
+quota). A run that failed only because operations failed has none of its own; their reasons are
+on their `operation_failed` events.
 
 ## Event types
 
