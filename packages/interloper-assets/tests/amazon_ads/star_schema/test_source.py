@@ -77,7 +77,7 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
     )
     client.execute(
         f"CREATE TABLE amazon_ads.display_campaigns__{profile_id} AS SELECT "
-        f"DATE '2026-09-30' AS date, 33{profile_id} AS campaign_id, 'SD from entity' AS name, 'enabled' AS state, "
+        f"DATE '2026-09-30' AS date, '33{profile_id}' AS campaign_id, 'SD from entity' AS name, 'enabled' AS state, "
         "10.0 AS budget, 'daily' AS budget_type, DATE '2026-09-20' AS start_date, CAST(NULL AS DATE) AS end_date, "
         f"{CREATED_SQL} AS creation_date, {UPDATED_SQL} AS last_updated_date WHERE {collected}"
     )
@@ -96,8 +96,9 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
     )
     client.execute(
         f"CREATE TABLE amazon_ads.display_ad_groups__{profile_id} AS SELECT "
-        f"DATE '2026-09-30' AS date, 4 AS ad_group_id, 33{profile_id} AS campaign_id, 'SD group from entity' AS name, "
-        f"'enabled' AS state, {CREATED_SQL} AS creation_date, {UPDATED_SQL} AS last_updated_date WHERE {collected}"
+        f"DATE '2026-09-30' AS date, '4' AS ad_group_id, '33{profile_id}' AS campaign_id, "
+        f"'SD group from entity' AS name, 'enabled' AS state, {CREATED_SQL} AS creation_date, "
+        f"{UPDATED_SQL} AS last_updated_date WHERE {collected}"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.products_campaigns_stats__{profile_id} AS SELECT * FROM (VALUES "
@@ -298,6 +299,8 @@ class TestOnDuckDB:
             dt.date(2026, 9, 20),
         )
         assert (display["created_at"], display["updated_at"]) == (CREATED, UPDATED)
+        # Sponsored Display sends its vocabulary in lower case; the dimension speaks one casing
+        assert (display["status"], display["budget_type"]) == ("ENABLED", "DAILY")
 
     def test_ad_groups_take_their_entity_row(self, warehouse):
         first = _profile("1", warehouse)
@@ -309,6 +312,7 @@ class TestOnDuckDB:
         assert (rows["3"]["status"], rows["3"]["as_of_date"]) == ("PAUSED", dt.date(2026, 9, 30))
         assert (rows["4"]["campaign_id"], rows["4"]["account_id"]) == ("331", "1")
         assert (rows["3"]["created_at"], rows["4"]["updated_at"]) == (CREATED, UPDATED)
+        assert rows["4"]["status"] == "ENABLED"
 
     def test_a_profile_takes_its_own_entity_row_over_the_facts(self, warehouse):
         first, second = _profile("1", warehouse), _profile("2", warehouse)

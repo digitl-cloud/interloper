@@ -5,12 +5,12 @@ from pydantic import Field
 
 
 class DisplayCampaigns(Schema):
-    """Sponsored Display campaign snapshot. One row per campaign and day, as the extended campaigns list returns it. Ids are numeric, as Sponsored Display sends them. Creation and update times arrive as epoch milliseconds and are stored as UTC instants."""
+    """Sponsored Display campaign snapshot. One row per campaign and day, as the extended campaigns list returns it. Ids are strings, as on the other ad products: Sponsored Display sends them as numbers, some beyond what a float holds exactly. Creation and update times arrive as epoch milliseconds and are stored as UTC instants."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    campaign_id: int | None = Field(default=None, description="Campaign id.")
+    campaign_id: str | None = Field(default=None, description="Campaign id.")
     name: str | None = Field(default=None, description="Campaign name.")
     state: str | None = Field(default=None, description="enabled, paused or archived.")
     tactic: str | None = Field(default=None, description="Targeting tactic: T00020 (contextual) or T00030 (audiences).")
@@ -21,7 +21,7 @@ class DisplayCampaigns(Schema):
         default=None, description="Scheduled end, in the profile's timezone; NULL when open-ended."
     )
     cost_type: str | None = Field(default=None, description="cpc or vcpm.")
-    portfolio_id: int | None = Field(default=None, description="Portfolio the campaign belongs to.")
+    portfolio_id: str | None = Field(default=None, description="Portfolio the campaign belongs to.")
     rule_based_budget_applicable_rule_id: str | None = Field(default=None, description="Budget rule in effect.")
     rule_based_budget_applicable_rule_name: str | None = Field(
         default=None, description="Name of the budget rule in effect."
