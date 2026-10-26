@@ -77,6 +77,38 @@ def _make_events(
     ]
 
 
+def test_save_many_writes_a_batch_and_reports_what_was_new(store: Store) -> None:
+    run_id = uuid4()
+    first = il.Event(type=il.EventType.RUN_STARTED, metadata={"run_id": str(run_id)})
+    second = il.Event(type=il.EventType.LOG, metadata={"message": "hi"})
+
+    inserted = store.events.save_many([first, second], _ORG_ID, run_id)
+    replayed = store.events.save_many([first, second], _ORG_ID, run_id)
+
+    assert inserted == [UUID(first.id), UUID(second.id)]
+    assert replayed == []
+    assert store.events.list(_ORG_ID, EventQuery(), run_id=run_id).total == 2
+
+
+def test_one_unconvertible_event_does_not_take_its_batch_with_it(
+    store: Store, caplog: pytest.LogCaptureFixture
+) -> None:
+    run_id = uuid4()
+    odd_message = il.Event(type=il.EventType.LOG, metadata={"message": {"rows": 3}})
+    bad_component = il.Event(type=il.EventType.LOG, metadata={"component_id": "not-a-uuid"})
+    fine = il.Event(type=il.EventType.LOG, metadata={"message": "fine"})
+
+    with caplog.at_level("ERROR", logger="interloper_db.store.events"):
+        inserted = store.events.save_many([odd_message, bad_component, fine], _ORG_ID, run_id)
+
+    assert inserted == [UUID(odd_message.id), UUID(fine.id)]
+    assert bad_component.id in caplog.text
+
+
+def test_save_many_of_nothing_touches_nothing(store: Store) -> None:
+    assert store.events.save_many([], _ORG_ID, uuid4()) == []
+
+
 def test_list_defaults_to_oldest_first(store: Store) -> None:
     _seed(_make_events(3))
     events = store.events.list(_ORG_ID, EventQuery(limit=100), run_id=_RUN_ID).items

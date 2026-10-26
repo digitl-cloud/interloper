@@ -11,6 +11,9 @@ The row the framework event becomes, text and payload sanitised, is
 
 from __future__ import annotations
 
+import builtins
+import logging
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +26,8 @@ from interloper_db.errors import NotFoundError
 from interloper_db.models import Event, Run
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery
+
+logger = logging.getLogger(__name__)
 
 _OPERATION_EVENT_TYPES = (
     "operation_queued",
@@ -61,16 +66,38 @@ class EventStore:
         """
         self._engine = engine
 
-    def save(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
-        """Persist a framework event to the database, idempotently.
+    def save_many(self, events: Sequence[il.Event], org_id: UUID, run_id: UUID | None = None) -> builtins.list[UUID]:
+        """Persist a batch of framework events in one transaction, idempotently.
 
-        The event's producer-assigned ``id`` becomes the row primary key
-        and the insert is an upsert (``ON CONFLICT DO NOTHING``), so the
-        same event delivered more than once — e.g. re-emitted from a child
-        container's log stream and also written directly — yields a single
-        row rather than a duplicate or an error.  Free-text fields are
-        sanitized so a stray NUL byte or oversized traceback can't fail the
-        write and silently drop the event.
+        One multi-row upsert, ``ON CONFLICT DO NOTHING`` on the producer-assigned
+        id, so a batch delivered twice yields one row per event. Nothing is read
+        back: the ids the database reports as inserted are what the caller
+        learns, which is how ingestion applies a run's effects exactly once.
+        An event that cannot become a row is logged and skipped, so one
+        malformed event never holds back the rest of its batch.
+
+        Args:
+            events: The framework events, in the order they were emitted.
+            org_id: Organisation UUID.
+            run_id: Optional run UUID stamped on every row.
+
+        Returns:
+            The ids of the rows this call inserted, in batch order.
+        """
+        rows = []
+        for event in events:
+            try:
+                rows.append(Event.from_event(event, org_id, run_id))
+            except Exception:
+                logger.exception("Event %s (%s) cannot be stored; skipped", event.id, event.type.value)
+        return self._upsert(rows)
+
+    def save(self, event: il.Event, org_id: UUID, run_id: UUID | None = None) -> Event:
+        """Persist one framework event, idempotently, and read its row back.
+
+        The scheduler's own writes (a reaper's verdict, a cancel's reason, the
+        verdicts closing a run's operations) come through here, one at a time.
+        A run's own events come in batches through :meth:`save_many`.
 
         Args:
             event: The framework Event.
@@ -85,16 +112,37 @@ class EventStore:
                 a concurrent delete can cause.
         """
         row = Event.from_event(event, org_id, run_id)
-        values = {name: getattr(row, name) for name in Event.model_fields}
         with session_scope(self._engine) as session:
-            table = Event.__table__  # ty: ignore[unresolved-attribute]
-            statement = dialect_insert(session)(table).values(**values).on_conflict_do_nothing(index_elements=["id"])
-            session.execute(statement)  # ty: ignore[deprecated]
+            self._upsert([row])
             commit(session)
             saved = session.get(Event, row.id)
             if saved is None:  # pragma: no cover - only if the row was concurrently deleted
                 raise RuntimeError(f"Event {row.id} missing immediately after upsert")
             return saved
+
+    def _upsert(self, rows: builtins.list[Event]) -> builtins.list[UUID]:
+        """Insert rows that are not there yet, in one statement.
+
+        Args:
+            rows: The rows, in batch order.
+
+        Returns:
+            The ids of the rows inserted.
+        """
+        if not rows:
+            return []
+        values = [{name: getattr(row, name) for name in Event.model_fields} for row in rows]
+        with session_scope(self._engine) as session:
+            table = Event.__table__  # ty: ignore[unresolved-attribute]
+            statement = (
+                dialect_insert(session)(table)
+                .values(values)
+                .on_conflict_do_nothing(index_elements=["id"])
+                .returning(table.c.id)
+            )
+            inserted = [row[0] for row in session.execute(statement)]  # ty: ignore[deprecated]
+            commit(session)
+            return inserted
 
     def list(self, org_id: UUID, query: EventQuery, *, run_id: UUID | None = None) -> Page[Event]:
         """List an organisation's events, oldest first.

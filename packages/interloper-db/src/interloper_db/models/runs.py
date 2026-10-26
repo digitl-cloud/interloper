@@ -393,7 +393,7 @@ class Event(SQLModel, table=True):
         )
 
     @staticmethod
-    def _sanitize_text(value: str | None, *, max_len: int = MAX_EVENT_TEXT) -> str | None:
+    def _sanitize_text(value: object, *, max_len: int = MAX_EVENT_TEXT) -> str | None:
         """Make a free-text event field safe to persist.
 
         Postgres ``text`` columns cannot store NUL bytes: a single one makes
@@ -402,7 +402,9 @@ class Event(SQLModel, table=True):
         length capped so an oversized traceback cannot fail the write either.
 
         Args:
-            value: The raw field value, or ``None`` when the producer omitted it.
+            value: The raw field value, or ``None`` when the producer omitted
+                it; anything else than a string (a dict an asset logged) is
+                stored as its ``str()``.
             max_len: Maximum characters to keep before truncating.
 
         Returns:
@@ -410,7 +412,7 @@ class Event(SQLModel, table=True):
         """
         if value is None:
             return None
-        cleaned = value.replace("\x00", "")
+        cleaned = str(value).replace("\x00", "")
         if len(cleaned) > max_len:
             cleaned = cleaned[:max_len] + "…[truncated]"
         return cleaned
