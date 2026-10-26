@@ -68,9 +68,9 @@ def _seed(
     client.execute(
         f"CREATE TABLE facebook_ads.adsets__{account_id} AS SELECT "
         f"DATE '2026-09-30' AS date, 's1' AS id, 'Set from entity' AS name, 'c{account_id}' AS campaign_id, "
-        f"'{account_id}' AS account_id, 'ACTIVE' AS status, CAST(NULL AS VARCHAR) AS daily_budget, "
-        "'9000' AS lifetime_budget, '2026-10-01T00:00:00+0200' AS start_time, '' AS end_time, "
-        "'2026-09-01T10:00:00+0200' AS created_time, '2026-09-02T10:00:00+0200' AS updated_time "
+        f"'{account_id}' AS account_id, 'ACTIVE' AS status, CAST(NULL AS BIGINT) AS daily_budget, "
+        "9000 AS lifetime_budget, '2026-10-01T00:00:00+0200' AS start_time, '' AS end_time, "
+        "TIMESTAMPTZ '2026-09-01 08:00:00+00' AS created_time, TIMESTAMPTZ '2026-09-02 08:00:00+00' AS updated_time "
         f"WHERE {'TRUE' if adsets_entity else 'FALSE'}"
     )
     client.execute(
