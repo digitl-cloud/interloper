@@ -2617,8 +2617,8 @@ of a name that identifies the campaign under a naming convention, and a <code>si
 below <code>1.0</code> also merges names that merely resemble each other.</p>
 <p>A star schema fans in one level below, with a qualified key: <code>FacebookAdsStarSchema</code> declares
 <code>facebook_ads.ads_stats</code> with <code>many=True</code> on its <code>fact_ad_performance</code>, one leg per Facebook Ads
-account. The star schemas are placeholders for now: they declare their wiring but materialize no
-rows.</p>
+account. Facebook Ads and Amazon Ads materialize their star schemas as views; the other platforms
+declare the same wiring and materialize nothing yet.</p>
 <p>Building a DAG over the star schemas and the matcher wires every <code>dim_campaigns</code> asset held into
 the <code>campaigns</code> relation, one leg per platform:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">fb</span> <span class="o">=</span> <span class="n">FacebookAdsStarSchema</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>   <span class="c1"># declares a dim_campaigns asset</span>

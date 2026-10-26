@@ -1,0 +1,2577 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/plans/2026-10-26-star-schema-contract/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>Star Schema Contract Implementation Plan - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#star-schema-contract-implementation-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Star Schema Contract Implementation Plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="star-schema-contract-implementation-plan">Star Schema Contract Implementation Plan<a class="headerlink" href="#star-schema-contract-implementation-plan" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>For agentic workers:</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (<code>- [ ]</code>) syntax for tracking.</p>
+</blockquote>
+<p><strong>Goal:</strong> Re-cut the two implemented star schemas (Facebook Ads, Amazon Ads) to the contract in <code>.claude/rules/star-schema.md</code>, so every platform's views share names, grain, keys and build rules before the five remaining shells are implemented.</p>
+<p><strong>Architecture:</strong> Nothing changes in the framework. Each star schema stays a source of <code>ibis_view</code>s over the platform's raw tables, in the platform's dataset. The views are renamed and reshaped: one campaign-grain fact per platform with the core columns, lean facts, four dimensions (accounts, campaigns, ad groups, ads) built from raw assets in tiers that each hold one row per key and day, <code>as_of_date</code> as the dimension's snapshot day. The views are recreated on every run, so no stored data changes; only Swarovski's Amazon views are live and nothing reads them yet.</p>
+<p><strong>Tech Stack:</strong> Python 3.10+, Ibis via <code>interloper_sql</code> (<code>ibis_view</code>, <code>union</code>, <code>latest</code>), DuckDB in tests, ruff, ty, pytest.</p>
+<p><strong>Spec:</strong> <code>.claude/rules/star-schema.md</code> (the contract), with <code>.claude/rules/assets.md</code> for the raw layer the views read.</p>
+<h2 id="global-constraints">Global Constraints<a class="headerlink" href="#global-constraints" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The star schema source stays <code>&lt;platform&gt;/star_schema/</code> with key <code>&lt;platform&gt;_star_schema</code>, <code>group="&lt;platform&gt;"</code>, <code>dataset="&lt;platform&gt;"</code>.</li>
+<li>Core columns, in this order, first in every schema class and in every view's select, extras after (rule 2):</li>
+<li>fact: <code>date</code>, <code>account_id</code>, <code>campaign_id</code>, <code>impressions</code> (int), <code>clicks</code> (int), <code>cost</code> (float), <code>currency</code> (str), <code>conversions</code> (int), <code>conversion_value</code> (float), <code>purchases</code> (int), <code>revenue</code> (float)</li>
+<li><code>dim_accounts</code>: <code>account_id</code>, <code>account_name</code>, <code>currency</code>, <code>timezone</code>, <code>as_of_date</code></li>
+<li><code>dim_campaigns</code>: <code>campaign_id</code>, <code>account_id</code>, <code>campaign_name</code>, <code>status</code>, <code>objective</code>, <code>campaign_type</code>, <code>budget</code> (float), <code>budget_type</code>, <code>start_date</code>, <code>end_date</code>, <code>created_at</code> (datetime), <code>updated_at</code> (datetime), <code>as_of_date</code></li>
+<li><code>dim_ad_groups</code>: <code>ad_group_id</code>, <code>campaign_id</code>, <code>account_id</code>, <code>ad_group_name</code>, <code>status</code>, <code>budget</code>, <code>budget_type</code>, <code>start_date</code>, <code>end_date</code>, <code>created_at</code>, <code>updated_at</code>, <code>as_of_date</code></li>
+<li><code>dim_ads</code>: <code>ad_id</code>, <code>ad_group_id</code>, <code>campaign_id</code>, <code>account_id</code>, <code>ad_name</code>, <code>status</code>, <code>created_at</code>, <code>updated_at</code>, <code>as_of_date</code></li>
+<li><code>cost</code> is the house word; no view carries <code>spend</code>. <code>status</code> is the configured status; Facebook's effective status is the extra <code>effective_status</code>.</li>
+<li><code>account_id</code> is stamped from the upstream's source discriminator on every view, never read from the rows. Every id is cast to <code>str</code>.</li>
+<li>Every tier holds one row per key and day before the union; the fact tier contributes keys and <code>currency</code> only. Each fact's key is unique and named in the source docstring.</li>
+<li>Facebook <code>budget</code> is <code>NULL</code> (minor units, no constant divisor); <code>budget_type</code> is <code>daily</code> when <code>daily_budget</code> is set, else <code>lifetime</code> when <code>lifetime_budget</code> is set, else <code>NULL</code>.</li>
+<li>Schema classes: one per file named after the view, class in <code>PascalCase</code>, every field <code>Field(default=None, description=...)</code>; the description of <code>conversions</code> and <code>purchases</code> names the vendor metric and its attribution window.</li>
+<li>Component docstrings are product copy (summary plus prose, no <code>Args:</code>/<code>Returns:</code>), per <code>python-style.md</code> rule 7.</li>
+<li>Tests mirror the source: <code>tests/&lt;platform&gt;/star_schema/test_source.py</code>, DuckDB via <code>pytest.importorskip("interloper_duckdb")</code>.</li>
+<li>Each commit is a valid Conventional Commit; squash as you go. No attribution lines.</li>
+</ul>
+<h2 id="review-focus">Review Focus<a class="headerlink" href="#review-focus" title="Permanent link">&para;</a></h2>
+<ol>
+<li>A Facebook campaign whose <code>start_time</code> or <code>stop_time</code> is <code>NULL</code> or an empty string: the dimension row carries <code>NULL</code>, the view does not fail. Pinned in Task 2 (<code>test_schedule_dates_come_from_the_local_timestamp_and_blank_is_null</code>).</li>
+<li>Facebook instants come as <code>2026-10-01T00:00:00+0200</code> (offset without a colon). <code>created_at</code>/<code>updated_at</code> must parse on DuckDB and BigQuery; if <code>.cast("timestamp")</code> refuses the form on DuckDB, insert the colon with <code>.re_replace(r"([+-]\d{2})(\d{2})$", r"\1:\2")</code> before the cast. Pinned in Task 2 (<code>test_entity_instants_parse_with_the_vendors_offset</code>).</li>
+<li>A campaign id stored as <code>BIGINT</code> in one raw table and <code>VARCHAR</code> in another: every tier casts to string before the union. Pinned in Task 2 (<code>campaigns_stats.account_id</code> seeded as <code>BIGINT</code>) and Task 3 (<code>BIGINT</code> campaign and ad group ids).</li>
+<li>Two report rows tied on key and day, one with a <code>NULL</code> attribute: the collapsed tier keeps the value and the view gives the same row on every evaluation. Pinned in Task 3 (<code>test_tied_report_rows_collapse_deterministically</code>).</li>
+<li>A key the fact carries that no bound entity or report knows: the dimension still has a row for it, from the fact tier. Pinned in Task 2 (<code>test_a_campaign_known_only_from_the_facts_comes_from_them</code>).</li>
+</ol>
+<hr />
+<h3 id="task-1-commit-the-contract">Task 1: Commit the contract<a class="headerlink" href="#task-1-commit-the-contract" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Create: <code>.claude/rules/star-schema.md</code> (already written, uncommitted)
+- Modify: <code>AGENTS.md</code> (the star schema bullet's pointer, already edited, uncommitted)
+- Modify: <code>docs/guide/dependencies.md:146</code></p>
+<p><strong>Interfaces:</strong>
+- Produces: the rule every later task argues from.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Replace the stale sentence in <code>docs/guide/dependencies.md</code></strong></li>
+</ul>
+<p>Replace the sentence beginning "The star schemas are placeholders for now: they declare their wiring but materialize no" with: "Facebook Ads and Amazon Ads materialize their star schemas as views; the other platforms declare the same wiring and materialize nothing yet."</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Verify the docs build</strong></li>
+</ul>
+<p>Run: <code>uv run zensical build --strict</code> (what the docs workflow runs)
+Expected: exit 0.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>add<span class="w"> </span>.claude/rules/star-schema.md<span class="w"> </span>AGENTS.md<span class="w"> </span>docs/guide/dependencies.md<span class="w"> </span>docs/superpowers/plans/2026-10-26-star-schema-contract.md
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"docs: the star schema contract every platform publishes"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-2-facebook-ads-star-schema-on-the-contract">Task 2: Facebook Ads star schema on the contract<a class="headerlink" href="#task-2-facebook-ads-star-schema-on-the-contract" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Create: <code>packages/interloper-assets/src/interloper_assets/facebook_ads/star_schema/schemas/fact_campaign_performance.py</code>
+- Create: <code>packages/interloper-assets/src/interloper_assets/facebook_ads/star_schema/schemas/dim_ad_groups.py</code>
+- Modify: <code>.../facebook_ads/star_schema/schemas/{fact_ad_performance,dim_accounts,dim_campaigns,dim_ads,__init__}.py</code>
+- Modify: <code>.../facebook_ads/star_schema/source.py</code>
+- Test: <code>packages/interloper-assets/tests/facebook_ads/star_schema/test_source.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: <code>interloper_sql.union(upstreams, *columns, **stamps)</code>, <code>interloper_sql.latest(rows, key, *order)</code>; raw schemas <code>facebook_ads.connector.schemas.{campaigns_stats, ads_stats, campaigns, ads}</code>.
+- Produces: views <code>fact_campaign_performance</code>, <code>fact_ad_performance</code>, <code>dim_accounts</code>, <code>dim_campaigns</code>, <code>dim_ad_groups</code>, <code>dim_ads</code>. The campaign matcher keeps reading <code>campaign_id</code> and <code>campaign_name</code> from <code>dim_campaigns</code>.</p>
+<p><strong>Schemas</strong> (core first, then the listed extras):</p>
+<ul>
+<li><code>FactCampaignPerformance</code>: the eleven core columns, then <code>reach: int | None</code>. <code>conversions</code> description: "NULL: Facebook reports no single primary conversion, its results depend on the objective; see purchases." <code>purchases</code> description: "Facebook purchase actions under the account's attribution setting (7-day click, 1-day view by default)."</li>
+<li><code>FactAdPerformance</code>: <code>date</code>, <code>account_id</code>, <code>campaign_id</code>, <code>ad_group_id</code>, <code>ad_id</code>, <code>publisher_platform</code>, <code>platform_position</code>, <code>impression_device</code>, <code>impressions</code>, <code>clicks</code>, <code>reach</code>, <code>cost</code>, <code>currency</code>, <code>conversions</code>, <code>conversion_value</code>, <code>purchases</code>, <code>revenue</code>. No names.</li>
+<li><code>DimAccounts</code>: the five core columns. <code>timezone</code> description: "NULL until an ad accounts entity is collected."</li>
+<li><code>DimCampaigns</code>: the thirteen core columns, then <code>effective_status</code>.</li>
+<li><code>DimAdGroups</code>: the twelve core columns. Everything but ids, name and <code>as_of_date</code> is "NULL until an ad sets entity is collected."</li>
+<li><code>DimAds</code>: the nine core columns, then <code>effective_status</code>.</li>
+</ul>
+<p><strong>Views</strong> (<code>source.py</code>). A module-level <code>_account(upstream: il.Upstream) -&gt; str</code> returns the upstream's source discriminator and raises <code>ConfigError</code> when the source has none (the shape of today's Amazon <code>_profile</code>). <code>_local_date(column) -&gt; ibis.Value</code> is <code>column.nullif("").substr(0, 10).cast("date")</code>; <code>_instant(column)</code> is the timestamp cast with the offset fix of Review Focus 2 if needed.</p>
+<ul class="task-list">
+<li><code>fact_campaign_performance(self, campaigns_stats: list[il.Upstream])</code>, relation <code>campaigns_stats</code> over <code>facebook_ads.campaigns_stats</code>, <code>many=True, optional=True</code>. <code>union</code> the reports on <code>date_start</code>, <code>campaign_id</code>, <code>impressions</code>, <code>clicks</code>, <code>spend</code>, <code>account_currency</code>, <code>actions_purchase</code>, <code>action_values_purchase</code>, <code>reach</code> with the <code>account_id</code> stamp; select to the core names (<code>conversions</code> and <code>conversion_value</code> as typed <code>NULL</code>, <code>purchases</code> cast <code>int64</code>, <code>revenue</code> cast <code>float64</code>); group by <code>date</code>, <code>account_id</code>, <code>campaign_id</code>, sum the measures, <code>max(currency)</code>. Key: <code>date</code>, <code>account_id</code>, <code>campaign_id</code>.</li>
+<li><code>fact_ad_performance(self, ads_stats: list[il.Upstream])</code>: <code>union</code> on the lean list with the stamp, rename to the contract names, same casts, no aggregation. Key: <code>date</code>, <code>account_id</code>, <code>ad_id</code>, <code>publisher_platform</code>, <code>platform_position</code>, <code>impression_device</code>.</li>
+<li><code>dim_accounts(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream)</code>: tier 2 from each report grouped by <code>account_id</code>, <code>date_start</code> with <code>max(account_name)</code>, <code>max(account_currency)</code>, <code>timezone</code> NULL; tier 3 from the fact grouped by <code>account_id</code>, <code>date</code> with <code>max(currency)</code>.</li>
+<li><code>dim_campaigns(self, campaigns: list[il.Upstream], fact_campaign_performance: il.Upstream)</code>, relation <code>campaigns</code> over <code>["facebook_ads.campaigns", "facebook_ads.campaigns_stats"]</code>: tier 1 from the entity (<code>id</code>, <code>name</code>, <code>status</code>, <code>objective</code>, <code>campaign_type</code> from <code>buying_type</code>, <code>budget</code> NULL, <code>budget_type</code> per the constraint, <code>_local_date(start_time)</code>, <code>_local_date(stop_time)</code>, <code>_instant(created_time)</code>, <code>_instant(updated_time)</code>, <code>date</code>, <code>effective_status</code>); tier 2 from the report grouped by <code>campaign_id</code>, <code>date_start</code> with <code>max(campaign_name)</code>, <code>max(objective)</code>, the rest NULL; tier 3 from the fact grouped by <code>campaign_id</code>, <code>date</code>, attributes NULL.</li>
+<li><code>dim_ad_groups(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream)</code>, relation <code>ads_stats</code>: tier 2 from each report grouped by <code>adset_id</code>, <code>date_start</code> with <code>max(adset_name)</code>, <code>max(campaign_id)</code>, the rest NULL; tier 3 from the fact grouped by <code>ad_group_id</code>, <code>date</code> with <code>max(campaign_id)</code>.</li>
+<li>
+<p><code>dim_ads(self, ads: list[il.Upstream], ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream)</code>, relations <code>ads</code> and <code>ads_stats</code>: tier 1 from the entity (<code>id</code>, <code>adset_id</code>, <code>campaign_id</code>, <code>name</code>, <code>status</code>, instants, <code>date</code>, <code>effective_status</code>); tier 2 from the report grouped by <code>ad_id</code>, <code>date_start</code> with <code>max(ad_name)</code>, <code>max(adset_id)</code>, <code>max(campaign_id)</code>; tier 3 from the fact grouped by <code>ad_id</code>, <code>date</code> with <code>max(ad_group_id)</code>, <code>max(campaign_id)</code>.</p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite the tests to the contract</strong></p>
+</li>
+</ul>
+<p>Keep the fixture shape (<code>warehouse</code>, <code>_account</code>, <code>_seed</code>, <code>_materialize</code>, <code>_rows</code>; <code>_rows</code> converts <code>date</code> and <code>as_of_date</code> to <code>dt.date</code>). <code>_seed</code> creates <code>campaigns_stats__{id}</code> with <code>account_id BIGINT</code>, <code>campaign_id VARCHAR</code>, <code>actions_purchase</code>, <code>action_values_purchase</code>, <code>reach</code>, two rows for <code>c{id}</code> on DAY when <code>two_report_rows=True</code>; <code>campaigns__{id}</code> with <code>buying_type 'AUCTION'</code>, <code>daily_budget '1000'</code>, <code>lifetime_budget NULL</code>, <code>start_time '2026-10-01T00:00:00+0200'</code>, <code>stop_time ''</code>, <code>created_time '2026-09-01T10:00:00+0200'</code>, <code>updated_time '2026-09-02T10:00:00+0200'</code>, <code>status 'ACTIVE'</code>, <code>effective_status 'ACTIVE'</code>, plus a second campaign with <code>stop_time NULL</code> when <code>two_entities=True</code>; <code>ads__{id}</code> and <code>ads_stats__{id}</code> as today with the purchase columns. Tests and assertions:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestWiring</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_relations_fan_in_every_account_and_are_optional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="n">fact</span> <span class="o">=</span> <span class="n">FacebookAdsStarSchema</span><span class="o">.</span><span class="n">fact_campaign_performance</span><span class="o">.</span><span class="n">relations</span><span class="p">[</span><span class="s2">"campaigns_stats"</span><span class="p">]</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="k">assert</span> <span class="p">(</span><span class="n">fact</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">fact</span><span class="o">.</span><span class="n">many</span><span class="p">,</span> <span class="n">fact</span><span class="o">.</span><span class="n">optional</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="s2">"facebook_ads.campaigns_stats"</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="k">assert</span> <span class="n">FacebookAdsStarSchema</span><span class="o">.</span><span class="n">dim_campaigns</span><span class="o">.</span><span class="n">relations</span><span class="p">[</span><span class="s2">"campaigns"</span><span class="p">]</span><span class="o">.</span><span class="n">key</span> <span class="o">==</span> <span class="p">[</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>            <span class="s2">"facebook_ads.campaigns"</span><span class="p">,</span> <span class="s2">"facebook_ads.campaigns_stats"</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="p">]</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="k">assert</span> <span class="n">FacebookAdsStarSchema</span><span class="o">.</span><span class="n">dim_ad_groups</span><span class="o">.</span><span class="n">relations</span><span class="p">[</span><span class="s2">"ads_stats"</span><span class="p">]</span><span class="o">.</span><span class="n">key</span> <span class="o">==</span> <span class="s2">"facebook_ads.ads_stats"</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_views_carry_the_core_columns_first</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="c1"># first 11 of FactCampaignPerformance, first 13 of DimCampaigns, first 12 of DimAdGroups,</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="c1"># first 9 of DimAds, first 5 of DimAccounts, exactly as Global Constraints lists them;</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>        <span class="c1"># "spend" not in FactAdPerformance.model_fields</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestOnDuckDB</span><span class="p">:</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_the_campaign_fact_sums_to_one_row_per_campaign_and_day</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>        <span class="c1"># two_report_rows: one row for ('111', 'c111', DAY); impressions 150, cost 15.0, currency 'EUR',</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>        <span class="c1"># conversions None, purchases 3, revenue 50.0; account_id is the stamped '111';</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>        <span class="c1"># len(rows) == len({(r['date'], r['account_id'], r['campaign_id']) for r in rows})</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_the_ad_fact_keeps_the_placement_grain_without_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>        <span class="c1"># list(columns) == FactAdPerformance fields; cost 12.5; ad_group_id 's1'</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_campaign_takes_its_entity_over_its_report_over_the_facts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>        <span class="c1"># 111 with entity: campaign_name 'Camp from entity', status 'ACTIVE', objective 'OUTCOME_SALES',</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>        <span class="c1"># campaign_type 'AUCTION', budget None, budget_type 'daily', effective_status 'ACTIVE'</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>        <span class="c1"># 222 without: 'Camp from report', status None, budget_type None, start_date None</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>
+</span><span id="__span-1-30"><a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_schedule_dates_come_from_the_local_timestamp_and_blank_is_null</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-31"><a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>        <span class="c1"># start_date == dt.date(2026, 10, 1); end_date None for '' and for NULL</span>
+</span><span id="__span-1-32"><a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>
+</span><span id="__span-1-33"><a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_entity_instants_parse_with_the_vendors_offset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-34"><a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a>        <span class="c1"># created_at == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc) or its naive-UTC equivalent</span>
+</span><span id="__span-1-35"><a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a>        <span class="c1"># as DuckDB returns it; updated_at one day later</span>
+</span><span id="__span-1-36"><a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a>
+</span><span id="__span-1-37"><a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_newer_fact_does_not_displace_an_older_entity_row</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>   <span class="c1"># as_of_date 2026-09-30</span>
+</span><span id="__span-1-38"><a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_campaign_known_only_from_the_facts_comes_from_them</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>   <span class="c1"># 'c999', attributes None</span>
+</span><span id="__span-1-39"><a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_ad_groups_come_from_the_report_then_the_facts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-40"><a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a>        <span class="c1"># [{'ad_group_id': 's1', 'campaign_id': 'c111', 'account_id': '111', 'ad_group_name': 'Set',</span>
+</span><span id="__span-1-41"><a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a>        <span class="c1">#   'status': None, ..., 'as_of_date': DAY}]</span>
+</span><span id="__span-1-42"><a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a>
+</span><span id="__span-1-43"><a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_an_ad_entity_wins_over_the_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-44"><a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a>        <span class="c1"># ad_name 'Ad from entity', status 'ACTIVE', ad_group_id 's1', as_of_date 2026-09-30</span>
+</span><span id="__span-1-45"><a id="__codelineno-1-45" name="__codelineno-1-45" href="#__codelineno-1-45"></a>
+</span><span id="__span-1-46"><a id="__codelineno-1-46" name="__codelineno-1-46" href="#__codelineno-1-46"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_accounts_come_from_the_report_then_the_fact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-1-47"><a id="__codelineno-1-47" name="__codelineno-1-47" href="#__codelineno-1-47"></a>        <span class="c1"># [{'account_id': '111', 'account_name': 'Acct 111', 'currency': 'EUR', 'timezone': None, 'as_of_date': DAY}]</span>
+</span><span id="__span-1-48"><a id="__codelineno-1-48" name="__codelineno-1-48" href="#__codelineno-1-48"></a>
+</span><span id="__span-1-49"><a id="__codelineno-1-49" name="__codelineno-1-49" href="#__codelineno-1-49"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_missing_account_table_fails_the_view</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>   <span class="c1"># on fact_campaign_performance</span>
+</span><span id="__span-1-50"><a id="__codelineno-1-50" name="__codelineno-1-50" href="#__codelineno-1-50"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_fact_with_no_account_bound_fails_clearly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-assets/tests/facebook_ads/star_schema -q</code>
+Expected: failures on missing <code>fact_campaign_performance</code>, <code>dim_ad_groups</code>, <code>as_of_date</code>, <code>cost</code>.</p>
+<ul class="task-list">
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Write the six schema modules and the source as specified</strong></p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests to verify they pass</strong></p>
+</li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-assets/tests/facebook_ads/star_schema -q</code>
+Expected: all pass.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Lint and type-check</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check packages/interloper-assets &amp;&amp; uv run ruff format --check packages/interloper-assets &amp;&amp; uv run ty check packages/interloper-assets</code>
+Expected: clean.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-assets/src/interloper_assets/facebook_ads/star_schema<span class="w"> </span>packages/interloper-assets/tests/facebook_ads/star_schema
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(assets): the Facebook Ads star schema on the contract"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-3-amazon-ads-star-schema-on-the-contract">Task 3: Amazon Ads star schema on the contract<a class="headerlink" href="#task-3-amazon-ads-star-schema-on-the-contract" title="Permanent link">&para;</a></h3>
+<p><strong>Files:</strong>
+- Create: <code>.../amazon_ads/star_schema/schemas/dim_ad_groups.py</code>
+- Modify: <code>.../amazon_ads/star_schema/schemas/{fact_campaign_performance,dim_campaigns,dim_accounts,__init__}.py</code>
+- Modify: <code>.../amazon_ads/star_schema/source.py</code>
+- Test: <code>packages/interloper-assets/tests/amazon_ads/star_schema/test_source.py</code></p>
+<p><strong>Interfaces:</strong>
+- Consumes: same helpers as Task 2 (each source keeps its own <code>_account</code>; no shared module yet); raw schemas <code>amazon_ads.connector.schemas.{products_campaigns_stats, brands_campaigns_stats, display_campaigns_stats, brands_ad_groups_stats, display_ad_groups_stats, profiles}</code>.
+- Produces: <code>fact_campaign_performance</code>, <code>dim_accounts</code>, <code>dim_campaigns</code>, <code>dim_ad_groups</code>. Swarovski's live views are recreated with the new columns on the next run; nothing reads them yet. <code>AD_PRODUCTS</code> maps every report key, campaign and ad group, to its product.</p>
+<p><strong>Schemas:</strong></p>
+<ul>
+<li><code>FactCampaignPerformance</code>: the eleven core columns, then <code>campaign_type</code> (the ad product: <code>sponsored_products</code>, <code>sponsored_brands</code>, <code>sponsored_display</code>). <code>conversions</code> and <code>purchases</code> description: "Purchases attributed within 14 days of a click, as each ad product's campaign report counts them"; <code>conversion_value</code> and <code>revenue</code>: the matching sales.</li>
+<li><code>DimCampaigns</code>: the thirteen core columns, no extras. <code>start_date</code>/<code>end_date</code>/<code>created_at</code>/<code>updated_at</code> descriptions: "NULL until a campaigns entity is collected; Amazon's campaign reports carry no schedule."</li>
+<li><code>DimAdGroups</code>: the twelve core columns, no extras; status, budget, schedule and instants "NULL until an ad groups entity is collected."</li>
+<li><code>DimAccounts</code>: the five core columns, then <code>account_type</code>, <code>marketplace_id</code>, <code>country_code</code>.</li>
+</ul>
+<p><strong>Views:</strong></p>
+<ul class="task-list">
+<li><code>fact_campaign_performance</code>: same relation; per-upstream projection to <code>date</code>, <code>campaign_id</code> (cast string), <code>impressions</code>, <code>clicks</code>, <code>cost</code> (<code>spend</code> on products), <code>currency</code> (<code>campaign_budget_currency_code</code>), <code>conversions</code> (<code>purchases_14d</code> on products, <code>purchases</code> elsewhere), <code>conversion_value</code> (<code>sales_14d</code> / <code>sales</code>), <code>purchases</code> and <code>revenue</code> the same two columns, stamped <code>account_id</code> and <code>campaign_type</code>; group by <code>date</code>, <code>account_id</code>, <code>campaign_type</code>, <code>campaign_id</code>, sum the measures, <code>max(currency)</code>. Keep the <code>ConfigError("no upstream bound: ...")</code> guard. Key: <code>date</code>, <code>account_id</code>, <code>campaign_type</code>, <code>campaign_id</code>.</li>
+<li><code>dim_campaigns(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream)</code>, relation <code>campaigns_stats</code> over the three campaign report keys: tier 2 from each report grouped by <code>campaign_id</code>, <code>date</code> with <code>max(campaign_name)</code>, <code>max(campaign_status)</code> as <code>status</code>, <code>max(campaign_budget_amount)</code> as <code>budget</code>, <code>max(campaign_budget_type)</code> as <code>budget_type</code>, stamped <code>account_id</code> and <code>campaign_type</code>, the rest NULL; tier 3 from the fact grouped by <code>campaign_id</code>, <code>date</code> with <code>max(account_id)</code>, <code>max(campaign_type)</code>.</li>
+<li><code>dim_ad_groups(self, ad_groups_stats: list[il.Upstream])</code>, relation <code>ad_groups_stats</code> over <code>["amazon_ads.products_campaigns_stats", "amazon_ads.brands_ad_groups_stats", "amazon_ads.display_ad_groups_stats"]</code> (Sponsored Products reports ad groups inside its campaign report): tier 2 from each report grouped by <code>ad_group_id</code>, <code>date</code> with <code>max(ad_group_name)</code>, <code>max(campaign_id)</code>, stamped <code>account_id</code>, the rest NULL. No fact tier: no Amazon fact carries <code>ad_group_id</code>.</li>
+<li>
+<p><code>dim_accounts(self, profiles: list[il.Upstream], fact_campaign_performance: il.Upstream)</code>: tier 1 from each <code>profiles</code> table filtered to <code>table["profile_id"].cast("string") == ibis.literal(_account(upstream))</code>, selecting <code>account_id</code> (the cast id), <code>account_info_name</code>, <code>currency_code</code>, <code>timezone</code>, <code>date</code>, <code>account_info_type</code>, <code>account_info_marketplace_string_id</code>, <code>country_code</code>; tier 2 from the fact grouped by <code>account_id</code>, <code>date</code> with <code>max(currency)</code>, the rest NULL.</p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Rewrite the tests to the contract</strong></p>
+</li>
+</ul>
+<p>Keep the fixtures; <code>_seed</code> adds <code>campaign_budget_type</code> to the three campaign reports, stores campaign and ad group ids as <code>BIGINT</code>, seeds the Sponsored Products table with two ad-group rows for one campaign whose <code>campaign_name</code> differ (<code>'SP campaign'</code>, <code>'SP campaign renamed'</code>) and whose second row has <code>campaign_status NULL</code>, creates <code>brands_ad_groups_stats__{id}</code> (one row) and an empty <code>display_ad_groups_stats__{id}</code>, and gives <code>profiles__{id}</code> a second row for a different profile id. Tests:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestWiring</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_raw_upstreams_fan_in_every_profile_and_are_optional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>        <span class="c1"># fact and dim_campaigns share the three campaign keys; dim_ad_groups the three ad group keys; profiles as today</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_views_carry_the_core_columns_first</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">TestOnDuckDB</span><span class="p">:</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_the_fact_unions_every_profile_and_ad_product_at_campaign_grain</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="c1"># keys {('1','sponsored_products'), ('1','sponsored_brands'), ('2', ...)} on (account_id, campaign_type);</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="c1"># products: campaign_id '111', impressions 150, clicks 15, cost 15.0, conversions 3, conversion_value 50.0,</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="c1"># purchases 3, revenue 50.0, currency 'EUR'; no sponsored_display row; no 'campaign_name' column;</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="c1"># rows unique on (date, account_id, campaign_type, campaign_id)</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_campaigns_come_from_the_reports_then_the_facts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="c1"># rows['111']['campaign_type'] == 'sponsored_products'; rows['221']['status'] == 'PAUSED';</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="c1"># budget 20.0, budget_type 'DAILY'; start_date None; account_id '1'</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_tied_report_rows_collapse_deterministically</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>        <span class="c1"># campaign_name == 'SP campaign renamed' (max); status == 'ENABLED' (max ignores NULL); two materializations identical</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_ad_groups_come_from_every_ad_product_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>        <span class="c1"># the two SP ad groups and the SB ad group, each with campaign_id, account_id '1', status None</span>
+</span><span id="__span-3-23"><a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>
+</span><span id="__span-3-24"><a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_profile_takes_its_own_entity_row_over_the_facts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-25"><a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>        <span class="c1"># profile 1: account_name 'Acme DE', timezone 'Europe/Berlin', marketplace_id 'A1PA6795UKMFR9',</span>
+</span><span id="__span-3-26"><a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>        <span class="c1"># as_of_date 2026-09-30; the foreign profile row does not appear; profile 2: account_name None,</span>
+</span><span id="__span-3-27"><a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>        <span class="c1"># currency 'EUR', as_of_date DAY</span>
+</span><span id="__span-3-28"><a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>
+</span><span id="__span-3-29"><a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_missing_profile_table_fails_the_view</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span><span id="__span-3-30"><a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">test_a_fact_with_no_profile_bound_fails_clearly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warehouse</span><span class="p">):</span> <span class="o">...</span>
+</span></code></pre></div>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Run the tests to verify they fail</strong></li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-assets/tests/amazon_ads/star_schema -q</code>
+Expected: failures on <code>account_id</code>, <code>purchases</code>, <code>dim_ad_groups</code>, <code>as_of_date</code>.</p>
+<ul class="task-list">
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 3: Write the four schema modules and the source as specified</strong></p>
+</li>
+<li class="task-list-item">
+<p><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 4: Run the tests to verify they pass</strong></p>
+</li>
+</ul>
+<p>Run: <code>uv run pytest packages/interloper-assets/tests/amazon_ads/star_schema -q</code>
+Expected: all pass.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 5: Lint, type-check, and run the whole assets suite</strong></li>
+</ul>
+<p>Run: <code>uv run ruff check packages/interloper-assets &amp;&amp; uv run ruff format --check packages/interloper-assets &amp;&amp; uv run ty check packages/interloper-assets &amp;&amp; uv run pytest packages/interloper-assets -q -n auto --maxprocesses 4</code>
+Expected: clean, all pass (the campaign matcher tests still find <code>campaign_id</code> and <code>campaign_name</code> on <code>dim_campaigns</code>).</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 6: Commit</strong></li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>git<span class="w"> </span>add<span class="w"> </span>packages/interloper-assets/src/interloper_assets/amazon_ads/star_schema<span class="w"> </span>packages/interloper-assets/tests/amazon_ads/star_schema
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>git<span class="w"> </span>commit<span class="w"> </span>-m<span class="w"> </span><span class="s2">"feat(assets): the Amazon Ads star schema on the contract"</span>
+</span></code></pre></div>
+<hr />
+<h3 id="task-4-whole-branch-verification">Task 4: Whole-branch verification<a class="headerlink" href="#task-4-whole-branch-verification" title="Permanent link">&para;</a></h3>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 1: Run the full check suite</strong></li>
+</ul>
+<p>Run: <code>make check-python</code>
+Expected: ruff, ty and the whole suite pass.</p>
+<ul class="task-list">
+<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> <strong>Step 2: Rebase on <code>origin/main</code>, push with <code>--force-with-lease</code>, open the PR titled <code>feat(assets): star schemas on one contract</code></strong></li>
+</ul>
+<p>The PR body: what the contract fixes (the five views per platform, core columns, <code>cost</code>, <code>conversions</code> versus <code>purchases</code>, lean facts with stated keys, dimensions from raw in deterministic tiers, <code>as_of_date</code>, scheduled dates, ad groups), that both re-cuts are view changes with no backfill, that Swarovski's Amazon views are recreated with the new columns on the next nightly run and nothing reads them yet, and that the connector entity additions (Amazon campaigns and ad groups, Facebook ad accounts and ad sets, The Trade Desk campaigns) follow in their own PRs.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>
