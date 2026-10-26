@@ -1,12 +1,14 @@
-"""Runs API: queue, inspect, retry and cancel runs, and read their executions and events."""
+"""Runs API: queue, inspect, retry and cancel runs, read their executions and events, take in a run's reports."""
 
 from __future__ import annotations
 
 import datetime as dt
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+import interloper as il
+from fastapi import APIRouter, Depends, HTTPException, Query
+from interloper.errors import EventError
 from interloper_db import EventQuery, ExecutionQuery, Page, PageQuery, RunQuery
 from interloper_db.models import Event, Run
 from pydantic import BaseModel, Field
@@ -17,6 +19,7 @@ from interloper_api.dependencies import (
     StoreDep,
     ViewerDep,
     load_authorized,
+    require_run,
 )
 from interloper_api.routes.executions import ExecutionResponse
 
@@ -331,3 +334,33 @@ def list_run_events(
     """
     run = load_authorized(store.runs.get, run_id, user, store, label="Run")
     return store.events.list(run.org_id, query, run_id=run_id).map(EventResponse.from_event)
+
+
+class IngestResponse(BaseModel):
+    """Whether the run is still running once the batch is folded."""
+
+    running: bool
+
+
+@router.post("/{run_id}/events", dependencies=[Depends(require_run)])
+def ingest_events(run_id: UUID, body: dict[str, Any], store: StoreDep) -> IngestResponse:
+    """Take in a batch of the run's events; everything a run's pod writes comes through here.
+
+    Only the run's own token is accepted (`require_run`).
+
+    Args:
+        run_id: The run, the one its token stands for.
+        body: The batch, in `EventBatch`'s JSON shape.
+        store: The Store instance.
+
+    Returns:
+        Whether the run is still running.
+
+    Raises:
+        HTTPException: 422 when the batch does not parse.
+    """
+    try:
+        batch = il.EventBatch.from_dict(body)
+    except EventError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return IngestResponse(running=store.runs.ingest(run_id, batch))

@@ -7,6 +7,7 @@ arguments.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -19,8 +20,10 @@ from interloper_api.dependencies import (
     get_current_org,
     get_current_user,
     get_org_id,
+    get_reaper_config,
     get_session_context,
     get_store,
+    require_run,
 )
 
 _ORG_ID = uuid4()
@@ -30,13 +33,15 @@ _USER_ID = uuid4()
 class FakeStore:
     """Stand-in exposing only the ``sessions`` and ``organisations`` facets these read."""
 
-    def __init__(self, *, session: tuple[Any, Any] | None = None, org: Any = None) -> None:
+    def __init__(self, *, session: tuple[Any, Any] | None = None, org: Any = None, run: Any = None) -> None:
         """Set up the fake.
 
         Args:
             session: What ``sessions.resolve`` returns; ``None`` means the
                 token is unknown or expired.
             org: What ``organisations.get`` returns.
+            run: What ``runs.resolve_token`` returns; ``None`` means the run
+                token is unknown or dead.
         """
         self.resolved_tokens: list[str] = []
         self.requested_orgs: list[UUID] = []
@@ -44,6 +49,13 @@ class FakeStore:
         self._org = org
         self.sessions = SimpleNamespace(resolve=self._resolve_session)
         self.organisations = SimpleNamespace(get=self._get_org)
+        self.resolved_run_tokens: list[tuple[str, timedelta]] = []
+        self._run = run
+        self.runs = SimpleNamespace(resolve_token=self._resolve_run_token)
+
+    def _resolve_run_token(self, raw: str, *, grace: timedelta) -> Any:
+        self.resolved_run_tokens.append((raw, grace))
+        return self._run
 
     def _resolve_session(self, token: str) -> tuple[Any, Any] | None:
         self.resolved_tokens.append(token)
@@ -212,3 +224,57 @@ class TestGetOrgId:
         client.cookies.set("session_token", "tok")
 
         assert client.get("/org-id").status_code == expected
+
+
+def _run_client(store: FakeStore) -> TestClient:
+    """Mount ``require_run`` behind a probe route.
+
+    Args:
+        store: The fake store the dependency resolves against.
+
+    Returns:
+        A client for the probe app.
+    """
+    router = APIRouter()
+
+    @router.get("/runs/{run_id}/whoami")
+    def whoami(run: Annotated[Any, Depends(require_run)]) -> dict[str, str]:
+        return {"run": str(run.id)}
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_reaper_config] = lambda: SimpleNamespace(heartbeat_timeout=90)
+    return TestClient(app)
+
+
+class TestRequireRun:
+    """A run's pod authenticates with its run's token, and only for that run."""
+
+    def test_a_live_token_resolves_its_run_with_the_heartbeat_grace(self) -> None:
+        run = SimpleNamespace(id=uuid4())
+        store = FakeStore(run=run)
+
+        response = _run_client(store).get(f"/runs/{run.id}/whoami", headers={"Authorization": "Bearer ilr_x"})
+
+        assert response.status_code == 200 and response.json() == {"run": str(run.id)}
+        assert store.resolved_run_tokens == [("ilr_x", timedelta(seconds=90))]
+
+    def test_a_missing_or_dead_token_is_a_401(self) -> None:
+        client = _run_client(FakeStore(run=None))
+
+        assert client.get(f"/runs/{uuid4()}/whoami").status_code == 401
+        assert client.get(f"/runs/{uuid4()}/whoami", headers={"Authorization": "Bearer ilr_x"}).status_code == 401
+
+    def test_a_session_cookie_is_not_a_run_token(self) -> None:
+        client = _run_client(FakeStore(session=(_profile(), _session_row()), run=None))
+        client.cookies.set("session_token", "tok")
+
+        assert client.get(f"/runs/{uuid4()}/whoami").status_code == 401
+
+    def test_a_token_for_another_run_is_a_404(self) -> None:
+        client = _run_client(FakeStore(run=SimpleNamespace(id=uuid4())))
+
+        response = client.get(f"/runs/{uuid4()}/whoami", headers={"Authorization": "Bearer ilr_x"})
+
+        assert response.status_code == 404

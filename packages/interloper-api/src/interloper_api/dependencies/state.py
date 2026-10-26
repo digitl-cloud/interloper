@@ -21,6 +21,7 @@ _smtp_config: Any | None = None
 _features: dict[str, bool] = {}
 _admin_config: Any | None = None
 _quota_defaults: Any | None = None
+_reaper_config: Any | None = None
 
 
 def set_store(store: Store) -> None:
@@ -198,6 +199,25 @@ def get_quota_defaults() -> Any:
     return _quota_defaults
 
 
+def set_reaper_config(reaper: Any) -> None:
+    """Set the run liveness settings (from settings, at app creation).
+
+    Args:
+        reaper: The ReaperSettings instance.
+    """
+    global _reaper_config
+    _reaper_config = reaper
+
+
+def get_reaper_config() -> Any:
+    """Return the run liveness settings.
+
+    Returns:
+        The ReaperSettings instance, or None if not configured.
+    """
+    return _reaper_config
+
+
 # -- Dependency aliases --------------------------------------------------------
 
 StoreDep = Annotated[Store, Depends(get_store)]
@@ -206,3 +226,4 @@ AgentDep = Annotated[Any, Depends(get_agent)]
 AuthConfigDep = Annotated[Any, Depends(get_auth_config)]
 AdminConfigDep = Annotated[Any, Depends(get_admin_config)]
 QuotaDefaultsDep = Annotated[Any, Depends(get_quota_defaults)]
+ReaperConfigDep = Annotated[Any, Depends(get_reaper_config)]

@@ -1,15 +1,16 @@
-"""Request-scoped identity: who is calling, and which organisation they are in."""
+"""Request-scoped identity: who is calling, and which organisation they are in, or which run."""
 
 from __future__ import annotations
 
-from typing import Annotated
+from datetime import timedelta
+from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import Cookie, Depends, HTTPException
-from interloper_db import Organisation, Profile, Store
+from fastapi import Cookie, Depends, Header, HTTPException
+from interloper_db import Organisation, Profile, Run, Store
 from interloper_db.models import AuthSession
 
-from interloper_api.dependencies.state import get_store
+from interloper_api.dependencies.state import get_reaper_config, get_store
 
 
 def get_session_context(
@@ -85,6 +86,42 @@ def get_org_id(
         The organisation UUID.
     """
     return org.id
+
+
+def require_run(
+    run_id: UUID,
+    store: Store = Depends(get_store),
+    reaper: Any = Depends(get_reaper_config),
+    authorization: str | None = Header(default=None),
+) -> Run:
+    """Resolve the run a bearer run token stands for, and check it is the run the path names.
+
+    Only a run token authenticates here, never a session or a personal
+    token: a run's pod writes as its run and nothing else.
+
+    Args:
+        run_id: The run the path names.
+        store: The Store instance.
+        reaper: The run liveness settings; a token outlives its run by the
+            heartbeat timeout, for a pod still delivering after its reaping.
+        authorization: The ``Authorization`` header.
+
+    Returns:
+        The run, dispatched, running, or ended within the grace.
+
+    Raises:
+        HTTPException: 401 without a live run token; 404 when the token's run
+            is not the path's, so a token cannot learn whether another run exists.
+    """
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Run token required")
+    run = store.runs.resolve_token(token, grace=timedelta(seconds=reaper.heartbeat_timeout))
+    if run is None:
+        raise HTTPException(status_code=401, detail="Unknown or expired run token")
+    if run.id != run_id:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return run
 
 
 # -- Dependency aliases --------------------------------------------------------
