@@ -2,6 +2,7 @@ import datetime as dt
 import json
 import logging
 import re
+from collections.abc import Callable
 from time import sleep
 from typing import Any
 
@@ -250,34 +251,50 @@ def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[d
     return [campaign._json for campaign in account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS)]
 
 
-def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    """Fetch all ads, wrapping each pagination call in rate-limit retries."""
-    from facebook_business.api import Cursor
+def _paginate(request: Callable[..., Any], fields: list[str]) -> list[dict]:
+    """Read every page of an account edge, retrying each page call on rate limits.
 
-    account = _account(connection, account_id)
+    Used by the ``ads`` and ``adsets`` entity assets, the two edges large
+    enough to page and to hit the rate limit. Indexing an SDK cursor reads its
+    current page without consuming it, and ``load_next_page`` replaces the
+    page, so each page is read by position.
 
-    @_rate_limit_retry
-    def _initial_cursor() -> Cursor:
-        cursor = account.get_ads(fields=constants.AD_ENTITY_FIELDS, params={"limit": 25})
-        assert isinstance(cursor, Cursor)
-        return cursor
+    Args:
+        request: The account's edge method, such as ``AdAccount.get_ads``.
+        fields: The fields to request on each object.
 
-    @_rate_limit_retry
-    def _load_next(cursor: Cursor) -> bool:
-        return cursor.load_next_page()
-
-    cursor = _initial_cursor()
-    ads: list[dict] = []
+    Returns:
+        Every object's data, in the order the API returned them.
+    """
+    cursor = _rate_limit_retry(request)(fields=fields, params={"limit": 25})
+    rows: list[dict] = []
     while True:
-        for _ in range(len(cursor)):
-            ads.append(cursor[0].export_all_data())
-        if not _load_next(cursor):
-            break
-    return ads
+        rows.extend(cursor[i].export_all_data() for i in range(len(cursor)))
+        if not _rate_limit_retry(cursor.load_next_page)():
+            return rows
+
+
+def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
+    return _paginate(_account(connection, account_id).get_ads, constants.AD_ENTITY_FIELDS)
+
+
+def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
+    return _paginate(_account(connection, account_id).get_ad_sets, constants.ADSET_ENTITY_FIELDS)
+
+
+def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
+    account = _rate_limit_retry(_account(connection, account_id).api_get)(fields=constants.AD_ACCOUNT_ENTITY_FIELDS)
+    return account.export_all_data()
 
 
 def _time_range(date: dt.date) -> dict[str, str]:
     return {"since": date.isoformat(), "until": date.isoformat()}
+
+
+# Entity nodes nest objects (targeting, promoted_object, business) that the source normalizer would
+# flatten into open-ended columns, and flattening business.name would overwrite the vendor's own
+# business_name; these assets keep every object whole as JSON under the vendor's name.
+_ENTITY_NORMALIZER = FacebookActionsNormalizer()
 
 
 # -- SOURCE --------------------------------------------------------------------
@@ -431,3 +448,23 @@ class FacebookAds(il.Source):
     def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign entities including objective, budget, and status configuration."""
         return [{**row, "date": context.partition_date} for row in _get_campaigns(self.connection, self.account_id)]
+
+    @il.asset(
+        schema=schemas.AdAccounts,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """The ad account with its name, currency, timezone, status and billing settings."""
+        return [{**_get_ad_account(self.connection, self.account_id), "date": context.partition_date}]
+
+    @il.asset(
+        schema=schemas.Adsets,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    def adsets(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Ad set entities including schedule, budget, bidding, optimisation and targeting."""
+        return [{**row, "date": context.partition_date} for row in _get_adsets(self.connection, self.account_id)]

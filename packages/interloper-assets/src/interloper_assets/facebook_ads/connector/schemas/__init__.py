@@ -1,17 +1,21 @@
+from .ad_accounts import AdAccounts
 from .ads import Ads
 from .ads_stats import AdsStats
 from .ads_stats_by_age_gender import AdsStatsByAgeGender
 from .ads_stats_by_country import AdsStatsByCountry
+from .adsets import Adsets
 from .campaigns import Campaigns
 from .campaigns_stats import CampaignsStats
 from .custom_audiences import CustomAudiences
 from .videos_stats import VideosStats
 
 __all__ = [
+    "AdAccounts",
     "Ads",
     "AdsStats",
     "AdsStatsByAgeGender",
     "AdsStatsByCountry",
+    "Adsets",
     "Campaigns",
     "CampaignsStats",
     "CustomAudiences",
