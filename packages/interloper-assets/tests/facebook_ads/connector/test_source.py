@@ -11,8 +11,11 @@ nullable columns are filled, so partial action sets are fine).
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 from typing import Any
 
+import interloper as il
 import pandas as pd
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
@@ -20,6 +23,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_ads import constants
 from interloper_assets.facebook_ads.connector import schemas
+from interloper_assets.facebook_ads.connector import source as connector
 from interloper_assets.facebook_ads.connector.source import PIVOT_COLUMNS, FacebookActionsNormalizer, FacebookAds
 
 
@@ -32,7 +36,7 @@ class TestSourceNormalizer:
         for asset in _source().assets:
             assert isinstance(asset.normalizer, FacebookActionsNormalizer), type(asset).key
 
-    def test_all_eight_assets_present(self):
+    def test_all_ten_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
             "campaigns_stats",
@@ -43,6 +47,8 @@ class TestSourceNormalizer:
             "custom_audiences",
             "ads",
             "campaigns",
+            "ad_accounts",
+            "adsets",
         }
 
 
@@ -154,6 +160,118 @@ class TestSchemaParity:
     def test_campaigns_stats_declares_the_shared_scalars(self):
         for name in ("attribution_setting", "quality_ranking", "converted_product_quantity"):
             assert name in schemas.CampaignsStats.model_fields, name
+
+    def test_ad_accounts_declares_every_requested_field(self):
+        missing = sorted(set(constants.AD_ACCOUNT_ENTITY_FIELDS) - set(schemas.AdAccounts.model_fields))
+        assert not missing, f"requested but undeclared on AdAccounts (silently dropped): {missing}"
+
+    def test_adsets_declares_every_requested_field(self):
+        missing = sorted(set(constants.ADSET_ENTITY_FIELDS) - set(schemas.Adsets.model_fields))
+        assert not missing, f"requested but undeclared on Adsets (silently dropped): {missing}"
+
+
+class TestNewEntities:
+    """Ad accounts and ad sets keep nested objects whole, under the vendor's name."""
+
+    def _child(self, key: str) -> Any:
+        return TestSpecRoundtripAndReconcile()._child(key)
+
+    def test_entity_normalizer_survives_roundtrip_without_flattening(self):
+        for key in ("ad_accounts", "adsets"):
+            normalizer = self._child(key).normalizer
+            assert isinstance(normalizer, FacebookActionsNormalizer), key
+            assert normalizer.flatten_max_level == 0, key
+
+    def test_adset_targeting_lands_whole_as_json(self):
+        child = self._child("adsets")
+        rows = [
+            {
+                "id": "1",
+                "targeting": {"geo_locations": {"countries": ["DE"]}, "age_min": 18},
+                "promoted_object": {"pixel_id": "9", "custom_event_type": "PURCHASE"},
+                "date": "2026-10-01",
+            }
+        ]
+        normalized = child.normalizer.normalize(rows)
+        assert not [column for column in normalized.columns if column.startswith("targeting_")]
+        out = TableData.from_data(normalized).reconcile(schemas.Adsets)
+        assert json.loads(out.loc[0, "targeting"]) == {"geo_locations": {"countries": ["DE"]}, "age_min": 18}
+        assert json.loads(out.loc[0, "promoted_object"])["pixel_id"] == "9"
+
+    def test_ad_account_keeps_the_vendors_business_name(self):
+        child = self._child("ad_accounts")
+        rows = [{"id": "act_1", "business": {"id": "5", "name": "Acme Holding"}, "business_name": "Acme GmbH"}]
+        normalized = child.normalizer.normalize(rows)
+        out = TableData.from_data(normalized).reconcile(schemas.AdAccounts)
+        assert out.loc[0, "business_name"] == "Acme GmbH"
+
+
+class _FakeObject:
+    def __init__(self, data: dict) -> None:
+        self.data = data
+
+    def export_all_data(self) -> dict:
+        return self.data
+
+
+class _FakeCursor:
+    """A Facebook SDK cursor: indexing reads the current page, `load_next_page` replaces it."""
+
+    def __init__(self, pages: list[list[dict]]) -> None:
+        self._pages = [[_FakeObject(row) for row in page] for page in pages]
+        self._queue = self._pages.pop(0)
+
+    def __len__(self) -> int:
+        return len(self._queue)
+
+    def __getitem__(self, index: int) -> _FakeObject:
+        return self._queue[index]
+
+    def load_next_page(self) -> bool:
+        if not self._pages:
+            return False
+        self._queue = self._pages.pop(0)
+        return True
+
+
+class TestPagination:
+    def test_every_row_of_every_page_is_read_once(self):
+        pages = [[{"id": "1"}, {"id": "2"}], [{"id": "3"}]]
+        calls: list[dict] = []
+
+        def request(**kwargs: Any) -> _FakeCursor:
+            calls.append(kwargs)
+            return _FakeCursor(pages)
+
+        rows = connector._paginate(request, ["id"])
+        assert [row["id"] for row in rows] == ["1", "2", "3"]
+        assert calls == [{"fields": ["id"], "params": {"limit": 25}}]
+
+    def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
+        class FakeAccount:
+            def get_ads(self, **kwargs: Any) -> _FakeCursor:
+                assert kwargs["fields"] == constants.AD_ENTITY_FIELDS
+                return _FakeCursor([[{"id": "a1"}], [{"id": "a2"}]])
+
+            def get_ad_sets(self, **kwargs: Any) -> _FakeCursor:
+                assert kwargs["fields"] == constants.ADSET_ENTITY_FIELDS
+                return _FakeCursor([[{"id": "s1"}]])
+
+            def api_get(self, **kwargs: Any) -> _FakeObject:
+                assert kwargs["fields"] == constants.AD_ACCOUNT_ENTITY_FIELDS
+                return _FakeObject({"id": "act_123", "account_id": "123"})
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        source = _source()
+        day = dt.date(2026, 10, 1)
+
+        def run(key: str) -> list[dict]:
+            asset = next(a for a in source.assets if type(a).key == key)
+            return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=day).window))
+
+        assert run("ads") == [{"id": "a1", "date": day}, {"id": "a2", "date": day}]
+        assert run("adsets") == [{"id": "s1", "date": day}]
+        assert run("ad_accounts") == [{"id": "act_123", "account_id": "123", "date": day}]
 
 
 def test_isinstance_of_dataframe_normalizer():
