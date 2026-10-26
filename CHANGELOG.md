@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v0.116.0 (2026-10-26)
+
+### Bug Fixes
+
+- **duckdb**: The session runs in UTC
+  ([`6ce1ca3`](https://github.com/digitl-cloud/interloper/commit/6ce1ca330bd1947ea497d5901d8b82abcc68d5b2))
+
+- **sql**: A declared datetime is a UTC instant in a view
+  ([`55f15dc`](https://github.com/digitl-cloud/interloper/commit/55f15dcdd3f90ca5d5fc1e418ff4144f4f57afe3))
+
+### Documentation
+
+- The star schema contract every platform publishes
+  ([`b214681`](https://github.com/digitl-cloud/interloper/commit/b214681ad48cb287794212c773e501a586d2f671))
+
+### Features
+
+- **app**: Status dot on the collection's type groups
+  ([`97d16e3`](https://github.com/digitl-cloud/interloper/commit/97d16e37a5e17a5238e54047687d183b3464ed43))
+
+- **assets**: Amazon Ads campaigns and ad groups per ad product, own profile only
+  ([`a50e0ec`](https://github.com/digitl-cloud/interloper/commit/a50e0ec35046dc873241e587d0e23852f4c7b6bc))
+
+- **assets**: Facebook ad accounts and ad sets entities, every ad read once
+  ([`b1b774d`](https://github.com/digitl-cloud/interloper/commit/b1b774dd2468c85632e586bf396ffcc974f169dc))
+
+- **assets**: Star schema dimensions read the new entities first
+  ([`9a84377`](https://github.com/digitl-cloud/interloper/commit/9a843777a6b618d5ec257ac349343d10c3375ccf))
+
+- **assets**: The Amazon Ads star schema on the contract
+  ([`0471612`](https://github.com/digitl-cloud/interloper/commit/0471612e253c5701d0216da2c7e207f8a555f3be))
+
+- **assets**: The Facebook Ads star schema on the contract
+  ([`3904a1a`](https://github.com/digitl-cloud/interloper/commit/3904a1ab5cd938d43a3f85c23ef349775f609ddb))
+
+
 ## v0.115.0 (2026-10-15)
 
 ### Bug Fixes
