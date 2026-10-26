@@ -13,14 +13,28 @@ AD_PRODUCTS = {
     "products_campaigns_stats": "sponsored_products",
     "brands_campaigns_stats": "sponsored_brands",
     "display_campaigns_stats": "sponsored_display",
+    "brands_ad_groups_stats": "sponsored_brands",
+    "display_ad_groups_stats": "sponsored_display",
 }
+CAMPAIGN_REPORTS = [
+    "amazon_ads.products_campaigns_stats",
+    "amazon_ads.brands_campaigns_stats",
+    "amazon_ads.display_campaigns_stats",
+]
+AD_GROUP_REPORTS = [
+    "amazon_ads.products_campaigns_stats",
+    "amazon_ads.brands_ad_groups_stats",
+    "amazon_ads.display_ad_groups_stats",
+]
+INSTANT = "timestamp('UTC')"
+ENTITY, REPORT, FACT = 1, 2, 3
 
 
-def _profile(upstream: il.Upstream) -> str:
-    """The profile an upstream's rows belong to; shared by the fact and the account dimension.
+def _account(upstream: il.Upstream) -> str:
+    """The profile an upstream's rows belong to; every view stamps it.
 
-    The campaign reports carry no profile column, so the profile is the
-    source's discriminator, stamped onto every row.
+    The reports carry no profile column, so the profile is the source's
+    discriminator, stamped onto every row.
 
     Args:
         upstream: A bound upstream of a profile's source.
@@ -45,106 +59,90 @@ class AmazonAdsStarSchema(il.Source):
     The fact unions the campaign reports of every ad product (Sponsored
     Products, Sponsored Brands, Sponsored Display) across profiles, at
     campaign and day grain, with the purchases and sales each report
-    attributes within 14 days of a click. Each campaign dimension row comes
-    from the facts; each profile from its latest entity row, else the facts.
+    attributes within 14 days of a click. The campaign and ad group
+    dimensions come from the reports, completed by the fact's keys; the
+    account dimension from each profile's entity row, else the facts.
     Every bound upstream's table must exist, or the view fails when it is
     created. Views are recreated on every run, so they follow the profiles
-    bound to them.
+    bound to them; a profile added to the organisation is absent until it
+    is bound.
     """
 
     @ibis_view(
         schema=schemas.FactCampaignPerformance,
         tags=["Fact"],
-        relations={
-            "campaigns_stats": il.Relation(
-                "asset",
-                [
-                    "amazon_ads.products_campaigns_stats",
-                    "amazon_ads.brands_campaigns_stats",
-                    "amazon_ads.display_campaigns_stats",
-                ],
-                many=True,
-                optional=True,
-            )
-        },
+        relations={"campaigns_stats": il.Relation("asset", CAMPAIGN_REPORTS, many=True, optional=True)},
     )
     def fact_campaign_performance(self, campaigns_stats: list[il.Upstream]) -> ibis.Table:
-        """Campaign performance of every profile and ad product, one row per campaign and day."""
+        """Campaign performance of every profile and ad product, one row per campaign and day.
+
+        Key: date, account_id, campaign_type, campaign_id.
+        """
 
         def from_products(table: ibis.Table) -> ibis.Table:
             return table.select(
                 date=table["date"],
                 campaign_id=table["campaign_id"].cast("string"),
-                campaign_name=table["campaign_name"],
-                campaign_status=table["campaign_status"],
-                campaign_budget_amount=table["campaign_budget_amount"],
-                campaign_budget_currency_code=table["campaign_budget_currency_code"],
                 impressions=table["impressions"],
                 clicks=table["clicks"],
                 cost=table["spend"],
+                currency=table["campaign_budget_currency_code"],
                 purchases=table["purchases_14d"],
-                sales=table["sales_14d"],
+                revenue=table["sales_14d"],
             )
 
         def from_report(table: ibis.Table) -> ibis.Table:
             return table.select(
                 date=table["date"],
                 campaign_id=table["campaign_id"].cast("string"),
-                campaign_name=table["campaign_name"],
-                campaign_status=table["campaign_status"],
-                campaign_budget_amount=table["campaign_budget_amount"],
-                campaign_budget_currency_code=table["campaign_budget_currency_code"],
                 impressions=table["impressions"],
                 clicks=table["clicks"],
                 cost=table["cost"],
+                currency=table["campaign_budget_currency_code"],
                 purchases=table["purchases"],
-                sales=table["sales"],
+                revenue=table["sales"],
             )
 
         if not campaigns_stats:
             raise ConfigError("no upstream bound: the fact needs at least one profile's campaign report")
-        candidates = {
+        measures = {
             "products_campaigns_stats": from_products,
             "brands_campaigns_stats": from_report,
             "display_campaigns_stats": from_report,
         }
         rows = ibis.union(
             *(
-                candidates[upstream.asset.key](upstream.data).mutate(
-                    profile_id=ibis.literal(_profile(upstream)),
-                    ad_product=ibis.literal(AD_PRODUCTS[upstream.asset.key]),
+                measures[upstream.asset.key](upstream.data).mutate(
+                    account_id=ibis.literal(_account(upstream)),
+                    campaign_type=ibis.literal(AD_PRODUCTS[upstream.asset.key]),
                 )
                 for upstream in campaigns_stats
             ),
             distinct=False,
         )
         # Sponsored Products reports one row per ad group, so the grain is restored by summing.
-        return rows.group_by(["date", "profile_id", "ad_product", "campaign_id"]).aggregate(
-            campaign_name=rows["campaign_name"].max(),
-            campaign_status=rows["campaign_status"].max(),
-            campaign_budget_amount=rows["campaign_budget_amount"].max(),
-            campaign_budget_currency_code=rows["campaign_budget_currency_code"].max(),
+        summed = rows.group_by(["date", "account_id", "campaign_type", "campaign_id"]).aggregate(
             impressions=rows["impressions"].sum(),
             clicks=rows["clicks"].sum(),
             cost=rows["cost"].sum(),
+            currency=rows["currency"].max(),
             purchases=rows["purchases"].sum(),
-            sales=rows["sales"].sum(),
+            revenue=rows["revenue"].sum(),
         )
-
-    @ibis_view(schema=schemas.DimCampaigns, tags=["Dimension"])
-    def dim_campaigns(self, fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per campaign with its ad product and profile, from the facts."""
-        rows = fact_campaign_performance.data.select(
-            "campaign_id",
-            "campaign_name",
-            "ad_product",
-            "profile_id",
-            "campaign_status",
-            "campaign_budget_amount",
-            "campaign_budget_currency_code",
+        return summed.select(
             "date",
+            "account_id",
+            "campaign_id",
+            "impressions",
+            "clicks",
+            "cost",
+            "currency",
+            conversions=summed["purchases"],
+            conversion_value=summed["revenue"],
+            purchases=summed["purchases"],
+            revenue=summed["revenue"],
+            campaign_type=summed["campaign_type"],
         )
-        return latest(rows, "campaign_id", rows["date"].desc())
 
     @ibis_view(
         schema=schemas.DimAccounts,
@@ -152,37 +150,141 @@ class AmazonAdsStarSchema(il.Source):
         relations={"profiles": il.Relation("asset", "amazon_ads.profiles", many=True, optional=True)},
     )
     def dim_accounts(self, profiles: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per profile with its account and marketplace, from its latest entity row, else the facts."""
+        """One row per profile with its account and marketplace, from its own entity row, else the facts."""
 
-        def from_entity(table: ibis.Table) -> ibis.Table:
-            return table.select(
-                profile_id=table["profile_id"].cast("string"),
-                account_name=table["account_info_name"],
-                account_type=table["account_info_type"],
-                marketplace_id=table["account_info_marketplace_string_id"],
-                country_code=table["country_code"],
-                currency_code=table["currency_code"],
-                timezone=table["timezone"],
-                date=table["date"],
-                priority=ibis.literal(1),
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            account = ibis.literal(_account(upstream))
+            # the profiles endpoint lists every profile the credentials see, not only this source's
+            own = table.filter(table["profile_id"].cast("string") == account)
+            return own.select(
+                account_id=account,
+                account_name=own["account_info_name"],
+                currency=own["currency_code"],
+                timezone=own["timezone"],
+                as_of_date=own["date"],
+                account_type=own["account_info_type"],
+                marketplace_id=own["account_info_marketplace_string_id"],
+                country_code=own["country_code"],
+                priority=ibis.literal(ENTITY),
             )
 
-        def from_facts(table: ibis.Table) -> ibis.Table:
-            return table.select(
-                profile_id=table["profile_id"],
+        def from_fact(table: ibis.Table) -> ibis.Table:
+            days = table.group_by([table["account_id"], table["date"]]).aggregate(currency=table["currency"].max())
+            return days.select(
+                account_id=days["account_id"],
                 account_name=ibis.null("string"),
+                currency=days["currency"],
+                timezone=ibis.null("string"),
+                as_of_date=days["date"],
                 account_type=ibis.null("string"),
                 marketplace_id=ibis.null("string"),
                 country_code=ibis.null("string"),
-                currency_code=table["campaign_budget_currency_code"],
-                timezone=ibis.null("string"),
-                date=table["date"],
-                priority=ibis.literal(2),
+                priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
-            *(from_entity(upstream.data) for upstream in profiles),
-            from_facts(fact_campaign_performance.data),
+            *(from_entity(upstream) for upstream in profiles),
+            from_fact(fact_campaign_performance.data),
             distinct=False,
         )
-        return latest(rows, "profile_id", rows["priority"].asc(), rows["date"].desc()).drop("priority")
+        return latest(rows, "account_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+
+    @ibis_view(
+        schema=schemas.DimCampaigns,
+        tags=["Dimension"],
+        relations={"campaigns_stats": il.Relation("asset", CAMPAIGN_REPORTS, many=True, optional=True)},
+    )
+    def dim_campaigns(self, campaigns_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
+        """One row per campaign with its ad product, status and budget, from its latest report, else the facts."""
+
+        def from_report(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            # the Sponsored Display campaign report carries no budget type
+            typed = "campaign_budget_type" in table.columns
+            attributes = {
+                "campaign_name": table["campaign_name"].max(),
+                "status": table["campaign_status"].max(),
+                "budget": table["campaign_budget_amount"].max(),
+            }
+            if typed:
+                attributes["budget_type"] = table["campaign_budget_type"].max()
+            days = table.group_by([table["date"], table["campaign_id"]]).aggregate(**attributes)
+            return days.select(
+                campaign_id=days["campaign_id"].cast("string"),
+                account_id=ibis.literal(_account(upstream)),
+                campaign_name=days["campaign_name"],
+                status=days["status"],
+                objective=ibis.null("string"),
+                campaign_type=ibis.literal(AD_PRODUCTS[upstream.asset.key]),
+                budget=days["budget"],
+                budget_type=days["budget_type"] if typed else ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                created_at=ibis.null(INSTANT),
+                updated_at=ibis.null(INSTANT),
+                as_of_date=days["date"],
+                priority=ibis.literal(REPORT),
+            )
+
+        def from_fact(table: ibis.Table) -> ibis.Table:
+            days = table.group_by([table["date"], table["campaign_id"]]).aggregate(
+                account_id=table["account_id"].max(), campaign_type=table["campaign_type"].max()
+            )
+            return days.select(
+                campaign_id=days["campaign_id"],
+                account_id=days["account_id"],
+                campaign_name=ibis.null("string"),
+                status=ibis.null("string"),
+                objective=ibis.null("string"),
+                campaign_type=days["campaign_type"],
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                created_at=ibis.null(INSTANT),
+                updated_at=ibis.null(INSTANT),
+                as_of_date=days["date"],
+                priority=ibis.literal(FACT),
+            )
+
+        rows = ibis.union(
+            *(from_report(upstream) for upstream in campaigns_stats),
+            from_fact(fact_campaign_performance.data),
+            distinct=False,
+        )
+        return latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+
+    @ibis_view(
+        schema=schemas.DimAdGroups,
+        tags=["Dimension"],
+        relations={"ad_groups_stats": il.Relation("asset", AD_GROUP_REPORTS, many=True, optional=True)},
+    )
+    def dim_ad_groups(self, ad_groups_stats: list[il.Upstream]) -> ibis.Table:
+        """One row per ad group with its name and campaign, from its latest report of any ad product."""
+
+        def from_report(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            days = table.group_by([table["date"], table["ad_group_id"]]).aggregate(
+                ad_group_name=table["ad_group_name"].max(), campaign_id=table["campaign_id"].max()
+            )
+            return days.select(
+                ad_group_id=days["ad_group_id"].cast("string"),
+                campaign_id=days["campaign_id"].cast("string"),
+                account_id=ibis.literal(_account(upstream)),
+                ad_group_name=days["ad_group_name"],
+                status=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                created_at=ibis.null(INSTANT),
+                updated_at=ibis.null(INSTANT),
+                as_of_date=days["date"],
+                priority=ibis.literal(REPORT),
+            )
+
+        if not ad_groups_stats:
+            raise ConfigError("no upstream bound: the ad group dimension needs at least one profile's report")
+        rows = ibis.union(*(from_report(upstream) for upstream in ad_groups_stats), distinct=False)
+        return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")

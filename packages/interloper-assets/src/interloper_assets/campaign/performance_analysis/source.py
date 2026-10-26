@@ -20,12 +20,7 @@ class CampaignPerformanceAnalysis(il.Source):
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Fact"],
         relations={
-            "performance": il.Relation(
-                "asset",
-                ["*.fact_ad_performance", "*.fact_ad_group_performance", "*.fact_campaign_performance"],
-                many=True,
-                optional=True,
-            ),
+            "performance": il.Relation("asset", "*.fact_campaign_performance", many=True, optional=True),
             "matches": il.Relation("asset", "campaign_matcher.campaign_matches", optional=True),
         },
     )
