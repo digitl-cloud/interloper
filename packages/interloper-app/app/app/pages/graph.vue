@@ -146,6 +146,12 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                     <UButton icon="i-lucide-plus"
                              label="New source"
                              @click="onCreateSource" />
+                    <UButton v-if="panelOpen"
+                             icon="i-lucide-panel-right-close"
+                             aria-label="Hide panel"
+                             color="neutral"
+                             variant="ghost"
+                             @click="onPanelClose" />
                 </template>
             </GraphToolbar>
             <SplitterGroup ref="assetGroupRef"
@@ -188,8 +194,7 @@ async function onDeleteDependency(payload: { upstreamAssetId: string; downstream
                         <GraphAssetPanel class="h-full"
                                          :asset="selectedAsset"
                                          :asset-defn="selectedAssetDefn"
-                                         :source="selectedSource"
-                                         @close="onPanelClose" />
+                                         :source="selectedSource" />
                     </div>
                 </SplitterPanel>
             </SplitterGroup>

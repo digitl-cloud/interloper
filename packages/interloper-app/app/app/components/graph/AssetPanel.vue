@@ -12,10 +12,6 @@ const props = defineProps<{
     source: ComponentRecord
 }>()
 
-const emit = defineEmits<{
-    close: []
-}>()
-
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const { apiFetch } = useApi()
@@ -110,6 +106,12 @@ const schemaFields = computed(() => {
         required: required.has(name),
     }))
 })
+
+const schemaColumns = [
+    { accessorKey: 'name', header: 'Name' },
+    { accessorKey: 'type', header: 'Type' },
+    { accessorKey: 'description', header: 'Description' },
+]
 
 /** Resolve a human-readable type string from a JSON Schema property. */
 function resolveSchemaType(prop: JsonSchemaProperty): string {
@@ -220,37 +222,39 @@ const dependencyRows = computed(() => {
 </script>
 
 <template>
-    <UCard :ui="{ root: 'flex flex-col', header: 'shrink-0', body: 'flex-1 min-h-0 overflow-auto px-4 pb-4 sm:px-6 sm:pb-6' }">
-        <template #header>
-            <div class="flex items-center gap-3">
-                <div class="flex items-center justify-center size-10 rounded-lg bg-elevated shrink-0">
-                    <UIcon :name="sourceIcon"
-                           class="size-5" />
-                </div>
-                <div class="min-w-0 flex-1">
-                    <h2 class="text-base font-semibold truncate leading-tight">
-                        {{ assetDefn?.name ?? asset.key }}
-                    </h2>
-                    <p class="text-xs text-muted mt-0.5 truncate">
-                        {{ sourceDefn?.name ?? source.key }}
-                    </p>
-                </div>
-                <UButton class="shrink-0"
-                         icon="i-lucide-x"
-                         color="neutral"
-                         variant="ghost"
-                         size="xs"
-                         @click="emit('close')" />
-            </div>
+    <div class="flex flex-col gap-3">
+        <!-- Folded, the header keeps the asset's identity: logo, name, source and type. -->
+        <GraphPanelSection class="shrink-0">
+            <template #title>
+                <span class="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <span class="flex items-center justify-center size-10 rounded-lg bg-elevated shrink-0">
+                        <UIcon :name="sourceIcon"
+                               class="size-5" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-base font-semibold truncate leading-tight text-highlighted">
+                            {{ assetDefn?.name ?? asset.key }}
+                        </span>
+                        <span class="mt-0.5 flex min-w-0 items-center gap-2">
+                            <span class="truncate text-xs text-muted">{{ sourceDefn?.name ?? source.key }}</span>
+                            <UBadge v-for="tag in assetDefn?.tags ?? []"
+                                    :key="tag"
+                                    :color="tagColor(tag)"
+                                    size="sm"
+                                    :label="tag" />
+                        </span>
+                    </span>
+                </span>
+            </template>
 
-            <div v-if="assetDefn?.tags?.length"
-                 class="mt-3 flex flex-wrap gap-1">
-                <UBadge v-for="tag in assetDefn.tags"
-                        :key="tag"
-                        :color="tagColor(tag)"
-                        size="sm"
-                        :label="tag" />
-            </div>
+            <p v-if="assetDefn?.description"
+               class="text-sm text-muted">
+                {{ assetDefn.description }}
+            </p>
+            <p v-else
+               class="text-sm text-dimmed italic">
+                No description
+            </p>
 
             <!-- Warnings — same set as the graph node badge. -->
             <UAlert v-if="warnings.length"
@@ -269,251 +273,143 @@ const dependencyRows = computed(() => {
                     </ul>
                 </template>
             </UAlert>
-        </template>
+        </GraphPanelSection>
 
-        <!-- pt-px keeps the first section's ring inside the scroll box, which clips overflow -->
-        <div class="flex flex-col gap-4 pt-px">
-            <!-- Drift notice — this asset no longer resolves against the catalog.
-                 UAlert is w-full, so pad a wrapper rather than margin the alert. -->
-            <div v-if="driftBadge">
-                <UAlert :color="driftBadge.color"
-                        :icon="driftBadge.icon"
-                        variant="subtle"
-                        :title="driftBadge.label"
-                        :description="asset.status === 'missing'
-                            ? 'Its catalog key was renamed or removed in code. It can\'t materialize — remove the source (or edit it to drop this asset), or restore the catalog entry.'
-                            : 'This component is not enabled in the current deployment.'" />
-            </div>
+        <!-- p-px keeps the cards' rings inside the scroll box, which clips overflow -->
+        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-px">
+            <!-- Drift notice — this asset no longer resolves against the catalog. -->
+            <UAlert v-if="driftBadge"
+                    :color="driftBadge.color"
+                    :icon="driftBadge.icon"
+                    variant="subtle"
+                    :title="driftBadge.label"
+                    :description="asset.status === 'missing'
+                        ? 'Its catalog key was renamed or removed in code. It can\'t materialize — remove the source (or edit it to drop this asset), or restore the catalog entry.'
+                        : 'This component is not enabled in the current deployment.'" />
 
-            <!-- Description -->
-            <UCollapsible default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Description</span>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4">
-                        <p v-if="assetDefn?.description"
-                           class="text-sm">
-                            {{ assetDefn.description }}
-                        </p>
-                        <p v-else
-                           class="text-sm text-dimmed italic">
-                            No description
-                        </p>
-                    </div>
-                </template>
-            </UCollapsible>
-
-            <!-- Materialization -->
-            <UCollapsible default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Materialization</span>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4 flex flex-col gap-2">
-                        <!-- Latest materialization -->
-                        <div class="flex items-center gap-4 rounded-md bg-muted p-4">
-                            <UIcon :name="materialization.icon"
-                                   class="size-10 shrink-0"
-                                   :class="[materialization.color, materialization.spin && 'animate-spin']" />
-                            <div class="min-w-0 flex-1">
-                                <div class="text-sm font-medium text-highlighted">
-                                    Latest materialization: <span :class="materialization.color">{{ materialization.label }}</span>
-                                </div>
-                                <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
+            <GraphPanelSection title="Materialization">
+                <div class="flex flex-col gap-2">
+                    <div class="flex items-center gap-4 rounded-md bg-elevated p-4">
+                        <UIcon :name="materialization.icon"
+                               class="size-10 shrink-0"
+                               :class="[materialization.color, materialization.spin && 'animate-spin']" />
+                        <div class="min-w-0 flex-1">
+                            <div class="text-sm font-medium text-highlighted">
+                                Latest materialization: <span :class="materialization.color">{{ materialization.label }}</span>
                             </div>
-                        </div>
-
-                        <!-- History heatmap (max last 7 runs) -->
-                        <div v-if="history.length"
-                             class="rounded-md bg-muted p-4">
-                            <div class="mb-2.5 text-xs font-medium text-muted">Materialization history</div>
-                            <div class="flex gap-1.5">
-                                <div v-for="execution in history"
-                                     :key="execution.run_id"
-                                     class="size-7 rounded-md"
-                                     :style="{ backgroundColor: heatColor(execution.status) }"
-                                     :title="historyTooltip(execution)" />
-                            </div>
+                            <div class="truncate text-xs text-muted">{{ materializationMeta }}</div>
                         </div>
                     </div>
-                </template>
-            </UCollapsible>
 
-            <!-- Destinations -->
-            <UCollapsible default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Destinations</span>
-                    <UBadge v-if="destinations.length"
-                            color="neutral"
-                            class="ml-auto">
-                        {{ destinations.length }}
-                    </UBadge>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4">
-                        <div v-if="destinations.length"
-                             class="flex flex-col gap-2">
-                            <div v-for="dest in destinations"
-                                 :key="dest.id"
-                                 class="flex items-center gap-4 rounded-md bg-muted p-4">
-                                <UIcon :name="dest.icon"
-                                       class="size-10 shrink-0" />
-                                <div class="min-w-0 flex-1">
-                                    <div class="text-sm font-medium">{{ dest.label }}</div>
-                                    <div class="text-xs text-muted">{{ dest.typeName }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        <p v-else
-                           class="text-sm text-dimmed italic">
-                            No destinations configured
-                        </p>
-                    </div>
-                </template>
-            </UCollapsible>
-
-            <!-- Partitions -->
-            <UCollapsible v-if="isPartitioned"
-                          default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Partitions</span>
-                    <UBadge v-if="partitionData.length"
-                            color="neutral"
-                            class="ml-auto">
-                        {{ partitionData.length }}
-                    </UBadge>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4">
-                        <!-- Loading -->
-                        <div v-if="partitionLoading"
-                             class="flex items-center justify-center py-6">
-                            <UIcon name="i-lucide-loader-circle"
-                                   class="size-5 animate-spin text-muted" />
-                        </div>
-
-                        <!-- Not materialized -->
-                        <UAlert v-else-if="partitionNotMaterialized"
-                                icon="i-lucide-info"
-                                color="warning"
-                                class="text-sm"
-                                title="Asset has not been materialized yet." />
-
-                        <!-- Error -->
-                        <UAlert v-else-if="partitionError"
-                                icon="i-lucide-triangle-alert"
-                                color="error"
-                                class="text-sm"
-                                :title="partitionError" />
-
-                        <!-- Chart -->
-                        <ChartPartitionRowCounts v-else-if="partitionData.length > 0"
-                                                 :data="partitionData" />
-
-                        <!-- Empty -->
-                        <p v-else
-                           class="text-sm text-dimmed italic">
-                            No partition data available.
-                        </p>
-                    </div>
-                </template>
-            </UCollapsible>
-
-            <!-- Dependencies -->
-            <UCollapsible v-if="dependencyRows.length"
-                          default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Upstream dependencies</span>
-                    <UBadge color="neutral"
-                            class="ml-auto">
-                        {{ dependencyRows.length }}
-                    </UBadge>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4 flex flex-col gap-1.5">
-                        <div v-for="dep in dependencyRows"
-                             :key="dep.param"
-                             class="flex items-center gap-2.5 rounded-md bg-muted px-3 py-2">
-                            <UIcon :name="dep.icon"
-                                   class="size-4 shrink-0 text-muted" />
-                            <div class="min-w-0 flex-1">
-                                <div class="truncate text-sm">{{ dep.name }}</div>
-                                <div class="truncate text-xs text-muted">{{ dep.sourceName }}</div>
-                            </div>
-                            <UBadge color="neutral"
-                                    size="sm"
-                                    class="shrink-0 font-mono">
-                                {{ dep.param }}
-                            </UBadge>
+                    <!-- History heatmap (max last 7 runs) -->
+                    <div v-if="history.length"
+                         class="rounded-md bg-elevated p-4">
+                        <div class="mb-2.5 text-xs font-medium text-muted">Materialization history</div>
+                        <div class="flex gap-1.5">
+                            <div v-for="execution in history"
+                                 :key="execution.run_id"
+                                 class="size-7 rounded-md"
+                                 :style="{ backgroundColor: heatColor(execution.status) }"
+                                 :title="historyTooltip(execution)" />
                         </div>
                     </div>
-                </template>
-            </UCollapsible>
+                </div>
+            </GraphPanelSection>
 
-            <!-- Schema -->
-            <UCollapsible v-if="schemaFields.length"
-                          default-open
-                          class="rounded-lg bg-default ring ring-default">
-                <button class="flex items-center gap-2 w-full px-4 py-3.5 group cursor-pointer">
-                    <UIcon name="i-lucide-chevron-right"
-                           class="size-3.5 shrink-0 text-dimmed group-data-[state=open]:rotate-90 transition-transform duration-200" />
-                    <span class="text-xs font-semibold text-muted uppercase tracking-wide">Schema</span>
-                    <UBadge color="neutral"
-                            class="ml-auto">
-                        {{ schemaFields.length }}
-                    </UBadge>
-                </button>
-
-                <template #content>
-                    <div class="px-4 pb-4">
-                        <div class="bg-muted rounded-md p-2 overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="border-b border-default text-left text-xs text-muted">
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Name</th>
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Type</th>
-                                        <th class="p-1.5 font-medium whitespace-nowrap">Description</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="field in schemaFields"
-                                        :key="field.name"
-                                        class="border-b border-default last:border-0">
-                                        <td class="p-1.5 font-mono text-xs whitespace-nowrap">{{ field.name }}</td>
-                                        <td class="p-1.5 whitespace-nowrap">
-                                            <UBadge color="neutral">
-                                                {{ field.type }}
-                                            </UBadge>
-                                        </td>
-                                        <td class="p-1.5 text-muted whitespace-nowrap">{{ field.description }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+            <GraphPanelSection title="Destinations"
+                               :count="destinations.length">
+                <div v-if="destinations.length"
+                     class="flex flex-col gap-2">
+                    <div v-for="dest in destinations"
+                         :key="dest.id"
+                         class="flex items-center gap-4 rounded-md bg-elevated p-4">
+                        <UIcon :name="dest.icon"
+                               class="size-10 shrink-0" />
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate text-sm font-medium">{{ dest.label }}</div>
+                            <div class="text-xs text-muted">{{ dest.typeName }}</div>
                         </div>
                     </div>
-                </template>
-            </UCollapsible>
+                </div>
+                <p v-else
+                   class="text-sm text-dimmed italic">
+                    No destinations configured
+                </p>
+            </GraphPanelSection>
+
+            <GraphPanelSection v-if="isPartitioned"
+                               title="Partitions"
+                               :count="partitionData.length">
+                <div v-if="partitionLoading"
+                     class="flex items-center justify-center py-6">
+                    <UIcon name="i-lucide-loader-circle"
+                           class="size-5 animate-spin text-muted" />
+                </div>
+                <UAlert v-else-if="partitionNotMaterialized"
+                        icon="i-lucide-info"
+                        color="warning"
+                        class="text-sm"
+                        title="Asset has not been materialized yet." />
+                <UAlert v-else-if="partitionError"
+                        icon="i-lucide-triangle-alert"
+                        color="error"
+                        class="text-sm"
+                        :title="partitionError" />
+                <ChartPartitionRowCounts v-else-if="partitionData.length > 0"
+                                         :data="partitionData" />
+                <p v-else
+                   class="text-sm text-dimmed italic">
+                    No partition data available.
+                </p>
+            </GraphPanelSection>
+
+            <GraphPanelSection v-if="dependencyRows.length"
+                               title="Upstream dependencies"
+                               :count="dependencyRows.length">
+                <div class="flex flex-col gap-1.5">
+                    <div v-for="dep in dependencyRows"
+                         :key="dep.param"
+                         class="flex items-center gap-2.5 rounded-md bg-elevated px-3 py-2">
+                        <UIcon :name="dep.icon"
+                               class="size-4 shrink-0 text-muted" />
+                        <div class="min-w-0 flex-1">
+                            <div class="truncate text-sm">{{ dep.name }}</div>
+                            <div class="truncate text-xs text-muted">{{ dep.sourceName }}</div>
+                        </div>
+                        <!-- Outline: a soft neutral badge is the tile's own tone. -->
+                        <UBadge color="neutral"
+                                variant="outline"
+                                size="sm"
+                                class="shrink-0 font-mono">
+                            {{ dep.param }}
+                        </UBadge>
+                    </div>
+                </div>
+            </GraphPanelSection>
+
+            <GraphPanelSection v-if="schemaFields.length"
+                               title="Schema"
+                               :count="schemaFields.length">
+                <UTable :data="schemaFields"
+                        :columns="schemaColumns"
+                        class="rounded-md bg-elevated"
+                        :ui="{
+                            th: 'py-2 px-3 text-xs first:ps-4',
+                            td: 'py-2 px-3 text-xs whitespace-nowrap first:ps-4',
+                            tbody: 'divide-accented',
+                        }">
+                    <template #name-cell="{ row }">
+                        <span class="font-mono text-default">{{ row.original.name }}</span>
+                    </template>
+                    <template #type-cell="{ row }">
+                        <UBadge color="neutral"
+                                variant="outline"
+                                size="sm">
+                            {{ row.original.type }}
+                        </UBadge>
+                    </template>
+                </UTable>
+            </GraphPanelSection>
         </div>
-    </UCard>
+    </div>
 </template>

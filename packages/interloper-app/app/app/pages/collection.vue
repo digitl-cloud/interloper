@@ -105,6 +105,12 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
                                 <UButton icon="i-lucide-plus"
                                          label="New source"
                                          @click="onCreateSource" />
+                                <UButton v-if="panelOpen"
+                                         icon="i-lucide-panel-right-close"
+                                         aria-label="Hide panel"
+                                         color="neutral"
+                                         variant="ghost"
+                                         @click="onPanelClose" />
                             </template>
                         </CollectionTable>
                     </div>
@@ -126,8 +132,7 @@ const showEmpty = computed(() => !componentsStore.loading && componentsStore.byK
                         <GraphAssetPanel class="h-full"
                                          :asset="selectedAsset"
                                          :asset-defn="selectedAssetDefn"
-                                         :source="selectedSource"
-                                         @close="onPanelClose" />
+                                         :source="selectedSource" />
                     </div>
                 </SplitterPanel>
             </SplitterGroup>
