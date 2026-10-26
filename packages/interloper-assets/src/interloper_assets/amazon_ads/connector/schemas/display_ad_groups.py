@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class DisplayAdGroups(Schema):
-    """Sponsored Display ad group snapshot. One row per ad group and day, as the extended ad groups list returns it. Ids are numeric, as Sponsored Display sends them. Creation and update times are epoch numbers whose unit Amazon does not document, kept as sent."""
+    """Sponsored Display ad group snapshot. One row per ad group and day, as the extended ad groups list returns it. Ids are numeric, as Sponsored Display sends them. Creation and update times arrive as epoch milliseconds and are stored as UTC instants."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -21,7 +21,7 @@ class DisplayAdGroups(Schema):
     tactic: str | None = Field(default=None, description="Targeting tactic: T00020 (contextual) or T00030 (audiences).")
     creative_type: str | None = Field(default=None, description="IMAGE or VIDEO.")
     serving_status: str | None = Field(default=None, description="Serving status.")
-    creation_date: int | None = Field(default=None, description="When the ad group was created, as an epoch number.")
-    last_updated_date: int | None = Field(
-        default=None, description="When the ad group was last changed, as an epoch number."
+    creation_date: dt.datetime | None = Field(default=None, description="When the ad group was created, in UTC.")
+    last_updated_date: dt.datetime | None = Field(
+        default=None, description="When the ad group was last changed, in UTC."
     )

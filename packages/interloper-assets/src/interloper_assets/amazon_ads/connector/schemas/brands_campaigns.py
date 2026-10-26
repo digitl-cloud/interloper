@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class BrandsCampaigns(Schema):
-    """Sponsored Brands campaign snapshot. One row per campaign and day, as the v4 campaigns list returns it with its extended data. Creation and update times are epoch numbers whose unit Amazon does not document, kept as sent."""
+    """Sponsored Brands campaign snapshot. One row per campaign and day, as the v4 campaigns list returns it with its extended data. Creation and update times arrive as epoch milliseconds and are stored as UTC instants."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -57,11 +57,11 @@ class BrandsCampaigns(Schema):
     bidding_shopper_cohort_bid_adjustments: str | None = Field(
         default=None, description="JSON array of shopper cohort bid adjustments."
     )
-    extended_data_creation_date: int | None = Field(
-        default=None, description="When the campaign was created, as an epoch number."
+    extended_data_creation_date: dt.datetime | None = Field(
+        default=None, description="When the campaign was created, in UTC."
     )
-    extended_data_last_update_date: int | None = Field(
-        default=None, description="When the campaign was last changed, as an epoch number."
+    extended_data_last_update_date: dt.datetime | None = Field(
+        default=None, description="When the campaign was last changed, in UTC."
     )
     extended_data_serving_status: str | None = Field(default=None, description="Serving status.")
     extended_data_serving_status_details: str | None = Field(

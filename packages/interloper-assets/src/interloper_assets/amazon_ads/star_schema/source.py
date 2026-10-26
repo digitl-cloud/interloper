@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ibis
+import ibis.expr.types as ir
 import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest
@@ -58,6 +59,27 @@ def _account(upstream: il.Upstream) -> str:
     if profile is None:
         raise ConfigError(f"Upstream '{upstream.asset.key}' belongs to no profile")
     return profile
+
+
+def _lifecycle(upstream: il.Upstream) -> tuple[ir.Value, ir.Value]:
+    """When an entity was created and last changed, from any ad product's entity table.
+
+    Used by the campaign and ad group dimensions. Each ad product names the
+    two instants its own way: under the extended data on Sponsored Products
+    and Brands, at the top level on Sponsored Display.
+
+    Args:
+        upstream: A bound campaigns or ad groups entity upstream of any ad product.
+
+    Returns:
+        The creation and last-update instants, in UTC.
+    """
+    table = upstream.data
+    if upstream.asset.key.startswith("products_"):
+        return table["extended_data_creation_date_time"], table["extended_data_last_update_date_time"]
+    if upstream.asset.key.startswith("brands_"):
+        return table["extended_data_creation_date"], table["extended_data_last_update_date"]
+    return table["creation_date"], table["last_updated_date"]
 
 
 @il.source(tags=["Analytics"], icon="icon:amazon", maturity="alpha", group="amazon_ads", dataset="amazon_ads")
@@ -219,9 +241,9 @@ class AmazonAdsStarSchema(il.Source):
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
-            # only Sponsored Products nests its budget and sends its lifecycle times as instants; the others send
-            # epoch numbers in an undocumented unit, left NULL here
+            # only Sponsored Products nests its budget
             products = upstream.asset.key == "products_campaigns"
+            created_at, updated_at = _lifecycle(upstream)
             return table.select(
                 campaign_id=table["campaign_id"].cast("string"),
                 account_id=ibis.literal(_account(upstream)),
@@ -233,8 +255,8 @@ class AmazonAdsStarSchema(il.Source):
                 budget_type=table["budget_budget_type"] if products else table["budget_type"],
                 start_date=table["start_date"],
                 end_date=table["end_date"],
-                created_at=table["extended_data_creation_date_time"] if products else ibis.null(INSTANT),
-                updated_at=table["extended_data_last_update_date_time"] if products else ibis.null(INSTANT),
+                created_at=created_at,
+                updated_at=updated_at,
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
             )
@@ -310,7 +332,7 @@ class AmazonAdsStarSchema(il.Source):
 
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
-            products = upstream.asset.key == "products_ad_groups"
+            created_at, updated_at = _lifecycle(upstream)
             return table.select(
                 ad_group_id=table["ad_group_id"].cast("string"),
                 campaign_id=table["campaign_id"].cast("string"),
@@ -321,8 +343,8 @@ class AmazonAdsStarSchema(il.Source):
                 budget_type=ibis.null("string"),
                 start_date=ibis.null("date"),
                 end_date=ibis.null("date"),
-                created_at=table["extended_data_creation_date_time"] if products else ibis.null(INSTANT),
-                updated_at=table["extended_data_last_update_date_time"] if products else ibis.null(INSTANT),
+                created_at=created_at,
+                updated_at=updated_at,
                 as_of_date=table["date"],
                 priority=ibis.literal(ENTITY),
             )

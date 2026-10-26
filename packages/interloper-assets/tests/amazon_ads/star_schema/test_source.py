@@ -17,6 +17,9 @@ from interloper_assets.amazon_ads.star_schema.source import AmazonAdsStarSchema
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
+CREATED_SQL, UPDATED_SQL = "TIMESTAMPTZ '2026-07-27 19:04:13.888+00'", "TIMESTAMPTZ '2026-07-28 19:04:13.888+00'"
+CREATED = dt.datetime(2026, 7, 27, 19, 4, 13, 888000, tzinfo=dt.timezone.utc)
+UPDATED = dt.datetime(2026, 7, 28, 19, 4, 13, 888000, tzinfo=dt.timezone.utc)
 CAMPAIGN_REPORTS = [
     "amazon_ads.products_campaigns_stats",
     "amazon_ads.brands_campaigns_stats",
@@ -68,14 +71,15 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
     client.execute(
         f"CREATE TABLE amazon_ads.brands_campaigns__{profile_id} AS SELECT "
         f"DATE '2026-09-30' AS date, '22{profile_id}' AS campaign_id, 'SB from entity' AS name, 'PAUSED' AS state, "
-        "25.0 AS budget, 'LIFETIME' AS budget_type, DATE '2026-09-15' AS start_date, DATE '2026-12-31' AS end_date "
+        "25.0 AS budget, 'LIFETIME' AS budget_type, DATE '2026-09-15' AS start_date, DATE '2026-12-31' AS end_date, "
+        f"{CREATED_SQL} AS extended_data_creation_date, {UPDATED_SQL} AS extended_data_last_update_date "
         f"WHERE {collected}"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.display_campaigns__{profile_id} AS SELECT "
         f"DATE '2026-09-30' AS date, 33{profile_id} AS campaign_id, 'SD from entity' AS name, 'enabled' AS state, "
-        "10.0 AS budget, 'daily' AS budget_type, DATE '2026-09-20' AS start_date, CAST(NULL AS DATE) AS end_date "
-        f"WHERE {collected}"
+        "10.0 AS budget, 'daily' AS budget_type, DATE '2026-09-20' AS start_date, CAST(NULL AS DATE) AS end_date, "
+        f"{CREATED_SQL} AS creation_date, {UPDATED_SQL} AS last_updated_date WHERE {collected}"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.products_ad_groups__{profile_id} AS SELECT "
@@ -87,12 +91,13 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
     client.execute(
         f"CREATE TABLE amazon_ads.brands_ad_groups__{profile_id} AS SELECT "
         f"DATE '2026-09-30' AS date, '3' AS ad_group_id, '22{profile_id}' AS campaign_id, "
-        f"'SB group from entity' AS name, 'PAUSED' AS state WHERE {collected}"
+        f"'SB group from entity' AS name, 'PAUSED' AS state, {CREATED_SQL} AS extended_data_creation_date, "
+        f"{UPDATED_SQL} AS extended_data_last_update_date WHERE {collected}"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.display_ad_groups__{profile_id} AS SELECT "
         f"DATE '2026-09-30' AS date, 4 AS ad_group_id, 33{profile_id} AS campaign_id, 'SD group from entity' AS name, "
-        f"'enabled' AS state WHERE {collected}"
+        f"'enabled' AS state, {CREATED_SQL} AS creation_date, {UPDATED_SQL} AS last_updated_date WHERE {collected}"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.products_campaigns_stats__{profile_id} AS SELECT * FROM (VALUES "
@@ -285,13 +290,14 @@ class TestOnDuckDB:
             dt.date(2026, 9, 15),
             dt.date(2026, 12, 31),
         )
-        assert brands["created_at"] is None
+        assert (brands["created_at"], brands["updated_at"]) == (CREATED, UPDATED)
         display = rows["331"]
         assert (display["account_id"], display["campaign_type"], display["start_date"]) == (
             "1",
             "sponsored_display",
             dt.date(2026, 9, 20),
         )
+        assert (display["created_at"], display["updated_at"]) == (CREATED, UPDATED)
 
     def test_ad_groups_take_their_entity_row(self, warehouse):
         first = _profile("1", warehouse)
@@ -302,6 +308,7 @@ class TestOnDuckDB:
         assert rows["1"]["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.timezone.utc)
         assert (rows["3"]["status"], rows["3"]["as_of_date"]) == ("PAUSED", dt.date(2026, 9, 30))
         assert (rows["4"]["campaign_id"], rows["4"]["account_id"]) == ("331", "1")
+        assert (rows["3"]["created_at"], rows["4"]["updated_at"]) == (CREATED, UPDATED)
 
     def test_a_profile_takes_its_own_entity_row_over_the_facts(self, warehouse):
         first, second = _profile("1", warehouse), _profile("2", warehouse)
