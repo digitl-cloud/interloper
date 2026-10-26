@@ -5,7 +5,7 @@ signed JSON file mapping each entity id to its rows), requested at ``DAY``
 granularity so every row carries its ``DATE``; their UPPER_SNAKE columns
 snake-case onto the schemas, with ``column_overrides`` for the ``3SEC`` /
 ``15SEC`` names. Entities are bookmark-paginated objects with nested settings
-and Unix-second timestamps, handled by ``PinterestEntityNormalizer``. These
+and Unix-second timestamps, typed by the entity normalizer's epoch option. These
 tests pin the key set, both reshapes, the spec round-trip, the partition
 columns, and the report and pagination helpers against a faked API.
 """
@@ -27,7 +27,7 @@ from interloper_assets.pinterest_ads import constants
 from interloper_assets.pinterest_ads.connection import PinterestAdsConnection
 from interloper_assets.pinterest_ads.connector import schemas
 from interloper_assets.pinterest_ads.connector import source as source_module
-from interloper_assets.pinterest_ads.connector.source import PinterestAds, PinterestEntityNormalizer
+from interloper_assets.pinterest_ads.connector.source import PinterestAds
 
 REPORT_ASSETS = ("ads_stats", "campaigns_stats", "ads_conversions_stats", "videos_stats_by_targeting")
 ENTITY_ASSETS = ("ad_accounts", "campaigns", "ad_groups", "ads")
@@ -75,7 +75,7 @@ class TestAssets:
     def test_entities_use_the_entity_normalizer(self):
         for key in ENTITY_ASSETS:
             normalizer = _asset(key).normalizer
-            assert isinstance(normalizer, PinterestEntityNormalizer), key
+            assert type(normalizer) is DataFrameNormalizer, key
             assert normalizer.flatten_max_level == 1, key
             assert normalizer.epoch_columns == ["created_time", "updated_time", "start_time", "end_time"], key
             assert normalizer.epoch_unit == "s", key

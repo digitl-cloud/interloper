@@ -4,7 +4,7 @@ Ad analytics rows carry their day as a nested ``dateRange`` of ``{year, month,
 day}`` objects; ``LinkedinAdsStatsNormalizer`` turns both bounds into dates so
 the report partitions on the vendor's own ``date_range_start``. Entities come
 back undated and carry epoch-millisecond ``runSchedule`` instants, which the
-source's ``LinkedinAdsNormalizer`` converts to UTC datetimes. Requests are
+source normalizer's epoch option converts to UTC datetimes. Requests are
 written as raw Rest.li 2.0 query strings, pinned here against a mock transport.
 """
 
@@ -18,15 +18,12 @@ import interloper as il
 from interloper.asset.context import ExecutionContext
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
+from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.linkedin_ads import constants
 from interloper_assets.linkedin_ads.connection import LinkedinAdsConnection
 from interloper_assets.linkedin_ads.connector import schemas
-from interloper_assets.linkedin_ads.connector.source import (
-    LinkedinAds,
-    LinkedinAdsNormalizer,
-    LinkedinAdsStatsNormalizer,
-)
+from interloper_assets.linkedin_ads.connector.source import LinkedinAds, LinkedinAdsStatsNormalizer
 
 REPORT_ASSETS = ("ads_stats",)
 ENTITY_ASSETS = ("ad_accounts", "campaign_groups", "campaigns")
@@ -92,9 +89,10 @@ class TestSourceNormalizer:
     def test_entities_use_the_source_normalizer(self):
         for key in ENTITY_ASSETS:
             normalizer = _asset(_source(), key).normalizer
-            assert isinstance(normalizer, LinkedinAdsNormalizer), key
+            assert type(normalizer) is DataFrameNormalizer, key
             assert normalizer.flatten_max_level == 1, key
             assert normalizer.epoch_columns == ["run_schedule_start", "run_schedule_end"], key
+            assert normalizer.epoch_unit == "ms", key
 
 
 class TestSpecRoundtripAndReconcile:
@@ -138,7 +136,7 @@ class TestSpecRoundtripAndReconcile:
 
     def test_open_ended_schedule_leaves_the_end_empty(self):
         rows = [{**CAMPAIGN_ROW, "runSchedule": {"start": 1757894400000}, "date": DAY}]
-        normalized = LinkedinAdsNormalizer(flatten_max_level=1, epoch_columns=["run_schedule_end"]).normalize(rows)
+        normalized = _asset(_source(), "campaigns").normalizer.normalize(rows)
         assert "run_schedule_end" not in normalized.columns
 
 
@@ -214,8 +212,3 @@ class TestRequests:
         assert rows == [{"id": 7, "date": DAY}]
         assert [url.path for url in seen] == ["/rest/adAccounts/123/adCampaignGroups"]
         assert seen[0].query.decode() == f"q=search&pageSize=1000&fields={','.join(constants.CAMPAIGN_GROUP_FIELDS)}"
-
-    def test_epoch_unit_is_configurable(self):
-        normalizer = LinkedinAdsNormalizer(flatten_max_level=1, epoch_columns=["run_schedule_start"], epoch_unit="s")
-        normalized = normalizer.normalize([{"runSchedule": {"start": 1757894400}}])
-        assert normalized.loc[0, "run_schedule_start"] == dt.datetime(2025, 9, 15, tzinfo=dt.timezone.utc)
