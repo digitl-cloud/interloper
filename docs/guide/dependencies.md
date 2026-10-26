@@ -143,8 +143,8 @@ below `1.0` also merges names that merely resemble each other.
 
 A star schema fans in one level below, with a qualified key: `FacebookAdsStarSchema` declares
 `facebook_ads.ads_stats` with `many=True` on its `fact_ad_performance`, one leg per Facebook Ads
-account. The star schemas are placeholders for now: they declare their wiring but materialize no
-rows.
+account. Facebook Ads and Amazon Ads materialize their star schemas as views; the other platforms
+declare the same wiring and materialize nothing yet.
 
 Building a DAG over the star schemas and the matcher wires every `dim_campaigns` asset held into
 the `campaigns` relation, one leg per platform:
