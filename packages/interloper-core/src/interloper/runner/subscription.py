@@ -54,5 +54,5 @@ class RunSubscription:
         Args:
             *exc_info: The exception leaving the block, if any; not suppressed.
         """
-        await asyncio.to_thread(EventBus.flush, 5.0)
+        await asyncio.to_thread(EventBus.flush)
         EventBus.unsubscribe(self)

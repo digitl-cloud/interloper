@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import atexit
+import logging
 import queue
 import threading
 from collections.abc import Callable
@@ -11,6 +12,8 @@ from typing import Any
 
 from interloper.events.event import Event
 from interloper.events.types import EventType
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -202,7 +205,7 @@ class EventBus:
                 for handler in targets:
                     try:
                         handler(item)
-                    except Exception:  # noqa: BLE001, S110
-                        pass  # isolate handler errors
+                    except Exception:
+                        logger.exception("Handler %r failed on %s", handler, item.type.value)
             finally:
                 self._queue.task_done()

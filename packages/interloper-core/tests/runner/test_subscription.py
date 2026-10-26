@@ -13,6 +13,16 @@ async def test_delivers_only_its_runs_events_and_flushes_on_exit():
     assert [event.metadata["run_id"] for event in delivered] == ["run-1"]
 
 
+async def test_exit_flushes_without_a_deadline(monkeypatch):
+    """Leaving the block waits for every queued event, however long that takes."""
+    timeouts: list[float | None] = []
+    original = EventBus.flush
+    monkeypatch.setattr(EventBus, "flush", staticmethod(lambda timeout=None: timeouts.append(timeout) or original()))
+    async with RunSubscription(lambda event: None, "run-1"):
+        pass
+    assert timeouts == [None]
+
+
 async def test_unsubscribes_on_exit():
     """After the block, the handler receives nothing."""
     delivered: list[Event] = []
