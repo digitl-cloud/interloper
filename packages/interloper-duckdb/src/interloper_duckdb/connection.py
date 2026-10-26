@@ -51,10 +51,17 @@ class DuckDBConnection(Connection):
         the same database, so threads writing concurrently never share one
         DuckDB connection object (which is not thread-safe).
 
+        The session runs in UTC. A declared datetime is stored as a naive
+        ``TIMESTAMP``, and DuckDB converts between naive and zoned timestamps in
+        the session timezone, which it otherwise takes from the host: the same
+        instant would be written and read differently on two machines.
+
         Returns:
             The connection, cached per connection instance.
         """
-        config = {"motherduck_token": self.motherduck_token} if self.motherduck_token else {}
+        config = {"TimeZone": "UTC"}
+        if self.motherduck_token:
+            config["motherduck_token"] = self.motherduck_token
         return duckdb.connect(self.database, config=config)
 
     @fetch_field_provider

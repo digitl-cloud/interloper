@@ -9,16 +9,22 @@ class TestClient:
     def test_is_cached_across_calls(self, connection):
         assert connection.client is connection.client
 
-    def test_local_file_opens_without_config(self, tmp_path):
+    def test_local_file_opens_in_utc(self, tmp_path):
         path = str(tmp_path / "local.duckdb")
         with patch("duckdb.connect") as connect:
             _ = DuckDBConnection(id="c", database=path).client
-        connect.assert_called_once_with(path, config={})
+        connect.assert_called_once_with(path, config={"TimeZone": "UTC"})
 
     def test_motherduck_token_is_passed_as_config(self):
         with patch("duckdb.connect") as connect:
             _ = DuckDBConnection(id="c", database="md:my_db", motherduck_token="token").client
-        connect.assert_called_once_with("md:my_db", config={"motherduck_token": "token"})
+        connect.assert_called_once_with("md:my_db", config={"TimeZone": "UTC", "motherduck_token": "token"})
+
+    def test_every_cursor_reads_timestamps_in_utc_whatever_the_host(self, connection):
+        cursor = connection.client.cursor()
+        assert cursor.execute("SELECT current_setting('TimeZone')").fetchone() == ("UTC",)
+        naive = cursor.execute("SELECT CAST(TIMESTAMP '2026-08-01 10:00:00' AS TIMESTAMPTZ)").fetchone()
+        assert naive is not None and naive[0].utcoffset().total_seconds() == 0 and naive[0].hour == 10
 
     def test_loads_from_the_environment(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DUCKDB_DATABASE", str(tmp_path / "env.duckdb"))
