@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 from interloper.errors import NormalizerError
 from interloper.normalizer import Normalizer
+from pydantic import Field, model_validator
+from typing_extensions import Self
 
 
 class DataFrameNormalizer(Normalizer):
@@ -27,7 +29,33 @@ class DataFrameNormalizer(Normalizer):
     Inherits all configuration fields from :class:`Normalizer`:
     ``normalize_columns``, ``flatten_max_level``, ``flatten_separator``,
     ``fill_missing``, ``infer``, ``snake_case_digits``, ``column_overrides``.
+
+    Attributes:
+        epoch_columns: Normalized column names holding instants the vendor
+            sends as numbers since the Unix epoch; each becomes a UTC
+            datetime. A column absent from the frame is skipped. The conform
+            step refuses numbers for datetime columns, since a bare number
+            does not say its unit.
+        epoch_unit: The unit of every epoch column, ``"s"`` or ``"ms"``;
+            required when ``epoch_columns`` is set.
     """
+
+    epoch_columns: list[str] = Field(default_factory=list)
+    epoch_unit: Literal["s", "ms"] | None = None
+
+    @model_validator(mode="after")
+    def _epoch_unit_is_declared(self) -> Self:
+        """Refuse epoch columns without a unit.
+
+        Returns:
+            The normalizer, unchanged.
+
+        Raises:
+            ValueError: If ``epoch_columns`` is set and ``epoch_unit`` is not.
+        """
+        if self.epoch_columns and self.epoch_unit is None:
+            raise ValueError("epoch_columns needs an epoch_unit: a number since the epoch does not say its unit")
+        return self
 
     def normalize(self, data: Any) -> pd.DataFrame:
         """Normalize *data* to a ``DataFrame`` with configured transformations.
@@ -67,6 +95,10 @@ class DataFrameNormalizer(Normalizer):
 
         if self.normalize_columns_names:
             df = df.rename(columns=self.column_name)
+
+        for column in self.epoch_columns:
+            if column in df.columns:
+                df[column] = pd.to_datetime(df[column], unit=self.epoch_unit, utc=True)
 
         return df
 

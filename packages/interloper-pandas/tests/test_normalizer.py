@@ -73,6 +73,32 @@ class TestDataFrameNormalize:
         assert pd.isna(result["a"].iloc[0])
         assert result["a"].iloc[1] == "x"
 
+    def test_epoch_columns_become_utc_instants_in_the_declared_unit(self):
+        n = DataFrameNormalizer(epoch_columns=["created_at", "starts_at"], epoch_unit="ms")
+        result = n.normalize([{"createdAt": 1785179053888, "startsAt": 1785179053888}, {"createdAt": None}])
+        assert result["created_at"].tolist()[0] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
+        assert pd.isna(result["created_at"].tolist()[1])
+        assert result["starts_at"].tolist()[0] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
+
+    def test_epoch_seconds_are_read_as_seconds(self):
+        n = DataFrameNormalizer(epoch_columns=["created_at"], epoch_unit="s")
+        result = n.normalize([{"created_at": 1785179053}])
+        assert result["created_at"].tolist() == [pd.Timestamp("2026-07-27T19:04:13", tz="UTC")]
+
+    def test_an_epoch_column_absent_from_the_frame_is_skipped(self):
+        n = DataFrameNormalizer(epoch_columns=["created_at"], epoch_unit="ms")
+        assert list(n.normalize([{"other": 1}]).columns) == ["other"]
+
+    def test_epoch_columns_need_a_declared_unit(self):
+        with pytest.raises(ValueError, match="epoch_unit"):
+            DataFrameNormalizer(epoch_columns=["created_at"])
+
+    def test_the_epoch_declaration_survives_the_spec_roundtrip(self):
+        n = DataFrameNormalizer(flatten_max_level=1, epoch_columns=["created_at"], epoch_unit="ms")
+        restored = DataFrameNormalizer.from_spec(n.to_spec())
+        assert isinstance(restored, DataFrameNormalizer)
+        assert (restored.epoch_columns, restored.epoch_unit) == (["created_at"], "ms")
+
     def test_replace_empty_dicts(self):
         n = DataFrameNormalizer(
             normalize_columns_names=False, fill_missing=False, flatten_max_level=0, replace_empty_dicts=True
