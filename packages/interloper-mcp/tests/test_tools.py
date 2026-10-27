@@ -15,7 +15,8 @@ import interloper as il
 from interloper.settings import McpSettings
 from interloper_db.store import Store
 from interloper_toolkit import TOOLS
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client
+from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult
 
 from interloper_mcp.context import init_context, set_static_ctx
@@ -23,17 +24,17 @@ from interloper_mcp.server import create_mcp_server
 
 
 def _result_dict(result: CallToolResult) -> dict[str, Any]:
-    payload = result.structuredContent
+    payload = result.structured_content
     if payload is None:
         payload = json.loads(result.content[0].text)  # ty: ignore[unresolved-attribute]
-    # Union-typed returns are wrapped in a "result" envelope by FastMCP.
+    # Union-typed returns are wrapped in a "result" envelope by MCPServer.
     return payload["result"] if set(payload) == {"result"} else payload
 
 
-def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor") -> Any:
+def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor") -> MCPServer:
     init_context(store, catalog)
     set_static_ctx(seeded["org"].id, role=role)
-    return create_mcp_server(McpSettings(), store=None)._mcp_server
+    return create_mcp_server(McpSettings(), store=None)
 
 
 WRITES = {
@@ -57,7 +58,7 @@ WRITES = {
 async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments(
     store: Store, catalog: il.Catalog, seeded: dict
 ):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         tools = (await client.list_tools()).tools
 
     by_name = {t.name: t for t in tools}
@@ -65,17 +66,17 @@ async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments
     assert "create_connections" not in by_name
     assert WRITES <= set(by_name)
     assert all(t.annotations is not None for t in tools)
-    reads = {name for name, t in by_name.items() if t.annotations and t.annotations.readOnlyHint}
+    reads = {name for name, t in by_name.items() if t.annotations and t.annotations.read_only_hint}
     assert reads == set(by_name) - WRITES
     cancel, check = by_name["cancel_backfill"].annotations, by_name["check_connection"].annotations
     delete = by_name["delete_component"].annotations
-    assert cancel is not None and cancel.destructiveHint is True
-    assert delete is not None and delete.destructiveHint is True
-    assert check is not None and check.openWorldHint is True
+    assert cancel is not None and cancel.destructive_hint is True
+    assert delete is not None and delete.destructive_hint is True
+    assert check is not None and check.open_world_hint is True
 
 
 async def test_a_viewer_token_is_refused_on_writes(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded, role="viewer")) as client:
+    async with Client(_server(store, catalog, seeded, role="viewer")) as client:
         result = _result_dict(
             await client.call_tool("toggle_job", {"component_id": str(seeded["job_id"]), "enabled": False})
         )
@@ -91,7 +92,7 @@ async def test_a_viewer_token_is_refused_on_writes(store: Store, catalog: il.Cat
 
 
 async def test_an_editor_token_writes(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         result = _result_dict(
             await client.call_tool("toggle_job", {"component_id": str(seeded["job_id"]), "enabled": False})
         )
@@ -101,7 +102,7 @@ async def test_an_editor_token_writes(store: Store, catalog: il.Catalog, seeded:
 
 
 async def test_list_jobs_returns_seeded_job_scoped_to_org(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         result = _result_dict(await client.call_tool("list_jobs", {}))
 
     assert result["status"] == "success"
@@ -110,7 +111,7 @@ async def test_list_jobs_returns_seeded_job_scoped_to_org(store: Store, catalog:
 
 
 async def test_list_recent_runs_returns_seeded_run(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         result = _result_dict(await client.call_tool("list_recent_runs", {"status": "success"}))
 
     assert result["status"] == "success"
@@ -119,7 +120,7 @@ async def test_list_recent_runs_returns_seeded_run(store: Store, catalog: il.Cat
 
 
 async def test_tool_errors_are_structured_not_raised(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         result = _result_dict(await client.call_tool("run_stats", {"component_id": "not-a-uuid"}))
 
     assert result["status"] == "error"
@@ -127,11 +128,11 @@ async def test_tool_errors_are_structured_not_raised(store: Store, catalog: il.C
 
 
 async def test_tools_declare_output_schemas(store: Store, catalog: il.Catalog, seeded: dict):
-    async with create_connected_server_and_client_session(_server(store, catalog, seeded)) as client:
+    async with Client(_server(store, catalog, seeded)) as client:
         tools = (await client.list_tools()).tools
 
-    missing = [t.name for t in tools if not t.outputSchema]
+    missing = [t.name for t in tools if not t.output_schema]
     assert missing == []
     # Spot-check a computed shape made it into the schema.
     job_health = next(t for t in tools if t.name == "job_health")
-    assert "JobHealthRow" in str(job_health.outputSchema)
+    assert "JobHealthRow" in str(job_health.output_schema)

@@ -12,7 +12,7 @@ from interloper.settings import AppSettings
 from interloper_db import Store
 
 from interloper_mcp.context import init_context, set_static_ctx
-from interloper_mcp.server import create_mcp_server
+from interloper_mcp.server import create_mcp_server, http_options
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def main() -> None:
     else:
         mcp = create_mcp_server(settings, store=store)
         logger.info("Serving streamable HTTP on %s:%s/mcp", settings.host, settings.port)
-        mcp.run(transport="streamable-http")
+        mcp.run(transport="streamable-http", port=settings.port, **http_options(settings))
 
 
 def _resolve_stdio_scope(store: Store, token: str, org_id: str) -> tuple[UUID, str]:

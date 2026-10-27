@@ -327,7 +327,7 @@ class McpSettings(BaseSettings):
     port: int = Field(default=3001, description="Bind port.")
     external_url: str = Field(
         default="",
-        description="Public base URL of the hosted server (`https://mcp.example.com`), fed to the OAuth "
+        description="Public URL of the MCP endpoint (`https://app.example.com/mcp`), fed to the OAuth "
         "protected-resource metadata so clients discover the auth requirements.",
     )
     token: str = Field(default="", description="Personal access token the stdio transport authenticates with.")

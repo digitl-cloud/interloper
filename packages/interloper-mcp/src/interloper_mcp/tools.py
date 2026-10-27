@@ -12,29 +12,37 @@ registered: they would travel through the client.
 from __future__ import annotations
 
 from interloper_toolkit import TOOLS, Effect
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from interloper_mcp.context import get_ctx
 
 ANNOTATIONS: dict[Effect, ToolAnnotations] = {
-    Effect.READ: ToolAnnotations(readOnlyHint=True, openWorldHint=False),
-    Effect.READ_PROVIDER: ToolAnnotations(readOnlyHint=True, openWorldHint=True),
-    Effect.EDIT: ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False),
-    Effect.CREATE: ToolAnnotations(
-        readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+    Effect.READ: ToolAnnotations(read_only_hint=True, open_world_hint=False),
+    Effect.READ_PROVIDER: ToolAnnotations(read_only_hint=True, open_world_hint=True),
+    Effect.EDIT: ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
     ),
-    Effect.LAUNCH: ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
-    Effect.CANCEL: ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False),
-    Effect.DELETE: ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=False),
+    Effect.CREATE: ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
+    ),
+    Effect.LAUNCH: ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True
+    ),
+    Effect.CANCEL: ToolAnnotations(
+        read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False
+    ),
+    Effect.DELETE: ToolAnnotations(
+        read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False
+    ),
 }
 
 
-def register_tools(mcp: FastMCP) -> None:
+def register_tools(mcp: MCPServer) -> None:
     """Register the interloper tools on the server.
 
     Args:
-        mcp: The FastMCP server instance.
+        mcp: The MCP server instance.
     """
     for tool in TOOLS:
         if tool.carries_secrets:
