@@ -136,7 +136,8 @@ class TestBuildParser:
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
 
         assert list(subparsers.choices) == sorted(subparsers.choices)
-        assert {"app", "db", "launch", "run"} <= set(subparsers.choices)
+        assert {"app", "db", "run", "scheduler"} <= set(subparsers.choices)
+        assert "launch" not in subparsers.choices
 
     def test_naming_a_command_builds_that_command_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def unrelated(_subparsers: Any) -> None:

@@ -2,13 +2,13 @@
 
 Four controllers share one :class:`Controller` loop skeleton and run as
 cluster singletons: cron creates runs from job schedules, hooks fires them in
-reaction to terminal runs, the queue worker dispatches queued runs through a
-:class:`Launcher`, and the reaper fails the runs that will never end on their own. The
-executor is the other half — it runs inside whatever the launcher started.
+reaction to terminal runs, the queue worker assembles queued runs and
+dispatches them through a :class:`Launcher`, and the reaper fails the runs
+that will never end on their own. A launched run reports back on its own,
+through the API or, in-process, the store's ingest.
 """
 
 from interloper_scheduler.cron import CronController
-from interloper_scheduler.executor import RunExecutor
 from interloper_scheduler.hooks import HookController
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
 from interloper_scheduler.queue import QueueController
@@ -25,6 +25,5 @@ __all__ = [
     "QueueController",
     "Reaper",
     "RenewalController",
-    "RunExecutor",
     "scheduler_services",
 ]

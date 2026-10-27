@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from interloper.asset.base import Asset
 from interloper.component import Component
-from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError
+from interloper.errors import AssetNotFoundError, CircularDependencyError, DAGError, PartitionError
 from interloper.operation import Operation, Workload
 from interloper.partitioning import Partition, PartitionWindow
 from interloper.runner.results import ExecutionStatus, RunResult
@@ -566,6 +566,31 @@ class DAG:
                 raise DAGError(f"'{path}' is not a Source or Asset class")
             workloads.append(imported)
         return cls(*workloads)
+
+    def check_window(self, window: PartitionWindow | None) -> None:
+        """Check the window against every enabled partitioned operation before anything executes.
+
+        A run whose window no operation can serve fails as a whole, listing
+        every failing operation, instead of failing the offending operations
+        while the rest of the DAG executes.
+
+        Args:
+            window: The run's window, ``None`` for an unscoped run.
+
+        Raises:
+            PartitionError: If the window is not valid for at least one enabled
+                partitioned operation, naming each one with its own predicate.
+        """
+        problems: list[str] = []
+        for operation in self.operations:
+            if not operation.enabled or operation.partitioning is None:
+                continue
+            try:
+                operation.partitioning.check(window)
+            except PartitionError as error:
+                problems.append(f"'{operation.key}' {error}")
+        if problems:
+            raise PartitionError("The run's window is not valid for every operation: " + "; ".join(problems))
 
     # -- Subgraph --------------------------------------------------------------
 

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from typing_extensions import Self
 
-from interloper.errors import PartitionError, RunnerError, format_exception
+from interloper.errors import RunnerError, format_exception
 from interloper.events import EventBus, EventType
 from interloper.operation.base import OperationResult
 from interloper.runner.results import ExecutionStatus, RunResult
@@ -49,7 +49,7 @@ class Run(ABC):
             window: The window the run covers, ``None`` when unscoped.
             metadata: Run-level metadata, carrying the ``run_id``.
         """
-        self._check_window(dag, window)
+        dag.check_window(window)
         self.runner = runner
         self.state = RunState(dag, window, metadata, reports_progress=self.reports_progress)
         self.fault: BaseException | None = None
@@ -251,30 +251,3 @@ class Run(ABC):
 
     async def close(self) -> None:  # noqa: B027 - a run holding nothing releases nothing
         """Release what the run holds; nothing by default."""
-
-    @staticmethod
-    def _check_window(dag: DAG, window: PartitionWindow | None) -> None:
-        """Check the window against every enabled partitioned operation before anything executes.
-
-        A run whose window no operation can serve fails as a whole, listing
-        every failing operation, instead of failing the offending operations
-        while the rest of the DAG executes.
-
-        Args:
-            dag: The DAG whose operations are checked.
-            window: The run's window, ``None`` for an unscoped run.
-
-        Raises:
-            PartitionError: If the window is not valid for at least one enabled
-                partitioned operation, naming each one with its own predicate.
-        """
-        problems: list[str] = []
-        for operation in dag.operations:
-            if not operation.enabled or operation.partitioning is None:
-                continue
-            try:
-                operation.partitioning.check(window)
-            except PartitionError as error:
-                problems.append(f"'{operation.key}' {error}")
-        if problems:
-            raise PartitionError("The run's window is not valid for every operation: " + "; ".join(problems))

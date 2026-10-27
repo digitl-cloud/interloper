@@ -1,10 +1,12 @@
-"""Docker launcher: runs each job in its own container."""
+"""Docker launcher: runs each run in its own container."""
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
+import tarfile
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -14,27 +16,24 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+    from interloper.dag import DAGSpec
+    from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+    from interloper_db.models import Run
 from interloper_scheduler.launcher import Launcher
 
 logger = logging.getLogger(__name__)
 
-# TODO: Implement a grace period to check if the container is running before returning in order to avoid
-# stale run statuses due to container startup errors?
-
-# TODO: `launch` command should supoort --catalog option to pass the catalog as a serialized string
-# Then use this instead of INTERLOPER_CATALOG
+_SPEC_DIRECTORY = "/interloper/run"
 
 
 class DockerLauncher(Launcher):
     """Launches each run in its own Docker container.
 
-    The container executes the ``interloper launch <run_id>`` CLI command,
-    which hydrates the DAG from the database and runs it to completion.
-
-    Postgres connection parameters are passed as plain values. The caller
-    (``Launcher.from_settings``) injects the app-level defaults; any
-    overrides from the launcher YAML config take precedence.
+    The container runs ``interloper run`` on the run's DAG spec, copied into
+    it before it starts: a bind mount would need the scheduler and the Docker
+    host to share a filesystem, which a containerised scheduler does not. The
+    container holds no database credentials: it reports its events to the
+    API's ``internal_url`` with the run's token.
     """
 
     @classmethod
@@ -42,7 +41,7 @@ class DockerLauncher(Launcher):
         cls,
         settings: LauncherSettings,
         *,
-        postgres: PostgresSettings,
+        server: ServerSettings,
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
@@ -50,20 +49,20 @@ class DockerLauncher(Launcher):
     ) -> DockerLauncher:
         """Construct from scheduler settings (registry construction hook).
 
-        Postgres credentials and the catalog are forwarded into the spawned
+        The API's internal URL and the catalog are forwarded into the spawned
         environment; ``settings.config`` supplies the launcher-specific
         keyword arguments.
 
         Args:
             settings: The launcher settings block (image, network, volumes).
-            postgres: Postgres credentials forwarded into the spawned container.
+            server: Server settings whose ``internal_url`` the container reports to.
             runner: Runner settings the spawned process builds its runner from.
             reaper: Run liveness settings whose heartbeat fields the spawned
                 process follows.
             catalog: Catalog forwarded as import paths; required, since a container
                 cannot see the caller's.
-            store: Accepted for the registry's uniform hook and unused — a
-                container opens its own connection, not the caller's.
+            store: Accepted for the registry's uniform hook and unused: a
+                container reports through the API.
 
         Returns:
             The configured launcher.
@@ -76,11 +75,7 @@ class DockerLauncher(Launcher):
             raise ConfigError("The 'docker' launcher requires a catalog.")
         return cls(
             catalog=catalog,
-            postgres_host=postgres.host,
-            postgres_port=postgres.port,
-            postgres_user=postgres.user,
-            postgres_password=postgres.password,
-            postgres_database=postgres.database,
+            internal_url=server.internal_url,
             runner_type=runner.type,
             runner_config=runner.config,
             heartbeat_interval=reaper.heartbeat_interval,
@@ -91,11 +86,7 @@ class DockerLauncher(Launcher):
     def __init__(
         self,
         catalog: Catalog,
-        postgres_host: str,
-        postgres_port: int,
-        postgres_user: str,
-        postgres_password: str,
-        postgres_database: str,
+        internal_url: str = "http://localhost:3000",
         image: str = "interloper:latest-scheduler",
         runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
@@ -108,11 +99,8 @@ class DockerLauncher(Launcher):
 
         Args:
             catalog: Catalog to inject into the container so it builds an identical catalog.
-            postgres_host: Postgres host to inject into the container.
-            postgres_port: Postgres port to inject into the container.
-            postgres_user: Postgres user to inject into the container.
-            postgres_password: Postgres password to inject into the container.
-            postgres_database: Postgres database to inject into the container.
+            internal_url: The API's base URL as reached from the container,
+                which the run reports its events to.
             image: Docker image to use.
             runner_type: Runner type name forwarded to the container.
             runner_config: Runner-specific kwargs forwarded to the container.
@@ -135,41 +123,66 @@ class DockerLauncher(Launcher):
         self._client = docker.from_env()
         self._catalog = catalog
         self._image = image
-        self._postgres_host = postgres_host
-        self._postgres_port = postgres_port
-        self._postgres_user = postgres_user
-        self._postgres_password = postgres_password
-        self._postgres_database = postgres_database
+        self._internal_url = internal_url
         self._volumes = dict(volumes or {})
         self._forward_env = forward_env or []
         if runner_type == "docker" and "/var/run/docker.sock" not in self._volumes:
             self._volumes["/var/run/docker.sock"] = {"bind": "/var/run/docker.sock", "mode": "rw"}
 
-    def launch(self, run_id: UUID) -> None:
-        """Start a container that executes a single run.
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+        """Create a container for the run, copy its spec in, and start it.
+
+        A container that cannot be started is removed: it holds the spec,
+        and the spec holds the run's connection secrets.
 
         Args:
-            run_id: The run UUID to execute.
+            run: The dispatched run.
+            spec: The DAG it executes, copied into the container.
+            token: The run's token, in the container's environment.
         """
-        environment = self._build_environment()
-        container_name = f"interloper_run_{str(run_id)[:8]}"
-
+        container = self._client.containers.create(
+            image=self._image,
+            name=f"interloper_run_{str(run.id)[:8]}",
+            command=self.command(run, f"{_SPEC_DIRECTORY}/spec.json"),
+            environment=self._build_environment(token),
+            volumes=self._volumes or None,
+            user="root" if self._runner_type == "docker" else None,
+            labels={"interloper.run_id": str(run.id)},
+        )
         try:
-            container = self._client.containers.run(
-                image=self._image,
-                name=container_name,
-                command=["interloper", "launch", str(run_id)],
-                environment=environment,
-                volumes=self._volumes or None,
-                user="root" if self._runner_type == "docker" else None,
-                detach=True,
-                auto_remove=False,
-                labels={"interloper.run_id": str(run_id)},
-            )
-            logger.info("Started container %s for run %s", container.short_id, run_id)
+            container.put_archive("/", self._archive(spec))
+            container.start()
         except Exception:
-            logger.exception("Failed to start container for run %s", run_id)
+            container.remove(force=True)
             raise
+        logger.info("Started container %s for run %s", container.short_id, run.id)
+
+    @staticmethod
+    def _archive(spec: DAGSpec) -> bytes:
+        """Pack the spec, and the directory it lives in, as the tar archive Docker copies into a container's root.
+
+        Docker extracts an archive only into a directory that already exists,
+        and no image carries the spec's, so the archive brings it along.
+
+        Args:
+            spec: The run's DAG spec.
+
+        Returns:
+            The archive's bytes.
+        """
+        directory = _SPEC_DIRECTORY.lstrip("/")
+        document = spec.model_dump_json().encode()
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as archive:
+            folder = tarfile.TarInfo(directory)
+            folder.type = tarfile.DIRTYPE
+            folder.mode = 0o755
+            archive.addfile(folder)
+            member = tarfile.TarInfo(f"{directory}/spec.json")
+            member.size = len(document)
+            member.mode = 0o444
+            archive.addfile(member, io.BytesIO(document))
+        return buffer.getvalue()
 
     def diagnose(self, run_id: UUID) -> str | None:
         """Say why a run's container stopped, from its exit state.
@@ -201,28 +214,24 @@ class DockerLauncher(Launcher):
             parts.append(f"error={state['Error']}")
         return " ".join(parts)
 
-    def _build_environment(self) -> dict[str, str]:
+    def _build_environment(self, token: str) -> dict[str, str]:
         """Build environment variables for the container.
+
+        Args:
+            token: The run's token.
 
         Returns:
             The environment the run container is started with.
-
         """
         environment: dict[str, str] = {
-            "INTERLOPER_POSTGRES_HOST": self._postgres_host,
-            "INTERLOPER_POSTGRES_PORT": str(self._postgres_port),
-            "INTERLOPER_POSTGRES_USER": self._postgres_user,
-            "INTERLOPER_POSTGRES_PASSWORD": self._postgres_password,
-            "INTERLOPER_POSTGRES_DATABASE": self._postgres_database,
             "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
             "INTERLOPER_REAPER_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
             "INTERLOPER_REAPER_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
+            "INTERLOPER_SERVER_INTERNAL_URL": self._internal_url,
+            "INTERLOPER_RUN_TOKEN": token,
         }
-        encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
-        if encryption_key:
-            environment["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
         for name in self._forward_env:
             value = os.environ.get(name)
             if value:

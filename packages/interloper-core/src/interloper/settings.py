@@ -98,7 +98,10 @@ class SecretsSettings(BaseSettings):
 
     encryption_key: str = Field(
         default="",
-        description="Fernet key encrypting stored resource payloads; required by the platform to persist resources.",
+        description=(
+            "Fernet key encrypting stored resource payloads and run tokens; required by the platform to persist "
+            "resources and to dispatch runs."
+        ),
     )
 
 

@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import Engine, and_
 from sqlmodel import col, func, select
 
-from interloper_db.models import Component, Execution
+from interloper_db.models import Component, Execution, Run
 from interloper_db.session import session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -100,6 +100,32 @@ class ExecutionStore:
             .correlate(Component)
             .scalar_subquery()
         )
+
+    def prior_successes(self, run: Run) -> set[UUID]:
+        """The operations that already succeeded earlier in a run's stack, which a failed-scope retry skips.
+
+        The walk follows ``retry_of`` back to the stack's first attempt, so an
+        operation an intermediate retry skipped (and so holds no row for)
+        still carries its earlier success forward; the closest attempt's
+        verdict wins. Operations are matched by component id, never by key: a
+        run can span many assets sharing one key (an ``ads_stats`` per
+        account), and one success must not skip the others.
+
+        Args:
+            run: The attempt about to execute.
+
+        Returns:
+            The component ids of the operations to skip; empty for a first attempt.
+        """
+        statuses: dict[UUID, str] = {}
+        parent_id = run.retry_of
+        with session_scope(self._engine) as session:
+            while parent_id is not None:
+                rows = session.exec(select(Execution).where(Execution.run_id == parent_id)).all()
+                for row in rows:
+                    statuses.setdefault(row.component_id, row.status)
+                parent_id = session.exec(select(Run.retry_of).where(Run.id == parent_id)).first()
+        return {component_id for component_id, status in statuses.items() if status == "success"}
 
     def counts(self, run_ids: Sequence[UUID]) -> dict[UUID, dict[str, int]]:
         """Count each run's operation executions by status, in one query.

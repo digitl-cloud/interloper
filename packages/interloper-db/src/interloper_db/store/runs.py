@@ -506,7 +506,7 @@ class RunStore:
         queue for the others.
 
         Returns:
-            The dispatched run, or ``None`` when nothing is claimable.
+            The dispatched run, its target loaded, or ``None`` when nothing is claimable.
         """
         while True:
             with session_scope(self._engine) as session:
@@ -524,8 +524,7 @@ class RunStore:
                 if self._quotas.try_reserve_run(db_run):
                     db_run.status = RunStatus.DISPATCHED
                     db_run.heartbeat_at = database_now(session)
-                    session.add(db_run)
-                    commit(session)
+                    save(session, db_run, "target")
                     logger.info("Dispatched run %s", db_run.id)
                     return db_run
                 self._cancel_over_quota(db_run)

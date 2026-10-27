@@ -262,3 +262,66 @@ class TestCounts:
 
         assert counts == {first: {"success": 2, "failed": 1}, second: {"running": 1}}
         assert store.executions.counts([]) == {}
+
+
+def _attempt(retry_of: UUID | None, statuses: dict[UUID, str], *, attempt: int = 1) -> UUID:
+    """Persist one attempt of a run stack and its operations' verdicts.
+
+    Args:
+        retry_of: The attempt it retries, ``None`` for the first.
+        statuses: Each operation's verdict in this attempt.
+        attempt: The attempt's number in its stack.
+
+    Returns:
+        The attempt's run id.
+    """
+    run_id = uuid4()
+    with Session(engine_module.get_engine()) as session:
+        session.add(Run(id=run_id, org_id=_ORG_ID, retry_of=retry_of, root_run_id=uuid4(), attempt=attempt))
+        session.commit()
+    _seed(
+        [
+            Execution(run_id=run_id, component_id=component_id, org_id=_ORG_ID, status=status, attempts=1)
+            for component_id, status in statuses.items()
+        ]
+    )
+    return run_id
+
+
+class TestPriorSuccesses:
+    """What a failed-scope retry may skip: the operations that already succeeded in its stack."""
+
+    def test_a_success_is_skipped_and_a_failure_reruns(self, store: Store) -> None:
+        succeeded, failed = uuid4(), uuid4()
+        first = _attempt(None, {succeeded: "success", failed: "failed"})
+        retry = Run(id=uuid4(), org_id=_ORG_ID, retry_of=first, retry_scope="failed")
+
+        assert store.executions.prior_successes(retry) == {succeeded}
+
+    def test_statuses_match_by_component_id_not_key(self, store: Store) -> None:
+        # A run can span many assets sharing one key (an ads_stats per account).
+        a, b, c = uuid4(), uuid4(), uuid4()
+        first = _attempt(None, {a: "success", b: "failed", c: "canceled"})
+        retry = Run(id=uuid4(), org_id=_ORG_ID, retry_of=first, retry_scope="failed")
+
+        assert store.executions.prior_successes(retry) == {a}
+
+    def test_a_success_carries_forward_across_the_stack(self, store: Store) -> None:
+        # The second attempt re-ran only b, so it holds no row for a.
+        a, b = uuid4(), uuid4()
+        first = _attempt(None, {a: "success", b: "failed"})
+        second = _attempt(first, {b: "failed"}, attempt=2)
+        retry = Run(id=uuid4(), org_id=_ORG_ID, retry_of=second, retry_scope="failed")
+
+        assert store.executions.prior_successes(retry) == {a}
+
+    def test_the_closest_attempt_wins(self, store: Store) -> None:
+        a = uuid4()
+        first = _attempt(None, {a: "failed"})
+        second = _attempt(first, {a: "success"}, attempt=2)
+        retry = Run(id=uuid4(), org_id=_ORG_ID, retry_of=second, retry_scope="failed")
+
+        assert store.executions.prior_successes(retry) == {a}
+
+    def test_a_first_attempt_skips_nothing(self, store: Store) -> None:
+        assert store.executions.prior_successes(Run(id=uuid4(), org_id=_ORG_ID)) == set()

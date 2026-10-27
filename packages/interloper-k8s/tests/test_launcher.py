@@ -1,19 +1,18 @@
-"""The launcher mounts configured secrets as env into every run pod.
-
-Runs hydrate connections, so the pod needs the same runtime-resolved
-credentials (e.g. the in-house OAuth provider trio) the API resolves from
-its environment; ``env_from`` is how a deployment delivers them.
-"""
+"""Tests for ``interloper_k8s.launcher``: one Job per run, its spec in a Secret the Job owns, no database in the pod."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+from interloper.dag import DAGSpec
+from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+from interloper_db import RunStatus
+from interloper_db.models import Run
 from kubernetes import client, config
 
 from interloper_k8s.launcher import KubernetesLauncher
@@ -24,16 +23,7 @@ def launcher_factory(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Kubernete
     monkeypatch.setattr(config, "load_incluster_config", lambda: None)
 
     def factory(**kwargs: Any) -> KubernetesLauncher:
-        return KubernetesLauncher(
-            catalog=Catalog(),
-            postgres_host="db",
-            postgres_port=5432,
-            postgres_user="user",
-            postgres_password="password",
-            postgres_database="interloper",
-            image="img",
-            **kwargs,
-        )
+        return KubernetesLauncher(catalog=Catalog(), image="img", internal_url="http://api", **kwargs)
 
     return factory
 
@@ -41,16 +31,100 @@ def launcher_factory(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Kubernete
 class _CapturingBatchV1:
     def __init__(self) -> None:
         self.jobs: list[client.V1Job] = []
+        self.patches: list[tuple[str, dict[str, Any]]] = []
+        self.deleted: list[str] = []
 
-    def create_namespaced_job(self, namespace: str, body: client.V1Job) -> None:
+    def create_namespaced_job(self, namespace: str, body: client.V1Job) -> client.V1Job:
         self.jobs.append(body)
+        body.metadata.uid = "job-uid"
+        return body
+
+    def patch_namespaced_job(self, name: str, namespace: str, body: dict[str, Any]) -> None:
+        self.patches.append((name, body))
+
+    def delete_namespaced_job(self, name: str, namespace: str, propagation_policy: str) -> None:
+        self.deleted.append(name)
+
+
+class _CapturingCoreV1:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.secrets: list[client.V1Secret] = []
+        self._fail = fail
+
+    def create_namespaced_secret(self, namespace: str, body: client.V1Secret) -> client.V1Secret:
+        if self._fail:
+            raise RuntimeError("secrets is forbidden")
+        self.secrets.append(body)
+        return body
+
+
+def _launch(
+    launcher: KubernetesLauncher, *, partition_key: str | None = None
+) -> tuple[_CapturingBatchV1, _CapturingCoreV1]:
+    batch, core = _CapturingBatchV1(), _CapturingCoreV1()
+    launcher._batch_v1 = cast(client.BatchV1Api, batch)
+    launcher._core_v1 = cast(client.CoreV1Api, core)
+    run = Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED, partition_key=partition_key)
+    launcher.launch(run, DAGSpec(items=[]), "ilr_x")
+    return batch, core
 
 
 def _launched_container(launcher: KubernetesLauncher) -> client.V1Container:
-    batch = _CapturingBatchV1()
-    launcher._batch_v1 = cast(client.BatchV1Api, batch)
-    launcher.launch(uuid4())
+    batch, _core = _launch(launcher)
     return batch.jobs[0].spec.template.spec.containers[0]
+
+
+def test_the_run_pod_holds_no_database_credentials_and_reads_its_token_from_the_secret(
+    launcher_factory: Callable[..., KubernetesLauncher],
+) -> None:
+    container = _launched_container(launcher_factory())
+    env = {variable.name: variable for variable in container.env}
+
+    token = env["INTERLOPER_RUN_TOKEN"]
+    assert token.value is None
+    assert token.value_from.secret_key_ref.key == "token"
+    assert env["INTERLOPER_SERVER_INTERNAL_URL"].value == "http://api"
+    assert not [name for name in env if name.startswith("INTERLOPER_POSTGRES") or name == "INTERLOPER_ENCRYPTION_KEY"]
+
+
+def test_the_job_starts_once_the_secret_it_owns_exists(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
+    batch, core = _launch(launcher_factory(), partition_key="2026-10-26")
+    (job,), (secret,) = batch.jobs, core.secrets
+    container = job.spec.template.spec.containers[0]
+
+    assert job.spec.suspend is True
+    assert batch.patches == [(job.metadata.name, {"spec": {"suspend": False}})]
+    assert container.args[:4] == ["run", "--format", "inline", "@/interloper/run/spec.json"]
+    assert container.args[-2:] == ["--date", "2026-10-26"]
+    assert json.loads(secret.string_data["spec.json"]) == {"items": []}
+    assert secret.string_data["token"] == "ilr_x"
+    (owner,) = secret.metadata.owner_references
+    assert (owner.kind, owner.name, owner.uid, owner.block_owner_deletion) == (
+        "Job",
+        job.metadata.name,
+        "job-uid",
+        None,
+    )
+    (volume,) = job.spec.template.spec.volumes
+    assert volume.secret.secret_name == secret.metadata.name
+    assert [item.key for item in volume.secret.items] == ["spec.json"]
+    (mount,) = container.volume_mounts
+    assert (mount.mount_path, mount.read_only) == ("/interloper/run", True)
+
+
+def test_a_job_whose_secret_cannot_be_created_is_deleted_unstarted(
+    launcher_factory: Callable[..., KubernetesLauncher],
+) -> None:
+    launcher = launcher_factory()
+    batch, core = _CapturingBatchV1(), _CapturingCoreV1(fail=True)
+    launcher._batch_v1 = cast(client.BatchV1Api, batch)
+    launcher._core_v1 = cast(client.CoreV1Api, core)
+
+    with pytest.raises(RuntimeError, match="forbidden"):
+        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), DAGSpec(items=[]), "ilr_x")
+
+    assert batch.deleted == [batch.jobs[0].metadata.name]
+    assert batch.patches == []
 
 
 def test_env_from_mounts_secrets(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
@@ -76,13 +150,14 @@ def test_the_heartbeat_settings_reach_the_run_container(
 def test_from_settings_forwards_the_heartbeat_settings(launcher_factory: Callable[..., KubernetesLauncher]) -> None:
     launcher = KubernetesLauncher.from_settings(
         LauncherSettings(type="kubernetes", config={"image": "img"}),
-        postgres=PostgresSettings(),
+        server=ServerSettings(internal_url="http://interloper-api:3000"),
         runner=RunnerSettings(),
         reaper=ReaperSettings(heartbeat_interval=5, heartbeat_timeout=45),
         catalog=Catalog(),
     )
 
     assert (launcher._heartbeat_interval, launcher._heartbeat_timeout) == (5, 45)
+    assert launcher._internal_url == "http://interloper-api:3000"
 
 
 class _PodsCoreV1:
