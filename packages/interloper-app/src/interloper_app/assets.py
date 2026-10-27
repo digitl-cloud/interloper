@@ -10,6 +10,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 _PACKAGE_DIR = Path(__file__).parent
 
+API_PATHS = ("/api", "/.well-known/oauth-authorization-server")
+
 
 def static_dir() -> Path:
     """Return the path to the built SPA static files.
@@ -46,10 +48,12 @@ def source_dir() -> Path:
 class SpaFallback:
     """Serve the built SPA for every request the API does not own.
 
-    ``/api`` and everything under ``/api/`` goes to the wrapped application,
-    so an unknown API route keeps its 404 rather than becoming a page. Any
-    other path is a file of the build when one exists, else ``index.html``
-    for the client-side router. Non-HTTP traffic (websockets) passes through.
+    Each of :data:`API_PATHS` and everything under it (``/api``, and the
+    authorization server's metadata at the host root) goes to the wrapped
+    application, so an unknown API route keeps its 404 rather than becoming a
+    page. Any other path is a file of the build when one exists, else
+    ``index.html`` for the client-side router. Non-HTTP traffic (websockets)
+    passes through.
     """
 
     def __init__(self, app: ASGIApp, directory: Path) -> None:
@@ -73,7 +77,7 @@ class SpaFallback:
             send: The ASGI send callable.
         """
         path = scope.get("path", "")
-        if scope["type"] != "http" or path == "/api" or path.startswith("/api/"):
+        if scope["type"] != "http" or any(path == prefix or path.startswith(f"{prefix}/") for prefix in API_PATHS):
             await self.app(scope, receive, send)
             return
         relative = path.lstrip("/")

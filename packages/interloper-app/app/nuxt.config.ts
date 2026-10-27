@@ -102,6 +102,11 @@ export default defineNuxtConfig({
                     changeOrigin: true,
                     autoRewrite: true,
                 },
+                // The OAuth authorization server's metadata sits at the host root, outside /api.
+                '/.well-known/oauth-authorization-server': {
+                    target: `http://localhost:${process.env.INTERLOPER_API_PORT || 3000}`,
+                    changeOrigin: true,
+                },
             },
         },
     },

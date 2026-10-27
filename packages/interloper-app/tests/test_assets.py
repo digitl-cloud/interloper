@@ -133,7 +133,7 @@ class TestSpaFallback:
         assert "spa" in client.get("/").text
 
     async def test_the_api_prefix_matches_the_segment_only(self, tmp_path: Path) -> None:
-        """``/api`` and ``/api/...`` reach the API; ``/apifoo`` is an SPA route served index.html."""
+        """``/api``, ``/api/...`` and the OAuth metadata reach the API; ``/apifoo`` is an SPA route."""
         (tmp_path / "index.html").write_text("<html>spa</html>")
         reached: list[str] = []
         sent: list[dict[str, Any]] = []
@@ -148,11 +148,12 @@ class TestSpaFallback:
             sent.append(message)
 
         middleware = SpaFallback(downstream, directory=tmp_path)  # ty: ignore[invalid-argument-type]
-        for path in ("/api", "/api/health", "/apifoo"):
+        paths = ("/api", "/api/health", "/apifoo", "/.well-known/oauth-authorization-server", "/.well-known/other")
+        for path in paths:
             scope = {"type": "http", "path": path, "method": "GET", "headers": [], "query_string": b""}
             await middleware(scope, receive, send)  # ty: ignore[invalid-argument-type]
 
-        assert reached == ["/api", "/api/health"]
+        assert reached == ["/api", "/api/health", "/.well-known/oauth-authorization-server"]
         assert any(message.get("status") == 200 for message in sent)
 
     async def test_websocket_traffic_is_left_to_the_application(self, tmp_path: Path) -> None:

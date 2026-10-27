@@ -51,6 +51,7 @@ nav = [
     { "Web UI" = [
         { "Tour" = "ui/index.md" },
         { "Generated from definitions" = "ui/definitions.md" },
+        { "Connecting MCP clients" = "ui/connecting-clients.md" },
         { "Running the app" = "ui/running.md" },
     ] },
     { "Extending" = [

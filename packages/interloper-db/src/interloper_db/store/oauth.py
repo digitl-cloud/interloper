@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, exists, update
+from sqlalchemy import Engine, delete, exists, update
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
@@ -107,6 +107,54 @@ class OAuthStore:
         """
         with session_scope(self._engine) as session:
             return session.get(OAuthClient, client_id)
+
+    def list_clients(self, *, registered_by: Literal["dynamic", "operator"] | None = None) -> list[OAuthClient]:
+        """List registered clients.
+
+        Args:
+            registered_by: Keep only the clients registered that way; ``None``
+                lists them all.
+
+        Returns:
+            The clients, by name.
+        """
+        statement = select(OAuthClient).order_by(col(OAuthClient.name), col(OAuthClient.client_id))
+        if registered_by is not None:
+            statement = statement.where(col(OAuthClient.registered_by) == registered_by)
+        with session_scope(self._engine) as session:
+            return list(session.exec(statement).all())
+
+    def delete_client(self, client_id: str) -> bool:
+        """Delete a client together with every grant it holds.
+
+        Its codes and refresh tokens are removed and its access tokens revoked,
+        for every user, so nothing it was given keeps working.
+
+        Args:
+            client_id: The client to delete.
+
+        Returns:
+            ``False`` when no client has that id, ``True`` once it is deleted.
+        """
+        now = datetime.now(timezone.utc)
+        with session_scope(self._engine) as session:
+            client = session.get(OAuthClient, client_id)
+            if client is None:
+                return False
+            session.connection().execute(
+                update(Token)
+                .where(
+                    col(Token.client_id) == client_id,
+                    col(Token.kind) == TokenKind.ACCESS,
+                    col(Token.revoked_at).is_(None),
+                )
+                .values(revoked_at=now)
+            )
+            session.connection().execute(delete(RefreshToken).where(col(RefreshToken.client_id) == client_id))
+            session.connection().execute(delete(AuthorizationCode).where(col(AuthorizationCode.client_id) == client_id))
+            session.delete(client)
+            commit(session)
+        return True
 
     def authorised_clients(self, user_id: UUID) -> list[OAuthClient]:
         """List the clients a user has authorised: those holding a live refresh token.

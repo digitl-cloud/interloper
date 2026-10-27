@@ -150,8 +150,9 @@ frontend:
 # ── MCP (Model Context Protocol server) ────────────────────────────────────
 # Serves the streamable-HTTP MCP endpoint (/mcp) for external AI agents,
 # authenticated per request with personal access tokens minted in the app
-# (Settings → Authentication); the holder's role in the organisation a tool
-# call names gates the write tools. Off by
+# (Settings → Authentication) or OAuth access tokens the API's authorization
+# server issues (the issuer is the root-level `externalUrl`); the holder's role in the
+# organisation a tool call names gates the write tools. Off by
 # default — it is an optional, separate surface from the API. When enabled,
 # the chart's HTTPRoute forwards /mcp and /.well-known/oauth-protected-resource
 # on the app hostnames to it.
@@ -217,9 +218,11 @@ dbInit:
 
 # Public base URL of the app (e.g. https://app.example.com), for links built
 # outside a browser request: the connection setup hand-off an MCP tool
-# returns. Injected as INTERLOPER_SERVER_EXTERNAL_URL into every pod; ignored
-# when extraConfig carries a `server` section (the YAML block then owns the
-# whole submodel).
+# returns, and the issuer of the OAuth authorization server the API runs,
+# whose metadata the API serves at /.well-known/oauth-authorization-server
+# (routed by the HTTPRoute and the Ingress). Injected as
+# INTERLOPER_SERVER_EXTERNAL_URL into every pod; ignored when extraConfig
+# carries a `server` section (the YAML block then owns the whole submodel).
 externalUrl: ""
 
 # The assistant. The loaded api image always bundles interloper-agent; this
@@ -386,8 +389,8 @@ ingress:
   tls:
     enabled: false
     secretName: ""
-  # The chart routes /api/* to the API service and everything else to the
-  # frontend service.
+  # The chart routes /api/* and /.well-known/oauth-authorization-server to the
+  # API service and everything else to the frontend service.
   apiPath: /api
   apiPathType: Prefix
   rootPath: /

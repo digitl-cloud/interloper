@@ -41,6 +41,9 @@ x-interloper-env: &interloper-env
   INTERLOPER_SERVER_INTERNAL_URL: http://host.docker.internal:3001
   INTERLOPER_RUNNER_CONFIG: '{"image":"interloper-scheduler:dev"}'
   INTERLOPER_ENCRYPTION_KEY: dev-encryption-key-not-for-production
+  # The app as the browser reaches it, through the frontend's nginx: the OAuth
+  # issuer, whatever port the api container listens on.
+  INTERLOPER_SERVER_EXTERNAL_URL: http://localhost:3000
   # Dev super-admin identity. Set INTERLOPER_DEV_USER_GOOGLE_ID (your Google
   # subject id) so the seeded profile is the one your login resolves to.
   # `make compose-*` forwards these from the repo-root .env / shell env.
