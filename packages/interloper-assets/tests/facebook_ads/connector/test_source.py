@@ -231,6 +231,46 @@ class TestNewEntities:
         assert out.loc[0, "created_time"] == pd.Timestamp("2020-01-15T08:30:00", tz="UTC")
         assert (out.loc[0, "amount_spent"], out.loc[0, "spend_cap"]) == (123456, 0)
 
+    def test_campaign_objects_stay_whole_and_its_instants_and_amounts_are_typed(self):
+        child = self._child("campaigns")
+        promoted_object = {"pixel_id": "9", "custom_event_type": "PURCHASE"}
+        rows = [
+            {
+                "id": "1",
+                "promoted_object": promoted_object,
+                "created_time": "2026-09-01T10:00:00+0200",
+                "last_budget_toggling_time": "2026-09-03T10:00:00+0200",
+                "daily_budget": "1500",
+                "spend_cap": "0",
+                "start_time": "2026-09-05T00:00:00+0200",
+            }
+        ]
+        out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Campaigns, strict=True)
+        assert json.loads(out.loc[0, "promoted_object"]) == promoted_object
+        assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
+        assert out.loc[0, "last_budget_toggling_time"] == pd.Timestamp("2026-09-03T08:00:00", tz="UTC")
+        assert (out.loc[0, "daily_budget"], out.loc[0, "spend_cap"]) == (1500, 0)
+        assert out.loc[0, "start_time"] == "2026-09-05T00:00:00+0200"
+
+    def test_ad_instants_bid_schedule_and_labels_are_typed(self):
+        child = self._child("ads")
+        rows = [
+            {
+                "id": "1",
+                "created_time": "2026-09-01T10:00:00+0200",
+                "bid_amount": 250,
+                "ad_schedule_start_time": "2026-09-05T00:00:00+0200",
+                "adlabels": [{"id": "7", "name": "brand"}],
+                "creative": {"id": "c1", "name": "Spring"},
+            }
+        ]
+        out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Ads, strict=True)
+        assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
+        assert out.loc[0, "bid_amount"] == 250
+        assert out.loc[0, "ad_schedule_start_time"] == "2026-09-05T00:00:00+0200"
+        assert json.loads(out.loc[0, "adlabels"]) == [{"id": "7", "name": "brand"}]
+        assert out.loc[0, "creative_name"] == "Spring"
+
 
 class _FakeObject:
     def __init__(self, data: dict) -> None:
