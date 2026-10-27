@@ -198,6 +198,23 @@ class TestAccess:
         assert store.tokens.resolve(raw, Audience.API) is None
         assert store.tokens.resolve(raw, Audience.APP) is None
 
+    def test_find_access_by_raw_value_whatever_its_state(self, store: Store, profile: Profile):
+        raw = store.tokens.create_access(profile.id, "client-1", Audience.MCP)
+        _, personal = store.tokens.create_personal(profile.id, "laptop", None)
+        session = store.tokens.create_session(profile.id)
+        found = store.tokens.find_access(raw)
+        assert found is not None
+        store.tokens.revoke(found.id)
+
+        revoked = store.tokens.find_access(raw)
+
+        assert revoked is not None
+        assert revoked.id == found.id
+        assert revoked.revoked_at is not None
+        assert store.tokens.find_access(personal) is None
+        assert store.tokens.find_access(session) is None
+        assert store.tokens.find_access("ila_no-such-token") is None
+
     def test_access_expiry_from_settings(self, token_db: Engine, profile: Profile):
         tokens = TokenStore(token_db, session_expiry=timedelta(days=30), access_token_expiry=timedelta(minutes=5))
 

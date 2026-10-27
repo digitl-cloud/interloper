@@ -167,3 +167,16 @@ def test_server_internal_url_env_override(monkeypatch: pytest.MonkeyPatch):
     """The chart points run pods at the cluster-internal API service."""
     monkeypatch.setenv("INTERLOPER_SERVER_INTERNAL_URL", "http://interloper-api:3000")
     assert ServerSettings().internal_url == "http://interloper-api:3000"
+
+
+@pytest.mark.parametrize(
+    ("external_url", "public_url"),
+    [
+        ("", "http://localhost:3100"),
+        ("https://app.example.com", "https://app.example.com"),
+        ("https://app.example.com/", "https://app.example.com"),
+    ],
+)
+def test_server_public_url_is_the_external_url_else_the_local_server(external_url: str, public_url: str):
+    """The OAuth issuer the API and the MCP server both name."""
+    assert ServerSettings(external_url=external_url, port=3100).public_url == public_url
