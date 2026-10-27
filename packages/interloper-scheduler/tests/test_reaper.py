@@ -299,7 +299,7 @@ class TestFailureReportingIsBestEffort:
         diagnose = reaper._explain
 
         def beat_then_explain(run: UUID, reason: str) -> str:
-            store.runs.ingest(run, [])
+            store.runs.ingest(run, il.EventBatch([]))
             return diagnose(run, reason)
 
         monkeypatch.setattr(reaper, "_explain", beat_then_explain)

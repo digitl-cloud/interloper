@@ -218,8 +218,8 @@ class _RecordingStore:
             raise NotFoundError(f"Run {run_id} not found")
         return self._run
 
-    def _ingest(self, run_id: UUID, events: list[il.Event], effects: Any = None) -> bool:
-        self.ingested.append((list(events), effects))
+    def _ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
+        self.ingested.append((list(batch.events), batch.effects))
         return self._running
 
     def _fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> None:

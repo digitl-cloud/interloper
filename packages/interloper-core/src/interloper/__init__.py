@@ -28,7 +28,7 @@ from interloper.destination import (
     MemoryDestination,
     destination,
 )
-from interloper.events import Event, EventBus, EventType
+from interloper.events import Event, EventBatch, EventBus, EventType
 from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, TriggerHook, WebhookHook
 from interloper.job import CronJob, Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
@@ -106,6 +106,7 @@ __all__ = [
     "Destination",
     "Effect",
     "Event",
+    "EventBatch",
     "EventBus",
     "EventType",
     "ExecutionContext",

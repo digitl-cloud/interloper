@@ -187,7 +187,7 @@ def _running_over_a_source(store: Store) -> tuple[Run, UUID]:
         asset_id = asset.id
     run = store.runs.create(_ORG_ID, component_id=source.id)
     assert store.runs.claim_next() is not None
-    assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is True
+    assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)])) is True
     return store.runs.get(run.id), asset_id
 
 
@@ -198,7 +198,7 @@ class TestIngest:
         run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
         assert store.runs.claim_next() is not None
 
-        running = store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+        running = store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
 
         saved = store.runs.get(run.id)
         assert running is True
@@ -206,7 +206,7 @@ class TestIngest:
 
     def test_run_completed_ends_the_run_as_a_success(self, store: Store) -> None:
         run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
-        assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_COMPLETED)]) is False
+        assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_COMPLETED)])) is False
         assert store.runs.get(run.id).status == RunStatus.SUCCESS
 
     def test_run_failed_ends_the_run_with_the_events_reason(self, store: Store) -> None:
@@ -215,7 +215,7 @@ class TestIngest:
         started = _operation_event(run, il.EventType.OPERATION_STARTED, component_id)
         failed = _run_event(run, il.EventType.RUN_FAILED, error="RuntimeError: destination unreachable")
 
-        assert store.runs.ingest(run.id, [started, failed]) is False
+        assert store.runs.ingest(run.id, il.EventBatch([started, failed])) is False
 
         ended = store.runs.get(run.id)
         assert (ended.status, ended.error) == (RunStatus.FAILED, "RuntimeError: destination unreachable")
@@ -225,7 +225,7 @@ class TestIngest:
     def test_a_run_failed_only_by_its_operations_has_no_reason_of_its_own(self, store: Store) -> None:
         run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
 
-        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_FAILED)])
+        store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_FAILED)]))
 
         ended = store.runs.get(run.id)
         assert (ended.status, ended.error) == (RunStatus.FAILED, None)
@@ -233,11 +233,11 @@ class TestIngest:
     def test_a_replayed_terminal_batch_changes_nothing(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID, component_id=_job_with_retry(store, max_attempts=3, delay=0))
         assert store.runs.claim_next() is not None
-        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+        store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
         batch = [_run_event(run, il.EventType.RUN_FAILED, error="boom")]
 
-        store.runs.ingest(run.id, batch)
-        store.runs.ingest(run.id, batch)
+        store.runs.ingest(run.id, il.EventBatch(batch))
+        store.runs.ingest(run.id, il.EventBatch(batch))
 
         assert store.events.list(run.org_id, EventQuery(event_type=["run_failed"]), run_id=run.id).total == 1
         assert len(store.runs.attempts(run.root_run_id)) == 2
@@ -250,7 +250,7 @@ class TestIngest:
         late = il.Event(type=il.EventType.LOG, metadata={"run_id": str(run.id), "message": "still here"})
 
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
-            running = store.runs.ingest(run.id, [late, _run_event(run, il.EventType.RUN_COMPLETED)])
+            running = store.runs.ingest(run.id, il.EventBatch([late, _run_event(run, il.EventType.RUN_COMPLETED)]))
 
         assert running is False
         assert store.runs.get(run.id).status == RunStatus.FAILED
@@ -261,7 +261,7 @@ class TestIngest:
         run, asset_id = _running_over_a_source(store)
         effects = {str(asset_id): il.Effect(config={"note": "rotated"}, state={"cursor": "x"})}
 
-        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_COMPLETED)], effects)
+        store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_COMPLETED)], effects))
 
         asset = store.components.get(asset_id)
         assert (store.components.read(asset).config or {})["note"] == "rotated"
@@ -272,10 +272,10 @@ class TestIngest:
     def test_effects_apply_once_with_the_runs_own_ending(self, store: Store) -> None:
         run, asset_id = _running_over_a_source(store)
         batch = [_run_event(run, il.EventType.RUN_COMPLETED)]
-        store.runs.ingest(run.id, batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})})
+        store.runs.ingest(run.id, il.EventBatch(batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})}))
         store.components.merge_config(asset_id, {"note": "newer"})
 
-        store.runs.ingest(run.id, batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})})
+        store.runs.ingest(run.id, il.EventBatch(batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})}))
 
         assert (store.components.read(store.components.get(asset_id)).config or {})["note"] == "newer"
 
@@ -291,8 +291,10 @@ class TestIngest:
         monkeypatch.setattr(store.runs, "_finish", recording_finish)
         store.runs.ingest(
             run.id,
-            [_run_event(run, il.EventType.RUN_COMPLETED)],
-            {str(asset_id): il.Effect(config={"note": "x"}, state={})},
+            il.EventBatch(
+                [_run_event(run, il.EventType.RUN_COMPLETED)],
+                {str(asset_id): il.Effect(config={"note": "x"}, state={})},
+            ),
         )
 
         assert seen == ["x"]
@@ -306,8 +308,10 @@ class TestIngest:
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
             store.runs.ingest(
                 run.id,
-                [_run_event(run, il.EventType.RUN_COMPLETED)],
-                {str(stranger): il.Effect(config={}, state={"cursor": "x"})},
+                il.EventBatch(
+                    [_run_event(run, il.EventType.RUN_COMPLETED)],
+                    {str(stranger): il.Effect(config={}, state={"cursor": "x"})},
+                ),
             )
 
         assert (store.components.get(stranger).state or {}).get("cursor") is None
@@ -1199,7 +1203,7 @@ class TestStartAndFail:
         run = store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))
         _drain(store)
 
-        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+        store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
 
         started = store.runs.get(run.id)
         assert (started.status, started.started_at is not None) == (RunStatus.RUNNING, True)
@@ -1210,7 +1214,7 @@ class TestStartAndFail:
         run = store.runs.create(_ORG_ID)
 
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
-            assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is False
+            assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)])) is False
 
         assert store.runs.get(run.id).status == RunStatus.QUEUED
         assert "reported starting while already queued" in caplog.text
@@ -1253,7 +1257,7 @@ class TestHeartbeat:
         run = _running(store)
         _stamp(store, run, heartbeat_at=_ago(60))
 
-        assert store.runs.ingest(run, []) is True
+        assert store.runs.ingest(run, il.EventBatch([])) is True
         heartbeat = store.runs.get(run).heartbeat_at
         assert heartbeat is not None and heartbeat.replace(tzinfo=dt.timezone.utc) > _ago(30)
 
@@ -1261,7 +1265,7 @@ class TestHeartbeat:
         run = _running(store)
         store.runs.cancel(run)
 
-        assert store.runs.ingest(run, []) is False
+        assert store.runs.ingest(run, il.EventBatch([])) is False
 
 
 class TestOverdue:
@@ -1335,7 +1339,7 @@ class TestReap:
         run = _running(store)
         stale = _ago(200)
         _stamp(store, run, heartbeat_at=stale)
-        store.runs.ingest(run, [])
+        store.runs.ingest(run, il.EventBatch([]))
 
         assert store.runs.reap(run, "lost", heartbeat_at=stale) is None
         assert store.runs.get(run).status == RunStatus.RUNNING
@@ -1358,7 +1362,7 @@ class TestCancel:
         if stage != "queued":
             _drain(store)
         if stage == "running":
-            store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+            store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
 
         canceled = store.runs.cancel(run.id)
 
@@ -1410,7 +1414,7 @@ def _running(store: Store, *, component_id: UUID | None = None) -> UUID:
     """
     run = store.runs.create(_ORG_ID, component_id=component_id)
     _stamp(store, run.id, status=RunStatus.DISPATCHED)
-    assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is True
+    assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)])) is True
     return run.id
 
 
@@ -1545,7 +1549,7 @@ class TestNamedReads:
         queued = store.backfills.attempts(backfill.id)
         _drain(store)
         for run in (queued[2], queued[0]):
-            store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+            store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
 
         assert [run.id for run in store.backfills.attempts(backfill.id)] == [queued[2].id, queued[0].id, queued[1].id]
 

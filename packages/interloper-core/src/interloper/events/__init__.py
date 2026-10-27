@@ -1,5 +1,6 @@
 """Event bus system for the Interloper framework."""
 
+from interloper.events.batch import EventBatch
 from interloper.events.bus import EventBus
 from interloper.events.console import ConsoleEventHandler
 from interloper.events.event import Event
@@ -12,6 +13,7 @@ from interloper.events.types import EventType
 __all__ = [
     "ConsoleEventHandler",
     "Event",
+    "EventBatch",
     "EventBus",
     "EventLogReader",
     "EventLogger",

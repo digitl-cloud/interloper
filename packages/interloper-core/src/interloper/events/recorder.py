@@ -1,9 +1,10 @@
 """EventRecorder: a run's events, batched and delivered to the platform with no loss.
 
 The runner hands the recorder every event of its run: it is the ``on_event``
-handler `RunSubscription` wraps. A writer thread delivers them in batches to
-``send``, whatever reaches the platform from where the run executes: the
-store's ingest in the scheduler's process, an `EventClient` from a pod. A
+handler `RunSubscription` wraps. A writer thread delivers them as
+`EventBatch`es to ``ingest``, whatever reaches the platform from where the run
+executes: the store's ingest in the scheduler's process, an `EventClient` from
+a pod. A
 batch is whatever accumulated while the previous delivery was in flight, so
 a quiet run delivers each event as it comes and a burst goes out in a few
 large batches.
@@ -29,6 +30,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import Self
 
 from interloper.errors import DeliveryError, RunLostError
+from interloper.events.batch import EventBatch
 from interloper.events.event import Event
 from interloper.events.types import EventType
 
@@ -45,7 +47,7 @@ class EventRecorder:
     """Deliver a run's events to the platform in batches, with no loss while the run lives.
 
     ```py
-    with EventRecorder(client.send, run_id=run_id, on_lost=exit_process) as recorder:
+    with EventRecorder(client.ingest, run_id=run_id, on_lost=exit_process) as recorder:
         result = await runner.model_copy(update={"on_event": recorder}).run(dag)
         recorder.finish(result)
     ```
@@ -56,7 +58,7 @@ class EventRecorder:
 
     def __init__(
         self,
-        send: Callable[[list[Event], dict[str, Effect] | None], bool],
+        ingest: Callable[[EventBatch], bool],
         *,
         run_id: str,
         heartbeat_interval: float = 10.0,
@@ -68,7 +70,7 @@ class EventRecorder:
         """Bind the recorder to its run and its delivery.
 
         Args:
-            send: Delivers one batch and, on the last one, the run's effects;
+            ingest: Delivers one batch, the run's effects on the last;
                 returns whether the run is still running. A `DeliveryError`
                 says whether the delivery is worth retrying; any other
                 exception is retried.
@@ -82,7 +84,7 @@ class EventRecorder:
             batch_size: The most events one delivery carries.
             backoff: Seconds before the first retry; doubles up to ten times that.
         """
-        self._send = send
+        self._ingest = ingest
         self._run_id = run_id
         self._heartbeat_interval = heartbeat_interval
         self._liveness = heartbeat_timeout / 2
@@ -217,7 +219,7 @@ class EventRecorder:
         delay = self._backoff
         while True:
             try:
-                return self._send(batch, effects)
+                return self._ingest(EventBatch(batch, effects))
             except DeliveryError as error:
                 if not error.retryable:
                     raise

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from interloper.errors import DeliveryError, RunLostError
-from interloper.events import Event, EventRecorder, EventType
+from interloper.events import Event, EventBatch, EventRecorder, EventType
 from interloper.operation.base import Effect, OperationResult
 from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 
@@ -31,12 +31,11 @@ class Sink:
         self.final = final
         self.lock = threading.Lock()
 
-    def __call__(self, events: list[Event], effects: Any) -> bool:
+    def __call__(self, batch: EventBatch) -> bool:
         """Take one delivery.
 
         Args:
-            events: The batch.
-            effects: The effects sent with it.
+            batch: The events and the effects sent with them.
 
         Returns:
             Whether the run is still running.
@@ -48,7 +47,7 @@ class Sink:
             if self.fail_times:
                 self.fail_times -= 1
                 raise DeliveryError("down", retryable=not self.final)
-            self.batches.append((list(events), effects))
+            self.batches.append((list(batch.events), batch.effects))
             return self.running
 
     @property

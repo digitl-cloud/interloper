@@ -71,6 +71,25 @@ class Effect:
     config: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Effect:
+        """Parse an effect from its JSON shape.
+
+        Args:
+            data: The effect, as ``dataclasses.asdict`` writes it.
+
+        Returns:
+            The effect.
+
+        Raises:
+            TypeError: If it carries anything but a ``config`` and a ``state``
+                mapping.
+        """
+        config, state = data.get("config", {}), data.get("state", {})
+        if set(data) - {"config", "state"} or not isinstance(config, dict) or not isinstance(state, dict):
+            raise TypeError(f"An effect is a config and a state mapping, not {data!r}")
+        return cls(config=config, state=state)
+
 
 @dataclass
 class OperationResult:
