@@ -13,13 +13,18 @@ reconciles against the ported schemas.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from typing import Any
 
+import httpx2
+import interloper as il
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
+from interloper_assets.tiktok_ads import constants
+from interloper_assets.tiktok_ads.connection import TiktokAdsConnection
 from interloper_assets.tiktok_ads.connector import schemas
 from interloper_assets.tiktok_ads.connector.source import TiktokAds, TiktokStatsNormalizer
 
@@ -29,7 +34,7 @@ def _source() -> Any:
 
 
 class TestSourceNormalizer:
-    def test_all_eight_assets_present(self):
+    def test_every_asset_is_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
             "ads_stats",
@@ -39,6 +44,7 @@ class TestSourceNormalizer:
             "videos_stats_by_platform",
             "ads",
             "campaigns",
+            "adgroups",
             "advertisers",
         }
 
@@ -56,7 +62,7 @@ class TestSourceNormalizer:
     def test_entity_assets_use_the_base_normalizer(self):
         # Entity assets use a plain DataFrameNormalizer (not the stats reshape);
         # nested str-field encoding is handled downstream by reconciliation.
-        for key in ("ads", "campaigns", "advertisers"):
+        for key in ("ads", "campaigns", "adgroups", "advertisers"):
             asset = next(a for a in _source().assets if type(a).key == key)
             assert isinstance(asset.normalizer, DataFrameNormalizer), key
             assert not isinstance(asset.normalizer, TiktokStatsNormalizer), key
@@ -146,6 +152,52 @@ class TestSpecRoundtripAndReconcile:
         reconciled = TableData.from_data(normalized).reconcile(schemas.Advertisers)
         assert reconciled.loc[0, "create_time"] == dt.datetime(2020, 9, 13, 12, 26, 40, tzinfo=dt.timezone.utc)
 
+    def test_an_ad_group_row_conforms_with_its_utc_schedule(self):
+        child = self._child("adgroups")
+        rows = [
+            {
+                "adgroup_id": 1790000000000001,
+                "campaign_id": 1790000000000000,
+                "adgroup_name": "Prospecting",
+                "budget_mode": "BUDGET_MODE_DAY",
+                "budget": "50.00",
+                "schedule_start_time": "2026-09-30 22:00:00",
+                "schedule_end_time": "2026-10-31 22:59:59",
+                "placements": ["PLACEMENT_TIKTOK"],
+                "operation_status": "ENABLE",
+                "date": dt.date(2026, 10, 1),
+            }
+        ]
+        reconciled = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Adgroups)
+        assert (reconciled.loc[0, "adgroup_id"], reconciled.loc[0, "campaign_id"]) == (
+            "1790000000000001",
+            "1790000000000000",
+        )
+        assert reconciled.loc[0, "budget"] == 50.0
+        # TikTok sends UTC times without a zone, as on its campaigns and ads; they stay naive UTC
+        assert reconciled.loc[0, "schedule_start_time"] == dt.datetime(2026, 9, 30, 22)
+        assert reconciled.loc[0, "placements"] == '["PLACEMENT_TIKTOK"]'
+
+
+class TestAdgroups:
+    def test_ad_groups_page_through_the_ad_group_endpoint(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            page = {"list": [{"adgroup_id": "7"}], "page_info": {"total_page": 1}}
+            return httpx2.Response(200, json={"code": 0, "data": page})
+
+        connection = TiktokAdsConnection(id="tt", access_token="x")
+        connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
+        source = TiktokAds(id="src-1", advertiser_id="123", connection=connection)
+        asset = next(a for a in source.assets if type(a).key == "adgroups")
+        day = dt.date(2026, 10, 1)
+        rows = asyncio.run(asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=day).window)))
+        assert rows == [{"adgroup_id": "7", "date": day}]
+        assert requests[0].url.path.endswith("/adgroup/get/")
+        assert requests[0].url.params["advertiser_id"] == "123"
+
 
 REPORT_ASSETS = (
     "ads_stats",
@@ -154,7 +206,7 @@ REPORT_ASSETS = (
     "ads_stats_by_platform",
     "videos_stats_by_platform",
 )
-ENTITY_ASSETS = ("ads", "campaigns", "advertisers")
+ENTITY_ASSETS = ("ads", "campaigns", "adgroups", "advertisers")
 
 
 class TestPartitionColumns:
