@@ -69,8 +69,8 @@ class FakeStore:
     def __init__(self) -> None:
         """Set up the recorders and the default fixture data."""
         self.orgs: dict[UUID, SimpleNamespace] = {
-            _ORG_ID: SimpleNamespace(id=_ORG_ID, name="Dev Org", created_at=_NOW),
-            _OTHER_ORG_ID: SimpleNamespace(id=_OTHER_ORG_ID, name="Other Org", created_at=_NOW),
+            _ORG_ID: SimpleNamespace(id=_ORG_ID, name="Dev Org", slug="dev-org", created_at=_NOW),
+            _OTHER_ORG_ID: SimpleNamespace(id=_OTHER_ORG_ID, name="Other Org", slug="other-org", created_at=_NOW),
         }
         self.roles: dict[tuple[UUID, UUID], str] = {(_ORG_ID, _USER_ID): "admin"}
         self.profiles: dict[UUID, SimpleNamespace] = {_USER_ID: _profile()}
@@ -117,7 +117,7 @@ class FakeStore:
 
     def _create_org(self, name: str, creator_id: UUID | None = None) -> SimpleNamespace:
         self.created_orgs.append((name, creator_id))
-        return SimpleNamespace(id=_ORG_ID, name=name, created_at=_NOW)
+        return SimpleNamespace(id=_ORG_ID, name=name, slug=name.lower(), created_at=_NOW)
 
     def _list_orgs(self, query: OrganisationQuery) -> Page:
         self.listed_orgs.append(query)
@@ -130,7 +130,7 @@ class FakeStore:
 
     def _update_org(self, org_id: UUID, *, name: str) -> SimpleNamespace:
         self.renamed_orgs.append((org_id, name))
-        return SimpleNamespace(id=org_id, name=name, created_at=_NOW)
+        return SimpleNamespace(id=org_id, name=name, slug=name.lower(), created_at=_NOW)
 
     def _delete_org(self, org_id: UUID) -> None:
         self.deleted_orgs.append(org_id)
@@ -285,7 +285,12 @@ class TestCreateOrganisation:
         response = client.post("/organisations", json={"name": "Acme"})
 
         assert response.status_code == 201
-        assert response.json() == {"id": str(_ORG_ID), "name": "Acme", "created_at": "2026-06-01T00:00:00Z"}
+        assert response.json() == {
+            "id": str(_ORG_ID),
+            "name": "Acme",
+            "slug": "acme",
+            "created_at": "2026-06-01T00:00:00Z",
+        }
         assert store.created_orgs == [("Acme", _USER_ID)]
 
     def test_the_new_org_becomes_the_sessions_active_one(self, client: TestClient, store: FakeStore) -> None:
@@ -309,8 +314,8 @@ class TestListOrganisations:
 
     def test_lists_the_users_organisations(self, client: TestClient, store: FakeStore) -> None:
         store.user_orgs = [
-            SimpleNamespace(id=_ORG_ID, name="Dev Org", created_at=_NOW),
-            SimpleNamespace(id=uuid4(), name="Other", created_at=None),
+            SimpleNamespace(id=_ORG_ID, name="Dev Org", slug="dev-org", created_at=_NOW),
+            SimpleNamespace(id=uuid4(), name="Other", slug="other", created_at=None),
         ]
 
         response = client.get("/organisations")
@@ -340,7 +345,12 @@ class TestUpdateOrganisation:
         response = client.patch(f"/organisations/{_ORG_ID}", json={"name": "Renamed"})
 
         assert response.status_code == 200
-        assert response.json() == {"id": str(_ORG_ID), "name": "Renamed", "created_at": "2026-06-01T00:00:00Z"}
+        assert response.json() == {
+            "id": str(_ORG_ID),
+            "name": "Renamed",
+            "slug": "renamed",
+            "created_at": "2026-06-01T00:00:00Z",
+        }
         assert store.renamed_orgs == [(_ORG_ID, "Renamed")]
 
     def test_an_editor_cannot_rename(self, client: TestClient, store: FakeStore) -> None:

@@ -16,7 +16,7 @@ from uuid import UUID
 from sqlalchemy import Engine, delete, update
 from sqlmodel import col, select
 
-from interloper_db.errors import NotFoundError
+from interloper_db.errors import ConflictError, NotFoundError
 from interloper_db.models import (
     AuthSession,
     Component,
@@ -29,6 +29,7 @@ from interloper_db.models import (
     UserOrganisation,
 )
 from interloper_db.session import commit, save, session_scope
+from interloper_db.slugs import MAX_LENGTH, slugify, unique_slug, validate_slug
 from interloper_db.store.page import Page, PageQuery
 
 
@@ -74,6 +75,24 @@ class OrganisationStore:
                 raise NotFoundError(f"Organisation {org_id} not found")
             return organisation
 
+    def get_by_slug(self, slug: str) -> Organisation:
+        """Get an organisation by its slug; soft-deleted organisations read as missing.
+
+        Args:
+            slug: The organisation's slug.
+
+        Returns:
+            The organisation row.
+
+        Raises:
+            NotFoundError: If no live organisation carries that slug.
+        """
+        with session_scope(self._engine) as session:
+            organisation = session.exec(select(Organisation).where(Organisation.slug == slug)).first()
+            if not organisation or organisation.deleted_at is not None:
+                raise NotFoundError(f"Organisation {slug!r} not found")
+            return organisation
+
     def list(self, query: OrganisationQuery) -> Page[Organisation]:
         """List organisations, oldest first.
 
@@ -96,6 +115,10 @@ class OrganisationStore:
     def create(self, name: str, creator_id: UUID | None = None) -> Organisation:
         """Create an organisation, optionally making the creator an admin.
 
+        The slug is derived from the name: free and not reserved, with a number
+        appended when the name's own slug is not (``acme``, ``acme-2``, ...).
+        Slugs of deleted organisations stay taken.
+
         Args:
             name: Organisation name.
             creator_id: Profile UUID of the creating user, who becomes an
@@ -106,7 +129,9 @@ class OrganisationStore:
             The created Organisation row.
         """
         with session_scope(self._engine) as session:
-            db_organisation = Organisation(name=name)
+            stem = slugify(name)[: MAX_LENGTH - len("-99999")]
+            taken = set(session.exec(select(Organisation.slug).where(col(Organisation.slug).like(f"{stem}%"))))
+            db_organisation = Organisation(name=name, slug=unique_slug(name, taken))
             session.add(db_organisation)
             session.flush()
             if creator_id is not None:
@@ -116,19 +141,33 @@ class OrganisationStore:
             save(session, db_organisation)
             return db_organisation
 
-    def update(self, org_id: UUID, *, name: str) -> Organisation:
-        """Rename an organisation.
+    def update(self, org_id: UUID, *, name: str | None = None, slug: str | None = None) -> Organisation:
+        """Rename an organisation or change its slug.
+
+        Renaming leaves the slug alone: it is part of the addresses people have
+        bookmarked and shared. A slug that is malformed or reserved raises
+        ``ConfigError`` from :func:`~interloper_db.slugs.validate_slug`.
 
         Args:
             org_id: Organisation UUID.
-            name: New organisation name.
+            name: New organisation name; ``None`` keeps the current one.
+            slug: New slug; ``None`` keeps the current one.
 
         Returns:
             The updated Organisation.
+
+        Raises:
+            ConflictError: If another organisation, deleted ones included, carries the slug.
         """
         with session_scope(self._engine) as session:
             db_organisation = self.get(org_id)
-            db_organisation.name = name
+            if name is not None:
+                db_organisation.name = name
+            if slug is not None and slug != db_organisation.slug:
+                validate_slug(slug)
+                if session.exec(select(Organisation.id).where(Organisation.slug == slug)).first() is not None:
+                    raise ConflictError(f"Slug {slug!r} is already taken")
+                db_organisation.slug = slug
             save(session, db_organisation)
             return db_organisation
 

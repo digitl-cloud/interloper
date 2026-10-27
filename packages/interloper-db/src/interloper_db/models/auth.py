@@ -113,6 +113,11 @@ class Organisation(SQLModel, table=True):
     Deletion is soft (``deleted_at``): the row survives so retained
     execution history and the usage ledger stay attributable for billing,
     while the org's sensitive payload (components, memberships) is purged.
+
+    Attributes:
+        slug: The organisation's name in the app's address, unique across
+            every row (a deleted organisation keeps its slug); see
+            :mod:`interloper_db.slugs` for what one may be.
     """
 
     __tablename__: ClassVar[str] = "organisations"
@@ -123,6 +128,7 @@ class Organisation(SQLModel, table=True):
         sa_column_kwargs={"server_default": text("gen_random_uuid()")},
     )
     name: str
+    slug: str = SQLField(index=True, unique=True)
     deleted_at: datetime | None = SQLField(default=None, sa_column=Column(TZDateTime))
     created_at: datetime | None = timestamp_column()
 

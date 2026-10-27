@@ -27,7 +27,7 @@ def session(auth_db: Engine) -> Iterator[Session]:
         An open session on that database.
     """
     with Session(auth_db) as session:
-        session.add_all(Organisation(name=name) for name in _NAMES)
+        session.add_all(Organisation(name=name, slug=name) for name in _NAMES)
         session.commit()
         yield session
 
