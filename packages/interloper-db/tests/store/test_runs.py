@@ -16,6 +16,7 @@ import interloper as il
 import pytest
 from interloper.errors import ConfigError
 from interloper.runner import RunState
+from interloper_assets.demo.basic.source import DemoSource
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
@@ -23,7 +24,17 @@ from sqlmodel import Session, col, select
 
 from interloper_db import ConflictError, NotFoundError
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, BackfillStatus, Component, Event, Quota, Run, RunStatus, Usage
+from interloper_db.models import (
+    Backfill,
+    BackfillStatus,
+    Component,
+    ComponentRelation,
+    Event,
+    Quota,
+    Run,
+    RunStatus,
+    Usage,
+)
 from interloper_db.store import EventQuery, PageQuery, RunQuery, Store
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, UsageLedger
 from interloper_db.store.runs import partition_key_range, partition_keys_overlapping
@@ -69,10 +80,10 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Backfill, Component, Run, Event, Quota, Usage):
+    for model in (Backfill, Component, ComponentRelation, Run, Event, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog(components={}), engine=engine)
+        yield Store(catalog=il.Catalog.from_assets([DemoSource]), engine=engine)
     finally:
         engine.dispose()
         engine_module._engine = None
@@ -166,6 +177,192 @@ def _operation_event(run: Run, event_type: il.EventType, component_id: UUID, *, 
         metadata={"component_id": str(component_id), "component_key": "a", "attempt": attempt},
         id=RunState.operation_event_id(str(run.id), str(component_id), event_type, attempt=attempt),
     )
+
+
+def _run_event(run: Run, event_type: il.EventType, **metadata: Any) -> il.Event:
+    """One of a run's own lifecycle events, as its runner reports it.
+
+    Args:
+        run: The run.
+        event_type: The run-lifecycle event type.
+        **metadata: More metadata (``error``).
+
+    Returns:
+        The event.
+    """
+    return il.Event(type=event_type, metadata={"run_id": str(run.id), **metadata})
+
+
+def _running_over_a_source(store: Store) -> tuple[Run, UUID]:
+    """A running run over the demo source, and the id of its asset ``a``.
+
+    Args:
+        store: The store under test, its catalog carrying the demo source.
+
+    Returns:
+        The run and the asset's id.
+    """
+    source = store.components.create(_ORG_ID, kind="source", key="demo_source")
+    with Session(store.engine) as session:
+        asset = session.exec(select(Component).where(Component.parent_id == source.id, Component.key == "a")).one()
+        asset_id = asset.id
+    run = store.runs.create(_ORG_ID, component_id=source.id)
+    assert store.runs.claim_next() is not None
+    assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is True
+    return store.runs.get(run.id), asset_id
+
+
+def _age_heartbeat(store: Store, run_id: UUID, *, seconds: int) -> dt.datetime:
+    """Push a run's heartbeat back in time.
+
+    Args:
+        store: The store under test.
+        run_id: The run.
+        seconds: How far back.
+
+    Returns:
+        The aged heartbeat.
+    """
+    aged = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+    with Session(store.engine) as session:
+        row = session.get(Run, run_id)
+        assert row is not None
+        row.heartbeat_at = aged
+        session.add(row)
+        session.commit()
+    return aged
+
+
+class TestIngest:
+    """One batch a pod reports: saved, folded into the run's state, and answered with whether to carry on."""
+
+    def test_run_started_starts_the_run_and_renews_the_heartbeat(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
+        assert store.runs.claim_next() is not None
+
+        running = store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+
+        saved = store.runs.get(run.id)
+        assert running is True
+        assert saved.status == RunStatus.RUNNING and saved.started_at is not None and saved.heartbeat_at is not None
+
+    def test_an_empty_batch_is_a_heartbeat(self, store: Store) -> None:
+        run = _running_run(store)
+        aged = _age_heartbeat(store, run.id, seconds=60)
+
+        assert store.runs.ingest(run.id, []) is True
+
+        heartbeat = store.runs.get(run.id).heartbeat_at
+        assert heartbeat is not None and heartbeat.replace(tzinfo=dt.timezone.utc) > aged
+
+    def test_run_completed_ends_the_run_as_a_success(self, store: Store) -> None:
+        run = _running_run(store)
+        assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_COMPLETED)]) is False
+        assert store.runs.get(run.id).status == RunStatus.SUCCESS
+
+    def test_run_failed_ends_the_run_with_the_events_reason(self, store: Store) -> None:
+        run = _running_run(store)
+        component_id = uuid4()
+        started = _operation_event(run, il.EventType.OPERATION_STARTED, component_id)
+        failed = _run_event(run, il.EventType.RUN_FAILED, error="RuntimeError: destination unreachable")
+
+        assert store.runs.ingest(run.id, [started, failed]) is False
+
+        ended = store.runs.get(run.id)
+        assert (ended.status, ended.error) == (RunStatus.FAILED, "RuntimeError: destination unreachable")
+        verdicts = store.events.list(run.org_id, EventQuery(event_type=["operation_failed"]), run_id=run.id).items
+        assert [event.error for event in verdicts] == ["RuntimeError: destination unreachable"]
+
+    def test_a_run_failed_only_by_its_operations_has_no_reason_of_its_own(self, store: Store) -> None:
+        run = _running_run(store)
+
+        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_FAILED)])
+
+        ended = store.runs.get(run.id)
+        assert (ended.status, ended.error) == (RunStatus.FAILED, None)
+
+    def test_a_replayed_terminal_batch_changes_nothing(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_job_with_retry(store, max_attempts=3, delay=0))
+        assert store.runs.claim_next() is not None
+        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
+        batch = [_run_event(run, il.EventType.RUN_FAILED, error="boom")]
+
+        store.runs.ingest(run.id, batch)
+        store.runs.ingest(run.id, batch)
+
+        assert store.events.list(run.org_id, EventQuery(event_type=["run_failed"]), run_id=run.id).total == 1
+        assert len(store.runs.attempts(run.root_run_id)) == 2
+
+    def test_after_the_run_ended_events_are_saved_and_the_pod_is_told_to_stop(
+        self, store: Store, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run = _running_run(store)
+        store.runs.fail(run.id, "No heartbeat since noon")
+        late = il.Event(type=il.EventType.LOG, metadata={"run_id": str(run.id), "message": "still here"})
+
+        with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
+            running = store.runs.ingest(run.id, [late, _run_event(run, il.EventType.RUN_COMPLETED)])
+
+        assert running is False
+        assert store.runs.get(run.id).status == RunStatus.FAILED
+        assert store.events.list(run.org_id, EventQuery(event_type=["log"]), run_id=run.id).total == 1
+        assert "already failed" in caplog.text
+
+    def test_effects_are_applied_and_not_stored(self, store: Store) -> None:
+        run, asset_id = _running_over_a_source(store)
+        effects = {str(asset_id): il.Effect(config={"note": "rotated"}, state={"cursor": "x"})}
+
+        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_COMPLETED)], effects)
+
+        asset = store.components.get(asset_id)
+        assert (store.components.read(asset).config or {})["note"] == "rotated"
+        assert (asset.state or {})["cursor"] == "x"
+        data = [event.data for event in store.events.list(run.org_id, EventQuery(), run_id=run.id).items]
+        assert all("rotated" not in str(entry) for entry in data)
+
+    def test_effects_apply_once_with_the_runs_own_ending(self, store: Store) -> None:
+        run, asset_id = _running_over_a_source(store)
+        batch = [_run_event(run, il.EventType.RUN_COMPLETED)]
+        store.runs.ingest(run.id, batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})})
+        store.components.merge_config(asset_id, {"note": "newer"})
+
+        store.runs.ingest(run.id, batch, {str(asset_id): il.Effect(config={"note": "first"}, state={})})
+
+        assert (store.components.read(store.components.get(asset_id)).config or {})["note"] == "newer"
+
+    def test_effects_land_before_the_verdict_settles(self, store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+        run, asset_id = _running_over_a_source(store)
+        seen: list[str] = []
+        finish = store.runs._finish
+
+        def recording_finish(db_run: Run, status: RunStatus, *, error: str | None = None) -> None:
+            seen.append((store.components.read(store.components.get(asset_id)).config or {}).get("note", ""))
+            finish(db_run, status, error=error)
+
+        monkeypatch.setattr(store.runs, "_finish", recording_finish)
+        store.runs.ingest(
+            run.id,
+            [_run_event(run, il.EventType.RUN_COMPLETED)],
+            {str(asset_id): il.Effect(config={"note": "x"}, state={})},
+        )
+
+        assert seen == ["x"]
+
+    def test_effects_outside_the_targets_operations_are_refused(
+        self, store: Store, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        run, _asset_id = _running_over_a_source(store)
+        stranger = _component(store, kind="job", key="other")
+
+        with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
+            store.runs.ingest(
+                run.id,
+                [_run_event(run, il.EventType.RUN_COMPLETED)],
+                {str(stranger): il.Effect(config={}, state={"cursor": "x"})},
+            )
+
+        assert (store.components.get(stranger).state or {}).get("cursor") is None
+        assert str(stranger) in caplog.text
 
 
 class TestEndings:

@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import builtins
 import logging
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
+import interloper as il
 from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
 from sqlalchemy import Engine, and_, exists, func, or_, update
@@ -45,9 +47,12 @@ from interloper_db.store.quotas import QuotaStore, UsageLedger
 
 if TYPE_CHECKING:
     from interloper_db.store.backfills import BackfillStore
+    from interloper_db.store.components import ComponentStore
     from interloper_db.store.events import EventStore
 
 logger = logging.getLogger(__name__)
+
+_RUN_ENDINGS = frozenset({il.EventType.RUN_COMPLETED, il.EventType.RUN_FAILED})
 
 # Reader queries eagerly join the target so its identity survives the session.
 # Deliberately not mapped on the relationship itself: locking queries (the
@@ -182,19 +187,29 @@ def latest_attempt() -> Any:
 class RunStore:
     """Store methods for runs."""
 
-    def __init__(self, engine: Engine, quotas: QuotaStore, backfills: BackfillStore, events: EventStore) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        quotas: QuotaStore,
+        backfills: BackfillStore,
+        events: EventStore,
+        components: Callable[[], ComponentStore],
+    ) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
             quotas: Quota gates it enforces through.
             backfills: Backfill facet a completing run advances its batch through.
-            events: Event facet a failure's reason is recorded through.
+            events: Event facet a run's events and a failure's reason are recorded through.
+            components: The component facet a run's effects are applied through, resolved
+                late since it is built after this one.
         """
         self._engine = engine
         self._quotas = quotas
         self._backfills = backfills
         self._events = events
+        self._components = components
 
     def create(
         self,
@@ -527,6 +542,52 @@ class RunStore:
             save(session, db_run, "target")
             return db_run
 
+    def ingest(
+        self,
+        run_id: UUID,
+        events: Sequence[il.Event],
+        effects: Mapping[str, il.Effect] | None = None,
+    ) -> bool:
+        """Take in a batch a run's pod reports: save it, fold the run's state from it, renew its heartbeat.
+
+        The one write path a run has. In one transaction: the events are
+        upserted; the effects, which travel with the run's own ending, are
+        merged onto the operations' rows, once, and before the verdict settles;
+        each run-lifecycle event in the batch folds into the run's status
+        (``run_started`` starts it, ``run_completed`` and ``run_failed`` end it
+        through the same step every ending takes); and a running run's
+        heartbeat is renewed, since reporting is proof of life.
+        A fold that no longer applies (a replayed ending, a batch after the
+        reaper ended the run) is a no-op with a warning: the events are the
+        truth of what happened and are kept either way.
+
+        Args:
+            run_id: The run UUID.
+            events: The batch, in emission order; may be empty.
+            effects: Operation effects keyed by component id; ``None`` for none.
+
+        Returns:
+            Whether the run is still running once the batch is folded, which
+            tells its pod to carry on or to stop.
+        """
+        with session_scope(self._engine) as session:
+            db_run = self._lock(run_id)
+            inserted = {str(event_id) for event_id in self._events.save_many(events, db_run.org_id, db_run.id)}
+            if effects:
+                self._apply_effects_once(db_run, events, inserted, effects)
+            for event in events:
+                if event.type is il.EventType.RUN_STARTED:
+                    self._start(db_run)
+                elif event.type is il.EventType.RUN_COMPLETED:
+                    self._end(db_run, RunStatus.SUCCESS)
+                elif event.type is il.EventType.RUN_FAILED:
+                    self._end(db_run, RunStatus.FAILED, error=event.metadata.get("error"))
+            if db_run.status == RunStatus.RUNNING:
+                db_run.heartbeat_at = database_now(session)
+            session.add(db_run)
+            commit(session)
+            return db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING)
+
     def heartbeat(self, run_id: UUID) -> bool:
         """Renew a running run's heartbeat, and say whether it is still running.
 
@@ -752,6 +813,85 @@ class RunStore:
             if db_run is None:
                 raise NotFoundError(f"Run {run_id} not found")
             return db_run
+
+    def _start(self, db_run: Run) -> None:
+        """Fold a ``run_started``: a dispatched run becomes running.
+
+        Args:
+            db_run: The run, locked.
+        """
+        if db_run.status == RunStatus.RUNNING:
+            return
+        if db_run.status != RunStatus.DISPATCHED:
+            logger.warning("Run %s reported starting while already %s", db_run.id, db_run.status)
+            return
+        db_run.status = RunStatus.RUNNING
+        db_run.started_at = datetime.now(timezone.utc)
+
+    def _end(self, db_run: Run, status: RunStatus, *, error: str | None = None) -> None:
+        """Fold a run's own ending, unless another ending came first.
+
+        Args:
+            db_run: The run, locked, its target reachable.
+            status: ``success`` or ``failed``.
+            error: Why a failed run failed.
+        """
+        if db_run.status in TERMINAL_RUN_STATUSES:
+            logger.warning("Run %s reported %s while already %s", db_run.id, status.value, db_run.status)
+            return
+        self._finish(db_run, status, error=error)
+
+    def _apply_effects_once(
+        self,
+        db_run: Run,
+        events: Sequence[il.Event],
+        inserted: set[str],
+        effects: Mapping[str, il.Effect],
+    ) -> None:
+        """Apply the effects that travel with the run's own ending, unless that ending was delivered before.
+
+        A resent final batch carries the same ending, already stored, and must
+        not write back a credential a later run has rotated since.
+
+        Args:
+            db_run: The run, locked.
+            events: The batch.
+            inserted: The ids of the batch's events this delivery inserted.
+            effects: Operation effects keyed by component id.
+        """
+        ending = next((event for event in events if event.type in _RUN_ENDINGS), None)
+        if ending is None or ending.id not in inserted:
+            logger.warning("Run %s delivered effects without a new ending of its own; not applied", db_run.id)
+            return
+        self._apply_effects(db_run, effects)
+
+    def _apply_effects(self, db_run: Run, effects: Mapping[str, il.Effect]) -> None:
+        """Merge the operations' effects onto their component rows.
+
+        Only an operation of the run's target may be written: a job's
+        operations are its targets' assets, which the job neither is nor
+        owns, so membership in ``target.operations()`` is the rule.
+
+        Args:
+            db_run: The run, locked.
+            effects: Operation effects keyed by component id.
+        """
+        if db_run.component_id is None:
+            logger.warning("Run %s reported effects but its target is gone", db_run.id)
+            return
+        components = self._components()
+        target = components.load(db_run.component_id)
+        allowed = {operation.id for operation in target.operations()} if isinstance(target, il.Workload) else set()
+        for component_id, effect in effects.items():
+            if component_id not in allowed:
+                logger.warning(
+                    "Run %s reported effects for %s, not an operation of its target", db_run.id, component_id
+                )
+                continue
+            if effect.config:
+                components.merge_config(UUID(component_id), effect.config)
+            if effect.state:
+                components.stamp_state(UUID(component_id), **effect.state)
 
     def _fail(self, db_run: Run, error: str) -> None:
         """Finish a run as failed, for a reason no runner reported.

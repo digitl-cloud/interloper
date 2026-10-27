@@ -58,6 +58,20 @@ class OperationContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class Effect:
+    """What an operation writes back to its own component, as the platform receives it.
+
+    ``config`` fields are merged into the component's stored config, through
+    its encryption path; ``state`` fields onto its machine-owned state. An
+    operation returns them on its `OperationResult`; a run hands them to the
+    platform as one ``Effect`` per operation.
+    """
+
+    config: dict[str, Any] = field(default_factory=dict)
+    state: dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class OperationResult:
     """What an operation came to: the effects the platform persists, and the verdict.
