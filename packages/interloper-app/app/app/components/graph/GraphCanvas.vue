@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ContextMenuItem } from '@nuxt/ui'
-import { MarkerType, VueFlow, useVueFlow, Panel } from '@vue-flow/core'
+import { VueFlow, useVueFlow, Panel } from '@vue-flow/core'
 import type { Node, Edge, Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -403,7 +403,8 @@ const baseEdges = computed(() => {
 // selection — expanding a source is not a selection. When an asset's panel is
 // open its incident edges turn blue and nodes outside its neighbourhood fade;
 // default (nothing open) leaves every edge faint and nothing dimmed. Hovering
-// an asset turns its incident edges blue too, without fading anything.
+// an asset turns its incident edges blue and dims the other edges too, but
+// fades no node.
 const hoveredId = ref<string | null>(null)
 
 function incidentEdges(id: string) {
@@ -579,17 +580,17 @@ function applyFocus(result: Node[]): Node[] {
     return result
 }
 
-/** Styled edges: faint gray by default; the selected or hovered asset's incident edges go blue, under a selection the rest dim. */
+/** Styled edges: faint gray by default; the selected or hovered asset's incident edges go blue and the rest dim. */
 const edges = computed<Edge[]>(() => {
+    const dimmed = !!(props.selectedId || hoveredId.value)
     return baseEdges.value.map((e) => {
         const active = highlightedEdges.value.has(e.id)
-        const color = active ? 'var(--ui-primary)' : focus.value ? 'var(--graph-edge-dim)' : 'var(--graph-edge)'
+        const color = active ? 'var(--ui-primary)' : dimmed ? 'var(--graph-edge-dim)' : 'var(--graph-edge)'
         return {
             ...e,
             type: 'upstream',
             zIndex: active ? EDGE_Z + 1 : EDGE_Z,
             style: { stroke: color, strokeWidth: active ? 2.4 : 1.6, strokeLinecap: 'round' },
-            markerEnd: { type: MarkerType.ArrowClosed, color, width: 12, height: 12 },
         }
     })
 })
