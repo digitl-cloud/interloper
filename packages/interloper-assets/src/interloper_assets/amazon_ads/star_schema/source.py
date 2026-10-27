@@ -35,6 +35,12 @@ AD_GROUP_REPORTS = [
     "amazon_ads.brands_ad_groups_stats",
     "amazon_ads.display_ad_groups_stats",
 ]
+AD_ENTITIES = ["amazon_ads.products_ads", "amazon_ads.brands_ads", "amazon_ads.display_ads"]
+AD_REPORTS = [
+    "amazon_ads.products_advertised_products_stats",
+    "amazon_ads.brands_ads_stats",
+    "amazon_ads.display_advertised_products_stats",
+]
 INSTANT = "timestamp('UTC')"
 ENTITY, REPORT, FACT = 1, 2, 3
 
@@ -64,7 +70,7 @@ def _account(upstream: il.Upstream) -> str:
 def _lifecycle(upstream: il.Upstream) -> tuple[ir.Value, ir.Value]:
     """When an entity was created and last changed, from any ad product's entity table.
 
-    Used by the campaign and ad group dimensions. Each ad product names the
+    Used by the campaign, ad group and ad dimensions. Each ad product names the
     two instants its own way: under the extended data on Sponsored Products
     and Brands, at the top level on Sponsored Display.
 
@@ -89,9 +95,10 @@ class AmazonAdsStarSchema(il.Source):
     The fact unions the campaign reports of every ad product (Sponsored
     Products, Sponsored Brands, Sponsored Display) across profiles, at
     campaign and day grain, with the purchases and sales each report
-    attributes within 14 days of a click. The campaign and ad group
-    dimensions come from the reports, completed by the fact's keys; the
-    account dimension from each profile's entity row, else the facts.
+    attributes within 14 days of a click. The campaign, ad group and ad
+    dimensions take each entity's own row where it is collected, else its
+    latest report, and the campaigns are completed by the fact's keys; the
+    account dimension comes from each profile's entity row, else the facts.
     Every bound upstream's table must exist, or the view fails when it is
     created. Views are recreated on every run, so they follow the profiles
     bound to them; a profile added to the organisation is absent until it
@@ -378,3 +385,81 @@ class AmazonAdsStarSchema(il.Source):
             distinct=False,
         )
         return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
+
+    @ibis_view(
+        schema=schemas.DimAds,
+        tags=["Dimension"],
+        relations={
+            "ads": il.Relation("asset", AD_ENTITIES, many=True, optional=True),
+            "ads_stats": il.Relation("asset", AD_REPORTS, many=True, optional=True),
+        },
+    )
+    def dim_ads(self, ads: list[il.Upstream], ads_stats: list[il.Upstream]) -> ibis.Table:
+        """One row per ad with its ad group, campaign and advertised product: its entity row, else its latest report."""
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            created_at, updated_at = _lifecycle(upstream)
+            none = ibis.null("string")
+            if upstream.asset.key == "brands_ads":
+                ad_name, asin, sku = table["name"], none, none
+            elif upstream.asset.key == "products_ads":
+                ad_name, asin, sku = none, table["asin"], table["sku"]
+            else:
+                ad_name, asin, sku = table["ad_name"], table["asin"], table["sku"]
+            return table.select(
+                ad_id=table["ad_id"],
+                ad_group_id=table["ad_group_id"],
+                campaign_id=table["campaign_id"],
+                account_id=ibis.literal(_account(upstream)),
+                ad_name=ad_name,
+                status=table["state"].upper(),
+                created_at=created_at,
+                updated_at=updated_at,
+                as_of_date=table["date"],
+                asin=asin,
+                sku=sku,
+                priority=ibis.literal(ENTITY),
+            )
+
+        def from_report(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            none = ibis.null("string")
+            if upstream.asset.key == "products_advertised_products_stats":
+                asin, sku = table["advertised_asin"], table["advertised_sku"]
+            elif upstream.asset.key == "display_advertised_products_stats":
+                asin, sku = table["promoted_asin"], none
+            else:
+                asin, sku = none, none
+            table = table.select(
+                "date", "ad_id", "ad_group_id", "campaign_id", advertised_asin=asin, advertised_sku=sku
+            )
+            days = table.group_by([table["date"], table["ad_id"]]).aggregate(
+                ad_group_id=table["ad_group_id"].max(),
+                campaign_id=table["campaign_id"].max(),
+                asin=table["advertised_asin"].max(),
+                sku=table["advertised_sku"].max(),
+            )
+            return days.select(
+                ad_id=days["ad_id"],
+                ad_group_id=days["ad_group_id"],
+                campaign_id=days["campaign_id"],
+                account_id=ibis.literal(_account(upstream)),
+                ad_name=ibis.null("string"),
+                status=ibis.null("string"),
+                created_at=ibis.null(INSTANT),
+                updated_at=ibis.null(INSTANT),
+                as_of_date=days["date"],
+                asin=days["asin"],
+                sku=days["sku"],
+                priority=ibis.literal(REPORT),
+            )
+
+        if not ads and not ads_stats:
+            raise ConfigError("no upstream bound: the ad dimension needs at least one profile's ads")
+        rows = ibis.union(
+            *(from_entity(upstream) for upstream in ads),
+            *(from_report(upstream) for upstream in ads_stats),
+            distinct=False,
+        )
+        return latest(rows, "ad_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
