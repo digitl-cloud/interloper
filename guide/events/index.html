@@ -1140,6 +1140,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#persistence" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Persistence
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#event-types" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2483,8 +2494,8 @@ everything else at <code>INFO</code>. <code>log</code> events use their own <cod
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">il</span><span class="o">.</span><span class="n">EventBus</span><span class="o">.</span><span class="n">unsubscribe</span><span class="p">(</span><span class="n">on_event</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Handlers run on a background worker thread in subscription order; an exception in one handler
-is isolated from the others. <code>il.EventBus.flush(timeout)</code> blocks until everything queued so far
-has been delivered.</p>
+is logged and isolated from the others. <code>il.EventBus.flush(timeout)</code> blocks until everything
+queued so far has been delivered; a run's own flush waits with no timeout.</p>
 <h2 id="the-event">The event<a class="headerlink" href="#the-event" title="Permanent link">&para;</a></h2>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">event</span><span class="o">.</span><span class="n">type</span>         <span class="c1"># EventType</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">event</span><span class="o">.</span><span class="n">timestamp</span>    <span class="c1"># aware UTC datetime, set by the producer</span>
@@ -2499,6 +2510,17 @@ plus <code>message</code> and, on failures, <code>error</code> and <code>traceba
 <code>Event.from_json()</code>. Operation lifecycle events get a <strong>deterministic id</strong> derived from run,
 component and type, so the same logical event produced twice (a child process and its host)
 collapses to one when persisted.</p>
+<h2 id="persistence">Persistence<a class="headerlink" href="#persistence" title="Permanent link">&para;</a></h2>
+<p>On the platform, a <code>RunRecorder</code> delivers a run's events in batches to the store, with no
+deadline: a batch is whatever accumulated while the previous delivery was in flight. The store
+folds the run's state from what it receives, so <code>run_started</code> starts the run and <code>run_completed</code>
+or <code>run_failed</code> ends it. A run's verdict is the ingestion of its own terminal event and never
+exists without the events before it. Every batch renews the run's heartbeat; a run that cannot
+deliver for half the heartbeat timeout is lost, and the reaper fails it.</p>
+<p>Why a run did not succeed is recorded on the run itself, as <code>Run.error</code>: the fault its runner
+reported, or the reason the platform ended it (the reaper, a failed dispatch, an exhausted
+quota). A run that failed only because operations failed has none of its own; their reasons are
+on their <code>operation_failed</code> events.</p>
 <h2 id="event-types">Event types<a class="headerlink" href="#event-types" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
