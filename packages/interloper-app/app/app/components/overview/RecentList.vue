@@ -3,6 +3,8 @@ import { h } from 'vue'
 import { StatusPill } from '#components'
 import type { Run } from '~/types/run'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{ runs: Run[] | null }>()
 
 /** As many rows as the overview returns, so the loaded table takes the skeleton's place. */
@@ -63,7 +65,7 @@ const columns = withSkeletons<Row>([
         <template #header>
             <CardHeader title="Just happened">
                 <UButton label="All executions"
-                         to="/executions/runs"
+                         :to="organisationStore.path('/executions/runs')"
                          color="neutral"
                          variant="outline"
                          size="sm" />
@@ -73,6 +75,6 @@ const columns = withSkeletons<Row>([
                 :columns="columns"
                 empty="No runs yet."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(`/executions/runs/${row.original.run.id}`)" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(organisationStore.path(`/executions/runs/${row.original.run.id}`))" />
     </UCard>
 </template>

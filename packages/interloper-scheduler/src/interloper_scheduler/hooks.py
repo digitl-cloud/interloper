@@ -127,7 +127,7 @@ class HookController(Controller):
                 component_id=str(run.component_id),
                 run_id=str(run.id),
                 partition_key=run.partition_key,
-                url=self._subject_url(f"/executions/runs/{run.id}"),
+                url=self._subject_url(run.org_id, f"/executions/runs/{run.id}"),
                 metadata=metadata,
                 trigger=lambda component_id, watched_ids=watched_ids: self._trigger(run, component_id, watched_ids),
             )
@@ -153,7 +153,7 @@ class HookController(Controller):
                 backfill_id=str(backfill.id),
                 start_key=backfill.start_key,
                 end_key=backfill.end_key,
-                url=self._subject_url(f"/executions/backfills/{backfill.id}"),
+                url=self._subject_url(backfill.org_id, f"/executions/backfills/{backfill.id}"),
                 metadata=metadata,
                 trigger=lambda component_id, watched_ids=watched_ids: self._trigger_backfill(
                     backfill, component_id, watched_ids
@@ -170,18 +170,25 @@ class HookController(Controller):
                 data={"backfill_id": str(backfill.id)},
             )
 
-    @staticmethod
-    def _subject_url(path: str) -> str | None:
-        """The app page for a run or backfill, when the deployment has a public URL.
+    def _subject_url(self, org_id: UUID, path: str) -> str | None:
+        """The app page for a run or backfill, under its organisation's slug, when the deployment has a public URL.
 
         Args:
-            path: The page's path under the app, such as ``/executions/runs/<id>``.
+            org_id: The subject's organisation, whose slug leads the path.
+            path: The page's path under the organisation, such as ``/executions/runs/<id>``.
 
         Returns:
-            The absolute URL, or ``None`` when ``server.external_url`` is unset.
+            The absolute URL, or ``None`` when ``server.external_url`` is unset
+            or the organisation is gone.
         """
         base = AppSettings.get().server.external_url.rstrip("/")
-        return f"{base}{path}" if base else None
+        if not base:
+            return None
+        try:
+            slug = self._store.organisations.get(org_id).slug
+        except NotFoundError:
+            return None
+        return f"{base}/{slug}{path}"
 
     def _unclaimed_hooks(
         self, org_id: UUID, target: Component, subject_id: UUID, event_type: str

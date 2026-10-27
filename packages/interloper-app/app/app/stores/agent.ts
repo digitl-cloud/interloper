@@ -1,7 +1,7 @@
 import type { Conversation, ConversationDetail } from '~/types/agent'
 
 export const useAgentStore = defineStore('agent', () => {
-    const { apiFetch, fetchAll } = useApi()
+    const { apiFetch, fetchAll } = useOrgApi()
 
     /**********************
      * State
@@ -54,7 +54,7 @@ export const useAgentStore = defineStore('agent', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(() => fetchConversations(), $reset)
+    watch(() => useOrganisationStore().organisation?.id, $reset)
 
     return {
         conversations,

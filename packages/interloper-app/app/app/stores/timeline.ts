@@ -26,7 +26,7 @@ export const DEFAULT_TIMELINE_SPAN = 24 * 3_600_000
 const MAX_RUNS = 1000
 
 export const useTimelineStore = defineStore('timeline', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -144,7 +144,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(() => fetch(), $reset)
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         runs,

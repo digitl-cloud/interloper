@@ -63,6 +63,7 @@ class OrganisationEntry(BaseModel):
     """One organisation the user can name, with the role tool calls hold in it."""
 
     id: UUID
+    slug: str
     name: str
     role: str
 
@@ -81,7 +82,9 @@ def list_organisations() -> OrganisationList:
     organisation it acts in. It may be left out when you belong to exactly one.
     """
     return OrganisationList(
-        organisations=[OrganisationEntry(id=org.id, name=org.name, role=role) for org, role in organisations()]
+        organisations=[
+            OrganisationEntry(id=org.id, slug=org.slug, name=org.name, role=role) for org, role in organisations()
+        ]
     )
 
 

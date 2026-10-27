@@ -1,7 +1,7 @@
 import type { ComponentRecord, ComponentInput, DeleteImpact, Relation, RelationInput } from '~/types/component'
 
 export const useComponentsStore = defineStore('components', () => {
-    const { apiFetch, fetchAll: fetchPages } = useApi()
+    const { apiFetch, fetchAll: fetchPages } = useOrgApi()
     const toast = useToast()
 
     /**********************
@@ -236,12 +236,11 @@ export const useComponentsStore = defineStore('components', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(reload, $reset)
-
     /**********************
      * Realtime
      **********************/
     const orgStore = useOrganisationStore()
+    watch(() => orgStore.organisation?.id, $reset)
 
     // Component notifications are slim ({id, kind, parent_id}) — the payload
     // channel never carries configs — so changes refetch through the API. The

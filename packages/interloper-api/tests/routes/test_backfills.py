@@ -15,11 +15,12 @@ from fastapi.testclient import TestClient
 from interloper.errors import ConfigError
 from interloper_db import BackfillQuery, ConflictError, NotFoundError, Page, QuotaExceededError
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import backfills as backfills_module
 
 _ORG_ID = uuid4()
+_BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
 
 
 def _fake_backfill(backfill_id: UUID, status: str = "running") -> SimpleNamespace:
@@ -50,7 +51,9 @@ class FakeStore:
         self.raise_not_found = False
         self.raise_conflict: str | None = None
         self.role: str | None = "editor"
+        self.backfill_org_id: UUID = _ORG_ID
         self.members = SimpleNamespace(role=self._member_role)
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.backfills = SimpleNamespace(
             get=self._get_backfill,
             cancel=self._cancel_backfill,
@@ -66,7 +69,9 @@ class FakeStore:
     def _get_backfill(self, backfill_id: UUID):
         if self.raise_not_found:
             raise NotFoundError(f"Backfill {backfill_id} not found")
-        return _fake_backfill(backfill_id)
+        backfill = _fake_backfill(backfill_id)
+        backfill.org_id = self.backfill_org_id
+        return backfill
 
     def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
         return self.role
@@ -81,9 +86,9 @@ class FakeStore:
 def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(backfills_module.router)
+    app.include_router(backfills_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
     return app
 
 
@@ -96,7 +101,7 @@ def _client(store: FakeStore) -> TestClient:
     Returns:
         The client.
     """
-    return TestClient(_app(store))
+    return TestClient(_app(store), base_url=_BASE_URL)
 
 
 @pytest.fixture
@@ -186,12 +191,10 @@ def _list_client(store: FakeStore) -> TestClient:
     """
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(backfills_module.router)
+    app.include_router(backfills_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    return TestClient(app, base_url=_BASE_URL)
 
 
 def test_list_backfills_returns_the_orgs_backfills(store: FakeStore) -> None:
@@ -284,8 +287,8 @@ def test_get_missing_backfill_returns_404(store: FakeStore) -> None:
 
 
 def test_get_backfill_of_another_org_returns_404(store: FakeStore) -> None:
-    """A non-member gets the same 404, so the id is not an existence oracle."""
-    store.role = None
+    """A backfill of another organisation gets the same 404, so the id is not an existence oracle."""
+    store.backfill_org_id = uuid4()
     backfill_id = uuid4()
 
     response = _client(store).get(f"/backfills/{backfill_id}")

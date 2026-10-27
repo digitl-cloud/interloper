@@ -110,7 +110,7 @@ def main() -> None:
         print("runs queued; waiting for the worker")
         _wait_and_backdate(settings.postgres.dsn)
 
-    (HERE / "session_token").write_text(store.sessions.create(user_id, org_id))
+    (HERE / "session_token").write_text(store.tokens.create_session(user_id))
     print("session minted")
 
 

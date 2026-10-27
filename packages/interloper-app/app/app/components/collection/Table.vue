@@ -4,6 +4,8 @@ import { getGroupedRowModel } from '@tanstack/vue-table'
 import type { GroupingOptions } from '@tanstack/vue-table'
 import type { CollectionRow, LastRun } from '~/composables/collection'
 
+const organisationStore = useOrganisationStore()
+
 const componentsStore = useComponentsStore()
 const runsStore = useRunsStore()
 const toast = useToast()
@@ -496,7 +498,7 @@ function onRowClick(row: any) {
                         <UTooltip :text="lastRunOf(row)!.note"
                                   :disabled="!lastRunOf(row)!.note"
                                   :delay-duration="0">
-                            <NuxtLink :to="`/executions/runs/${lastRunOf(row)!.runId}`"
+                            <NuxtLink :to="organisationStore.path(`/executions/runs/${lastRunOf(row)!.runId}`)"
                                       @click.stop>
                                 <UBadge :color="statusColor(lastRunOf(row)!.status)"
                                         :icon="statusIcon(lastRunOf(row)!.status)"

@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from interloper_db import NotFoundError, Page, PageQuery
 from pydantic import BaseModel, Field
 
-from interloper_api.dependencies import CurrentUserDep, StoreDep
+from interloper_api.dependencies import SessionUserDep, StoreDep
 
 router = APIRouter(prefix="/tokens", tags=["tokens"])
 
@@ -56,7 +56,7 @@ class CreatedTokenResponse(TokenResponse):
 @router.post("", status_code=201)
 def create_token(
     body: CreateTokenRequest,
-    user: CurrentUserDep,
+    user: SessionUserDep,
     store: StoreDep,
 ) -> CreatedTokenResponse:
     """Create a personal access token for the caller.
@@ -68,7 +68,7 @@ def create_token(
     Args:
         body: The token name and its lifetime in days; a null lifetime mints a
             token that never expires.
-        user: The authenticated caller.
+        user: The caller, authenticated by the session cookie alone.
         store: The database store.
 
     Returns:
@@ -88,14 +88,14 @@ def create_token(
 
 @router.get("")
 def list_tokens(
-    user: CurrentUserDep,
+    user: SessionUserDep,
     store: StoreDep,
     query: Annotated[PageQuery, Query()],
 ) -> Page[TokenResponse]:
     """List the caller's personal access tokens.
 
     Args:
-        user: The authenticated caller.
+        user: The caller, authenticated by the session cookie alone.
         store: The database store.
         query: The window to read.
 
@@ -110,7 +110,7 @@ def list_tokens(
 @router.delete("/{token_id}", status_code=204)
 def revoke_token(
     token_id: UUID,
-    user: CurrentUserDep,
+    user: SessionUserDep,
     store: StoreDep,
 ) -> Response:
     """Revoke one of the caller's tokens.
@@ -122,7 +122,7 @@ def revoke_token(
 
     Args:
         token_id: The token to revoke.
-        user: The authenticated caller.
+        user: The caller, authenticated by the session cookie alone.
         store: The database store.
 
     Returns:

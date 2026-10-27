@@ -21,7 +21,7 @@ export interface RunEvent {
 const EVENTS_PAGE_SIZE = 100
 
 export const useEventsStore = defineStore('events', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -217,6 +217,8 @@ export const useEventsStore = defineStore('events', () => {
         loadingMore.value = false
         error.value = null
     }
+
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         runId,

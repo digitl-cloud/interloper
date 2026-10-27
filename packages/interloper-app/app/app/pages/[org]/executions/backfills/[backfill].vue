@@ -5,10 +5,6 @@ import type { Page } from '~/composables/api'
 import type { Run } from '~/types/run'
 import type { Backfill } from '~/types/backfill'
 
-// orgSwitchTarget: this page is bespoke to one org's backfill — switching org
-// from the nav lands on the backfills list instead.
-definePageMeta({ orgSwitchTarget: '/executions/backfills' })
-
 const PAGE_SIZE = 50
 
 const UBadge = resolveComponent('UBadge')
@@ -16,8 +12,9 @@ const UBadge = resolveComponent('UBadge')
 const route = useRoute()
 const backfillId = route.params.backfill!.toString()
 
-const { apiFetch } = useApi()
+const { apiFetch } = useOrgApi()
 const backfillsStore = useBackfillsStore()
+const organisationStore = useOrganisationStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -63,10 +60,8 @@ watch(sorting, () => {
     reloadRuns()
 })
 
-const { mismatch } = useOrgGate(() => backfill.value?.org_id)
-
 const cancellable = computed(() =>
-    !mismatch.value && backfill.value != null && ['running', 'queued'].includes(backfill.value.status),
+    backfill.value != null && ['running', 'queued'].includes(backfill.value.status),
 )
 const cancelling = ref(false)
 
@@ -97,6 +92,7 @@ async function onCancel() {
 const backfillTargetName = computed(() => backfill.value ? targetLabel(backfill.value) : '')
 
 const fetchError = ref<unknown>(null)
+const notFound = computed(() => (fetchError.value as { statusCode?: number } | null)?.statusCode === 404)
 
 onMounted(async () => {
     try {
@@ -153,11 +149,11 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
         <template #header>
             <AppNavbar>
                 <template #title>
-                    <ULink to="/executions/backfills"
+                    <ULink :to="organisationStore.path('/executions/backfills')"
                            class="text-base font-medium text-muted hover:text-highlighted">Backfills</ULink>
                     <span class="text-base text-dimmed">/</span>
                     <span class="truncate font-mono text-base font-semibold">{{ backfillId.substring(0, 8) }}</span>
-                    <StatusPill v-if="backfill && !mismatch"
+                    <StatusPill v-if="backfill"
                                 :label="statusLabel(backfill.status)"
                                 :color="statusPillColor(backfill.status)" />
                 </template>
@@ -175,10 +171,17 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
             </UDashboardToolbar>
         </template>
         <template #body>
-            <OrganizationGate :org-id="backfill?.org_id"
-                              :error="fetchError"
-                              back-to="/executions/backfills"
-                              resource-label="backfill">
+            <EmptyState v-if="notFound"
+                        icon="i-lucide-search-x"
+                        title="Backfill not found"
+                        :description="`No backfill ${backfillId} in ${organisationStore.organisation?.name}.`">
+                <UButton :to="organisationStore.path('/executions/backfills')"
+                         class="mt-6"
+                         variant="outline"
+                         color="neutral"
+                         label="Back to backfills" />
+            </EmptyState>
+            <template v-else>
                 <div class="flex flex-1 min-h-0 flex-col gap-4 sm:gap-6">
                     <UCard v-if="backfill"
                            title="Backfill">
@@ -216,7 +219,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                                 sticky
                                 :ui="{ tr: 'cursor-pointer' }"
                                 class="flex-1 min-h-0"
-                                @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+                                @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))" />
                         <template #footer>
                             <TableFooter :page="runsPage + 1"
                                          :total="runsTotal"
@@ -227,7 +230,7 @@ const columns: TableColumn<Run>[] = withSortableHeaders([
                         </template>
                     </UCard>
                 </div>
-            </OrganizationGate>
+            </template>
         </template>
     </UDashboardPanel>
 </template>

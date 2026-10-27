@@ -14,7 +14,17 @@ from uuid import UUID, uuid4
 import interloper as il
 import pytest
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
+from interloper_db.models import (
+    Backfill,
+    Component,
+    ComponentRelation,
+    Event,
+    Execution,
+    Organisation,
+    Quota,
+    Run,
+    Usage,
+)
 from interloper_db.store import Store
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
@@ -115,7 +125,7 @@ def toolkit_db() -> Iterator[Engine]:
 
     # Execution maps a Postgres view; its table definition doubles as the view's
     # schema, so SQLite gets it as a plain table the tests write rows into.
-    for model in (Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
+    for model in (Organisation, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng

@@ -12,14 +12,13 @@ from interloper_db.models import Backfill
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
-    CurrentUserDep,
-    OrgIdDep,
+    OrgDep,
     StoreDep,
     ViewerDep,
     load_authorized,
 )
 
-router = APIRouter(prefix="/backfills", tags=["backfills"])
+org_router = APIRouter(prefix="/backfills", tags=["backfills"])
 
 
 # -- Request / response models -------------------------------------------------
@@ -99,18 +98,16 @@ class BackfillResponse(BaseModel):
 # -- Endpoints -----------------------------------------------------------------
 
 
-@router.get("")
+@org_router.get("")
 def list_backfills(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     query: Annotated[BackfillQuery, Query()],
 ) -> Page[BackfillResponse]:
     """List the organisation's backfills, newest first.
 
     Args:
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: The statuses to keep (``status=queued&status=running`` for the
             active ones) and the window to read.
@@ -118,15 +115,15 @@ def list_backfills(
     Returns:
         The page of backfills, each with its partitions per status.
     """
-    backfills = store.backfills.list(org_id, query)
+    backfills = store.backfills.list(scope.organisation.id, query)
     counts = store.backfills.run_counts([backfill.id for backfill in backfills.items])
     return backfills.map(lambda backfill: BackfillResponse.from_backfill(backfill, counts.get(backfill.id)))
 
 
-@router.post("", status_code=201)
+@org_router.post("", status_code=201)
 def create_backfill(
     body: BackfillCreateRequest,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> BackfillResponse:
     """Queue a backfill for a job over a partition-key range.
@@ -134,14 +131,14 @@ def create_backfill(
     Args:
         body: The target job, the inclusive partition-key range, and the
             concurrency and fail-fast settings.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The queued backfill, as a response model.
     """
     job = load_authorized(
-        lambda i: store.components.get(i, kind="job"), body.component_id, user, store, label="Job", minimum="editor"
+        lambda i: store.components.get(i, kind="job"), body.component_id, scope, label="Job", minimum="editor"
     )
     backfill = store.backfills.create(
         job.org_id,
@@ -154,30 +151,30 @@ def create_backfill(
     return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill.id]).get(backfill.id))
 
 
-@router.get("/{backfill_id}")
+@org_router.get("/{backfill_id}")
 def get_backfill(
     backfill_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> BackfillResponse:
-    """Get a single backfill by ID. Authorized by membership in the backfill's org.
+    """Get a single backfill by ID. It must belong to the path's organisation.
 
     Args:
         backfill_id: The backfill UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The backfill, as a response model.
     """
-    backfill = load_authorized(store.backfills.get, backfill_id, user, store, label="Backfill")
+    backfill = load_authorized(store.backfills.get, backfill_id, scope, label="Backfill")
     return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill_id]).get(backfill_id))
 
 
-@router.post("/{backfill_id}/cancel")
+@org_router.post("/{backfill_id}/cancel")
 def cancel_backfill(
     backfill_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> BackfillResponse:
     """Cancel a backfill and every run of it that has not ended; executing runs stop on their next heartbeat.
@@ -186,12 +183,12 @@ def cancel_backfill(
 
     Args:
         backfill_id: The backfill UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The cancelled backfill, as a response model, with its partitions per status.
     """
-    load_authorized(store.backfills.get, backfill_id, user, store, label="Backfill", minimum="editor")
+    load_authorized(store.backfills.get, backfill_id, scope, label="Backfill", minimum="editor")
     backfill = store.backfills.cancel(backfill_id)
     return BackfillResponse.from_backfill(backfill, store.backfills.run_counts([backfill_id]).get(backfill_id))

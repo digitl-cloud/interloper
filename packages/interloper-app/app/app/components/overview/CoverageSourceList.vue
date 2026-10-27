@@ -3,6 +3,8 @@ import type { ComponentRecord } from '~/types/component'
 import type { Coverage, CoverageDay, CoverageSource } from '~/types/overview'
 import type { DayAggregate } from '~/composables/coverage'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{
     date: string
     coverage: Coverage
@@ -234,7 +236,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_10rem_minmax(0,1fr)_6.5rem] 
                                      size="xs"
                                      color="neutral"
                                      variant="outline"
-                                     :to="{ path: `/executions/runs/${selectedDay(row)?.failed_run_id}`, query: { status: 'failed' } }" />
+                                     :to="{ path: organisationStore.path(`/executions/runs/${selectedDay(row)?.failed_run_id}`), query: { status: 'failed' } }" />
                             <UButton v-else-if="missingOn(selectedDay(row)) && editor"
                                      icon="i-lucide-play"
                                      label="Run"

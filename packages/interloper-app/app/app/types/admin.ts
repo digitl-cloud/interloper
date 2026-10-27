@@ -1,6 +1,7 @@
 export interface AdminOrganisation {
     id: string
     name: string
+    slug: string
     member_count: number
     created_at: string | null
     /** Soft-deleted orgs stay listed for billing history but are read-only. */

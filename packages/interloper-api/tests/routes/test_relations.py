@@ -11,11 +11,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper_db import Page, RelationQuery
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import relations as relations_module
 
 _ORG_ID = uuid4()
+_BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
 
 
 def _relation(name: str, src_kind: str, dst_kind: str) -> SimpleNamespace:
@@ -30,6 +31,8 @@ class RelationStore:
         self.rows: list[Any] = []
         self.listed: list[tuple[UUID, RelationQuery]] = []
         self.relations = SimpleNamespace(list=self._list)
+        self.members = SimpleNamespace(role=lambda org_id, user_id: "viewer")
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _list(self, org_id: UUID, query: RelationQuery) -> Page[Any]:
         self.listed.append((org_id, query))
@@ -66,12 +69,10 @@ def client(store: RelationStore) -> TestClient:
     user = SimpleNamespace(id=uuid4(), email="ada@example.com", is_super_admin=False)
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(relations_module.router)
+    app.include_router(relations_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[require_viewer] = lambda: user
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: user
+    return TestClient(app, base_url=_BASE_URL)
 
 
 class TestListRelations:
@@ -143,7 +144,7 @@ class TestListRelations:
     def test_the_listing_requires_a_viewer(self, store: RelationStore) -> None:
         app = FastAPI()
         install_error_handlers(app)
-        app.include_router(relations_module.router)
+        app.include_router(relations_module.org_router, prefix=ORG_PREFIX)
         app.dependency_overrides[get_store] = lambda: store
 
-        assert TestClient(app).get("/relations").status_code == 401
+        assert TestClient(app, base_url=_BASE_URL).get("/relations").status_code == 401

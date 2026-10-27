@@ -3,18 +3,14 @@ import type { RunEvent } from '~/stores/events'
 import type { Run } from '~/types/run'
 import type { SplitterItem } from '@nuxt/ui'
 
-// orgSwitchTarget: this page is bespoke to one org's run — switching org from
-// the nav lands on the runs list instead.
-definePageMeta({ orgSwitchTarget: '/executions/runs' })
-
 const route = useRoute()
+const organisationStore = useOrganisationStore()
 const runId = route.params.run!.toString()
 
 const runsStore = useRunsStore()
 const eventsStore = useEventsStore()
 const executionsStore = useExecutionsStore()
 const componentsStore = useComponentsStore()
-const catalogStore = useCatalogStore()
 const toast = useToast()
 const { confirm } = useConfirm()
 const appConfig = useAppConfig()
@@ -122,14 +118,12 @@ function toggleRail() {
     else railPanel.value?.collapse()
 }
 
-const { mismatch } = useOrgGate(() => run.value?.org_id)
-
 const retrying = ref(false)
 
 // A retry continues the stack from its latest attempt, so only that attempt
 // offers one; an attempt whose stack has not loaded yet is treated as latest.
 const retryable = computed(() => {
-    if (mismatch.value || run.value?.status !== 'failed') return false
+    if (run.value?.status !== 'failed') return false
     const latest = attempts.value.at(-1)?.run
     return !latest || latest.id === run.value.id
 })
@@ -139,7 +133,7 @@ async function onRetry(scope: 'all' | 'failed') {
     try {
         const newRunId = await runsStore.retryRun(runId, scope)
         toast.add({ title: `Retry queued (${newRunId.slice(0, 8)})`, color: 'success' })
-        await navigateTo(`/executions/runs/${newRunId}`)
+        await navigateTo(organisationStore.path(`/executions/runs/${newRunId}`))
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to queue retry'))
@@ -150,7 +144,7 @@ async function onRetry(scope: 'all' | 'failed') {
 }
 
 const cancellable = computed(() =>
-    !mismatch.value && run.value != null && ['pending', 'queued', 'dispatched', 'running'].includes(run.value.status),
+    run.value != null && ['pending', 'queued', 'dispatched', 'running'].includes(run.value.status),
 )
 const cancelling = ref(false)
 
@@ -178,6 +172,7 @@ async function onCancel() {
 }
 
 const fetchError = ref<unknown>(null)
+const notFound = computed(() => (fetchError.value as { statusCode?: number } | null)?.statusCode === 404)
 
 onMounted(async () => {
     try {
@@ -192,7 +187,6 @@ onMounted(async () => {
             // Asset-to-asset relations back the Graph view's edges; the store
             // derives them from the whole set (they carry no name of their own).
             componentsStore.upstreams.length === 0 ? componentsStore.fetchRelations() : Promise.resolve(),
-            catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
         ])
         initialRun.value = fetchedRun
         // Seed the store so realtime updates can find and update it.
@@ -216,11 +210,11 @@ onUnmounted(() => {
         <template #header>
             <AppNavbar>
                 <template #title>
-                    <ULink to="/executions/runs"
+                    <ULink :to="organisationStore.path('/executions/runs')"
                            class="text-base font-medium text-muted hover:text-highlighted">Runs</ULink>
                     <span class="text-base text-dimmed">/</span>
                     <span class="truncate font-mono text-base font-semibold">{{ runId }}</span>
-                    <StatusPill v-if="run && !mismatch"
+                    <StatusPill v-if="run"
                                 :label="statusLabel(run.status)"
                                 :color="statusPillColor(run.status)"
                                 :spinner="run.status === 'running' || run.status === 'dispatched'" />
@@ -255,10 +249,17 @@ onUnmounted(() => {
             </UDashboardToolbar>
         </template>
         <template #body>
-            <OrganizationGate :org-id="run?.org_id"
-                              :error="fetchError"
-                              back-to="/executions/runs"
-                              resource-label="run">
+            <EmptyState v-if="notFound"
+                        icon="i-lucide-search-x"
+                          title="Run not found"
+                          :description="`No run ${runId} in ${organisationStore.organisation?.name}.`">
+                <UButton :to="organisationStore.path('/executions/runs')"
+                         class="mt-6"
+                         variant="outline"
+                         color="neutral"
+                         label="Back to runs" />
+            </EmptyState>
+            <template v-else>
                 <!-- The panel gap, less the 1px the splitter's panes pad their cards with. -->
                 <div class="flex min-h-0 flex-1 flex-col gap-[15px] sm:gap-[23px]">
                     <UCard v-if="run"
@@ -360,7 +361,7 @@ onUnmounted(() => {
                         </template>
                     </USplitter>
                 </div>
-            </OrganizationGate>
+            </template>
         </template>
     </UDashboardPanel>
 </template>

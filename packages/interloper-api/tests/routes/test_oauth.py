@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from interloper.oauth import PROVIDERS, OAuthAppCredentials
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import oauth as oauth_module
 
 _SUFFIXES = ("CLIENT_ID", "CLIENT_SECRET", "REDIRECT_URI")
@@ -45,7 +45,7 @@ def _client() -> TestClient:
     install_error_handlers(app)
     app.include_router(oauth_module.router)
     # Stand in for an authenticated user; auth itself is covered separately.
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4())
     return TestClient(app)
 
 

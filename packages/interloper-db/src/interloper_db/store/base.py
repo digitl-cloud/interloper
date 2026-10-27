@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import AbstractContextManager
+from datetime import timedelta
 from typing import Any
 
 from interloper.catalog import Catalog
@@ -25,7 +26,6 @@ from interloper_db.store.profiles import ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageStore
 from interloper_db.store.relations import RelationStore
 from interloper_db.store.runs import RunStore
-from interloper_db.store.sessions import SessionStore
 from interloper_db.store.tokens import TokenStore
 
 logger = logging.getLogger(__name__)
@@ -43,11 +43,10 @@ class Store:
 
     Attributes:
         profiles: Who a person is.
-        sessions: The login sessions proving it.
         organisations: The tenants.
         members: Who belongs to an organisation, with which role.
         invitations: Memberships not yet accepted.
-        tokens: Personal access tokens.
+        tokens: The secrets a user authenticates with: login sessions and personal access tokens.
         conversations: A member's conversations with the agent.
         components: Component CRUD, hydration and catalog status, for every kind.
         relations: The vocabulary-checked edges between components.
@@ -67,6 +66,7 @@ class Store:
         encrypt: Any | None = None,
         decrypt: Any | None = None,
         quota_defaults: Any | None = None,
+        session_expiry: timedelta = timedelta(days=30),
     ) -> None:
         """Initialize the store.
 
@@ -78,6 +78,8 @@ class Store:
             decrypt: Optional callable ``(data: bytes) -> bytes`` for resource decryption.
             quota_defaults: QuotaSettings-shaped default limits enforced when
                 an organisation has no override. None = everything unlimited.
+            session_expiry: How long a login session stays valid, defaulting
+                to ``auth.session_expiry_days``'s own default.
         """
         self._catalog = catalog
         self._engine = engine or get_engine()
@@ -88,11 +90,10 @@ class Store:
         # Each facet is handed what it works through, so its dependencies read
         # off its constructor and nothing reaches back into the store.
         self.profiles = ProfileStore(self._engine)
-        self.sessions = SessionStore(self._engine)
         self.organisations = OrganisationStore(self._engine)
         self.members = MemberStore(self._engine)
         self.invitations = InvitationStore(self._engine)
-        self.tokens = TokenStore(self._engine)
+        self.tokens = TokenStore(self._engine, session_expiry=session_expiry)
         self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
@@ -142,6 +143,7 @@ class Store:
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
         settings = AppSettings.get()
+        session_expiry = timedelta(days=settings.auth.session_expiry_days)
         key = settings.secrets.encryption_key
         if not key:
             logger.warning(
@@ -149,12 +151,19 @@ class Store:
                 "fail closed (writes are rejected rather than stored in plaintext). Set it "
                 "to enable encrypted resources at rest."
             )
-            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota)
+            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota, session_expiry=session_expiry)
 
         from interloper_db.crypto import make_cipher
 
         encrypt, decrypt = make_cipher(key)
-        return cls(catalog=catalog, engine=engine, encrypt=encrypt, decrypt=decrypt, quota_defaults=settings.quota)
+        return cls(
+            catalog=catalog,
+            engine=engine,
+            encrypt=encrypt,
+            decrypt=decrypt,
+            quota_defaults=settings.quota,
+            session_expiry=session_expiry,
+        )
 
     # -- Session policy --------------------------------------------------------
 

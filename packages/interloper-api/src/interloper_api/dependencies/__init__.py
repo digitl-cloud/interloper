@@ -1,18 +1,18 @@
 """Shared FastAPI dependencies: application state, identity, and role gates.
 
 Three concerns, one import surface. ``state`` holds what ``create_app``
-installs once at startup; ``auth`` resolves the caller and their active
-organisation per request; ``rbac`` gates handlers on the caller's role.
+installs once at startup; ``auth`` resolves the caller and the organisation
+the path names per request; ``rbac`` gates handlers on the caller's role there.
 """
 
 from interloper_api.dependencies.auth import (
     CurrentUserDep,
-    OrgIdDep,
-    SessionContextDep,
-    get_current_org,
-    get_current_user,
-    get_org_id,
-    get_session_context,
+    OrgDep,
+    OrgScope,
+    SessionUserDep,
+    get_caller,
+    get_org_scope,
+    get_session_caller,
     require_run,
 )
 from interloper_api.dependencies.rbac import (
@@ -20,8 +20,6 @@ from interloper_api.dependencies.rbac import (
     EditorDep,
     SuperAdminDep,
     ViewerDep,
-    authorize_org_member,
-    authorize_organisation,
     load_authorized,
     require_admin,
     require_editor,
@@ -64,26 +62,24 @@ __all__ = [
     "CatalogDep",
     "CurrentUserDep",
     "EditorDep",
-    "OrgIdDep",
+    "OrgDep",
+    "OrgScope",
     "QuotaDefaultsDep",
     "ReaperConfigDep",
-    "SessionContextDep",
+    "SessionUserDep",
     "StoreDep",
     "SuperAdminDep",
     "ViewerDep",
-    "authorize_org_member",
-    "authorize_organisation",
     "get_admin_config",
     "get_agent",
     "get_auth_config",
+    "get_caller",
     "get_catalog",
-    "get_current_org",
-    "get_current_user",
     "get_features",
-    "get_org_id",
+    "get_org_scope",
     "get_quota_defaults",
     "get_reaper_config",
-    "get_session_context",
+    "get_session_caller",
     "get_smtp_config",
     "get_store",
     "load_authorized",

@@ -48,7 +48,7 @@ A non-success response raises:
   "backfill_id": null,
   "start_key": null,
   "end_key": null,
-  "url": "https://app.example.com/executions/runs/…",
+  "url": "https://app.example.com/acme/executions/runs/…",
   "hook_id": "…",
   "metadata": {}
 }

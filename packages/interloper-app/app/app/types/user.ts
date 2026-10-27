@@ -1,4 +1,4 @@
-import type { Organisation } from './organisation'
+import type { Membership } from './organisation'
 
 export interface User {
     id: string
@@ -6,9 +6,8 @@ export interface User {
     name: string | null
     avatar_url: string | null
     timezone: string | null
-    role: string
     is_super_admin: boolean
-    organisation: Organisation | null
+    memberships: Membership[]
     last_organisation_id: string | null
     features: Record<string, boolean>
 }

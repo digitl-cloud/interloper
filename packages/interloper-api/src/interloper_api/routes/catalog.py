@@ -3,7 +3,8 @@
 Besides serving the definitions, the routes here execute a component *class*
 against a candidate, unsaved config: resolving a FetchField's options and
 checking a connection. They act on a type, not on a stored component, so they
-are addressed by catalog key.
+are addressed by catalog key. They live under an organisation, whose members
+read the catalog and whose editors run it.
 """
 
 from __future__ import annotations
@@ -25,10 +26,10 @@ from interloper_api.dependencies import CatalogDep, EditorDep, require_viewer
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(require_viewer)])
+org_router = APIRouter(prefix="/catalog", tags=["catalog"], dependencies=[Depends(require_viewer)])
 
 
-@router.get("")
+@org_router.get("")
 def list_catalog(catalog: CatalogDep) -> dict[str, Any]:
     """Return the full catalog.
 
@@ -41,7 +42,7 @@ def list_catalog(catalog: CatalogDep) -> dict[str, Any]:
     return catalog.dump()
 
 
-@router.get("/resource-kinds")
+@org_router.get("/resource-kinds")
 def list_resource_kinds(catalog: CatalogDep) -> list[str]:
     """Return distinct resource kinds from the catalog.
 
@@ -105,12 +106,12 @@ class ResolveRequest(BaseModel):
     deps: dict[str, dict[str, Any]] = {}
 
 
-@router.post("/{key}/resolve")
+@org_router.post("/{key}/resolve")
 async def resolve_fetch_field(
     key: str,
     body: ResolveRequest,
     catalog: CatalogDep,
-    _user: EditorDep,
+    _scope: EditorDep,
 ) -> list[dict[str, Any]]:
     """Resolve the options for a ``FetchField(provider=...)`` field.
 
@@ -129,7 +130,7 @@ async def resolve_fetch_field(
         body: The field name and the per-relation credentials the form
             currently holds.
         catalog: The Catalog instance.
-        _user: The authenticated user (editor gate).
+        _scope: The organisation the path names, the caller at least an editor there.
 
     Returns:
         The field's options, as the provider returned them.
@@ -254,12 +255,12 @@ class CheckResponse(BaseModel):
         return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
 
 
-@router.post("/{key}/check")
+@org_router.post("/{key}/check")
 async def check_connection(
     key: str,
     body: CheckRequest,
     catalog: CatalogDep,
-    _user: EditorDep,
+    _scope: EditorDep,
 ) -> CheckResponse:
     """Check a connection's candidate config, statically and (when supported) live.
 
@@ -275,7 +276,7 @@ async def check_connection(
         key: The catalog key of the connection to check.
         body: The candidate config to check.
         catalog: The Catalog instance.
-        _user: The authenticated user (editor gate).
+        _scope: The organisation the path names, the caller at least an editor there.
 
     Returns:
         The check outcome; a failed check is still a 200 with ``ok: false``.

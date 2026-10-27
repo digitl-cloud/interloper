@@ -14,10 +14,10 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Page, PageQuery
+from interloper_db import Audience, NotFoundError, Page, PageQuery, TokenKind
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.dependencies import get_session_caller, get_store
 from interloper_api.routes import tokens as tokens_module
 
 USER_ID = uuid4()
@@ -48,12 +48,20 @@ class FakeStore:
         self.rows: dict[UUID, SimpleNamespace] = {}
         self.listed: list[tuple[UUID, PageQuery]] = []
         self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
+        self.secrets: dict[str, TokenKind] = {}
         self.tokens = SimpleNamespace(
+            resolve=self._resolve,
             create_personal=self._create_token,
             list=self._list_tokens,
             get=self._get_token,
             revoke=self._revoke_token,
         )
+
+    def _resolve(self, raw: str, audience: Audience):
+        kind = self.secrets.get(raw)
+        if kind is None or kind not in audience.kinds:
+            return None
+        return SimpleNamespace(id=USER_ID, is_super_admin=False), SimpleNamespace(kind=kind)
 
     def _create_token(self, user_id: UUID, name: str, expires_at=None):
         row = _row(user_id=user_id, name=name)
@@ -82,8 +90,55 @@ def _client(store: FakeStore, user_id: UUID = USER_ID) -> TestClient:
     app.include_router(tokens_module.router)
     user = SimpleNamespace(id=user_id, is_super_admin=False)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_session_caller] = lambda: user
     return TestClient(app)
+
+
+class TestCookieOnly:
+    """Credential management answers the login session alone: a leaked token cannot mint its successors."""
+
+    @staticmethod
+    def _real_client(store: FakeStore) -> TestClient:
+        app = FastAPI()
+        install_error_handlers(app)
+        app.include_router(tokens_module.router)
+        app.dependency_overrides[get_store] = lambda: store
+        return TestClient(app)
+
+    def test_a_bearer_pat_cannot_mint_a_token(self) -> None:
+        store = FakeStore()
+        store.secrets = {"ilp_leaked": TokenKind.PERSONAL}
+
+        response = self._real_client(store).post(
+            "/tokens", json={"name": "successor"}, headers={"Authorization": "Bearer ilp_leaked"}
+        )
+
+        assert response.status_code == 401
+        assert store.rows == {}
+
+    def test_the_session_cookie_mints_a_token(self) -> None:
+        store = FakeStore()
+        store.secrets = {"cookie": TokenKind.SESSION}
+        client = self._real_client(store)
+        client.cookies.set("session_token", "cookie")
+
+        response = client.post("/tokens", json={"name": "laptop"})
+
+        assert response.status_code == 201
+        (row,) = store.rows.values()
+        assert row.user_id == USER_ID
+
+    def test_a_bearer_is_refused_even_beside_a_valid_cookie(self) -> None:
+        store = FakeStore()
+        store.secrets = {"cookie": TokenKind.SESSION, "ilp_leaked": TokenKind.PERSONAL}
+        client = self._real_client(store)
+        client.cookies.set("session_token", "cookie")
+
+        for response in (
+            client.get("/tokens", headers={"Authorization": "Bearer ilp_leaked"}),
+            client.delete(f"/tokens/{uuid4()}", headers={"Authorization": "Bearer ilp_leaked"}),
+        ):
+            assert response.status_code == 401
 
 
 class TestCreate:

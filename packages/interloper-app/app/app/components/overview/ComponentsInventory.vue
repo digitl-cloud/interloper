@@ -3,6 +3,8 @@ import { h } from 'vue'
 import { UIcon } from '#components'
 import type { KindInventory } from '~/types/overview'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{ rows: KindInventory[] | null }>()
 
 const KIND_META: Record<string, { label: string, icon: string, to: string }> = {
@@ -12,6 +14,12 @@ const KIND_META: Record<string, { label: string, icon: string, to: string }> = {
     connection: { label: 'Connections', icon: 'i-lucide-key-round', to: kindPath('connection') },
     job: { label: 'Jobs', icon: 'i-lucide-calendar-clock', to: kindPath('job') },
     hook: { label: 'Hooks', icon: 'i-carbon-lightning', to: kindPath('hook') },
+}
+
+/** A kind's row: its label, icon and list page in the organisation. */
+function kindMeta(kind: string): { label: string, icon: string, to: string } {
+    const meta = KIND_META[kind] ?? { label: kindLabel(kind), icon: 'i-lucide-box', to: kindPath(kind) }
+    return { ...meta, to: organisationStore.path(meta.to) }
 }
 
 /** In bar and legend order: from healthy to failing, then the inactive ones. */
@@ -26,7 +34,7 @@ const ISSUES = ['failing', 'attention', 'disabled'] as const
 
 const table = computed(() => (props.rows ?? []).map(row => ({
     ...row,
-    meta: KIND_META[row.kind] ?? { label: kindLabel(row.kind), icon: 'i-lucide-box', to: kindPath(row.kind) },
+    meta: kindMeta(row.kind),
     segments: STATES.filter(s => row[s.key]).map(s => ({
         ...s,
         pct: (100 * row[s.key]) / row.total,
@@ -80,7 +88,7 @@ const columns = withSkeletons<(typeof table.value)[number]>([
                         :description="summary"
                         :loading="!rows">
                 <UButton label="Open collection"
-                         to="/collection"
+                         :to="organisationStore.path('/collection')"
                          color="neutral"
                          variant="outline"
                          size="sm" />

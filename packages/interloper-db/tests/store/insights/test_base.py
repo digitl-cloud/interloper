@@ -24,7 +24,6 @@ from sqlmodel import Session, col
 from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
 from interloper_db.models import (
-    AuthSession,
     Backfill,
     Component,
     ComponentRelation,
@@ -61,7 +60,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    tenant = (Organisation, Profile, UserOrganisation, Invitation, AuthSession, Token)
+    tenant = (Organisation, Profile, UserOrganisation, Invitation, Token)
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:

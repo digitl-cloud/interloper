@@ -4,6 +4,8 @@ import type { TimelineRow } from '~/types/timeline'
 import type { RunAttempt } from '~/composables/runAttempts'
 import type { RunStatusBucket } from '~/composables/runStats'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{
     /** This attempt's assets, unfiltered: the rail is where the status filter is chosen. */
     rows: TimelineRow[]
@@ -129,7 +131,7 @@ function outcome(attempt: RunAttempt): string {
             <div>
                 <UButton v-for="attempt in attempts"
                          :key="attempt.run.id"
-                         :to="`/executions/runs/${attempt.run.id}`"
+                         :to="organisationStore.path(`/executions/runs/${attempt.run.id}`)"
                          block
                          color="neutral"
                          variant="ghost"

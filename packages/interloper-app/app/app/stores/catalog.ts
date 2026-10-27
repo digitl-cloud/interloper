@@ -26,10 +26,11 @@ export const useCatalogStore = defineStore('catalog', () => {
     /**********************
      * Actions
      **********************/
-    async function fetchCatalog() {
+    /** Load the deployment's catalog, read through an organisation the user can act in. */
+    async function fetchCatalog(orgId: string) {
         const [cat, kinds, providers] = await Promise.all([
-            apiFetch<Catalog>('/catalog'),
-            apiFetch<string[]>('/catalog/resource-kinds'),
+            apiFetch<Catalog>(`/organisations/${orgId}/catalog`),
+            apiFetch<string[]>(`/organisations/${orgId}/catalog/resource-kinds`),
             apiFetch<OAuthProviderInfo[]>('/oauth/providers'),
         ])
         catalog.value = cat

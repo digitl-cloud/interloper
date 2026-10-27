@@ -15,6 +15,7 @@ const UTooltip = resolveComponent('UTooltip')
 
 const route = useRoute()
 const catalogStore = useCatalogStore()
+const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
 const views = useComponentViews()
 const { statusBadge } = useDrift()
@@ -270,7 +271,7 @@ const typeKey = useQueryParam('type', null)
                         <div class="flex-1 text-sm text-toned leading-normal">
                             You can also create a connection inline while adding a source — whichever you reach first.
                             Ready to connect data?
-                            <NuxtLink :to="kindPath('source')"
+                            <NuxtLink :to="organisationStore.path(kindPath('source'))"
                                       class="text-primary font-semibold">Browse sources →</NuxtLink>
                         </div>
                     </div>

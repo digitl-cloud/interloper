@@ -21,13 +21,15 @@ from interloper_db import (
 from interloper_api.app import create_app, install_error_handlers
 from interloper_api.dependencies import get_features, get_store
 
+_ORG = "00000000-0000-0000-0000-000000000000"
+
 
 def test_agent_routes_absent_when_disabled(fake_settings: SimpleNamespace):
     fake_settings.agent.enabled = False
     app = create_app(settings=fake_settings)
     client = TestClient(app)
 
-    assert client.post("/api/agent/conversations").status_code == 404
+    assert client.post(f"/api/organisations/{_ORG}/agent/conversations").status_code == 404
     assert get_features() == {"agent": False}
 
 
@@ -37,18 +39,26 @@ def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
     client = TestClient(app)
 
     # 401 (not 404): the router is mounted and the auth guard answers first.
-    assert client.post("/api/agent/conversations").status_code == 401
+    assert client.post(f"/api/organisations/{_ORG}/agent/conversations").status_code == 401
     assert get_features() == {"agent": True}
 
 
 @pytest.mark.parametrize(
     ("method", "path"),
     [
-        ("GET", "/api/relations"),
-        ("GET", "/api/executions"),
-        ("POST", "/api/catalog/facebook_ads/check"),
-        ("POST", "/api/catalog/facebook_ads/resolve"),
-        ("GET", "/api/organisations/00000000-0000-0000-0000-000000000000/members"),
+        ("GET", f"/api/organisations/{_ORG}/relations"),
+        ("GET", f"/api/organisations/{_ORG}/executions"),
+        ("GET", f"/api/organisations/{_ORG}/runs"),
+        ("GET", f"/api/organisations/{_ORG}/components"),
+        ("GET", f"/api/organisations/{_ORG}/backfills"),
+        ("GET", f"/api/organisations/{_ORG}/overview"),
+        ("GET", f"/api/organisations/{_ORG}/catalog"),
+        ("POST", f"/api/organisations/{_ORG}/catalog/facebook_ads/check"),
+        ("POST", f"/api/organisations/{_ORG}/catalog/facebook_ads/resolve"),
+        ("GET", f"/api/organisations/{_ORG}/members"),
+        ("PATCH", f"/api/organisations/{_ORG}"),
+        ("GET", "/api/organisations"),
+        ("GET", "/api/auth/me"),
     ],
 )
 def test_the_reorganised_routes_are_mounted(fake_settings: SimpleNamespace, method: str, path: str):
@@ -57,6 +67,16 @@ def test_the_reorganised_routes_are_mounted(fake_settings: SimpleNamespace, meth
 
     # 401 (not 404): the route is mounted and the auth guard answers first.
     assert TestClient(app).request(method, path, json={}).status_code == 401
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/runs", "/api/components", "/api/catalog", "/api/overview", "/api/agent/conversations"]
+)
+def test_organisation_routes_are_gone_from_the_top_level(fake_settings: SimpleNamespace, path: str):
+    app = create_app(settings=fake_settings)
+    app.dependency_overrides[get_store] = lambda: None
+
+    assert TestClient(app).get(path).status_code == 404
 
 
 class TestErrorHandlers:

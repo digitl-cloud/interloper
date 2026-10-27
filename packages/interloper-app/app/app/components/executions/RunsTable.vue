@@ -3,6 +3,8 @@ import { h, resolveComponent } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import type { Run } from '~/types/run'
 
+const organisationStore = useOrganisationStore()
+
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const EntityBadge = resolveComponent('EntityBadge')
@@ -12,7 +14,6 @@ const UProgressGroup = resolveComponent('UProgressGroup')
 type RunRow = Run & { children?: Run[] }
 
 const runsStore = useRunsStore()
-const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
 const { runs, stacks, loading, total, pageIndex, pageSize, filtered } = storeToRefs(runsStore)
 
@@ -76,8 +77,7 @@ const typeChoices = computed(() => kindParam.value
     : componentsStore.all)
 
 onMounted(() => {
-    // Target icons and type names read the catalog; the filter choices read the collection.
-    if (!catalogStore.loaded) catalogStore.fetchCatalog()
+    // The filter choices read the collection.
     if (componentsStore.all.length === 0) componentsStore.fetchAll()
 })
 
@@ -189,7 +189,7 @@ function onPageChange(page: number) {
                 <UButton icon="i-lucide-calendar-plus"
                          label="Create a job"
                          class="mt-5"
-                         :to="kindPath('job')" />
+                         :to="organisationStore.path(kindPath('job'))" />
             </EmptyState>
         </div>
 
@@ -230,7 +230,7 @@ function onPageChange(page: number) {
                     sticky
                     class="flex-1 min-h-0"
                     :ui="tableUi"
-                    @select="(_e: Event, row: any) => navigateTo(`/executions/runs/${row.original.id}`)" />
+                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/runs/${row.original.id}`))" />
 
             <template #footer>
                 <TableFooter :page="pageIndex + 1"

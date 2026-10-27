@@ -60,9 +60,14 @@ def store(monkeypatch: pytest.MonkeyPatch) -> Iterator[Store]:
 
 
 def _terminal_run(
-    store: Store, component_id: UUID, *, status: RunStatus = RunStatus.SUCCESS, error: str | None = None
+    store: Store,
+    component_id: UUID,
+    *,
+    status: RunStatus = RunStatus.SUCCESS,
+    error: str | None = None,
+    org_id: UUID = _ORG,
 ) -> Run:
-    run = store.runs.create(_ORG, component_id=component_id, partition_key="2026-07-06")
+    run = store.runs.create(org_id, component_id=component_id, partition_key="2026-07-06")
     with Session(engine_module.get_engine()) as session:
         db_run = session.get(Run, run.id)
         assert db_run is not None
@@ -820,7 +825,7 @@ class TestBackfillEvents:
 
 
 class TestSubjectUrl:
-    """The context links to the subject's page when the app has a public URL."""
+    """The context links to the subject's page, under its organisation's slug, when the app has a public URL."""
 
     @pytest.fixture
     def public_url(self) -> Iterator[None]:
@@ -828,9 +833,13 @@ class TestSubjectUrl:
         yield
         AppSettings.clear_active()
 
-    def _watch(self, store: Store, component_id: UUID, event: str) -> None:
+    @pytest.fixture
+    def org_id(self, store: Store) -> UUID:
+        return store.organisations.create("Swarovski").id
+
+    def _watch(self, store: Store, org_id: UUID, component_id: UUID, event: str) -> None:
         store.components.create(
-            _ORG,
+            org_id,
             kind="hook",
             key="webhook_hook",
             name="Notify",
@@ -838,25 +847,25 @@ class TestSubjectUrl:
             relations={"watches": [component_id]},
         )
 
-    def test_a_run_event_links_to_the_run(self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None):
+    def test_hook_url_carries_slug(self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None, org_id: UUID):
         payloads = _capture_posts(monkeypatch)
-        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(org_id, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
-        self._watch(store, leaf.id, "run_completed")
-        run = _terminal_run(store, leaf.id)
+        self._watch(store, org_id, leaf.id, "run_completed")
+        run = _terminal_run(store, leaf.id, org_id=org_id)
 
         _sweep(store)
 
-        assert [payload["url"] for payload in payloads] == [f"https://app.test/executions/runs/{run.id}"]
+        assert [payload["url"] for payload in payloads] == [f"https://app.test/swarovski/executions/runs/{run.id}"]
 
     def test_a_backfill_event_links_to_the_backfill(
-        self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None, org_id: UUID
     ):
         payloads = _capture_posts(monkeypatch)
-        job = store.components.create(_ORG, kind="job", key="cron_job", name="Nightly", config={"cron": "0 6 * * *"})
-        self._watch(store, job.id, "backfill_completed")
+        job = store.components.create(org_id, kind="job", key="cron_job", name="Nightly", config={"cron": "0 6 * * *"})
+        self._watch(store, org_id, job.id, "backfill_completed")
         backfill = store.backfills.create(
-            _ORG, component_id=job.id, start_key="2026-09-01", end_key="2026-09-02", concurrency=2
+            org_id, component_id=job.id, start_key="2026-09-01", end_key="2026-09-02", concurrency=2
         )
         with Session(engine_module.get_engine()) as session:
             for run in session.exec(select(Run).where(Run.backfill_id == backfill.id)).all():
@@ -864,14 +873,18 @@ class TestSubjectUrl:
 
         _sweep(store)
 
-        assert [payload["url"] for payload in payloads] == [f"https://app.test/executions/backfills/{backfill.id}"]
+        assert [payload["url"] for payload in payloads] == [
+            f"https://app.test/swarovski/executions/backfills/{backfill.id}"
+        ]
 
-    def test_without_a_public_url_the_context_carries_none(self, store: Store, monkeypatch: pytest.MonkeyPatch):
+    def test_without_a_public_url_the_context_carries_none(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch, org_id: UUID
+    ):
         payloads = _capture_posts(monkeypatch)
-        source = store.components.create(_ORG, kind="source", key="demo_source", name="Demo")
+        source = store.components.create(org_id, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")
-        self._watch(store, leaf.id, "run_completed")
-        _terminal_run(store, leaf.id)
+        self._watch(store, org_id, leaf.id, "run_completed")
+        _terminal_run(store, leaf.id, org_id=org_id)
 
         _sweep(store)
 

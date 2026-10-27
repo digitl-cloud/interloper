@@ -16,11 +16,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
+from interloper_db.slugs import slugify
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_admin_config, get_auth_config, get_current_user, get_store
+from interloper_api.dependencies import get_admin_config, get_auth_config, get_session_caller, get_store
 from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes import admin as admin_module
 
@@ -29,7 +30,9 @@ class FakeStore:
     """In-memory stand-in exposing only the store facets the admin routes reach for."""
 
     def __init__(self) -> None:
-        self.org = SimpleNamespace(id=uuid4(), name="Acme", created_at=datetime.now(timezone.utc), deleted_at=None)
+        self.org = SimpleNamespace(
+            id=uuid4(), name="Acme", slug="acme", created_at=datetime.now(timezone.utc), deleted_at=None
+        )
         self.profile_rows: dict[UUID, SimpleNamespace] = {}
         self.member = self.add_profile("member@acme.test", name="Member")
         self.deleted_profiles: list[UUID] = []
@@ -52,6 +55,7 @@ class FakeStore:
         )
         self.insights = SimpleNamespace(feed=self._activity)
         self.members = SimpleNamespace(count_by_org=self._count_by_org)
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
         self.quotas = SimpleNamespace(
             all_overrides=self._all_quota_overrides,
             set_overrides=self._set_quota,
@@ -120,7 +124,9 @@ class FakeStore:
         return {self.org.id: 1}
 
     def _create_organisation(self, name: str, creator_id: UUID | None = None):
-        return SimpleNamespace(id=uuid4(), name=name, created_at=datetime.now(timezone.utc), deleted_at=None)
+        return SimpleNamespace(
+            id=uuid4(), name=name, slug=slugify(name), created_at=datetime.now(timezone.utc), deleted_at=None
+        )
 
     def _get_organisation(self, org_id: UUID):
         return self.org
@@ -178,7 +184,7 @@ def _app(store: FakeStore, *, is_super_admin: bool) -> FastAPI:
     install_error_handlers(app)
     app.include_router(admin_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: _profile(is_super_admin=is_super_admin)
+    app.dependency_overrides[get_session_caller] = lambda: _profile(is_super_admin=is_super_admin)
     return app
 
 
@@ -372,6 +378,21 @@ def test_non_super_admin_cannot_delete_user(store: FakeStore) -> None:
     assert store.deleted_profiles == []
 
 
+@pytest.mark.parametrize("path", ["/admin/organisations", "/admin/users"])
+def test_a_super_admin_token_is_refused_and_the_session_cookie_passes(store: FakeStore, path: str) -> None:
+    app = _app(store, is_super_admin=True)
+    app.dependency_overrides.pop(get_session_caller)
+    store.tokens = SimpleNamespace(resolve=lambda raw, audience: (_profile(is_super_admin=True), SimpleNamespace()))
+    client = TestClient(app)
+
+    refused = client.get(path, headers={"Authorization": "Bearer ilp_x"})
+    client.cookies.set("session_token", "cookie")
+    passed = client.get(path)
+
+    assert refused.status_code == 401
+    assert passed.status_code == 200
+
+
 def test_delete_user(store: FakeStore) -> None:
     target = uuid4()
     resp = _client(store, is_super_admin=True).delete(f"/admin/users/{target}")
@@ -383,7 +404,7 @@ def test_delete_user(store: FakeStore) -> None:
 def test_cannot_delete_own_account(store: FakeStore) -> None:
     app = _app(store, is_super_admin=True)
     me = _profile(is_super_admin=True)
-    app.dependency_overrides[get_current_user] = lambda: me
+    app.dependency_overrides[get_session_caller] = lambda: me
     client = TestClient(app)
     resp = client.delete(f"/admin/users/{me.id}")
     assert resp.status_code == 400
@@ -421,7 +442,7 @@ class TestUpdateUser:
         """
         me = store.add_profile("me@test", name="Me", is_super_admin=True)
         app = _app(store, is_super_admin=True)
-        app.dependency_overrides[get_current_user] = lambda: me
+        app.dependency_overrides[get_session_caller] = lambda: me
         app.dependency_overrides[get_auth_config] = lambda: SimpleNamespace(super_admin_emails=configured or [])
         return TestClient(app), me
 
@@ -514,6 +535,7 @@ def test_super_admin_lists_all_organisations(store: FakeStore) -> None:
     assert body["total"] == 1
     (org,) = body["items"]
     assert org["name"] == "Acme"
+    assert org["slug"] == "acme"
     assert org["member_count"] == 1
     # Soft-deleted organisations stay listed on the admin surface.
     assert store.listed_orgs == [OrganisationQuery(include_deleted=True)]

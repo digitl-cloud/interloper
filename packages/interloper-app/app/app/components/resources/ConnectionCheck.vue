@@ -40,7 +40,7 @@ const emit = defineEmits<{
     fieldErrors: [errors: FormError[]]
 }>()
 
-const { apiFetch } = useApi()
+const { apiFetch } = useOrgApi()
 
 const checking = ref(false)
 const result = ref<CheckResult | null>(null)

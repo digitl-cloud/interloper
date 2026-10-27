@@ -19,11 +19,11 @@ from interloper_db import ComponentStatus
 from interloper_db.store import insights
 from pydantic import BaseModel
 
-from interloper_api.dependencies import OrgIdDep, StoreDep, ViewerDep
+from interloper_api.dependencies import StoreDep, ViewerDep
 from interloper_api.routes.runs import RunResponse
 from interloper_api.utils import format_duration
 
-router = APIRouter(prefix="/overview", tags=["overview"])
+org_router = APIRouter(prefix="/overview", tags=["overview"])
 
 RECENT_LIMIT = 5
 MAX_COVERAGE_SPAN_DAYS = 400
@@ -208,10 +208,9 @@ class CoverageResponse(BaseModel):
 # -- Endpoints -----------------------------------------------------------------
 
 
-@router.get("")
+@org_router.get("")
 def get_overview(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     now: Annotated[
         dt.datetime | None,
@@ -221,8 +220,7 @@ def get_overview(
     """Compose the overview page's data for the current organisation.
 
     Args:
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         now: Reference instant. A test seam: tests pin it so every window and
             "overdue" reading is deterministic; clients omit it.
@@ -230,6 +228,7 @@ def get_overview(
     Returns:
         The overview.
     """
+    org_id = scope.organisation.id
     now = assume_utc(now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
     health = store.insights.health(org_id, now=now)
     activity = store.insights.activity(org_id, now=now)
@@ -249,10 +248,9 @@ def get_overview(
     )
 
 
-@router.get("/coverage")
+@org_router.get("/coverage")
 def get_coverage(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     since: dt.date,
     until: dt.date,
@@ -264,8 +262,7 @@ def get_coverage(
     """Read per source and day coverage over a window of at most :data:`MAX_COVERAGE_SPAN_DAYS` days.
 
     Args:
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         since: First day of the window.
         until: Last day of the window, inclusive.
@@ -281,5 +278,5 @@ def get_coverage(
     if until < since or (until - since).days + 1 > MAX_COVERAGE_SPAN_DAYS:
         raise HTTPException(status_code=422, detail=f"The window must span 1 to {MAX_COVERAGE_SPAN_DAYS} days")
     now = assume_utc(now or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
-    groups = store.insights.coverage_by_day(org_id, since=since, until=until, now=now)
+    groups = store.insights.coverage_by_day(scope.organisation.id, since=since, until=until, now=now)
     return CoverageResponse(since=since, until=until, sources=[CoverageSource.from_group(group) for group in groups])

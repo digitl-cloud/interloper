@@ -1,7 +1,7 @@
 import type { Execution } from '~/types/execution'
 
 export const useExecutionsStore = defineStore('executions', () => {
-    const { fetchAll } = useApi()
+    const { fetchAll } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -94,6 +94,8 @@ export const useExecutionsStore = defineStore('executions', () => {
         latest.value = []
         latestLoaded.value = false
     }
+
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         runId,

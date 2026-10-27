@@ -12,12 +12,13 @@ import { useChat } from '@ai-sdk/vue'
  */
 export function useAgentChat(conversationId: string, initialMessages: UIMessage[] = []) {
     const agentStore = useAgentStore()
+    const organisationStore = useOrganisationStore()
 
     const chat = useChat({
         id: conversationId,
         messages: initialMessages,
         transport: new DefaultChatTransport({
-            api: `/api/agent/conversations/${conversationId}/chat`,
+            api: `/api/organisations/${organisationStore.requireOrganisation().id}/agent/conversations/${conversationId}/chat`,
             credentials: 'include',
         }),
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,

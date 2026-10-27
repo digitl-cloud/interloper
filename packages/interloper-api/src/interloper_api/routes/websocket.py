@@ -4,7 +4,9 @@ Architecture:
 - A background thread LISTENs on the ``table_changes`` PostgreSQL channel.
 - When a notification arrives, the payload (table, op, org_id, record) is
   broadcast to all WebSocket clients belonging to that org.
-- Clients subscribe by connecting to ``/api/ws`` with a valid session cookie.
+- Clients subscribe to one organisation by connecting to
+  ``/api/organisations/{org_id}/ws``, authenticated and authorised as every
+  organisation route is.
 """
 
 from __future__ import annotations
@@ -16,15 +18,16 @@ import select as _select
 import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from uuid import UUID
 
 import psycopg2
 import psycopg2.extensions
-from fastapi import APIRouter, Cookie, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from interloper_api.dependencies import get_store
+from interloper_api.dependencies import get_caller, get_org_scope, get_store
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["websocket"])
+org_router = APIRouter(tags=["websocket"])
 
 
 # -- Connection manager --------------------------------------------------------
@@ -163,39 +166,39 @@ async def realtime_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # -- Endpoints -----------------------------------------------------------------
 
 
-@router.websocket("/ws")
+@org_router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
+    org_id: UUID,
     session_token: str | None = Cookie(default=None),
 ) -> None:
-    """Authenticate via session cookie, then stream table change events.
+    """Authenticate and authorise the caller in the path's organisation, then stream its table changes.
+
+    A caller who cannot be authenticated is closed with 4001, one who cannot
+    act in the organisation with 4004. The socket is accepted first: a close
+    during the handshake reaches the browser as a 1006 without its code, and
+    the app reads these two as final instead of reconnecting.
 
     Args:
         websocket: The incoming WebSocket connection.
-        session_token: The session cookie value; None closes the connection as
-            unauthorized.
+        org_id: The organisation whose changes are streamed, from the path.
+        session_token: The session cookie value.
     """
     store = get_store()
-
-    if not session_token:
-        await websocket.close(code=4001, reason="Unauthorized")
+    try:
+        user = get_caller(store, session_token, websocket.headers.get("authorization"))
+        get_org_scope(org_id, user, store)
+    except HTTPException as exception:
+        unauthenticated = exception.status_code == 401
+        await websocket.accept()
+        await websocket.close(
+            code=4001 if unauthenticated else 4004, reason="Unauthorized" if unauthenticated else "Not found"
+        )
         return
 
-    result = store.sessions.resolve(session_token)
-    if not result:
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
-
-    _, session_row = result
-    if not session_row.organisation_id:
-        await websocket.close(code=4002, reason="No organisation selected")
-        return
-
-    org_id = str(session_row.organisation_id)
-    logger.info("[WS] Authenticated. org=%s — accepting connection", org_id)
-
+    channel = str(org_id)
     await websocket.accept()
-    await _manager.connect(websocket, org_id)
+    await _manager.connect(websocket, channel)
 
     try:
         while True:
@@ -203,4 +206,4 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         pass
     finally:
-        await _manager.disconnect(websocket, org_id)
+        await _manager.disconnect(websocket, channel)

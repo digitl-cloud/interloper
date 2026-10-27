@@ -1,7 +1,8 @@
 """Agent API: conversations with the assistant, streamed the Vercel AI SDK way.
 
-A conversation is a member's own: its history lives in the store and the
-server, not the client, is its source of truth. Each turn is one
+A conversation is a member's own, in the organisation the path names: its
+history lives in the store and the server, not the client, is its source of
+truth. Each turn is one
 :meth:`~pydantic_ai.ui.vercel_ai.VercelAIAdapter.dispatch_request`: the
 stored history is passed as ``message_history``, the client's request adds
 the new prompt (or the tool approvals and answers the app collected), and the
@@ -42,10 +43,10 @@ from pydantic_ai.ui.vercel_ai import VercelAIAdapter, VercelAIEventStream
 from pydantic_ai.ui.vercel_ai.request_types import RequestData, UIMessage
 from pydantic_ai.ui.vercel_ai.response_types import BaseChunk
 
-from interloper_api.dependencies import AgentDep, CatalogDep, EditorDep, OrgIdDep, StoreDep, ViewerDep
+from interloper_api.dependencies import AgentDep, CatalogDep, CurrentUserDep, EditorDep, StoreDep, ViewerDep
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/agent", tags=["agent"])
+org_router = APIRouter(prefix="/agent", tags=["agent"])
 
 SDK_VERSION = 7
 """The AI SDK major version the app speaks; tool approvals need at least 6."""
@@ -215,82 +216,82 @@ class ConversationDetailResponse(ConversationResponse):
         )
 
 
-@router.post("/conversations", status_code=201)
-def create_conversation(user: EditorDep, org_id: OrgIdDep, store: StoreDep) -> ConversationResponse:
-    """Start a conversation in the active organisation.
+@org_router.post("/conversations", status_code=201)
+def create_conversation(user: CurrentUserDep, scope: EditorDep, store: StoreDep) -> ConversationResponse:
+    """Start a conversation in the path's organisation.
 
     Args:
-        user: The authenticated user, required to hold at least the ``editor`` role.
-        org_id: The active organisation's UUID.
+        user: The authenticated caller, who owns the conversation.
+        scope: The organisation the path names, the caller at least an editor there.
         store: The Store instance.
 
     Returns:
         The new, empty conversation.
     """
-    return ConversationResponse.from_conversation(store.conversations.create(org_id, user.id))
+    return ConversationResponse.from_conversation(store.conversations.create(scope.organisation.id, user.id))
 
 
-@router.get("/conversations")
+@org_router.get("/conversations")
 def list_conversations(
-    user: ViewerDep, org_id: OrgIdDep, store: StoreDep, query: Annotated[PageQuery, Query()]
+    user: CurrentUserDep, scope: ViewerDep, store: StoreDep, query: Annotated[PageQuery, Query()]
 ) -> Page[ConversationResponse]:
-    """List the caller's conversations in the active organisation, newest first.
+    """List the caller's conversations in the path's organisation, newest first.
 
     Args:
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        user: The authenticated caller.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: The window to read.
 
     Returns:
         The page of conversations.
     """
-    return store.conversations.list(org_id, user.id, query).map(ConversationResponse.from_conversation)
+    return store.conversations.list(scope.organisation.id, user.id, query).map(ConversationResponse.from_conversation)
 
 
-@router.get("/conversations/{conversation_id}")
+@org_router.get("/conversations/{conversation_id}")
 def get_conversation(
-    conversation_id: UUID, user: ViewerDep, org_id: OrgIdDep, store: StoreDep
+    conversation_id: UUID, user: CurrentUserDep, scope: ViewerDep, store: StoreDep
 ) -> ConversationDetailResponse:
     """Read one of the caller's conversations with its history.
 
     Args:
-        conversation_id: The conversation UUID.
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        conversation_id: The conversation UUID; one of another organisation reads as missing.
+        user: The authenticated caller.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
 
     Returns:
         The conversation and its messages, as response models.
     """
-    row = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
+    row = store.conversations.get(conversation_id, org_id=scope.organisation.id, user_id=user.id)
     return ConversationDetailResponse.from_conversation(row)
 
 
-@router.delete("/conversations/{conversation_id}", status_code=204)
-def delete_conversation(conversation_id: UUID, user: EditorDep, org_id: OrgIdDep, store: StoreDep) -> Response:
+@org_router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: UUID, user: CurrentUserDep, scope: EditorDep, store: StoreDep) -> Response:
     """Delete one of the caller's conversations.
 
     Args:
-        conversation_id: The conversation UUID.
-        user: The authenticated user, required to hold at least the ``editor`` role.
-        org_id: The active organisation's UUID.
+        conversation_id: The conversation UUID; one of another organisation reads as missing.
+        user: The authenticated caller.
+        scope: The organisation the path names, the caller at least an editor there.
         store: The Store instance.
 
     Returns:
         An empty response.
     """
-    row = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
+    row = store.conversations.get(conversation_id, org_id=scope.organisation.id, user_id=user.id)
     store.conversations.delete(row.id)
     return Response(status_code=204)
 
 
-@router.post("/conversations/{conversation_id}/chat")
+@org_router.post("/conversations/{conversation_id}/chat")
 async def chat(
     conversation_id: UUID,
     request: Request,
-    user: EditorDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
+    scope: EditorDep,
     store: StoreDep,
     catalog: CatalogDep,
     agent: AgentDep,
@@ -303,10 +304,11 @@ async def chat(
     the run completes.
 
     Args:
-        conversation_id: The conversation UUID.
+        conversation_id: The conversation UUID; it must belong to the path's
+            organisation, else it reads as missing.
         request: The raw request, handed to the adapter.
-        user: The authenticated user, required to hold at least the ``editor`` role.
-        org_id: The active organisation's UUID.
+        user: The authenticated caller.
+        scope: The organisation the path names, the caller at least an editor there.
         store: The Store instance.
         catalog: The Catalog instance.
         agent: The assistant.
@@ -314,13 +316,8 @@ async def chat(
     Returns:
         The turn as a ``text/event-stream`` response.
     """
-    conversation = store.conversations.get(conversation_id, org_id=org_id, user_id=user.id)
-    context = ToolkitContext(
-        store=store,
-        catalog=catalog.dump(),
-        org_id=org_id,
-        role=store.members.role(org_id, user.id) or "viewer",
-    )
+    conversation = store.conversations.get(conversation_id, org_id=scope.organisation.id, user_id=user.id)
+    context = ToolkitContext(store=store, catalog=catalog.dump(), org_id=scope.organisation.id, role=scope.role)
 
     def save(result: AgentRunResult[Any]) -> None:
         messages = result.all_messages()

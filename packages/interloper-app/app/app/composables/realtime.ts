@@ -19,27 +19,37 @@ type RealtimeEvent = 'INSERT' | 'UPDATE' | 'DELETE'
 type RealtimeHandler = (event: RealtimeEvent, record: Record<string, any>) => void
 
 // ---------------------------------------------------------------------------
-// Shared WebSocket connection (module-level singleton)
+// Shared WebSocket connection (module-level singleton), one organisation at a time
 // ---------------------------------------------------------------------------
 
 let _ws: WebSocket | null = null
+let _orgId: string | null = null
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let _reconnectDelay = 1000
 const _MAX_RECONNECT_DELAY = 30000
+/** Closed by the server for a caller that is signed out (4001) or cannot act in the organisation (4004): retrying cannot help. */
+const _FINAL_CLOSE_CODES = new Set([4001, 4004])
 const _handlers = new Map<string, Set<RealtimeHandler>>()
-let _wsUrl: string | null = null
+let _following = false
+
+function _url(orgId: string): string {
+    const devApiPort = useRuntimeConfig().public.devApiPort
+    const base = devApiPort
+        ? `ws://localhost:${devApiPort}`
+        : window.location.origin.replace(/^http/, 'ws')
+    return `${base}/api/organisations/${orgId}/ws`
+}
 
 function _connect() {
-    if (!_wsUrl) return
-    if (_ws?.readyState === WebSocket.OPEN || _ws?.readyState === WebSocket.CONNECTING) return
+    if (!_orgId) return
+    const socket = new WebSocket(_url(_orgId))
+    _ws = socket
 
-    _ws = new WebSocket(_wsUrl)
-
-    _ws.onopen = () => {
+    socket.onopen = () => {
         _reconnectDelay = 1000
     }
 
-    _ws.onmessage = (e) => {
+    socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data)
             const handlers = _handlers.get(msg.table)
@@ -52,27 +62,40 @@ function _connect() {
         }
     }
 
-    _ws.onclose = () => {
+    socket.onclose = (e) => {
+        if (_ws !== socket) return
         _ws = null
+        if (_FINAL_CLOSE_CODES.has(e.code)) return
         _reconnectTimer = setTimeout(_connect, _reconnectDelay)
         _reconnectDelay = Math.min(_reconnectDelay * 2, _MAX_RECONNECT_DELAY)
     }
 
-    _ws.onerror = () => {
-        _ws?.close()
+    socket.onerror = () => {
+        socket.close()
     }
 }
 
-function _ensureConnection() {
-    if (!_wsUrl) {
-        const config = useRuntimeConfig()
-        const devApiPort = config.public.devApiPort
-        const base = devApiPort
-            ? `ws://localhost:${devApiPort}`
-            : window.location.origin.replace(/^http/, 'ws')
-        _wsUrl = base + '/api/ws'
-    }
+/** Point the socket at an organisation, closing the previous one's; `null` closes it. */
+function _open(orgId: string | null) {
+    if (orgId === _orgId) return
+    _orgId = orgId
+    if (_reconnectTimer) clearTimeout(_reconnectTimer)
+    _reconnectTimer = null
+    _reconnectDelay = 1000
+    const previous = _ws
+    _ws = null
+    previous?.close()
     _connect()
+}
+
+/** The socket follows the active organisation for the app's lifetime, from the first subscription on. */
+function _ensureConnection() {
+    if (_following) return
+    _following = true
+    const organisationStore = useOrganisationStore()
+    effectScope(true).run(() => {
+        watch(() => organisationStore.organisation?.id ?? null, _open, { immediate: true })
+    })
 }
 
 function _subscribe(table: string, handler: RealtimeHandler): () => void {

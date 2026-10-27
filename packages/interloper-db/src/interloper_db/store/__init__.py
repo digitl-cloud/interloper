@@ -17,11 +17,10 @@ Each entity is a facet reached through the store, so a caller depends on the
 part it uses rather than on all of it:
 
 - ``store.profiles`` — who a person is
-- ``store.sessions`` — the login sessions proving it
 - ``store.organisations`` — the tenants
 - ``store.members`` — who belongs to an organisation, with which role
 - ``store.invitations`` — memberships not yet accepted
-- ``store.tokens`` — personal access tokens (programmatic/MCP access)
+- ``store.tokens`` — the secrets proving it, login sessions and personal access tokens
 - ``store.conversations`` — a member's conversations with the agent
 - ``store.components`` — component CRUD, hydration and catalog status, for every kind
 - ``store.relations`` — the vocabulary-checked edges between components
@@ -43,9 +42,9 @@ Every facet keeps the same error contract. Anything addressed by primary key
 — ``get``, and every mutation — raises :class:`~interloper_db.errors.NotFoundError`
 when the row is absent, so the caller writes the happy path and the API turns
 one exception into one 404. Returning ``None`` is reserved for lookups where
-absence is an ordinary answer rather than a failure: resolving a session token,
+absence is an ordinary answer rather than a failure: resolving a token,
 a Google id, or an invitation token, where "no match" is what the caller asked.
-A mutation that is deliberately idempotent (clearing a session's org, re-adding
+A mutation that is deliberately idempotent (revoking a revoked token, re-adding
 an existing member) says so in its own docstring.
 """
 
@@ -65,7 +64,6 @@ from interloper_db.store.profiles import ProfileQuery, ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageDrift, UsageQuery, UsageStore
 from interloper_db.store.relations import RelationQuery, RelationStore
 from interloper_db.store.runs import RunQuery, RunStore
-from interloper_db.store.sessions import SessionStore
 from interloper_db.store.tokens import TokenStore
 
 __all__ = [
@@ -94,7 +92,6 @@ __all__ = [
     "RelationStore",
     "RunQuery",
     "RunStore",
-    "SessionStore",
     "Store",
     "TokenStore",
     "UsageDrift",
