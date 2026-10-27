@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import secrets
 from contextlib import suppress
 from typing import Annotated, Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -27,6 +28,8 @@ from interloper_api.routes.organisations import OrganisationResponse
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+LOGIN_STATE_COOKIE = "login_state"
+LOGIN_STATE_MAX_AGE = 600
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -59,6 +62,24 @@ def _signup_allowed(email: str, auth_config: Any, store: Store) -> bool:
     if email.rsplit("@", 1)[-1] in allowed_domains:
         return True
     return store.invitations.has_pending(email)
+
+
+def _app_relative(path: str) -> str:
+    r"""Return ``path`` when it stays on this app, otherwise the app root.
+
+    Browsers read ``//host`` and ``/\host`` as protocol-relative URLs, so a
+    single leading slash is not enough.
+
+    Args:
+        path: The requested post-login destination.
+
+    Returns:
+        ``path`` when it is an app-relative path, otherwise ``"/"``.
+    """
+    parts = urlsplit(path)
+    if not path.startswith("/") or path[1:2] in ("/", "\\") or parts.scheme or parts.netloc:
+        return "/"
+    return path
 
 
 # -- Login & session -----------------------------------------------------------
@@ -121,12 +142,13 @@ def google_login(
 
     Args:
         redirect: App-relative destination to return to once the login
-            completes; carried through Google as the ``state`` parameter and
-            defaulting to the app root.
+            completes; carried through Google in the ``state`` parameter after
+            a random nonce, defaulting to the app root.
         auth_config: The resolved auth configuration.
 
     Returns:
-        A redirect to Google's consent screen.
+        A redirect to Google's consent screen, setting the nonce in a
+        short-lived cookie the callback checks ``state`` against.
 
     Raises:
         HTTPException: 500 when no Google client id is configured.
@@ -137,6 +159,7 @@ def google_login(
     if not client_id:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
 
+    nonce = secrets.token_urlsafe(32)
     params = urlencode(
         {
             "client_id": client_id,
@@ -145,10 +168,20 @@ def google_login(
             "scope": "openid email profile",
             "access_type": "offline",
             "prompt": "consent",
-            "state": redirect or "/",
+            "state": f"{nonce}:{redirect or '/'}",
         }
     )
-    return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{params}")
+    response = RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{params}")
+    response.set_cookie(
+        key=LOGIN_STATE_COOKIE,
+        value=nonce,
+        httponly=True,
+        samesite="lax",
+        secure=auth_config.cookie_secure,
+        max_age=LOGIN_STATE_MAX_AGE,
+        path="/",
+    )
+    return response
 
 
 @router.get("/google/callback")
@@ -157,19 +190,24 @@ def google_callback(
     store: StoreDep,
     auth_config: AuthConfigDep,
     state: str | None = None,
+    login_state: Annotated[str | None, Cookie()] = None,
 ) -> RedirectResponse:
     """Exchange Google authorization code for tokens, upsert profile, create session.
 
     Args:
         code: The single-use authorization code handed back by Google.
-        state: The destination recorded at the start of the flow; honoured only
-            when it is app-relative, otherwise the app root is used.
+        state: The nonce and destination recorded at the start of the flow; the
+            destination is honoured only when it is app-relative, otherwise the
+            app root is used.
         store: The database store.
         auth_config: The resolved auth configuration.
+        login_state: The nonce cookie :func:`google_login` set; a callback whose
+            ``state`` does not carry it was not started by this browser.
 
     Returns:
         A redirect to the post-login destination carrying the session cookie, or
-        a redirect back to the login page when signup is not allowed.
+        a redirect back to the login page when the nonce does not match or
+        signup is not allowed.
 
     Raises:
         HTTPException: 500 when Google OAuth is not configured, 401 when the code
@@ -183,6 +221,12 @@ def google_callback(
 
     if not client_id or not client_secret:
         raise HTTPException(status_code=500, detail="Google OAuth not configured")
+
+    nonce, _, redirect = (state or "").partition(":")
+    if not login_state or not secrets.compare_digest(nonce, login_state):
+        response = RedirectResponse(url="/login?error=login_expired", status_code=302)
+        response.delete_cookie(LOGIN_STATE_COOKIE, path="/")
+        return response
 
     token_resp = httpx2.post(
         GOOGLE_TOKEN_URL,
@@ -238,8 +282,8 @@ def google_callback(
     # Create session (no org context — frontend resolves org after login)
     token = store.sessions.create(profile.id)
 
-    redirect_url = state if state and state.startswith("/") else "/"
-    response = RedirectResponse(url=redirect_url, status_code=302)
+    response = RedirectResponse(url=_app_relative(redirect), status_code=302)
+    response.delete_cookie(LOGIN_STATE_COOKIE, path="/")
     response.set_cookie(
         key="session_token",
         value=token,
