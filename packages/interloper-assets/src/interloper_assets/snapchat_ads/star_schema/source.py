@@ -62,12 +62,12 @@ class SnapchatAdsStarSchema(il.Source):
     @il.asset(
         partitioning=PARTITIONING,
         tags=["Dimension"],
-        relations={"accounts": il.Relation("asset", "snapchat_ads.ad_account", many=True, optional=True)},
+        relations={"ad_accounts": il.Relation("asset", "snapchat_ads.ad_accounts", many=True, optional=True)},
     )
     def dim_accounts(
         self,
         context: il.ExecutionContext,
-        accounts: list[il.Upstream],
+        ad_accounts: list[il.Upstream],
         fact_ad_performance: il.Upstream,
     ) -> list[dict[str, Any]]:
         """One row per ad account, from the account snapshots, completed from the facts."""

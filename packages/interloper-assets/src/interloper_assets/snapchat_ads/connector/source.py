@@ -9,7 +9,6 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.snapchat_ads import constants
 from interloper_assets.snapchat_ads.connection import SnapchatAdsConnection
 from interloper_assets.snapchat_ads.connector.schemas import (
-    AdAccount,
     AdAccounts,
     Ads,
     AdSquads,
@@ -182,31 +181,14 @@ class SnapchatAds(il.Source):
     # --- Entity assets (flattening normalizer) ---
 
     @il.asset(
-        schema=AdAccount,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Entity"],
-        normalizer=_ENTITY_NORMALIZER,
-    )
-    async def ad_account(self, context: il.ExecutionContext) -> list[_RECORD]:
-        """A single ad account with its attributes."""
-        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        rows = await _entity_records(self.connection, path, "adaccounts", "adaccount")
-        return _with_date(rows, context.partition_date)
-
-    @il.asset(
         schema=AdAccounts,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
     async def ad_accounts(self, context: il.ExecutionContext) -> list[_RECORD]:
-        """All ad accounts in the organization owning this account."""
-        account_path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
-        accounts = await _entity_records(self.connection, account_path, "adaccounts", "adaccount")
-        organization_id = accounts[0]["organization_id"] if accounts else None
-        if organization_id is None:
-            return []
-        path = f"/{constants.API_VERSION}/organizations/{organization_id}/adaccounts"
+        """The source's ad account with its attributes."""
+        path = f"/{constants.API_VERSION}/adaccounts/{self.account_id}"
         rows = await _entity_records(self.connection, path, "adaccounts", "adaccount")
         return _with_date(rows, context.partition_date)
 
