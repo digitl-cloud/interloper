@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class Ads(Schema):
-    """Facebook Ads entity snapshot. One row per ad (not time-series). Captures ad configuration, status, and creative details. Join to the ads insights table on id=ad_id. Join to facebook_insights.posts on creative_effective_object_story_id=post_id to resolve paid vs organic split."""
+    """Facebook Ads entity snapshot. One row per ad (not time-series). Captures ad configuration, status, and creative details. Join to the ads insights table on id=ad_id. Join to facebook_insights.posts on creative_effective_object_story_id=post_id to resolve paid vs organic split. bid_amount is an integer in the currency's minor units; creation and update times are UTC instants; ad_schedule_start_time and ad_schedule_end_time keep the vendor's ISO 8601 string with the account's offset."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
@@ -23,10 +23,25 @@ class Ads(Schema):
         default=None,
         description="Placement-specific ad review rejection reason (flattened from ad_review_feedback dict). NULL if no placement feedback.",
     )
-    adset_id: str | None = Field(default=None, description="Ad set this ad belongs to.")
-    bid_amount: float | None = Field(
+    ad_schedule_end_time: str | None = Field(
         default=None,
-        description="Manual bid amount for this ad (in account currency). NULL when using automatic bidding.",
+        description=(
+            "Scheduled end of the ad as the vendor sends it, ISO 8601 with the account's UTC offset; NULL when the ad "
+            "follows its ad set's schedule. A string because a timestamp would store it in UTC and lose the offset; its date part is the local day."
+        ),
+    )
+    ad_schedule_start_time: str | None = Field(
+        default=None,
+        description=(
+            "Scheduled start of the ad as the vendor sends it, ISO 8601 with the account's UTC offset; NULL when the "
+            "ad follows its ad set's schedule. A string because a timestamp would store it in UTC and lose the offset; its date part is the local day."
+        ),
+    )
+    adlabels: str | None = Field(default=None, description="JSON array of the ad labels attached to the ad.")
+    adset_id: str | None = Field(default=None, description="Ad set this ad belongs to.")
+    bid_amount: int | None = Field(
+        default=None,
+        description="Manual bid for this ad, in the currency's minor units (cents for EUR and USD). NULL when using automatic bidding.",
     )
     campaign_id: str | None = Field(default=None, description="Campaign this ad belongs to.")
     configured_status: str | None = Field(
@@ -35,7 +50,7 @@ class Ads(Schema):
     conversion_domain: str | None = Field(
         default=None, description="Domain where conversions are tracked (e.g. example.com). NULL if not set."
     )
-    created_time: str | None = Field(default=None, description="ISO 8601 timestamp when the ad was created.")
+    created_time: dt.datetime | None = Field(default=None, description="When the ad was created, in UTC.")
     creative_id: str | None = Field(
         default=None, description="ID of the ad creative (flattened from creative sub-object)."
     )
@@ -87,4 +102,4 @@ class Ads(Schema):
         default=None,
         description="JSON array of tracking specification objects defining what events to track for this ad.",
     )
-    updated_time: str | None = Field(default=None, description="ISO 8601 timestamp when the ad was last updated.")
+    updated_time: dt.datetime | None = Field(default=None, description="When the ad was last changed, in UTC.")

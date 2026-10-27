@@ -444,6 +444,7 @@ class FacebookAds(il.Source):
         schema=schemas.Campaigns,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
     )
     def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Campaign entities including objective, budget, and status configuration."""

@@ -36,7 +36,6 @@ AD_REPORT_COLUMNS = (
     "actions_purchase",
     "action_values_purchase",
 )
-INSTANT_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 INSTANT = "timestamp('UTC')"
 ENTITY, REPORT, FACT = 1, 2, 3
 
@@ -78,20 +77,6 @@ def _local_date(column: ir.StringValue) -> ir.Value:
         A date column.
     """
     return column.nullif(ibis.literal("")).substr(0, 10).cast("date")
-
-
-def _instant(column: ir.StringValue) -> ir.Value:
-    """A vendor timestamp with an offset, parsed to the UTC instant it names; blank is NULL.
-
-    Used by the campaign and ad dimensions for ``created_at`` and ``updated_at``.
-
-    Args:
-        column: A string column of ISO 8601 timestamps with an offset.
-
-    Returns:
-        A timestamp column, in UTC.
-    """
-    return column.nullif(ibis.literal("")).as_timestamp(INSTANT_FORMAT)
 
 
 def _budget_type(table: ibis.Table) -> ir.Value:
@@ -290,8 +275,8 @@ class FacebookAdsStarSchema(il.Source):
                 budget_type=_budget_type(table),
                 start_date=_local_date(table["start_time"]),
                 end_date=_local_date(table["stop_time"]),
-                created_at=_instant(table["created_time"]),
-                updated_at=_instant(table["updated_time"]),
+                created_at=table["created_time"],
+                updated_at=table["updated_time"],
                 as_of_date=table["date"],
                 effective_status=table["effective_status"],
                 priority=ibis.literal(ENTITY),
@@ -450,8 +435,8 @@ class FacebookAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 ad_name=table["name"],
                 status=table["status"],
-                created_at=_instant(table["created_time"]),
-                updated_at=_instant(table["updated_time"]),
+                created_at=table["created_time"],
+                updated_at=table["updated_time"],
                 as_of_date=table["date"],
                 effective_status=table["effective_status"],
                 priority=ibis.literal(ENTITY),

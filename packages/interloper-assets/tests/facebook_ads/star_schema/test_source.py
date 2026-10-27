@@ -99,12 +99,12 @@ def _seed(
     client.execute(
         f"CREATE TABLE facebook_ads.campaigns__{account_id} AS SELECT * FROM (VALUES "
         f"(DATE '{entity_date}', 'c{account_id}', 'Camp from entity', '{account_id}', 'OUTCOME_SALES', 'ACTIVE', "
-        "'ACTIVE', 'AUCTION', '1000', CAST(NULL AS VARCHAR), '2026-10-01T00:00:00+0200', '', "
-        "'2026-09-01T10:00:00+0200', '2026-09-02T10:00:00+0200')"
+        "'ACTIVE', 'AUCTION', 1000, CAST(NULL AS BIGINT), '2026-10-01T00:00:00+0200', '', "
+        "TIMESTAMPTZ '2026-09-01 08:00:00+00', TIMESTAMPTZ '2026-09-02 08:00:00+00')"
         + (
             f", (DATE '{entity_date}', 'c{account_id}b', 'Second from entity', '{account_id}', 'OUTCOME_SALES', "
-            "'PAUSED', 'PAUSED', 'AUCTION', CAST(NULL AS VARCHAR), '5000', '2026-10-02T00:00:00+0200', "
-            "CAST(NULL AS VARCHAR), '2026-09-01T10:00:00+0200', '2026-09-02T10:00:00+0200')"
+            "'PAUSED', 'PAUSED', 'AUCTION', CAST(NULL AS BIGINT), 5000, '2026-10-02T00:00:00+0200', "
+            "CAST(NULL AS VARCHAR), TIMESTAMPTZ '2026-09-01 08:00:00+00', TIMESTAMPTZ '2026-09-02 08:00:00+00')"
             if two_entities
             else ""
         )
@@ -116,8 +116,8 @@ def _seed(
         f"CREATE TABLE facebook_ads.ads__{account_id} AS SELECT "
         f"DATE '2026-09-30' AS date, 'a1' AS id, 'Ad from entity' AS name, 's1' AS adset_id, "
         f"'c{account_id}' AS campaign_id, '{account_id}' AS account_id, 'ACTIVE' AS status, "
-        "'ACTIVE' AS effective_status, '2026-09-01T10:00:00+0200' AS created_time, "
-        f"'2026-09-02T10:00:00+0200' AS updated_time WHERE {ad_collected}"
+        "'ACTIVE' AS effective_status, TIMESTAMPTZ '2026-09-01 08:00:00+00' AS created_time, "
+        f"TIMESTAMPTZ '2026-09-02 08:00:00+00' AS updated_time WHERE {ad_collected}"
     )
     if extra_fact_campaign:
         client.execute(
