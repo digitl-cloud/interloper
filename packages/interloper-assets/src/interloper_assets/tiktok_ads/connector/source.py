@@ -10,6 +10,7 @@ from interloper_pandas import DataFrameNormalizer
 from interloper_assets.tiktok_ads import constants
 from interloper_assets.tiktok_ads.connection import TiktokAdsConnection
 from interloper_assets.tiktok_ads.connector.schemas import (
+    Adgroups,
     Ads,
     AdsStats,
     AdsStatsByAgeGender,
@@ -243,6 +244,17 @@ class TiktokAds(il.Source):
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns in the advertiser account with their attributes."""
         rows = await _paginate(self.connection, "/campaign/get/", {"advertiser_id": self.advertiser_id})
+        return _with_date(rows, context.partition_date)
+
+    @il.asset(
+        schema=Adgroups,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def adgroups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """All ad groups in the advertiser account with their schedule, budget, targeting and status."""
+        rows = await _paginate(self.connection, "/adgroup/get/", {"advertiser_id": self.advertiser_id})
         return _with_date(rows, context.partition_date)
 
     @il.asset(
