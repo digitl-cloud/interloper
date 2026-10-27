@@ -9,7 +9,7 @@ import pytest
 
 import interloper as il
 from interloper.cli.commands.run import _cmd_run, register
-from interloper.events import EventBus
+from interloper.events import Event, EventBatch, EventBus, EventType
 
 
 class FakeRunSource(il.Source):
@@ -58,6 +58,7 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "file": None,
         "dry_run": False,
         "run_id": None,
+        "metadata": None,
         "date": None,
         "start_date": None,
         "end_date": None,
@@ -362,6 +363,95 @@ class TestRunOutcome:
         _cmd_run(_args(target=[SOURCE_PATH]))
 
         assert "@EVENT:" in capsys.readouterr().err
+
+
+class TestRecordedRun:
+    """A platform run: the spec from a file, the run's metadata, and its events reported with the run's token."""
+
+    @pytest.fixture
+    def sent(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[Event], Any]]:
+        """Report through a fake client, and never exit the test process.
+
+        Args:
+            monkeypatch: Fixture used to swap the client and the exit.
+
+        Returns:
+            Every delivery the run made; the first entry is the client's construction.
+        """
+        deliveries: list[tuple[list[Event], Any]] = []
+
+        class FakeClient:
+            def __init__(self, url: str, token: str, run_id: str) -> None:
+                deliveries.append(([], {"url": url, "token": token, "run_id": run_id}))
+
+            def ingest(self, batch: EventBatch) -> bool:
+                deliveries.append((list(batch.events), batch.effects))
+                return True
+
+        monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
+        monkeypatch.setattr("interloper.cli.commands.run.EventClient", FakeClient)
+        monkeypatch.setattr("interloper.cli.commands.run._exit_lost", lambda: None)
+        return deliveries
+
+    def test_the_inline_spec_can_be_read_from_a_file(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        path = tmp_path / "spec.json"
+        path.write_text(il.DAG(FakeRunSource(destinations=[il.MemoryDestination()])).to_spec().model_dump_json())
+
+        _cmd_run(_args(format="inline", target=[f"@{path}"], dry_run=True))
+
+        assert "1. fake_run_source.one" in capsys.readouterr().out
+
+    def test_the_metadata_is_spread_into_every_event(self) -> None:
+        events: list[Any] = []
+        EventBus.subscribe(events.append)
+        try:
+            _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1", metadata='{"org_id": "org-1", "attempt": 2}'))
+            EventBus.flush(timeout=5.0)
+        finally:
+            EventBus.unsubscribe(events.append)
+
+        started = next(event for event in events if event.type is EventType.RUN_STARTED)
+        assert (started.metadata["org_id"], started.metadata["attempt"]) == ("org-1", 2)
+
+    def test_with_a_run_token_every_event_is_reported_to_the_platform(self, sent: list[Any]) -> None:
+        _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1"))
+
+        assert sent[0][1] == {"url": "http://localhost:3000", "token": "ilr_x", "run_id": "run-1"}
+        delivered = [event for batch, _ in sent[1:] for event in batch]
+        assert delivered[0].type is EventType.RUN_STARTED and delivered[-1].type is EventType.RUN_COMPLETED
+
+    def test_a_spec_that_cannot_be_read_is_reported_as_the_runs_failure(self, sent: list[Any]) -> None:
+        with pytest.raises(SystemExit, match="failed to parse inline DAGSpec"):
+            _cmd_run(_args(format="inline", target=["@/nonexistent/spec.json"], run_id="run-1"))
+
+        (failed,) = [event for batch, _ in sent[1:] for event in batch]
+        assert failed.type is EventType.RUN_FAILED
+        assert "failed to parse inline DAGSpec" in failed.metadata["error"]
+
+    def test_a_platform_runs_window_is_its_partition_key(self, sent: list[Any]) -> None:
+        # An unpartitioned DAG given a key: the CLI alone refuses it, a platform run reads the key as the platform does.
+        _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1", date="2026-10-26"))
+
+        delivered = [event for batch, _ in sent[1:] for event in batch]
+        assert delivered[0].metadata["window"] == "2026-10-26"
+        assert delivered[-1].type is EventType.RUN_COMPLETED
+
+    def test_a_recorded_run_needs_its_run_id(self, sent: list[Any]) -> None:
+        with pytest.raises(SystemExit, match="needs --run-id"):
+            _cmd_run(_args(target=[SOURCE_PATH]))
+
+    def test_a_recorded_run_that_is_lost_exits_nonzero(self, sent: list[Any], monkeypatch: pytest.MonkeyPatch) -> None:
+        class EndedClient:
+            def __init__(self, url: str, token: str, run_id: str) -> None:
+                pass
+
+            def ingest(self, batch: EventBatch) -> bool:
+                return False
+
+        monkeypatch.setattr("interloper.cli.commands.run.EventClient", EndedClient)
+
+        with pytest.raises(SystemExit, match="ended elsewhere"):
+            _cmd_run(_args(target=[f"{FailingSource.__module__}.FailingSource"], run_id="run-1"))
 
 
 class TestPrintPlan:
