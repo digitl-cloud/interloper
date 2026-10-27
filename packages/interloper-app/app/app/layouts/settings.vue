@@ -24,12 +24,17 @@ function navItems(collapsed: boolean): NavigationMenuItem[] {
                 {
                     label: 'Sign in',
                     to: { path: '/settings/authentication', query: { tab: 'signin' } },
-                    active: onAuth && tab !== 'tokens',
+                    active: onAuth && tab !== 'tokens' && tab !== 'apps',
                 },
                 {
                     label: 'Personal Access Tokens',
                     to: { path: '/settings/authentication', query: { tab: 'tokens' } },
                     active: onAuth && tab === 'tokens',
+                },
+                {
+                    label: 'Authorised apps',
+                    to: { path: '/settings/authentication', query: { tab: 'apps' } },
+                    active: onAuth && tab === 'apps',
                 },
             ],
         },
