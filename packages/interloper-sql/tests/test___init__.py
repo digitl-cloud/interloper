@@ -22,7 +22,7 @@ def _import_with_blocked(module: str) -> subprocess.CompletedProcess[str]:
 def test_the_views_import_without_sqlalchemy():
     completed = _import_with_blocked("sqlalchemy")
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "IbisView,ibis_view,latest,union"
+    assert completed.stdout.strip() == "IbisView,ibis_view,latest,local_date,union"
 
 
 def test_any_other_missing_module_still_fails_the_import():

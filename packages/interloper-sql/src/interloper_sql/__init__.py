@@ -1,6 +1,6 @@
 """Interloper SQL integration: portable views, and a SQLAlchemy-backed destination behind the postgres extra."""
 
-from interloper_sql.view import IbisView, ibis_view, latest, union
+from interloper_sql.view import IbisView, ibis_view, latest, local_date, union
 
 try:
     from interloper_sql.connection import SQLConnection
@@ -13,6 +13,7 @@ except ModuleNotFoundError as error:
         "IbisView",
         "ibis_view",
         "latest",
+        "local_date",
         "union",
     ]
 else:
@@ -22,5 +23,6 @@ else:
         "SQLDestination",
         "ibis_view",
         "latest",
+        "local_date",
         "union",
     ]
