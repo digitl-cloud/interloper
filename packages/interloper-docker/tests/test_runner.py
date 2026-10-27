@@ -3,46 +3,49 @@
 from __future__ import annotations
 
 import datetime as dt
+import io
 import json
-from collections.abc import Iterator
+import tarfile
 from typing import Any
 
 import docker
 import docker.errors
 import interloper as il
 import pytest
-import requests
 from interloper.events import Event, EventType
-from interloper.events.stderr import EVENT_LINE_PREFIX
 from interloper.partitioning import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
-from interloper.runner import ExecutionStatus, RunState
+from interloper.runner import ExecutionStatus
 
 from interloper_docker.runner import DockerRun, DockerRunner
 
 
 class FakeContainer:
-    """A container whose log and exit code are scripted."""
+    """A container whose exit code and termination message are scripted."""
 
-    def __init__(self, chunks: list[bytes], status_code: int = 0, broken: bool = False) -> None:
+    def __init__(self, status_code: int = 0, message: str | None = None) -> None:
         """Script the container.
 
         Args:
-            chunks: What its log yields.
             status_code: Its exit code.
-            broken: Whether its log stream breaks after the chunks.
+            message: What it left at its termination message path; ``None`` for nothing.
         """
-        self.chunks = chunks
         self.status_code = status_code
-        self.broken = broken
+        self.message = message
         self.id = "c0ffee000000aaaa"
         self.short_id = "c0ffee000000"
         self.removed = False
         self.launched: dict[str, Any] = {}
 
-    def logs(self, **kwargs: Any) -> Iterator[bytes]:
-        yield from self.chunks
-        if self.broken:
-            raise requests.exceptions.ConnectionError("stream reset")
+    def get_archive(self, path: str) -> tuple[list[bytes], dict[str, Any]]:
+        if self.message is None:
+            raise docker.errors.NotFound(f"{path} not found")
+        data = self.message.encode()
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as archive:
+            info = tarfile.TarInfo(name=path.rsplit("/", 1)[-1])
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+        return [buffer.getvalue()], {}
 
     def wait(self) -> dict[str, int]:
         return {"StatusCode": self.status_code}
@@ -52,22 +55,25 @@ class FakeContainer:
 
 
 class FakeDocker:
-    """A Docker client whose one container is scripted, or whose launch fails."""
+    """A Docker client whose containers are scripted, one per attempt, or whose launch fails."""
 
-    def __init__(self, container: FakeContainer | None) -> None:
+    def __init__(self, *containers: FakeContainer) -> None:
         """Script the client.
 
         Args:
-            container: The container every launch returns; ``None`` makes launching fail.
+            *containers: The containers successive launches return; none makes launching fail.
         """
-        self.container = container
+        self.scripted = list(containers)
+        self.launched: list[FakeContainer] = []
         self.containers = self
 
     def run(self, **kwargs: Any) -> FakeContainer:
-        if self.container is None:
+        if not self.scripted:
             raise docker.errors.APIError("no such image")
-        self.container.launched = kwargs
-        return self.container
+        container = self.scripted.pop(0)
+        container.launched = kwargs
+        self.launched.append(container)
+        return container
 
 
 class Contained(il.Asset):
@@ -75,11 +81,6 @@ class Contained(il.Asset):
 
     def data(self) -> list[dict[str, Any]]:
         return []
-
-
-def _event_line(event_type: EventType, component_id: str = "asset-1", **metadata: Any) -> bytes:
-    event = Event(type=event_type, metadata={"component_id": component_id, "run_id": "run-1", **metadata})
-    return (EVENT_LINE_PREFIX + event.to_json() + "\n").encode()
 
 
 @pytest.fixture
@@ -93,45 +94,65 @@ def asset() -> il.Asset:
 
 
 async def _run(
-    monkeypatch: pytest.MonkeyPatch, container: FakeContainer | None, asset: il.Asset
+    monkeypatch: pytest.MonkeyPatch, asset: il.Asset, *containers: FakeContainer
 ) -> tuple[il.RunResult, list[Event]]:
-    monkeypatch.setattr(docker, "from_env", lambda: FakeDocker(container))
+    monkeypatch.setattr(docker, "from_env", lambda: FakeDocker(*containers))
     events: list[Event] = []
     runner = DockerRunner(image="img", on_event=events.append)
     result = await runner.run(il.DAG(asset), metadata={"run_id": "run-1"})
     return result, events
 
 
+def _lifecycle(events: list[Event]) -> list[tuple[str, int]]:
+    return [(event.type.value, event.metadata["attempt"]) for event in events if "attempt" in event.metadata]
+
+
 class TestContainerRun:
-    async def test_forwards_the_childs_events_before_recording_the_verdict(self, monkeypatch, asset):
-        container = FakeContainer([_event_line(EventType.ASSET_DATA_COMPLETED)])
+    async def test_the_host_reports_the_operations_lifecycle(self, monkeypatch, asset):
+        _, events = await _run(monkeypatch, asset, FakeContainer())
 
-        result, events = await _run(monkeypatch, container, asset)
+        assert _lifecycle(events) == [("operation_queued", 1), ("operation_started", 1), ("operation_completed", 1)]
 
-        types = [event.type for event in events]
-        assert types.index(EventType.ASSET_DATA_COMPLETED) < types.index(EventType.OPERATION_COMPLETED)
-        assert result.status is ExecutionStatus.COMPLETED
-        assert container.removed
+    async def test_a_failed_exit_without_a_message_names_its_exit_code(self, monkeypatch, asset):
+        result, _ = await _run(monkeypatch, asset, FakeContainer(status_code=3))
 
-    async def test_the_host_reports_no_start_of_its_own(self, monkeypatch, asset):
-        _, events = await _run(monkeypatch, FakeContainer([]), asset)
-
-        assert EventType.OPERATION_STARTED not in [event.type for event in events]
-
-    async def test_a_failed_exit_is_a_failed_operation_with_the_hosts_terminal_event(self, monkeypatch, asset):
-        result, events = await _run(monkeypatch, FakeContainer([], status_code=3), asset)
-
-        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
-        assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED)
         assert result.executions["asset-1"].error == "RunnerError: Container c0ffee000000 exited with code 3"
 
-    async def test_a_container_that_dies_mid_retry_ends_its_last_attempt(self, monkeypatch, asset):
-        container = FakeContainer([_event_line(EventType.OPERATION_STARTED, attempt=2)], status_code=137)
+    async def test_a_failed_attempt_carries_what_the_child_left(self, monkeypatch, asset):
+        message = json.dumps({"error": "ValueError: bad credentials", "retryable": False})
 
-        _, events = await _run(monkeypatch, container, asset)
+        result, _ = await _run(monkeypatch, asset, FakeContainer(status_code=1, message=message))
 
-        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
-        assert failed.id == RunState.operation_event_id("run-1", "asset-1", EventType.OPERATION_FAILED, attempt=2)
+        assert result.executions["asset-1"].error == "ValueError: bad credentials"
+
+    async def test_a_retryable_attempt_is_retried_in_a_new_container(self, monkeypatch, asset):
+        asset.retry = il.RetryPolicy(max_attempts=2, delay=0)
+        failed = FakeContainer(status_code=137)
+        succeeded = FakeContainer()
+
+        result, events = await _run(monkeypatch, asset, failed, succeeded)
+
+        assert result.status is ExecutionStatus.COMPLETED
+        assert _lifecycle(events) == [
+            ("operation_queued", 1),
+            ("operation_started", 1),
+            ("operation_retried", 1),
+            ("operation_started", 2),
+            ("operation_completed", 2),
+        ]
+        assert [failed.launched["name"], succeeded.launched["name"]] == [
+            "interloper_run_run-1_asset-1_1",
+            "interloper_run_run-1_asset-1_2",
+        ]
+
+    async def test_an_attempt_the_child_says_is_final_is_not_retried(self, monkeypatch, asset):
+        asset.retry = il.RetryPolicy(max_attempts=3, delay=0)
+        message = json.dumps({"error": "ValueError: bad credentials", "retryable": False})
+
+        result, _ = await _run(monkeypatch, asset, FakeContainer(status_code=1, message=message))
+
+        assert result.executions["asset-1"].attempt == 1
+        assert result.status is ExecutionStatus.FAILED
 
     async def test_an_unreachable_daemon_fails_the_run_with_its_events(self, monkeypatch, asset):
         def unreachable() -> None:
@@ -147,39 +168,45 @@ class TestContainerRun:
         assert [event.type for event in events][-1] is EventType.RUN_FAILED
 
     async def test_a_launch_failure_is_a_failed_operation(self, monkeypatch, asset):
-        result, events = await _run(monkeypatch, None, asset)
+        result, events = await _run(monkeypatch, asset)
 
         assert "no such image" in (result.executions["asset-1"].error or "")
         assert EventType.OPERATION_FAILED in [event.type for event in events]
 
-    async def test_a_broken_log_stream_still_returns_the_verdict(self, monkeypatch, asset):
-        container = FakeContainer([_event_line(EventType.ASSET_DATA_STARTED)], broken=True)
-
-        result, events = await _run(monkeypatch, container, asset)
-
-        assert EventType.ASSET_DATA_STARTED in [event.type for event in events]
-        assert result.status is ExecutionStatus.COMPLETED
-
     async def test_the_container_carries_its_name_label_and_environment(self, monkeypatch, asset):
-        container = FakeContainer([])
+        container = FakeContainer()
 
-        await _run(monkeypatch, container, asset)
+        await _run(monkeypatch, asset, container)
 
-        assert container.launched["name"] == "interloper_run_run-1_asset-1"
+        assert container.launched["name"] == "interloper_run_run-1_asset-1_1"
         assert container.launched["labels"] == {"interloper.component_id": "asset-1"}
-        assert container.launched["environment"]["INTERLOPER_EVENTS_TO_STDERR"] == "true"
+
+    async def test_the_child_reports_its_operation_with_the_runs_token(self, monkeypatch, asset):
+        monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
+        monkeypatch.setenv("INTERLOPER_SERVER_INTERNAL_URL", "http://api")
+        container = FakeContainer()
+
+        result, _ = await _run(monkeypatch, asset, container)
+
+        environment = container.launched["environment"]
+        assert environment["INTERLOPER_RUN_OPERATION"] == "asset-1"
+        assert (environment["INTERLOPER_RUN_TOKEN"], environment["INTERLOPER_SERVER_INTERNAL_URL"]) == (
+            "ilr_x",
+            "http://api",
+        )
+        assert result.status is ExecutionStatus.COMPLETED and container.removed
 
     async def test_the_container_continues_the_runs_trace(self, monkeypatch, asset, span_exporter):
-        container = FakeContainer([])
+        container = FakeContainer()
 
-        await _run(monkeypatch, container, asset)
+        await _run(monkeypatch, asset, container)
 
         run_span = next(span for span in span_exporter.get_finished_spans() if span.name == "interloper.runner.run")
         traceparent = container.launched["environment"].get("TRACEPARENT", "")
         assert f"{run_span.context.trace_id:032x}" in traceparent
 
     async def test_a_kept_container_is_not_removed(self, monkeypatch, asset):
-        container = FakeContainer([])
+        container = FakeContainer()
         monkeypatch.setattr(docker, "from_env", lambda: FakeDocker(container))
 
         await DockerRunner(image="img", auto_remove=False).run(il.DAG(asset))
@@ -192,7 +219,7 @@ class TestCommand:
 
     @staticmethod
     def _command(monkeypatch: pytest.MonkeyPatch, asset: il.Asset, window: Any) -> list[str]:
-        monkeypatch.setattr(docker, "from_env", lambda: FakeDocker(None))
+        monkeypatch.setattr(docker, "from_env", lambda: FakeDocker())
         dag = il.DAG(asset)
         run = DockerRun(DockerRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
         return run.command(dag.operations[0])

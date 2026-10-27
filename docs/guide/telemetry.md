@@ -99,10 +99,12 @@ instrumentation is installed, so REST-based sources get egress spans for free.
 | `interloper.destination.rows` | counter | `destination_key`; the rows a completed write carried, when the data has a length |
 
 Metrics are computed by a subscriber on the [event bus](events.md), so they cost nothing on the
-execution path, and they dedupe on event id so re-emitted child events count once. Attributes
-stay low-cardinality by design: ids and partitions never become metric attributes. In a child
-container (`INTERLOPER_EVENTS_TO_STDERR=true`) the metrics handler is not installed; the host
-that re-emits the events is authoritative.
+execution path, and they dedupe on event id so one outcome reported twice counts once. Attributes
+stay low-cardinality by design: ids and partitions never become metric attributes. A child
+container executing one operation of its host's run (`INTERLOPER_RUN_OPERATION`) counts only
+destination I/O, which happens nowhere else; the host counts its run and every operation's
+verdict, which it authors. Operation durations are therefore not recorded for operations that
+execute in a child.
 
 The platform adds its own instruments where the event bus does not reach:
 

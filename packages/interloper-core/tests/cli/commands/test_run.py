@@ -10,6 +10,7 @@ import pytest
 import interloper as il
 from interloper.cli.commands.run import _cmd_run, register
 from interloper.events import Event, EventBatch, EventBus, EventType
+from interloper.operation import OperationResult
 
 
 class FakeRunSource(il.Source):
@@ -355,15 +356,6 @@ class TestRunOutcome:
 
         assert excinfo.value.code == 1
 
-    def test_container_mode_forwards_events_to_stderr(
-        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        monkeypatch.setenv("INTERLOPER_EVENTS_TO_STDERR", "true")
-
-        _cmd_run(_args(target=[SOURCE_PATH]))
-
-        assert "@EVENT:" in capsys.readouterr().err
-
 
 class TestRecordedRun:
     """A platform run: the spec from a file, the run's metadata, and its events reported with the run's token."""
@@ -435,6 +427,51 @@ class TestRecordedRun:
         delivered = [event for batch, _ in sent[1:] for event in batch]
         assert delivered[0].metadata["window"] == "2026-10-26"
         assert delivered[-1].type is EventType.RUN_COMPLETED
+
+    def test_a_child_reports_only_its_own_operation(self, sent: list[Any], monkeypatch: pytest.MonkeyPatch) -> None:
+        dag = il.DAG(FakeRunSource(destinations=[il.MemoryDestination()]))
+        (operation,) = dag.operations
+        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", operation.id)
+
+        _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], run_id="run-1"))
+
+        delivered = [event for batch, _ in sent[1:] for event in batch]
+        assert delivered and all(event.metadata.get("component_id") in (None, operation.id) for event in delivered)
+        assert not [event for event in delivered if event.type.value.startswith(("run_", "operation_"))]
+        assert EventType.ASSET_DATA_COMPLETED in {event.type for event in delivered}
+
+    def test_a_child_makes_one_attempt_and_leaves_its_verdict(
+        self, sent: list[Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        message = tmp_path / "termination-log"
+        monkeypatch.setattr(OperationResult, "TERMINATION_MESSAGE_PATH", str(message))
+        dag = il.DAG(FailingSource(destinations=[il.MemoryDestination()]))
+        (operation,) = dag.operations
+        operation.retry = il.RetryPolicy(max_attempts=3, delay=0)
+        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", operation.id)
+
+        with pytest.raises(SystemExit):
+            _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], run_id="run-1"))
+
+        assert OperationResult.from_termination_message(message.read_text(), "exited") == OperationResult(
+            error="RuntimeError: asset blew up"
+        )
+        delivered = [event.type for batch, _ in sent[1:] for event in batch]
+        assert delivered.count(EventType.ASSET_DATA_STARTED) == 1
+
+    def test_a_child_that_fails_before_its_attempt_leaves_a_final_verdict(
+        self, sent: list[Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        message = tmp_path / "termination-log"
+        monkeypatch.setattr(OperationResult, "TERMINATION_MESSAGE_PATH", str(message))
+        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", "op-1")
+
+        with pytest.raises(SystemExit):
+            _cmd_run(_args(format="inline", target=["{not json"], run_id="run-1"))
+
+        left = OperationResult.from_termination_message(message.read_text(), "exited")
+        assert (left.error or "").startswith("Error: failed to parse inline DAGSpec")
+        assert left.retryable is False
 
     def test_a_recorded_run_needs_its_run_id(self, sent: list[Any]) -> None:
         with pytest.raises(SystemExit, match="needs --run-id"):

@@ -1,13 +1,12 @@
 """KubernetesRunner: each operation in its own Job.
 
-A Job's pod runs its operation's mini-DAG (the operation and its upstream
-ancestors, the ancestors read-only) through ``interloper run --format
-inline``, so the operation resolves its upstreams from their destinations
-without recomputing them. The pod reports its operation's progress as
-``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
-pod runs; the host authors the operation's terminal event itself, from the
-Job's status and on the last attempt the pod reported, so an operation whose
-pod dies without a word, or mid-retry, still ends.
+Each attempt at an operation is one Job, whose pod runs the operation's
+mini-DAG (the operation and its upstream ancestors, the ancestors read-only)
+through ``interloper run --format inline``, so the operation resolves its
+upstreams from their destinations without recomputing them. The host owns the
+operation's lifecycle and its retries; the pod reports only what happens
+inside the operation, and leaves why its attempt failed in its termination
+message.
 """
 
 from __future__ import annotations
@@ -16,14 +15,13 @@ import asyncio
 import contextvars
 import json
 import logging
-import threading
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
 from interloper.errors import RunnerError, format_exception
-from interloper.events import EventLogReader
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
 from interloper.telemetry.propagation import child_process_env
@@ -36,25 +34,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_STARTED = frozenset({"Running", "Succeeded", "Failed"})
-
 
 class KubernetesRun(Run):
-    """One run of a KubernetesRunner: each operation in its own Job, its events read from the pod's log.
+    """One run of a KubernetesRunner: each attempt at an operation in its own Job.
 
     Following a Job blocks, so each one is followed on a thread of the run's
-    polling pool. The Job's status decides the verdict; the pod's log is
-    forwarded alongside on a thread of its own, given ``log_grace`` seconds
-    after the verdict to deliver the pod's last events, and stopped past them:
-    a pod lost with its node can leave a log stream open that never ends, and
-    an event arriving after the verdict would contradict it.
+    polling pool.
     """
 
     runner: KubernetesRunner
-    reports_progress = False
     batch: client.BatchV1Api
     core: client.CoreV1Api
-    log_grace: ClassVar[float] = 5.0
 
     def __init__(
         self, runner: KubernetesRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
@@ -79,52 +69,55 @@ class KubernetesRun(Run):
         self.batch = client.BatchV1Api()
         self.core = client.CoreV1Api()
 
-    async def execute(self, operation: Operation) -> OperationResult:
-        """Run the operation in its own Job, followed on the polling pool.
+    async def attempt(self, operation: Operation) -> OperationResult:
+        """Make one attempt in its own Job, followed on the polling pool.
 
         Args:
-            operation: The operation to execute.
+            operation: The operation to attempt.
 
         Returns:
-            Its result, recorded on the last attempt the pod reported.
+            The attempt's result.
         """
-        reader = EventLogReader(operation.id, label=f"job {self.name(operation)}")
         # The child continues the run's trace, which only this context carries onto the pool thread.
-        follow = partial(contextvars.copy_context().run, self.follow, operation, reader)
-        result = await asyncio.get_running_loop().run_in_executor(self.polling, follow)
-        self.state.advance(operation, reader.attempt)
-        return result
+        follow = partial(contextvars.copy_context().run, self.follow, operation)
+        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
 
-    def follow(self, operation: Operation, reader: EventLogReader) -> OperationResult:
-        """Create the operation's Job, forward its pod's events, and wait for the Job's verdict.
+    def follow(self, operation: Operation) -> OperationResult:
+        """Create the attempt's Job and wait for it to finish.
 
         Args:
-            operation: The operation the Job executes.
-            reader: Forwards the pod's events.
+            operation: The operation the Job attempts.
 
         Returns:
-            An empty result when the Job succeeded; otherwise a failure naming
-            the Job, or why it could not be created or watched.
+            An empty result when the Job succeeded; otherwise the failure its
+            pod left in its termination message, or one naming the Job, or why
+            it could not be created or watched.
         """
         name = self.name(operation)
         try:
             self.batch.create_namespaced_job(namespace=self.runner.namespace, body=self.job(operation, name))
-        except Exception as error:  # noqa: BLE001 - a Job that cannot be created fails its operation
+            if self.wait(name):
+                return OperationResult()
+            message = self.termination_message(name)
+        except Exception as error:  # noqa: BLE001 - a Job that cannot be created or watched fails its attempt
             return OperationResult(error=format_exception(error))
-        finished = threading.Event()
-        forwarding = threading.Thread(target=self.forward_log, args=(name, reader, finished), daemon=True)
-        forwarding.start()
-        try:
-            succeeded = self.wait(name)
-        except Exception as error:  # noqa: BLE001 - losing the Job fails its operation, never the run
-            return OperationResult(error=format_exception(error))
-        finally:
-            finished.set()
-            forwarding.join(timeout=self.log_grace)
-            reader.stop()
-        if succeeded:
-            return OperationResult()
-        return OperationResult(error=format_exception(RunnerError(f"Job {name} failed")))
+        return OperationResult.from_termination_message(message, format_exception(RunnerError(f"Job {name} failed")))
+
+    def termination_message(self, name: str) -> str | None:
+        """The message the Job's pod left when its container terminated.
+
+        Args:
+            name: The Job's name.
+
+        Returns:
+            The message, ``None`` when the pod wrote none or is gone.
+        """
+        pods = self.core.list_namespaced_pod(namespace=self.runner.namespace, label_selector=f"job-name={name}").items
+        for pod in pods:
+            for status in (pod.status and pod.status.container_statuses) or []:
+                if status.state and status.state.terminated and status.state.terminated.message:
+                    return status.state.terminated.message
+        return None
 
     def wait(self, name: str) -> bool:
         """Wait for the Job to finish.
@@ -155,58 +148,6 @@ class KubernetesRun(Run):
             return False
         return None
 
-    def forward_log(self, name: str, reader: EventLogReader, finished: threading.Event) -> None:
-        """Forward the operation's events from the Job's pod log until the log ends.
-
-        A stream that breaks is logged and ends the forwarding: the Job's
-        status, not the log, decides the operation's verdict.
-
-        Args:
-            name: The Job's name.
-            reader: Forwards the pod's events.
-            finished: Set once the Job's verdict is known.
-        """
-        pod = self.pod(name, finished)
-        if pod is None:
-            return
-        try:
-            stream = self.core.read_namespaced_pod_log(
-                name=pod, namespace=self.runner.namespace, container="interloper", follow=True, _preload_content=False
-            )
-            for chunk in stream:
-                reader.feed(chunk)
-        except Exception:
-            logger.debug("Log stream of pod %s ended early", pod, exc_info=True)
-        reader.close()
-
-    def pod(self, name: str, finished: threading.Event) -> str | None:
-        """Wait for the Job's pod to start.
-
-        The pods are listed once more after the verdict: a pod that fails right
-        after its image pull can go from ``Pending`` to ``Failed`` between two
-        polls, and its log still holds the events saying why.
-
-        Args:
-            name: The Job's name.
-            finished: Set once the Job's verdict is known, which ends the wait.
-
-        Returns:
-            The pod's name, or ``None`` when the Job finished without one starting.
-        """
-        while True:
-            last = finished.is_set()
-            try:
-                pods = self.core.list_namespaced_pod(namespace=self.runner.namespace, label_selector=f"job-name={name}")
-            except Exception:
-                logger.debug("Listing the pods of Job %s failed", name, exc_info=True)
-            else:
-                for pod in pods.items:
-                    if pod.status is not None and pod.status.phase in _STARTED:
-                        return pod.metadata.name
-            if last:
-                return None
-            finished.wait(self.runner.poll_interval)
-
     def job(self, operation: Operation, name: str) -> client.V1Job:
         """The Job that runs the operation's mini-DAG, once, in the runner's pod settings.
 
@@ -225,8 +166,9 @@ class KubernetesRun(Run):
             image_pull_policy=self.runner.image_pull_policy,
             command=command[:1],
             args=command[1:],
-            env=self.runner.environment() or None,
+            env=[*self.runner.environment(), client.V1EnvVar(name="INTERLOPER_RUN_OPERATION", value=operation.id)],
             resources=self.runner.requirements(),
+            termination_message_path=OperationResult.TERMINATION_MESSAGE_PATH,
         )
         pull_secrets = [client.V1LocalObjectReference(name=secret) for secret in self.runner.image_pull_secrets]
         pod = client.V1PodSpec(
@@ -273,15 +215,16 @@ class KubernetesRun(Run):
         return command
 
     def name(self, operation: Operation) -> str:
-        """A Job name unique to this operation and run, within Kubernetes' 63 characters.
+        """A Job name unique to this attempt at the operation in this run, within Kubernetes' 63 characters.
 
         Args:
-            operation: The operation the Job executes.
+            operation: The operation the Job attempts.
 
         Returns:
-            ``interloper-run-<run>-<operation>``, each id cut to 8 characters.
+            ``interloper-run-<run>-<operation>-<attempt>``, each id cut to 8 characters.
         """
-        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}"[:63]
+        attempt = self.state.executions[operation.id].attempt
+        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}-{attempt}"[:63]
 
     async def close(self) -> None:
         """Release the polling pool.
@@ -295,8 +238,8 @@ class KubernetesRun(Run):
 class KubernetesRunner(Runner):
     """Execute each operation in its own Kubernetes Job, ``max_jobs`` at a time.
 
-    The Job's pod runs the image's ``interloper`` CLI on the operation's
-    mini-DAG; the host forwards the pod's events and records the Job's status:
+    Each attempt's pod runs the image's ``interloper`` CLI on the
+    operation's mini-DAG; the host records the attempt and retries it:
 
     ```py
     result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
@@ -330,12 +273,15 @@ class KubernetesRunner(Runner):
         """The environment every pod gets.
 
         Returns:
-            ``env_vars``, the switch that makes the child report its events on
-            stderr, and the trace context the child continues.
+            ``env_vars``, the trace context the child continues and, on the
+            platform, the host run's token and the API's URL its child reports
+            to; each Job adds its own operation.
         """
         environment = [client.V1EnvVar(name=name, value=value) for name, value in self.env_vars.items()]
-        environment.append(client.V1EnvVar(name="INTERLOPER_EVENTS_TO_STDERR", value="true"))
         environment.extend(client.V1EnvVar(name=name, value=value) for name, value in child_process_env().items())
+        for name in ("INTERLOPER_RUN_TOKEN", "INTERLOPER_SERVER_INTERNAL_URL"):
+            if value := os.environ.get(name):
+                environment.append(client.V1EnvVar(name=name, value=value))
         return environment
 
     def requirements(self) -> client.V1ResourceRequirements | None:

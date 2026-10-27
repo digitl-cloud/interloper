@@ -123,11 +123,11 @@ event is `il.EventBus.emit(il.EventType.LOG, metadata={...})`.
 
 ## Events across processes
 
-Container-based runners run assets in child processes that have their own bus. With
-`INTERLOPER_EVENTS_TO_STDERR=true`, the `interloper run` command subscribes a
-`StderrEventHandler` that writes each event as an `@EVENT:{json}` line on stderr; the host
-parses those lines with `Event.from_log_line()` and re-emits them with `EventBus.emit_event()`,
-preserving ids and timestamps. Subscribers on the host therefore see one unified stream.
+Container-based runners run each operation in a child process with its own bus. On the
+platform, the child reports its operation's events to the API itself, with its host run's token,
+and the host authors the operation's verdict from the child's exit; deterministic ids make the
+two verdicts one row. The host's own bus does not see the child's events, so a subscriber on the
+host sees the run's and the operations' lifecycle, not the steps inside a child.
 
 ## Metrics
 

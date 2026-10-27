@@ -47,10 +47,9 @@ A `Run` implements:
 
 | Member | Role |
 |--------|------|
-| `execute(operation) -> OperationResult` | Execute one operation where this kind of run executes it, and return what it came to. An operation's own failure is a result with its `error` set, never an exception; an `execute` that raises is a fault of the run itself and fails the whole run. |
+| `attempt(operation) -> OperationResult` | Make one attempt at an operation where this kind of run executes it, and return what it came to. An attempt's own failure is a result with its `error` and `retryable` set, never an exception; an `attempt` that raises is a fault of the run itself and fails the whole run. |
 | `open()` | Acquire what the run holds from outside the process (a client, a connection). Optional; the walk calls it after `RUN_STARTED`, so a failure fails the run with its events, like any other fault of the run. |
 | `close()` | Release what the run holds (pools, clients). Optional; a failure here is logged and never masks the run's result. |
-| `reports_progress` | Class attribute, `True` by default. Set it to `False` when each operation executes in a child process that reports its own start and retries (see below). |
 
 What a run holds while it lasts (a pool, a client) is its attributes. Local ones (a pool) are
 set up in `__init__` after `super().__init__(...)`, which checks the run's window against every
@@ -64,11 +63,12 @@ starts every ready operation while fewer than `capacity` are in flight, records 
 lands, stops starting new ones after a failure under `fail_fast` (what is in flight always
 finishes), cancels whatever never started, and emits `RUN_COMPLETED` or `RUN_FAILED`.
 
-`OperationResult.from_execution(operation, context, on_retry=..., on_restart=...)` is the attempt
-loop an in-process run uses: it executes the operation inside its span, retries it under its
-`RetryPolicy` while `operation.retryable(error)` agrees, and turns a final failure into the
-operation's `failure(error)` result, completed with the traceback (when the operation's class
-allows one) and the original exception, so `reraise` can raise it.
+The walk retries every kind of run the same way: it makes attempts under the operation's
+`RetryPolicy` while each failed attempt is `retryable`, reporting each one. An in-process attempt
+is `OperationResult.from_attempt(operation, context)`: it executes the operation inside its span
+and turns a failure into the operation's `failure(error)` result, completed with the traceback
+(when the operation's class allows one), the original exception, so `reraise` can raise it, and
+whether `operation.retryable(error)` thinks another attempt may help.
 
 ## RunState
 
@@ -83,15 +83,13 @@ state.context(operation)           # the OperationContext it executes with
 
 state.start(operation)             # RUNNING; OPERATION_STARTED
 state.retry(operation, error)      # OPERATION_RETRIED; the next attempt
-state.advance(operation, attempt)  # catches up with the attempts a child made on its own
 state.finish(operation, result)    # COMPLETED or FAILED; promotes or cancels its dependents
 state.cancel_pending()             # cancels everything not yet terminal
 ```
 
-The walk calls `start`, `finish` and `cancel_pending`; a run's `execute` only reports retries
-(`retry`, then `start` for the next attempt). Non-enabled operations start as `SKIPPED` and count
+The walk calls every transition; a run's `attempt` calls none. Non-enabled operations start as `SKIPPED` and count
 as satisfied predecessors. `RunState` is not thread-safe: call it from the run's event loop only,
-never from a thread an `execute` hands work to.
+never from a thread an `attempt` hands work to.
 
 ## Registering
 
@@ -117,16 +115,18 @@ give it a `from_settings` classmethod, as the Docker and Kubernetes launchers do
 
 ## Events from children
 
-A run that executes each operation in a child process (the Docker and Kubernetes runners) sets
-`reports_progress = False`: the child reports its operation's start, retries and asset steps
-itself, and the host records them silently. Have the child run
-`interloper run --format inline --run-id=<id> <spec>` under `INTERLOPER_EVENTS_TO_STDERR=true`
-(the CLI then subscribes a `StderrEventHandler`), and feed its log through an
-`EventLogReader(operation.id, label=...)`, which forwards that operation's `@EVENT:` lines to the
-host's event bus and follows the last attempt they report (`reader.attempt`). The host still
-records the verdict and emits the terminal event, after `state.advance(operation, reader.attempt)`
-so it lands on that attempt; deterministic operation event ids make the host's and the child's
-collapse into one when persisted. Pass
+A run that makes each attempt in a child process (the Docker and Kubernetes runners) still owns
+its operations' lifecycle: the host reports every start, retry and verdict, and the child only
+what happens inside the operation. Have the child run
+`interloper run --format inline --run-id=<id> <spec>` with `INTERLOPER_RUN_OPERATION` set to the
+operation's id, and, on the platform, the host's `INTERLOPER_RUN_TOKEN` and
+`INTERLOPER_SERVER_INTERNAL_URL`: the child then makes one attempt, reports that operation's
+asset and destination events to the API, and drops every lifecycle event and its upstreams'
+events. A failed attempt leaves its error and whether a retry may help at
+`OperationResult.TERMINATION_MESSAGE_PATH`; the host reads it back with
+`OperationResult.from_termination_message` once the child exits (Kubernetes surfaces it as the
+container's termination message; a Docker host copies it out of the stopped container). A child
+that dies without writing one fails its attempt with its exit code, and may be retried. Pass
 `child_process_env()` into the child for trace continuity.
 
 Run the child on the host's interloper version. The spec and the flags it receives are written

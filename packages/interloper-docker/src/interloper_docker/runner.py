@@ -1,30 +1,32 @@
 """DockerRunner: each operation in its own container.
 
-A container runs its operation's mini-DAG (the operation and its upstream
-ancestors, the ancestors read-only) through ``interloper run --format
-inline``, so the operation resolves its upstreams from their destinations
-without recomputing them. The container reports its operation's progress as
-``@EVENT:`` lines on stderr, which the host forwards to its EventBus while the
-container runs; the host authors the operation's terminal event itself, from
-the container's exit code and on the last attempt the container reported, so
-an operation whose container dies without a word, or mid-retry, still ends.
+Each attempt at an operation is one container, which runs the operation's
+mini-DAG (the operation and its upstream ancestors, the ancestors read-only)
+through ``interloper run --format inline``, so the operation resolves its
+upstreams from their destinations without recomputing them. The host owns the
+operation's lifecycle and its retries; the container reports only what
+happens inside the operation, and leaves why its attempt failed in its
+termination message.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextvars
+import io
 import json
 import logging
+import os
+import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import docker
 from docker import DockerClient
+from docker.errors import NotFound
 from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
-from interloper.events import EventLogReader
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
 from interloper.telemetry.propagation import child_process_env
@@ -38,15 +40,14 @@ logger = logging.getLogger(__name__)
 
 
 class DockerRun(Run):
-    """One run of a DockerRunner: each operation in its own container, its events read from the container's log.
+    """One run of a DockerRunner: each attempt at an operation in its own container.
 
-    Following a container (start it, forward its log, read its exit code)
-    blocks, so each one is followed on a thread of the run's polling pool,
-    one thread per container.
+    Following a container (start it, wait for its exit code) blocks, so each
+    one is followed on a thread of the run's polling pool, one thread per
+    container.
     """
 
     runner: DockerRunner
-    reports_progress = False
     docker: DockerClient
 
     def __init__(
@@ -67,49 +68,63 @@ class DockerRun(Run):
         """Connect to the Docker daemon."""
         self.docker = docker.from_env()
 
-    async def execute(self, operation: Operation) -> OperationResult:
-        """Run the operation in its own container, followed on the polling pool.
+    async def attempt(self, operation: Operation) -> OperationResult:
+        """Make one attempt in its own container, followed on the polling pool.
 
         Args:
-            operation: The operation to execute.
+            operation: The operation to attempt.
 
         Returns:
-            Its result, recorded on the last attempt the container reported.
+            The attempt's result.
         """
-        reader = EventLogReader(operation.id, label=f"container {self.name(operation)}")
         # The child continues the run's trace, which only this context carries onto the pool thread.
-        follow = partial(contextvars.copy_context().run, self.follow, operation, reader)
-        result = await asyncio.get_running_loop().run_in_executor(self.polling, follow)
-        self.state.advance(operation, reader.attempt)
-        return result
+        follow = partial(contextvars.copy_context().run, self.follow, operation)
+        return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
 
-    def follow(self, operation: Operation, reader: EventLogReader) -> OperationResult:
-        """Start the operation's container, forward its log's events until it exits, then read its exit code.
+    def follow(self, operation: Operation) -> OperationResult:
+        """Start the attempt's container and wait for it to exit.
 
         Args:
-            operation: The operation the container executes.
-            reader: Forwards the container's events.
+            operation: The operation the container attempts.
 
         Returns:
-            An empty result for exit code 0; otherwise a failure naming the
-            code, or why the container could not be started or waited on.
+            An empty result for exit code 0; otherwise the failure the
+            container left in its termination message, or one naming its exit
+            code, or why it could not be started or waited on.
         """
         try:
             container = self.launch(operation)
-        except Exception as error:  # noqa: BLE001 - a container that cannot start fails its operation
+        except Exception as error:  # noqa: BLE001 - a container that cannot start fails its attempt
             return OperationResult(error=format_exception(error))
         try:
-            self.forward_log(container, reader)
             status_code = container.wait().get("StatusCode", 1)
-        except Exception as error:  # noqa: BLE001 - losing the container fails its operation, never the run
+            message = self.termination_message(container) if status_code else None
+        except Exception as error:  # noqa: BLE001 - losing the container fails its attempt, never the run
             return OperationResult(error=format_exception(error))
         finally:
             if self.runner.auto_remove:
                 self.remove(container)
         if status_code == 0:
             return OperationResult()
-        exited = RunnerError(f"Container {container.short_id} exited with code {status_code}")
-        return OperationResult(error=format_exception(exited))
+        exited = format_exception(RunnerError(f"Container {container.short_id} exited with code {status_code}"))
+        return OperationResult.from_termination_message(message, exited)
+
+    def termination_message(self, container: Container) -> str | None:
+        """The message an exited container left at its termination message path.
+
+        Args:
+            container: The exited container.
+
+        Returns:
+            The message, ``None`` when the container wrote none.
+        """
+        try:
+            chunks, _ = container.get_archive(OperationResult.TERMINATION_MESSAGE_PATH)
+        except NotFound:
+            return None
+        with tarfile.open(fileobj=io.BytesIO(b"".join(chunks))) as archive:
+            member = archive.extractfile(archive.getmembers()[0])
+            return member.read().decode() if member is not None else None
 
     def launch(self, operation: Operation) -> Container:
         """Start the operation's container, detached.
@@ -124,7 +139,7 @@ class DockerRun(Run):
             image=self.runner.image,
             name=self.name(operation),
             command=self.command(operation),
-            environment=self.runner.environment(),
+            environment={**self.runner.environment(), "INTERLOPER_RUN_OPERATION": operation.id},
             volumes=self.runner.mounts() or None,
             labels={"interloper.component_id": operation.id},
             remove=False,
@@ -132,23 +147,6 @@ class DockerRun(Run):
             stdout=True,
             stderr=True,
         )
-
-    def forward_log(self, container: Container, reader: EventLogReader) -> None:
-        """Forward the operation's events from the container's log until the log ends.
-
-        A stream that breaks is logged and ends the forwarding: the exit code,
-        not the log, decides the operation's verdict.
-
-        Args:
-            container: The running container.
-            reader: Forwards the container's events.
-        """
-        try:
-            for chunk in container.logs(stream=True, follow=True, stdout=False, stderr=True):
-                reader.feed(chunk)
-        except Exception:
-            logger.debug("Log stream of container %s ended early", container.short_id, exc_info=True)
-        reader.close()
 
     def remove(self, container: Container) -> None:
         """Remove a finished container; a failure to is logged, never failing its operation.
@@ -181,15 +179,16 @@ class DockerRun(Run):
         return command
 
     def name(self, operation: Operation) -> str:
-        """A container name unique to this operation and run.
+        """A container name unique to this attempt at the operation in this run.
 
         Args:
-            operation: The operation the container executes.
+            operation: The operation the container attempts.
 
         Returns:
-            ``interloper_run_<run>_<operation>``, each id cut to 8 characters.
+            ``interloper_run_<run>_<operation>_<attempt>``, each id cut to 8 characters.
         """
-        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}"
+        attempt = self.state.executions[operation.id].attempt
+        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}_{attempt}"
 
     async def close(self) -> None:
         """Release the polling pool.
@@ -203,9 +202,8 @@ class DockerRun(Run):
 class DockerRunner(Runner):
     """Execute each operation in its own Docker container, ``max_containers`` at a time.
 
-    The container runs the image's ``interloper`` CLI on the operation's
-    mini-DAG; the host forwards the container's events and records its exit
-    code:
+    Each attempt's container runs the image's ``interloper`` CLI on the
+    operation's mini-DAG; the host records the attempt and retries it:
 
     ```py
     result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
@@ -232,12 +230,15 @@ class DockerRunner(Runner):
         """The environment every container gets.
 
         Returns:
-            ``env_vars``, the switch that makes the child report its events on
-            stderr, and the trace context the child continues.
+            ``env_vars``, the trace context the child continues and, on the
+            platform, the host run's token and the API's URL its child reports
+            to; each container adds its own operation.
         """
         environment = dict(self.env_vars)
-        environment["INTERLOPER_EVENTS_TO_STDERR"] = "true"
         environment.update(child_process_env())
+        for name in ("INTERLOPER_RUN_TOKEN", "INTERLOPER_SERVER_INTERNAL_URL"):
+            if value := os.environ.get(name):
+                environment[name] = value
         return environment
 
     def mounts(self) -> dict[str, dict[str, str]]:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 from interloper.operation.base import OperationResult
@@ -20,21 +19,16 @@ class AsyncRun(Run):
     event loop serves the whole run.
     """
 
-    async def execute(self, operation: Operation) -> OperationResult:
-        """Execute the operation here, under its retry policy, reporting each retry as it happens.
+    async def attempt(self, operation: Operation) -> OperationResult:
+        """Execute the operation once, here.
 
         Args:
-            operation: The operation to execute.
+            operation: The operation to attempt.
 
         Returns:
-            Its result.
+            The attempt's result.
         """
-        return await OperationResult.from_execution(
-            operation,
-            self.state.context(operation),
-            on_retry=partial(self.state.retry, operation),
-            on_restart=partial(self.state.start, operation),
-        )
+        return await OperationResult.from_attempt(operation, self.state.context(operation))
 
 
 class AsyncRunner(Runner):

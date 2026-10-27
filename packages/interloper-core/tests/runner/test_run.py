@@ -34,7 +34,7 @@ class ScriptedRun(Run):
     results: ClassVar[dict[str, OperationResult]] = {}
     executed: ClassVar[list[str]] = []
 
-    async def execute(self, operation: Operation) -> OperationResult:
+    async def attempt(self, operation: Operation) -> OperationResult:
         self.executed.append(operation.key)
         await asyncio.sleep(0)
         return self.results.get(operation.key, OperationResult())
@@ -78,9 +78,9 @@ class TestWalk:
         assert statuses == {"first": ExecutionStatus.FAILED, "second": ExecutionStatus.CANCELED}
         assert ScriptedRun.executed == ["first"]
 
-    async def test_a_raising_execute_is_the_runs_error(self):
+    async def test_a_raising_attempt_is_the_runs_error(self):
         class Faulty(ScriptedRun):
-            async def execute(self, operation: Operation) -> OperationResult:
+            async def attempt(self, operation: Operation) -> OperationResult:
                 raise RuntimeError("runner bug")
 
         class FaultyRunner(il.AsyncRunner):
@@ -98,7 +98,7 @@ class TestWalk:
 
     async def test_an_operation_canceled_from_within_fails_instead_of_stalling_the_walk(self):
         class Canceling(ScriptedRun):
-            async def execute(self, operation: Operation) -> OperationResult:
+            async def attempt(self, operation: Operation) -> OperationResult:
                 raise asyncio.CancelledError
 
         class CancelingRunner(il.AsyncRunner):

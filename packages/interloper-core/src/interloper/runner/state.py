@@ -19,17 +19,13 @@ class RunState:
     """The operations of one run: their statuses, attempts and results, and the events their transitions emit.
 
     Every transition is one verb, and emits its operation-lifecycle event with
-    a deterministic id. With ``reports_progress`` off, a start and a retry are
-    recorded without an event: the operation executes in a child process that
-    reports its own, while every verdict is still recorded, and its terminal
-    event authored, here, on the last attempt the child reached (`advance`).
+    a deterministic id. The run that walks the DAG is the only author of its
+    operations' lifecycle, wherever an attempt executes: a container's child
+    reports only what happens inside its operation.
 
     Event ids derive from ``(run_id, component_id, event_type, attempt)``, so
-    the *same* logical event collapses to one row when more than one party
-    produces it: a container's child emits its own ``operation_failed`` and
-    the host authors one from the exit status, or both emit
-    ``operation_queued``. With the idempotent event save, this dedups without
-    any cross-process coordination.
+    a verdict the store authors for an operation its run left open collapses
+    with the same verdict arriving late from a stopping pod.
 
     Every transition happens on the run's event loop thread, so no locking is
     required.
@@ -42,8 +38,6 @@ class RunState:
         dag: DAG,
         window: PartitionWindow | None,
         metadata: dict[str, Any],
-        *,
-        reports_progress: bool = True,
     ) -> None:
         """Track a DAG's operations for one run, roots ready.
 
@@ -51,12 +45,10 @@ class RunState:
             dag: The DAG the run walks.
             window: The window the run covers, ``None`` when unscoped.
             metadata: Run-level metadata, carrying the ``run_id``.
-            reports_progress: Whether starts and retries emit events here.
         """
         self.dag = dag
         self.window = window
         self.metadata = metadata
-        self.reports_progress = reports_progress
         self.executions: dict[str, ExecutionInfo] = {
             operation.id: ExecutionInfo(
                 component_id=operation.id,
@@ -121,8 +113,7 @@ class RunState:
             operation: The operation starting an attempt.
         """
         self.executions[operation.id].start()
-        if self.reports_progress:
-            self._emit(EventType.OPERATION_STARTED, operation, f"Operation '{operation.key}' started")
+        self._emit(EventType.OPERATION_STARTED, operation, f"Operation '{operation.key}' started")
 
     def retry(self, operation: Operation, error: str) -> None:
         """Record a failed attempt that will be retried (``OPERATION_RETRIED``), and count the next one.
@@ -137,21 +128,9 @@ class RunState:
             error: The attempt's error.
         """
         info = self.executions[operation.id]
-        if self.reports_progress:
-            message = f"Operation '{operation.key}' failed on attempt {info.attempt}, retrying: {error}"
-            self._emit(EventType.OPERATION_RETRIED, operation, message, error=error)
+        message = f"Operation '{operation.key}' failed on attempt {info.attempt}, retrying: {error}"
+        self._emit(EventType.OPERATION_RETRIED, operation, message, error=error)
         info.attempt += 1
-
-    def advance(self, operation: Operation, attempt: int) -> None:
-        """Catch up with the attempts a child process made on its own, so its verdict lands on the last one.
-
-        Args:
-            operation: The operation the child executed.
-            attempt: The last attempt the child reported; an earlier one than
-                already recorded changes nothing.
-        """
-        info = self.executions[operation.id]
-        info.attempt = max(info.attempt, attempt)
 
     def finish(self, operation: Operation, result: OperationResult) -> None:
         """Record what an operation came to.
@@ -197,11 +176,8 @@ class RunState:
     def operation_event_id(run_id: str, component_id: str, event_type: EventType, attempt: int = 1) -> str:
         """Derive a deterministic event id from a run/component/type triple.
 
-        Both the host and the in-container child run this same code with the
-        same ``run_id`` (passed via ``--run-id``) and ``component_id`` (carried
-        in the mini-DAG spec), so they compute identical ids and their events
-        dedup. The store derives the same ids when it closes the operations a
-        run left open, so a late event from a stopping pod dedups too.
+        The store derives the same ids when it closes the operations a run
+        left open, so a late event from a stopping pod dedups.
 
         Args:
             run_id: Id of the run the event belongs to.
@@ -277,8 +253,7 @@ class RunState:
         """
         attempt = self.executions[operation.id].attempt
         metadata = {
-            **operation.event_metadata(self.metadata, self.window, attempt=attempt),
-            **extra,
+            **operation.event_metadata(self.metadata, self.window, attempt=attempt, **extra),
             "message": message,
         }
         event_id = self.operation_event_id(self.run_id, operation.id, event_type, attempt=attempt)

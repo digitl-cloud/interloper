@@ -6,7 +6,8 @@ import asyncio
 import datetime as dt
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 from typing_extensions import Self
 
@@ -30,15 +31,10 @@ class Run(ABC):
 
     A runner is configuration; a run is made from it for one DAG and one
     window, walks the DAG once and is closed. Each kind of run says where an
-    operation executes (`execute`) and what it holds while the run lasts
-    (acquired by `open`, released by `close`); the walk, the run's own
-    lifecycle events and its result are the same for every kind.
-
-    ``reports_progress`` is off for a run whose operations execute in a child
-    process that reports its own starts and retries.
+    attempt at an operation executes (`attempt`) and what it holds while the
+    run lasts (acquired by `open`, released by `close`); the walk, the
+    retries, every lifecycle event and the result are the same for every kind.
     """
-
-    reports_progress: ClassVar[bool] = True
 
     def __init__(self, runner: Runner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
         """Make a run of a runner, checking the window before anything is emitted.
@@ -51,7 +47,7 @@ class Run(ABC):
         """
         dag.check_window(window)
         self.runner = runner
-        self.state = RunState(dag, window, metadata, reports_progress=self.reports_progress)
+        self.state = RunState(dag, window, metadata)
         self.fault: BaseException | None = None
         self.started_at = dt.datetime.now(dt.timezone.utc)
 
@@ -228,17 +224,33 @@ class Run(ABC):
             raise info.result.exception
         raise RunnerError(f"Operation '{operation.key}' failed: {info.error}")
 
-    # -- The kind of run ---------------------------------------------------------
-
-    @abstractmethod
     async def execute(self, operation: Operation) -> OperationResult:
-        """Execute one operation and return what it came to; never raise for the operation's own failure.
+        """Execute an operation under its retry policy, reporting each attempt as it happens.
 
         Args:
             operation: The operation to execute.
 
         Returns:
-            Its result.
+            What its last attempt came to.
+        """
+        return await OperationResult.from_execution(
+            operation,
+            partial(self.attempt, operation),
+            on_retry=partial(self.state.retry, operation),
+            on_restart=partial(self.state.start, operation),
+        )
+
+    # -- The kind of run ---------------------------------------------------------
+
+    @abstractmethod
+    async def attempt(self, operation: Operation) -> OperationResult:
+        """Make one attempt at an operation and return what it came to; never raise for its own failure.
+
+        Args:
+            operation: The operation to attempt.
+
+        Returns:
+            The attempt's result, its ``retryable`` set on a failure.
         """
 
     async def open(self) -> None:  # noqa: B027 - a run holding nothing acquires nothing
