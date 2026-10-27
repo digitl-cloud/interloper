@@ -102,7 +102,7 @@ class Store:
         self.members = MemberStore(self._engine)
         self.invitations = InvitationStore(self._engine)
         self.tokens = TokenStore(self._engine, session_expiry=session_expiry, access_token_expiry=access_token_expiry)
-        self.oauth = OAuthStore(self._engine, refresh_token_expiry=refresh_token_expiry)
+        self.oauth = OAuthStore(self._engine, self.tokens, refresh_token_expiry=refresh_token_expiry)
         self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)

@@ -13,7 +13,10 @@ Access tokens are ``tokens`` rows and carry no family. Revoking a family
 revokes the access tokens of its user and client, which can end a sibling
 family's access token early; that family's next refresh issues a new one.
 A family stays revoked: a refresh token saved into it after the revocation
-(the loser of a race on one token) never rotates and never counts as live.
+(the loser of a race on one token) never rotates and never counts as live,
+and a pair issued into it is revoked on the spot. Revoking a family is done
+once: a later replay into it, or of a code past its lifetime, carries no new
+sign of theft and revokes nothing, so it cannot end a newer grant's access.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from sqlmodel import Session, col, select
 from interloper_db.crypto import hash_token
 from interloper_db.models import Audience, AuthorizationCode, OAuthClient, RefreshToken, Token, TokenKind
 from interloper_db.session import commit, save, session_scope
+from interloper_db.store.tokens import TokenStore
 
 CLIENT_SECRET_PREFIX = "ilc_"
 
@@ -41,15 +45,18 @@ AUTHORIZATION_CODE_EXPIRY = timedelta(minutes=10)
 class OAuthStore:
     """Store methods for OAuth clients, authorization codes and refresh tokens."""
 
-    def __init__(self, engine: Engine, *, refresh_token_expiry: timedelta) -> None:
+    def __init__(self, engine: Engine, tokens: TokenStore, *, refresh_token_expiry: timedelta) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
+            tokens: The token facet, which issues the access tokens a grant
+                pairs with its refresh tokens.
             refresh_token_expiry: How long a refresh token stays valid; each
                 rotation issues a successor valid this long again.
         """
         self._engine = engine
+        self._tokens = tokens
         self._refresh_token_expiry = refresh_token_expiry
 
     # -- Clients ---------------------------------------------------------------
@@ -122,9 +129,11 @@ class OAuthStore:
             return list(session.exec(statement).all())
 
     def revoke_client_for_user(self, user_id: UUID, client_id: str) -> None:
-        """Revoke every refresh and access token a client holds for a user.
+        """Revoke every refresh and access token a client holds for a user, and its unspent codes.
 
-        Idempotent: tokens already revoked keep their revocation time.
+        A code approved before the revocation expires with it, so the client
+        cannot exchange it for a fresh grant. Idempotent: tokens already
+        revoked keep their revocation time.
 
         Args:
             user_id: Profile UUID.
@@ -132,6 +141,16 @@ class OAuthStore:
         """
         now = datetime.now(timezone.utc)
         with session_scope(self._engine) as session:
+            session.connection().execute(
+                update(AuthorizationCode)
+                .where(
+                    col(AuthorizationCode.user_id) == user_id,
+                    col(AuthorizationCode.client_id) == client_id,
+                    col(AuthorizationCode.used_at).is_(None),
+                    col(AuthorizationCode.expires_at) > now,
+                )
+                .values(expires_at=now)
+            )
             session.connection().execute(
                 update(RefreshToken)
                 .where(
@@ -189,21 +208,20 @@ class OAuthStore:
 
         Returns:
             The code, now marked used, or ``None`` when it is unknown, expired
-            or already spent. Presenting a spent code also revokes the family
-            it opened.
+            or already spent. Presenting a spent code within its lifetime also
+            revokes the family it opened; past it, the code was exchanged long
+            enough ago that its replay says nothing new, and revokes nothing.
         """
         now = datetime.now(timezone.utc)
         with session_scope(self._engine) as session:
             code = session.exec(
                 select(AuthorizationCode).where(col(AuthorizationCode.code_hash) == hash_token(raw)).with_for_update()
             ).first()
-            if code is None:
+            if code is None or code.expires_at <= now:
                 return None
             if code.used_at is not None:
                 self._revoke_family(session, code.family_id, code.user_id, code.client_id, now)
                 commit(session)
-                return None
-            if code.expires_at <= now:
                 return None
             code.used_at = now
             save(session, code)
@@ -238,6 +256,42 @@ class OAuthStore:
             save(session, token)
         return raw
 
+    def issue_tokens(
+        self, user_id: UUID, client_id: str, resource: Audience, family_id: UUID
+    ) -> tuple[str, str] | None:
+        """Issue a grant's access token and the refresh token that joins its family.
+
+        The family is checked again once the pair is written: a replay that
+        revoked it while the pair was being issued would not have reached
+        rows it could not see yet, so the pair is revoked here instead.
+
+        Args:
+            user_id: Profile UUID of the user the client acts for.
+            client_id: The client holding the tokens.
+            resource: The surface the grant is for.
+            family_id: The family the refresh token joins: the consumed code's
+                on a code exchange, the rotated token's on a refresh.
+
+        Returns:
+            ``(access_token, refresh_token)``, raw; only their hashes are
+            stored. ``None`` when the family was revoked, leaving both revoked.
+        """
+        with session_scope(self._engine) as session:
+            access = self._tokens.create_access(user_id, client_id, resource)
+            refresh = self.issue_refresh(user_id, client_id, resource, family_id)
+            if not self._family_revoked(session, family_id):
+                commit(session)
+                return access, refresh
+            now = datetime.now(timezone.utc)
+            session.connection().execute(
+                update(Token).where(col(Token.token_hash) == hash_token(access)).values(revoked_at=now)
+            )
+            session.connection().execute(
+                update(RefreshToken).where(col(RefreshToken.token_hash) == hash_token(refresh)).values(revoked_at=now)
+            )
+            commit(session)
+            return None
+
     def rotate_refresh(self, raw: str, client_id: str) -> RefreshToken | None:
         """Retire a refresh token presented by its client, once.
 
@@ -264,7 +318,11 @@ class OAuthStore:
                 self._revoke_family(session, token.family_id, token.user_id, token.client_id, now)
                 commit(session)
                 return None
-            if token.revoked_at is not None or token.expires_at <= now or self._family_revoked(session, token):
+            if (
+                token.revoked_at is not None
+                or token.expires_at <= now
+                or self._family_revoked(session, token.family_id)
+            ):
                 return None
             token.rotated_at = now
             save(session, token)
@@ -317,24 +375,27 @@ class OAuthStore:
             ),
         )
 
-    def _family_revoked(self, session: Session, token: RefreshToken) -> bool:
-        """Whether any token of a refresh token's family has been revoked.
+    def _family_revoked(self, session: Session, family_id: UUID) -> bool:
+        """Whether any token of a refresh-token family has been revoked.
 
         Args:
             session: The session to read in.
-            token: A token of the family.
+            family_id: The family.
 
         Returns:
-            ``True`` when the family was revoked, even if this token was
-            saved into it afterwards.
+            ``True`` when the family was revoked, even if some of its tokens
+            were saved into it afterwards.
         """
         statement = select(RefreshToken.token_hash).where(
-            col(RefreshToken.family_id) == token.family_id, col(RefreshToken.revoked_at).is_not(None)
+            col(RefreshToken.family_id) == family_id, col(RefreshToken.revoked_at).is_not(None)
         )
         return session.exec(statement.limit(1)).first() is not None
 
     def _revoke_family(self, session: Session, family_id: UUID, user_id: UUID, client_id: str, now: datetime) -> None:
-        """Revoke a family's refresh tokens and its client's access tokens for its user.
+        """Revoke a family's refresh tokens and its client's access tokens for its user, once.
+
+        A family already revoked is left alone: its access tokens were revoked
+        with it, and those the client holds now belong to a newer grant.
 
         Args:
             session: The session to write in; the caller commits.
@@ -343,6 +404,8 @@ class OAuthStore:
             client_id: The family's client.
             now: The revocation time to stamp.
         """
+        if self._family_revoked(session, family_id):
+            return
         session.connection().execute(
             update(RefreshToken)
             .where(col(RefreshToken.family_id) == family_id, col(RefreshToken.revoked_at).is_(None))

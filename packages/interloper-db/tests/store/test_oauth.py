@@ -9,10 +9,10 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import Engine, inspect, update
-from sqlmodel import col
+from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
-from interloper_db.models import Audience, AuthorizationCode, OAuthClient, Profile, RefreshToken
+from interloper_db.models import Audience, AuthorizationCode, OAuthClient, Profile, RefreshToken, Token, TokenKind
 from interloper_db.session import session_scope
 from interloper_db.store import Store
 
@@ -133,6 +133,27 @@ class TestCodes:
         assert store.oauth.rotate_refresh(refresh, client.client_id) is None
         assert store.tokens.resolve(access, Audience.MCP) is None
 
+    def test_stale_replay_of_an_expired_code_spares_a_newer_grant(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        raw = _issue_code(store, profile, client)
+        assert store.oauth.consume_code(raw) is not None
+        with session_scope(auth_db) as session:
+            session.connection().execute(
+                update(AuthorizationCode).values(expires_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+            )
+            session.commit()
+        newer = store.oauth.consume_code(_issue_code(store, profile, client))
+        assert newer is not None
+        issued = store.oauth.issue_tokens(profile.id, client.client_id, Audience.MCP, newer.family_id)
+        assert issued is not None
+        access, refresh = issued
+
+        assert store.oauth.consume_code(raw) is None
+
+        assert store.tokens.resolve(access, Audience.MCP) is not None
+        assert store.oauth.rotate_refresh(refresh, client.client_id) is not None
+
 
 class TestRefreshTokens:
     def test_refresh_rotation_issues_new_and_retires_old(self, store: Store, profile: Profile, client: OAuthClient):
@@ -181,6 +202,23 @@ class TestRefreshTokens:
         assert store.oauth.rotate_refresh(late, client.client_id) is None
         assert store.oauth.authorised_clients(profile.id) == []
 
+    def test_replay_into_a_revoked_family_spares_a_newer_grant(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        old = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        assert store.oauth.rotate_refresh(old, client.client_id) is not None
+        assert store.oauth.rotate_refresh(old, client.client_id) is None
+        code = store.oauth.consume_code(_issue_code(store, profile, client))
+        assert code is not None
+        issued = store.oauth.issue_tokens(profile.id, client.client_id, Audience.MCP, code.family_id)
+        assert issued is not None
+        access, refresh = issued
+
+        assert store.oauth.rotate_refresh(old, client.client_id) is None
+
+        assert store.tokens.resolve(access, Audience.MCP) is not None
+        assert store.oauth.rotate_refresh(refresh, client.client_id) is not None
+
     def test_refresh_is_bound_to_its_client(self, store: Store, profile: Profile, client: OAuthClient):
         other, _ = store.oauth.register_client("Other", ["http://localhost/cb"], registered_by="dynamic")
         raw = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
@@ -202,6 +240,47 @@ class TestRefreshTokens:
         assert store.oauth.rotate_refresh("ilr_no-such-token", client.client_id) is None
 
 
+class TestIssueTokens:
+    def test_issue_tokens_pairs_an_access_token_with_a_refresh_token_of_the_family(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        code = store.oauth.consume_code(_issue_code(store, profile, client))
+        assert code is not None
+
+        issued = store.oauth.issue_tokens(profile.id, client.client_id, Audience.MCP, code.family_id)
+
+        assert issued is not None
+        access, refresh = issued
+        resolved = store.tokens.resolve(access, Audience.MCP)
+        assert resolved is not None
+        assert resolved[1].client_id == client.client_id
+        found = store.oauth.find_refresh(refresh)
+        assert found is not None
+        assert found.family_id == code.family_id
+        assert found.resource == "mcp"
+
+    def test_issue_tokens_into_a_revoked_family_leaves_nothing_live(
+        self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
+    ):
+        # The family was revoked while the pair was being issued: a replay
+        # landed between the claim and the issue.
+        old = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        rotated = store.oauth.rotate_refresh(old, client.client_id)
+        assert rotated is not None
+        assert store.oauth.rotate_refresh(old, client.client_id) is None
+
+        assert store.oauth.issue_tokens(profile.id, client.client_id, Audience.MCP, rotated.family_id) is None
+
+        with session_scope(auth_db) as session:
+            live_access = session.exec(
+                select(Token).where(col(Token.kind) == TokenKind.ACCESS, col(Token.revoked_at).is_(None))
+            ).all()
+            live_refresh = session.exec(select(RefreshToken).where(col(RefreshToken.revoked_at).is_(None))).all()
+        assert live_access == []
+        assert live_refresh == []
+        assert store.oauth.authorised_clients(profile.id) == []
+
+
 class TestAuthorisedClients:
     def test_revoke_client_for_user_kills_refresh_and_access(self, store: Store, profile: Profile, client: OAuthClient):
         other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
@@ -216,6 +295,16 @@ class TestAuthorisedClients:
         assert store.tokens.resolve(access, Audience.MCP) is None
         assert store.oauth.rotate_refresh(theirs, client.client_id) is not None
         assert store.tokens.resolve(personal, Audience.MCP) is not None
+
+    def test_revoke_client_for_user_burns_unspent_codes(self, store: Store, profile: Profile, client: OAuthClient):
+        other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        mine = _issue_code(store, profile, client)
+        theirs = _issue_code(store, other_user, client)
+
+        store.oauth.revoke_client_for_user(profile.id, client.client_id)
+
+        assert store.oauth.consume_code(mine) is None
+        assert store.oauth.consume_code(theirs) is not None
 
     def test_authorised_clients_are_those_holding_a_live_refresh_token(
         self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
