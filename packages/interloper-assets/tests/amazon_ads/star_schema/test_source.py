@@ -131,6 +131,40 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
         f"CREATE TABLE amazon_ads.display_ad_groups_stats__{profile_id} (date DATE, campaign_id VARCHAR, "
         "campaign_name VARCHAR, ad_group_id VARCHAR, ad_group_name VARCHAR)"
     )
+    client.execute(
+        f"CREATE TABLE amazon_ads.products_ads__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '91' AS ad_id, '1' AS ad_group_id, '11{profile_id}' AS campaign_id, "
+        "'B000SP' AS asin, CAST(NULL AS VARCHAR) AS sku, 'ENABLED' AS state, "
+        "TIMESTAMP '2026-08-01 10:00:00' AS extended_data_creation_date_time, "
+        f"TIMESTAMP '2026-08-02 10:00:00' AS extended_data_last_update_date_time WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.brands_ads__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '93' AS ad_id, '3' AS ad_group_id, '22{profile_id}' AS campaign_id, "
+        f"'SB ad from entity' AS name, 'PAUSED' AS state, {CREATED_SQL} AS extended_data_creation_date, "
+        f"{UPDATED_SQL} AS extended_data_last_update_date WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.display_ads__{profile_id} AS SELECT "
+        f"DATE '2026-09-30' AS date, '94' AS ad_id, '4' AS ad_group_id, '33{profile_id}' AS campaign_id, "
+        "CAST(NULL AS VARCHAR) AS ad_name, 'B000SD' AS asin, CAST(NULL AS VARCHAR) AS sku, 'enabled' AS state, "
+        f"{CREATED_SQL} AS creation_date, {UPDATED_SQL} AS last_updated_date WHERE {collected}"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.products_advertised_products_stats__{profile_id} AS SELECT * FROM (VALUES "
+        f"(DATE '2026-10-01', '91', '1', '11{profile_id}', 'B000SP', CAST(NULL AS VARCHAR)), "
+        f"(DATE '2026-10-01', '92', '2', '11{profile_id}', 'B000ONLY', 'SKU-2')"
+        ") AS t(date, ad_id, ad_group_id, campaign_id, advertised_asin, advertised_sku)"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.brands_ads_stats__{profile_id} AS SELECT * FROM (VALUES "
+        f"(DATE '2026-10-01', '93', '3', '22{profile_id}')"
+        ") AS t(date, ad_id, ad_group_id, campaign_id)"
+    )
+    client.execute(
+        f"CREATE TABLE amazon_ads.display_advertised_products_stats__{profile_id} (date DATE, ad_id VARCHAR, "
+        "ad_group_id VARCHAR, campaign_id VARCHAR, promoted_asin VARCHAR)"
+    )
     collected = "TRUE" if entity else "FALSE"
     client.execute(
         f"CREATE TABLE amazon_ads.profiles__{profile_id} AS SELECT * FROM (VALUES "
@@ -177,6 +211,32 @@ class TestWiring:
         assert (ad_groups.key, ad_groups.many, ad_groups.optional) == (AD_GROUP_REPORTS, True, True)
         profiles = AmazonAdsStarSchema.dim_accounts.relations["profiles"]
         assert (profiles.key, profiles.many, profiles.optional) == ("amazon_ads.profiles", True, True)
+        ads = AmazonAdsStarSchema.dim_ads.relations["ads"]
+        assert (ads.key, ads.many, ads.optional) == (
+            ["amazon_ads.products_ads", "amazon_ads.brands_ads", "amazon_ads.display_ads"],
+            True,
+            True,
+        )
+        assert AmazonAdsStarSchema.dim_ads.relations["ads_stats"].key == [
+            "amazon_ads.products_advertised_products_stats",
+            "amazon_ads.brands_ads_stats",
+            "amazon_ads.display_advertised_products_stats",
+        ]
+
+    def test_the_ad_dimension_carries_the_core_columns_then_the_advertised_product(self):
+        assert list(schemas.DimAds.model_fields) == [
+            "ad_id",
+            "ad_group_id",
+            "campaign_id",
+            "account_id",
+            "ad_name",
+            "status",
+            "created_at",
+            "updated_at",
+            "as_of_date",
+            "asin",
+            "sku",
+        ]
 
     def test_views_carry_the_core_columns_first(self):
         assert list(schemas.FactCampaignPerformance.model_fields) == [*FACT_CORE, "campaign_type"]
@@ -314,6 +374,39 @@ class TestOnDuckDB:
         assert (rows["4"]["campaign_id"], rows["4"]["account_id"]) == ("331", "1")
         assert (rows["3"]["created_at"], rows["4"]["updated_at"]) == (CREATED, UPDATED)
         assert rows["4"]["status"] == "ENABLED"
+
+    def test_ads_take_their_entity_row_of_every_ad_product(self, warehouse):
+        first = _profile("1", warehouse)
+        _seed(warehouse, "1", entity=False, campaign_entities=True)
+        _materialize(warehouse, first)
+        rows = {row["ad_id"]: row for row in _rows(warehouse, "dim_ads")}
+        products, brands, display = rows["91"], rows["93"], rows["94"]
+        assert (products["ad_group_id"], products["campaign_id"], products["account_id"]) == ("1", "111", "1")
+        assert (products["ad_name"], products["asin"], products["status"]) == (None, "B000SP", "ENABLED")
+        assert products["updated_at"] == dt.datetime(2026, 8, 2, 10, 0, tzinfo=dt.timezone.utc)
+        assert (brands["ad_name"], brands["status"], brands["created_at"]) == ("SB ad from entity", "PAUSED", CREATED)
+        assert (display["asin"], display["status"], display["as_of_date"]) == (
+            "B000SD",
+            "ENABLED",
+            dt.date(2026, 9, 30),
+        )
+
+    def test_an_ad_without_an_entity_row_comes_from_its_latest_report(self, warehouse):
+        first = _profile("1", warehouse)
+        _seed(warehouse, "1", entity=False, campaign_entities=False)
+        _materialize(warehouse, first)
+        rows = {row["ad_id"]: row for row in _rows(warehouse, "dim_ads")}
+        assert set(rows) == {"91", "92", "93"}
+        only = rows["92"]
+        assert (only["ad_group_id"], only["campaign_id"], only["account_id"]) == ("2", "111", "1")
+        assert (only["asin"], only["sku"], only["status"], only["as_of_date"]) == ("B000ONLY", "SKU-2", None, DAY)
+        assert rows["93"]["ad_name"] is None
+
+    def test_an_ad_dimension_with_nothing_bound_fails_clearly(self, warehouse):
+        star = AmazonAdsStarSchema(destinations=[warehouse])
+        result = il.DAG(star).materialize()
+        error = result.executions[star.dim_ads.id].error
+        assert error is not None and "no upstream bound" in error
 
     def test_a_profile_takes_its_own_entity_row_over_the_facts(self, warehouse):
         first, second = _profile("1", warehouse), _profile("2", warehouse)
