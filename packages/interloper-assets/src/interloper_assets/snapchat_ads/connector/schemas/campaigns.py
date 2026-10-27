@@ -11,14 +11,16 @@ class Campaigns(Schema):
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
     id: str | None = Field(default=None, description="The ID of the campaign")
-    updated_at: str | None = Field(default=None, description="The last updated timestamp of the campaign")
-    created_at: str | None = Field(default=None, description="The creation timestamp of the campaign")
+    updated_at: dt.datetime | None = Field(default=None, description="The last updated timestamp of the campaign")
+    created_at: dt.datetime | None = Field(default=None, description="The creation timestamp of the campaign")
     name: str | None = Field(default=None, description="The name of the campaign")
     ad_account_id: str | None = Field(default=None, description="The ID of the associated ad account")
     status: str | None = Field(default=None, description="The status of the campaign")
     objective: str | None = Field(default=None, description="The objective of the campaign")
-    start_time: str | None = Field(default=None, description="The start time of the campaign")
-    end_time: str | None = Field(default=None, description="The end time of the campaign")
+    start_time: dt.datetime | None = Field(default=None, description="Scheduled start of the campaign, in UTC.")
+    end_time: dt.datetime | None = Field(
+        default=None, description="Scheduled end of the campaign, in UTC; NULL when open-ended."
+    )
     lifetime_spend_cap_micro: float | None = Field(
         default=None, description="The lifetime spend cap of the campaign in micro units"
     )

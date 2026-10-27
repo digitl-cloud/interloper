@@ -69,7 +69,10 @@ class AdsStatsByCountry(Schema):
     custom_event_3: int | None = Field(default=None, description="The number of custom event 3 attributed to the ad")
     custom_event_4: int | None = Field(default=None, description="The number of custom event 4 attributed to the ad")
     custom_event_5: int | None = Field(default=None, description="The number of custom event 5 attributed to the ad")
-    end_time: str | None = Field(default=None, description="The end time of the ad")
+    end_time: dt.datetime | None = Field(
+        default=None,
+        description="End of the report window, in UTC; Snapchat sends local midnight with the account's offset, and the local day is date.",
+    )
     granularity: str | None = Field(default=None, description="The level of granularity for the ad data")
     id: str | None = Field(default=None, description="The unique identifier of the ad")
     impressions: int | None = Field(default=None, description="The number of times the ad was displayed")
@@ -85,7 +88,10 @@ class AdsStatsByCountry(Schema):
     saves: int | None = Field(default=None, description="The number of times the ad was saved")
     shares: int | None = Field(default=None, description="The number of times the ad was shared")
     spend: int | None = Field(default=None, description="The amount spent on the ad")
-    start_time: str | None = Field(default=None, description="The start time of the ad")
+    start_time: dt.datetime | None = Field(
+        default=None,
+        description="Start of the report window, in UTC; Snapchat sends local midnight with the account's offset, and the local day is date.",
+    )
     swipes: int | None = Field(default=None, description="The number of swipes on the ad")
     total_installs: int | None = Field(
         default=None, description="The total number of app installs attributed to the ad"

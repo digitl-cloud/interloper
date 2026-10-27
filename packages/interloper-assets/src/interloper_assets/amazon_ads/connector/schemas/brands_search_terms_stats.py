@@ -7,12 +7,12 @@ from pydantic import Field
 class BrandsSearchTermsStats(Schema):
     """Brands search term performance metrics including clicks, impressions, purchases, and keyword details."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     campaign_budget_amount: float | None = Field(..., description="The amount of the campaign budget")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_status: str | None = Field(..., description="The status of the campaign")
     clicks: int | None = Field(..., description="The number of clicks")
@@ -21,7 +21,7 @@ class BrandsSearchTermsStats(Schema):
     date: datetime.date | None = Field(..., description="The date of the search term data")
     impressions: int | None = Field(..., description="The number of impressions")
     keyword_bid: float | None = Field(..., description="The bid amount for the keyword")
-    keyword_id: int | None = Field(..., description="The ID of the keyword")
+    keyword_id: str | None = Field(..., description="The ID of the keyword")
     keyword_text: str | None = Field(..., description="The text of the keyword")
     match_type: str | None = Field(..., description="The type of match for the keyword")
     purchases: int | None = Field(..., description="The number of purchases made")

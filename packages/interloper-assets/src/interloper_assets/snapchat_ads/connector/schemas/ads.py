@@ -11,8 +11,8 @@ class Ads(Schema):
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
     id: str | None = Field(default=None, description="The ID of the ad")
-    updated_at: str | None = Field(default=None, description="The timestamp when the ad was last updated")
-    created_at: str | None = Field(default=None, description="The timestamp when the ad was created")
+    updated_at: dt.datetime | None = Field(default=None, description="The timestamp when the ad was last updated")
+    created_at: dt.datetime | None = Field(default=None, description="The timestamp when the ad was created")
     name: str | None = Field(default=None, description="The name of the ad")
     ad_squad_id: str | None = Field(default=None, description="The ID of the ad squad that the ad belongs to")
     creative_id: str | None = Field(default=None, description="The ID of the creative")

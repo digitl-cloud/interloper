@@ -31,7 +31,6 @@ _EXEMPT_SOURCES = {"DemoSource"}
 
 _LOCAL_SCHEDULE = "local wall clock with the account's UTC offset; a timestamp would keep only the UTC instant"
 _GA4_EXPORT = "mirrors GA4's own BigQuery export schema"
-_PENDING_MIGRATION = "has prod tables; changes type with their migration (ITLPR-162)"
 
 EXCEPTIONS: dict[str, str] = {
     "FacebookAds.adsets.start_time": _LOCAL_SCHEDULE,
@@ -43,14 +42,6 @@ EXCEPTIONS: dict[str, str] = {
     "GoogleAnalytics4Export.events.event_date": _GA4_EXPORT,
     "GoogleAnalytics4Export.events.event_timestamp": _GA4_EXPORT,
     "Adservice.conversions_stats_by_time_of_day.day": "the day of the week, not a date",
-    "AmazonAds.*_stats.*_id": _PENDING_MIGRATION,
-    "AmazonAds.profiles.profile_id": _PENDING_MIGRATION,
-    "Criteo.*_stats.*_id": _PENDING_MIGRATION,
-    "FacebookAds.campaigns_stats.*_id": _PENDING_MIGRATION,
-    "SnapchatAds.*.*_at": _PENDING_MIGRATION,
-    "SnapchatAds.*.*_time": _PENDING_MIGRATION,
-    "SnapchatAds.*.*_date": _PENDING_MIGRATION,
-    "TiktokAds.*_stats*.*_id": _PENDING_MIGRATION,
 }
 
 _IDENTIFIER = re.compile(r"(^|_)id$")

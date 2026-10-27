@@ -24,7 +24,7 @@ class TelevisionTargetingStats(Schema):
     impressions: int | None = Field(default=None, description="Impressions.")
     keyword: str | None = Field(default=None, description="Targeted keyword.")
     keyword_bid: float | None = Field(default=None, description="Keyword bid.")
-    keyword_id: int | None = Field(default=None, description="Keyword id.")
+    keyword_id: str | None = Field(default=None, description="Keyword id.")
     keyword_type: str | None = Field(default=None, description="Keyword type.")
     match_type: str | None = Field(default=None, description="Keyword match type.")
     new_to_brand_detail_page_view_clicks: int | None = Field(
@@ -46,7 +46,7 @@ class TelevisionTargetingStats(Schema):
     new_to_brand_sales: float | None = Field(default=None, description="Attributed new to brand sales.")
     new_to_brand_sales_clicks: float | None = Field(default=None, description="Attributed new to brand sales clicks.")
     new_to_brand_sales_views: float | None = Field(default=None, description="Attributed new to brand sales views.")
-    portfolio_id: int | None = Field(default=None, description="Portfolio id.")
+    portfolio_id: str | None = Field(default=None, description="Portfolio id.")
     purchases: int | None = Field(default=None, description="Attributed purchases.")
     purchases_clicks: int | None = Field(default=None, description="Attributed purchases clicks.")
     purchases_views: int | None = Field(default=None, description="Attributed purchases views.")

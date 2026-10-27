@@ -7,16 +7,16 @@ from pydantic import Field
 class ProductsPurchasedProductsStats(Schema):
     """Products purchased product metrics including sales, purchases, and units sold across time windows."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     advertised_asin: str | None = Field(..., description="The ASIN of the advertised product")
     advertised_sku: str | None = Field(..., description="The SKU of the advertised product")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     date: datetime.date | None = Field(..., description="The date of the purchase")
     keyword: str | None = Field(..., description="The keyword")
-    keyword_id: int | None = Field(..., description="The ID of the keyword")
+    keyword_id: str | None = Field(..., description="The ID of the keyword")
     keyword_type: str | None = Field(..., description="The type of keyword")
     kindle_edition_normalized_pages_read_14d: int | None = Field(
         ..., description="The number of Kindle Edition Normalized Pages read in the last 14 days"
@@ -25,7 +25,7 @@ class ProductsPurchasedProductsStats(Schema):
         ..., description="The royalties for Kindle Edition Normalized Pages in the last 14 days"
     )
     match_type: str | None = Field(..., description="The type of match")
-    portfolio_id: int | None = Field(..., description="The ID of the portfolio")
+    portfolio_id: str | None = Field(..., description="The ID of the portfolio")
     purchased_asin: str | None = Field(..., description="The ASIN of the purchased product")
     purchases_14d: int | None = Field(..., description="The number of purchases in the last 14 days")
     purchases_1d: int | None = Field(..., description="The number of purchases in the last 1 day")

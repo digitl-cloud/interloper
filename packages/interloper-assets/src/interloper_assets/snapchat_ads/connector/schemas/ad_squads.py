@@ -11,8 +11,8 @@ class AdSquads(Schema):
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
     id: str | None = Field(default=None, description="The ID of the ad squad")
-    updated_at: str | None = Field(default=None, description="The last updated timestamp of the ad squad")
-    created_at: str | None = Field(default=None, description="The creation timestamp of the ad squad")
+    updated_at: dt.datetime | None = Field(default=None, description="The last updated timestamp of the ad squad")
+    created_at: dt.datetime | None = Field(default=None, description="The creation timestamp of the ad squad")
     name: str | None = Field(default=None, description="The name of the ad squad")
     status: str | None = Field(default=None, description="The status of the ad squad")
     campaign_id: str | None = Field(default=None, description="The ID of the campaign associated with the ad squad")
@@ -30,8 +30,8 @@ class AdSquads(Schema):
     lifetime_budget_micro: int | None = Field(
         default=None, description="The lifetime budget of the ad squad in micro units"
     )
-    start_time: str | None = Field(default=None, description="The start time of the ad squad")
-    end_time: str | None = Field(default=None, description="The end time of the ad squad")
+    start_time: dt.datetime | None = Field(default=None, description="The start time of the ad squad")
+    end_time: dt.datetime | None = Field(default=None, description="The end time of the ad squad")
     optimization_goal: str | None = Field(default=None, description="The optimization goal of the ad squad")
     delivery_constraint: str | None = Field(default=None, description="The delivery constraint of the ad squad")
     pacing_type: str | None = Field(default=None, description="The pacing type of the ad squad")
@@ -77,8 +77,8 @@ class AdSquads(Schema):
     reserved_status: str | None = Field(default=None, description="Reserved status")
     reserved_rate_micro: float | None = Field(default=None, description="Reserved rate (micro)")
     reserved_debug_message: str | None = Field(default=None, description="Reserved debug message")
-    reserved_start_target_date: str | None = Field(default=None, description="Reserved start target date")
-    reserved_end_target_date: str | None = Field(default=None, description="Reserved end target date")
+    reserved_start_target_date: dt.date | None = Field(default=None, description="Reserved start target date")
+    reserved_end_target_date: dt.date | None = Field(default=None, description="Reserved end target date")
     ad_scheduling_config_saturday_hour_of_day: str | None = Field(
         default=None, description="Ad scheduling config Saturday hour of day"
     )

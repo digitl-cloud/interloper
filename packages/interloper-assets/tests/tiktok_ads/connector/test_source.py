@@ -81,6 +81,27 @@ class TestStatsNormalizer:
         assert df.loc[0, "spend"] == "12.50"
         assert df.loc[0, "date"] == "2026-06-14"
 
+    def test_a_metric_that_does_not_apply_is_null(self):
+        rows = [
+            {
+                "dimensions": {"ad_id": "456", "stat_time_day": "2026-06-14 00:00:00"},
+                "metrics": {"cost_per_secondary_goal_result": "-", "spend": "12.50"},
+            },
+            {
+                "dimensions": {"ad_id": "789", "stat_time_day": "2026-06-14 00:00:00"},
+                "metrics": {"cost_per_secondary_goal_result": "0.00", "spend": "-"},
+            },
+        ]
+        df = TiktokStatsNormalizer().normalize(rows)
+        reconciled = TableData.from_data(df).reconcile(schemas.AdsStats)
+        assert reconciled["cost_per_secondary_goal_result"].isna().tolist() == [True, False]
+        assert reconciled.loc[1, "cost_per_secondary_goal_result"] == 0.0
+        assert reconciled["spend"].isna().tolist() == [False, True]
+
+    def test_a_dimension_spelled_as_a_dash_is_kept(self):
+        rows = [{"dimensions": {"ad_id": "456", "country_code": "-"}, "metrics": {"spend": "1"}}]
+        assert TiktokStatsNormalizer().normalize(rows).loc[0, "country_code"] == "-"
+
 
 class TestSpecRoundtripAndReconcile:
     """Normalizers survive the host→child spec round-trip and rows reconcile."""

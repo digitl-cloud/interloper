@@ -7,13 +7,13 @@ from pydantic import Field
 class AdsStatsByAgeGender(Schema):
     """The Ads by Age Gender report provides insights into ad performance segmented by age and gender demographics. It includes key metrics such as clicks, conversions, conversion rate, cost per conversion, cost per result, cost per click (CPC), cost per thousand impressions (CPM), click-through rate (CTR), currency used, date of data, gross impressions, impressions, and real-time metrics."""
 
-    ad_id: int | None = Field(default=None, description="Unique identifier for the ad")
+    ad_id: str | None = Field(default=None, description="Unique identifier for the ad")
     ad_name: str | None = Field(default=None, description="Name of the ad")
     ad_text: str | None = Field(default=None, description="Text content of the ad")
-    adgroup_id: int | None = Field(default=None, description="Unique identifier for the adgroup")
+    adgroup_id: str | None = Field(default=None, description="Unique identifier for the adgroup")
     adgroup_name: str | None = Field(default=None, description="Name for the adgroup")
     age: str | None = Field(default=None, description="The age of the target audience")
-    campaign_id: int | None = Field(default=None, description="Unique identifier for the campaign")
+    campaign_id: str | None = Field(default=None, description="Unique identifier for the campaign")
     campaign_name: str | None = Field(default=None, description="Name of the campaign")
     clicks: int | None = Field(default=None, description="Number of clicks on the ad")
     conversion: int | None = Field(default=None, description="Conversion value of the ad")
@@ -21,7 +21,7 @@ class AdsStatsByAgeGender(Schema):
     cost_per_1000_reached: float | None = Field(default=None, description="Cost per 1000 reached impressions")
     cost_per_conversion: float | None = Field(default=None, description="Cost per conversion")
     cost_per_result: float | None = Field(default=None, description="Cost per result")
-    cost_per_secondary_goal_result: str | None = Field(default=None, description="Cost per secondary goal result")
+    cost_per_secondary_goal_result: float | None = Field(default=None, description="Cost per secondary goal result")
     cpc: float | None = Field(default=None, description="Cost per thousand impressions")
     cpm: float | None = Field(default=None, description="Cost per thousand impressions")
     ctr: float | None = Field(default=None, description="Click-through rate")

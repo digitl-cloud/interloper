@@ -18,7 +18,7 @@ class TelevisionCampaignsStats(Schema):
         default=None, description="Currency of the budget and every amount."
     )
     campaign_budget_type: str | None = Field(default=None, description="Campaign budget type.")
-    campaign_id: int | None = Field(default=None, description="Campaign id.")
+    campaign_id: str | None = Field(default=None, description="Campaign id.")
     campaign_name: str | None = Field(default=None, description="Campaign name.")
     campaign_status: str | None = Field(default=None, description="Campaign status.")
     clicks: int | None = Field(default=None, description="Clicks.")
@@ -49,7 +49,7 @@ class TelevisionCampaignsStats(Schema):
     new_to_brand_sales: float | None = Field(default=None, description="Attributed new to brand sales.")
     new_to_brand_sales_clicks: float | None = Field(default=None, description="Attributed new to brand sales clicks.")
     new_to_brand_sales_views: float | None = Field(default=None, description="Attributed new to brand sales views.")
-    portfolio_id: int | None = Field(default=None, description="Portfolio id.")
+    portfolio_id: str | None = Field(default=None, description="Portfolio id.")
     purchases: int | None = Field(default=None, description="Attributed purchases.")
     purchases_clicks: int | None = Field(default=None, description="Attributed purchases clicks.")
     purchases_views: int | None = Field(default=None, description="Attributed purchases views.")

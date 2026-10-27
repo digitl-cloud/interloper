@@ -112,7 +112,7 @@ class AmazonAdsStarSchema(il.Source):
         def from_products(table: ibis.Table) -> ibis.Table:
             return table.select(
                 date=table["date"],
-                campaign_id=table["campaign_id"].cast("string"),
+                campaign_id=table["campaign_id"],
                 impressions=table["impressions"],
                 clicks=table["clicks"],
                 cost=table["spend"],
@@ -124,7 +124,7 @@ class AmazonAdsStarSchema(il.Source):
         def from_report(table: ibis.Table) -> ibis.Table:
             return table.select(
                 date=table["date"],
-                campaign_id=table["campaign_id"].cast("string"),
+                campaign_id=table["campaign_id"],
                 impressions=table["impressions"],
                 clicks=table["clicks"],
                 cost=table["cost"],
@@ -186,7 +186,7 @@ class AmazonAdsStarSchema(il.Source):
             table = upstream.data
             account = ibis.literal(_account(upstream))
             # the profiles endpoint lists every profile the credentials see, not only this source's
-            own = table.filter(table["profile_id"].cast("string") == account)
+            own = table.filter(table["profile_id"] == account)
             return own.select(
                 account_id=account,
                 account_name=own["account_info_name"],
@@ -245,7 +245,7 @@ class AmazonAdsStarSchema(il.Source):
             products = upstream.asset.key == "products_campaigns"
             created_at, updated_at = _lifecycle(upstream)
             return table.select(
-                campaign_id=table["campaign_id"].cast("string"),
+                campaign_id=table["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 campaign_name=table["name"],
                 status=table["state"].upper(),
@@ -274,7 +274,7 @@ class AmazonAdsStarSchema(il.Source):
                 attributes["budget_type"] = table["campaign_budget_type"].max()
             days = table.group_by([table["date"], table["campaign_id"]]).aggregate(**attributes)
             return days.select(
-                campaign_id=days["campaign_id"].cast("string"),
+                campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 campaign_name=days["campaign_name"],
                 status=days["status"].upper(),
@@ -334,8 +334,8 @@ class AmazonAdsStarSchema(il.Source):
             table = upstream.data
             created_at, updated_at = _lifecycle(upstream)
             return table.select(
-                ad_group_id=table["ad_group_id"].cast("string"),
-                campaign_id=table["campaign_id"].cast("string"),
+                ad_group_id=table["ad_group_id"],
+                campaign_id=table["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=table["name"],
                 status=table["state"].upper(),
@@ -355,8 +355,8 @@ class AmazonAdsStarSchema(il.Source):
                 ad_group_name=table["ad_group_name"].max(), campaign_id=table["campaign_id"].max()
             )
             return days.select(
-                ad_group_id=days["ad_group_id"].cast("string"),
-                campaign_id=days["campaign_id"].cast("string"),
+                ad_group_id=days["ad_group_id"],
+                campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=days["ad_group_name"],
                 status=ibis.null("string"),

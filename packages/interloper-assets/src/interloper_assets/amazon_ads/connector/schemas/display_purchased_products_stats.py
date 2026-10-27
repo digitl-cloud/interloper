@@ -7,11 +7,11 @@ from pydantic import Field
 class DisplayPurchasedProductsStats(Schema):
     """Display purchased product metrics including conversions, sales, and units sold with brand halo effects."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     asin_brand_halo: str | None = Field(..., description="The ASIN with brand halo")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     conversions_brand_halo: int | None = Field(..., description="The number of conversions with brand halo")
     conversions_brand_halo_clicks: int | None = Field(

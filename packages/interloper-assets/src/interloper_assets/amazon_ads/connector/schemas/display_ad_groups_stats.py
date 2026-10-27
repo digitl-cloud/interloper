@@ -7,7 +7,7 @@ from pydantic import Field
 class DisplayAdGroupsStats(Schema):
     """Display ad group performance metrics including clicks, impressions, purchases, sales, and viewability rates."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group.")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group.")
     ad_group_name: str | None = Field(..., description="The name of the ad group.")
     add_to_cart: int | None = Field(..., description="The number of add to cart.")
     add_to_cart_clicks: int | None = Field(..., description="The number of add to cart clicks.")
@@ -19,7 +19,7 @@ class DisplayAdGroupsStats(Schema):
     branded_searches_clicks: int | None = Field(..., description="The number of branded searches clicks.")
     branded_searches_views: int | None = Field(..., description="The number of branded searches views.")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget.")
-    campaign_id: int | None = Field(..., description="The ID of the campaign.")
+    campaign_id: str | None = Field(..., description="The ID of the campaign.")
     campaign_name: str | None = Field(..., description="The name of the campaign.")
     clicks: int | None = Field(..., description="The number of clicks.")
     cost: float | None = Field(..., description="The cost of the ad group.")

@@ -7,7 +7,7 @@ from pydantic import Field
 class ProductsCampaignsStats(Schema):
     """Products campaign performance metrics including clicks, impressions, sales, and purchases across time windows."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     ad_status: str | None = Field(..., description="The status of the ad")
     attributed_sales_same_sku_14d: float | None = Field(
@@ -25,14 +25,14 @@ class ProductsCampaignsStats(Schema):
     campaign_applicable_budget_rule_name: str | None = Field(
         ..., description="The name of the applicable budget rule for the campaign"
     )
-    campaign_applicable_budget_rule_id: int | None = Field(
+    campaign_applicable_budget_rule_id: str | None = Field(
         ..., description="The ID of the applicable budget rule for the campaign"
     )
     campaign_bidding_strategy: str | None = Field(..., description="The bidding strategy of the campaign")
     campaign_budget_amount: float | None = Field(..., description="The amount of campaign budget")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_rule_based_budget_amount: float | None = Field(
         ..., description="The budget amount based on campaign rules"

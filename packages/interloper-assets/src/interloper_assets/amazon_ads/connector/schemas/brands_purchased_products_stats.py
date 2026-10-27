@@ -7,11 +7,11 @@ from pydantic import Field
 class BrandsPurchasedProductsStats(Schema):
     """Brands purchased product metrics including purchases, sales, and units sold with new-to-brand breakdowns."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     attribution_type: str | None = Field(..., description="The type of attribution")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     date: datetime.date | None = Field(..., description="The date of the record")
     new_to_brand_purchases_14d: float | None = Field(

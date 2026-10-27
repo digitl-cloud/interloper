@@ -127,7 +127,7 @@ class FacebookAdsStarSchema(il.Source):
         rows = rows.select(
             date=rows["date_start"],
             account_id=rows["account_id"],
-            campaign_id=rows["campaign_id"].cast("string"),
+            campaign_id=rows["campaign_id"],
             impressions=rows["impressions"],
             clicks=rows["clicks"],
             cost=rows["spend"],
@@ -170,9 +170,9 @@ class FacebookAdsStarSchema(il.Source):
         return rows.select(
             date=rows["date_start"],
             account_id=rows["account_id"],
-            campaign_id=rows["campaign_id"].cast("string"),
-            ad_group_id=rows["adset_id"].cast("string"),
-            ad_id=rows["ad_id"].cast("string"),
+            campaign_id=rows["campaign_id"],
+            ad_group_id=rows["adset_id"],
+            ad_id=rows["ad_id"],
             publisher_platform=rows["publisher_platform"],
             platform_position=rows["platform_position"],
             impression_device=rows["impression_device"],
@@ -265,7 +265,7 @@ class FacebookAdsStarSchema(il.Source):
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
             return table.select(
-                campaign_id=table["id"].cast("string"),
+                campaign_id=table["id"],
                 account_id=ibis.literal(_account(upstream)),
                 campaign_name=table["name"],
                 status=table["status"],
@@ -288,7 +288,7 @@ class FacebookAdsStarSchema(il.Source):
                 campaign_name=table["campaign_name"].max(), objective=table["objective"].max()
             )
             return days.select(
-                campaign_id=days["campaign_id"].cast("string"),
+                campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 campaign_name=days["campaign_name"],
                 status=ibis.null("string"),
@@ -349,8 +349,8 @@ class FacebookAdsStarSchema(il.Source):
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
             return table.select(
-                ad_group_id=table["id"].cast("string"),
-                campaign_id=table["campaign_id"].cast("string"),
+                ad_group_id=table["id"],
+                campaign_id=table["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=table["name"],
                 status=table["status"],
@@ -370,8 +370,8 @@ class FacebookAdsStarSchema(il.Source):
                 ad_group_name=table["adset_name"].max(), campaign_id=table["campaign_id"].max()
             )
             return days.select(
-                ad_group_id=days["adset_id"].cast("string"),
-                campaign_id=days["campaign_id"].cast("string"),
+                ad_group_id=days["adset_id"],
+                campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=days["ad_group_name"],
                 status=ibis.null("string"),
@@ -429,9 +429,9 @@ class FacebookAdsStarSchema(il.Source):
         def from_entity(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
             return table.select(
-                ad_id=table["id"].cast("string"),
-                ad_group_id=table["adset_id"].cast("string"),
-                campaign_id=table["campaign_id"].cast("string"),
+                ad_id=table["id"],
+                ad_group_id=table["adset_id"],
+                campaign_id=table["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_name=table["name"],
                 status=table["status"],
@@ -450,9 +450,9 @@ class FacebookAdsStarSchema(il.Source):
                 campaign_id=table["campaign_id"].max(),
             )
             return days.select(
-                ad_id=days["ad_id"].cast("string"),
-                ad_group_id=days["ad_group_id"].cast("string"),
-                campaign_id=days["campaign_id"].cast("string"),
+                ad_id=days["ad_id"],
+                ad_group_id=days["ad_group_id"],
+                campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 ad_name=days["ad_name"],
                 status=ibis.null("string"),

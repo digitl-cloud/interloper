@@ -17,7 +17,7 @@ class DisplayCampaignsStats(Schema):
     branded_searches_views: int | None = Field(..., description="The number of branded searches views")
     campaign_budget_amount: float | None = Field(..., description="The amount of campaign budget")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_status: str | None = Field(..., description="The status of the campaign")
     clicks: int | None = Field(..., description="The number of clicks")

@@ -7,12 +7,12 @@ from pydantic import Field
 class AdsStats(Schema):
     """The TikTok Ads report provides insights on ad performance in a campaign. It includes key metrics such as clicks, conversion value, conversion rate, cost per 1000 reached impressions, cost per conversion, cost per result, cost per secondary goal result, CPM, click-through rate (CTR), currency used, frequency, total impressions, and reach."""
 
-    ad_id: int | None = Field(default=None, description="Unique identifier for the ad")
+    ad_id: str | None = Field(default=None, description="Unique identifier for the ad")
     ad_name: str | None = Field(default=None, description="Name of the ad")
     ad_text: str | None = Field(default=None, description="Text content of the ad")
-    adgroup_id: int | None = Field(default=None, description="Unique identifier for the adgroup")
+    adgroup_id: str | None = Field(default=None, description="Unique identifier for the adgroup")
     adgroup_name: str | None = Field(default=None, description="Name for the adgroup")
-    campaign_id: int | None = Field(default=None, description="Unique identifier for the campaign")
+    campaign_id: str | None = Field(default=None, description="Unique identifier for the campaign")
     campaign_name: str | None = Field(default=None, description="Name of the campaign")
     clicks: int | None = Field(default=None, description="Number of clicks on the ad")
     conversion: int | None = Field(default=None, description="Conversion value of the ad")
@@ -20,7 +20,7 @@ class AdsStats(Schema):
     cost_per_1000_reached: float | None = Field(default=None, description="Cost per 1000 reached impressions")
     cost_per_conversion: float | None = Field(default=None, description="Cost per conversion")
     cost_per_result: float | None = Field(default=None, description="Cost per result")
-    cost_per_secondary_goal_result: str | None = Field(default=None, description="Cost per secondary goal result")
+    cost_per_secondary_goal_result: float | None = Field(default=None, description="Cost per secondary goal result")
     cpc: float | None = Field(default=None, description="Cost per thousand impressions")
     cpm: float | None = Field(default=None, description="Cost per thousand impressions")
     ctr: float | None = Field(default=None, description="Click-through rate")
