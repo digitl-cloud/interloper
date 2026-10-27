@@ -1,6 +1,6 @@
 """Run executor: assembles a dispatched run's operations and drives the runner.
 
-Everything the run says reaches the store through one path. A `RunRecorder`
+Everything the run says reaches the store through one path. An `EventRecorder`
 delivers the runner's events in batches, and the run's effects with the last
 one, to `RunStore.ingest`, which folds the run's start, its verdict and its
 heartbeat from them: the verdict is the ingestion of the run's own terminal
@@ -24,7 +24,7 @@ from uuid import UUID
 
 import interloper as il
 from interloper.errors import RunLostError, format_exception
-from interloper.events import RunRecorder
+from interloper.events import EventRecorder
 from interloper.runner import ExecutionStatus, Runner
 from interloper.settings import AppSettings, ReaperSettings
 from interloper.telemetry import attributes
@@ -156,7 +156,7 @@ class RunExecutor:
             Whether the run completed; ``False`` too when it was lost.
         """
         window = il.TimePartition.from_key(db_run.partition_key) if db_run.partition_key else None
-        recorder = RunRecorder(
+        recorder = EventRecorder(
             partial(self._store.runs.ingest, db_run.id),
             run_id=str(db_run.id),
             heartbeat_interval=self._reaper.heartbeat_interval,

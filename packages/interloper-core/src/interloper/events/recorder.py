@@ -1,9 +1,9 @@
-"""RunRecorder: a run's events, batched and delivered to the platform with no loss.
+"""EventRecorder: a run's events, batched and delivered to the platform with no loss.
 
 The runner hands the recorder every event of its run: it is the ``on_event``
 handler `RunSubscription` wraps. A writer thread delivers them in batches to
 ``send``, whatever reaches the platform from where the run executes: the
-store's ingest in the scheduler's process, an `IngestClient` from a pod. A
+store's ingest in the scheduler's process, an `EventClient` from a pod. A
 batch is whatever accumulated while the previous delivery was in flight, so
 a quiet run delivers each event as it comes and a burst goes out in a few
 large batches.
@@ -41,11 +41,11 @@ logger = logging.getLogger(__name__)
 _RUN_ENDINGS = frozenset({EventType.RUN_COMPLETED, EventType.RUN_FAILED})
 
 
-class RunRecorder:
+class EventRecorder:
     """Deliver a run's events to the platform in batches, with no loss while the run lives.
 
     ```py
-    with RunRecorder(client.send, run_id=run_id, on_lost=exit_process) as recorder:
+    with EventRecorder(client.send, run_id=run_id, on_lost=exit_process) as recorder:
         result = await runner.model_copy(update={"on_event": recorder}).run(dag)
         recorder.finish(result)
     ```

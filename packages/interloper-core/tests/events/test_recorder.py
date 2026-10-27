@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from interloper.errors import DeliveryError, RunLostError
-from interloper.events import Event, EventType, RunRecorder
+from interloper.events import Event, EventRecorder, EventType
 from interloper.operation.base import Effect, OperationResult
 from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 
@@ -61,10 +61,10 @@ def _event(index: int) -> Event:
     return Event(type=EventType.LOG, metadata={"run_id": "run-1", "message": str(index)})
 
 
-def _recorder(sink: Sink, **overrides: Any) -> RunRecorder:
+def _recorder(sink: Sink, **overrides: Any) -> EventRecorder:
     options: dict[str, Any] = {"run_id": "run-1", "heartbeat_interval": 0.05, "heartbeat_timeout": 0.4, "backoff": 0.01}
     options.update(overrides)
-    return RunRecorder(sink, **options)
+    return EventRecorder(sink, **options)
 
 
 def _result(**config: Any) -> RunResult:

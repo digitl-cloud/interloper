@@ -68,7 +68,7 @@ collapses to one when persisted.
 
 ## Persistence
 
-On the platform, a `RunRecorder` delivers a run's events in batches to the store, with no
+On the platform, an `EventRecorder` delivers a run's events in batches to the store, with no
 deadline: a batch is whatever accumulated while the previous delivery was in flight. The store
 folds the run's state from what it receives, so `run_started` starts the run and `run_completed`
 or `run_failed` ends it. A run's verdict is the ingestion of its own terminal event and never
