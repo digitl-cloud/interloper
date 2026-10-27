@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from interloper.errors import ConfigError
 from sqlalchemy import Engine
 from sqlmodel import Session as SQLSession
 from sqlmodel import select
 
-from interloper_db import Audience, NotFoundError
+from interloper_db import Audience, ConflictError, NotFoundError
 from interloper_db.models import (
     Backfill,
     Component,
@@ -23,6 +24,69 @@ from interloper_db.models import (
     UserOrganisation,
 )
 from interloper_db.store import OrganisationQuery, Store
+
+
+class TestSlug:
+    def test_create_derives_the_slug_from_the_name(self, store: Store):
+        assert store.organisations.create(name="Swarovski AG").slug == "swarovski-ag"
+
+    def test_reserved_name_gets_suffix(self, store: Store):
+        assert store.organisations.create(name="Settings").slug == "settings-2"
+
+    def test_duplicate_name_dedupes(self, store: Store):
+        slugs = [store.organisations.create(name="Acme").slug for _ in range(3)]
+        assert slugs == ["acme", "acme-2", "acme-3"]
+
+    def test_a_deleted_organisation_keeps_its_slug(self, store: Store):
+        first = store.organisations.create(name="Acme")
+        store.organisations.delete(first.id)
+        assert store.organisations.create(name="Acme").slug == "acme-2"
+
+    def test_get_by_slug(self, store: Store):
+        org = store.organisations.create(name="Swarovski AG")
+        assert store.organisations.get_by_slug("swarovski-ag").id == org.id
+
+    def test_get_by_slug_misses_unknown_and_deleted(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        with pytest.raises(NotFoundError):
+            store.organisations.get_by_slug("nope")
+        store.organisations.delete(org.id)
+        with pytest.raises(NotFoundError):
+            store.organisations.get_by_slug("acme")
+
+    def test_update_renames_without_touching_the_slug(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        updated = store.organisations.update(org.id, name="Acme Corp")
+        assert (updated.name, updated.slug) == ("Acme Corp", "acme")
+
+    def test_update_sets_a_free_slug(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        updated = store.organisations.update(org.id, slug="acme-eu")
+        assert updated.slug == "acme-eu"
+        assert store.organisations.get_by_slug("acme-eu").id == org.id
+
+    def test_update_sets_name_and_slug_together(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        updated = store.organisations.update(org.id, name="Acme Corp", slug="acme-corp")
+        assert (updated.name, updated.slug) == ("Acme Corp", "acme-corp")
+
+    def test_update_to_its_own_slug_is_a_no_op(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        assert store.organisations.update(org.id, slug="acme").slug == "acme"
+
+    def test_rename_to_taken_slug_conflicts(self, store: Store):
+        store.organisations.create(name="Acme")
+        other = store.organisations.create(name="Globex")
+        with pytest.raises(ConflictError, match="acme"):
+            store.organisations.update(other.id, slug="acme")
+        assert store.organisations.get(other.id).slug == "globex"
+
+    def test_update_refuses_a_reserved_or_malformed_slug(self, store: Store):
+        org = store.organisations.create(name="Acme")
+        with pytest.raises(ConfigError):
+            store.organisations.update(org.id, slug="admin")
+        with pytest.raises(ConfigError):
+            store.organisations.update(org.id, slug="Not Valid")
 
 
 class TestDeleteOrganisation:

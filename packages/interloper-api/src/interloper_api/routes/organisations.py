@@ -38,6 +38,7 @@ class OrganisationResponse(BaseModel):
 
     id: UUID
     name: str
+    slug: str
     created_at: datetime | None = None
 
     @classmethod
@@ -50,7 +51,9 @@ class OrganisationResponse(BaseModel):
         Returns:
             The response model.
         """
-        return cls(id=organisation.id, name=organisation.name, created_at=organisation.created_at)
+        return cls(
+            id=organisation.id, name=organisation.name, slug=organisation.slug, created_at=organisation.created_at
+        )
 
 
 class CreateOrganisationRequest(BaseModel):

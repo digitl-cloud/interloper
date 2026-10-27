@@ -203,7 +203,7 @@ class FakeProfileStore:
     """In-memory stand-in for ``PATCH /auth/me``: the profile update and what ``GET /auth/me`` reads."""
 
     def __init__(self) -> None:
-        self.org = SimpleNamespace(id=uuid4(), name="Dev Org", created_at=None)
+        self.org = SimpleNamespace(id=uuid4(), name="Dev Org", slug="dev-org", created_at=None)
         self.profile = SimpleNamespace(
             id=uuid4(),
             email="user@example.com",
@@ -257,7 +257,12 @@ def test_update_me_answers_the_same_shape_as_get_me() -> None:
 
     assert patched.status_code == 200
     assert patched.json() == fetched.json()
-    assert patched.json()["organisation"] == {"id": str(store.org.id), "name": "Dev Org", "created_at": None}
+    assert patched.json()["organisation"] == {
+        "id": str(store.org.id),
+        "name": "Dev Org",
+        "slug": "dev-org",
+        "created_at": None,
+    }
     assert patched.json()["role"] == "editor"
     assert set(patched.json()) == set(auth_module.AuthUserResponse.model_fields)
 
@@ -594,7 +599,7 @@ class TestGetMe:
     def test_the_active_organisation_and_role_are_reported(self) -> None:
         profile = _me_profile()
         org_id = uuid4()
-        org = SimpleNamespace(id=org_id, name="Dev Org", created_at=None)
+        org = SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None)
         client = _session_client(
             SessionStore(session=(profile, SimpleNamespace(organisation_id=org_id)), org=org, role="admin")
         )
@@ -624,7 +629,7 @@ class TestGetMe:
         client = _session_client(
             SessionStore(
                 session=(profile, SimpleNamespace(organisation_id=org_id)),
-                org=SimpleNamespace(id=org_id, name="Dev Org", created_at=None),
+                org=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None),
                 role=None,
             )
         )
@@ -692,7 +697,7 @@ class TestAcceptInvite:
     def test_joining_makes_the_org_active(self) -> None:
         profile = _me_profile()
         org_id = uuid4()
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=None))
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None))
         client = _session_client(store, user=profile)
         client.cookies.set("session_token", "tok")
 
@@ -705,12 +710,17 @@ class TestAcceptInvite:
     def test_the_joined_organisation_is_returned(self) -> None:
         org_id = uuid4()
         created_at = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=created_at))
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=created_at))
         client = _session_client(store, user=_me_profile())
 
         response = client.post("/auth/accept-invite", json={"token": "invite-token"})
 
-        assert response.json() == {"id": str(org_id), "name": "Dev Org", "created_at": "2026-01-02T00:00:00Z"}
+        assert response.json() == {
+            "id": str(org_id),
+            "name": "Dev Org",
+            "slug": "dev-org",
+            "created_at": "2026-01-02T00:00:00Z",
+        }
 
     def test_an_unknown_or_expired_token_is_a_400(self) -> None:
         store = SessionStore(accepted=None)
@@ -725,7 +735,7 @@ class TestAcceptInvite:
 
     def test_without_a_cookie_the_membership_still_lands(self) -> None:
         org_id = uuid4()
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", created_at=None))
+        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None))
         client = _session_client(store, user=_me_profile())
 
         response = client.post("/auth/accept-invite", json={"token": "invite-token"})
