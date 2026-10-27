@@ -150,7 +150,8 @@ frontend:
 # ── MCP (Model Context Protocol server) ────────────────────────────────────
 # Serves the streamable-HTTP MCP endpoint (/mcp) for external AI agents,
 # authenticated per request with personal access tokens minted in the app
-# (Settings → Authentication); a token's role gates the write tools. Off by
+# (Settings → Authentication); the holder's role in the organisation a tool
+# call names gates the write tools. Off by
 # default — it is an optional, separate surface from the API. When enabled,
 # the chart's HTTPRoute forwards /mcp and /.well-known/oauth-protected-resource
 # on the app hostnames to it.

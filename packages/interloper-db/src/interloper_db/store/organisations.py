@@ -23,7 +23,6 @@ from interloper_db.models import (
     ComponentRelation,
     Invitation,
     Organisation,
-    PersonalAccessToken,
     Profile,
     Quota,
     Role,
@@ -140,8 +139,9 @@ class OrganisationStore:
         runs, events, and backfills — execution history and the usage
         ledger must stay attributable for billing, even after the org is
         gone. Everything sensitive or live is removed: components and
-        their relations (encrypted credentials, client config), tokens,
-        quota overrides, invitations, and memberships; sessions and
+        their relations (encrypted credentials, client config), quota
+        overrides, invitations, and memberships (which every token its
+        members hold reached the organisation through); sessions and
         profiles pointing at the org are detached. Retained runs and
         backfills lose their component reference via the FK's SET NULL.
         Bulk statements — ordered children-first — so the cascade never
@@ -155,7 +155,6 @@ class OrganisationStore:
             for statement in (
                 delete(ComponentRelation).where(col(ComponentRelation.org_id) == org_id),
                 delete(Component).where(col(Component.org_id) == org_id),
-                delete(PersonalAccessToken).where(col(PersonalAccessToken.organisation_id) == org_id),
                 delete(Quota).where(col(Quota.org_id) == org_id),
                 delete(Invitation).where(col(Invitation.organisation_id) == org_id),
                 delete(UserOrganisation).where(col(UserOrganisation.organisation_id) == org_id),

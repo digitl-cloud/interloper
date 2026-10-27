@@ -1,7 +1,7 @@
 """Shared fixtures: a seeded in-memory database behind a real Store.
 
 SQLite stands in for Postgres as in the interloper-db tests; the tables
-created are exactly those the toolkit and the PAT verifier touch.
+created are exactly those the toolkit and the token verifier touch.
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ from interloper_db.models import (
     Component,
     ComponentRelation,
     Organisation,
-    PersonalAccessToken,
     Profile,
     Run,
+    Token,
     UserOrganisation,
 )
 from interloper_db.store import Store
@@ -53,7 +53,7 @@ def mcp_db() -> Iterator[Engine]:
         Profile,
         Organisation,
         UserOrganisation,
-        PersonalAccessToken,
+        Token,
         Component,
         ComponentRelation,
         Backfill,
@@ -79,14 +79,14 @@ def store(mcp_db: Engine, catalog: il.Catalog) -> Store:
 
 @pytest.fixture
 def seeded(store: Store) -> dict[str, Any]:
-    """An org with one member, a valid PAT, one job component, and one run.
+    """An org with one member (its admin), a valid PAT, one job component, and one run.
 
     Returns:
         The seeded ids and the raw token, keyed for the tests to read.
     """
     profile = store.profiles.upsert(google_id="g-user", email="user@example.com", name="User")
     org = store.organisations.create(name="Acme", creator_id=profile.id)
-    _, raw_token = store.tokens.create(profile.id, org.id, name="test")
+    _, raw_token = store.tokens.create_personal(profile.id, "test")
 
     job = Component(org_id=org.id, kind="job", key="daily_sync", name="Daily sync", config={"enabled": True})
     run = Run(id=uuid4(), org_id=org.id, component_id=job.id, status="success")
@@ -105,4 +105,4 @@ def reset_mcp_context() -> Iterator[None]:
     yield
     mcp_context._store = None
     mcp_context._catalog_dump = None
-    mcp_context._static_ctx.set(None)
+    mcp_context._static_user.set(None)

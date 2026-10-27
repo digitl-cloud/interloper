@@ -10,7 +10,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session as SQLSession
 from sqlmodel import select
 
-from interloper_db import NotFoundError
+from interloper_db import Audience, NotFoundError
 from interloper_db.models import (
     Backfill,
     Component,
@@ -18,7 +18,6 @@ from interloper_db.models import (
     Event,
     Invitation,
     Organisation,
-    PersonalAccessToken,
     Profile,
     Run,
     UserOrganisation,
@@ -59,7 +58,7 @@ class TestDeleteOrganisation:
         store.members.add(org.id, admin.id, "admin")
         store.members.add(keeper.id, admin.id, "admin")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
-        store.tokens.create(admin.id, org.id, name="laptop")
+        _, raw_token = store.tokens.create_personal(admin.id, "laptop")
         session_token = store.sessions.create(admin.id, org_id=org.id)
         with SQLSession(auth_db) as session:
             self._seed_org_data(session, org.id)
@@ -85,10 +84,6 @@ class TestDeleteOrganisation:
                 session.exec(select(UserOrganisation).where(UserOrganisation.organisation_id == org.id)).first() is None
             )
             assert session.exec(select(Invitation).where(Invitation.organisation_id == org.id)).first() is None
-            assert (
-                session.exec(select(PersonalAccessToken).where(PersonalAccessToken.organisation_id == org.id)).first()
-                is None
-            )
             # ...but execution history survives for billing, detached from
             # the purged components via the FK's SET NULL.
             surviving_run = session.exec(select(Run).where(Run.org_id == org.id)).one()
@@ -103,6 +98,8 @@ class TestDeleteOrganisation:
         assert profile.last_organisation_id is None
         assert store.organisations.get(keeper.id).deleted_at is None
         assert store.members.role(keeper.id, admin.id) == "admin"
+        # A token is its user's, not the organisation's: it keeps working.
+        assert store.tokens.resolve(raw_token, Audience.API) is not None
 
     def test_double_delete_reads_as_missing(self, store: Store):
         org = store.organisations.create(name="Once")

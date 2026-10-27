@@ -1,12 +1,18 @@
-"""Process globals and per-request toolkit context resolution.
+"""Process globals and per-call toolkit context resolution.
 
-Two authentication paths converge on :func:`get_ctx`:
+A token names only its user; every tool call names the organisation it acts
+in, and :func:`get_ctx` checks the user's live membership there and reads
+their role. Two authentication paths supply the user:
 
-- **Streamable HTTP**: every request carries a bearer PAT; the SDK's auth
+- **Streamable HTTP**: every request carries a bearer token; the SDK's auth
   middleware stores the verified token in a contextvar, read back here via
   ``get_access_token()``.
-- **stdio**: single-user by nature; the context is resolved once at startup
-  (from a PAT or a direct org scope) and seeded via :func:`set_static_ctx`.
+- **stdio**: single-user by nature; the user is resolved once at startup
+  from ``INTERLOPER_MCP_TOKEN`` and seeded via :func:`set_static_user`.
+
+A super-admin acts as ``admin`` in any live organisation, as on the API's
+organisation routes; leaving the organisation out still counts memberships
+only, so a super-admin names any other organisation explicitly.
 """
 
 from __future__ import annotations
@@ -16,16 +22,20 @@ from typing import Any
 from uuid import UUID
 
 from interloper.catalog import Catalog
-from interloper_db import Store
-from interloper_toolkit import ToolkitContext
+from interloper_db import NotFoundError, Organisation, OrganisationQuery, Profile, Role, Store
+from interloper_toolkit import ToolError, ToolkitContext
 from mcp.server.auth.middleware.auth_context import get_access_token
 
-from interloper_mcp.auth import PatAccessToken
+from interloper_mcp.auth import UserAccessToken
+
+NAME_THE_ORGANISATION = (
+    "Name the organisation to act in: pass its id as `organisation` (list_organisations lists yours)."
+)
 
 _store: Store | None = None
 _catalog_dump: dict[str, Any] | None = None
 
-_static_ctx: ContextVar[ToolkitContext | None] = ContextVar("interloper_mcp_static_ctx", default=None)
+_static_user: ContextVar[Profile | None] = ContextVar("interloper_mcp_static_user", default=None)
 
 
 def init_context(store: Store, catalog: Catalog) -> None:
@@ -41,37 +51,116 @@ def init_context(store: Store, catalog: Catalog) -> None:
     _catalog_dump = catalog.dump()
 
 
-def set_static_ctx(org_id: UUID, *, role: str = "viewer") -> None:
-    """Seed the static (stdio) context with an organisation scope.
+def set_static_user(profile: Profile) -> None:
+    """Seed the static (stdio) context with the user every tool call runs as.
 
     Args:
-        org_id: The organisation all tool calls are scoped to.
-        role: The caller's role in it, gating the write tools.
+        profile: The user the stdio token resolved to.
     """
-    _static_ctx.set(ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=org_id, role=role))
+    _static_user.set(profile)
 
 
-def get_ctx() -> ToolkitContext:
-    """Build the toolkit context for the current tool call.
+def get_ctx(organisation: str | None = None) -> ToolkitContext | ToolError:
+    """Build the toolkit context for the current tool call, or refuse it.
+
+    Args:
+        organisation: The id of the organisation the call acts in; ``None``
+            when the caller left it out, which is accepted only when they
+            belong to exactly one organisation.
 
     Returns:
-        The org-scoped context — from the request's verified bearer token
-        (HTTP) or the startup-seeded scope (stdio).
+        The context scoped to that organisation with the caller's role in it,
+        or the refusal: an organisation the caller cannot act in, or an
+        omitted one while they belong to none or several, the error listing
+        their organisation ids.
+    """
+    if organisation is None:
+        memberships = organisations()
+        if len(memberships) != 1:
+            return ToolError(error=NAME_THE_ORGANISATION, valid_values=[str(org.id) for org, _ in memberships])
+        ((org, role),) = memberships
+        return ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=org.id, role=role)
+
+    try:
+        org_id = UUID(organisation)
+    except ValueError:
+        return _not_found(organisation)
+    role = _role(org_id)
+    if role is None:
+        return _not_found(organisation)
+    return ToolkitContext(store=_require_store(), catalog=_require_catalog(), org_id=org_id, role=role)
+
+
+def organisations() -> list[tuple[Organisation, str]]:
+    """The organisations the caller is a member of, with the role tool calls hold in each.
+
+    Returns:
+        Each live organisation the caller belongs to, oldest first, with
+        their role in it (``admin`` for a super-admin).
+    """
+    user_id, _ = _caller()
+    listed = _require_store().organisations.list(OrganisationQuery(user_id=user_id, limit=None)).items
+    return [(org, role) for org in listed if (role := _role(org.id)) is not None]
+
+
+def _not_found(organisation: str) -> ToolError:
+    """The refusal for an organisation the caller cannot act in.
+
+    Missing and not a member read the same, so ids don't act as an existence
+    oracle.
+
+    Args:
+        organisation: The organisation as the caller named it.
+
+    Returns:
+        The error, listing the caller's own organisation ids.
+    """
+    return ToolError(
+        error=f"Organisation {organisation} not found", valid_values=[str(org.id) for org, _ in organisations()]
+    )
+
+
+def _role(org_id: UUID) -> str | None:
+    """The role the caller acts with in an organisation, read live.
+
+    Args:
+        org_id: The organisation.
+
+    Returns:
+        ``admin`` for a super-admin in a live organisation, else the caller's
+        membership role; ``None`` when they cannot act in it.
+    """
+    user_id, is_super_admin = _caller()
+    store = _require_store()
+    if not is_super_admin:
+        return store.members.role(org_id, user_id)
+    try:
+        store.organisations.get(org_id)
+    except NotFoundError:
+        return None
+    return Role.ADMIN.value
+
+
+def _caller() -> tuple[UUID, bool]:
+    """The user the current tool call runs as.
+
+    Returns:
+        Their profile id and whether they are a super-admin: from the
+        request's verified bearer token (HTTP), else the startup-seeded user
+        (stdio).
 
     Raises:
-        RuntimeError: When no authenticated context exists (a programming
+        RuntimeError: When no authenticated user exists (a programming
             error: the transport must enforce auth before tools run).
     """
     token = get_access_token()
-    if isinstance(token, PatAccessToken):
-        return ToolkitContext(
-            store=_require_store(), catalog=_require_catalog(), org_id=UUID(token.org_id), role=token.role
-        )
+    if isinstance(token, UserAccessToken):
+        return UUID(token.profile_id), token.is_super_admin
 
-    ctx = _static_ctx.get()
-    if ctx is None:
-        raise RuntimeError("No authenticated context for this tool call")
-    return ctx
+    profile = _static_user.get()
+    if profile is None:
+        raise RuntimeError("No authenticated user for this tool call")
+    return profile.id, profile.is_super_admin
 
 
 def _require_store() -> Store:

@@ -1,32 +1,32 @@
-"""Bearer-token verification: personal access tokens as MCP access tokens.
+"""Bearer-token verification: the user's tokens as MCP access tokens.
 
 The SDK treats the server as an OAuth resource server; a
 :class:`~mcp.server.auth.provider.TokenVerifier` is its seam for validating
-whatever bearer token arrives. Interloper PATs slot straight in — and an
-OAuth authorization server can later mint short-lived tokens verified through
-this same seam without touching the tools.
+whatever bearer token arrives. The verifier resolves it for the MCP
+audience, which takes personal access tokens and the access tokens issued
+for MCP, and the verified token names only the user: each tool call names
+the organisation it acts in.
 """
 
 from __future__ import annotations
 
 import anyio.to_thread
-from interloper_db import Store
+from interloper_db import Audience, Store
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 
-class PatAccessToken(AccessToken):
-    """An access token backed by a verified personal access token."""
+class UserAccessToken(AccessToken):
+    """An access token standing for a verified user."""
 
-    org_id: str
-    role: str
     profile_id: str
+    is_super_admin: bool
 
 
 class PatVerifier(TokenVerifier):
-    """Verify raw bearer tokens against the PAT store.
+    """Verify raw bearer tokens against the token store.
 
-    Resolution enforces revocation, expiry, and live org membership; the
-    resulting token carries the tenant scope every tool call runs under.
+    Resolution enforces the token's kind and audience, revocation and expiry;
+    the resulting token carries the user every tool call runs as.
     """
 
     def __init__(self, store: Store) -> None:
@@ -44,22 +44,20 @@ class PatVerifier(TokenVerifier):
             token: The bearer token exactly as presented by the client.
 
         Returns:
-            The access token carrying the tenant scope, or ``None`` when the
-            token is unknown, revoked, expired, or its holder is no longer a
-            member of its organisation.
+            The access token carrying the user, or ``None`` when the token is
+            unknown, revoked, expired, or not one MCP accepts.
         """
         # The store is synchronous — keep the event loop free.
-        result = await anyio.to_thread.run_sync(self._store.tokens.resolve, token)
+        result = await anyio.to_thread.run_sync(self._store.tokens.resolve, token, Audience.MCP)
         if result is None:
             return None
 
-        profile, pat, role = result
-        return PatAccessToken(
+        profile, row = result
+        return UserAccessToken(
             token=token,
             client_id=str(profile.id),
-            scopes=[f"role:{role}"],
-            expires_at=int(pat.expires_at.timestamp()) if pat.expires_at else None,
-            org_id=str(pat.organisation_id),
-            role=role,
+            scopes=[],
+            expires_at=int(row.expires_at.timestamp()) if row.expires_at else None,
             profile_id=str(profile.id),
+            is_super_admin=profile.is_super_admin,
         )

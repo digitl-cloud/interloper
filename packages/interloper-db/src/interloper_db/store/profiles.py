@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import AuthSession, Invitation, PersonalAccessToken, Profile, UserOrganisation
+from interloper_db.models import AuthSession, Invitation, Profile, Token, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -195,7 +195,7 @@ class ProfileStore:
     def delete(self, profile_id: UUID) -> None:
         """Delete a profile and everything anchored to it.
 
-        Removes the user's sessions, personal access tokens, organisation
+        Removes the user's sessions, tokens, organisation
         memberships, and the invitations they sent, then the profile row.
 
         Args:
@@ -205,7 +205,7 @@ class ProfileStore:
             db_profile = self.get(profile_id)
             for statement in (
                 delete(AuthSession).where(col(AuthSession.user_id) == profile_id),
-                delete(PersonalAccessToken).where(col(PersonalAccessToken.user_id) == profile_id),
+                delete(Token).where(col(Token.user_id) == profile_id),
                 delete(UserOrganisation).where(col(UserOrganisation.user_id) == profile_id),
                 delete(Invitation).where(col(Invitation.invited_by) == profile_id),
             ):

@@ -92,7 +92,7 @@ class Store:
         self.organisations = OrganisationStore(self._engine)
         self.members = MemberStore(self._engine)
         self.invitations = InvitationStore(self._engine)
-        self.tokens = TokenStore(self._engine, self.members)
+        self.tokens = TokenStore(self._engine)
         self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)

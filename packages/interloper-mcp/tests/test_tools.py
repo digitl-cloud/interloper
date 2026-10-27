@@ -1,9 +1,10 @@
 """Tool behaviour over a real (in-memory) client-server session.
 
 The properties under test: every tool carries the annotations a client keys
-on, the writes are gated on the token's role, credentials never travel as
-tool arguments, tool calls return the toolkit's structured results, and
-everything is scoped to the authenticated organisation.
+on and takes the organisation it acts in, the writes are gated on the
+caller's role there, credentials never travel as tool arguments, tool calls
+return the toolkit's structured results, and everything is scoped to the
+named organisation.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult
 
-from interloper_mcp.context import init_context, set_static_ctx
+from interloper_mcp.context import init_context, set_static_user
 from interloper_mcp.server import create_mcp_server
 
 
@@ -32,8 +33,9 @@ def _result_dict(result: CallToolResult) -> dict[str, Any]:
 
 
 def _server(store: Store, catalog: il.Catalog, seeded: dict, role: str = "editor") -> MCPServer:
+    store.members.update(seeded["org"].id, seeded["profile"].id, role)
     init_context(store, catalog)
-    set_static_ctx(seeded["org"].id, role=role)
+    set_static_user(store.profiles.get(seeded["profile"].id))
     return create_mcp_server(McpSettings(), store=None)
 
 
@@ -62,7 +64,7 @@ async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments
         tools = (await client.list_tools()).tools
 
     by_name = {t.name: t for t in tools}
-    assert set(by_name) == {t.name for t in TOOLS if not t.carries_secrets}
+    assert set(by_name) == {t.name for t in TOOLS if not t.carries_secrets} | {"list_organisations"}
     assert "create_connections" not in by_name
     assert WRITES <= set(by_name)
     assert all(t.annotations is not None for t in tools)
@@ -136,3 +138,36 @@ async def test_tools_declare_output_schemas(store: Store, catalog: il.Catalog, s
     # Spot-check a computed shape made it into the schema.
     job_health = next(t for t in tools if t.name == "job_health")
     assert "JobHealthRow" in str(job_health.output_schema)
+
+
+async def test_every_toolkit_tool_takes_an_optional_organisation(store: Store, catalog: il.Catalog, seeded: dict):
+    async with Client(_server(store, catalog, seeded)) as client:
+        tools = (await client.list_tools()).tools
+
+    toolkit = [t for t in tools if t.name != "list_organisations"]
+    assert all("organisation" in t.input_schema["properties"] for t in toolkit)
+    assert not any("organisation" in t.input_schema.get("required", []) for t in toolkit)
+    assert all("list_organisations" in t.input_schema["properties"]["organisation"]["description"] for t in toolkit)
+
+
+async def test_a_named_organisation_scopes_the_call(store: Store, catalog: il.Catalog, seeded: dict):
+    store.organisations.create(name="Globex", creator_id=seeded["profile"].id)
+
+    async with Client(_server(store, catalog, seeded)) as client:
+        omitted = _result_dict(await client.call_tool("list_jobs", {}))
+        named = _result_dict(await client.call_tool("list_jobs", {"organisation": str(seeded["org"].id)}))
+
+    assert omitted["status"] == "error"
+    assert omitted["valid_values"] is not None and str(seeded["org"].id) in omitted["valid_values"]
+    assert named["status"] == "success"
+    assert [job["key"] for job in named["jobs"]] == ["daily_sync"]
+
+
+async def test_list_organisations_lists_memberships_with_roles(store: Store, catalog: il.Catalog, seeded: dict):
+    async with Client(_server(store, catalog, seeded, role="viewer")) as client:
+        result = _result_dict(await client.call_tool("list_organisations", {}))
+
+    assert result == {
+        "status": "success",
+        "organisations": [{"id": str(seeded["org"].id), "name": "Acme", "role": "viewer"}],
+    }

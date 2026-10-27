@@ -112,8 +112,7 @@ class Organisation(SQLModel, table=True):
 
     Deletion is soft (``deleted_at``): the row survives so retained
     execution history and the usage ledger stay attributable for billing,
-    while the org's sensitive payload (components, tokens, memberships)
-    is purged.
+    while the org's sensitive payload (components, memberships) is purged.
     """
 
     __tablename__: ClassVar[str] = "organisations"

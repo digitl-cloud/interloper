@@ -1,9 +1,9 @@
 """Tests for ``interloper_api.routes.tokens`` — PAT mint/list/revoke.
 
 The store is faked in memory; the properties under test are the API
-contract: the raw token appears exactly once (creation), listings never
-carry secret material, and revocation authorizes owner-or-org-admin with a
-404 that doesn't leak token existence.
+contract: a token is its user's, with no organisation; the raw token appears
+exactly once (creation), listings never carry secret material, and only the
+owner revokes, anyone else getting a 404 that doesn't leak token existence.
 """
 
 from __future__ import annotations
@@ -14,21 +14,19 @@ from uuid import UUID, uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Page, TokenQuery
+from interloper_db import NotFoundError, Page, PageQuery
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.dependencies import get_current_user, get_store
 from interloper_api.routes import tokens as tokens_module
 
 USER_ID = uuid4()
-ORG_ID = uuid4()
 
 
-def _row(*, user_id: UUID = USER_ID, org_id: UUID = ORG_ID, name: str = "t") -> SimpleNamespace:
+def _row(*, user_id: UUID = USER_ID, name: str = "t") -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid4(),
         user_id=user_id,
-        organisation_id=org_id,
         name=name,
         token_prefix="ilp_12345678",
         token_hash="deadbeef" * 8,
@@ -40,34 +38,32 @@ def _row(*, user_id: UUID = USER_ID, org_id: UUID = ORG_ID, name: str = "t") -> 
 
 
 class FakeStore:
-    """In-memory stand-in exposing only the store facets the token routes reach for."""
+    """In-memory stand-in for the store facets the token routes could reach for.
+
+    Every caller administers every organisation, so a route that let an
+    organisation admin act on someone else's token would show it.
+    """
 
     def __init__(self) -> None:
         self.rows: dict[UUID, SimpleNamespace] = {}
-        self.roles: dict[tuple[UUID, UUID], str] = {}
-        self.listed: list[tuple[UUID, TokenQuery]] = []
-        self.members = SimpleNamespace(role=self._member_role)
+        self.listed: list[tuple[UUID, PageQuery]] = []
+        self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
         self.tokens = SimpleNamespace(
-            create=self._create_token,
+            create_personal=self._create_token,
             list=self._list_tokens,
             get=self._get_token,
             revoke=self._revoke_token,
         )
 
-    def _create_token(self, user_id: UUID, org_id: UUID, *, name: str, expires_at=None):
-        row = _row(user_id=user_id, org_id=org_id, name=name)
+    def _create_token(self, user_id: UUID, name: str, expires_at=None):
+        row = _row(user_id=user_id, name=name)
         row.expires_at = expires_at
         self.rows[row.id] = row
         return row, "ilp_raw-secret-token"
 
-    def _list_tokens(self, user_id: UUID, query: TokenQuery) -> Page:
+    def _list_tokens(self, user_id: UUID, query: PageQuery) -> Page:
         self.listed.append((user_id, query))
-        rows = [
-            r
-            for r in self.rows.values()
-            if r.user_id == user_id and (query.org_id is None or r.organisation_id == query.org_id)
-        ]
-        return Page.window(rows, query)
+        return Page.window([r for r in self.rows.values() if r.user_id == user_id], query)
 
     def _get_token(self, token_id: UUID):
         if token_id not in self.rows:
@@ -79,9 +75,6 @@ class FakeStore:
         row.revoked_at = datetime.now(timezone.utc)
         return row
 
-    def _member_role(self, org_id: UUID, user_id: UUID):
-        return self.roles.get((user_id, org_id))
-
 
 def _client(store: FakeStore, user_id: UUID = USER_ID) -> TestClient:
     app = FastAPI()
@@ -90,8 +83,6 @@ def _client(store: FakeStore, user_id: UUID = USER_ID) -> TestClient:
     user = SimpleNamespace(id=user_id, is_super_admin=False)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[require_viewer] = lambda: user
-    app.dependency_overrides[get_org_id] = lambda: ORG_ID
     return TestClient(app)
 
 
@@ -105,6 +96,16 @@ class TestCreate:
         assert body["token"] == "ilp_raw-secret-token"
         assert body["name"] == "laptop"
         assert body["expires_at"] is not None  # default 90 days
+
+    def test_create_token_needs_no_organisation(self) -> None:
+        store = FakeStore()
+
+        resp = _client(store).post("/tokens", json={"name": "laptop"})
+
+        assert resp.status_code == 201
+        assert "organisation_id" not in resp.json()
+        (row,) = store.rows.values()
+        assert row.user_id == USER_ID
 
     def test_create_without_expiry(self) -> None:
         store = FakeStore()
@@ -130,14 +131,16 @@ class TestList:
         assert "token_hash" not in item
         assert item["token_prefix"] == "ilp_12345678"
 
-    def test_list_is_scoped_to_the_caller_in_the_active_organisation(self) -> None:
+    def test_list_returns_only_own_tokens(self) -> None:
         store = FakeStore()
+        mine, theirs = _row(name="mine"), _row(user_id=uuid4(), name="theirs")
+        store.rows = {mine.id: mine, theirs.id: theirs}
 
-        _client(store).get("/tokens")
+        resp = _client(store).get("/tokens")
 
-        ((user_id, query),) = store.listed
+        ((user_id, _),) = store.listed
         assert user_id == USER_ID
-        assert query.org_id == ORG_ID
+        assert [item["name"] for item in resp.json()["items"]] == ["mine"]
 
     def test_the_page_window_is_forwarded(self) -> None:
         store = FakeStore()
@@ -169,22 +172,9 @@ class TestRevoke:
         assert resp.content == b""
         assert row.revoked_at is not None
 
-    def test_org_admin_can_revoke_others_token(self) -> None:
-        store = FakeStore()
-        admin_id = uuid4()
-        store.roles[(admin_id, ORG_ID)] = "admin"
-        row = _row()  # owned by USER_ID
-        store.rows[row.id] = row
-
-        resp = _client(store, user_id=admin_id).delete(f"/tokens/{row.id}")
-
-        assert resp.status_code == 204
-        assert row.revoked_at is not None
-
-    def test_non_owner_non_admin_gets_same_404_as_missing(self) -> None:
+    def test_revoke_other_users_token_404s(self) -> None:
         store = FakeStore()
         stranger_id = uuid4()
-        store.roles[(stranger_id, ORG_ID)] = "editor"
         row = _row()
         store.rows[row.id] = row
 
