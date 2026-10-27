@@ -1,15 +1,19 @@
+<script setup lang="ts">
+const views = useExecutionViews()
+</script>
+
 <template>
-    <UDashboardPanel id="backfills">
+    <UDashboardPanel id="runs">
         <template #header>
             <AppNavbar title="Executions" />
             <UDashboardToolbar>
                 <template #left>
-                    <PageTabs :items="EXECUTION_VIEWS" />
+                    <PageTabs :items="views" />
                 </template>
             </UDashboardToolbar>
         </template>
         <template #body>
-            <ExecutionsBackfillsTable />
+            <ExecutionsRunsTable />
         </template>
     </UDashboardPanel>
 </template>

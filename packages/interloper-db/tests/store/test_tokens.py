@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -10,7 +11,9 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from sqlalchemy import Engine, event, text
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import Engine, event, inspect, text
 from sqlalchemy.pool import StaticPool
 
 from interloper_db import NotFoundError, PageQuery
@@ -19,7 +22,7 @@ from interloper_db.crypto import hash_token
 from interloper_db.models import Audience, Organisation, Profile, Token, TokenKind, UserOrganisation
 from interloper_db.session import save, session_scope
 from interloper_db.store import Store
-from interloper_db.store.tokens import TOKEN_PREFIX_LEN
+from interloper_db.store.tokens import TOKEN_PREFIX_LEN, TokenStore
 
 
 @pytest.fixture
@@ -123,12 +126,14 @@ class TestResolve:
 
         assert store.tokens.resolve(raw, Audience.APP) is None
 
-    def test_session_token_resolves_only_as_cookie(self, store: Store, profile: Profile):
-        _insert(profile, "ils_session", TokenKind.SESSION)
+    def test_session_resolves_only_as_cookie(self, store: Store, profile: Profile):
+        raw = store.tokens.create_session(profile.id)
 
-        assert store.tokens.resolve("ils_session", Audience.APP) is not None
-        assert store.tokens.resolve("ils_session", Audience.API) is None
-        assert store.tokens.resolve("ils_session", Audience.MCP) is None
+        resolved = store.tokens.resolve(raw, Audience.APP)
+        assert resolved is not None
+        assert resolved[1].kind == TokenKind.SESSION
+        assert store.tokens.resolve(raw, Audience.API) is None
+        assert store.tokens.resolve(raw, Audience.MCP) is None
 
     def test_access_token_resolves_only_on_its_resource(self, store: Store, profile: Profile):
         _insert(profile, "ila_api", TokenKind.ACCESS, resource=Audience.API.value)
@@ -179,6 +184,96 @@ class TestResolve:
 
         assert resolved is not None
         assert resolved[1].kind == TokenKind.PERSONAL
+
+
+class TestSessions:
+    def test_session_expiry_from_settings(self, token_db: Engine, profile: Profile):
+        tokens = TokenStore(token_db, session_expiry=timedelta(days=2))
+
+        before = datetime.now(timezone.utc)
+        raw = tokens.create_session(profile.id)
+
+        resolved = tokens.resolve(raw, Audience.APP)
+        assert resolved is not None
+        expires_at = resolved[1].expires_at
+        assert expires_at is not None
+        assert before + timedelta(days=2) <= expires_at <= datetime.now(timezone.utc) + timedelta(days=2)
+
+    def test_revoke_sessions_ends_every_session_of_the_user_only(self, store: Store, profile: Profile):
+        other = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        first = store.tokens.create_session(profile.id)
+        second = store.tokens.create_session(profile.id)
+        theirs = store.tokens.create_session(other.id)
+        _, personal = store.tokens.create_personal(profile.id, "laptop", None)
+
+        store.tokens.revoke_sessions(profile.id)
+
+        assert store.tokens.resolve(first, Audience.APP) is None
+        assert store.tokens.resolve(second, Audience.APP) is None
+        assert store.tokens.resolve(theirs, Audience.APP) is not None
+        assert store.tokens.resolve(personal, Audience.API) is not None
+
+    def test_migration_017_keeps_logins(self, store: Store, profile: Profile, token_db: Engine):
+        # A login made before migration 017 lives in ``sessions``; the upgrade
+        # moves it into ``tokens`` with its hash, so the cookie keeps working.
+        expired_hash = hash_token("expired-cookie")
+        with token_db.begin() as connection:
+            connection.execute(
+                text(
+                    "CREATE TABLE sessions (id uuid PRIMARY KEY, user_id uuid NOT NULL, organisation_id uuid, "
+                    "token_hash varchar NOT NULL, expires_at timestamp with time zone NOT NULL, "
+                    "created_at timestamp with time zone)"
+                )
+            )
+            for raw, expires_at in (
+                ("live-cookie", datetime.now(timezone.utc) + timedelta(days=1)),
+                ("expired-cookie", datetime.now(timezone.utc) - timedelta(days=1)),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO sessions (id, user_id, token_hash, expires_at) "
+                        "VALUES (:id, :user_id, :token_hash, :expires_at)"
+                    ),
+                    {
+                        "id": uuid4().hex,
+                        "user_id": profile.id.hex,
+                        "token_hash": hash_token(raw),
+                        "expires_at": expires_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
+                    },
+                )
+
+            with Operations.context(MigrationContext.configure(connection)):
+                importlib.import_module("interloper_db.migrations.versions.017_sessions_are_tokens").upgrade()
+
+        resolved = store.tokens.resolve("live-cookie", Audience.APP)
+        assert resolved is not None
+        assert resolved[0].id == profile.id
+        assert resolved[1].kind == TokenKind.SESSION
+        with token_db.connect() as connection:
+            moved = connection.execute(text("SELECT count(*) FROM tokens WHERE token_hash = :h"), {"h": expired_hash})
+            assert moved.scalar() == 0
+            assert "sessions" not in inspect(connection).get_table_names()
+
+    def test_migration_017_downgrade_restores_sessions_the_old_code_can_write(
+        self, store: Store, profile: Profile, token_db: Engine
+    ):
+        # The rolled-back code inserts a session without an id, relying on the
+        # table's server default; a live session token moves back with its hash.
+        raw = store.tokens.create_session(profile.id)
+        with token_db.begin() as connection:
+            with Operations.context(MigrationContext.configure(connection)):
+                importlib.import_module("interloper_db.migrations.versions.017_sessions_are_tokens").downgrade()
+            connection.execute(
+                text("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES (:user_id, 'new', :expires_at)"),
+                {"user_id": profile.id.hex, "expires_at": "2099-01-01 00:00:00"},
+            )
+
+        with token_db.connect() as connection:
+            rows = connection.execute(text("SELECT id, token_hash FROM sessions")).all()
+            left = connection.execute(text("SELECT count(*) FROM tokens WHERE kind = 'session'")).scalar()
+        assert {row.token_hash for row in rows} == {hash_token(raw), "new"}
+        assert all(row.id is not None for row in rows)
+        assert left == 0
 
 
 class TestListAndRevoke:

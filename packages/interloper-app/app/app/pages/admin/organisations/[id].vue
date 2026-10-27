@@ -3,7 +3,7 @@ import { h } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import { UBadge } from '#components'
 import type { AdminActivityEntry, AdminOrganisation, AdminOrgQuotaStatus, AdminQuotas } from '~/types/admin'
-import type { Organisation, OrgMember } from '~/types/organisation'
+import type { OrgMember } from '~/types/organisation'
 
 definePageMeta({ layout: 'admin', middleware: 'super-admin' })
 
@@ -14,7 +14,6 @@ const adminStore = useAdminStore()
 const organisationStore = useOrganisationStore()
 const userStore = useUserStore()
 const toast = useToast()
-const { switchToOrg } = useOrgSwitch()
 
 const rows = ref<OrgMember[]>([])
 const org = ref<AdminOrganisation | null>(null)
@@ -258,7 +257,8 @@ async function submitRename() {
     if (!name || name === org.value?.name) return
     renaming.value = true
     try {
-        await organisationStore.renameOrganisation(orgId.value, name)
+        await organisationStore.updateOrganisation(orgId.value, { name })
+        await userStore.fetchMe()
         toast.add({ title: 'Organisation renamed', color: 'success' })
         await loadData()
     }
@@ -272,8 +272,7 @@ async function submitRename() {
 
 async function openWorkspace() {
     if (!org.value) return
-    await switchToOrg({ id: org.value.id, name: org.value.name } as Organisation)
-    await navigateTo('/')
+    await navigateTo(`/${org.value.slug}`)
 }
 
 const deleteConfirmName = ref('')
@@ -317,7 +316,7 @@ watch(orgId, loadData)
                     <PageTabs :items="tabs" />
                 </template>
                 <template #right>
-                    <UButton v-if="isMember"
+                    <UButton v-if="org && !org.deleted_at"
                              icon="i-lucide-external-link"
                              label="Open workspace"
                              color="neutral"
@@ -455,22 +454,22 @@ watch(orgId, loadData)
                                     <div class="min-w-0 flex-1">
                                         <div class="text-sm font-medium text-highlighted">Your membership</div>
                                         <div class="mt-0.5 text-sm text-muted">
-                                            <template v-if="isMember">You are an active member, so you can open this workspace directly.</template>
-                                            <template v-else>You are not a member of this organisation. Join it to open its workspace.</template>
+                                            <template v-if="isMember">You are an active member of this organisation.</template>
+                                            <template v-else>You are not a member of this organisation. As a super-admin you can open its workspace anyway, or join it.</template>
                                         </div>
                                     </div>
-                                    <UButton v-if="isMember"
+                                    <UButton v-if="!isMember"
+                                             icon="i-lucide-user-plus"
+                                             label="Join"
+                                             color="neutral"
+                                             variant="outline"
+                                             @click="joinOrganisation" />
+                                    <UButton v-if="org && !org.deleted_at"
                                              icon="i-lucide-log-in"
                                              label="Open workspace"
                                              color="neutral"
                                              variant="outline"
                                              @click="openWorkspace" />
-                                    <UButton v-else
-                                             icon="i-lucide-log-in"
-                                             label="Join"
-                                             color="neutral"
-                                             variant="outline"
-                                             @click="joinOrganisation" />
                                 </div>
                             </div>
                         </UCard>

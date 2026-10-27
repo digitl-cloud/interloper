@@ -2,9 +2,9 @@
 
 Every route below the collection takes the organisation from the path and
 serves its own members by role and the platform's super-admins through the
-same endpoints. The authorization is the real ``authorize_organisation``,
-resolved against the fake store's memberships, so each route is proven for
-an org admin, a member with too low a role, a non-member and a super-admin.
+same endpoints. The authorization is the real ``get_org_scope`` and role
+gates, resolved against the fake store's memberships, so each route is proven
+for an org admin, a member with too low a role, a non-member and a super-admin.
 """
 
 from __future__ import annotations
@@ -17,10 +17,11 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery
+from interloper.errors import ConfigError
+from interloper_db import ConflictError, NotFoundError, OrganisationQuery, Page, PageQuery
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_store
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_session_caller, get_store
 from interloper_api.notifications import InvitationEmail
 from interloper_api.routes import organisations as organisations_module
 
@@ -78,10 +79,10 @@ class FakeStore:
         self.user_orgs: list[SimpleNamespace] = []
 
         self.created_orgs: list[tuple[str, UUID | None]] = []
-        self.renamed_orgs: list[tuple[UUID, str]] = []
+        self.updated_orgs: list[tuple[UUID, str | None, str | None]] = []
+        self.update_error: Exception | None = None
         self.deleted_orgs: list[UUID] = []
         self.listed_orgs: list[OrganisationQuery] = []
-        self.session_org_calls: list[tuple[str, UUID, UUID]] = []
         self.added_members: list[tuple[UUID, UUID, str]] = []
         self.role_updates: list[tuple[UUID, UUID, str]] = []
         self.removed_members: list[tuple[UUID, UUID]] = []
@@ -98,6 +99,7 @@ class FakeStore:
             update=self._update_org,
             delete=self._delete_org,
         )
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
         self.members = SimpleNamespace(
             role=lambda org_id, user_id: self.roles.get((org_id, user_id)),
             list=self._list_members,
@@ -111,7 +113,6 @@ class FakeStore:
             delete=self._delete_invitation,
             reissue=self._reissue_invitation,
         )
-        self.sessions = SimpleNamespace(switch_org=self._switch_org)
 
     # -- organisations --
 
@@ -128,15 +129,15 @@ class FakeStore:
             raise NotFoundError(f"Organisation {org_id} not found")
         return self.orgs[org_id]
 
-    def _update_org(self, org_id: UUID, *, name: str) -> SimpleNamespace:
-        self.renamed_orgs.append((org_id, name))
-        return SimpleNamespace(id=org_id, name=name, slug=name.lower(), created_at=_NOW)
+    def _update_org(self, org_id: UUID, *, name: str | None = None, slug: str | None = None) -> SimpleNamespace:
+        if self.update_error is not None:
+            raise self.update_error
+        self.updated_orgs.append((org_id, name, slug))
+        current = self.orgs[org_id]
+        return SimpleNamespace(id=org_id, name=name or current.name, slug=slug or current.slug, created_at=_NOW)
 
     def _delete_org(self, org_id: UUID) -> None:
         self.deleted_orgs.append(org_id)
-
-    def _switch_org(self, token: str, org_id: UUID, user_id: UUID) -> None:
-        self.session_org_calls.append((token, org_id, user_id))
 
     # -- members --
 
@@ -243,8 +244,10 @@ def app(store: FakeStore, no_smtp: None) -> FastAPI:
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(organisations_module.router)
+    app.include_router(organisations_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: _profile()
+    app.dependency_overrides[get_caller] = lambda: _profile()
+    app.dependency_overrides[get_session_caller] = lambda: _profile()
     return app
 
 
@@ -271,7 +274,24 @@ def super_client(app: FastAPI) -> TestClient:
     Returns:
         The client.
     """
-    app.dependency_overrides[get_current_user] = lambda: _super_admin()
+    app.dependency_overrides[get_caller] = lambda: _super_admin()
+    app.dependency_overrides[get_session_caller] = lambda: _super_admin()
+    return TestClient(app)
+
+
+def _token_client(app: FastAPI, store: FakeStore) -> TestClient:
+    """A client whose caller is resolved for real, every credential standing for the super-admin.
+
+    Args:
+        app: The probe app; its caller overrides are dropped.
+        store: The fake store, given a resolver that accepts any secret.
+
+    Returns:
+        The client.
+    """
+    app.dependency_overrides.pop(get_caller)
+    app.dependency_overrides.pop(get_session_caller)
+    store.tokens = SimpleNamespace(resolve=lambda raw, audience: (_super_admin(), SimpleNamespace()))
     return TestClient(app)
 
 
@@ -292,18 +312,6 @@ class TestCreateOrganisation:
             "created_at": "2026-06-01T00:00:00Z",
         }
         assert store.created_orgs == [("Acme", _USER_ID)]
-
-    def test_the_new_org_becomes_the_sessions_active_one(self, client: TestClient, store: FakeStore) -> None:
-        client.cookies.set("session_token", "tok")
-
-        client.post("/organisations", json={"name": "Acme"})
-
-        assert store.session_org_calls == [("tok", _ORG_ID, _USER_ID)]
-
-    def test_without_a_session_cookie_no_org_is_selected(self, client: TestClient, store: FakeStore) -> None:
-        client.post("/organisations", json={"name": "Acme"})
-
-        assert store.session_org_calls == []
 
     def test_a_missing_name_is_rejected(self, client: TestClient) -> None:
         assert client.post("/organisations", json={}).status_code == 422
@@ -339,7 +347,45 @@ class TestListOrganisations:
 
 
 class TestUpdateOrganisation:
-    """``PATCH /organisations/{org_id}``: the org's admin or a super-admin renames it."""
+    """``PATCH /organisations/{org_id}``: the org's admin or a super-admin renames it or changes its slug."""
+
+    def test_an_org_admin_changes_the_slug(self, client: TestClient, store: FakeStore) -> None:
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "acme"})
+
+        assert response.status_code == 200
+        assert response.json()["slug"] == "acme"
+        assert response.json()["name"] == "Dev Org"
+        assert store.updated_orgs == [(_ORG_ID, None, "acme")]
+
+    def test_a_taken_slug_is_a_409(self, client: TestClient, store: FakeStore) -> None:
+        store.update_error = ConflictError("Slug 'other-org' is taken")
+
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "other-org"})
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "Slug 'other-org' is taken"
+
+    def test_a_reserved_or_malformed_slug_is_a_400(self, client: TestClient, store: FakeStore) -> None:
+        store.update_error = ConfigError("Slug 'settings' is reserved")
+
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "settings"})
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Slug 'settings' is reserved"
+
+    def test_an_editor_cannot_change_the_slug(self, client: TestClient, store: FakeStore) -> None:
+        store.roles[(_ORG_ID, _USER_ID)] = "editor"
+
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "acme"})
+
+        assert response.status_code == 403
+        assert store.updated_orgs == []
+
+    def test_a_super_admin_changes_any_slug(self, super_client: TestClient, store: FakeStore) -> None:
+        response = super_client.patch(f"/organisations/{_OTHER_ORG_ID}", json={"slug": "renamed"})
+
+        assert response.status_code == 200
+        assert store.updated_orgs == [(_OTHER_ORG_ID, None, "renamed")]
 
     def test_an_org_admin_renames_their_organisation(self, client: TestClient, store: FakeStore) -> None:
         response = client.patch(f"/organisations/{_ORG_ID}", json={"name": "Renamed"})
@@ -348,10 +394,10 @@ class TestUpdateOrganisation:
         assert response.json() == {
             "id": str(_ORG_ID),
             "name": "Renamed",
-            "slug": "renamed",
+            "slug": "dev-org",
             "created_at": "2026-06-01T00:00:00Z",
         }
-        assert store.renamed_orgs == [(_ORG_ID, "Renamed")]
+        assert store.updated_orgs == [(_ORG_ID, "Renamed", None)]
 
     def test_an_editor_cannot_rename(self, client: TestClient, store: FakeStore) -> None:
         store.roles[(_ORG_ID, _USER_ID)] = "editor"
@@ -360,21 +406,21 @@ class TestUpdateOrganisation:
 
         assert response.status_code == 403
         assert response.json()["detail"] == "Requires admin role or higher"
-        assert store.renamed_orgs == []
+        assert store.updated_orgs == []
 
     def test_a_non_member_reads_the_organisation_as_missing(self, client: TestClient, store: FakeStore) -> None:
         response = client.patch(f"/organisations/{_OTHER_ORG_ID}", json={"name": "Renamed"})
 
         assert response.status_code == 404
         assert response.json()["detail"] == f"Organisation {_OTHER_ORG_ID} not found"
-        assert store.renamed_orgs == []
+        assert store.updated_orgs == []
 
     def test_a_super_admin_renames_any_organisation(self, super_client: TestClient, store: FakeStore) -> None:
         response = super_client.patch(f"/organisations/{_OTHER_ORG_ID}", json={"name": "Renamed"})
 
         assert response.status_code == 200
         assert response.json()["name"] == "Renamed"
-        assert store.renamed_orgs == [(_OTHER_ORG_ID, "Renamed")]
+        assert store.updated_orgs == [(_OTHER_ORG_ID, "Renamed", None)]
 
     def test_a_super_admin_still_gets_a_404_on_a_missing_organisation(
         self, super_client: TestClient, store: FakeStore
@@ -385,7 +431,7 @@ class TestUpdateOrganisation:
 
         assert response.status_code == 404
         assert response.json()["detail"] == f"Organisation {missing} not found"
-        assert store.renamed_orgs == []
+        assert store.updated_orgs == []
 
 
 class TestDeleteOrganisation:
@@ -416,6 +462,25 @@ class TestDeleteOrganisation:
 
         assert response.status_code == 403
         assert store.deleted_orgs == []
+
+    def test_a_super_admin_token_is_refused(self, app: FastAPI, store: FakeStore) -> None:
+        client = _token_client(app, store)
+
+        response = client.request(
+            "DELETE", f"/organisations/{_ORG_ID}", json={"name": "Dev Org"}, headers={"Authorization": "Bearer ilp_x"}
+        )
+
+        assert response.status_code == 401
+        assert store.deleted_orgs == []
+
+    def test_a_super_admin_session_cookie_deletes(self, app: FastAPI, store: FakeStore) -> None:
+        client = _token_client(app, store)
+        client.cookies.set("session_token", "cookie")
+
+        response = client.request("DELETE", f"/organisations/{_ORG_ID}", json={"name": "Dev Org"})
+
+        assert response.status_code == 204
+        assert store.deleted_orgs == [_ORG_ID]
 
 
 # -- Members -------------------------------------------------------------------
@@ -520,6 +585,23 @@ class TestJoinOrganisation:
 
         assert response.status_code == 403
         assert store.added_members == []
+
+    def test_a_super_admin_token_is_refused(self, app: FastAPI, store: FakeStore) -> None:
+        client = _token_client(app, store)
+
+        response = client.post(f"/organisations/{_ORG_ID}/members", json={}, headers={"Authorization": "Bearer ilp_x"})
+
+        assert response.status_code == 401
+        assert store.added_members == []
+
+    def test_a_super_admin_session_cookie_joins(self, app: FastAPI, store: FakeStore) -> None:
+        client = _token_client(app, store)
+        client.cookies.set("session_token", "cookie")
+
+        response = client.post(f"/organisations/{_ORG_ID}/members", json={})
+
+        assert response.status_code == 201
+        assert store.added_members == [(_ORG_ID, _SUPER_ADMIN_ID, "admin")]
 
 
 class TestUpdateMember:
@@ -751,7 +833,7 @@ class TestInviteMember:
     def test_a_nameless_inviter_is_identified_by_email(
         self, app: FastAPI, client: TestClient, mailer: list[tuple[InvitationEmail, str]]
     ) -> None:
-        app.dependency_overrides[get_current_user] = lambda: _profile(name=None)
+        app.dependency_overrides[get_caller] = lambda: _profile(name=None)
 
         client.post(f"/organisations/{_ORG_ID}/invitations", json={"email": "new@example.com"})
 

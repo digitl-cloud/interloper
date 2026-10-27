@@ -29,12 +29,13 @@ from interloper_db import (
     RunStatus,
 )
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_run, require_viewer
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_store, require_run
 from interloper_api.routes import runs as runs_module
 
 _ORG_ID = uuid4()
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
+_BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
 
 
 def _fake_run(run_id: UUID, org_id: UUID = _ORG_ID) -> SimpleNamespace:
@@ -74,6 +75,7 @@ class FakeStore:
         self.run_org_id: UUID = _ORG_ID
         self.members = SimpleNamespace(role=self._member_role)
         self.ingested: list[tuple[UUID, il.EventBatch]] = []
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(
             get=self._get_run,
             list=self._list_runs,
@@ -138,15 +140,28 @@ def _any_run(run_id: UUID) -> SimpleNamespace:
 def _app(store: FakeStore) -> FastAPI:
     app = FastAPI()
     install_error_handlers(app)
+    app.include_router(runs_module.org_router, prefix=ORG_PREFIX)
     app.include_router(runs_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
+    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
     app.dependency_overrides[require_run] = _any_run
     return app
 
 
 def _client(store: FakeStore) -> TestClient:
     """A client for the probe app.
+
+    Args:
+        store: The fake store the routes resolve against.
+
+    Returns:
+        The client.
+    """
+    return TestClient(_app(store), base_url=_BASE_URL)
+
+
+def _ingest_client(store: FakeStore) -> TestClient:
+    """A client at the API root, where a run's pod reports, outside any organisation.
 
     Args:
         store: The fake store the routes resolve against.
@@ -275,21 +290,31 @@ def test_get_run_allows_member_of_owning_org(store: FakeStore) -> None:
 
 def test_get_run_returns_404_for_non_member(store: FakeStore) -> None:
     store.role = None
-    run_id = uuid4()
-    resp = _client(store).get(f"/runs/{run_id}")
+    resp = _client(store).get(f"/runs/{uuid4()}")
     assert resp.status_code == 404
-    # Identical detail to a missing run — IDs must not act as an existence oracle.
-    assert resp.json()["detail"] == f"Run {run_id} not found"
+    assert resp.json()["detail"] == f"Organisation {_ORG_ID} not found"
 
 
-def test_get_run_404_detail_matches_missing_run(store: FakeStore) -> None:
+def test_detail_of_other_org_404(store: FakeStore) -> None:
+    # A run of organisation A, read under organisation B where the caller is
+    # an editor, is missing there: identical to a run that does not exist.
     run_id = uuid4()
-    store.role = None
-    non_member = _client(store).get(f"/runs/{run_id}").json()["detail"]
-    store.role = "viewer"
+    store.run_org_id = uuid4()
+    other_org = _client(store).get(f"/runs/{run_id}")
     store.raise_not_found = True
-    missing = _client(store).get(f"/runs/{run_id}").json()["detail"]
-    assert non_member == missing
+    missing = _client(store).get(f"/runs/{run_id}")
+
+    assert other_org.status_code == missing.status_code == 404
+    assert other_org.json()["detail"] == missing.json()["detail"] == f"Run {run_id} not found"
+
+
+def test_a_write_on_a_run_of_another_org_is_refused(store: FakeStore) -> None:
+    store.run_org_id = uuid4()
+
+    resp = _client(store).post(f"/runs/{uuid4()}/cancel")
+
+    assert resp.status_code == 404
+    assert store.cancel_calls == []
 
 
 def test_run_events_return_404_for_non_member(store: FakeStore) -> None:
@@ -338,10 +363,8 @@ def _viewer_client(store: FakeStore) -> TestClient:
     Returns:
         The client.
     """
-    app = _app(store)
-    app.dependency_overrides[require_viewer] = lambda: SimpleNamespace(id=uuid4())
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-    return TestClient(app)
+    store.role = "viewer"
+    return _client(store)
 
 
 def test_list_runs_is_a_page(store: FakeStore) -> None:
@@ -561,6 +584,7 @@ class EventsStore:
         self.total = total
         self.list_calls: list[tuple[UUID, EventQuery, UUID | None]] = []
         self.members = SimpleNamespace(role=lambda org_id, user_id: "viewer")
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(id=run_id, org_id=_ORG_ID))
         self.events = SimpleNamespace(list=self._list_events)
 
@@ -585,10 +609,10 @@ class EventsStore:
 def _events_client(store: EventsStore) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(runs_module.router)
+    app.include_router(runs_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4())
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+    return TestClient(app, base_url=_BASE_URL)
 
 
 @pytest.fixture
@@ -674,7 +698,7 @@ def test_ingest_hands_the_batch_to_the_store_and_reports_whether_the_run_was_liv
     event = {"event_id": event_id, "type": "log", "timestamp": "2026-10-26T10:00:00+00:00", "message": "hi"}
     effects = {"a": {"config": {"k": 1}, "state": {}}}
 
-    response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [event], "effects": effects})
+    response = _ingest_client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [event], "effects": effects})
 
     assert response.status_code == 200 and response.json() == {"live": True}
     ((run_id, batch),) = store.ingested
@@ -684,16 +708,23 @@ def test_ingest_hands_the_batch_to_the_store_and_reports_whether_the_run_was_liv
 
 
 def test_ingest_rejects_a_malformed_event(store: FakeStore) -> None:
-    response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [{"type": "nope"}]})
+    response = _ingest_client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [{"type": "nope"}]})
 
     assert response.status_code == 422
     assert store.ingested == []
 
 
 def test_ingest_rejects_a_malformed_effect(store: FakeStore) -> None:
-    response = _client(store).post(
+    response = _ingest_client(store).post(
         f"/runs/{_RUN_ID}/events", json={"events": [], "effects": {"a": {"config": "rotated"}}}
     )
 
     assert response.status_code == 422
+    assert store.ingested == []
+
+
+def test_ingest_is_not_served_under_the_organisation(store: FakeStore) -> None:
+    response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": []})
+
+    assert response.status_code == 405
     assert store.ingested == []

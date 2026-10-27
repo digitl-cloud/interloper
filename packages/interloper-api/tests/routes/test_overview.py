@@ -38,8 +38,8 @@ from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_current_user, get_org_id, get_store, require_viewer
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import overview as overview_module
 
 NOW = dt.datetime(2026, 8, 13, 9, 14, tzinfo=dt.timezone.utc)
@@ -210,12 +210,10 @@ def client(store: Store, member: SimpleNamespace) -> TestClient:
     """
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(overview_module.router)
+    app.include_router(overview_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: member
-    app.dependency_overrides[require_viewer] = lambda: member
-    app.dependency_overrides[get_org_id] = lambda: member.org_id
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: member
+    return TestClient(app, base_url=f"http://testserver/organisations/{member.org_id}")
 
 
 def _overview(client: TestClient) -> dict[str, Any]:
@@ -813,11 +811,10 @@ class TestAuth:
     def test_a_viewer_is_required(self, store: Store, member: SimpleNamespace):
         app = FastAPI()
         install_error_handlers(app)
-        app.include_router(overview_module.router)
+        app.include_router(overview_module.org_router, prefix=ORG_PREFIX)
         app.dependency_overrides[get_store] = lambda: store
-        app.dependency_overrides[get_org_id] = lambda: member.org_id
 
-        assert TestClient(app).get("/overview").status_code in (401, 403)
+        assert TestClient(app).get(f"/organisations/{member.org_id}/overview").status_code == 401
 
     def test_another_organisations_data_never_shows(self, client: TestClient, store: Store, member: SimpleNamespace):
         other = store.organisations.create(name="Other", creator_id=member.id).id

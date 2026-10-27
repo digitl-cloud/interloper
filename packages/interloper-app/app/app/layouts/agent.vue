@@ -2,6 +2,7 @@
 
 const route = useRoute()
 const agentStore = useAgentStore()
+const organisationStore = useOrganisationStore()
 
 const sidebarItems = computed(() => {
     if (!agentStore.conversations.length) return []
@@ -12,7 +13,7 @@ const sidebarItems = computed(() => {
             id: c.id,
             label: c.title ?? 'New conversation',
             icon: 'i-lucide-message-square',
-            to: `/agent/chat/${c.id}`,
+            to: organisationStore.path(`/agent/chat/${c.id}`),
             slot: 'chat' as const,
         })),
     ]
@@ -21,13 +22,12 @@ const sidebarItems = computed(() => {
 async function deleteChat(id: string) {
     await agentStore.deleteConversation(id)
     if (route.params.id === id) {
-        navigateTo('/agent')
+        navigateTo(organisationStore.path('/agent'))
     }
 }
 
-onMounted(() => {
-    agentStore.fetchConversations()
-})
+// The layout outlives its pages, so it follows the organisation they are in.
+watch(() => organisationStore.organisation?.id, () => agentStore.fetchConversations(), { immediate: true })
 </script>
 
 <template>
@@ -47,7 +47,7 @@ onMounted(() => {
                              color="primary"
                              block
                              :square="collapsed"
-                             to="/agent" />
+                             :to="organisationStore.path('/agent')" />
 
                     <UNavigationMenu v-if="sidebarItems.length"
                                      :collapsed="collapsed"

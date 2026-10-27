@@ -16,7 +16,7 @@ export interface RunFilters {
 const NO_FILTERS: RunFilters = { q: '', kind: null, key: null, status: null }
 
 export const useRunsStore = defineStore('runs', () => {
-    const { apiFetch, fetchAll } = useApi()
+    const { apiFetch, fetchAll } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -242,7 +242,7 @@ export const useRunsStore = defineStore('runs', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(() => fetch(), $reset)
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         runs,

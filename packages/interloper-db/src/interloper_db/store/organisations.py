@@ -18,7 +18,6 @@ from sqlmodel import col, select
 
 from interloper_db.errors import ConflictError, NotFoundError
 from interloper_db.models import (
-    AuthSession,
     Component,
     ComponentRelation,
     Invitation,
@@ -180,8 +179,8 @@ class OrganisationStore:
         gone. Everything sensitive or live is removed: components and
         their relations (encrypted credentials, client config), quota
         overrides, invitations, and memberships (which every token its
-        members hold reached the organisation through); sessions and
-        profiles pointing at the org are detached. Retained runs and
+        members hold reached the organisation through); profiles
+        whose last organisation it was are detached. Retained runs and
         backfills lose their component reference via the FK's SET NULL.
         Bulk statements — ordered children-first — so the cascade never
         depends on ORM-loaded state.
@@ -197,7 +196,6 @@ class OrganisationStore:
                 delete(Quota).where(col(Quota.org_id) == org_id),
                 delete(Invitation).where(col(Invitation.organisation_id) == org_id),
                 delete(UserOrganisation).where(col(UserOrganisation.organisation_id) == org_id),
-                update(AuthSession).where(col(AuthSession.organisation_id) == org_id).values(organisation_id=None),
                 update(Profile).where(col(Profile.last_organisation_id) == org_id).values(last_organisation_id=None),
             ):
                 session.connection().execute(statement)

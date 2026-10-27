@@ -8,8 +8,8 @@ const LABEL_WIDTH = 280
 const REFRESH_INTERVAL = 60_000
 
 const timelineStore = useTimelineStore()
+const organisationStore = useOrganisationStore()
 const componentsStore = useComponentsStore()
-const catalogStore = useCatalogStore()
 
 const { runs, rangeStart, rangeEnd, loading, total, truncated } = storeToRefs(timelineStore)
 
@@ -40,7 +40,7 @@ const activeSpan = computed({
 const runCount = computed(() => runs.value.reduce((n, run) => n + (run.started_at ? 1 : 0), 0))
 
 function onBarClick(bar: TimelineBar) {
-    navigateTo(`/executions/runs/${bar.id}`)
+    navigateTo(organisationStore.path(`/executions/runs/${bar.id}`))
 }
 
 useIntervalFn(() => timelineStore.fetch(), REFRESH_INTERVAL)
@@ -50,7 +50,6 @@ onMounted(async () => {
         timelineStore.setSpan(windowSpan.value),
         // Jobs give the rows; sources/assets name and icon the ad-hoc ones.
         componentsStore.fetchAll(['job', 'source', 'asset']),
-        catalogStore.loaded ? Promise.resolve() : catalogStore.fetchCatalog(),
     ])
 })
 
@@ -71,7 +70,7 @@ onUnmounted(() => timelineStore.$reset())
                     <UButton icon="i-lucide-calendar-plus"
                              label="Create a job"
                              class="mt-5"
-                             :to="kindPath('job')" />
+                             :to="organisationStore.path(kindPath('job'))" />
                 </EmptyState>
             </div>
 

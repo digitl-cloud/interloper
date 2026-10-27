@@ -11,6 +11,7 @@ import type { Conversation } from '~/types/agent'
 
 const { open, width, dragging, startResize, resetWidth } = useAgentPanel()
 const agentStore = useAgentStore()
+const organisationStore = useOrganisationStore()
 
 const resumed = ref(false)
 const creating = ref(false)
@@ -49,12 +50,14 @@ async function resume() {
 watch(open, resume, { immediate: true })
 
 // A conversation belongs to one organisation: a switch leaves it for the new organisation's latest.
-useOrgScopedRefetch(resume, () => {
+watch(() => organisationStore.organisation?.id, () => {
     chat.value?.stop()
     chat.value = undefined
     summary.value = null
     resumed.value = false
     unavailable.value = false
+    creating.value = false
+    resume()
 })
 
 const input = ref('')

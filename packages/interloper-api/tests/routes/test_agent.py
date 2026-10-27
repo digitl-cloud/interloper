@@ -52,16 +52,8 @@ from pydantic_ai.models.test import TestModel
 from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import (
-    get_agent,
-    get_catalog,
-    get_current_user,
-    get_org_id,
-    get_store,
-    require_editor,
-    require_viewer,
-)
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_agent, get_caller, get_catalog, get_store
 from interloper_api.routes import agent as agent_module
 
 
@@ -106,18 +98,17 @@ def member(store: Store) -> SimpleNamespace:
     return SimpleNamespace(id=profile.id, org_id=org.id, email="ada@example.com", is_super_admin=False)
 
 
-def _client(store: Store, member: SimpleNamespace, agent: Agent[ToolkitContext, Any]) -> TestClient:
+def _client(
+    store: Store, member: SimpleNamespace, agent: Agent[ToolkitContext, Any], org_id: UUID | None = None
+) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(agent_module.router)
+    app.include_router(agent_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})
     app.dependency_overrides[get_agent] = lambda: agent
-    app.dependency_overrides[get_current_user] = lambda: member
-    app.dependency_overrides[require_editor] = lambda: member
-    app.dependency_overrides[require_viewer] = lambda: member
-    app.dependency_overrides[get_org_id] = lambda: member.org_id
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: member
+    return TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
 
 
 def _turn(text: str) -> dict[str, Any]:
@@ -156,6 +147,17 @@ class TestConversationLifecycle:
 
         assert client.get(f"/agent/conversations/{theirs.id}").status_code == 404
         assert client.delete(f"/agent/conversations/{theirs.id}").status_code == 404
+
+    def test_a_conversation_of_another_organisation_is_not_found(self, store: Store, member: SimpleNamespace):
+        # The caller edits both organisations; a conversation lives in its own
+        # and reads as missing under the other's path.
+        mine = store.conversations.create(member.org_id, member.id)
+        other_org = store.organisations.create(name="Other", creator_id=member.id)
+        client = _client(store, member, _echo_agent(), org_id=other_org.id)
+
+        assert client.get(f"/agent/conversations/{mine.id}").status_code == 404
+        assert client.post(f"/agent/conversations/{mine.id}/chat", json=_turn("hi")).status_code == 404
+        assert client.get("/agent/conversations").json()["total"] == 0
 
 
 class TestHistory:

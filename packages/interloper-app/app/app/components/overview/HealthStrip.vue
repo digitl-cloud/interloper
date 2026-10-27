@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Overview } from '~/types/overview'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{ overview: Overview | null }>()
 
 const SPARK_HEIGHT = 30
@@ -48,12 +50,12 @@ const jobs = computed(() => {
 <template>
     <div class="grid grid-cols-2 gap-4 sm:gap-6 xl:grid-cols-4">
         <OverviewHealthTile label="Runs · last 24h"
-                            to="/executions/runs"
+                            :to="organisationStore.path('/executions/runs')"
                             :loading="!overview"
                             :headline="overview?.runs.total">
             <template #detail>
                 {{ overview?.runs.succeeded }} succeeded ·
-                <ULink :to="{ path: '/executions/runs', query: { status: 'failed' } }"
+                <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'failed' } }"
                        class="relative hover:underline"
                        :class="overview?.runs.failed ? 'font-medium text-error' : 'text-muted'">{{ overview?.runs.failed }} failed</ULink>
             </template>
@@ -77,11 +79,11 @@ const jobs = computed(() => {
         </OverviewHealthTile>
 
         <OverviewHealthTile label="Running now"
-                            :to="{ path: '/executions/runs', query: { status: 'running' } }"
+                            :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'running' } }"
                             :loading="!overview"
                             :headline="activity.running">
             <template #detail>
-                <ULink :to="{ path: '/executions/runs', query: { status: 'queued' } }"
+                <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'queued' } }"
                        class="relative text-muted hover:underline">{{ activity.queued }} queued</ULink>
             </template>
             <template #footer>
@@ -99,7 +101,7 @@ const jobs = computed(() => {
         </OverviewHealthTile>
 
         <OverviewHealthTile label="Backfills in progress"
-                            :to="{ path: '/executions/backfills', query: { status: 'running', single: 'true' } }"
+                            :to="{ path: organisationStore.path('/executions/backfills'), query: { status: 'running', single: 'true' } }"
                             :loading="!overview"
                             :headline="overview?.backfills.active">
             <template #detail>{{ overview?.backfills.partitions_done }} of {{ overview?.backfills.partitions_total }} partitions</template>
@@ -116,7 +118,7 @@ const jobs = computed(() => {
         </OverviewHealthTile>
 
         <OverviewHealthTile label="Jobs failing"
-                            :to="kindPath('job')"
+                            :to="organisationStore.path(kindPath('job'))"
                             :loading="!overview"
                             :headline="jobs.failing"
                             :headline-class="jobs.failing ? 'text-error' : ''">

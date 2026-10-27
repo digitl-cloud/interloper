@@ -37,7 +37,7 @@ const emit = defineEmits<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const { apiFetch } = useApi()
+const { apiFetch } = useOrgApi()
 const toast = useToast()
 
 const defn = computed(() => catalogStore.catalog[props.request.connection_key])

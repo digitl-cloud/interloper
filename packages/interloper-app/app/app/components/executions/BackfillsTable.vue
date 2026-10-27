@@ -4,6 +4,8 @@ import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/vue-table'
 import type { Backfill } from '~/types/backfill'
 
+const organisationStore = useOrganisationStore()
+
 const PAGE_SIZE = 50
 
 const EntityBadge = resolveComponent('EntityBadge')
@@ -13,12 +15,9 @@ const UProgressGroup = resolveComponent('UProgressGroup')
 const BACKFILL_STATUSES = ['queued', 'running', 'success', 'failed', 'canceled']
 
 const backfillsStore = useBackfillsStore()
-const catalogStore = useCatalogStore()
 const { backfills, loading } = storeToRefs(backfillsStore)
 
 onMounted(async () => {
-    // Target icons read the catalog's per-type icon.
-    if (!catalogStore.loaded) catalogStore.fetchCatalog()
     if (!loading.value) await backfillsStore.fetch()
 })
 
@@ -108,7 +107,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                 <UButton icon="i-lucide-calendar-plus"
                          label="Go to Jobs"
                          class="mt-5"
-                         :to="kindPath('job')" />
+                         :to="organisationStore.path(kindPath('job'))" />
             </EmptyState>
         </div>
 
@@ -136,7 +135,7 @@ const columns: TableColumn<Backfill>[] = withSortableHeaders([
                     sticky
                     class="flex-1 min-h-0"
                     :ui="{ tr: 'cursor-pointer' }"
-                    @select="(_e: Event, row: any) => navigateTo(`/executions/backfills/${row.original.id}`)" />
+                    @select="(_e: Event, row: any) => navigateTo(organisationStore.path(`/executions/backfills/${row.original.id}`))" />
 
             <template #footer>
                 <TableFooter :page="pagination.pageIndex + 1"

@@ -3,7 +3,8 @@
 Tokens are opaque bearer secrets whose SHA-256 hash is the only thing
 stored. A token stands for its user and carries no organisation: resolving
 one yields the holder, and the caller reads the holder's live role in the
-organisation it acts in, so a role change or removal applies at once.
+organisation it acts in, so a role change or removal applies at once. A
+login session is a token too, the one the app's cookie carries.
 """
 
 from __future__ import annotations
@@ -12,13 +13,13 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, update
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
 from interloper_db.errors import NotFoundError
 from interloper_db.models import Audience, Profile, Token, TokenKind
-from interloper_db.session import save, session_scope
+from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 TOKEN_PREFIX = "ilp_"
@@ -33,13 +34,59 @@ LAST_USED_THROTTLE_SECONDS = 60
 class TokenStore:
     """Store methods for tokens."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, session_expiry: timedelta) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
+            session_expiry: How long a login session stays valid.
         """
         self._engine = engine
+        self._session_expiry = session_expiry
+
+    def create_session(self, user_id: UUID) -> str:
+        """Open a login session and return its raw secret, the cookie's value.
+
+        A session is never listed or shown, so it keeps no display prefix:
+        its ``token_prefix`` is empty, as on the sessions migration 017 moved.
+
+        Args:
+            user_id: Profile UUID of the user logging in.
+
+        Returns:
+            The raw secret; only its hash is stored.
+        """
+        raw = secrets.token_urlsafe(48)
+        with session_scope(self._engine) as session:
+            save(
+                session,
+                Token(
+                    user_id=user_id,
+                    kind=TokenKind.SESSION,
+                    token_prefix="",
+                    token_hash=hash_token(raw),
+                    expires_at=datetime.now(timezone.utc) + self._session_expiry,
+                ),
+            )
+        return raw
+
+    def revoke_sessions(self, user_id: UUID) -> None:
+        """Revoke every live login session of a user (logout everywhere).
+
+        Args:
+            user_id: Profile UUID.
+        """
+        with session_scope(self._engine) as session:
+            session.connection().execute(
+                update(Token)
+                .where(
+                    col(Token.user_id) == user_id,
+                    col(Token.kind) == TokenKind.SESSION,
+                    col(Token.revoked_at).is_(None),
+                )
+                .values(revoked_at=datetime.now(timezone.utc))
+            )
+            commit(session)
 
     def create_personal(self, user_id: UUID, name: str, expires_at: datetime | None = None) -> tuple[Token, str]:
         """Create a personal access token.

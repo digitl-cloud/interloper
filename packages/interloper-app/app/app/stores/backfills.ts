@@ -1,7 +1,7 @@
 import type { Backfill } from '~/types/backfill'
 
 export const useBackfillsStore = defineStore('backfills', () => {
-    const { apiFetch, fetchAll } = useApi()
+    const { apiFetch, fetchAll } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     /**********************
@@ -121,7 +121,7 @@ export const useBackfillsStore = defineStore('backfills', () => {
         error.value = null
     }
 
-    useOrgScopedRefetch(() => fetch(), $reset)
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         backfills,

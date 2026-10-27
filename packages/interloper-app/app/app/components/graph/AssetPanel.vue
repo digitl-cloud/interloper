@@ -14,7 +14,7 @@ const props = defineProps<{
 
 const catalogStore = useCatalogStore()
 const componentsStore = useComponentsStore()
-const { apiFetch } = useApi()
+const { apiFetch } = useOrgApi()
 const { statusBadge } = useDrift()
 const { getWarnings } = useAssetWarnings()
 const sourceDefn = computed(() => catalogStore.getSourceDefinition(props.source.key))

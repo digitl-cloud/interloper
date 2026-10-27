@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from types import ModuleType
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
@@ -51,24 +50,34 @@ from interloper_api.routes import catalog as catalog_routes
 
 logger = logging.getLogger(__name__)
 
-#: Routers mounted under ``/api`` for every deployment. The agent router is
-#: absent by design: it is optional and mounted by :func:`_mount_agent`.
-_ROUTE_MODULES: tuple[ModuleType, ...] = (
-    auth,
-    organisations,
-    admin,
-    catalog_routes,
-    components,
-    relations,
-    runs,
-    executions,
-    backfills,
-    overview,
-    oauth,
-    tokens,
-    websocket,
-    health,
+#: Routers mounted under ``/api`` for every deployment: the caller's own, the
+#: organisation management and super-admin ones, a run's ingest, and the probes.
+_ROUTERS: tuple[APIRouter, ...] = (
+    auth.router,
+    organisations.router,
+    admin.router,
+    oauth.router,
+    tokens.router,
+    runs.router,
+    health.router,
 )
+
+#: Routers acting in one organisation, mounted under ``/api/organisations/{org_id}``.
+#: The agent router is absent by design: it is optional and mounted by
+#: :func:`_mount_agent`.
+_ORG_ROUTERS: tuple[APIRouter, ...] = (
+    organisations.org_router,
+    catalog_routes.org_router,
+    components.org_router,
+    relations.org_router,
+    runs.org_router,
+    executions.org_router,
+    backfills.org_router,
+    overview.org_router,
+    websocket.org_router,
+)
+
+ORG_PREFIX = "/organisations/{org_id}"
 
 
 # -- Error handling ------------------------------------------------------------
@@ -205,8 +214,10 @@ def create_app(
         )
 
     api = APIRouter(prefix="/api")
-    for module in _ROUTE_MODULES:
-        api.include_router(module.router)
+    for router in _ROUTERS:
+        api.include_router(router)
+    for org_router in _ORG_ROUTERS:
+        api.include_router(org_router, prefix=ORG_PREFIX)
     agent_available = _mount_agent(api, settings)
     app.include_router(api)
 
@@ -224,7 +235,7 @@ def create_app(
 
 
 def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
-    """Mount the optional agent routes, reporting whether they are available.
+    """Mount the optional agent routes under the organisation prefix, reporting whether they are available.
 
     Args:
         api: The ``/api`` router to mount onto.
@@ -247,7 +258,7 @@ def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
         )
         return False
 
-    api.include_router(agent_routes.router)
+    api.include_router(agent_routes.org_router, prefix=ORG_PREFIX)
     return True
 
 

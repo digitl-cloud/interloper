@@ -123,7 +123,7 @@ class TestDeleteOrganisation:
         store.members.add(keeper.id, admin.id, "admin")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
         _, raw_token = store.tokens.create_personal(admin.id, "laptop")
-        session_token = store.sessions.create(admin.id, org_id=org.id)
+        session_token = store.tokens.create_session(admin.id)
         with SQLSession(auth_db) as session:
             self._seed_org_data(session, org.id)
             db_admin = session.get(Profile, admin.id)
@@ -155,10 +155,9 @@ class TestDeleteOrganisation:
             assert session.exec(select(Backfill).where(Backfill.org_id == org.id)).first() is not None
             assert session.exec(select(Event).where(Event.org_id == org.id)).first() is not None
         # The user, their session, and the other organisation survive; org refs are cleared.
-        resolved = store.sessions.resolve(session_token)
+        resolved = store.tokens.resolve(session_token, Audience.APP)
         assert resolved is not None
-        profile, auth_session = resolved
-        assert auth_session.organisation_id is None
+        profile, _ = resolved
         assert profile.last_organisation_id is None
         assert store.organisations.get(keeper.id).deleted_at is None
         assert store.members.role(keeper.id, admin.id) == "admin"

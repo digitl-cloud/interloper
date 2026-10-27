@@ -1,8 +1,8 @@
 """Tests for ``interloper_api.dependencies.rbac``.
 
 The role gates are the API's authorization boundary, so the 404-vs-403
-distinction matters: a non-member must not be able to use an ID as an
-existence oracle.
+distinction matters: an entity of another organisation must read as missing,
+so an id is no existence oracle.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError, Profile, Store
+from interloper_db import NotFoundError, Organisation, Profile
 
+from interloper_api.app import ORG_PREFIX
 from interloper_api.dependencies import (
-    authorize_org_member,
-    authorize_organisation,
-    get_current_user,
-    get_org_id,
+    OrgScope,
+    get_caller,
+    get_session_caller,
     get_store,
     load_authorized,
     require_admin,
@@ -31,38 +31,26 @@ from interloper_api.dependencies import (
 
 _ORG_ID = uuid4()
 _OTHER_ORG_ID = uuid4()
-_USER_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing ``members.role`` and ``organisations.get``."""
+    """Stand-in exposing ``members.role`` per organisation and ``organisations.get``."""
 
-    def __init__(self, role: str | None, live_orgs: set[UUID] | None = None) -> None:
+    def __init__(self, roles: dict[UUID, str] | None = None) -> None:
         """Set up the fake.
 
         Args:
-            role: Role the user holds in any organisation asked about;
-                ``None`` means not a member.
-            live_orgs: Organisations ``organisations.get`` finds; every
-                other id raises ``NotFoundError``. ``None`` means every
-                organisation exists.
+            roles: The caller's role per organisation; absent means not a member.
         """
-        self.asked: list[tuple[UUID, UUID]] = []
-        self.fetched: list[UUID] = []
-        self._role = role
-        self._live_orgs = live_orgs
+        self.asked: list[UUID] = []
+        self._roles = roles or {}
         self.members = SimpleNamespace(role=self._member_role)
-        self.organisations = SimpleNamespace(get=self._get_organisation)
+        self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
-        self.asked.append((org_id, user_id))
-        return self._role
-
-    def _get_organisation(self, org_id: UUID) -> SimpleNamespace:
-        self.fetched.append(org_id)
-        if self._live_orgs is not None and org_id not in self._live_orgs:
-            raise NotFoundError(f"Organisation {org_id} not found")
-        return SimpleNamespace(id=org_id)
+        self.asked.append(org_id)
+        return self._roles.get(org_id)
 
 
 def _profile(is_super_admin: bool = False) -> Profile:
@@ -74,195 +62,94 @@ def _profile(is_super_admin: bool = False) -> Profile:
     Returns:
         The stand-in, typed as a ``Profile`` for the helpers under test.
     """
-    return cast(Profile, SimpleNamespace(id=_USER_ID, email="user@example.com", is_super_admin=is_super_admin))
+    return cast(Profile, SimpleNamespace(id=uuid4(), email="user@example.com", is_super_admin=is_super_admin))
 
 
-def _store(role: str | None) -> Store:
-    """Build a store stand-in resolving every membership to *role*.
+def _scope(role: str, org_id: UUID = _ORG_ID) -> OrgScope:
+    """Build the scope a request in *org_id* resolves to.
 
     Args:
-        role: Role the user holds; ``None`` means not a member.
+        role: The caller's role there.
+        org_id: The organisation the path names.
 
     Returns:
-        The stand-in, typed as a ``Store`` for the helpers under test.
+        The scope.
     """
-    return cast(Store, FakeStore(role))
-
-
-class TestAuthorizeOrgMember:
-    """The direct helper, checked against the resource's org rather than the session's."""
-
-    def test_a_member_at_the_minimum_passes(self) -> None:
-        store = FakeStore("viewer")
-
-        authorize_org_member(_profile(), _ORG_ID, cast(Store, store), minimum="viewer")
-
-        assert store.asked == [(_ORG_ID, _USER_ID)]
-
-    def test_a_member_above_the_minimum_passes(self) -> None:
-        authorize_org_member(_profile(), _ORG_ID, _store("admin"), minimum="editor")
-
-    def test_a_non_member_gets_the_missing_resource_404(self) -> None:
-        # Same detail as a genuinely missing resource, so the ID reveals nothing.
-        with pytest.raises(HTTPException) as excinfo:
-            authorize_org_member(
-                _profile(),
-                _ORG_ID,
-                _store(None),
-                detail="Asset 1 not found",
-            )
-
-        assert excinfo.value.status_code == 404
-        assert excinfo.value.detail == "Asset 1 not found"
-
-    def test_an_insufficient_role_gets_a_403(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            authorize_org_member(_profile(), _ORG_ID, _store("viewer"), minimum="admin")
-
-        assert excinfo.value.status_code == 403
-        assert excinfo.value.detail == "Requires admin role or higher"
-
-    def test_an_unknown_role_name_is_treated_as_below_every_minimum(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            authorize_org_member(_profile(), _ORG_ID, _store("bogus"), minimum="viewer")
-
-        assert excinfo.value.status_code == 403
-
-
-class TestAuthorizeOrganisation:
-    """Organisation-addressed routes serve members by role and super-admins on any live org."""
-
-    def test_a_member_with_enough_role_passes(self) -> None:
-        store = FakeStore("admin")
-
-        authorize_organisation(_profile(), _ORG_ID, cast(Store, store), minimum="admin")
-
-        assert store.asked == [(_ORG_ID, _USER_ID)]
-
-    def test_a_member_with_too_low_a_role_gets_a_403(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            authorize_organisation(_profile(), _ORG_ID, _store("viewer"), minimum="admin")
-
-        assert excinfo.value.status_code == 403
-        assert excinfo.value.detail == "Requires admin role or higher"
-
-    def test_a_non_member_reads_the_organisation_as_missing(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            authorize_organisation(_profile(), _ORG_ID, _store(None))
-
-        assert excinfo.value.status_code == 404
-        assert excinfo.value.detail == f"Organisation {_ORG_ID} not found"
-
-    def test_a_super_admin_passes_on_any_organisation_without_membership(self) -> None:
-        store = FakeStore(None)
-
-        authorize_organisation(_profile(is_super_admin=True), _OTHER_ORG_ID, cast(Store, store), minimum="admin")
-
-        assert store.fetched == [_OTHER_ORG_ID]
-        assert store.asked == []
-
-    def test_a_super_admin_still_gets_a_404_on_a_missing_organisation(self) -> None:
-        store = FakeStore(None, live_orgs=set())
-
-        with pytest.raises(NotFoundError):
-            authorize_organisation(_profile(is_super_admin=True), _ORG_ID, cast(Store, store))
+    return OrgScope(organisation=cast(Organisation, SimpleNamespace(id=org_id)), role=role)
 
 
 class TestLoadAuthorized:
     """The shared ID-addressed fetch-then-authorize pattern."""
 
-    def test_returns_the_entity_for_a_member(self) -> None:
+    def test_returns_the_entity_of_the_path_org(self) -> None:
         entity = SimpleNamespace(id=uuid4(), org_id=_ORG_ID)
 
-        loaded = load_authorized(
-            lambda entity_id: entity,
-            entity.id,
-            _profile(),
-            _store("editor"),
-            label="Asset",
-        )
+        loaded = load_authorized(lambda entity_id: entity, entity.id, _scope("viewer"), label="Asset")
 
         assert loaded is entity
 
     def test_a_missing_entity_is_a_404_naming_the_label(self) -> None:
         entity_id = uuid4()
 
+        def fetch(_id: UUID) -> Any:
+            raise NotFoundError("gone")
+
         with pytest.raises(HTTPException) as excinfo:
-            load_authorized(
-                lambda _id: (_ for _ in ()).throw(NotFoundError("gone")),
-                entity_id,
-                _profile(),
-                _store("admin"),
-                label="Asset",
-            )
+            load_authorized(fetch, entity_id, _scope("admin"), label="Asset")
 
         assert excinfo.value.status_code == 404
         assert excinfo.value.detail == f"Asset {entity_id} not found"
 
-    def test_an_entity_in_another_org_is_indistinguishable_from_missing(self) -> None:
+    def test_an_entity_of_another_org_is_indistinguishable_from_missing(self) -> None:
+        # Even an admin of the path's organisation, who may be a member of
+        # the entity's own, reads it as missing here.
         entity_id = uuid4()
         entity = SimpleNamespace(id=entity_id, org_id=_OTHER_ORG_ID)
 
         with pytest.raises(HTTPException) as excinfo:
-            load_authorized(
-                lambda _id: entity,
-                entity_id,
-                _profile(),
-                _store(None),
-                label="Asset",
-            )
+            load_authorized(lambda _id: entity, entity_id, _scope("admin"), label="Asset")
 
         assert excinfo.value.status_code == 404
         assert excinfo.value.detail == f"Asset {entity_id} not found"
 
-    def test_a_member_with_too_low_a_role_gets_a_403(self) -> None:
+    def test_a_role_below_the_minimum_is_a_403(self) -> None:
         entity_id = uuid4()
 
         with pytest.raises(HTTPException) as excinfo:
             load_authorized(
                 lambda _id: SimpleNamespace(id=entity_id, org_id=_ORG_ID),
                 entity_id,
-                _profile(),
-                _store("viewer"),
+                _scope("viewer"),
                 label="Asset",
                 minimum="editor",
             )
 
         assert excinfo.value.status_code == 403
-
-    def test_it_authorizes_against_the_entitys_org_not_the_session(self) -> None:
-        # An ID-addressed endpoint works for a member of the owning org
-        # regardless of which org the session currently has selected.
-        store = FakeStore("admin")
-        entity = SimpleNamespace(id=uuid4(), org_id=_OTHER_ORG_ID)
-
-        load_authorized(lambda _id: entity, entity.id, _profile(), cast(Store, store), label="Asset")
-
-        assert store.asked == [(_OTHER_ORG_ID, _USER_ID)]
+        assert excinfo.value.detail == "Requires editor role or higher"
 
 
-def _gate_client(gate: Any, store: FakeStore | Store, user: Profile) -> TestClient:
-    """Mount one role gate behind a probe route.
+def _gate_client(gate: Any, store: FakeStore, user: Profile) -> TestClient:
+    """Mount one role gate behind a probe route under the organisation prefix.
 
     Args:
         gate: The ``require_*`` dependency under test.
-        store: The fake store the gate resolves roles against.
-        user: The authenticated profile the gate receives.
+        store: The fake store the scope resolves roles against.
+        user: The authenticated profile.
 
     Returns:
         A client for the probe app.
     """
-    router = APIRouter()
+    org_router = APIRouter()
 
-    @router.get("/gated")
-    def gated(caller: Any = Depends(gate)) -> dict[str, str]:  # noqa: FAST002 - `gate` is a closure variable
-        return {"email": caller.email}
+    @org_router.get("/gated")
+    def gated(passed: Any = Depends(gate)) -> dict[str, str]:  # noqa: FAST002 - `gate` is a closure variable
+        return {"role": getattr(passed, "role", None) or "super-admin"}
 
     app = FastAPI()
-    app.include_router(router)
+    app.include_router(org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
+    app.dependency_overrides[get_caller] = lambda: user
+    app.dependency_overrides[get_session_caller] = lambda: user
     return TestClient(app)
 
 
@@ -284,42 +171,81 @@ class TestRoleGates:
         ],
     )
     def test_the_role_ladder(self, gate: Any, role: str, allowed: bool) -> None:
-        response = _gate_client(gate, FakeStore(role), _profile()).get("/gated")
+        response = _gate_client(gate, FakeStore({_ORG_ID: role}), _profile()).get(f"/organisations/{_ORG_ID}/gated")
 
-        assert (response.status_code == 200) is allowed
-        if not allowed:
-            assert response.status_code == 403
+        assert response.status_code == (200 if allowed else 403)
+
+    def test_role_from_path_org(self) -> None:
+        # Editor in one organisation, viewer in another: a write is allowed
+        # only under the organisation the caller edits.
+        client = _gate_client(require_editor, FakeStore({_ORG_ID: "editor", _OTHER_ORG_ID: "viewer"}), _profile())
+
+        assert client.get(f"/organisations/{_ORG_ID}/gated").status_code == 200
+        refused = client.get(f"/organisations/{_OTHER_ORG_ID}/gated")
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "Requires editor role or higher"
 
     @pytest.mark.parametrize("gate", [require_viewer, require_editor, require_admin])
-    def test_a_non_member_is_refused_by_every_gate(self, gate: Any) -> None:
-        response = _gate_client(gate, _store(None), _profile()).get("/gated")
+    def test_a_non_member_reads_the_organisation_as_missing(self, gate: Any) -> None:
+        response = _gate_client(gate, FakeStore(), _profile()).get(f"/organisations/{_ORG_ID}/gated")
+
+        assert response.status_code == 404
+
+    def test_an_unknown_role_name_is_below_every_minimum(self) -> None:
+        response = _gate_client(require_viewer, FakeStore({_ORG_ID: "bogus"}), _profile()).get(
+            f"/organisations/{_ORG_ID}/gated"
+        )
 
         assert response.status_code == 403
-        assert response.json()["detail"] == "Not a member of this organisation"
 
-    def test_the_profile_passes_through_for_chaining(self) -> None:
-        response = _gate_client(require_viewer, _store("viewer"), _profile()).get("/gated")
+    def test_a_super_admin_passes_the_admin_gate_anywhere(self) -> None:
+        store = FakeStore()
 
-        assert response.json() == {"email": "user@example.com"}
+        response = _gate_client(require_admin, store, _profile(is_super_admin=True)).get(
+            f"/organisations/{_ORG_ID}/gated"
+        )
+
+        assert response.json() == {"role": "admin"}
+        assert store.asked == []
 
 
 class TestRequireSuperAdmin:
-    """The cross-org admin surface is not bound to the active organisation."""
+    """The cross-org admin surface is not bound to any organisation."""
 
     def test_a_super_admin_passes(self) -> None:
-        response = _gate_client(require_super_admin, _store(None), _profile(is_super_admin=True)).get("/gated")
+        response = _gate_client(require_super_admin, FakeStore(), _profile(is_super_admin=True)).get(
+            f"/organisations/{_ORG_ID}/gated"
+        )
 
         assert response.status_code == 200
 
     def test_a_plain_user_is_refused_even_as_an_org_admin(self) -> None:
-        response = _gate_client(require_super_admin, _store("admin"), _profile()).get("/gated")
+        response = _gate_client(require_super_admin, FakeStore({_ORG_ID: "admin"}), _profile()).get(
+            f"/organisations/{_ORG_ID}/gated"
+        )
 
         assert response.status_code == 403
         assert response.json()["detail"] == "Requires super-admin privileges"
 
     def test_it_never_consults_org_membership(self) -> None:
-        store = FakeStore("admin")
+        store = FakeStore({_ORG_ID: "admin"})
 
-        _gate_client(require_super_admin, cast(Store, store), _profile(is_super_admin=True)).get("/gated")
+        _gate_client(require_super_admin, store, _profile(is_super_admin=True)).get(f"/organisations/{_ORG_ID}/gated")
 
         assert store.asked == []
+
+    def test_only_the_session_cookie_reaches_it(self) -> None:
+        # A super-admin's token acts in the organisations it names, never across them.
+        store = FakeStore()
+        store.tokens = SimpleNamespace(resolve=lambda raw, audience: (_profile(is_super_admin=True), SimpleNamespace()))
+        app = FastAPI()
+        app.add_api_route("/gated", lambda user=Depends(require_super_admin): {"email": user.email})
+        app.dependency_overrides[get_store] = lambda: store
+        client = TestClient(app)
+
+        refused = client.get("/gated", headers={"Authorization": "Bearer ilp_x"})
+        client.cookies.set("session_token", "cookie")
+        passed = client.get("/gated")
+
+        assert refused.status_code == 401
+        assert passed.status_code == 200

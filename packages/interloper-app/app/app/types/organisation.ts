@@ -1,7 +1,16 @@
 export interface Organisation {
     id: string
     name: string
+    slug: string
     created_at: string | null
+}
+
+/** An organisation the user acts in, with the role they act with; a super-admin acts as `admin` in every one. */
+export interface Membership {
+    id: string
+    name: string
+    slug: string
+    role: string
 }
 
 export interface Member {

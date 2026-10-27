@@ -18,10 +18,10 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper_db import NotFoundError
+from interloper_db import NotFoundError, Page
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_auth_config, get_current_user, get_session_context, get_store
+from interloper_api.dependencies import get_auth_config, get_caller, get_store
 from interloper_api.routes import auth as auth_module
 
 
@@ -40,7 +40,7 @@ class FakeStore:
             upsert=self._upsert_profile,
             set_super_admin=self._set_super_admin,
         )
-        self.sessions = SimpleNamespace(create=self._create_session)
+        self.tokens = SimpleNamespace(create_session=self._create_session)
         self.invitations = SimpleNamespace(has_pending=self._has_pending_invitation)
 
     def _get_profile_by_google_id(self, google_id: str) -> SimpleNamespace | None:
@@ -58,7 +58,7 @@ class FakeStore:
         self.profile.is_super_admin = value
         return self.profile
 
-    def _create_session(self, user_id: UUID, org_id: UUID | None = None) -> str:
+    def _create_session(self, user_id: UUID) -> str:
         self.sessions_created.append(user_id)
         return "token"
 
@@ -213,11 +213,9 @@ class FakeProfileStore:
             is_super_admin=False,
             last_organisation_id=None,
         )
-        self.session_row = SimpleNamespace(organisation_id=self.org.id)
         self.updates: list[tuple[UUID, str | None, str | None]] = []
         self.profiles = SimpleNamespace(update=self._update_profile)
-        self.sessions = SimpleNamespace(resolve=lambda token: (self.profile, self.session_row))
-        self.organisations = SimpleNamespace(get=lambda org_id: self.org)
+        self.organisations = SimpleNamespace(list=lambda query: Page(items=[self.org], total=1))
         self.members = SimpleNamespace(role=lambda org_id, user_id: "editor")
 
     def _update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
@@ -234,7 +232,7 @@ def _me_client(store: FakeProfileStore) -> TestClient:
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_session_context] = lambda: (store.profile, store.session_row)
+    app.dependency_overrides[get_caller] = lambda: store.profile
     return TestClient(app)
 
 
@@ -257,13 +255,9 @@ def test_update_me_answers_the_same_shape_as_get_me() -> None:
 
     assert patched.status_code == 200
     assert patched.json() == fetched.json()
-    assert patched.json()["organisation"] == {
-        "id": str(store.org.id),
-        "name": "Dev Org",
-        "slug": "dev-org",
-        "created_at": None,
-    }
-    assert patched.json()["role"] == "editor"
+    assert patched.json()["memberships"] == [
+        {"id": str(store.org.id), "name": "Dev Org", "slug": "dev-org", "role": "editor"}
+    ]
     assert set(patched.json()) == set(auth_module.AuthUserResponse.model_fields)
 
 
@@ -489,68 +483,72 @@ class TestGoogleCallbackNonce:
         assert exchanged == []
 
 
-# -- Session-backed endpoints --------------------------------------------------
+# -- Endpoints about the caller ------------------------------------------------
 
 
-class SessionStore:
-    """Fake store for the endpoints that read an existing session."""
+class CallerStore:
+    """Fake store for the endpoints that read the caller."""
 
     def __init__(
         self,
         *,
-        session: tuple[Any, Any] | None = None,
-        org: Any = None,
-        role: str | None = "editor",
-        org_missing: bool = False,
+        authenticated: bool = True,
+        organisations: list[Any] | None = None,
+        roles: dict[UUID, str] | None = None,
         accepted: Any = None,
     ) -> None:
         """Set up the fake.
 
         Args:
-            session: What ``sessions.resolve`` returns.
-            org: What ``organisations.get`` returns.
-            role: The caller's role in the organisation asked about.
-            org_missing: Whether ``organisations.get`` raises ``NotFoundError``.
+            authenticated: Whether the session cookie resolves.
+            organisations: The organisations the caller belongs to.
+            roles: The caller's role per organisation; absent means not a member.
             accepted: What ``invitations.accept`` returns; ``None`` means the
                 token was unknown or expired.
         """
-        self.deleted_sessions: list[UUID] = []
-        self.session_org_calls: list[tuple[str, UUID, UUID]] = []
+        self.profile = _me_profile()
+        self.revoked_sessions: list[UUID] = []
+        self.last_organisations: list[tuple[UUID, UUID | None]] = []
         self.accept_calls: list[tuple[str, UUID]] = []
         self._accepted = accepted
-        self._org = org
-        self.sessions = SimpleNamespace(
-            resolve=lambda token: session,
-            delete_all=self.deleted_sessions.append,
-            switch_org=self._switch_org,
+        self._organisations = organisations or []
+        self._roles = roles or {}
+        resolved = (self.profile, SimpleNamespace(kind="session")) if authenticated else None
+        self.tokens = SimpleNamespace(
+            resolve=lambda raw, audience: resolved, revoke_sessions=self.revoked_sessions.append
         )
-        self.organisations = SimpleNamespace(get=self._get_org if not org_missing else self._missing_org)
-        self.members = SimpleNamespace(role=lambda org_id, user_id: role)
+        self.profiles = SimpleNamespace(update=self._update_profile)
+        self.organisations = SimpleNamespace(
+            list=lambda query: Page(items=self._organisations, total=len(self._organisations)),
+            get=self._get_organisation,
+        )
+        self.members = SimpleNamespace(role=lambda org_id, user_id: self._roles.get(org_id))
         self.invitations = SimpleNamespace(accept=self._accept)
 
-    def _get_org(self, org_id: UUID) -> Any:
-        return self._org
-
-    def _missing_org(self, org_id: UUID) -> Any:
+    def _get_organisation(self, org_id: UUID) -> Any:
+        for organisation in self._organisations:
+            if organisation.id == org_id:
+                return organisation
         raise NotFoundError(f"Organisation {org_id} not found")
 
-    def _switch_org(self, token: str, org_id: UUID, user_id: UUID) -> None:
-        self.session_org_calls.append((token, org_id, user_id))
+    def _update_profile(self, user_id: UUID, *, last_organisation_id: UUID | None = None) -> Any:
+        self.last_organisations.append((user_id, last_organisation_id))
+        return self.profile
 
     def _accept(self, token: str, user_id: UUID) -> Any:
         self.accept_calls.append((token, user_id))
         return self._accepted
 
 
-def _session_client(store: Any, user: Any = None) -> TestClient:
+def _session_client(store: CallerStore) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_auth_config] = lambda: _auth_config([], [])
-    if user is not None:
-        app.dependency_overrides[get_current_user] = lambda: user
-    return TestClient(app, follow_redirects=False)
+    client = TestClient(app, follow_redirects=False)
+    client.cookies.set("session_token", "tok")
+    return client
 
 
 def _me_profile(**overrides: Any) -> SimpleNamespace:
@@ -567,154 +565,162 @@ def _me_profile(**overrides: Any) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
+def _organisation(name: str, slug: str) -> SimpleNamespace:
+    return SimpleNamespace(id=uuid4(), name=name, slug=slug, created_at=None)
+
+
 class TestGetMe:
-    """``GET /auth/me`` — identity plus the active organisation, when there is one."""
+    """``GET /auth/me``: identity plus every organisation the caller belongs to, by slug."""
 
     def test_no_cookie_is_a_401(self) -> None:
-        response = _session_client(SessionStore()).get("/auth/me")
-
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Not authenticated"
-
-    def test_an_unresolvable_token_is_a_401(self) -> None:
-        client = _session_client(SessionStore(session=None))
-        client.cookies.set("session_token", "stale")
+        client = _session_client(CallerStore())
+        client.cookies.clear()
 
         response = client.get("/auth/me")
 
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid or expired session"
+        assert response.json()["detail"] == "Not authenticated"
 
-    def test_a_session_without_an_organisation_defaults_to_viewer(self) -> None:
-        profile = _me_profile()
-        client = _session_client(SessionStore(session=(profile, SimpleNamespace(organisation_id=None))))
-        client.cookies.set("session_token", "tok")
+    def test_an_unresolvable_cookie_is_a_401(self) -> None:
+        response = _session_client(CallerStore(authenticated=False)).get("/auth/me")
 
-        payload = client.get("/auth/me").json()
+        assert response.status_code == 401
 
-        assert payload["organisation"] is None
-        assert payload["role"] == "viewer"
+    def test_memberships_carry_the_slug_and_the_role(self) -> None:
+        dev, acme = _organisation("Dev Org", "dev-org"), _organisation("Acme", "acme")
+        store = CallerStore(organisations=[dev, acme], roles={dev.id: "admin", acme.id: "viewer"})
+
+        payload = _session_client(store).get("/auth/me").json()
+
         assert payload["email"] == "ada@example.com"
+        assert payload["memberships"] == [
+            {"id": str(dev.id), "name": "Dev Org", "slug": "dev-org", "role": "admin"},
+            {"id": str(acme.id), "name": "Acme", "slug": "acme", "role": "viewer"},
+        ]
+        assert "organisation" not in payload
+        assert "role" not in payload
 
-    def test_the_active_organisation_and_role_are_reported(self) -> None:
-        profile = _me_profile()
-        org_id = uuid4()
-        org = SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None)
-        client = _session_client(
-            SessionStore(session=(profile, SimpleNamespace(organisation_id=org_id)), org=org, role="admin")
-        )
-        client.cookies.set("session_token", "tok")
+    def test_a_super_admins_memberships_carry_admin(self) -> None:
+        dev = _organisation("Dev Org", "dev-org")
+        store = CallerStore(organisations=[dev], roles={dev.id: "viewer"})
+        store.profile.is_super_admin = True
 
-        payload = client.get("/auth/me").json()
+        payload = _session_client(store).get("/auth/me").json()
 
-        assert payload["organisation"]["name"] == "Dev Org"
-        assert payload["role"] == "admin"
+        assert [membership["role"] for membership in payload["memberships"]] == ["admin"]
 
-    def test_a_session_outliving_its_organisation_still_resolves(self) -> None:
-        # The caller is authenticated, just no longer scoped anywhere.
-        profile = _me_profile()
-        client = _session_client(
-            SessionStore(session=(profile, SimpleNamespace(organisation_id=uuid4())), org_missing=True)
-        )
-        client.cookies.set("session_token", "tok")
+    def test_the_last_organisation_is_reported(self) -> None:
+        store = CallerStore()
+        store.profile.last_organisation_id = last = uuid4()
 
-        payload = client.get("/auth/me").json()
+        assert _session_client(store).get("/auth/me").json()["last_organisation_id"] == str(last)
 
-        assert payload["organisation"] is None
-        assert payload["role"] == "viewer"
-
-    def test_a_non_member_of_the_active_org_falls_back_to_viewer(self) -> None:
-        profile = _me_profile()
-        org_id = uuid4()
-        client = _session_client(
-            SessionStore(
-                session=(profile, SimpleNamespace(organisation_id=org_id)),
-                org=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None),
-                role=None,
-            )
-        )
-        client.cookies.set("session_token", "tok")
-
-        assert client.get("/auth/me").json()["role"] == "viewer"
+    def test_no_membership_is_an_empty_list(self) -> None:
+        assert _session_client(CallerStore()).get("/auth/me").json()["memberships"] == []
 
 
 class TestLogout:
-    """``POST /auth/logout`` — every session, not just this browser's."""
+    """``POST /auth/logout``: every session, not just this browser's."""
 
-    def test_drops_all_sessions_and_clears_the_cookie(self) -> None:
-        profile = _me_profile()
-        store = SessionStore()
-        client = _session_client(store, user=profile)
+    def test_revokes_all_sessions_and_clears_the_cookie(self) -> None:
+        store = CallerStore()
 
-        response = client.post("/auth/logout")
+        response = _session_client(store).post("/auth/logout")
 
         assert response.status_code == 204
         assert response.content == b""
-        assert store.deleted_sessions == [profile.id]
+        assert store.revoked_sessions == [store.profile.id]
         assert 'session_token=""' in response.headers["set-cookie"]
 
+    def test_a_bearer_cannot_log_out(self) -> None:
+        store = CallerStore()
 
-class TestSwitchOrg:
-    """``POST /auth/switch-org`` — membership is required."""
+        response = _session_client(store).post("/auth/logout", headers={"Authorization": "Bearer ilp_leaked"})
 
-    def test_records_the_new_active_org(self) -> None:
-        profile = _me_profile()
-        store = SessionStore(role="viewer")
-        client = _session_client(store, user=profile)
-        client.cookies.set("session_token", "tok")
-        org_id = uuid4()
+        assert response.status_code == 401
+        assert store.revoked_sessions == []
 
-        response = client.post("/auth/switch-org", json={"organisation_id": str(org_id)})
+
+class TestCookieOnlyRoutes:
+    """Membership and session management refuse a bearer token; reading the caller does not."""
+
+    @pytest.mark.parametrize(
+        ("method", "path", "body"),
+        [
+            ("PUT", "/auth/me/last-organisation", {"org_id": "00000000-0000-0000-0000-000000000000"}),
+            ("POST", "/auth/accept-invite", {"token": "invite-token"}),
+        ],
+    )
+    def test_a_bearer_is_refused(self, method: str, path: str, body: dict[str, str]) -> None:
+        store = CallerStore()
+
+        response = _session_client(store).request(
+            method, path, json=body, headers={"Authorization": "Bearer ilp_leaked"}
+        )
+
+        assert response.status_code == 401
+        assert store.last_organisations == []
+        assert store.accept_calls == []
+
+    def test_get_me_accepts_a_bearer(self) -> None:
+        client = _session_client(CallerStore())
+        client.cookies.clear()
+
+        response = client.get("/auth/me", headers={"Authorization": "Bearer ilp_pat"})
+
+        assert response.status_code == 200
+
+
+def test_switch_org_gone() -> None:
+    response = _session_client(CallerStore()).post("/auth/switch-org", json={"organisation_id": str(uuid4())})
+
+    assert response.status_code == 404
+
+
+class TestLastOrganisation:
+    """``PUT /auth/me/last-organisation``: where the app lands the caller next time."""
+
+    def test_a_member_records_the_organisation(self) -> None:
+        dev = _organisation("Dev Org", "dev-org")
+        store = CallerStore(organisations=[dev], roles={dev.id: "viewer"})
+
+        response = _session_client(store).put("/auth/me/last-organisation", json={"org_id": str(dev.id)})
 
         assert response.status_code == 204
-        assert response.content == b""
-        assert store.session_org_calls == [("tok", org_id, profile.id)]
+        assert store.last_organisations == [(store.profile.id, dev.id)]
 
     def test_a_non_member_is_refused(self) -> None:
-        store = SessionStore(role=None)
-        client = _session_client(store, user=_me_profile())
-        client.cookies.set("session_token", "tok")
+        other = _organisation("Other", "other")
+        store = CallerStore(organisations=[other])
 
-        response = client.post("/auth/switch-org", json={"organisation_id": str(uuid4())})
+        response = _session_client(store).put("/auth/me/last-organisation", json={"org_id": str(other.id)})
 
-        assert response.status_code == 403
-        assert response.json()["detail"] == "Not a member of this organisation"
-        assert store.session_org_calls == []
+        assert response.status_code == 404
+        assert store.last_organisations == []
 
-    def test_without_a_cookie_there_is_nothing_to_record(self) -> None:
-        store = SessionStore(role="admin")
-        client = _session_client(store, user=_me_profile())
+    def test_a_super_admin_records_any_live_organisation(self) -> None:
+        other = _organisation("Other", "other")
+        store = CallerStore(organisations=[other])
+        store.profile.is_super_admin = True
 
-        response = client.post("/auth/switch-org", json={"organisation_id": str(uuid4())})
+        response = _session_client(store).put("/auth/me/last-organisation", json={"org_id": str(other.id)})
 
         assert response.status_code == 204
-        assert store.session_org_calls == []
+        assert store.last_organisations == [(store.profile.id, other.id)]
 
 
 class TestAcceptInvite:
-    """``POST /auth/accept-invite`` — redeeming a token joins the organisation."""
-
-    def test_joining_makes_the_org_active(self) -> None:
-        profile = _me_profile()
-        org_id = uuid4()
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None))
-        client = _session_client(store, user=profile)
-        client.cookies.set("session_token", "tok")
-
-        response = client.post("/auth/accept-invite", json={"token": "invite-token"})
-
-        assert response.status_code == 200
-        assert store.accept_calls == [("invite-token", profile.id)]
-        assert store.session_org_calls == [("tok", org_id, profile.id)]
+    """``POST /auth/accept-invite``: redeeming a token joins the organisation."""
 
     def test_the_joined_organisation_is_returned(self) -> None:
         org_id = uuid4()
         created_at = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=created_at))
-        client = _session_client(store, user=_me_profile())
+        store = CallerStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=created_at))
 
-        response = client.post("/auth/accept-invite", json={"token": "invite-token"})
+        response = _session_client(store).post("/auth/accept-invite", json={"token": "invite-token"})
 
+        assert response.status_code == 200
+        assert store.accept_calls == [("invite-token", store.profile.id)]
         assert response.json() == {
             "id": str(org_id),
             "name": "Dev Org",
@@ -723,24 +729,7 @@ class TestAcceptInvite:
         }
 
     def test_an_unknown_or_expired_token_is_a_400(self) -> None:
-        store = SessionStore(accepted=None)
-        client = _session_client(store, user=_me_profile())
-        client.cookies.set("session_token", "tok")
-
-        response = client.post("/auth/accept-invite", json={"token": "stale"})
+        response = _session_client(CallerStore(accepted=None)).post("/auth/accept-invite", json={"token": "stale"})
 
         assert response.status_code == 400
         assert response.json()["detail"] == "Invalid or expired invitation"
-        assert store.session_org_calls == []
-
-    def test_without_a_cookie_the_membership_still_lands(self) -> None:
-        org_id = uuid4()
-        store = SessionStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=None))
-        client = _session_client(store, user=_me_profile())
-
-        response = client.post("/auth/accept-invite", json={"token": "invite-token"})
-
-        assert response.status_code == 200
-        assert response.json()["id"] == str(org_id)
-        assert len(store.accept_calls) == 1
-        assert store.session_org_calls == []

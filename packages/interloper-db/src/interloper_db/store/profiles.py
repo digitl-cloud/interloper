@@ -1,7 +1,7 @@
 """Profile persistence: who a person is.
 
-A profile is an identity (Google OAuth). The sessions proving it are
-:mod:`~interloper_db.store.sessions`; what it may do, and in which
+A profile is an identity (Google OAuth). The tokens proving it, login
+sessions among them, are :mod:`~interloper_db.store.tokens`; what it may do, and in which
 organisation, is :mod:`~interloper_db.store.members`.
 """
 
@@ -16,7 +16,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import AuthSession, Invitation, Profile, Token, UserOrganisation
+from interloper_db.models import Invitation, Profile, Token, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -128,13 +128,22 @@ class ProfileStore:
             save(session, db_profile)
             return db_profile
 
-    def update(self, profile_id: UUID, *, name: str | None = None, timezone: str | None = None) -> Profile:
+    def update(
+        self,
+        profile_id: UUID,
+        *,
+        name: str | None = None,
+        timezone: str | None = None,
+        last_organisation_id: UUID | None = None,
+    ) -> Profile:
         """Update a profile's user-editable fields.
 
         Args:
             profile_id: Profile UUID.
             name: New display name (``None`` leaves the stored value untouched).
             timezone: New IANA timezone name (``None`` leaves the stored value untouched).
+            last_organisation_id: The organisation the user last worked in
+                (``None`` leaves the stored value untouched).
 
         Returns:
             The updated Profile.
@@ -145,6 +154,8 @@ class ProfileStore:
                 db_profile.name = name
             if timezone is not None:
                 db_profile.timezone = timezone
+            if last_organisation_id is not None:
+                db_profile.last_organisation_id = last_organisation_id
             save(session, db_profile)
             return db_profile
 
@@ -195,7 +206,7 @@ class ProfileStore:
     def delete(self, profile_id: UUID) -> None:
         """Delete a profile and everything anchored to it.
 
-        Removes the user's sessions, tokens, organisation
+        Removes the user's tokens (login sessions among them), organisation
         memberships, and the invitations they sent, then the profile row.
 
         Args:
@@ -204,7 +215,6 @@ class ProfileStore:
         with session_scope(self._engine) as session:
             db_profile = self.get(profile_id)
             for statement in (
-                delete(AuthSession).where(col(AuthSession.user_id) == profile_id),
                 delete(Token).where(col(Token.user_id) == profile_id),
                 delete(UserOrganisation).where(col(UserOrganisation.user_id) == profile_id),
                 delete(Invitation).where(col(Invitation.invited_by) == profile_id),

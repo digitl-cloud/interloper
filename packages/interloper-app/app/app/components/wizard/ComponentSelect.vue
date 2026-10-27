@@ -9,6 +9,8 @@
  */
 import type { ComponentRecord } from '~/types/component'
 
+const organisationStore = useOrganisationStore()
+
 const selectedIds = defineModel<string[]>({ default: () => [] })
 
 const props = defineProps<{
@@ -83,7 +85,7 @@ function deselectVisible() {
                           icon="i-lucide-plug"
                           message="No sources, assets or jobs configured yet."
                           action-label="Go to Sources"
-                          @action="navigateTo(kindPath('source'))" />
+                          @action="navigateTo(organisationStore.path(kindPath('source')))" />
 
         <div v-else-if="filtered.length === 0"
              class="flex items-center justify-center rounded-md p-6 text-sm text-muted">

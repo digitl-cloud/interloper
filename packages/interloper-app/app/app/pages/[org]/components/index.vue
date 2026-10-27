@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Components is a hub whose views are routes; land on the first one.
-definePageMeta({ redirect: '/components/sources' })
+definePageMeta({ redirect: to => `/${to.params.org}/components/sources` })
 </script>
 
 <template>

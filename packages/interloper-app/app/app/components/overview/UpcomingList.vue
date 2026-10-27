@@ -3,6 +3,8 @@ import { h } from 'vue'
 import { UIcon } from '#components'
 import type { UpcomingRun } from '~/types/overview'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{ items: UpcomingRun[] | null }>()
 const LIMIT = 4
 
@@ -49,7 +51,7 @@ const columns = withSkeletons<Row>([
             <CardHeader title="Coming up"
                         :description="timezone">
                 <UButton label="All jobs"
-                         :to="kindPath('job')"
+                         :to="organisationStore.path(kindPath('job'))"
                          color="neutral"
                          variant="outline"
                          size="sm" />
@@ -59,6 +61,6 @@ const columns = withSkeletons<Row>([
                 :columns="columns"
                 empty="Nothing scheduled."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: kindPath('job'), query: { q: row.original.job_name } })" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: organisationStore.path(kindPath('job')), query: { q: row.original.job_name } })" />
     </UCard>
 </template>

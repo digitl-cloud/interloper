@@ -1,4 +1,10 @@
-"""Runs API: queue, inspect, retry and cancel runs, read their executions and events, take in a run's reports."""
+"""Runs API: queue, inspect, retry and cancel runs, read their executions and events, take in a run's reports.
+
+Two routers: ``org_router`` is mounted under the organisation's path and serves
+its members; ``router`` is mounted at the API root and serves a run's pod, which
+authenticates as its run (:func:`~interloper_api.dependencies.require_run`) and
+names no organisation.
+"""
 
 from __future__ import annotations
 
@@ -14,8 +20,7 @@ from interloper_db.models import Event, Run
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
-    CurrentUserDep,
-    OrgIdDep,
+    OrgDep,
     StoreDep,
     ViewerDep,
     load_authorized,
@@ -23,6 +28,7 @@ from interloper_api.dependencies import (
 )
 from interloper_api.routes.executions import ExecutionResponse
 
+org_router = APIRouter(prefix="/runs", tags=["runs"])
 router = APIRouter(prefix="/runs", tags=["runs"])
 
 # -- Request / response models -------------------------------------------------
@@ -162,10 +168,9 @@ class EventResponse(BaseModel):
 # -- Endpoints -----------------------------------------------------------------
 
 
-@router.get("")
+@org_router.get("")
 def list_runs(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     query: Annotated[RunQuery, Query()],
 ) -> Page[RunResponse]:
@@ -179,8 +184,7 @@ def list_runs(
     a time range asks for.
 
     Args:
-        user: The authenticated user, required to hold at least the ``viewer`` role.
-        org_id: The active organisation's UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: The filters, the order and the window to read; see
             :class:`~interloper_db.RunQuery`.
@@ -188,57 +192,57 @@ def list_runs(
     Returns:
         The page of runs, each with its executions counted per status.
     """
-    runs = store.runs.list(org_id, query)
+    runs = store.runs.list(scope.organisation.id, query)
     counts = store.executions.counts([run.id for run in runs.items])
     return runs.map(lambda run: RunResponse.from_run(run, counts.get(run.id)))
 
 
-@router.post("", status_code=201)
+@org_router.post("", status_code=201)
 def create_run(
     body: RunCreateRequest,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> RunResponse:
     """Queue a single run targeting a component whose kind declares an operation.
 
     Args:
         body: The component to run and the partition key to run it for.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The queued run.
     """
-    target = load_authorized(store.components.get, body.component_id, user, store, label="Component", minimum="editor")
+    target = load_authorized(store.components.get, body.component_id, scope, label="Component", minimum="editor")
     return RunResponse.from_run(
         store.runs.create(target.org_id, component_id=body.component_id, partition_key=body.partition_key)
     )
 
 
-@router.get("/{run_id}")
+@org_router.get("/{run_id}")
 def get_run(
     run_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> RunResponse:
-    """Get a single run by ID. Authorized by membership in the run's org.
+    """Get a single run by ID. It must belong to the path's organisation.
 
     Args:
         run_id: The run UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The run, with its executions counted per status.
     """
-    run = load_authorized(store.runs.get, run_id, user, store, label="Run")
+    run = load_authorized(store.runs.get, run_id, scope, label="Run")
     return RunResponse.from_run(run, store.executions.counts([run_id]).get(run_id))
 
 
-@router.post("/{run_id}/retry", status_code=201)
+@org_router.post("/{run_id}/retry", status_code=201)
 def retry_run(
     run_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
     body: RetryRequest | None = None,
 ) -> RunResponse:
@@ -251,21 +255,21 @@ def retry_run(
 
     Args:
         run_id: The UUID of the run to retry, any attempt of its stack.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
         body: The retry scope; None retries the whole DAG, as ``scope="all"`` does.
 
     Returns:
         The queued attempt.
     """
-    load_authorized(store.runs.get, run_id, user, store, label="Run", minimum="editor")
+    load_authorized(store.runs.get, run_id, scope, label="Run", minimum="editor")
     return RunResponse.from_run(store.runs.retry(run_id, scope=body.scope if body else "all"))
 
 
-@router.post("/{run_id}/cancel")
+@org_router.post("/{run_id}/cancel")
 def cancel_run(
     run_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> RunResponse:
     """Cancel a run that has not ended, wherever it stands.
@@ -275,21 +279,21 @@ def cancel_run(
 
     Args:
         run_id: The run UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The canceled run.
     """
-    load_authorized(store.runs.get, run_id, user, store, label="Run", minimum="editor")
+    load_authorized(store.runs.get, run_id, scope, label="Run", minimum="editor")
     store.runs.cancel(run_id)
     return RunResponse.from_run(store.runs.get(run_id))
 
 
-@router.get("/{run_id}/executions")
+@org_router.get("/{run_id}/executions")
 def list_run_executions(
     run_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
     query: Annotated[PageQuery, Query()],
 ) -> Page[ExecutionResponse]:
@@ -297,22 +301,22 @@ def list_run_executions(
 
     Args:
         run_id: The run UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
         query: The window to read.
 
     Returns:
         The page of the run's executions.
     """
-    run = load_authorized(store.runs.get, run_id, user, store, label="Run")
+    run = load_authorized(store.runs.get, run_id, scope, label="Run")
     executions = store.executions.list(run.org_id, ExecutionQuery(**query.model_dump()), run_id=run_id)
     return executions.map(ExecutionResponse.from_row)
 
 
-@router.get("/{run_id}/events")
+@org_router.get("/{run_id}/events")
 def list_run_events(
     run_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
     query: Annotated[EventQuery, Query()],
 ) -> Page[EventResponse]:
@@ -325,14 +329,14 @@ def list_run_events(
 
     Args:
         run_id: The run UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
         query: The components, event types, error filter and window to read.
 
     Returns:
         The page of events, oldest first.
     """
-    run = load_authorized(store.runs.get, run_id, user, store, label="Run")
+    run = load_authorized(store.runs.get, run_id, scope, label="Run")
     return store.events.list(run.org_id, query, run_id=run_id).map(EventResponse.from_event)
 
 

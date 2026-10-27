@@ -15,9 +15,9 @@ from interloper_db import ExecutionQuery, Page
 from interloper_db.models import Execution
 from pydantic import BaseModel
 
-from interloper_api.dependencies import OrgIdDep, StoreDep, ViewerDep
+from interloper_api.dependencies import StoreDep, ViewerDep
 
-router = APIRouter(prefix="/executions", tags=["executions"])
+org_router = APIRouter(prefix="/executions", tags=["executions"])
 
 
 class ExecutionResponse(BaseModel):
@@ -54,18 +54,16 @@ class ExecutionResponse(BaseModel):
         )
 
 
-@router.get("")
+@org_router.get("")
 def list_executions(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     query: Annotated[ExecutionQuery, Query()],
 ) -> Page[ExecutionResponse]:
     """List the organisation's operation executions; ``latest=true`` keeps each component's newest.
 
     Args:
-        user: The authenticated user, required to hold at least the viewer role.
-        org_id: The active organisation UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: Whether to keep only each component's newest execution or one
             component's, the order, and the window to read.
@@ -73,4 +71,4 @@ def list_executions(
     Returns:
         The page of executions.
     """
-    return store.executions.list(org_id, query).map(ExecutionResponse.from_row)
+    return store.executions.list(scope.organisation.id, query).map(ExecutionResponse.from_row)

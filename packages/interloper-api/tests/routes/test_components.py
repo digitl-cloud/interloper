@@ -25,14 +25,8 @@ from interloper_db import (
     Store,
 )
 
-from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import (
-    get_current_user,
-    get_org_id,
-    get_store,
-    require_editor,
-    require_viewer,
-)
+from interloper_api.app import ORG_PREFIX, install_error_handlers
+from interloper_api.dependencies import get_caller, get_store
 from interloper_api.routes import components as components_module
 
 
@@ -40,7 +34,6 @@ class TestDelete:
     """DELETE /components/{id} maps store errors to HTTP statuses."""
 
     def test_in_use_maps_to_409_with_referrers(self):
-        org_id = uuid4()
         referrers: list[dict[str, str | None]] = [
             {"id": str(uuid4()), "kind": "source", "key": "facebook_ads", "name": "FB"}
         ]
@@ -51,18 +44,19 @@ class TestDelete:
         class FakeStore:
             def __init__(self):
                 self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
+                self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
                 self.components = SimpleNamespace(
-                    get=lambda component_id: SimpleNamespace(id=component_id, org_id=org_id),
+                    get=lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID),
                     delete=_delete,
                 )
 
         app = FastAPI()
         install_error_handlers(app)
-        app.include_router(components_module.router)
+        app.include_router(components_module.org_router, prefix=ORG_PREFIX)
         app.dependency_overrides[get_store] = lambda: FakeStore()
-        app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
+        app.dependency_overrides[get_caller] = lambda: SimpleNamespace(id=uuid4(), is_super_admin=False)
 
-        resp = TestClient(app).delete(f"/components/{uuid4()}")
+        resp = TestClient(app, base_url=_BASE_URL).delete(f"/components/{uuid4()}")
 
         assert resp.status_code == 409
         assert resp.json()["detail"]["used_by"] == referrers
@@ -204,6 +198,7 @@ class TestUnreadablePayload:
 
 
 _ORG_ID = uuid4()
+_BASE_URL = f"http://testserver/organisations/{_ORG_ID}"
 _USER_ID = uuid4()
 
 
@@ -264,6 +259,7 @@ class CrudStore:
         self.impact = DeleteImpact(blocking=[], detaching=[])
 
         self.members = SimpleNamespace(role=lambda org_id, user_id: self.role)
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.components = SimpleNamespace(
             list=self._list,
             create=self._create,
@@ -351,13 +347,10 @@ def crud_client(crud_store: CrudStore) -> TestClient:
     user = SimpleNamespace(id=_USER_ID, email="ada@example.com", is_super_admin=False)
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(components_module.router)
+    app.include_router(components_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: crud_store
-    app.dependency_overrides[get_org_id] = lambda: _ORG_ID
-    app.dependency_overrides[get_current_user] = lambda: user
-    app.dependency_overrides[require_viewer] = lambda: user
-    app.dependency_overrides[require_editor] = lambda: user
-    return TestClient(app)
+    app.dependency_overrides[get_caller] = lambda: user
+    return TestClient(app, base_url=_BASE_URL)
 
 
 class TestListComponents:
@@ -447,10 +440,11 @@ class TestDeleteImpact:
         assert response.json() == {"blocking": [referrer], "detaching": []}
         assert crud_store.impact_requested == [[first, second]]
 
-    def test_a_non_member_gets_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_store.role = None
+    def test_a_component_of_another_org_is_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
+        crud_store.get_org_id = uuid4()
 
         assert crud_client.get(f"/components/delete-impact?id={uuid4()}").status_code == 404
+        assert crud_store.impact_requested == []
 
     def test_an_unknown_id_is_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
         crud_store.error = NotFoundError("gone")
@@ -520,7 +514,7 @@ class TestGetComponent:
         assert response.json()["id"] == str(component_id)
 
     def test_a_component_of_another_org_is_a_404(self, crud_client: TestClient, crud_store: CrudStore) -> None:
-        crud_store.role = None
+        crud_store.get_org_id = uuid4()
 
         response = crud_client.get(f"/components/{uuid4()}")
 
@@ -630,8 +624,8 @@ class TestAddRelation:
     def test_a_target_in_another_org_is_a_404(
         self, crud_client: TestClient, crud_store: CrudStore, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Both loads authorize, but the two rows must belong to one org —
-        # otherwise a relation could straddle organisations.
+        # Both rows must belong to the path's organisation, otherwise a
+        # relation could straddle organisations.
         source_id, destination_id = uuid4(), uuid4()
         other_org = uuid4()
 

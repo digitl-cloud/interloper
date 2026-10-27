@@ -32,37 +32,44 @@ const shots = [
         await page.getByRole('button', { name: /expand all/i }).first().click().catch(() => {})
         await page.waitForTimeout(800)
     } },
-    { name: 'sources', path: '/sources' },
-    { name: 'destinations', path: '/destinations' },
-    { name: 'connections', path: '/resources/connection' },
-    { name: 'jobs', path: '/jobs' },
-    { name: 'hooks', path: '/hooks' },
-    { name: 'executions', path: '/executions?tab=runs' },
-    { name: 'backfills', path: '/executions?tab=backfills' },
+    { name: 'sources', path: '/components/sources' },
+    { name: 'destinations', path: '/components/destinations' },
+    { name: 'connections', path: '/components/connections' },
+    { name: 'jobs', path: '/components/jobs' },
+    { name: 'hooks', path: '/components/hooks' },
+    { name: 'executions', path: '/executions/runs' },
+    { name: 'backfills', path: '/executions/backfills' },
     { name: 'run', path: '__best_run__' },
-    { name: 'source-wizard-types', path: '/sources', actions: async (page) => { await openWizard(page, /new source/i) } },
-    { name: 'source-wizard-assets', path: '/sources', actions: async (page) => {
+    { name: 'source-wizard-types', path: '/components/sources', actions: async (page) => { await openWizard(page, /new source/i) } },
+    { name: 'source-wizard-assets', path: '/components/sources', actions: async (page) => {
         await openWizard(page, /new source/i); await pickTile(page, 'Facebook Ads')
         await dialog(page).getByText('Select all', { exact: true }).click(); await page.waitForTimeout(500)
     } },
-    { name: 'source-wizard-connection', path: '/sources', actions: async (page) => {
+    { name: 'source-wizard-connection', path: '/components/sources', actions: async (page) => {
         await openWizard(page, /new source/i); await pickTile(page, 'Facebook Ads')
         await dialog(page).getByText('Select all', { exact: true }).click(); await page.waitForTimeout(400); await next(page)
     } },
-    { name: 'source-wizard-details', path: '/sources', actions: async (page) => {
+    { name: 'source-wizard-details', path: '/components/sources', actions: async (page) => {
         await openWizard(page, /new source/i); await pickTile(page, 'Demo Source')
         await dialog(page).getByText('Select all', { exact: true }).click(); await page.waitForTimeout(400); await next(page); await next(page)
     } },
-    { name: 'connection-form', path: '/resources/connection', actions: async (page) => {
+    { name: 'connection-form', path: '/components/connections', actions: async (page) => {
         await openWizard(page, /new connection/i); await pickTile(page, 'Facebook Ads'); await page.waitForTimeout(800)
     } },
 ]
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
-async function bestRunPath(page) {
-    const res = await page.request.get(`${base}/api/runs/`)
-    const runs = await res.json()
+/** The seeded organisation: its id addresses the API, its slug the app's pages. */
+async function organisation(page) {
+    const res = await page.request.get(`${base}/api/auth/me`)
+    const [membership] = (await res.json()).memberships
+    return membership
+}
+
+async function bestRunPath(page, orgId) {
+    const res = await page.request.get(`${base}/api/organisations/${orgId}/runs`)
+    const runs = (await res.json()).items
     const name = (r) => r.target?.name ?? r.target_name ?? r.component_name ?? ''
     const pick = runs.find(r => r.status === 'success' && name(r) === 'Demo Data') ?? runs.find(r => r.status === 'success') ?? runs[0]
     return pick ? `/executions/runs/${pick.id}` : '/executions'
@@ -73,9 +80,10 @@ for (const scheme of ['light', 'dark']) {
     await ctx.addCookies([{ name: 'session_token', value: token, domain: 'localhost', path: '/' }])
     await ctx.addInitScript((scheme) => { try { localStorage.setItem('nuxt-color-mode', scheme) } catch {} }, scheme)
     const page = await ctx.newPage()
+    const org = await organisation(page)
     for (const shot of shots) {
         if (only && !only.split(',').includes(shot.name)) continue
-        const target = shot.path === '__best_run__' ? await bestRunPath(page) : shot.path
+        const target = `/${org.slug}${shot.path === '__best_run__' ? await bestRunPath(page, org.id) : shot.path}`
         try {
             await page.goto(`${base}${target}`, { waitUntil: 'networkidle', timeout: 60000 })
             await page.waitForTimeout(1200)

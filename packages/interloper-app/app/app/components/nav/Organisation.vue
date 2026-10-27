@@ -1,48 +1,32 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Organisation } from '~/types/organisation'
 
 defineProps<{
     collapsed?: boolean
 }>()
 
 const route = useRoute()
+const userStore = useUserStore()
 const orgStore = useOrganisationStore()
 
-const userOrgs = ref<Organisation[]>([])
-const orgsLoaded = ref(false)
-
-async function loadUserOrgs() {
-    if (orgsLoaded.value) return
-    userOrgs.value = await orgStore.fetchOrganisations()
-    orgsLoaded.value = true
-}
-
-const { switchToOrg } = useOrgSwitch()
-
-async function selectOrg(org: Organisation) {
-    await switchToOrg(org)
-    orgsLoaded.value = false
-}
-
+/** Every organisation lives at its own address, so switching is following a link; another tab keeps its own. */
 const orgItems = computed<DropdownMenuItem[]>(() => {
-    if (!orgsLoaded.value) return [{ label: 'Loading...', disabled: true }]
-    if (userOrgs.value.length === 0) return [{ label: 'No organisations', disabled: true }]
+    const memberships = userStore.user?.memberships ?? []
+    if (memberships.length === 0) return [{ label: 'No organisations', disabled: true }]
 
-    const currentId = orgStore.organisation?.id
-    return userOrgs.value.map((org) => {
-        if (org.id === currentId) {
+    return memberships.map((membership) => {
+        if (membership.id === orgStore.organisation?.id) {
             return {
-                label: org.name,
+                label: membership.name,
                 icon: 'i-lucide-building-2',
                 type: 'checkbox' as const,
                 checked: true,
             }
         }
         return {
-            label: org.name,
+            label: membership.name,
             icon: 'i-lucide-building-2',
-            onSelect: () => selectOrg(org),
+            to: `/${membership.slug}`,
         }
     })
 })
@@ -52,7 +36,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
     [{
         label: 'Manage',
         icon: 'i-lucide-users',
-        onSelect: () => navigateTo('/organization'),
+        to: orgStore.path('/organization'),
     }],
 ])
 </script>
@@ -60,15 +44,14 @@ const items = computed<DropdownMenuItem[][]>(() => [
 <template>
     <UDropdownMenu :items="items"
                    :content="{ align: 'start', side: 'top' }"
-                   :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width)' }"
-                   @update:open="(open: boolean) => { if (open) loadUserOrgs() }">
+                   :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width)' }">
         <UButton :avatar="{ icon: 'i-lucide-building-2' }"
                  :label="collapsed ? undefined : (orgStore.organisation?.name || 'Organization')"
                  class="w-full justify-start data-[state=open]:bg-elevated"
                  variant="ghost"
                  color="neutral"
                  :square="collapsed"
-                 :class="{ 'text-highlighted': route.path === '/organization' }"
+                 :class="{ 'text-highlighted': route.path === orgStore.path('/organization') }"
                  truncate>
             <template v-if="!collapsed"
                       #trailing>

@@ -1,91 +1,148 @@
-"""Request-scoped identity: who is calling, and which organisation they are in, or which run."""
+"""Request-scoped identity: who is calling, and in which organisation the request acts, or which run.
+
+The caller proves who they are with the app's session cookie or an
+``Authorization: Bearer`` token, each resolved for its own surface, so a
+secret presented on the wrong one is refused; the routes that manage
+credentials and memberships, and the super-admin ones, take the cookie alone.
+The organisation is named by the path, never remembered between requests. A run's pod authenticates as its
+run, with the run token, and nothing else.
+"""
 
 from __future__ import annotations
 
+from contextlib import suppress
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Cookie, Depends, Header, HTTPException
-from interloper_db import Organisation, Profile, Run, Store
-from interloper_db.models import AuthSession
+from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store
 
 from interloper_api.dependencies.state import get_reaper_config, get_store
 
 
-def get_session_context(
+def get_caller(
     store: Store = Depends(get_store),
     session_token: str | None = Cookie(default=None),
-) -> tuple[Profile, AuthSession]:
-    """Resolve the caller and their login session from the session cookie.
+    authorization: str | None = Header(default=None),
+) -> Profile:
+    """Resolve the caller from the bearer token, else the session cookie.
+
+    A bearer token resolves as an API credential (personal or access token)
+    and the cookie as a login session; a bearer token, when presented, is the
+    credential, so a failing one is never rescued by a cookie. Any other
+    ``Authorization`` scheme (a proxy's HTTP Basic in front of a staging
+    deployment) is not ours and leaves the cookie to authenticate.
 
     Args:
         store: The Store instance.
-        session_token: Session cookie value.
-
-    Returns:
-        ``(Profile, AuthSession)``.
-
-    Raises:
-        HTTPException: 401 if not authenticated or the session is invalid or expired.
-    """
-    if not session_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    result = store.sessions.resolve(session_token)
-    if not result:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-    return result
-
-
-def get_current_user(
-    context: tuple[Profile, AuthSession] = Depends(get_session_context),
-) -> Profile:
-    """Resolve the current user from the session.
-
-    Args:
-        context: The caller and their session.
+        session_token: The session cookie value.
+        authorization: The ``Authorization`` header value.
 
     Returns:
         The authenticated Profile.
+
+    Raises:
+        HTTPException: 401 when no credential is presented or the secret does
+            not resolve for its surface.
     """
-    profile, _ = context
+    scheme, _, secret = (authorization or "").partition(" ")
+    if scheme.lower() == "bearer":
+        resolved = store.tokens.resolve(secret, Audience.API) if secret else None
+    elif session_token:
+        resolved = store.tokens.resolve(session_token, Audience.APP)
+    else:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if resolved is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired credentials")
+    profile, _ = resolved
     return profile
 
 
-def get_current_org(
-    context: tuple[Profile, AuthSession] = Depends(get_session_context),
+CurrentUserDep = Annotated[Profile, Depends(get_caller)]
+
+
+def get_session_caller(
     store: Store = Depends(get_store),
-) -> Organisation:
-    """Resolve the organisation the session is working in.
+    session_token: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
+) -> Profile:
+    """Resolve the caller from the session cookie alone, refusing any bearer token.
+
+    Credential and membership management (tokens, logout, invitations, the
+    last organisation) and the platform-wide super-admin surface answer only
+    the browser's login session, so a leaked token can neither mint its
+    successors, act on the user's sessions or memberships, nor act across
+    organisations.
 
     Args:
-        context: The caller and their session.
+        store: The Store instance.
+        session_token: The session cookie value.
+        authorization: The ``Authorization`` header value; a bearer token
+            alone refuses the request, any other scheme is ignored.
+
+    Returns:
+        The authenticated Profile.
+
+    Raises:
+        HTTPException: 401 when a bearer token is presented, or the session
+            cookie is missing or does not resolve.
+    """
+    if (authorization or "").partition(" ")[0].lower() == "bearer":
+        raise HTTPException(status_code=401, detail="This route accepts only the session cookie")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    resolved = store.tokens.resolve(session_token, Audience.APP)
+    if resolved is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired credentials")
+    profile, _ = resolved
+    return profile
+
+
+SessionUserDep = Annotated[Profile, Depends(get_session_caller)]
+
+
+@dataclass(frozen=True)
+class OrgScope:
+    """The organisation a request acts in, and the role the caller holds there.
+
+    Attributes:
+        organisation: The organisation the path names.
+        role: The caller's live role in it; ``admin`` for a super-admin.
+    """
+
+    organisation: Organisation
+    role: str
+
+
+def get_org_scope(org_id: UUID, user: CurrentUserDep, store: Store = Depends(get_store)) -> OrgScope:
+    """Resolve the organisation the path names and the caller's role in it.
+
+    A super-admin acts as ``admin`` in every live organisation; anyone else
+    must be a member. A non-member reads the organisation as missing, so an id
+    reveals nothing.
+
+    Args:
+        org_id: The organisation id from the path.
+        user: The authenticated caller.
         store: The Store instance.
 
     Returns:
-        The active Organisation.
+        The organisation and the caller's role in it.
 
     Raises:
-        HTTPException: 400 if no organisation is selected.
+        HTTPException: 404 when the organisation is missing, deleted, or the
+            caller is neither a member nor a super-admin.
     """
-    _, session_row = context
-    if not session_row.organisation_id:
-        raise HTTPException(status_code=400, detail="No organisation selected")
-    return store.organisations.get(session_row.organisation_id)
+    role = Role.ADMIN.value if user.is_super_admin else store.members.role(org_id, user.id)
+    if role is not None:
+        with suppress(NotFoundError):
+            return OrgScope(organisation=store.organisations.get(org_id), role=role)
+    raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
 
 
-def get_org_id(
-    org: Organisation = Depends(get_current_org),
-) -> UUID:
-    """Shorthand: return just the org UUID for route handlers.
-
-    Args:
-        org: The resolved Organisation.
-
-    Returns:
-        The organisation UUID.
-    """
-    return org.id
+OrgDep = Annotated[OrgScope, Depends(get_org_scope)]
 
 
 def require_run(
@@ -122,10 +179,3 @@ def require_run(
     if run.id != run_id:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     return run
-
-
-# -- Dependency aliases --------------------------------------------------------
-
-CurrentUserDep = Annotated[Profile, Depends(get_current_user)]
-SessionContextDep = Annotated[tuple[Profile, AuthSession], Depends(get_session_context)]
-OrgIdDep = Annotated[UUID, Depends(get_org_id)]

@@ -54,8 +54,8 @@ class TestDelete:
         org = store.organisations.create(name="Acme", creator_id=admin.id)
         store.members.add(org.id, admin.id, "admin")
         store.members.add(org.id, keeper.id, "viewer")
-        session_token = store.sessions.create(admin.id)
-        keeper_token = store.sessions.create(keeper.id)
+        session_token = store.tokens.create_session(admin.id)
+        keeper_token = store.tokens.create_session(keeper.id)
         _, raw_token = store.tokens.create_personal(admin.id, "laptop")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
 
@@ -63,13 +63,13 @@ class TestDelete:
 
         with pytest.raises(NotFoundError):
             store.profiles.get(admin.id)
-        assert store.sessions.resolve(session_token) is None
+        assert store.tokens.resolve(session_token, Audience.APP) is None
         assert store.tokens.resolve(raw_token, Audience.API) is None
         assert not store.invitations.has_pending("new@example.com")
         assert store.members.role(org.id, admin.id) is None
         # Other users' data is untouched.
         assert store.profiles.get(keeper.id).id == keeper.id
-        assert store.sessions.resolve(keeper_token) is not None
+        assert store.tokens.resolve(keeper_token, Audience.APP) is not None
         assert store.members.role(org.id, keeper.id) == "viewer"
 
     def test_missing_profile_raises(self, store: Store):
@@ -101,6 +101,15 @@ class TestUpdate:
         zoned = store.profiles.update(profile.id, timezone="Europe/Berlin")
         assert zoned.name == "Custom Name"
         assert zoned.timezone == "Europe/Berlin"
+
+    def test_records_the_last_organisation_leaving_the_rest(self, store: Store):
+        profile = store.profiles.upsert(google_id="g-last", email="last@example.com", name="Name")
+        org = store.organisations.create(name="Acme", creator_id=profile.id)
+
+        updated = store.profiles.update(profile.id, last_organisation_id=org.id)
+
+        assert updated.last_organisation_id == org.id
+        assert updated.name == "Name"
 
     def test_missing_profile_raises(self, store: Store):
         with pytest.raises(NotFoundError):

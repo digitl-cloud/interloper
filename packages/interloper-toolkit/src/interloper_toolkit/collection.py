@@ -351,7 +351,7 @@ def request_connection_setup(
             name=name,
             oauth=oauth is not None,
             oauth_available=OAuthAppCredentials.is_configured(oauth["provider"]) if oauth else False,
-            setup_url=_setup_url(connection_key, name),
+            setup_url=_setup_url(ctx, connection_key, name),
         )
     except Exception as e:
         return ToolError(error=str(e))
@@ -475,10 +475,11 @@ async def check_connection(ctx: ToolkitContext, connection_id: str) -> Connectio
         return ToolError(error=str(e))
 
 
-def _setup_url(connection_key: str, name: str | None) -> str | None:
-    """The app's connection form for a definition, pre-filled with a name.
+def _setup_url(ctx: ToolkitContext, connection_key: str, name: str | None) -> str | None:
+    """The app's connection form for a definition in the context's organisation, pre-filled with a name.
 
     Args:
+        ctx: The call's context, whose organisation's slug leads the path.
         connection_key: The connection definition to open the form for.
         name: The display name to prefill, or ``None``.
 
@@ -488,8 +489,9 @@ def _setup_url(connection_key: str, name: str | None) -> str | None:
     base = AppSettings.get().server.external_url.rstrip("/")
     if not base:
         return None
+    slug = ctx.store.organisations.get(ctx.org_id).slug
     query = {"new": connection_key, **({"name": name} if name else {})}
-    return f"{base}/components/connections?{urlencode(query)}"
+    return f"{base}/{slug}/components/connections?{urlencode(query)}"
 
 
 def categorise(exc: Exception) -> tuple[str, str]:

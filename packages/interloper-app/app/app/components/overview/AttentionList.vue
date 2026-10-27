@@ -2,6 +2,8 @@
 import type { RouteLocationRaw } from 'vue-router'
 import type { AttentionItem } from '~/types/overview'
 
+const organisationStore = useOrganisationStore()
+
 defineProps<{
     items: AttentionItem[] | null
     generatedAt: string | null
@@ -24,22 +26,22 @@ function openTarget(item: AttentionItem): { label: string, to: RouteLocationRaw 
     switch (item.kind) {
         case 'error_group':
         case 'run_stack':
-            return { label: 'Open run', to: { path: `/executions/runs/${item.run_id}`, query: { events: 'errors' } } }
+            return { label: 'Open run', to: { path: organisationStore.path(`/executions/runs/${item.run_id}`), query: { events: 'errors' } } }
         case 'connection':
-            return { label: 'Open connection', to: kindPath('connection') }
+            return { label: 'Open connection', to: organisationStore.path(kindPath('connection')) }
         case 'drift':
             if (!item.component_kind || item.component_kind === 'asset')
-                return { label: 'Open collection', to: { path: '/collection', query: { q: item.target ?? undefined } } }
-            return { label: `Open ${item.component_kind}`, to: { path: kindPath(item.component_kind), query: { type: item.target ?? undefined } } }
+                return { label: 'Open collection', to: { path: organisationStore.path('/collection'), query: { q: item.target ?? undefined } } }
+            return { label: `Open ${item.component_kind}`, to: { path: organisationStore.path(kindPath(item.component_kind)), query: { type: item.target ?? undefined } } }
         case 'overdue':
-            return { label: 'Open job', to: { path: kindPath('job'), query: { q: item.target ?? undefined } } }
+            return { label: 'Open job', to: { path: organisationStore.path(kindPath('job')), query: { q: item.target ?? undefined } } }
     }
 }
 
 function fix(item: AttentionItem): { label: string, icon: string, to: string } | null {
     if (!editor.value) return null
     if (item.kind === 'connection' && item.component_id) {
-        return { label: 'Reconnect', icon: 'i-lucide-plug-zap', to: `${kindPath('connection')}?edit=${item.component_id}` }
+        return { label: 'Reconnect', icon: 'i-lucide-plug-zap', to: `${organisationStore.path(kindPath('connection'))}?edit=${item.component_id}` }
     }
     return null
 }

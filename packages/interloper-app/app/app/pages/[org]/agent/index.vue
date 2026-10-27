@@ -2,6 +2,7 @@
 definePageMeta({ layout: 'agent' })
 
 const agentStore = useAgentStore()
+const organisationStore = useOrganisationStore()
 const prompt = ref('')
 const creating = ref(false)
 
@@ -20,7 +21,7 @@ async function onSubmit(e: Event) {
         const initialMessage = prompt.value
         prompt.value = ''
         await navigateTo({
-            path: `/agent/chat/${conversation.id}`,
+            path: organisationStore.path(`/agent/chat/${conversation.id}`),
             query: { q: initialMessage },
         })
     }

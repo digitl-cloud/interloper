@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -116,7 +117,11 @@ class TestFromSettings:
             monkeypatch.setattr(
                 "interloper.settings.AppSettings.get",
                 classmethod(
-                    lambda cls: SimpleNamespace(secrets=SimpleNamespace(encryption_key=encryption_key), quota=quota)
+                    lambda cls: SimpleNamespace(
+                        secrets=SimpleNamespace(encryption_key=encryption_key),
+                        quota=quota,
+                        auth=SimpleNamespace(session_expiry_days=2),
+                    )
                 ),
             )
             monkeypatch.setattr(base_module, "engine_from_settings", lambda: component_db)
@@ -165,6 +170,12 @@ class TestFromSettings:
 
         assert Store.from_settings()._quota_defaults is quota
 
+    @pytest.mark.parametrize("keyed", [True, False])
+    def test_the_session_expiry_comes_from_the_auth_settings(self, settings, keyed: bool) -> None:
+        settings(Fernet.generate_key().decode() if keyed else None)
+
+        assert Store.from_settings().tokens._session_expiry == timedelta(days=2)
+
     def test_the_engine_comes_from_the_process(self, settings, component_db: Engine) -> None:
         settings(None)
 
@@ -201,7 +212,6 @@ class TestFacets:
 
     FACETS = (
         "profiles",
-        "sessions",
         "organisations",
         "members",
         "invitations",

@@ -29,9 +29,8 @@ from interloper_db import Component, ComponentDriftError, ComponentQuery, Compon
 from pydantic import BaseModel
 
 from interloper_api.dependencies import (
-    CurrentUserDep,
     EditorDep,
-    OrgIdDep,
+    OrgDep,
     StoreDep,
     ViewerDep,
     load_authorized,
@@ -40,7 +39,7 @@ from interloper_api.routes.relations import RelationResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/components", tags=["components"])
+org_router = APIRouter(prefix="/components", tags=["components"])
 
 
 # -- Request/Response models ---------------------------------------------------
@@ -275,10 +274,9 @@ def _bindings(relations: dict[str, list[RelationEntry]] | None) -> dict[str, lis
 # -- Component endpoints -------------------------------------------------------
 
 
-@router.get("")
+@org_router.get("")
 def list_components(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     query: Annotated[ComponentQuery, Query()],
 ) -> Page[ComponentResponse]:
@@ -289,22 +287,21 @@ def list_components(
     standalone assets alone.
 
     Args:
-        user: The authenticated user.
-        org_id: The active organisation UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: The kinds, text and window to read.
 
     Returns:
         The page of components, secret configs withheld.
     """
-    return store.components.list(org_id, query).map(
+    return store.components.list(scope.organisation.id, query).map(
         lambda row: ComponentResponse.from_row(row, store, include_config=False)
     )
 
 
-@router.get("/delete-impact")
+@org_router.get("/delete-impact")
 def get_delete_impact(
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
     component_id: Annotated[list[UUID], Query(alias="id")],
 ) -> DeleteImpactResponse:
@@ -315,7 +312,7 @@ def get_delete_impact(
     loses a binding.
 
     Args:
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
         component_id: The components about to be deleted, repeated per id.
 
@@ -323,15 +320,14 @@ def get_delete_impact(
         The blocking and detaching referrers.
     """
     for one in component_id:
-        load_authorized(store.components.get, one, user, store, label="Component")
+        load_authorized(store.components.get, one, scope, label="Component")
     return DeleteImpactResponse.from_impact(store.components.delete_impact(component_id))
 
 
-@router.post("", status_code=201)
+@org_router.post("", status_code=201)
 def create_component(
     body: ComponentCreateRequest,
-    user: EditorDep,
-    org_id: OrgIdDep,
+    scope: EditorDep,
     store: StoreDep,
 ) -> ComponentResponse:
     """Create a component of any kind.
@@ -339,15 +335,14 @@ def create_component(
     Args:
         body: The component spec: kind, key, name, config, and the optional
             encryption, children and relation facets.
-        user: The authenticated user.
-        org_id: The active organisation UUID.
+        scope: The organisation the path names, the caller at least an editor there.
         store: The Store instance.
 
     Returns:
         The created component, with its config decoded.
     """
     row = store.components.create(
-        org_id,
+        scope.organisation.id,
         kind=body.kind,
         key=body.key,
         name=body.name,
@@ -359,31 +354,31 @@ def create_component(
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
-@router.get("/{component_id}")
+@org_router.get("/{component_id}")
 def get_component(
     component_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> ComponentResponse:
     """Get a single component by ID, including its decoded config payload.
 
     Args:
         component_id: The component UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The component, with its config decoded.
     """
-    row = load_authorized(store.components.get, component_id, user, store, label="Component")
+    row = load_authorized(store.components.get, component_id, scope, label="Component")
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
-@router.put("/{component_id}")
+@org_router.put("/{component_id}")
 def update_component(
     component_id: UUID,
     body: ComponentUpdateRequest,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> ComponentResponse:
     """Update a component's spec. Omitted facets are untouched.
@@ -391,13 +386,13 @@ def update_component(
     Args:
         component_id: The component UUID.
         body: The facets to update; the omitted ones are left as they are.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         The updated component, with its config decoded.
     """
-    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
     row = store.components.update(
         component_id,
         name=body.name,
@@ -409,23 +404,23 @@ def update_component(
     return ComponentResponse.from_row(row, store, include_config=True)
 
 
-@router.delete("/{component_id}", status_code=204)
+@org_router.delete("/{component_id}", status_code=204)
 def delete_component(
     component_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> Response:
     """Delete a component. Refused (409) while other components are bound to it.
 
     Args:
         component_id: The component UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
         An empty 204 response.
     """
-    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
     store.components.delete(component_id)
     return Response(status_code=204)
 
@@ -433,11 +428,11 @@ def delete_component(
 # -- Relation endpoints --------------------------------------------------------
 
 
-@router.post("/{component_id}/relations", status_code=201)
+@org_router.post("/{component_id}/relations", status_code=201)
 def add_relation(
     component_id: UUID,
     body: RelationCreateRequest,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> RelationResponse:
     """Add one relation from a component (e.g. a dependency edge).
@@ -445,31 +440,24 @@ def add_relation(
     Args:
         component_id: The source component's UUID.
         body: The relation to add: its name and target ``dst_id``.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
-        The created relation row.
-
-    Raises:
-        HTTPException: 404 when the target belongs to another organisation.
+        The created relation row; a target of another organisation reads as missing.
     """
-    source = load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
-    destination_row = load_authorized(
-        store.components.get, body.dst_id, user, store, label="Component", minimum="editor"
-    )
-    if destination_row.org_id != source.org_id:
-        raise HTTPException(status_code=404, detail=f"Component {body.dst_id} not found")
+    load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
+    load_authorized(store.components.get, body.dst_id, scope, label="Component", minimum="editor")
     relation = store.relations.add(component_id, name=body.name, dst_id=body.dst_id)
     return RelationResponse.from_relation(relation)
 
 
-@router.delete("/{component_id}/relations/{name}/{dst_id}", status_code=204)
+@org_router.delete("/{component_id}/relations/{name}/{dst_id}", status_code=204)
 def remove_relation(
     component_id: UUID,
     name: str,
     dst_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> None:
     """Remove a component's relation of one name toward one destination.
@@ -480,27 +468,27 @@ def remove_relation(
         component_id: The source component's UUID.
         name: The relation name to remove.
         dst_id: The target component's UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
     """
-    load_authorized(store.components.get, component_id, user, store, label="Component", minimum="editor")
+    load_authorized(store.components.get, component_id, scope, label="Component", minimum="editor")
     store.relations.delete(component_id, name=name, dst_id=dst_id)
 
 
 # -- Partition endpoint --------------------------------------------------------
 
 
-@router.get("/{component_id}/partition-row-counts")
+@org_router.get("/{component_id}/partition-row-counts")
 def get_partition_row_counts(
     component_id: UUID,
-    user: CurrentUserDep,
+    scope: OrgDep,
     store: StoreDep,
 ) -> PartitionRowCountsResponse:
     """Get row counts grouped by partition for an asset.
 
     Args:
         component_id: The asset component's UUID.
-        user: The authenticated user.
+        scope: The organisation the path names and the caller's role there.
         store: The Store instance.
 
     Returns:
@@ -511,7 +499,7 @@ def get_partition_row_counts(
             catalog or holds no data yet, 400 if it is not partitioned or its
             destination cannot count partitions, 500 for anything else.
     """
-    load_authorized(store.components.get, component_id, user, store, label="Component")
+    load_authorized(store.components.get, component_id, scope, label="Component")
     try:
         il_asset = store.components.load(component_id)
     except ComponentDriftError as e:

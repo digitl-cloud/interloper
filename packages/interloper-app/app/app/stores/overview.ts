@@ -11,7 +11,7 @@ function isoDate(date: Date): string {
 }
 
 export const useOverviewStore = defineStore('overview', () => {
-    const { apiFetch } = useApi()
+    const { apiFetch } = useOrgApi()
     const orgStore = useOrganisationStore()
 
     const overview = ref<Overview | null>(null)
@@ -23,14 +23,12 @@ export const useOverviewStore = defineStore('overview', () => {
     const coverageLoading = ref(false)
     const error = ref<Error | null>(null)
     const coverageError = ref<Error | null>(null)
-    const active = ref(false)
 
     let overviewSeq = 0
     let coverageSeq = 0
 
     async function fetchOverview() {
         const seq = ++overviewSeq
-        active.value = true
         loading.value = true
         error.value = null
         try {
@@ -104,7 +102,7 @@ export const useOverviewStore = defineStore('overview', () => {
         onDelete: () => scheduleRefresh(),
     })
 
-    function clear() {
+    function $reset() {
         clearTimeout(refreshTimer)
         refreshTimer = undefined
         coverageStale = false
@@ -119,17 +117,7 @@ export const useOverviewStore = defineStore('overview', () => {
         coverageError.value = null
     }
 
-    function $reset() {
-        clear()
-        active.value = false
-    }
-
-    useOrgScopedRefetch(() => {
-        if (active.value) {
-            fetchOverview()
-            fetchCoverage()
-        }
-    }, clear)
+    watch(() => orgStore.organisation?.id, $reset)
 
     return {
         overview,

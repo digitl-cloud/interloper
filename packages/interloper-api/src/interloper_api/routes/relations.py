@@ -15,9 +15,9 @@ from interloper_db import Page, RelationQuery
 from interloper_db.models import ComponentRelation
 from pydantic import BaseModel
 
-from interloper_api.dependencies import OrgIdDep, StoreDep, ViewerDep
+from interloper_api.dependencies import StoreDep, ViewerDep
 
-router = APIRouter(prefix="/relations", tags=["relations"])
+org_router = APIRouter(prefix="/relations", tags=["relations"])
 
 
 class RelationResponse(BaseModel):
@@ -52,22 +52,20 @@ class RelationResponse(BaseModel):
         )
 
 
-@router.get("")
+@org_router.get("")
 def list_relations(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    scope: ViewerDep,
     store: StoreDep,
     query: Annotated[RelationQuery, Query()],
 ) -> Page[RelationResponse]:
     """List the organisation's relations, optionally filtered by name and endpoint kinds.
 
     Args:
-        user: The authenticated user, required to hold at least the viewer role.
-        org_id: The active organisation UUID.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         query: The name, source and destination kinds, and the window to read.
 
     Returns:
         The page of relations.
     """
-    return store.relations.list(org_id, query).map(RelationResponse.from_relation)
+    return store.relations.list(scope.organisation.id, query).map(RelationResponse.from_relation)

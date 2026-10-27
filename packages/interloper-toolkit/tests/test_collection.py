@@ -268,13 +268,14 @@ class TestGetDeleteImpact:
 
 class TestConnections:
     @pytest.mark.parametrize("external_url", ["https://app.example.com/", ""], indirect=True)
-    def test_request_connection_setup_links_the_form_when_the_app_has_a_public_url(
-        self, ctx: ToolkitContext, external_url: str
-    ):
+    def test_setup_url_carries_slug(self, ctx: ToolkitContext, store: Store, external_url: str):
+        organisation = store.organisations.create("Swarovski")
+        ctx = dataclasses.replace(ctx, org_id=organisation.id)
+
         result = collection.request_connection_setup(ctx, "demo_connection", name="Main account")
 
         assert result.status == "success"
-        expected = "https://app.example.com/components/connections?new=demo_connection&name=Main+account"
+        expected = "https://app.example.com/swarovski/components/connections?new=demo_connection&name=Main+account"
         assert result.setup_url == (expected if external_url else None)
 
     def test_request_connection_setup_presents_the_form_even_when_connections_exist(

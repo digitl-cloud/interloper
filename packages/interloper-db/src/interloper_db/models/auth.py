@@ -150,24 +150,3 @@ class Invitation(SQLModel, table=True):
     invited_by: UUID = SQLField(foreign_key="profiles.id")
     created_at: datetime | None = timestamp_column()
     expires_at: datetime = SQLField(sa_column=Column(TZDateTime))
-
-
-class AuthSession(SQLModel, table=True):
-    """A cookie-based user login session with optional org context.
-
-    Named ``AuthSession`` (table stays ``sessions``) so it can never be
-    confused with the SQLAlchemy ``Session`` used throughout the store.
-    """
-
-    __tablename__: ClassVar[str] = "sessions"
-
-    id: UUID = SQLField(
-        default=None,
-        primary_key=True,
-        sa_column_kwargs={"server_default": text("gen_random_uuid()")},
-    )
-    user_id: UUID = SQLField(foreign_key="profiles.id", index=True)
-    organisation_id: UUID | None = SQLField(default=None, foreign_key="organisations.id")
-    token_hash: str = SQLField(index=True, unique=True)
-    expires_at: datetime = SQLField(sa_column=Column(TZDateTime))
-    created_at: datetime | None = timestamp_column()

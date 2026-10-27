@@ -2,6 +2,8 @@
 import type { UpcomingRun } from '~/types/overview'
 import type { TimelineBar, TimelineRow } from '~/types/timeline'
 
+const organisationStore = useOrganisationStore()
+
 const props = defineProps<{ upcoming: UpcomingRun[] }>()
 
 const LABEL_WIDTH = 250
@@ -59,8 +61,8 @@ const rangeLabel = computed(() => {
 const height = computed(() => AXIS_HEIGHT + (loaded.value ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
 
 function onBarClick(bar: TimelineBar) {
-    if (bar.status === 'scheduled') navigateTo(kindPath('job'))
-    else navigateTo(`/executions/runs/${bar.id}`)
+    if (bar.status === 'scheduled') navigateTo(organisationStore.path(kindPath('job')))
+    else navigateTo(organisationStore.path(`/executions/runs/${bar.id}`))
 }
 
 watch(rangeEnd, () => {
@@ -90,7 +92,7 @@ onUnmounted(() => timelineStore.$reset())
                        size="xs"
                        :content="false" />
                 <UButton label="All executions"
-                         to="/executions/runs"
+                         :to="organisationStore.path('/executions/runs')"
                          color="neutral"
                          variant="outline"
                          size="sm" />

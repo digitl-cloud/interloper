@@ -16,9 +16,10 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
+from interloper_db import Audience
 from typing_extensions import Self
 
-from interloper_api.app import install_error_handlers
+from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import state as state_module
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.routes.websocket import ConnectionManager
@@ -357,20 +358,30 @@ class TestRealtimeLifespan:
 
 
 class FakeStore:
-    """Stand-in exposing only ``sessions.resolve``."""
+    """Stand-in exposing the ``tokens``, ``members`` and ``organisations`` facets the endpoint reads."""
 
-    def __init__(self, session: tuple[Any, Any] | None) -> None:
+    def __init__(self, *, authenticated: bool = True, role: str | None = "viewer") -> None:
         """Set up the fake.
 
         Args:
-            session: What ``sessions.resolve`` returns; ``None`` means unknown.
+            authenticated: Whether the session cookie resolves.
+            role: The caller's role in every organisation; ``None`` means not a member.
         """
-        self.sessions = SimpleNamespace(resolve=lambda token: session)
+        profile = SimpleNamespace(id=uuid4(), email="user@example.com", is_super_admin=False)
+        self.presented: list[tuple[str, Audience]] = []
+        self._resolved = (profile, SimpleNamespace(kind="session")) if authenticated else None
+        self.tokens = SimpleNamespace(resolve=self._resolve)
+        self.members = SimpleNamespace(role=lambda org_id, user_id: role)
+        self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
+
+    def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
+        self.presented.append((raw, audience))
+        return self._resolved
 
 
 @pytest.fixture
 def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Mount the websocket route with the global store swapped for a fake.
+    """Mount the websocket route under the organisation prefix with the global store swapped for a fake.
 
     The endpoint calls ``get_store()`` directly rather than through
     ``Depends``, so the module-level state is what has to be replaced.
@@ -379,21 +390,24 @@ def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
         monkeypatch: Fixture used to install the fake store.
 
     Returns:
-        A callable taking the resolved session and returning a TestClient.
+        A callable taking the fake store and returning a TestClient.
     """
 
-    def build(session: tuple[Any, Any] | None) -> TestClient:
-        monkeypatch.setattr(state_module, "_store", FakeStore(session))
+    def build(store: FakeStore) -> TestClient:
+        monkeypatch.setattr(state_module, "_store", store)
         app = FastAPI()
         install_error_handlers(app)
-        app.include_router(websocket_module.router)
+        app.include_router(websocket_module.org_router, prefix=ORG_PREFIX)
         return TestClient(app)
 
     return build
 
 
+_PATH = f"/organisations/{_ORG_ID}/ws"
+
+
 class TestWebSocketEndpoint:
-    """Authentication happens before the socket is accepted or registered."""
+    """Authentication and authorisation happen before the socket is accepted or registered."""
 
     @pytest.fixture(autouse=True)
     def fresh_manager(self, monkeypatch: pytest.MonkeyPatch) -> ConnectionManager:
@@ -409,42 +423,50 @@ class TestWebSocketEndpoint:
         monkeypatch.setattr(websocket_module, "_manager", manager)
         return manager
 
-    def test_no_cookie_is_refused_before_accept(self, endpoint_client: Any) -> None:
-        client = endpoint_client(None)
+    def test_no_cookie_is_closed_with_4001(self, endpoint_client: Any) -> None:
+        client = endpoint_client(FakeStore())
 
-        with pytest.raises(WebSocketDisconnect) as excinfo, client.websocket_connect("/ws"):
-            pass  # pragma: no cover - the handshake never completes
+        with client.websocket_connect(_PATH) as socket, pytest.raises(WebSocketDisconnect) as excinfo:
+            socket.receive_text()
 
         assert excinfo.value.code == 4001
 
     def test_an_unresolvable_token_is_refused(self, endpoint_client: Any) -> None:
-        client = endpoint_client(None)
+        client = endpoint_client(FakeStore(authenticated=False))
         client.cookies.set("session_token", "stale")
 
-        with pytest.raises(WebSocketDisconnect) as excinfo, client.websocket_connect("/ws"):
-            pass  # pragma: no cover - the handshake never completes
+        with client.websocket_connect(_PATH) as socket, pytest.raises(WebSocketDisconnect) as excinfo:
+            socket.receive_text()
 
         assert excinfo.value.code == 4001
 
-    def test_a_session_without_an_organisation_is_refused_distinctly(self, endpoint_client: Any) -> None:
-        # 4002, not 4001: the caller is authenticated but has no org selected.
-        profile = SimpleNamespace(id=uuid4(), email="user@example.com")
-        client = endpoint_client((profile, SimpleNamespace(organisation_id=None)))
+    def test_the_cookie_is_resolved_as_a_session(self, endpoint_client: Any) -> None:
+        store = FakeStore()
+        client = endpoint_client(store)
         client.cookies.set("session_token", "tok")
 
-        with pytest.raises(WebSocketDisconnect) as excinfo, client.websocket_connect("/ws"):
-            pass  # pragma: no cover - the handshake never completes
+        with client.websocket_connect(_PATH):
+            pass
 
-        assert excinfo.value.code == 4002
+        assert store.presented == [("tok", Audience.APP)]
+
+    def test_a_non_member_is_refused_distinctly(self, endpoint_client: Any) -> None:
+        # 4004, not 4001: the caller is authenticated but cannot act in the organisation.
+        client = endpoint_client(FakeStore(role=None))
+        client.cookies.set("session_token", "tok")
+
+        with client.websocket_connect(_PATH) as socket, pytest.raises(WebSocketDisconnect) as excinfo:
+            socket.receive_text()
+
+        assert excinfo.value.code == 4004
 
     def test_an_authenticated_socket_is_registered_and_then_released(
         self, endpoint_client: Any, fresh_manager: ConnectionManager
     ) -> None:
-        profile = SimpleNamespace(id=uuid4(), email="user@example.com")
-        client = endpoint_client((profile, SimpleNamespace(organisation_id=_ORG_ID)))
+        client = endpoint_client(FakeStore())
         client.cookies.set("session_token", "tok")
 
-        with client.websocket_connect("/ws"):
+        with client.websocket_connect(_PATH):
             assert set(fresh_manager._connections) == {str(_ORG_ID)}
 
         assert fresh_manager._connections == {}
@@ -452,11 +474,10 @@ class TestWebSocketEndpoint:
     def test_a_registered_socket_receives_a_broadcast(
         self, endpoint_client: Any, fresh_manager: ConnectionManager
     ) -> None:
-        profile = SimpleNamespace(id=uuid4(), email="user@example.com")
-        client = endpoint_client((profile, SimpleNamespace(organisation_id=_ORG_ID)))
+        client = endpoint_client(FakeStore())
         client.cookies.set("session_token", "tok")
 
-        with client.websocket_connect("/ws") as socket:
+        with client.websocket_connect(_PATH) as socket:
             connection = next(iter(fresh_manager._connections[str(_ORG_ID)]))
             asyncio.run(connection.send_json({"table": "runs", "event": "INSERT"}))
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import httpx2
 import interloper as il
 import pytest
@@ -11,15 +13,17 @@ from interloper_assets.facebook_ads import connection as fb_connection
 from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.connector.source import FacebookAds
 
-from interloper_api.app import install_error_handlers
+from interloper_api.app import ORG_PREFIX, install_error_handlers
 from interloper_api.dependencies import get_catalog, get_store, require_editor, require_viewer
 from interloper_api.routes import catalog as catalog_module
+
+_BASE_URL = f"http://testserver/organisations/{uuid4()}"
 
 
 def _app() -> FastAPI:
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(catalog_module.router)
+    app.include_router(catalog_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: None
     app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})
     return app
@@ -35,14 +39,14 @@ def _app() -> FastAPI:
     ],
 )
 def test_unauthenticated_requests_rejected(method: str, path: str):
-    resp = TestClient(_app()).request(method, path, json={"field": "x"})
+    resp = TestClient(_app(), base_url=_BASE_URL).request(method, path, json={"field": "x"})
     assert resp.status_code == 401
 
 
 def test_viewer_can_read_catalog():
     app = _app()
     app.dependency_overrides[require_viewer] = lambda: None
-    client = TestClient(app)
+    client = TestClient(app, base_url=_BASE_URL)
 
     assert client.get("/catalog").status_code == 200
     assert client.get("/catalog/resource-kinds").status_code == 200
@@ -54,7 +58,7 @@ def test_the_catalog_is_served_whole():
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[require_viewer] = lambda: None
 
-    response = TestClient(app).get("/catalog")
+    response = TestClient(app, base_url=_BASE_URL).get("/catalog")
 
     assert response.status_code == 200
     assert response.json() == catalog.dump()
@@ -66,7 +70,7 @@ def test_resource_kinds_are_the_kinds_anchored_under_resource():
     app.dependency_overrides[get_catalog] = lambda: catalog
     app.dependency_overrides[require_viewer] = lambda: None
 
-    response = TestClient(app).get("/catalog/resource-kinds")
+    response = TestClient(app, base_url=_BASE_URL).get("/catalog/resource-kinds")
 
     assert response.json() == ["connection"]
 
@@ -76,7 +80,7 @@ def test_the_per_key_and_per_kind_reads_are_gone(path: str):
     app = _app()
     app.dependency_overrides[require_viewer] = lambda: None
 
-    assert TestClient(app).get(path).status_code == 404
+    assert TestClient(app, base_url=_BASE_URL).get(path).status_code == 404
 
 
 # -- Operations on a type ------------------------------------------------------
@@ -94,11 +98,11 @@ class UncheckableConnection(il.Connection):
 def _client(catalog: il.Catalog) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
-    app.include_router(catalog_module.router)
+    app.include_router(catalog_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[require_viewer] = lambda: None
     app.dependency_overrides[require_editor] = lambda: None
     app.dependency_overrides[get_catalog] = lambda: catalog
-    return TestClient(app)
+    return TestClient(app, base_url=_BASE_URL)
 
 
 @pytest.fixture

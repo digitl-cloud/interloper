@@ -237,7 +237,7 @@ const mergedResourceContext = computed<Record<string, Record<string, unknown>>>(
 })
 
 // ── Fetch fields ─────────────────────────────────────────────────
-const { apiFetch } = useApi()
+const { apiFetch } = useOrgApi()
 
 /** Per-field fetch state: options, loading, error. */
 const fetchState = ref<Record<string, {
