@@ -20,10 +20,12 @@ from interloper_db import (
     Store,
 )
 
+from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
 from interloper_api.dependencies import (
     set_admin_config,
     set_agent,
     set_auth_config,
+    set_authorization_server,
     set_catalog,
     set_features,
     set_quota_defaults,
@@ -34,6 +36,7 @@ from interloper_api.dependencies import (
 from interloper_api.routes import (
     admin,
     auth,
+    authorization,
     backfills,
     components,
     executions,
@@ -54,6 +57,7 @@ logger = logging.getLogger(__name__)
 #: organisation management and super-admin ones, a run's ingest, and the probes.
 _ROUTERS: tuple[APIRouter, ...] = (
     auth.router,
+    authorization.router,
     organisations.router,
     admin.router,
     oauth.router,
@@ -212,6 +216,8 @@ def create_app(
             allow_methods=["*"],
             allow_headers=["*"],
         )
+    # Added last, so it answers a client-facing endpoint's preflight before the policy above can refuse it.
+    app.add_middleware(CrossOriginMiddleware)
 
     api = APIRouter(prefix="/api")
     for router in _ROUTERS:
@@ -220,6 +226,7 @@ def create_app(
         api.include_router(org_router, prefix=ORG_PREFIX)
     agent_available = _mount_agent(api, settings)
     app.include_router(api)
+    app.include_router(authorization.well_known_router)
 
     # After mounting, so the feature flag and the config snapshot can record
     # whether the agent actually mounted. Routes read state per request, never
@@ -291,6 +298,7 @@ def _install_state(
     set_features({"agent": agent_available})
 
     if settings:
+        set_authorization_server(_authorization_server(store, settings))
         set_auth_config(settings.auth)
         set_smtp_config(settings.smtp)
         set_quota_defaults(settings.quota)
@@ -298,3 +306,27 @@ def _install_state(
         set_admin_config(
             admin.AdminConfigResponse.from_settings(settings, features={"agent": agent_available}, catalog=catalog)
         )
+
+
+def _authorization_server(store: Store | None, settings: Any) -> AuthorizationServer | None:
+    """Build the OAuth authorization server, when the deployment can run one.
+
+    Args:
+        store: The ``Store`` instance, or ``None``.
+        settings: Full ``AppSettings``.
+
+    Returns:
+        The server, or ``None`` without a store, without an encryption key
+        (which seals the authorization request while the user decides), or
+        when the issuer is refused (plain http on a non-loopback host).
+    """
+    if store is None:
+        return None
+    if not settings.secrets.encryption_key:
+        logger.warning("OAuth authorization server not mounted: INTERLOPER_ENCRYPTION_KEY is not configured.")
+        return None
+    try:
+        return AuthorizationServer.from_settings(store, settings)
+    except ValueError as error:
+        logger.warning("OAuth authorization server not mounted: %s (server.external_url).", error)
+        return None

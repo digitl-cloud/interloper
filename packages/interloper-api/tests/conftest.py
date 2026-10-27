@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from types import SimpleNamespace
+from typing import Any
+from uuid import uuid4
 
+import interloper as il
 import pytest
+from interloper.settings import ServerSettings
+from interloper_db import Store
+from interloper_db import engine as engine_module
+from interloper_db.models import (
+    AuthorizationCode,
+    OAuthClient,
+    Organisation,
+    Profile,
+    RefreshToken,
+    Token,
+    UserOrganisation,
+)
+from sqlalchemy import event
+from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture
@@ -39,6 +57,7 @@ def fake_settings() -> SimpleNamespace:
             google_client_secret="oauth-secret",
             google_redirect_uri="https://app/api/auth/google/callback",
             session_expiry_days=30,
+            access_token_expiry_minutes=60,
             cookie_secure=True,
         ),
         cron=SimpleNamespace(enabled=True, reconcile_interval=10, batch_size=50, max_execution_delay=3600),
@@ -62,9 +81,32 @@ def fake_settings() -> SimpleNamespace:
             sample_ratio=1.0,
         ),
         mcp=SimpleNamespace(external_url="", token="mcp-secret"),
-        server=SimpleNamespace(external_url=""),
+        server=ServerSettings(external_url="", port=3000),
         secrets=SimpleNamespace(encryption_key="key-material"),
         postgres=SimpleNamespace(password="pg-secret"),
         quota=SimpleNamespace(max_sources=None, max_assets_per_source=None, max_successful_runs_per_month=25),
         catalog=["interloper_assets.demo.basic.source.DemoSource"],
     )
+
+
+@pytest.fixture
+def oauth_store() -> Iterator[Store]:
+    """A store over a fresh in-memory database carrying the login and OAuth tables.
+
+    Yields:
+        The store, its engine disposed once the test finishes.
+    """
+    engine = engine_module.init_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+
+    @event.listens_for(engine, "connect")
+    def _configure_connection(dbapi_connection: Any, _record: Any) -> None:
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+        dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
+
+    for model in (Profile, Organisation, UserOrganisation, Token, OAuthClient, AuthorizationCode, RefreshToken):
+        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+    try:
+        yield Store(catalog=il.Catalog(components={}))
+    finally:
+        engine.dispose()
+        engine_module._engine = None

@@ -16,12 +16,26 @@ from interloper_db import (
     InUseError,
     NotFoundError,
     QuotaExceededError,
+    Store,
 )
 
 from interloper_api.app import create_app, install_error_handlers
 from interloper_api.dependencies import get_features, get_store
 
 _ORG = "00000000-0000-0000-0000-000000000000"
+
+
+def test_a_plain_http_external_url_mounts_no_authorization_server(
+    fake_settings: SimpleNamespace, oauth_store: Store, caplog: pytest.LogCaptureFixture
+):
+    fake_settings.agent.enabled = False
+    fake_settings.server.external_url = "http://interloper.example.com"
+
+    with caplog.at_level("WARNING", logger="interloper_api.app"):
+        app = create_app(store=oauth_store, settings=fake_settings)
+
+    assert TestClient(app).get("/.well-known/oauth-authorization-server").status_code == 503
+    assert "OAuth authorization server not mounted" in caplog.text
 
 
 def test_agent_routes_absent_when_disabled(fake_settings: SimpleNamespace):

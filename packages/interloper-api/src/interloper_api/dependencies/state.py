@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from interloper.catalog import Catalog
 from interloper_db import Store
+
+from interloper_api.authorization import AuthorizationServer
 
 _store: Store | None = None
 _catalog: Catalog | None = None
@@ -22,6 +24,7 @@ _features: dict[str, bool] = {}
 _admin_config: Any | None = None
 _quota_defaults: Any | None = None
 _reaper_config: Any | None = None
+_authorization_server: AuthorizationServer | None = None
 
 
 def set_store(store: Store) -> None:
@@ -218,6 +221,30 @@ def get_reaper_config() -> Any:
     return _reaper_config
 
 
+def set_authorization_server(server: AuthorizationServer | None) -> None:
+    """Set the OAuth authorization server, or clear it on a deployment that cannot run one.
+
+    Args:
+        server: The server, or ``None``.
+    """
+    global _authorization_server
+    _authorization_server = server
+
+
+def get_authorization_server() -> AuthorizationServer:
+    """Return the OAuth authorization server.
+
+    Returns:
+        The server.
+
+    Raises:
+        HTTPException: 503 when the deployment runs none (no encryption key).
+    """
+    if _authorization_server is None:
+        raise HTTPException(status_code=503, detail="OAuth authorization server not configured")
+    return _authorization_server
+
+
 # -- Dependency aliases --------------------------------------------------------
 
 StoreDep = Annotated[Store, Depends(get_store)]
@@ -227,3 +254,4 @@ AuthConfigDep = Annotated[Any, Depends(get_auth_config)]
 AdminConfigDep = Annotated[Any, Depends(get_admin_config)]
 QuotaDefaultsDep = Annotated[Any, Depends(get_quota_defaults)]
 ReaperConfigDep = Annotated[Any, Depends(get_reaper_config)]
+AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]

@@ -210,6 +210,18 @@ class ServerSettings(BaseSettings):
         description="Base URL a run's pod reports its events to: the API as reached from inside the deployment.",
     )
 
+    @property
+    def public_url(self) -> str:
+        """The app's public base URL: ``external_url`` without a trailing slash, else the local server.
+
+        It is the OAuth authorization server's issuer, which the API and the
+        MCP server must name identically.
+
+        Returns:
+            The URL, ``http://localhost:<port>`` when ``external_url`` is empty.
+        """
+        return self.external_url.rstrip("/") or f"http://localhost:{self.port}"
+
 
 class CronSettings(BaseSettings):
     """Cron controller settings."""

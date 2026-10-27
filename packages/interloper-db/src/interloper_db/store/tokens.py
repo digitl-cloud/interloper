@@ -123,6 +123,23 @@ class TokenStore:
             )
         return raw
 
+    def find_access(self, raw: str) -> Token | None:
+        """Look an OAuth access token up by its raw value, whatever its state or surface.
+
+        For the authorization server's revocation endpoint, which a client
+        calls with the token alone.
+
+        Args:
+            raw: The access token as presented.
+
+        Returns:
+            The token, or ``None`` when no access token has that value; a
+            session or personal token never matches.
+        """
+        statement = select(Token).where(Token.token_hash == hash_token(raw), Token.kind == TokenKind.ACCESS)
+        with session_scope(self._engine) as session:
+            return session.exec(statement).first()
+
     def create_personal(self, user_id: UUID, name: str, expires_at: datetime | None = None) -> tuple[Token, str]:
         """Create a personal access token.
 

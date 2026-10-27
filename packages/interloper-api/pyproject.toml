@@ -11,6 +11,8 @@ requires-python = ">=3.10"
 dependencies = [
     "interloper-core",
     "interloper-db",
+    "authlib>=1.9,<2",
+    "cryptography>=43.0.0",
     "fastapi>=0.115.0",
     "google-auth>=2.0.0",
     "httpx2>=2.13.1",
