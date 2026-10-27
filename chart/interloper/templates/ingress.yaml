@@ -31,6 +31,15 @@ spec:
                 name: {{ include "interloper.fullname" . }}-api
                 port:
                   number: {{ .Values.api.service.port }}
+          # The RFC 8414 metadata of the authorization server the API runs sits
+          # at the host root, outside apiPath.
+          - path: /.well-known/oauth-authorization-server
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "interloper.fullname" . }}-api
+                port:
+                  number: {{ .Values.api.service.port }}
           {{- end }}
           {{- if .Values.frontend.enabled }}
           - path: {{ .Values.ingress.rootPath }}

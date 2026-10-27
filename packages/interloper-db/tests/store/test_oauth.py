@@ -83,6 +83,42 @@ class TestClients:
     def test_unknown_client_is_none(self, store: Store):
         assert store.oauth.get_client("no-such-client") is None
 
+    def test_list_clients_filters_by_registrant_and_orders_by_name(self, store: Store):
+        store.oauth.register_client("Zed", ["http://localhost/cb"], registered_by="dynamic")
+        store.oauth.register_client(
+            "Slack", ["https://slack.example.com/cb"], registered_by="operator", confidential=True
+        )
+        store.oauth.register_client(
+            "Acme", ["https://acme.example.com/cb"], registered_by="operator", confidential=True
+        )
+
+        assert [client.name for client in store.oauth.list_clients()] == ["Acme", "Slack", "Zed"]
+        assert [client.name for client in store.oauth.list_clients(registered_by="operator")] == ["Acme", "Slack"]
+
+    def test_delete_client_removes_it_with_its_grants(self, store: Store, profile: Profile, client: OAuthClient):
+        code = store.oauth.consume_code(_issue_code(store, profile, client))
+        assert code is not None
+        refresh = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP, family_id=code.family_id)
+        access = store.tokens.create_access(profile.id, client.client_id, Audience.MCP)
+        _issue_code(store, profile, client)
+
+        assert store.oauth.delete_client(client.client_id) is True
+
+        assert store.oauth.get_client(client.client_id) is None
+        assert store.oauth.rotate_refresh(refresh, client.client_id) is None
+        assert store.tokens.resolve(access, Audience.MCP) is None
+
+    def test_delete_client_spares_other_clients_grants(self, store: Store, profile: Profile, client: OAuthClient):
+        other, _ = store.oauth.register_client("Other", ["http://localhost/cb"], registered_by="dynamic")
+        access = store.tokens.create_access(profile.id, other.client_id, Audience.MCP)
+
+        store.oauth.delete_client(client.client_id)
+
+        assert store.tokens.resolve(access, Audience.MCP) is not None
+
+    def test_delete_unknown_client_is_false(self, store: Store):
+        assert store.oauth.delete_client("no-such-client") is False
+
 
 class TestCodes:
     def test_code_single_use(self, store: Store, profile: Profile, client: OAuthClient):

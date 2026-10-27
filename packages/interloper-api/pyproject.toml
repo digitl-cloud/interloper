@@ -30,6 +30,7 @@ otel = [
 
 [project.entry-points."interloper.cli"]
 api = "interloper_api.cli:register"
+oauth = "interloper_api.cli:register_oauth"
 
 [build-system]
 requires = ["uv_build>=0.12.9,<0.13"]

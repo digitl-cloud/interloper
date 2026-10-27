@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from interloper.settings import McpSettings
+from interloper.settings import AppSettings, McpSettings
 from interloper_db import Store
 from mcp.server.auth.settings import AuthSettings as McpAuthSettings
 from mcp.server.mcpserver import MCPServer
-from pydantic import AnyHttpUrl
 
 from interloper_mcp.auth import PatVerifier
 from interloper_mcp.tools import register_tools
@@ -48,6 +47,10 @@ def http_options(settings: McpSettings) -> dict[str, Any]:
 def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPServer:
     """Build the MCP server.
 
+    The protected-resource metadata names the interloper authorization server
+    as the issuer of the tokens the server accepts, by the URL the API serves
+    it at (``server.public_url``).
+
     Args:
         settings: The MCP settings (host, port, external URL).
         store: When provided, requests authenticate with bearer tokens
@@ -64,12 +67,18 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
         # resource, which puts the metadata at /.well-known/oauth-protected-resource/mcp.
         # Default to the local bind address so dev servers work without configuration.
         local_url = f"http://localhost:{settings.port}"
+        issuer = AppSettings.get().server.public_url
+        # Strings, not AnyHttpUrl instances: the SDK's settings model keeps a path-less URL
+        # as given only when it validates the string itself, and the issuer must match the
+        # authorization server's own metadata exactly (RFC 8414 section 3.3).
         auth_kwargs = {
             "token_verifier": PatVerifier(store),
-            "auth": McpAuthSettings(
-                issuer_url=AnyHttpUrl(settings.external_url or local_url),
-                resource_server_url=AnyHttpUrl(settings.external_url or f"{local_url}/mcp"),
-                validate_token_resource=False,
+            "auth": McpAuthSettings.model_validate(
+                {
+                    "issuer_url": issuer,
+                    "resource_server_url": settings.external_url or f"{local_url}/mcp",
+                    "validate_token_resource": False,
+                }
             ),
         }
 

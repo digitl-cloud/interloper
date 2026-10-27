@@ -14,10 +14,15 @@ spec:
   {{- end }}
   rules:
     {{- if .Values.api.enabled }}
+    # The well-known path carries the RFC 8414 metadata of the authorization
+    # server the API runs; it sits at the host root, outside apiPath.
     - matches:
         - path:
             type: PathPrefix
             value: {{ .Values.httpRoute.apiPath }}
+        - path:
+            type: PathPrefix
+            value: /.well-known/oauth-authorization-server
       backendRefs:
         - name: {{ include "interloper.fullname" . }}-api
           port: {{ .Values.api.service.port }}
