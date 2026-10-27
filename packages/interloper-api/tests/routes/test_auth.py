@@ -63,6 +63,9 @@ class FakeStore:
         return "token"
 
 
+NONCE = "nonce"
+
+
 def _auth_config(super_admin_emails: list[str], allowed_domains: list[str]) -> SimpleNamespace:
     return SimpleNamespace(
         google_client_id="client-id",
@@ -85,7 +88,22 @@ def _client(
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_auth_config] = lambda: _auth_config(super_admin_emails or [], allowed_domains or [])
-    return TestClient(app, follow_redirects=False)
+    client = TestClient(app, follow_redirects=False)
+    client.cookies.set(auth_module.LOGIN_STATE_COOKIE, NONCE)
+    return client
+
+
+def _callback_params(destination: str = "/", nonce: str = NONCE) -> dict[str, str]:
+    """Build the query Google hands back for a flow :func:`_client`'s browser started.
+
+    Args:
+        destination: The post-login destination recorded in ``state``.
+        nonce: The nonce recorded in ``state``; anything but ``NONCE`` mismatches the cookie.
+
+    Returns:
+        The callback's query parameters.
+    """
+    return {"code": "c", "state": f"{nonce}:{destination}"}
 
 
 @pytest.fixture(autouse=True)
@@ -108,7 +126,7 @@ def fake_google(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_listed_email_is_promoted_case_insensitively() -> None:
     store = FakeStore()
-    resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert store.promoted == [store.profile.id]
     assert store.profile.is_super_admin is True
@@ -116,14 +134,14 @@ def test_listed_email_is_promoted_case_insensitively() -> None:
 
 def test_unlisted_email_is_not_promoted() -> None:
     store = FakeStore()
-    resp = _client(store, ["someone-else@example.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, ["someone-else@example.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert store.promoted == []
 
 
 def test_existing_super_admin_is_not_touched() -> None:
     store = FakeStore(is_super_admin=True)
-    resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, ["boss@example.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert store.promoted == []
 
@@ -131,7 +149,7 @@ def test_existing_super_admin_is_not_touched() -> None:
 def test_signup_blocked_when_domain_not_allowed() -> None:
     store = FakeStore()
     client = _client(store, allowed_domains=["digitlcloud.com"])
-    resp = client.get("/auth/google/callback", params={"code": "c"})
+    resp = client.get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert resp.headers["location"] == "/login?error=signup_not_allowed"
     assert store.upserted is None
@@ -141,7 +159,7 @@ def test_signup_blocked_when_domain_not_allowed() -> None:
 
 def test_signup_allowed_for_listed_domain() -> None:
     store = FakeStore()
-    resp = _client(store, allowed_domains=["example.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, allowed_domains=["example.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted == {
@@ -155,7 +173,7 @@ def test_signup_allowed_for_listed_domain() -> None:
 
 def test_existing_profile_bypasses_allowlist() -> None:
     store = FakeStore(exists=True)
-    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted is not None
@@ -163,7 +181,7 @@ def test_existing_profile_bypasses_allowlist() -> None:
 
 def test_invited_email_can_sign_up() -> None:
     store = FakeStore(invited=True)
-    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params={"code": "c"})
+    resp = _client(store, allowed_domains=["digitlcloud.com"]).get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.upserted is not None
@@ -172,7 +190,7 @@ def test_invited_email_can_sign_up() -> None:
 def test_super_admin_email_can_sign_up() -> None:
     store = FakeStore()
     client = _client(store, super_admin_emails=["boss@example.com"], allowed_domains=["digitlcloud.com"])
-    resp = client.get("/auth/google/callback", params={"code": "c"})
+    resp = client.get("/auth/google/callback", params=_callback_params())
     assert resp.status_code == 302
     assert resp.headers["location"] == "/"
     assert store.promoted == [store.profile.id]
@@ -286,13 +304,32 @@ class TestGoogleLogin:
         assert query["redirect_uri"] == ["http://localhost/api/auth/google/callback"]
         assert query["response_type"] == ["code"]
         assert query["scope"] == ["openid email profile"]
-        assert query["state"] == ["/"]
+        nonce, _, destination = query["state"][0].partition(":")
+        assert destination == "/"
+        assert nonce == response.cookies[auth_module.LOGIN_STATE_COOKIE]
+
+    def test_the_nonce_cookie_is_short_lived_and_httponly(self) -> None:
+        response = _client(FakeStore()).get("/auth/google")
+
+        cookie = response.headers["set-cookie"]
+        assert cookie.startswith(f"{auth_module.LOGIN_STATE_COOKIE}=")
+        assert "HttpOnly" in cookie
+        assert "SameSite=lax" in cookie
+        assert f"Max-Age={auth_module.LOGIN_STATE_MAX_AGE}" in cookie
+
+    def test_every_login_draws_a_fresh_nonce(self) -> None:
+        client = _client(FakeStore())
+
+        first = client.get("/auth/google").cookies[auth_module.LOGIN_STATE_COOKIE]
+        second = client.get("/auth/google").cookies[auth_module.LOGIN_STATE_COOKIE]
+
+        assert first != second
 
     def test_the_return_destination_rides_the_state_parameter(self) -> None:
         response = _client(FakeStore()).get("/auth/google?redirect=/jobs/42")
 
         query = parse_qs(urlparse(response.headers["location"]).query)
-        assert query["state"] == ["/jobs/42"]
+        assert query["state"][0].endswith(":/jobs/42")
 
     def test_an_unconfigured_client_id_is_a_500(self) -> None:
         app = FastAPI()
@@ -321,14 +358,14 @@ class TestGoogleCallbackFailures:
         config.google_client_secret = ""
         app.dependency_overrides[get_auth_config] = lambda: config
 
-        response = TestClient(app, follow_redirects=False).get("/auth/google/callback?code=c")
+        response = TestClient(app, follow_redirects=False).get("/auth/google/callback", params=_callback_params())
 
         assert response.status_code == 500
 
     def test_a_rejected_code_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(auth_module.httpx2, "post", lambda *a, **k: SimpleNamespace(status_code=400, json=dict))
 
-        response = _client(FakeStore()).get("/auth/google/callback?code=bad")
+        response = _client(FakeStore()).get("/auth/google/callback", params={**_callback_params(), "code": "bad"})
 
         assert response.status_code == 401
         assert response.json()["detail"] == "Failed to exchange authorization code"
@@ -340,7 +377,7 @@ class TestGoogleCallbackFailures:
             lambda *a, **k: SimpleNamespace(status_code=200, json=lambda: {"scope": "openid"}),
         )
 
-        response = _client(FakeStore()).get("/auth/google/callback?code=c")
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params())
 
         assert response.status_code == 401
         assert response.json()["detail"] == "No access token in response"
@@ -348,7 +385,7 @@ class TestGoogleCallbackFailures:
     def test_a_failed_userinfo_lookup_is_a_401(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(auth_module.httpx2, "get", lambda *a, **k: SimpleNamespace(status_code=403, json=dict))
 
-        response = _client(FakeStore()).get("/auth/google/callback?code=c")
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params())
 
         assert response.status_code == 401
         assert response.json()["detail"] == "Failed to fetch user info"
@@ -364,7 +401,7 @@ class TestGoogleCallbackFailures:
             lambda *a, **k: SimpleNamespace(status_code=200, json=lambda: userinfo),
         )
 
-        response = _client(FakeStore()).get("/auth/google/callback?code=c")
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params())
 
         assert response.status_code == 401
         assert response.json()["detail"] == "Incomplete user info from Google"
@@ -374,7 +411,7 @@ class TestGoogleCallbackSession:
     """A successful login lands a session cookie and honours the return destination."""
 
     def test_the_session_cookie_is_set_httponly(self) -> None:
-        response = _client(FakeStore()).get("/auth/google/callback?code=c")
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params())
 
         assert response.status_code == 302
         cookie = response.headers["set-cookie"]
@@ -382,22 +419,69 @@ class TestGoogleCallbackSession:
         assert "HttpOnly" in cookie
         assert "Max-Age=86400" in cookie
 
-    def test_an_app_relative_state_is_honoured(self) -> None:
-        response = _client(FakeStore()).get("/auth/google/callback?code=c&state=/jobs/42")
+    def test_an_app_relative_destination_is_honoured(self) -> None:
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params("/jobs/42?tab=runs"))
+
+        assert response.headers["location"] == "/jobs/42?tab=runs"
+
+    @pytest.mark.parametrize(
+        "destination",
+        ["https://evil.example.com/", "evil.example.com", "//evil.example.com", "/\\evil.example.com", ""],
+    )
+    def test_an_off_site_destination_is_refused_in_favour_of_the_root(self, destination: str) -> None:
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params(destination))
+
+        assert response.headers["location"] == "/"
+
+    def test_the_nonce_cookie_is_cleared(self) -> None:
+        response = _client(FakeStore()).get("/auth/google/callback", params=_callback_params())
+
+        assert f'{auth_module.LOGIN_STATE_COOKIE}=""' in response.headers["set-cookie"]
+
+    def test_a_login_round_trip_lands_at_the_requested_destination(self) -> None:
+        client = _client(FakeStore())
+        client.cookies.clear()
+
+        login = client.get("/auth/google?redirect=/jobs/42")
+        state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+        response = client.get("/auth/google/callback", params={"code": "c", "state": state})
 
         assert response.headers["location"] == "/jobs/42"
+        assert "session_token=token" in response.headers["set-cookie"]
 
-    @pytest.mark.parametrize("state", ["https://evil.example.com/", "evil.example.com"])
-    def test_an_absolute_state_is_refused_in_favour_of_the_root(self, state: str) -> None:
-        # Otherwise ``state`` is an open-redirect vector.
-        response = _client(FakeStore()).get(f"/auth/google/callback?code=c&state={state}")
 
-        assert response.headers["location"] == "/"
+class TestGoogleCallbackNonce:
+    """A callback is honoured only in the browser that started the login."""
 
-    def test_no_state_lands_at_the_root(self) -> None:
-        response = _client(FakeStore()).get("/auth/google/callback?code=c")
+    def test_a_callback_without_the_nonce_cookie_is_refused(self) -> None:
+        store = FakeStore()
+        client = _client(store)
+        client.cookies.clear()
 
-        assert response.headers["location"] == "/"
+        response = client.get("/auth/google/callback", params=_callback_params())
+
+        assert response.status_code == 302
+        assert response.headers["location"] == "/login?error=login_expired"
+        assert store.sessions_created == []
+        assert "session_token" not in response.cookies
+
+    @pytest.mark.parametrize("state", ["other-nonce:/", "/", ""])
+    def test_a_mismatched_nonce_is_refused(self, state: str) -> None:
+        store = FakeStore()
+
+        response = _client(store).get("/auth/google/callback", params={"code": "c", "state": state})
+
+        assert response.headers["location"] == "/login?error=login_expired"
+        assert store.sessions_created == []
+        assert f'{auth_module.LOGIN_STATE_COOKIE}=""' in response.headers["set-cookie"]
+
+    def test_a_refused_callback_never_exchanges_the_code(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exchanged: list[Any] = []
+        monkeypatch.setattr(auth_module.httpx2, "post", lambda *a, **k: exchanged.append(a))
+
+        _client(FakeStore()).get("/auth/google/callback", params=_callback_params(nonce="other-nonce"))
+
+        assert exchanged == []
 
 
 # -- Session-backed endpoints --------------------------------------------------
