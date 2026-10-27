@@ -8,9 +8,12 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
+from interloper.dag import DAGSpec
+from interloper_assets.demo.basic.source import DemoSource
 from interloper_db import Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
+from interloper_db.crypto import make_cipher
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -21,20 +24,27 @@ from interloper_scheduler.queue import QueueController
 _ORG = uuid4()
 
 
+class EmptySource(il.Source):
+    """A source that declares no assets."""
+
+
+_CATALOG = il.Catalog.from_assets([DemoSource, EmptySource])
+
+
 class _FakeLauncher(Launcher):
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
-        self.launched: list[UUID] = []
+        self.launched: list[tuple[UUID, DAGSpec, str]] = []
 
-    def launch(self, run_id: UUID) -> None:
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
         if self.fail:
             raise RuntimeError("no docker daemon")
-        self.launched.append(run_id)
+        self.launched.append((run.id, spec, token))
 
 
 @pytest.fixture
 def store() -> Iterator[Store]:
-    """A store over an in-memory database with the run tables.
+    """A store over an in-memory database with the run tables and the demo source in its catalog.
 
     Yields:
         The store bound to that database, disposed once the test finishes.
@@ -49,10 +59,11 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill, Event, Quota, Usage):
+    for model in (Component, ComponentRelation, Run, Backfill, Event, Execution, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog(components={}))
+        encrypt, decrypt = make_cipher("test-key")
+        yield Store(catalog=_CATALOG, encrypt=encrypt, decrypt=decrypt)
     finally:
         eng.dispose()
         engine_module._engine = None
@@ -63,29 +74,33 @@ def _statuses(store: Store) -> dict[UUID, str]:
         return {run.id: run.status for run in session.exec(select(Run)).all() if run.id}
 
 
-def _job(store: Store) -> UUID:
-    """Create a job component for a backfill to target.
+def _source(store: Store) -> UUID:
+    """Create the demo source, whose ``a -> b,c,d -> e`` assets a run executes.
 
     Args:
-        store: The store to create the job through.
+        store: The store to create it through.
 
     Returns:
-        The job's id.
+        The source's id.
     """
-    job_id = store.components.create(_ORG, kind="job", key="queue_job", name="J", config={}).id
-    assert job_id is not None
-    return job_id
+    source_id = store.components.create(_ORG, kind="source", key="demo_source").id
+    assert source_id is not None
+    return source_id
 
 
-def test_tick_drains_the_queue(store: Store) -> None:
-    first = store.runs.create(_ORG)
-    second = store.runs.create(_ORG)
+def test_tick_hands_each_run_its_spec_and_token(store: Store) -> None:
+    source_id = _source(store)
+    first = store.runs.create(_ORG, component_id=source_id, partition_key="2026-10-25")
+    second = store.runs.create(_ORG, component_id=source_id, partition_key="2026-10-25")
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()
 
-    assert set(launcher.launched) == {first.id, second.id}
+    assert {run_id for run_id, _spec, _token in launcher.launched} == {first.id, second.id}
     assert set(_statuses(store).values()) == {"dispatched"}
+    _, spec, token = launcher.launched[0]
+    assert token.startswith("ilr_")
+    assert len(il.DAG.from_spec(spec, catalog=_CATALOG).operations) == 5
 
 
 def test_empty_queue_is_a_noop(store: Store) -> None:
@@ -94,8 +109,63 @@ def test_empty_queue_is_a_noop(store: Store) -> None:
     assert launcher.launched == []
 
 
+def test_a_failed_scope_retry_disables_the_prior_successes(store: Store) -> None:
+    source_id = _source(store)
+    first = store.runs.create(_ORG, component_id=source_id, partition_key="2026-10-25")
+    with Session(store.engine) as session:
+        asset_a = session.exec(select(Component).where(Component.parent_id == source_id, Component.key == "a")).one()
+        asset_id = asset_a.id
+        session.add(Execution(run_id=first.id, component_id=asset_id, org_id=_ORG, status="success", attempts=1))
+        session.commit()
+    store.runs.fail(first.id, "boom")
+    store.runs.retry(first.id, scope="failed")
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    ((_run_id, spec, _token),) = launcher.launched
+    disabled = {
+        operation.id for operation in il.DAG.from_spec(spec, catalog=_CATALOG).operations if not operation.enabled
+    }
+    assert str(asset_id) in disabled
+
+
+def test_a_run_that_cannot_be_assembled_fails_with_the_reason(store: Store) -> None:
+    run = store.runs.create(_ORG)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    assert _statuses(store)[run.id] == "failed"
+    assert "deleted" in (store.runs.get(run.id).error or "")
+
+
+def test_a_run_whose_window_its_operations_refuse_fails_without_a_launch(store: Store) -> None:
+    run = store.runs.create(_ORG, component_id=_source(store))
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    failed = store.runs.get(run.id)
+    assert failed.status == "failed"
+    assert "not valid for every operation" in (failed.error or "")
+
+
+def test_a_target_selecting_nothing_succeeds_without_a_launch(store: Store) -> None:
+    empty_source = store.components.create(_ORG, kind="source", key="empty_source").id
+    run = store.runs.create(_ORG, component_id=empty_source)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    assert launcher.launched == []
+    assert _statuses(store)[run.id] == "success"
+
+
 def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
-    """A run that can't launch is completed like any failed run.
+    """A run that can't launch is failed like any failed run, with the reason.
 
     Pins the backfill-stall fix: each failed dispatch releases its
     concurrency slot (promoting the pending sibling), and the backfill
@@ -103,7 +173,7 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
     """
     backfill = store.backfills.create(
         _ORG,
-        component_id=_job(store),
+        component_id=_source(store),
         start_key="2026-01-01",
         end_key="2026-01-02",
         concurrency=1,
@@ -117,7 +187,7 @@ def test_failed_launch_takes_the_terminal_path(store: Store) -> None:
 
 
 def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -> None:
-    store.runs.create(_ORG)
+    store.runs.create(_ORG, component_id=_source(store), partition_key="2026-10-25")
     launcher = _FakeLauncher()
 
     QueueController(launcher=launcher, store=store)._tick()
@@ -125,7 +195,7 @@ def test_launch_emits_a_span_per_claimed_run(store: Store, span_exporter: Any) -
     spans = [s for s in span_exporter.get_finished_spans() if s.name == "interloper.launcher.launch"]
     assert len(spans) == 1
     assert spans[0].attributes is not None
-    assert spans[0].attributes["interloper.run.id"] == str(launcher.launched[0])
+    assert spans[0].attributes["interloper.run.id"] == str(launcher.launched[0][0])
     assert spans[0].attributes["interloper.launcher.type"] == "_FakeLauncher"
 
 

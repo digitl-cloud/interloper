@@ -6,8 +6,8 @@ config, and due-ness from the machine-owned ``state.next_renewal_at`` — the
 same tick / ``SKIP LOCKED`` / stamp-and-enqueue mechanics as the cron
 controller, pointed at connections. The controller only schedules: the
 renewal itself executes in a run pod like any other run (``Connection``
-is an operation, so the executor drives it through the operation
-contract), which writes the real next due time; the stamp made here is a
+is an operation, so the runner drives it through the operation contract),
+which writes the real next due time; the stamp made here is a
 provisional slot that re-arms the connection if that run never completes.
 """
 

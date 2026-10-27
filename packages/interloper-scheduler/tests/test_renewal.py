@@ -6,22 +6,28 @@ scheduling and dispatch logic is what these tests pin.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from collections.abc import Iterator
+from functools import partial
 from typing import Any
 from uuid import UUID, uuid4
 
 import httpx2
 import interloper as il
 import pytest
+from interloper.dag import DAGSpec
+from interloper.events import EventRecorder
 from interloper_db import Store
 from interloper_db import engine as engine_module
+from interloper_db.crypto import make_cipher
 from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
 
-from interloper_scheduler.executor import RunExecutor
+from interloper_scheduler.launcher import Launcher
+from interloper_scheduler.queue import QueueController
 from interloper_scheduler.renewal import RenewalController
 
 _ORG = uuid4()
@@ -65,7 +71,8 @@ def store() -> Iterator[Store]:
     for model in (Component, ComponentRelation, Run, Backfill, Event, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=_CATALOG)
+        encrypt, decrypt = make_cipher("test-key")
+        yield Store(catalog=_CATALOG, encrypt=encrypt, decrypt=decrypt)
     finally:
         eng.dispose()
         engine_module._engine = None
@@ -157,21 +164,42 @@ class TestRenewalController:
         assert _state(store, conn_id)["next_renewal_at"] > past
 
 
-class TestRenewalRuns:
-    def _dispatched_run(self, store: Store, conn_id: UUID) -> UUID:
-        with Session(store.engine) as session:
-            run = Run(component_id=conn_id, org_id=_ORG, status="dispatched")
-            session.add(run)
-            session.commit()
-            assert run.id is not None
-            return run.id
+class _RightHereLauncher(Launcher):
+    """Runs a launched run to its end in the calling thread, reporting through the store's ingest."""
 
+    def __init__(self, store: Store) -> None:
+        super().__init__()
+        self._store = store
+
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+        with EventRecorder(partial(self._store.runs.ingest, run.id), run_id=str(run.id)) as recorder:
+            runner = il.AsyncRunner(on_event=recorder)
+            dag = il.DAG.from_spec(spec, catalog=_CATALOG)
+            recorder.finish(asyncio.run(runner.run(dag, None, run.event_metadata(run.target))))
+
+
+def _execute(store: Store, conn_id: UUID) -> UUID:
+    """Queue a renewal run for a connection and execute it through the queue.
+
+    Args:
+        store: The store.
+        conn_id: The connection to renew.
+
+    Returns:
+        The run's id.
+    """
+    run = store.runs.create(_ORG, component_id=conn_id)
+    QueueController(launcher=_RightHereLauncher(store), store=store)._tick()
+    assert run.id is not None
+    return run.id
+
+
+class TestRenewalRuns:
     def test_successful_renewal_persists_and_schedules(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store, config={"token": "old"})
-        run_id = self._dispatched_run(store, conn_id)
         monkeypatch.setattr(RenewableConn, "renew", lambda self: il.Renewal(fields={"token": "NEW"}, expires_in=7200))
 
-        assert RunExecutor(store=store).execute(run_id) is True
+        run_id = _execute(store, conn_id)
 
         with Session(store.engine) as session:
             db_run = session.get(Run, run_id)
@@ -189,7 +217,6 @@ class TestRenewalRuns:
 
     def test_failed_renewal_stamps_curated_error_and_fails_the_run(self, store: Store, monkeypatch: pytest.MonkeyPatch):
         conn_id = _connection(store)
-        run_id = self._dispatched_run(store, conn_id)
 
         def boom(self: RenewableConn) -> il.Renewal:
             request = httpx2.Request("GET", "https://provider/exchange?client_secret=SECRET")
@@ -197,7 +224,7 @@ class TestRenewalRuns:
 
         monkeypatch.setattr(RenewableConn, "renew", boom)
 
-        assert RunExecutor(store=store).execute(run_id) is False
+        run_id = _execute(store, conn_id)
 
         with Session(store.engine) as session:
             db_run = session.get(Run, run_id)

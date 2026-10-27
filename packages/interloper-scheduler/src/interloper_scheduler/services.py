@@ -57,7 +57,7 @@ def scheduler_services(
     if worker or reaper:
         launcher = Launcher.from_settings(
             settings.launcher,
-            postgres=settings.postgres,
+            server=settings.server,
             runner=settings.runner,
             reaper=settings.reaper,
             catalog=catalog,

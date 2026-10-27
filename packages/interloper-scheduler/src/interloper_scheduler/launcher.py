@@ -2,20 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import threading
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
 
+from interloper.dag import DAG
 from interloper.errors import ConfigError
+from interloper.events import EventRecorder
+from interloper.partitioning import TimePartition
 from interloper.registry import Registry
+from interloper.runner import Runner
+from interloper.settings import AppSettings, RunnerSettings
 from interloper_db import Store
 from opentelemetry import context as otel_context
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from interloper.catalog import Catalog
-    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+    from interloper.dag import DAGSpec
+    from interloper.settings import LauncherSettings, ReaperSettings, ServerSettings
+    from interloper_db.models import Run
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +53,7 @@ class Launcher(ABC):
         cls,
         settings: LauncherSettings,
         *,
-        postgres: PostgresSettings,
+        server: ServerSettings,
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
@@ -58,11 +69,10 @@ class Launcher(ABC):
 
         Args:
             settings: Launcher settings (type + type-specific config).
-            postgres: Postgres settings forwarded to launchers that spawn
-                isolated processes (e.g. Docker).
+            server: Server settings; a launcher that spawns isolated processes
+                hands them the API's ``internal_url`` to report to.
             runner: Runner settings forwarded to every launcher.
-            reaper: Run liveness settings, whose heartbeat every run's
-                executor follows.
+            reaper: Run liveness settings, whose heartbeat every run follows.
             catalog: Catalog forwarded to launchers that spawn isolated
                 processes so they can reproduce an identical catalog
                 (``None`` is accepted by launchers that don't consume it).
@@ -85,7 +95,7 @@ class Launcher(ABC):
                 f"Is the matching interloper package installed?"
             )
         return launcher_cls.from_settings(
-            settings, postgres=postgres, runner=runner, reaper=reaper, catalog=catalog, store=store
+            settings, server=server, runner=runner, reaper=reaper, catalog=catalog, store=store
         )
 
     def __init__(
@@ -103,12 +113,43 @@ class Launcher(ABC):
         self._runner_config = runner_config or {}
 
     @abstractmethod
-    def launch(self, run_id: UUID) -> None:
-        """Launch a run for execution.
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+        """Start executing a dispatched run somewhere, with everything it needs in hand.
 
         Args:
-            run_id: The run UUID to execute.
+            run: The run, dispatched, its target loaded; its partition and its
+                event metadata come from it.
+            spec: The DAG the run executes, its connections resolved.
+            token: The run's token, which its reports carry.
         """
+
+    @staticmethod
+    def command(run: Run, spec_path: str) -> list[str]:
+        """The ``interloper run`` argv that executes *run* from the spec at *spec_path*.
+
+        The token is not an argument: it travels in the environment, which a
+        process listing does not show.
+
+        Args:
+            run: The run.
+            spec_path: Where the run's process finds the spec file.
+
+        Returns:
+            The argv.
+        """
+        argv = [
+            "interloper",
+            "run",
+            "--format",
+            "inline",
+            f"@{spec_path}",
+            f"--run-id={run.id}",
+            "--metadata",
+            json.dumps(run.event_metadata(run.target)),
+        ]
+        if run.partition_key:
+            argv.extend(["--date", run.partition_key])
+        return argv
 
     def diagnose(self, run_id: UUID) -> str | None:
         """Say why a launched run's workload stopped, when the launcher can tell.
@@ -128,10 +169,10 @@ class Launcher(ABC):
 
 
 class InProcessLauncher(Launcher):
-    """Launches runs in a detached thread using ``RunExecutor``.
+    """Launches runs in a detached thread of this process, reporting straight through the store's ingest.
 
-    Accepts an optional ``store`` so all runs share the same persistence
-    layer (encryption keys, etc.) rather than creating a fresh default.
+    The store is shared, so the run needs no token and makes no HTTP call;
+    otherwise it runs exactly as a pod's ``interloper run`` does.
     """
 
     def __init__(
@@ -146,20 +187,20 @@ class InProcessLauncher(Launcher):
         Args:
             runner_type: Runner type name (``async``, ``serial``, or a registered key).
             runner_config: Runner-specific kwargs forwarded to the runner constructor.
-            store: Optional Store instance to share with executors.
-            reaper: Run liveness settings the executors' heartbeat follows;
+            store: The Store runs report through. Defaults to the settings-configured one.
+            reaper: Run liveness settings the runs' recorders follow;
                 ``None`` reads them from the app settings.
         """
         super().__init__(runner_type=runner_type, runner_config=runner_config)
-        self._store = store
-        self._reaper = reaper
+        self._store = store or Store.from_settings()
+        self._reaper = reaper or AppSettings.get().reaper
 
     @classmethod
     def from_settings(
         cls,
         settings: LauncherSettings,
         *,
-        postgres: PostgresSettings,
+        server: ServerSettings,
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
@@ -169,10 +210,10 @@ class InProcessLauncher(Launcher):
 
         Args:
             settings: The launcher settings block, unused by this launcher.
-            postgres: Postgres settings, unused: the store is shared in-process.
-            runner: Runner settings the executor's runner is built from.
-            reaper: Run liveness settings the executors' heartbeat follows.
-            catalog: Catalog the store hydrates against.
+            server: Server settings, unused: the run reports through the shared store.
+            runner: Runner settings each run's runner is built from.
+            reaper: Run liveness settings the runs' recorders follow.
+            catalog: Catalog the store hydrates against, unused here.
             store: An existing Store to reuse. Defaults to ``None``, which
                 builds one from settings.
 
@@ -181,33 +222,48 @@ class InProcessLauncher(Launcher):
         """
         return cls(runner_type=runner.type, runner_config=runner.config, store=store, reaper=reaper)
 
-    def launch(self, run_id: UUID) -> None:
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
         """Launch a run in a background thread.
 
+        The run shares this process, so a lost run cannot exit it: the run is
+        ended in the database and its thread runs to its end.
+
         Args:
-            run_id: The run UUID to execute.
+            run: The dispatched run.
+            spec: The DAG it executes.
+            token: Unused: the run reports through the shared store.
         """
-        from interloper.runner import Runner
-        from interloper.settings import RunnerSettings
-
-        from interloper_scheduler.executor import RunExecutor
-
         runner = Runner.from_settings(RunnerSettings(type=self._runner_type, config=self._runner_config))
-        # The run shares this process, so a lost heartbeat cannot exit it:
-        # the run is ended in the database and its thread runs to its end.
-        executor = RunExecutor(store=self._store, runner=runner, reaper=self._reaper)
-
-        # A bare thread does not inherit contextvars — carry the launch-time
-        # OTel context across so the run's spans parent under the launch span.
+        dag = DAG.from_spec(spec)
+        # A bare thread does not inherit contextvars: the launch span is carried across so the run continues it.
         context = otel_context.get_current()
+        threading.Thread(
+            target=self._execute, args=(run, runner, dag, context), name=f"run-{run.id}", daemon=True
+        ).start()
+        logger.info("Launched run %s in a background thread", run.id)
 
-        def _execute() -> None:
-            token = otel_context.attach(context)
-            try:
-                executor.execute(run_id)
-            finally:
-                otel_context.detach(token)
+    def _execute(self, run: Run, runner: Runner, dag: DAG, context: otel_context.Context) -> None:
+        """Drive the run on its thread, its events and effects reported through the store's ingest.
 
-        thread = threading.Thread(target=_execute, daemon=True)
-        thread.start()
-        logger.info("Launched run %s in background thread", run_id)
+        Args:
+            run: The dispatched run.
+            runner: The runner to drive.
+            dag: The DAG it executes.
+            context: The launching thread's trace context, which the run continues.
+        """
+        attached = otel_context.attach(context)
+        recorder = EventRecorder(
+            partial(self._store.runs.ingest, run.id),
+            run_id=str(run.id),
+            heartbeat_interval=self._reaper.heartbeat_interval,
+            heartbeat_timeout=self._reaper.heartbeat_timeout,
+        )
+        window = TimePartition.from_key(run.partition_key) if run.partition_key else None
+        try:
+            with recorder:
+                recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
+                recorder.finish(asyncio.run(recorded.run(dag, window, run.event_metadata(run.target))))
+        except Exception:
+            logger.exception("Run %s did not complete", run.id)
+        finally:
+            otel_context.detach(attached)

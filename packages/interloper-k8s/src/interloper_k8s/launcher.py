@@ -1,10 +1,9 @@
-"""Kubernetes launcher: runs each job as a Kubernetes Job."""
+"""Kubernetes launcher: runs each run as a Kubernetes Job."""
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -13,9 +12,13 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.settings import LauncherSettings, PostgresSettings, ReaperSettings, RunnerSettings
+    from interloper.dag import DAGSpec
+    from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
+    from interloper_db.models import Run
 from interloper_scheduler.launcher import Launcher
 from kubernetes import client, config
+
+_SPEC_DIRECTORY = "/interloper/run"
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +26,10 @@ logger = logging.getLogger(__name__)
 class KubernetesLauncher(Launcher):
     """Launches each run as a Kubernetes Job.
 
-    The Job runs a single container that executes
-    ``interloper launch <run_id>``, which hydrates the DAG from the
-    database and runs it to completion.
-
-    Postgres connection parameters and the catalog are injected as
-    environment variables.  The caller (``Launcher.from_settings``) provides
-    the app-level defaults; any overrides from the launcher YAML
-    config take precedence.
+    The Job's container runs ``interloper run`` on the run's DAG spec. The
+    spec and the run's token travel in a Secret the Job owns, so Kubernetes
+    deletes it with the Job. The pod holds no database credentials: it reports
+    its events to the API's ``internal_url`` with that token.
     """
 
     @classmethod
@@ -38,7 +37,7 @@ class KubernetesLauncher(Launcher):
         cls,
         settings: LauncherSettings,
         *,
-        postgres: PostgresSettings,
+        server: ServerSettings,
         runner: RunnerSettings,
         reaper: ReaperSettings,
         catalog: Catalog | None,
@@ -46,20 +45,20 @@ class KubernetesLauncher(Launcher):
     ) -> KubernetesLauncher:
         """Construct from scheduler settings (registry construction hook).
 
-        Postgres credentials and the catalog are forwarded into the spawned
+        The API's internal URL and the catalog are forwarded into the spawned
         environment; ``settings.config`` supplies the launcher-specific
         keyword arguments.
 
         Args:
             settings: The launcher settings block (image, namespace, resources).
-            postgres: Postgres credentials forwarded into the spawned pod.
+            server: Server settings whose ``internal_url`` the pod reports to.
             runner: Runner settings the spawned process builds its runner from.
             reaper: Run liveness settings whose heartbeat fields the spawned
                 process follows.
             catalog: Catalog forwarded as import paths; required, since a pod
                 cannot see the caller's.
-            store: Accepted for the registry's uniform hook and unused — a pod
-                opens its own connection, not the caller's.
+            store: Accepted for the registry's uniform hook and unused: a pod
+                reports through the API.
 
         Returns:
             The configured launcher.
@@ -72,11 +71,7 @@ class KubernetesLauncher(Launcher):
             raise ConfigError("The 'kubernetes' launcher requires a catalog.")
         return cls(
             catalog=catalog,
-            postgres_host=postgres.host,
-            postgres_port=postgres.port,
-            postgres_user=postgres.user,
-            postgres_password=postgres.password,
-            postgres_database=postgres.database,
+            internal_url=server.internal_url,
             runner_type=runner.type,
             runner_config=runner.config,
             heartbeat_interval=reaper.heartbeat_interval,
@@ -87,12 +82,8 @@ class KubernetesLauncher(Launcher):
     def __init__(
         self,
         catalog: Catalog,
-        postgres_host: str,
-        postgres_port: int,
-        postgres_user: str,
-        postgres_password: str,
-        postgres_database: str,
         image: str,
+        internal_url: str = "http://localhost:3000",
         namespace: str = "default",
         runner_type: str = "async",
         runner_config: dict[str, Any] | None = None,
@@ -111,12 +102,9 @@ class KubernetesLauncher(Launcher):
 
         Args:
             catalog: Catalog to inject into the container.
-            postgres_host: Postgres host for the container.
-            postgres_port: Postgres port for the container.
-            postgres_user: Postgres user for the container.
-            postgres_password: Postgres password for the container.
-            postgres_database: Postgres database for the container.
             image: Container image to use for the Job.
+            internal_url: The API's base URL as reached from the pod, which
+                the run reports its events to.
             namespace: Kubernetes namespace for Jobs.
             runner_type: Runner type name forwarded to the container.
             runner_config: Runner-specific kwargs forwarded to the container.
@@ -128,10 +116,8 @@ class KubernetesLauncher(Launcher):
             tolerations: Pod tolerations for scheduling.
             ttl_seconds_after_finished: Seconds before K8s auto-deletes
                 completed Jobs.
-            env_from: Names of Secrets mounted as env into the container.
-                Runs hydrate connections, so they need the same
-                runtime-resolved credentials (e.g. the in-house OAuth
-                provider trio) the API resolves from its environment.
+            env_from: Names of Secrets mounted as env into the container, for
+                whatever else a deployment's runs read from their environment.
             heartbeat_interval: Seconds between a run's heartbeats, forwarded
                 to the container.
             heartbeat_timeout: The reaper's heartbeat timeout in seconds,
@@ -143,11 +129,7 @@ class KubernetesLauncher(Launcher):
         self._heartbeat_interval = heartbeat_interval
         self._heartbeat_timeout = heartbeat_timeout
         self._namespace = namespace
-        self._postgres_host = postgres_host
-        self._postgres_port = postgres_port
-        self._postgres_user = postgres_user
-        self._postgres_password = postgres_password
-        self._postgres_database = postgres_database
+        self._internal_url = internal_url
         self._service_account_name = service_account_name
         self._image_pull_policy = image_pull_policy
         self._image_pull_secrets = image_pull_secrets or []
@@ -164,28 +146,70 @@ class KubernetesLauncher(Launcher):
         self._batch_v1 = client.BatchV1Api()
         self._core_v1 = client.CoreV1Api()
 
-    def launch(self, run_id: UUID) -> None:
-        """Create a Kubernetes Job that executes a single run.
+    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+        """Create the run's Job suspended, the Secret it owns, then start the Job.
+
+        The Secret carries the run's DAG spec, mounted as a file, and its
+        token, read into the environment: neither belongs in the Job's own
+        spec, which every reader of Jobs and Pods sees. Owned by the Job, the
+        Secret is deleted with it. The Job is created suspended because the
+        Secret's owner reference needs the Job's uid, and a pod started before
+        its Secret exists would wait for it forever; a Job whose Secret cannot
+        be created is deleted before it ever starts a pod.
 
         Args:
-            run_id: The run UUID to execute.
+            run: The dispatched run.
+            spec: The DAG it executes, written into the Secret.
+            token: The run's token, written into the Secret.
         """
-        env = self._build_env()
-        job_name = f"interloper-run-{str(run_id)[:8]}"
+        name = f"interloper-run-{str(run.id)[:8]}"
+        labels = {"interloper.run_id": str(run.id)}
+        created = self._batch_v1.create_namespaced_job(namespace=self._namespace, body=self._job(run, name, labels))
+        try:
+            owner = client.V1OwnerReference(api_version="batch/v1", kind="Job", name=name, uid=created.metadata.uid)
+            secret = client.V1Secret(
+                metadata=client.V1ObjectMeta(
+                    name=name, namespace=self._namespace, labels=labels, owner_references=[owner]
+                ),
+                string_data={"spec.json": spec.model_dump_json(), "token": token},
+            )
+            self._core_v1.create_namespaced_secret(namespace=self._namespace, body=secret)
+            self._batch_v1.patch_namespaced_job(name=name, namespace=self._namespace, body={"spec": {"suspend": False}})
+        except Exception:
+            self._batch_v1.delete_namespaced_job(name=name, namespace=self._namespace, propagation_policy="Background")
+            raise
+        logger.info("Created Job %s for run %s", name, run.id)
 
+    def _job(self, run: Run, name: str, labels: dict[str, str]) -> client.V1Job:
+        """The suspended Job that runs the run's spec, read from its Secret.
+
+        Args:
+            run: The dispatched run.
+            name: The Job's name, which its Secret shares.
+            labels: The labels the Job and its pod carry.
+
+        Returns:
+            The Job to create.
+        """
+        command = self.command(run, f"{_SPEC_DIRECTORY}/spec.json")
+        token = client.V1EnvVar(
+            name="INTERLOPER_RUN_TOKEN",
+            value_from=client.V1EnvVarSource(secret_key_ref=client.V1SecretKeySelector(name=name, key="token")),
+        )
         container = client.V1Container(
             name="interloper",
             image=self._image,
             image_pull_policy=self._image_pull_policy,
-            command=["interloper"],
-            args=["launch", str(run_id)],
-            env=env,
+            command=command[:1],
+            args=command[1:],
+            env=[*self._build_env(), token],
             env_from=[client.V1EnvFromSource(secret_ref=client.V1SecretEnvSource(name=n)) for n in self._env_from]
             if self._env_from
             else None,
             resources=self._build_resources(),
+            volume_mounts=[client.V1VolumeMount(name="spec", mount_path=_SPEC_DIRECTORY, read_only=True)],
         )
-
+        spec_file = client.V1KeyToPath(key="spec.json", path="spec.json")
         pod_spec = client.V1PodSpec(
             containers=[container],
             restart_policy="Never",
@@ -195,34 +219,21 @@ class KubernetesLauncher(Launcher):
             image_pull_secrets=[client.V1LocalObjectReference(name=s) for s in self._image_pull_secrets]
             if self._image_pull_secrets
             else None,
+            volumes=[
+                client.V1Volume(name="spec", secret=client.V1SecretVolumeSource(secret_name=name, items=[spec_file]))
+            ],
         )
-
-        job = client.V1Job(
+        return client.V1Job(
             api_version="batch/v1",
             kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=job_name,
-                namespace=self._namespace,
-                labels={"interloper.run_id": str(run_id)},
-            ),
+            metadata=client.V1ObjectMeta(name=name, namespace=self._namespace, labels=labels),
             spec=client.V1JobSpec(
-                template=client.V1PodTemplateSpec(
-                    metadata=client.V1ObjectMeta(
-                        labels={"interloper.run_id": str(run_id)},
-                    ),
-                    spec=pod_spec,
-                ),
+                template=client.V1PodTemplateSpec(metadata=client.V1ObjectMeta(labels=labels), spec=pod_spec),
                 backoff_limit=0,
                 ttl_seconds_after_finished=self._ttl_seconds_after_finished,
+                suspend=True,
             ),
         )
-
-        try:
-            self._batch_v1.create_namespaced_job(namespace=self._namespace, body=job)
-            logger.info("Created Job %s for run %s", job_name, run_id)
-        except Exception:
-            logger.exception("Failed to create Job for run %s", run_id)
-            raise
 
     def diagnose(self, run_id: UUID) -> str | None:
         """Say why a run's pod stopped, from its termination state.
@@ -268,29 +279,20 @@ class KubernetesLauncher(Launcher):
     # -- Helpers ---------------------------------------------------------------
 
     def _build_env(self) -> list[client.V1EnvVar]:
-        """Build environment variables for the container.
+        """Build the plain environment variables for the container; the token is read from the run's Secret.
 
         Returns:
             The environment the run pod is started with.
-
         """
         env_map: dict[str, str] = {
-            "INTERLOPER_POSTGRES_HOST": self._postgres_host,
-            "INTERLOPER_POSTGRES_PORT": str(self._postgres_port),
-            "INTERLOPER_POSTGRES_USER": self._postgres_user,
-            "INTERLOPER_POSTGRES_PASSWORD": self._postgres_password,
-            "INTERLOPER_POSTGRES_DATABASE": self._postgres_database,
             "INTERLOPER_CATALOG": json.dumps(self._catalog.to_paths()),
             "INTERLOPER_RUNNER_TYPE": self._runner_type,
             "INTERLOPER_RUNNER_CONFIG": json.dumps(self._runner_config),
             "INTERLOPER_REAPER_HEARTBEAT_INTERVAL": str(self._heartbeat_interval),
             "INTERLOPER_REAPER_HEARTBEAT_TIMEOUT": str(self._heartbeat_timeout),
+            "INTERLOPER_SERVER_INTERNAL_URL": self._internal_url,
         }
-        encryption_key = os.environ.get("INTERLOPER_ENCRYPTION_KEY")
-        if encryption_key:
-            env_map["INTERLOPER_ENCRYPTION_KEY"] = encryption_key
         env_map.update(child_process_env())
-
         return [client.V1EnvVar(name=k, value=v) for k, v in env_map.items()]
 
     def _build_resources(self) -> client.V1ResourceRequirements | None:

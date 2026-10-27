@@ -1197,6 +1197,15 @@ class TestRunToken:
         with pytest.raises(ConfigError, match="INTERLOPER_ENCRYPTION_KEY"):
             store.runs.token(run.id)
 
+    def test_the_claimed_run_carries_its_target(self, store: Store) -> None:
+        store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))
+
+        run = store.runs.claim_next()
+
+        assert run is not None
+        assert run.target is not None and run.target.name == "Nightly"
+        assert run.event_metadata(run.target)["target_name"] == "Nightly"
+
 
 class TestClaimNext:
     """The queue's claim: oldest claimable first, dispatched only with a quota slot."""
