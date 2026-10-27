@@ -4,7 +4,8 @@ Tokens are opaque bearer secrets whose SHA-256 hash is the only thing
 stored. A token stands for its user and carries no organisation: resolving
 one yields the holder, and the caller reads the holder's live role in the
 organisation it acts in, so a role change or removal applies at once. A
-login session is a token too, the one the app's cookie carries.
+login session is a token too, the one the app's cookie carries, and so is
+an OAuth access token, which a client holds for the surface it was issued for.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from interloper_db.store.page import Page, PageQuery
 
 TOKEN_PREFIX = "ilp_"
 
+ACCESS_TOKEN_PREFIX = "ila_"
+
 TOKEN_PREFIX_LEN = 12
 
 # last_used_at is informational; throttling the bump keeps hot MCP sessions
@@ -34,15 +37,17 @@ LAST_USED_THROTTLE_SECONDS = 60
 class TokenStore:
     """Store methods for tokens."""
 
-    def __init__(self, engine: Engine, *, session_expiry: timedelta) -> None:
+    def __init__(self, engine: Engine, *, session_expiry: timedelta, access_token_expiry: timedelta) -> None:
         """Bind the facet to what it works through.
 
         Args:
             engine: Engine the facet opens its sessions on.
             session_expiry: How long a login session stays valid.
+            access_token_expiry: How long an OAuth access token stays valid.
         """
         self._engine = engine
         self._session_expiry = session_expiry
+        self._access_token_expiry = access_token_expiry
 
     def create_session(self, user_id: UUID) -> str:
         """Open a login session and return its raw secret, the cookie's value.
@@ -87,6 +92,36 @@ class TokenStore:
                 .values(revoked_at=datetime.now(timezone.utc))
             )
             commit(session)
+
+    def create_access(self, user_id: UUID, client_id: str, resource: Audience) -> str:
+        """Issue an OAuth access token a client holds for a user on one surface.
+
+        Like a session, an access token is never listed, so it keeps no
+        display prefix.
+
+        Args:
+            user_id: Profile UUID of the user the client acts for.
+            client_id: The OAuth client holding the token.
+            resource: The surface the token is issued for; it resolves there only.
+
+        Returns:
+            The raw token; only its hash is stored.
+        """
+        raw = ACCESS_TOKEN_PREFIX + secrets.token_urlsafe(36)
+        with session_scope(self._engine) as session:
+            save(
+                session,
+                Token(
+                    user_id=user_id,
+                    kind=TokenKind.ACCESS,
+                    client_id=client_id,
+                    resource=resource.value,
+                    token_prefix="",
+                    token_hash=hash_token(raw),
+                    expires_at=datetime.now(timezone.utc) + self._access_token_expiry,
+                ),
+            )
+        return raw
 
     def create_personal(self, user_id: UUID, name: str, expires_at: datetime | None = None) -> tuple[Token, str]:
         """Create a personal access token.

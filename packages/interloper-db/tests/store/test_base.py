@@ -120,7 +120,9 @@ class TestFromSettings:
                     lambda cls: SimpleNamespace(
                         secrets=SimpleNamespace(encryption_key=encryption_key),
                         quota=quota,
-                        auth=SimpleNamespace(session_expiry_days=2),
+                        auth=SimpleNamespace(
+                            session_expiry_days=2, access_token_expiry_minutes=15, refresh_token_expiry_days=7
+                        ),
                     )
                 ),
             )
@@ -176,6 +178,15 @@ class TestFromSettings:
 
         assert Store.from_settings().tokens._session_expiry == timedelta(days=2)
 
+    @pytest.mark.parametrize("keyed", [True, False])
+    def test_the_oauth_lifetimes_come_from_the_auth_settings(self, settings, keyed: bool) -> None:
+        settings(Fernet.generate_key().decode() if keyed else None)
+
+        store = Store.from_settings()
+
+        assert store.tokens._access_token_expiry == timedelta(minutes=15)
+        assert store.oauth._refresh_token_expiry == timedelta(days=7)
+
     def test_the_engine_comes_from_the_process(self, settings, component_db: Engine) -> None:
         settings(None)
 
@@ -216,6 +227,7 @@ class TestFacets:
         "members",
         "invitations",
         "tokens",
+        "oauth",
         "conversations",
         "components",
         "relations",
