@@ -7,10 +7,10 @@ from pydantic import Field
 class VideosStatsByPlatform(Schema):
     """The Ads by Platform report provides insights into ad performance categorized by platform. It includes key metrics such as clicks, conversion value, conversion rate, cost per conversion, cost per result, cost per thousand impressions (CPM), click-through rate (CTR), currency used, total number of impressions, platform, and real-time metrics."""
 
-    ad_id: int | None = Field(default=None, description="The unique ID of the TikTok advertisement.")
+    ad_id: str | None = Field(default=None, description="The unique ID of the TikTok advertisement.")
     ad_name: str | None = Field(default=None, description="The name of the TikTok advertisement.")
     ad_text: str | None = Field(default=None, description="The creative text or caption used in the ad.")
-    adgroup_id: int | None = Field(default=None, description="The unique ID of the ad group.")
+    adgroup_id: str | None = Field(default=None, description="The unique ID of the ad group.")
     adgroup_name: str | None = Field(default=None, description="The name of the ad group.")
     average_video_play: float | None = Field(
         default=None, description="Average time the video was played per video play (total play time / video plays)."
@@ -18,7 +18,7 @@ class VideosStatsByPlatform(Schema):
     average_video_play_per_user: float | None = Field(
         default=None, description="Average time the video was played per unique user."
     )
-    campaign_id: int | None = Field(default=None, description="The unique ID of the campaign.")
+    campaign_id: str | None = Field(default=None, description="The unique ID of the campaign.")
     campaign_name: str | None = Field(default=None, description="The name of the campaign.")
     clicks: int | None = Field(default=None, description="Total number of clicks on the ad.")
     clicks_on_music_disc: int | None = Field(

@@ -216,10 +216,10 @@ def _run(source: Any, key: str) -> list[dict[str, Any]]:
     return asset.data(context=il.ExecutionContext(asset, il.TimePartition(value=DAY).window))
 
 
-def _conform(key: str, rows: list[dict[str, Any]], schema: type[Schema]) -> pd.DataFrame:
+def _conform(key: str, rows: list[dict[str, Any]], schema: type[Schema], *, strict: bool = True) -> pd.DataFrame:
     asset = next(a for a in _source().assets if type(a).key == key)
     normalized = asset.normalizer.normalize(rows)
-    return TableData.from_data(normalized).reconcile(schema, strict=True)
+    return TableData.from_data(normalized).reconcile(schema, strict=strict)
 
 
 class TestEntities:
@@ -445,7 +445,9 @@ class TestProfiles:
 
         rows = _run(_source_with_api(handler), "profiles")
         assert [row["profileId"] for row in rows] == [123]
-        out = _conform("profiles", rows, schemas.Profiles)
+        # /v2/profiles sends profileId as a number, which the default RECONCILE cast turns into the text id
+        out = _conform("profiles", rows, schemas.Profiles, strict=False)
+        assert out.loc[0, "profile_id"] == "123"
         assert out.loc[0, "daily_budget"] == 10.0 and out.loc[0, "account_info_sub_type"] == "KDP"
         assert pd.isna(out.loc[0, "account_info_name"])
 

@@ -8,9 +8,9 @@ class AdsStats(Schema):
     """The Criteo Ads report provides insights into the performance of marketing campaigns aimed at driving online sales and conversions. It includes key metrics such as click-through rate, cost per acquisition, revenue generated, and dimensions such as ad ID, advertiser, and date."""
 
     ad: str | None = Field(..., description="The name of the ad")
-    ad_id: int | None = Field(..., description="The unique identifier of the ad")
+    ad_id: str | None = Field(..., description="The unique identifier of the ad")
     adset: str | None = Field(..., description="The name of the adset")
-    adset_id: int | None = Field(..., description="The unique identifier of the adset")
+    adset_id: str | None = Field(..., description="The unique identifier of the adset")
     advertiser_all_value: float | None = Field(
         ..., description="The total value generated for the advertiser across all channels and attribution models"
     )
@@ -66,7 +66,7 @@ class AdsStats(Schema):
         ..., description="The rate at which visitors leave the website after viewing only one page"
     )
     campaign: str | None = Field(..., description="The name of the campaign")
-    campaign_id: int | None = Field(..., description="The unique identifier of the campaign")
+    campaign_id: str | None = Field(..., description="The unique identifier of the campaign")
     click_through_rate: float | None = Field(
         ...,
         description="The ratio of users who click on a specific link to the number of total users who view a page, email, or advertisement",

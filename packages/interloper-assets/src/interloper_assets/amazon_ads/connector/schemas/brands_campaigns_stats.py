@@ -15,7 +15,7 @@ class BrandsCampaignsStats(Schema):
     campaign_budget_amount: float | None = Field(..., description="The budget amount for the campaign")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code for the campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_rule_based_budget_amount: float | None = Field(
         ..., description="The budget amount based on campaign rules"

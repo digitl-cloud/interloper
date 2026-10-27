@@ -8,7 +8,7 @@ class CampaignsStats(Schema):
     """The Campaigns report provides insights into the performance of your advertising campaigns. It includes key metrics such as clicks, impressions, spend, and engagement rates. With this information, advertisers can evaluate the effectiveness of their campaigns, identify successful strategies, and optimize their advertising efforts to achieve their objectives more efficiently."""
 
     account_currency: str | None = Field(default=None, description="The currency used for the account")
-    account_id: int | None = Field(default=None, description="The ID of the account")
+    account_id: str | None = Field(default=None, description="The ID of the account")
     account_name: str | None = Field(default=None, description="The name of the account")
     action_values_add_payment_info: float | None = Field(
         default=None, description="Action values for adding payment info"
@@ -175,7 +175,7 @@ class CampaignsStats(Schema):
         default=None, description="The attribution setting applied to the conversion metrics"
     )
     buying_type: str | None = Field(default=None, description="The type of buying")
-    campaign_id: int | None = Field(default=None, description="The ID of the campaign")
+    campaign_id: str | None = Field(default=None, description="The ID of the campaign")
     campaign_name: str | None = Field(default=None, description="The name of the campaign")
     clicks: int | None = Field(default=None, description="The number of clicks")
     converted_product_quantity: float | None = Field(

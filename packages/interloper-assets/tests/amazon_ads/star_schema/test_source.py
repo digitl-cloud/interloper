@@ -102,41 +102,42 @@ def _seed(warehouse, profile_id: str, *, entity: bool, campaign_entities: bool =
     )
     client.execute(
         f"CREATE TABLE amazon_ads.products_campaigns_stats__{profile_id} AS SELECT * FROM (VALUES "
-        f"(DATE '2026-10-01', 11{profile_id}, 'SP campaign', 'ENABLED', 50.0, 'DAILY', 'EUR', "
-        "100, 10, 12.5, 2, 40.0, 1, 'SP group one'), "
-        f"(DATE '2026-10-01', 11{profile_id}, 'SP campaign renamed', CAST(NULL AS VARCHAR), 50.0, 'DAILY', 'EUR', "
-        "50, 5, 2.5, 1, 10.0, 2, 'SP group two')"
+        f"(DATE '2026-10-01', '11{profile_id}', 'SP campaign', 'ENABLED', 50.0, 'DAILY', 'EUR', "
+        "100, 10, 12.5, 2, 40.0, '1', 'SP group one'), "
+        f"(DATE '2026-10-01', '11{profile_id}', 'SP campaign renamed', CAST(NULL AS VARCHAR), 50.0, 'DAILY', 'EUR', "
+        "50, 5, 2.5, 1, 10.0, '2', 'SP group two')"
         ") AS t(date, campaign_id, campaign_name, campaign_status, campaign_budget_amount, campaign_budget_type, "
         "campaign_budget_currency_code, impressions, clicks, spend, purchases_14d, sales_14d, ad_group_id, "
         "ad_group_name)"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.brands_campaigns_stats__{profile_id} AS SELECT * FROM (VALUES "
-        f"(DATE '2026-10-01', 22{profile_id}, 'SB campaign', 'PAUSED', 20.0, 'DAILY', 'EUR', 30, 3, 4.0, 1, 15.0)"
+        f"(DATE '2026-10-01', '22{profile_id}', 'SB campaign', 'PAUSED', 20.0, 'DAILY', 'EUR', 30, 3, 4.0, 1, 15.0)"
         ") AS t(date, campaign_id, campaign_name, campaign_status, campaign_budget_amount, campaign_budget_type, "
         "campaign_budget_currency_code, impressions, clicks, cost, purchases, sales)"
     )
     client.execute(
-        f"CREATE TABLE amazon_ads.display_campaigns_stats__{profile_id} (date DATE, campaign_id BIGINT, "
+        f"CREATE TABLE amazon_ads.display_campaigns_stats__{profile_id} (date DATE, campaign_id VARCHAR, "
         "campaign_name VARCHAR, campaign_status VARCHAR, campaign_budget_amount DOUBLE, "
         "campaign_budget_currency_code VARCHAR, impressions BIGINT, clicks BIGINT, cost DOUBLE, "
         "purchases BIGINT, sales DOUBLE)"
     )
     client.execute(
         f"CREATE TABLE amazon_ads.brands_ad_groups_stats__{profile_id} AS SELECT * FROM (VALUES "
-        f"(DATE '2026-10-01', 22{profile_id}, 'SB campaign', 3, 'SB group')"
+        f"(DATE '2026-10-01', '22{profile_id}', 'SB campaign', '3', 'SB group')"
         ") AS t(date, campaign_id, campaign_name, ad_group_id, ad_group_name)"
     )
     client.execute(
-        f"CREATE TABLE amazon_ads.display_ad_groups_stats__{profile_id} (date DATE, campaign_id BIGINT, "
-        "campaign_name VARCHAR, ad_group_id BIGINT, ad_group_name VARCHAR)"
+        f"CREATE TABLE amazon_ads.display_ad_groups_stats__{profile_id} (date DATE, campaign_id VARCHAR, "
+        "campaign_name VARCHAR, ad_group_id VARCHAR, ad_group_name VARCHAR)"
     )
     collected = "TRUE" if entity else "FALSE"
     client.execute(
         f"CREATE TABLE amazon_ads.profiles__{profile_id} AS SELECT * FROM (VALUES "
-        f"(DATE '2026-09-30', {profile_id}, 'DE', 'EUR', 'Europe/Berlin', 'A1PA6795UKMFR9', 'acc', 'vendor', "
+        f"(DATE '2026-09-30', '{profile_id}', 'DE', 'EUR', 'Europe/Berlin', 'A1PA6795UKMFR9', 'acc', 'vendor', "
         "'Acme DE', TRUE), "
-        "(DATE '2026-09-30', 999, 'FR', 'EUR', 'Europe/Paris', 'A13V1IB3VIYZZH', 'acc', 'vendor', 'Someone else', TRUE)"
+        "(DATE '2026-09-30', '999', 'FR', 'EUR', 'Europe/Paris', 'A13V1IB3VIYZZH', 'acc', 'vendor', "
+        "'Someone else', TRUE)"
         ") AS t(date, profile_id, country_code, currency_code, timezone, account_info_marketplace_string_id, "
         f"account_info_id, account_info_type, account_info_name, account_info_valid_payment_method) WHERE {collected}"
     )

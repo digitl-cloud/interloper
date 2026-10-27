@@ -62,7 +62,7 @@ class CampaignsStats(Schema):
         ..., description="The rate at which visitors leave the website after viewing only one page"
     )
     campaign: str | None = Field(..., description="The name of the campaign")
-    campaign_id: int | None = Field(..., description="The unique identifier for the campaign")
+    campaign_id: str | None = Field(..., description="The unique identifier for the campaign")
     click_through_rate: float | None = Field(
         ...,
         description="The ratio of users who click on a specific link to the number of total users who view a page, email, or advertisement",

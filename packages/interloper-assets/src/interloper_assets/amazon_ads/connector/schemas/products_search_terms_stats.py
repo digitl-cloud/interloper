@@ -9,7 +9,7 @@ class ProductsSearchTermsStats(Schema):
 
     acos_clicks_14d: float | None = Field(..., description="The advertising cost of sales for clicks within 14 days")
     acos_clicks_7d: float | None = Field(..., description="The advertising cost of sales for clicks within 7 days")
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     ad_keyword_status: str | None = Field(..., description="The status of the ad keyword")
     attributed_sales_same_sku_14d: float | None = Field(
@@ -27,7 +27,7 @@ class ProductsSearchTermsStats(Schema):
     campaign_budget_amount: float | None = Field(..., description="The budget amount for the campaign")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code for the campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_status: str | None = Field(..., description="The status of the campaign")
     click_through_rate: float | None = Field(..., description="The click-through rate")
@@ -38,7 +38,7 @@ class ProductsSearchTermsStats(Schema):
     impressions: int | None = Field(..., description="The number of impressions")
     keyword: str | None = Field(..., description="The keyword used for the ad")
     keyword_bid: float | None = Field(..., description="The bid for the keyword")
-    keyword_id: int | None = Field(..., description="The ID of the keyword")
+    keyword_id: str | None = Field(..., description="The ID of the keyword")
     keyword_type: str | None = Field(..., description="The type of the keyword")
     kindle_edition_normalized_pages_read_14d: int | None = Field(
         ..., description="The pages read for Kindle Edition Normalized Pages within 14 days"
@@ -47,7 +47,7 @@ class ProductsSearchTermsStats(Schema):
         ..., description="The royalties for Kindle Edition Normalized Pages within 14 days"
     )
     match_type: str | None = Field(..., description="The match type of the keyword")
-    portfolio_id: int | None = Field(..., description="The ID of the portfolio")
+    portfolio_id: str | None = Field(..., description="The ID of the portfolio")
     purchases_14d: int | None = Field(..., description="The purchases within 14 days")
     purchases_1d: int | None = Field(..., description="The purchases within 1 day")
     purchases_30d: int | None = Field(..., description="The purchases within 30 days")

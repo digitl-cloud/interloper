@@ -7,12 +7,12 @@ from pydantic import Field
 class AdsStatsByCountry(Schema):
     """The Ads by Country report provides insights into ad performance categorized by country. It includes key metrics such as clicks, conversion value, conversion rate, cost per conversion, cost per result, country code, cost per thousand impressions (CPM), click-through rate (CTR), currency used, total number of impressions, and real-time metrics."""
 
-    ad_id: int | None = Field(default=None, description="Unique identifier for the ad")
+    ad_id: str | None = Field(default=None, description="Unique identifier for the ad")
     ad_name: str | None = Field(default=None, description="Name of the ad")
     ad_text: str | None = Field(default=None, description="Text content of the ad")
-    adgroup_id: int | None = Field(default=None, description="Unique identifier for the adgroup")
+    adgroup_id: str | None = Field(default=None, description="Unique identifier for the adgroup")
     adgroup_name: str | None = Field(default=None, description="Name for the adgroup")
-    campaign_id: int | None = Field(default=None, description="Unique identifier for the campaign")
+    campaign_id: str | None = Field(default=None, description="Unique identifier for the campaign")
     campaign_name: str | None = Field(default=None, description="Name of the campaign")
     clicks: int | None = Field(default=None, description="Number of clicks on the ad")
     conversion: int | None = Field(default=None, description="Conversion value of the ad")
@@ -20,7 +20,7 @@ class AdsStatsByCountry(Schema):
     cost_per_1000_reached: float | None = Field(default=None, description="Cost per 1000 reached impressions")
     cost_per_conversion: float | None = Field(default=None, description="Cost per conversion")
     cost_per_result: float | None = Field(default=None, description="Cost per result")
-    cost_per_secondary_goal_result: str | None = Field(default=None, description="Cost per secondary goal result")
+    cost_per_secondary_goal_result: float | None = Field(default=None, description="Cost per secondary goal result")
     country_code: str | None = Field(default=None, description="The country code")
     cpc: float | None = Field(default=None, description="Cost per thousand impressions")
     cpm: float | None = Field(default=None, description="Cost per thousand impressions")

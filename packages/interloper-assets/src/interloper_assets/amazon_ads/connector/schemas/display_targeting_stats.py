@@ -7,7 +7,7 @@ from pydantic import Field
 class DisplayTargetingStats(Schema):
     """Display targeting performance metrics including clicks, impressions, and targeting expression details."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     ad_keyword_status: str | None = Field(..., description="The status of the ad keyword")
     add_to_cart: int | None = Field(..., description="The number of add to cart")
@@ -19,7 +19,7 @@ class DisplayTargetingStats(Schema):
     branded_searches_clicks: int | None = Field(..., description="The number of clicks for branded searches")
     branded_searches_views: int | None = Field(..., description="The number of views for branded searches")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     clicks: int | None = Field(..., description="The number of clicks")
     cost: float | None = Field(..., description="The cost")
@@ -62,7 +62,7 @@ class DisplayTargetingStats(Schema):
     sales_clicks: float | None = Field(..., description="The number of clicks for sales")
     sales_promoted_clicks: float | None = Field(..., description="The number of clicks for sales promoted")
     targeting_expression: str | None = Field(..., description="The expression of the targeting")
-    targeting_id: int | None = Field(..., description="The ID of the targeting")
+    targeting_id: str | None = Field(..., description="The ID of the targeting")
     targeting_text: str | None = Field(..., description="The text of the targeting")
     units_sold: int | None = Field(..., description="The number of units sold")
     units_sold_clicks: int | None = Field(..., description="The number of clicks for units sold")

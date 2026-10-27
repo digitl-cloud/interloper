@@ -7,7 +7,7 @@ from pydantic import Field
 class BrandsTargetingStats(Schema):
     """Brands targeting performance metrics including clicks, impressions, purchases, and targeting expression details."""
 
-    ad_group_id: int | None = Field(..., description="The ID of the ad group")
+    ad_group_id: str | None = Field(..., description="The ID of the ad group")
     ad_group_name: str | None = Field(..., description="The name of the ad group")
     ad_keyword_status: str | None = Field(..., description="The status of the ad keyword")
     add_to_cart: int | None = Field(..., description="The number of add to cart")
@@ -18,7 +18,7 @@ class BrandsTargetingStats(Schema):
     campaign_budget_amount: float | None = Field(..., description="The amount of campaign budget")
     campaign_budget_currency_code: str | None = Field(..., description="The currency code of the campaign budget")
     campaign_budget_type: str | None = Field(..., description="The type of campaign budget")
-    campaign_id: int | None = Field(..., description="The ID of the campaign")
+    campaign_id: str | None = Field(..., description="The ID of the campaign")
     campaign_name: str | None = Field(..., description="The name of the campaign")
     campaign_status: str | None = Field(..., description="The status of the campaign")
     clicks: int | None = Field(..., description="The number of clicks")
@@ -30,7 +30,7 @@ class BrandsTargetingStats(Schema):
     ecp_add_to_cart: float | None = Field(..., description="The eCP add to cart")
     impressions: int | None = Field(..., description="The number of impressions")
     keyword_bid: float | None = Field(..., description="The bid for the keyword")
-    keyword_id: int | None = Field(..., description="The ID of the keyword")
+    keyword_id: str | None = Field(..., description="The ID of the keyword")
     keyword_text: str | None = Field(..., description="The text of the keyword")
     keyword_type: str | None = Field(..., description="The type of keyword")
     match_type: str | None = Field(..., description="The type of match")
@@ -67,7 +67,7 @@ class BrandsTargetingStats(Schema):
     sales_clicks: float | None = Field(..., description="The number of clicks for sales")
     sales_promoted: float | None = Field(..., description="The number of promoted sales")
     targeting_expression: str | None = Field(..., description="The expression of the targeting")
-    targeting_id: int | None = Field(..., description="The ID of the targeting")
+    targeting_id: str | None = Field(..., description="The ID of the targeting")
     targeting_text: str | None = Field(..., description="The text of the targeting")
     targeting_type: str | None = Field(..., description="The type of targeting")
     top_of_search_impression_share: float | None = Field(..., description="The impression share at the top of search")

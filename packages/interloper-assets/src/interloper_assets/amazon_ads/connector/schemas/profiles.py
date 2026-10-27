@@ -10,7 +10,7 @@ class Profiles(Schema):
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    profile_id: int | None = Field(default=None, description="The Amazon Ads profile ID")
+    profile_id: str | None = Field(default=None, description="The Amazon Ads profile ID")
     country_code: str | None = Field(default=None, description="The account's country code")
     currency_code: str | None = Field(default=None, description="The account's currency code")
     daily_budget: float | None = Field(default=None, description="The profile's daily budget, in its currency")
