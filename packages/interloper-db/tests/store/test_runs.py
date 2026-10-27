@@ -139,27 +139,6 @@ def _job_with_retry(store: Store, **policy: Any) -> UUID:
         return row.id
 
 
-def _running_run(store: Store) -> Run:
-    """A run over a job, dispatched and marked running.
-
-    Args:
-        store: The store under test.
-
-    Returns:
-        The running run, its target loaded.
-    """
-    run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
-    assert store.runs.claim_next() is not None
-    with Session(store.engine) as session:
-        row = session.get(Run, run.id)
-        assert row is not None
-        row.status = RunStatus.RUNNING
-        row.started_at = dt.datetime.now(dt.timezone.utc)
-        session.add(row)
-        session.commit()
-    return store.runs.get(run.id)
-
-
 def _operation_event(run: Run, event_type: il.EventType, component_id: UUID, *, attempt: int = 1) -> il.Event:
     """One of an operation's lifecycle events, with the id the runner derives.
 
@@ -212,27 +191,6 @@ def _running_over_a_source(store: Store) -> tuple[Run, UUID]:
     return store.runs.get(run.id), asset_id
 
 
-def _age_heartbeat(store: Store, run_id: UUID, *, seconds: int) -> dt.datetime:
-    """Push a run's heartbeat back in time.
-
-    Args:
-        store: The store under test.
-        run_id: The run.
-        seconds: How far back.
-
-    Returns:
-        The aged heartbeat.
-    """
-    aged = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
-    with Session(store.engine) as session:
-        row = session.get(Run, run_id)
-        assert row is not None
-        row.heartbeat_at = aged
-        session.add(row)
-        session.commit()
-    return aged
-
-
 class TestIngest:
     """One batch a pod reports: saved, folded into the run's state, and answered with whether to carry on."""
 
@@ -246,22 +204,13 @@ class TestIngest:
         assert running is True
         assert saved.status == RunStatus.RUNNING and saved.started_at is not None and saved.heartbeat_at is not None
 
-    def test_an_empty_batch_is_a_heartbeat(self, store: Store) -> None:
-        run = _running_run(store)
-        aged = _age_heartbeat(store, run.id, seconds=60)
-
-        assert store.runs.ingest(run.id, []) is True
-
-        heartbeat = store.runs.get(run.id).heartbeat_at
-        assert heartbeat is not None and heartbeat.replace(tzinfo=dt.timezone.utc) > aged
-
     def test_run_completed_ends_the_run_as_a_success(self, store: Store) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
         assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_COMPLETED)]) is False
         assert store.runs.get(run.id).status == RunStatus.SUCCESS
 
     def test_run_failed_ends_the_run_with_the_events_reason(self, store: Store) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
         component_id = uuid4()
         started = _operation_event(run, il.EventType.OPERATION_STARTED, component_id)
         failed = _run_event(run, il.EventType.RUN_FAILED, error="RuntimeError: destination unreachable")
@@ -274,7 +223,7 @@ class TestIngest:
         assert [event.error for event in verdicts] == ["RuntimeError: destination unreachable"]
 
     def test_a_run_failed_only_by_its_operations_has_no_reason_of_its_own(self, store: Store) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
 
         store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_FAILED)])
 
@@ -296,7 +245,7 @@ class TestIngest:
     def test_after_the_run_ended_events_are_saved_and_the_pod_is_told_to_stop(
         self, store: Store, caplog: pytest.LogCaptureFixture
     ) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
         store.runs.fail(run.id, "No heartbeat since noon")
         late = il.Event(type=il.EventType.LOG, metadata={"run_id": str(run.id), "message": "still here"})
 
@@ -369,16 +318,16 @@ class TestEndings:
     """A run's endings carry their reason on the run itself."""
 
     def test_fail_records_its_reason_on_the_run_and_authors_no_event(self, store: Store) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
 
         store.runs.fail(run.id, "boom")
 
         failed = store.runs.get(run.id)
         assert (failed.status, failed.error) == (RunStatus.FAILED, "boom")
-        assert store.events.list(run.org_id, EventQuery(), run_id=run.id).items == []
+        assert store.events.list(run.org_id, EventQuery(event_type=["run_failed"]), run_id=run.id).total == 0
 
     def test_fail_labels_a_started_operation_failed_with_the_reason(self, store: Store) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
         component_id = uuid4()
         store.events.save(_operation_event(run, il.EventType.OPERATION_STARTED, component_id), run.org_id, run.id)
 
@@ -390,7 +339,7 @@ class TestEndings:
     def test_complete_records_a_success_and_warns_about_open_operations(
         self, store: Store, caplog: pytest.LogCaptureFixture
     ) -> None:
-        run = _running_run(store)
+        run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
         store.events.save(_operation_event(run, il.EventType.OPERATION_QUEUED, uuid4()), run.org_id, run.id)
 
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
@@ -1244,30 +1193,27 @@ class TestClaimNext:
 
 
 class TestStartAndFail:
-    """The executor's and the reaper's transitions."""
+    """A run's start, folded from its pod's events, and the reaper's failure."""
 
-    def test_start_marks_the_run_running_with_its_target(self, store: Store) -> None:
+    def test_run_started_marks_the_run_running_with_its_target(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID, component_id=_component(store, "job", name="Nightly"))
         _drain(store)
 
-        started = store.runs.start(run.id)
+        store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
 
+        started = store.runs.get(run.id)
         assert (started.status, started.started_at is not None) == (RunStatus.RUNNING, True)
         assert started.heartbeat_at is not None
         assert started.target is not None and started.target.name == "Nightly"
 
-    def test_a_run_not_dispatched_cannot_start(self, store: Store) -> None:
+    def test_a_run_not_dispatched_does_not_start(self, store: Store, caplog: pytest.LogCaptureFixture) -> None:
         run = store.runs.create(_ORG_ID)
 
-        with pytest.raises(ConflictError, match="not dispatched"):
-            store.runs.start(run.id)
+        with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
+            assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is False
 
-    def test_a_terminal_run_cannot_start(self, store: Store) -> None:
-        run = store.runs.create(_ORG_ID)
-        store.runs.fail(run.id, "failed")
-
-        with pytest.raises(ConflictError):
-            store.runs.start(run.id)
+        assert store.runs.get(run.id).status == RunStatus.QUEUED
+        assert "reported starting while already queued" in caplog.text
 
     def test_fail_records_the_reason_on_the_run(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID)
@@ -1286,9 +1232,9 @@ class TestStartAndFail:
         assert store.events.list(_ORG_ID, EventQuery(), run_id=run.id).items == []
         assert store.runs.get(run.id).status == RunStatus.SUCCESS
 
-    @pytest.mark.parametrize("verb", ["start", "fail", "mark_hooks_evaluated"])
+    @pytest.mark.parametrize("verb", ["ingest", "fail", "mark_hooks_evaluated"])
     def test_a_missing_run_is_not_found(self, store: Store, verb: str) -> None:
-        arguments = (uuid4(), "gone") if verb == "fail" else (uuid4(),)
+        arguments = {"ingest": (uuid4(), []), "fail": (uuid4(), "gone")}.get(verb, (uuid4(),))
 
         with pytest.raises(NotFoundError):
             getattr(store.runs, verb)(*arguments)
@@ -1303,19 +1249,19 @@ class TestHeartbeat:
 
         assert store.runs.get(run.id).heartbeat_at is not None
 
-    def test_a_running_run_renews_its_heartbeat(self, store: Store) -> None:
+    def test_every_batch_renews_a_running_runs_heartbeat(self, store: Store) -> None:
         run = _running(store)
         _stamp(store, run, heartbeat_at=_ago(60))
 
-        assert store.runs.heartbeat(run) is True
+        assert store.runs.ingest(run, []) is True
         heartbeat = store.runs.get(run).heartbeat_at
-        assert heartbeat is not None and heartbeat > _ago(30)
+        assert heartbeat is not None and heartbeat.replace(tzinfo=dt.timezone.utc) > _ago(30)
 
     def test_a_run_ended_elsewhere_is_told_to_stop(self, store: Store) -> None:
         run = _running(store)
         store.runs.cancel(run)
 
-        assert store.runs.heartbeat(run) is False
+        assert store.runs.ingest(run, []) is False
 
 
 class TestOverdue:
@@ -1389,7 +1335,7 @@ class TestReap:
         run = _running(store)
         stale = _ago(200)
         _stamp(store, run, heartbeat_at=stale)
-        store.runs.heartbeat(run)
+        store.runs.ingest(run, [])
 
         assert store.runs.reap(run, "lost", heartbeat_at=stale) is None
         assert store.runs.get(run).status == RunStatus.RUNNING
@@ -1412,7 +1358,7 @@ class TestCancel:
         if stage != "queued":
             _drain(store)
         if stage == "running":
-            store.runs.start(run.id)
+            store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
 
         canceled = store.runs.cancel(run.id)
 
@@ -1457,14 +1403,15 @@ class TestCancel:
 
 
 def _running(store: Store, *, component_id: UUID | None = None) -> UUID:
-    """Create a run and take it through dispatch and start.
+    """Create a run and take it through dispatch and its pod's ``run_started``.
 
     Returns:
         The running run's id.
     """
     run = store.runs.create(_ORG_ID, component_id=component_id)
     _stamp(store, run.id, status=RunStatus.DISPATCHED)
-    return store.runs.start(run.id).id
+    assert store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)]) is True
+    return run.id
 
 
 class TestHooksPending:
@@ -1597,8 +1544,8 @@ class TestNamedReads:
         backfill = _backfill(store, days=3, concurrency=3)
         queued = store.backfills.attempts(backfill.id)
         _drain(store)
-        store.runs.start(queued[2].id)
-        store.runs.start(queued[0].id)
+        for run in (queued[2], queued[0]):
+            store.runs.ingest(run.id, [_run_event(run, il.EventType.RUN_STARTED)])
 
         assert [run.id for run in store.backfills.attempts(backfill.id)] == [queued[2].id, queued[0].id, queued[1].id]
 

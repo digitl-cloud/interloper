@@ -9,12 +9,11 @@ from __future__ import annotations
 import builtins
 import threading
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 from interloper.settings import ReaperSettings
 from interloper.telemetry.tracer import tracer
 from interloper_db import ConflictError, NotFoundError, RunStatus, Store
@@ -43,7 +42,7 @@ def test_execute_roots_its_own_trace_linked_to_the_dispatch_span(hydrated_asset:
         assert executor.execute(run.id) is True
     dispatch_context = dispatch.get_span_context()
 
-    assert store.completed == [(run.id, True)]
+    assert store.events[-1].type is il.EventType.RUN_COMPLETED
 
     spans = {s.name: s for s in span_exporter.get_finished_spans()}
     root = spans["interloper.run.execute"]
@@ -174,90 +173,158 @@ def _dispatched(component_id: UUID | None = None) -> Run:
 
 
 class _RecordingStore:
-    """Store stand-in recording completions, failures and applied effects."""
+    """Store stand-in recording every batch ingested and every failure."""
 
     def __init__(
         self,
         target: Any,
         *,
         run: Run | None = None,
-        complete_raises: bool = False,
-        already_terminal: bool = False,
+        running: bool = True,
+        fail_raises: type[Exception] | None = None,
     ) -> None:
         """Set up the fake.
 
         Args:
-            target: What ``components.load`` hands back.
-            run: What ``runs.start`` hands back; ``None`` reads as a missing run.
-            complete_raises: Whether recording the verdict raises, standing in
-                for a store that is unreachable while reporting a failure.
-            already_terminal: Whether recording the verdict is refused as
-                already terminal, standing in for a verdict the reaper wrote first.
+            target: What ``components.load`` hands back; ``None`` raises as a missing component.
+            run: What ``runs.get`` hands back; ``None`` reads as a missing run.
+            running: What every ingest answers once the run started.
+            fail_raises: An exception ``runs.fail`` raises, standing in for an
+                unreachable store or a verdict another writer recorded first.
         """
-        self.completed: list[tuple[UUID, bool]] = []
-        self.failures: list[str] = []
-        self.merged: list[tuple[UUID, dict[str, Any]]] = []
-        self.stamped: list[tuple[UUID, dict[str, Any]]] = []
+        self.ingested: list[tuple[list[il.Event], Any]] = []
+        self.failures: list[tuple[UUID, str]] = []
+        self._target = target
         self._run = run
-        self._complete_raises = complete_raises
-        self._already_terminal = already_terminal
-        self.components = SimpleNamespace(
-            load=lambda _component_id: target,
-            merge_config=lambda component_id, config: self.merged.append((component_id, config)),
-            stamp_state=lambda component_id, **state: self.stamped.append((component_id, state)),
-        )
-        self.runs = SimpleNamespace(start=self._start, complete=self._complete, fail=self._fail)
-        self.events = SimpleNamespace(save=lambda event, org_id, run_id: None)
+        self._running = running
+        self._fail_raises = fail_raises
+        self.components = SimpleNamespace(load=self._load)
+        self.completed: list[UUID] = []
+        self.runs = SimpleNamespace(get=self._get, ingest=self._ingest, fail=self._fail, complete=self.completed.append)
         self.executions = SimpleNamespace(list=lambda org_id, query, run_id: SimpleNamespace(items=[]))
 
-    def _start(self, run_id: UUID) -> Run:
+    @property
+    def events(self) -> list[il.Event]:
+        """Every event ingested, in order."""
+        return [event for batch, _ in self.ingested for event in batch]
+
+    def _load(self, component_id: UUID) -> Any:
+        if self._target is None:
+            raise NotFoundError(f"Component {component_id} not found")
+        return self._target
+
+    def _get(self, run_id: UUID, *, org_id: UUID | None = None) -> Run:
         if self._run is None:
             raise NotFoundError(f"Run {run_id} not found")
         return self._run
 
-    def _complete(self, run_id: UUID) -> None:
-        self._end(run_id, success=True)
+    def _ingest(self, run_id: UUID, events: list[il.Event], effects: Any = None) -> bool:
+        self.ingested.append((list(events), effects))
+        return self._running
 
     def _fail(self, run_id: UUID, error: str, *, metadata: dict[str, Any] | None = None) -> None:
-        self._end(run_id, success=False)
-        self.failures.append(error)
-
-    def _end(self, run_id: UUID, *, success: bool) -> None:
-        if self._complete_raises:
-            raise RuntimeError("store unreachable")
-        if self._already_terminal:
-            raise ConflictError(f"Run {run_id} is already failed")
-        self.completed.append((run_id, success))
+        if self._fail_raises is not None:
+            raise self._fail_raises(f"Run {run_id} cannot be failed")
+        self.failures.append((run_id, error))
 
 
-def _executor(store: _RecordingStore) -> RunExecutor:
+def _executor(store: _RecordingStore, **options: Any) -> RunExecutor:
     """Build an executor over a recording store.
 
     Args:
         store: The fake standing in for the real ``Store``.
+        **options: ``reaper`` and ``on_lost``.
 
     Returns:
         The executor, its store cast to the type the constructor declares.
     """
-    return RunExecutor(store=cast(Store, store), runner=il.AsyncRunner())
+    options.setdefault("reaper", ReaperSettings.model_construct(heartbeat_interval=10, heartbeat_timeout=90))
+    return RunExecutor(store=cast(Store, store), runner=il.AsyncRunner(), **options)
+
+
+class _Rotating(il.Operation):
+    """An operation that rotates a credential, as a renewal does."""
+
+    kind: ClassVar[str] = "rotating_fixture"
+
+    async def execute(self, context: il.OperationContext) -> il.OperationResult:
+        """Rotate the credential.
+
+        Args:
+            context: The execution context, unused.
+
+        Returns:
+            The rotated credential as a config effect.
+        """
+        return il.OperationResult(config={"refresh_token": "rotated"})
+
+
+class TestReporting:
+    """Everything a run says reaches the store through one path: ingest."""
+
+    def test_every_event_reaches_ingest_from_start_to_verdict(self, hydrated_asset: il.Asset) -> None:
+        run = _dispatched()
+        store = _RecordingStore(hydrated_asset, run=run)
+
+        assert _executor(store).execute(run.id) is True
+
+        assert store.events[0].type is il.EventType.RUN_STARTED
+        assert store.events[-1].type is il.EventType.RUN_COMPLETED
+        assert store.failures == []
+
+    def test_a_failed_operation_fails_the_run_through_its_own_run_failed(self) -> None:
+        @il.asset()
+        def broken() -> list[dict[str, Any]]:
+            raise RuntimeError("vendor 500")
+
+        run = _dispatched()
+        store = _RecordingStore(broken(id=str(uuid4()), destinations=[il.MemoryDestination()]), run=run)
+
+        assert _executor(store).execute(run.id) is False
+
+        assert store.events[-1].type is il.EventType.RUN_FAILED
+        assert store.failures == []
+
+    def test_the_effects_ride_with_the_last_batch(self) -> None:
+        operation = _Rotating(id=str(uuid4()))
+        run = _dispatched()
+        store = _RecordingStore(operation, run=run)
+
+        assert _executor(store).execute(run.id) is True
+
+        (ending_batch,) = [
+            (batch, effects)
+            for batch, effects in store.ingested
+            if any(e.type is il.EventType.RUN_COMPLETED for e in batch)
+        ]
+        assert ending_batch[1] == {operation.id: il.Effect(config={"refresh_token": "rotated"})}
+        assert all(effects is None for batch, effects in store.ingested if batch is not ending_batch[0])
+
+    def test_a_run_ended_elsewhere_is_handed_to_on_lost(self, hydrated_asset: il.Asset) -> None:
+        run = _dispatched()
+        store = _RecordingStore(hydrated_asset, run=run, running=False)
+        lost = threading.Event()
+
+        assert _executor(store, on_lost=lost.set).execute(run.id) is False
+        assert lost.is_set()
 
 
 class TestRunLookup:
-    """A run that cannot be executed is skipped rather than half-started."""
+    """A run that cannot be executed is skipped, never half-started."""
 
     def test_a_missing_run_is_skipped(self) -> None:
         store = _RecordingStore(None)
 
         assert _executor(store).execute(uuid4()) is False
-        assert store.completed == []
+        assert store.ingested == [] and store.failures == []
 
-    def test_a_run_whose_target_was_deleted_fails_with_the_reason(self) -> None:
-        run = Run(id=uuid4(), component_id=None, org_id=uuid4(), status=RunStatus.DISPATCHED)
-        store = _RecordingStore(None, run=run)
+    def test_a_run_no_longer_dispatched_is_skipped(self, hydrated_asset: il.Asset) -> None:
+        run = _dispatched()
+        run.status = RunStatus.CANCELED
+        store = _RecordingStore(hydrated_asset, run=run)
 
         assert _executor(store).execute(run.id) is False
-        assert store.completed == [(run.id, False)]
-        assert "deleted" in store.failures[0]
+        assert store.ingested == [] and store.failures == []
 
 
 class _NotAWorkload:
@@ -266,151 +333,68 @@ class _NotAWorkload:
     kind = "destination"
 
 
-class TestWorkloadValidation:
-    """A component whose kind declares no workload fails the run."""
+class TestAssembly:
+    """A run that cannot be assembled is failed with the reason, before anything executes."""
+
+    def test_a_deleted_target_fails_the_run(self) -> None:
+        run = Run(id=uuid4(), component_id=None, org_id=uuid4(), status=RunStatus.DISPATCHED)
+        store = _RecordingStore(None, run=run)
+
+        assert _executor(store).execute(run.id) is False
+        ((failed_id, error),) = store.failures
+        assert failed_id == run.id and "deleted" in error
+        assert store.ingested == []
 
     def test_a_non_workload_target_fails_the_run(self) -> None:
-        # Silently succeeding would report a run that materialized nothing.
         run = _dispatched()
         store = _RecordingStore(_NotAWorkload(), run=run)
 
         assert _executor(store).execute(run.id) is False
-        assert store.completed == [(run.id, False)]
-
-    def test_the_failure_is_reported_as_an_event(self) -> None:
-        run = _dispatched()
-        store = _RecordingStore(_NotAWorkload(), run=run)
-
-        _executor(store).execute(run.id)
-
-        (error,) = store.failures
+        ((_, error),) = store.failures
         assert "declares no workload" in error
 
     def test_a_store_that_cannot_record_the_failure_still_returns_false(self) -> None:
-        # Otherwise the launcher would read the raise as a crash, not a failed run.
         run = _dispatched()
-        store = _RecordingStore(_NotAWorkload(), run=run, complete_raises=True)
+        store = _RecordingStore(_NotAWorkload(), run=run, fail_raises=RuntimeError)
 
         assert _executor(store).execute(run.id) is False
 
-
-class TestAlreadyTerminal:
-    """A run another writer finished first is not this executor's to finish."""
-
-    def test_it_logs_and_reports_failure_without_retrying_the_completion(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_a_failure_another_writer_recorded_first_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
         run = _dispatched()
-
-        class EmptyWorkload(il.Source):
-            """Source that selects none of its assets."""
-
-        store = _RecordingStore(EmptyWorkload(), run=run, already_terminal=True)
+        store = _RecordingStore(_NotAWorkload(), run=run, fail_raises=ConflictError)
 
         with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
             assert _executor(store).execute(run.id) is False
 
-        assert store.completed == []
-        assert [record.levelname for record in caplog.records] == ["WARNING"]
-        assert str(run.id) in caplog.records[0].getMessage()
-
-    def test_a_failure_another_writer_completed_first_is_logged(self, caplog: pytest.LogCaptureFixture) -> None:
-        run = _dispatched()
-        store = _RecordingStore(_NotAWorkload(), run=run, already_terminal=True)
-
-        with caplog.at_level("WARNING", logger="interloper_scheduler.executor"):
-            assert _executor(store).execute(run.id) is False
-
-        assert store.failures == []
         assert "completed by another writer first" in caplog.text
+
+    def test_a_window_the_operations_refuse_fails_the_run_with_the_reason(self) -> None:
+        @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+        def daily() -> list[dict[str, Any]]:
+            return []
+
+        run = _dispatched()
+        run.partition_key = "2026-10"
+        store = _RecordingStore(daily(id=str(uuid4()), destinations=[il.MemoryDestination()]), run=run)
+
+        assert _executor(store).execute(run.id) is False
+        ((_, error),) = store.failures
+        assert "window" in error.lower()
+        assert store.events == []
 
 
 class TestEmptyWorkload:
-    """A workload that resolves to no operations succeeds without a DAG run."""
+    """A workload that resolves to no operations still reports a successful run."""
 
     def test_it_completes_successfully(self) -> None:
-        run = _dispatched()
-
         class EmptyWorkload(il.Source):
             """Source that selects none of its assets."""
 
+        run = _dispatched()
         store = _RecordingStore(EmptyWorkload(), run=run)
 
         assert _executor(store).execute(run.id) is True
-        assert store.completed == [(run.id, True)]
-
-
-class TestHeartbeat:
-    """The run beats while it executes, and a run ended elsewhere is handed to ``on_lost``."""
-
-    def test_a_run_ended_elsewhere_is_handed_to_on_lost(self) -> None:
-        run = _dispatched()
-        lost = threading.Event()
-
-        @il.asset()
-        def slow() -> list[dict[str, Any]]:
-            lost.wait(2)
-            return []
-
-        store = _RecordingStore(slow(id=str(uuid4()), destinations=[il.MemoryDestination()]), run=run)
-        store.runs.heartbeat = lambda run_id: False
-        reaper = ReaperSettings.model_construct(heartbeat_interval=0.01, heartbeat_timeout=1)
-        executor = RunExecutor(store=cast(Store, store), runner=il.AsyncRunner(), reaper=reaper, on_lost=lost.set)
-
-        executor.execute(run.id)
-
-        assert lost.is_set()
-
-
-class TestApplyEffects:
-    """An operation's returned effects land on its component row."""
-
-    @staticmethod
-    def _result(effects: il.OperationResult | None) -> il.RunResult:
-        component_id = str(uuid4())
-        info = ExecutionInfo(
-            component_id=component_id,
-            component_key="a",
-            status=ExecutionStatus.COMPLETED,
-        )
-        info.result = effects
-        return RunResult(executions={component_id: info})
-
-    def test_config_effects_are_merged(self, hydrated_asset: il.Asset) -> None:
-        store = _RecordingStore(hydrated_asset)
-        executor = _executor(store)
-
-        executor._apply_effects(self._result(il.OperationResult(config={"cursor": "abc"})))
-
-        assert [config for _id, config in store.merged] == [{"cursor": "abc"}]
-        assert store.stamped == []
-
-    def test_state_effects_are_stamped(self, hydrated_asset: il.Asset) -> None:
-        store = _RecordingStore(hydrated_asset)
-        executor = _executor(store)
-
-        executor._apply_effects(self._result(il.OperationResult(state={"next_run_at": None})))
-
-        assert [state for _id, state in store.stamped] == [{"next_run_at": None}]
-        assert store.merged == []
-
-    def test_a_node_without_effects_is_untouched(self, hydrated_asset: il.Asset) -> None:
-        store = _RecordingStore(hydrated_asset)
-        executor = _executor(store)
-
-        executor._apply_effects(self._result(None))
-
-        assert store.merged == []
-        assert store.stamped == []
-
-    def test_empty_effects_write_nothing(self, hydrated_asset: il.Asset) -> None:
-        store = _RecordingStore(hydrated_asset)
-        executor = _executor(store)
-
-        executor._apply_effects(self._result(il.OperationResult()))
-
-        assert store.merged == []
-        assert store.stamped == []
+        assert store.completed == [run.id]
 
 
 class _UpstreamFixture(il.Asset):
@@ -446,7 +430,7 @@ class TestUpstreamJoinsReadOnly:
     directly; the DAG (phase 1 Task 6) is what joins it as a read-only node.
     The executor no longer walks anything itself, so this exercises the real
     ``RunExecutor.execute`` path, capturing the assembled DAG through
-    ``_run_dag`` to inspect what it built.
+    ``_assemble`` to inspect what it built.
     """
 
     def test_a_bound_upstream_is_joined_and_made_non_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -457,13 +441,15 @@ class TestUpstreamJoinsReadOnly:
         run = _dispatched()
 
         built: list[il.DAG] = []
-        real_run_dag = RunExecutor._run_dag
+        real_assemble = RunExecutor._assemble
 
-        def _capturing_run_dag(self: RunExecutor, dag: il.DAG, *args: Any, **kwargs: Any) -> il.RunResult:
+        def _capturing_assemble(self: RunExecutor, db_run: Run) -> il.DAG | None:
+            dag = real_assemble(self, db_run)
+            assert dag is not None
             built.append(dag)
-            return real_run_dag(self, dag, *args, **kwargs)
+            return dag
 
-        monkeypatch.setattr(RunExecutor, "_run_dag", _capturing_run_dag)
+        monkeypatch.setattr(RunExecutor, "_assemble", _capturing_assemble)
 
         store = _RecordingStore(target, run=run)
         executor = _executor(store)
