@@ -79,9 +79,9 @@ def _capture() -> Iterator[list[Event]]:
         EventBus.unsubscribe(captured.append)
 
 
-def _state(source: il.Source, *, reports_progress: bool = True) -> tuple[RunState, dict[str, Any]]:
+def _state(source: il.Source) -> tuple[RunState, dict[str, Any]]:
     dag = il.DAG(source)
-    state = RunState(dag, None, {"run_id": "run-1"}, reports_progress=reports_progress)
+    state = RunState(dag, None, {"run_id": "run-1"})
     return state, {operation.key: operation for operation in dag.operations}
 
 
@@ -335,36 +335,6 @@ class TestDone:
         state, _ = chain
 
         assert not state.done
-
-
-class TestProgressReportedElsewhere:
-    """Without ``reports_progress``, starts and retries are recorded silently; verdicts still emit."""
-
-    def test_start_and_retry_are_silent_and_the_verdict_is_not(self) -> None:
-        state, operations = _state(ChainSource(destinations=[il.MemoryDestination()]), reports_progress=False)
-        root = operations["root"]
-
-        with _capture() as events:
-            state.start(root)
-            state.retry(root, "transient")
-            state.finish(root, OperationResult())
-
-        assert [event.type for event in events] == [EventType.OPERATION_COMPLETED]
-        assert state.executions[root.id].status is ExecutionStatus.COMPLETED
-
-    def test_the_verdict_lands_on_the_attempt_the_child_reached(self) -> None:
-        state, operations = _state(ChainSource(destinations=[il.MemoryDestination()]), reports_progress=False)
-        root = operations["root"]
-
-        with _capture() as events:
-            state.start(root)
-            state.advance(root, 3)
-            state.advance(root, 2)
-            state.finish(root, OperationResult(error="exited"))
-
-        [failed] = [event for event in events if event.type is EventType.OPERATION_FAILED]
-        assert failed.id == RunState.operation_event_id("run-1", root.id, EventType.OPERATION_FAILED, attempt=3)
-        assert state.executions[root.id].attempt == 3
 
 
 class TestEventIds:

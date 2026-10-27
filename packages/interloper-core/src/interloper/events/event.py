@@ -20,7 +20,7 @@ class Event:
     arbitrary metadata dict.  The ``id`` is assigned once by the producer
     and preserved across serialization, so the same logical event can be
     persisted idempotently even when it is delivered more than once (e.g.
-    re-emitted from a child process's log stream and also written directly).
+    reported by a child process and authored by its host).
 
     Supports JSON and dict serialization for forwarding and persistence.
     """
@@ -139,32 +139,3 @@ class Event:
             The deserialized Event instance.
         """
         return cls.from_dict(json.loads(json_str))
-
-    @classmethod
-    def from_log_line(cls, line: str) -> Event | None:
-        """Try to parse an `Event` from a log line.
-
-        An event line is ``@EVENT:{...}``, as `StderrEventHandler` writes
-        it. Any other line, or one whose JSON is malformed, is not an event
-        and ``None`` is returned.
-
-        Args:
-            line: A single log line (may include trailing newline).
-
-        Returns:
-            The parsed Event, or ``None`` if the line is not an event.
-        """
-        from interloper.events.stderr import EVENT_LINE_PREFIX
-
-        line = line.strip()
-        if not line:
-            return None
-
-        if not line.startswith(EVENT_LINE_PREFIX):
-            return None
-        line = line[len(EVENT_LINE_PREFIX) :]
-
-        try:
-            return cls.from_json(line)
-        except (json.JSONDecodeError, Exception):  # noqa: BLE001
-            return None

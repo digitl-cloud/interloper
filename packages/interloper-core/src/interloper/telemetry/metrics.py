@@ -49,9 +49,9 @@ class _Bounded(OrderedDict):
 class OtelMetricsHandler:
     """Event-bus handler recording run/operation/destination metrics.
 
-    Docker/k8s hosts re-emit child-container events with deterministic
-    ids, and hosts author their own terminal events under the same ids —
-    the handler therefore dedupes on ``event.id``. Bookkeeping is bounded
+    Events of one logical outcome can arrive twice under one deterministic
+    id (a run's ending emitted by the runner and authored by the store's
+    path), so the handler dedupes on ``event.id``. Bookkeeping is bounded
     because a start event can lose its terminal counterpart.
     """
 
@@ -87,6 +87,9 @@ class OtelMetricsHandler:
         EventType.DEST_WRITE_COMPLETED: ("write", "completed"),
         EventType.DEST_WRITE_FAILED: ("write", "failed"),
     }
+
+    #: The destination event types: all a child process counts, since its host counts the rest.
+    DESTINATION_EVENT_TYPES: ClassVar[list[EventType]] = list(_DEST_STATUS)
 
     def __init__(self, max_tracked: int = 4096) -> None:
         """Create the handler and its instruments.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from functools import partial
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -272,7 +273,10 @@ class _Attempts:
 
 async def _execute(operation: Operation, attempts: _Attempts) -> OperationResult:
     return await OperationResult.from_execution(
-        operation, OperationContext(), on_retry=attempts.retry, on_restart=attempts.restart
+        operation,
+        partial(OperationResult.from_attempt, operation, OperationContext()),
+        on_retry=attempts.retry,
+        on_restart=attempts.restart,
     )
 
 

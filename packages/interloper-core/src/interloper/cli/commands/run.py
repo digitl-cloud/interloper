@@ -32,13 +32,15 @@ messages flow through the standard logging stack (via
 format and stream with regular log lines.  Verbosity is the logging
 level: ``-v`` shows DEBUG (execution / destination-I/O events), ``-q``
 shows only warnings and errors.  ``--events json`` streams raw event
-JSON lines to stdout instead, unaffected by the level.  In container
-mode (``INTERLOPER_EVENTS_TO_STDERR``) the ``@EVENT:`` forwarding lines
-are emitted instead.
+JSON lines to stdout instead, unaffected by the level.
 
 A platform run's pod runs this command with ``INTERLOPER_RUN_TOKEN`` set: the
 run's events are then reported to the platform through an `EventRecorder`, and
-``--metadata`` carries the run's ids and names into every event.
+``--metadata`` carries the run's ids and names into every event. A child a
+container runner starts for one attempt at an operation of its host's run
+carries ``INTERLOPER_RUN_OPERATION``: it makes that one attempt, reports only
+what happens inside the operation, and leaves a failed attempt's verdict in
+its termination message for the host, which owns the operation's lifecycle.
 """
 
 from __future__ import annotations
@@ -159,7 +161,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
     """
     from interloper.cli.console import configure_console_logging
     from interloper.errors import PartitionError, RunLostError, format_exception
-    from interloper.events import Event, EventBus, EventRecorder, EventType, StderrEventHandler
+    from interloper.events import ConsoleEventHandler, Event, EventRecorder, EventType
+    from interloper.operation import OperationResult
     from interloper.partitioning import PartitionWindow, TimePartition
     from interloper.runner import ExecutionStatus, Runner
     from interloper.settings import AppSettings
@@ -173,18 +176,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
         "%H:%M:%S",
         log_format=settings.log.format,
     )
-    is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
     token = os.environ.get("INTERLOPER_RUN_TOKEN")
+    attempted = os.environ.get("INTERLOPER_RUN_OPERATION") or None
     if token is not None and not args.run_id:
         raise SystemExit("Error: a recorded run needs --run-id.")
 
-    # -- Subscribe stderr event handler (for container event forwarding) -------
-    stderr_handler = None
-    if is_container:
-        stderr_handler = StderrEventHandler()
-        EventBus.subscribe(stderr_handler)
-
-    # A platform run reports a failure to even start as its own failure: its process holds no store.
+    # A failure to even start is the run's own failure, or a child's attempt's: neither process holds a store.
     recorder = None
     if token is not None:
         recorder = EventRecorder(
@@ -193,74 +190,69 @@ def _cmd_run(args: argparse.Namespace) -> None:
             heartbeat_interval=settings.reaper.heartbeat_interval,
             heartbeat_timeout=settings.reaper.heartbeat_timeout,
             on_lost=_exit_lost,
+            component_id=attempted,
         )
 
     try:
-        try:
-            dag = _build_dag(args)
-            if recorder is None:
-                window = _resolve_window(args, dag)
-            else:
-                # A platform run's window is its partition key, read as the platform reads it.
-                window = PartitionWindow.of(TimePartition.from_key(args.date)) if args.date else None
-            runner = Runner.from_settings(settings.runner)
-            metadata: dict[str, Any] = json.loads(args.metadata) if args.metadata else {}
-        except (Exception, SystemExit) as error:
-            if recorder is not None:
-                reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
-                failed = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
-                with recorder:
-                    recorder(Event(type=EventType.RUN_FAILED, metadata=failed))
-            raise
-        if args.run_id:
-            metadata["run_id"] = args.run_id
+        dag = _build_dag(args)
+        if recorder is None:
+            window = _resolve_window(args, dag)
+        else:
+            # A platform run's window is its partition key, read as the platform reads it.
+            window = PartitionWindow.of(TimePartition.from_key(args.date)) if args.date else None
+        runner = Runner.from_settings(settings.runner)
+        if attempted is not None:
+            dag.operation_map[attempted].retry = None
+        metadata: dict[str, Any] = json.loads(args.metadata) if args.metadata else {}
+    except (Exception, SystemExit) as error:
+        reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
+        if attempted is not None:
+            OperationResult(error=reason).write_termination_message()
+        elif recorder is not None:
+            ending = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
+            with recorder:
+                recorder(Event(type=EventType.RUN_FAILED, metadata=ending))
+        raise
+    if args.run_id:
+        metadata["run_id"] = args.run_id
 
-        if args.dry_run:
-            _print_plan(dag, window, type(runner).__name__)
-            return
+    if args.dry_run:
+        _print_plan(dag, window, type(runner).__name__)
+        return
 
-        # -- Console event output (interactive mode only) ----------------------
-        # Events become records on the ``interloper.run`` logger, so the
-        # console logging set up above governs their visibility and format.  In
-        # container mode the StderrEventHandler already owns stderr with
-        # ``@EVENT:`` lines for the host to re-parse; printing on the host
-        # side covers child events too, since cross-process runners re-emit
-        # them on the host bus.
-        on_event = None
-        if not is_container and token is None:
-            from interloper.events import ConsoleEventHandler
+    enabled = [operation for operation in dag.operations if operation.enabled]
+    logger.info(
+        "Running DAG with %d enabled operation(s) (%d total) using %s",
+        len(enabled),
+        len(dag.operations),
+        type(runner).__name__,
+    )
 
-            on_event = ConsoleEventHandler(json_lines=args.events == "json")
-
-        enabled = [operation for operation in dag.operations if operation.enabled]
-        logger.info(
-            "Running DAG with %d enabled operation(s) (%d total) using %s",
-            len(enabled),
-            len(dag.operations),
-            type(runner).__name__,
-        )
-
-        try:
-            if recorder is None:
-                runner.on_event = on_event
-                result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
-            else:
-                with recorder:
-                    recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
-                    result = asyncio.run(recorded.run(dag, window, metadata))
-                    recorder.finish(result)
-        except (PartitionError, RunLostError) as error:
+    try:
+        if recorder is None:
+            # Events become records on the ``interloper.run`` logger, so the console logging set up above
+            # governs their visibility and format.
+            runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
+            result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
+        else:
+            with recorder:
+                recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
+                result = asyncio.run(recorded.run(dag, window, metadata))
+                recorder.finish(result)
+    except Exception as error:
+        if attempted is not None:
+            OperationResult(error=format_exception(error)).write_termination_message()
+        if isinstance(error, (PartitionError, RunLostError)):
             raise SystemExit(f"Error: {error}") from error
+        raise
 
-        logger.info("Run completed: %s", result.status.name)
+    if attempted is not None and (failed := result.executions[attempted].result) and not failed.succeeded:
+        failed.write_termination_message()
 
-        if result.status != ExecutionStatus.COMPLETED:
-            raise SystemExit(1)
+    logger.info("Run completed: %s", result.status.name)
 
-    finally:
-        if stderr_handler is not None:
-            EventBus.flush()
-            EventBus.unsubscribe(stderr_handler)
+    if result.status != ExecutionStatus.COMPLETED:
+        raise SystemExit(1)
 
 
 # -- Internals -----------------------------------------------------------------

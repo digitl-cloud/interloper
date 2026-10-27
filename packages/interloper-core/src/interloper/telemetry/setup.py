@@ -231,25 +231,24 @@ def _duration_views() -> list[Any]:
     ]
 
 
-def _register_metrics_handler() -> OtelMetricsHandler | None:
+def _register_metrics_handler() -> OtelMetricsHandler:
     """Subscribe the metrics handler on the event bus.
 
-    Docker/k8s child containers stream their events to the host, which
-    re-emits them — the host is authoritative for metrics, so children
-    (marked by ``INTERLOPER_EVENTS_TO_STDERR``) skip the handler entirely.
-    Traces are unaffected: spans exist where code runs.
+    A child process executing one operation of its host's run (marked by
+    ``INTERLOPER_RUN_OPERATION``) counts only destination I/O, which happens
+    nowhere else: the host counts its run and authors every operation's
+    verdict. Traces are unaffected: spans exist where code runs.
 
     Returns:
-        The subscribed handler, or ``None`` in a child container.
+        The subscribed handler.
     """
-    if os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true":
-        return None
-
     from interloper.events import EventBus
     from interloper.telemetry.metrics import OtelMetricsHandler
 
     handler = OtelMetricsHandler()
-    EventBus.subscribe(handler, event_types=OtelMetricsHandler.EVENT_TYPES)
+    child = bool(os.environ.get("INTERLOPER_RUN_OPERATION"))
+    event_types = OtelMetricsHandler.DESTINATION_EVENT_TYPES if child else OtelMetricsHandler.EVENT_TYPES
+    EventBus.subscribe(handler, event_types=event_types)
     return handler
 
 

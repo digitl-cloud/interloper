@@ -43,7 +43,7 @@ environment, not in `${VAR}` placeholders.
 
 | Variable | Read by | Meaning |
 |----------|---------|---------|
-| `INTERLOPER_EVENTS_TO_STDERR` | `interloper run`, telemetry setup | `true` marks a child container: events are forwarded as `@EVENT:` lines and the metrics handler is not installed. |
+| `INTERLOPER_RUN_OPERATION` | `interloper run`, telemetry setup | Set by a container runner on a child: the one operation of the host's run it reports events for; its metrics count destination I/O only. |
 | `INTERLOPER_RUN_TOKEN` | `interloper run` | Set by a launcher on a run's pod: the bearer the run's events are reported to the API with. |
 | `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`, `_REDIRECT_URI` | OAuth connections and providers | In-house OAuth app credentials per provider. |
 | `TRACEPARENT`, `TRACESTATE` | telemetry propagation | Parent trace context for a spawned process. |

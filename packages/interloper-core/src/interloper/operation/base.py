@@ -21,8 +21,10 @@ to the store.
 from __future__ import annotations
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from traceback import format_exc
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -35,8 +37,10 @@ from interloper.retry import RetryPolicy
 from interloper.telemetry import attributes as telemetry_attributes
 from interloper.telemetry.tracer import tracer
 
+_MESSAGE_BYTES = 3500
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from interloper.component.relation import Relation
     from interloper.dag.base import DAG
@@ -100,17 +104,21 @@ class OperationResult:
     machine-owned state: how an operation's effects reach the row without
     the operation knowing the store. An operation's `execute` returns one
     carrying its effects, and its `failure` hook one carrying the
-    persistence-safe ``error``. The attempt loop (`from_execution`) completes
-    a failure with the ``traceback`` (when the operation's class allows one)
-    and the original ``exception``, kept in memory only so a runner can
-    re-raise it. An unset ``error`` means the operation succeeded.
+    persistence-safe ``error``. An attempt (`from_attempt`) completes a
+    failure with the ``traceback`` (when the operation's class allows one),
+    the original ``exception``, kept in memory only so a runner can re-raise
+    it, and whether it is ``retryable``. An unset ``error`` means the
+    operation succeeded.
     """
+
+    TERMINATION_MESSAGE_PATH: ClassVar[str] = "/tmp/termination-log"
 
     error: str | None = None
     config: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
     traceback: str | None = None
     exception: BaseException | None = field(default=None, compare=False, repr=False)
+    retryable: bool = field(default=False, compare=False, repr=False)
 
     @property
     def succeeded(self) -> bool:
@@ -125,53 +133,99 @@ class OperationResult:
     async def from_execution(
         cls,
         operation: Operation,
-        context: OperationContext,
+        attempt: Callable[[], Awaitable[OperationResult]],
         *,
         on_retry: Callable[[str], None],
         on_restart: Callable[[], None],
     ) -> OperationResult:
-        """Execute an operation under its retry policy and return what it came to.
+        """Make attempts at an operation under its retry policy and return what the last came to.
 
-        Each attempt runs inside the ``interloper.operation.execute`` span. A
-        failure is retried when the operation's `RetryPolicy` allows another
-        attempt and `Operation.retryable` agrees: ``on_retry`` is told the
-        error as it happens, the policy's backoff is slept, ``on_restart`` is
-        told the next attempt starts, and the operation executes again. Any
-        other failure becomes the operation's `failure` result, completed with
-        the formatted error when the hook left it empty, the traceback when the
-        class's ``capture_traceback`` allows, and the original exception.
+        A failed attempt is retried when the operation's `RetryPolicy` allows
+        another and the attempt says it may help: ``on_retry`` is told the
+        error, the policy's backoff is slept, ``on_restart`` is told the next
+        attempt starts, and *attempt* is called again.
+
+        Args:
+            operation: The operation, whose policy bounds the attempts.
+            attempt: Makes one attempt; never raises for the operation's own failure.
+            on_retry: Told the error of each attempt that will be retried, before its backoff.
+            on_restart: Told when the next attempt starts, after the backoff.
+
+        Returns:
+            The last attempt's result.
+        """
+        number = 1
+        while True:
+            result = await attempt()
+            policy = operation.retry
+            if result.succeeded or not result.retryable or policy is None or not policy.allows(number + 1):
+                return result
+            on_retry(result.error or "")
+            await asyncio.sleep(policy.delay_before(number + 1))
+            number += 1
+            on_restart()
+
+    @classmethod
+    async def from_attempt(cls, operation: Operation, context: OperationContext) -> OperationResult:
+        """Execute an operation once, here, and return what it came to.
+
+        The attempt runs inside the ``interloper.operation.execute`` span. A
+        failure becomes the operation's `failure` result, completed with the
+        formatted error when the hook left it empty, the traceback when the
+        class's ``capture_traceback`` allows, the original exception, and
+        whether `Operation.retryable` thinks another attempt may help.
 
         Args:
             operation: The operation to execute.
             context: The facts it executes with.
-            on_retry: Told the formatted error of each attempt that will be
-                retried, before its backoff.
-            on_restart: Told when the next attempt starts, after the backoff.
 
         Returns:
-            The result: the operation's own on success, its failure otherwise.
+            The operation's own result on success, its failure otherwise.
         """
         span_attributes = telemetry_attributes.from_metadata(operation.event_metadata(context.metadata, context.window))
-        attempt = 1
-        while True:
-            try:
-                with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attributes):
-                    return await operation.execute(context)
-            except Exception as error:  # noqa: BLE001 - every failure becomes the operation's result
-                policy = operation.retry
-                if policy is not None and policy.allows(attempt + 1) and operation.retryable(error):
-                    on_retry(format_exception(error))
-                    await asyncio.sleep(policy.delay_before(attempt + 1))
-                    attempt += 1
-                    on_restart()
-                    continue
-                failed = operation.failure(error)
-                return replace(
-                    failed,
-                    error=failed.error or format_exception(error),
-                    traceback=format_exc() if type(operation).capture_traceback else None,
-                    exception=error,
-                )
+        try:
+            with tracer().start_as_current_span("interloper.operation.execute", attributes=span_attributes):
+                return await operation.execute(context)
+        except Exception as error:  # noqa: BLE001 - every failure becomes the operation's result
+            failed = operation.failure(error)
+            return replace(
+                failed,
+                error=failed.error or format_exception(error),
+                traceback=format_exc() if type(operation).capture_traceback else None,
+                exception=error,
+                retryable=operation.retryable(error),
+            )
+
+    def write_termination_message(self) -> None:
+        """Leave what a child's attempt came to where its host reads it once the child exits.
+
+        Only the verdict travels: the error, its tail kept within what a
+        Kubernetes termination message holds, and whether a retry may help.
+        Effects stay in the child, since a pod's status is readable by
+        whoever reads pods.
+        """
+        error = (self.error or "").encode()[-_MESSAGE_BYTES:].decode(errors="ignore")
+        message = json.dumps({"error": error, "retryable": self.retryable}, ensure_ascii=False)
+        Path(self.TERMINATION_MESSAGE_PATH).write_text(message)
+
+    @classmethod
+    def from_termination_message(cls, message: str | None, fallback: str) -> OperationResult:
+        """What a child's attempt came to, from the message it left on exit.
+
+        Args:
+            message: The child's termination message; ``None`` or empty when
+                it died without writing one.
+            fallback: The error to record when there is no message, such as
+                the container's exit code.
+
+        Returns:
+            The attempt's failure; one with no message is retryable, since a
+            killed container says nothing about the operation.
+        """
+        if not message:
+            return cls(error=fallback, retryable=True)
+        reported = json.loads(message)
+        return cls(error=reported.get("error") or fallback, retryable=bool(reported.get("retryable")))
 
 
 class Workload(ABC):

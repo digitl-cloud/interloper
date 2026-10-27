@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _RUN_ENDINGS = frozenset({EventType.RUN_COMPLETED, EventType.RUN_FAILED})
+_LIFECYCLE = _RUN_ENDINGS | {
+    EventType.RUN_STARTED,
+    EventType.OPERATION_QUEUED,
+    EventType.OPERATION_STARTED,
+    EventType.OPERATION_RETRIED,
+    EventType.OPERATION_COMPLETED,
+    EventType.OPERATION_FAILED,
+    EventType.OPERATION_CANCELED,
+}
 
 
 class EventRecorder:
@@ -66,6 +75,7 @@ class EventRecorder:
         on_lost: Callable[[], None] | None = None,
         batch_size: int = 500,
         backoff: float = 1.0,
+        component_id: str | None = None,
     ) -> None:
         """Bind the recorder to its run and its delivery.
 
@@ -83,6 +93,9 @@ class EventRecorder:
                 lost; a pod exits its process here.
             batch_size: The most events one delivery carries.
             backoff: Seconds before the first retry; doubles up to ten times that.
+            component_id: The one operation a child process attempts for its
+                host's run, which owns the lifecycle: only what happens inside
+                the operation is reported. ``None`` reports everything.
         """
         self._ingest = ingest
         self._run_id = run_id
@@ -91,6 +104,7 @@ class EventRecorder:
         self._on_lost = on_lost
         self._batch_size = batch_size
         self._backoff = backoff
+        self._component_id = component_id
         self._queue: queue.Queue[Event | None] = queue.Queue()
         self._effects: dict[str, Effect] | None = None
         self._ended = False
@@ -105,6 +119,10 @@ class EventRecorder:
         Args:
             event: The event the runner emitted.
         """
+        if self._component_id is not None and (
+            event.type in _LIFECYCLE or event.metadata.get("component_id") not in (None, self._component_id)
+        ):
+            return
         self._queue.put(event)
 
     def finish(self, result: RunResult) -> None:

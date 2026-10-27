@@ -174,3 +174,21 @@ class TestLiveness:
 
         with pytest.raises(ValueError, match="mine"):
             raise_inside()
+
+
+class TestOperationFilter:
+    """A child reports only what happens inside its operation: the lifecycle and its upstreams' reads are the host's."""
+
+    def test_only_what_happens_inside_the_operation_is_delivered(self) -> None:
+        sink = Sink()
+        inside = Event(type=EventType.ASSET_DATA_STARTED, metadata={"run_id": "run-1", "component_id": "op-1"})
+        lifecycle = Event(type=EventType.OPERATION_STARTED, metadata={"run_id": "run-1", "component_id": "op-1"})
+        logged = Event(type=EventType.LOG, metadata={"run_id": "run-1"})
+        theirs = Event(type=EventType.DEST_READ_COMPLETED, metadata={"run_id": "run-1", "component_id": "op-2"})
+        started = Event(type=EventType.RUN_STARTED, metadata={"run_id": "run-1"})
+
+        with _recorder(sink, component_id="op-1") as recorder:
+            for event in (started, lifecycle, inside, logged, theirs):
+                recorder(event)
+
+        assert [event.type for event in sink.events] == [EventType.ASSET_DATA_STARTED, EventType.LOG]

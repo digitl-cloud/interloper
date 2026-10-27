@@ -8,7 +8,6 @@ import pytest
 
 from interloper.errors import EventError
 from interloper.events import Event, EventBus, EventType
-from interloper.events.stderr import EVENT_LINE_PREFIX
 
 
 def test_events_get_unique_ids_by_default() -> None:
@@ -136,56 +135,6 @@ class TestFromDictValidation:
 
         assert event.id == "e1"
         assert event.metadata == {"run_id": "r1", "message": "hello"}
-
-
-class TestFromLogLine:
-    """Parsing events back out of a child container's log stream."""
-
-    def test_a_prefixed_line_is_parsed(self) -> None:
-        original = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
-
-        parsed = Event.from_log_line(f"{EVENT_LINE_PREFIX}{original.to_json()}\n")
-
-        assert parsed is not None
-        assert parsed.id == original.id
-        assert parsed.metadata == {"run_id": "r1"}
-
-    @pytest.mark.parametrize(
-        "line",
-        [
-            "",
-            "   \n",
-            "2026-01-01 INFO  some regular log line",
-            f"{EVENT_LINE_PREFIX}{{not json",
-            '{"type": "not_a_type", "timestamp": "2026-01-01T00:00:00+00:00"}',
-        ],
-    )
-    def test_anything_else_is_ignored(self, line: str) -> None:
-        # Application logs share the stream, so an unrecognised line must
-        # never take the log-forwarding thread down.
-        assert Event.from_log_line(line) is None
-
-
-def test_stderr_handler_writes_a_prefixed_line(capsys: pytest.CaptureFixture[str]) -> None:
-    """The container-side handler emits exactly what ``from_log_line`` parses."""
-    from interloper.events.stderr import StderrEventHandler
-
-    event = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
-
-    StderrEventHandler()(event)
-
-    line = capsys.readouterr().err
-    assert line.startswith(EVENT_LINE_PREFIX)
-    parsed = Event.from_log_line(line)
-    assert parsed is not None
-    assert parsed.id == event.id
-
-
-def test_a_bare_json_line_is_not_an_event():
-    """Only ``@EVENT:`` lines are events; a bare JSON line is not."""
-    event = Event(type=EventType.RUN_STARTED, metadata={"run_id": "r1"})
-
-    assert Event.from_log_line(event.to_json()) is None
 
 
 def test_subject_and_summary_fall_back_in_order():

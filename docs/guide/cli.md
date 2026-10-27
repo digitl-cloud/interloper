@@ -102,14 +102,13 @@ runner:
 ## Environment
 
 A `.env` file in the working directory is loaded when `python-dotenv` is installed. Telemetry
-is initialized from the `otel` settings for every command. In a container with
-`INTERLOPER_EVENTS_TO_STDERR=true`, events are forwarded as `@EVENT:` lines instead of being
-printed; see [Events](events.md#events-across-processes).
+is initialized from the `otel` settings for every command.
 
 A platform run's pod runs `interloper run` with `INTERLOPER_RUN_TOKEN` set: the spec comes from a
 file (`--format inline @<path>`), `--metadata` carries the run's ids into every event, and the
 events are reported to the API at `server.internal_url` instead of being printed; see
-[Events](events.md#persistence).
+[Events](events.md#persistence). A child a container runner starts for one operation of that run
+also carries `INTERLOPER_RUN_OPERATION`, and reports that operation's events only.
 
 ## Other commands
 

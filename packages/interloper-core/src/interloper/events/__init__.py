@@ -7,7 +7,6 @@ from interloper.events.console import ConsoleEventHandler
 from interloper.events.event import Event
 from interloper.events.logger import EventLogger
 from interloper.events.recorder import EventRecorder
-from interloper.events.stderr import EventLogReader, StderrEventHandler
 from interloper.events.step import Step, StepKind
 from interloper.events.types import EventType
 
@@ -17,11 +16,9 @@ __all__ = [
     "EventBatch",
     "EventBus",
     "EventClient",
-    "EventLogReader",
     "EventLogger",
     "EventRecorder",
     "EventType",
-    "StderrEventHandler",
     "Step",
     "StepKind",
 ]
