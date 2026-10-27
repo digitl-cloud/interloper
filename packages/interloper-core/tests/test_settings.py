@@ -3,7 +3,14 @@
 import pytest
 from pydantic import ValidationError
 
-from interloper.settings import AgentSettings, AppSettings, AuthSettings, PostgresSettings, TelemetrySettings
+from interloper.settings import (
+    AgentSettings,
+    AppSettings,
+    AuthSettings,
+    PostgresSettings,
+    ServerSettings,
+    TelemetrySettings,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -149,3 +156,14 @@ def test_location_names_the_target_without_credentials():
 
     assert settings.location == "db:5433/warehouse"
     assert "secret" not in settings.location
+
+
+def test_server_internal_url_defaults_to_the_local_api():
+    """A run pod reaches the API on this host unless the deployment says where."""
+    assert ServerSettings().internal_url == "http://localhost:3000"
+
+
+def test_server_internal_url_env_override(monkeypatch: pytest.MonkeyPatch):
+    """The chart points run pods at the cluster-internal API service."""
+    monkeypatch.setenv("INTERLOPER_SERVER_INTERNAL_URL", "http://interloper-api:3000")
+    assert ServerSettings().internal_url == "http://interloper-api:3000"
