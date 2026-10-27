@@ -17,6 +17,8 @@ from typing import Any
 
 import interloper as il
 import pandas as pd
+import pytest
+from facebook_business.exceptions import FacebookRequestError
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
@@ -272,6 +274,11 @@ class TestNewEntities:
         assert out.loc[0, "creative_name"] == "Spring"
 
 
+def _facebook_error(code: int, message: str) -> FacebookRequestError:
+    body = json.dumps({"error": {"code": code, "message": message}})
+    return FacebookRequestError("Call was not successful", {"method": "GET", "path": "act_1/ads"}, 500, {}, body)
+
+
 class _FakeObject:
     def __init__(self, data: dict) -> None:
         self.data = data
@@ -312,6 +319,42 @@ class TestPagination:
         rows = connector._paginate(request, ["id"])
         assert [row["id"] for row in rows] == ["1", "2", "3"]
         assert calls == [{"fields": ["id"], "params": {"limit": 25}}]
+
+    def test_an_edge_too_heavy_to_page_is_reread_with_half_the_page_until_it_fits(self):
+        limits: list[int] = []
+
+        def request(**kwargs: Any) -> _FakeCursor:
+            limits.append(kwargs["params"]["limit"])
+            if kwargs["params"]["limit"] > 6:
+                raise _facebook_error(1, "Please reduce the amount of data you're asking for, then retry your request")
+            return _FakeCursor([[{"id": "1"}], [{"id": "2"}]])
+
+        rows = connector._paginate(request, ["id"])
+        assert [row["id"] for row in rows] == ["1", "2"]
+        assert limits == [25, 12, 6]
+
+    def test_a_page_that_is_still_too_heavy_alone_fails(self):
+        def request(**kwargs: Any) -> _FakeCursor:
+            raise _facebook_error(1, "Please reduce the amount of data you're asking for, then retry your request")
+
+        with pytest.raises(FacebookRequestError, match="Call was not successful"):
+            connector._paginate(request, ["id"])
+
+    def test_any_other_error_is_not_retried_with_a_smaller_page(self):
+        limits: list[int] = []
+
+        def request(**kwargs: Any) -> _FakeCursor:
+            limits.append(kwargs["params"]["limit"])
+            raise _facebook_error(100, "(#100) Invalid parameter")
+
+        with pytest.raises(FacebookRequestError):
+            connector._paginate(request, ["id"])
+        assert limits == [25]
+
+    def test_the_account_requests_no_field_that_needs_a_parameter(self):
+        # Facebook answers 400 for the whole account when show_checkout_experience comes without a page_id
+        assert "show_checkout_experience" not in constants.AD_ACCOUNT_ENTITY_FIELDS
+        assert "show_checkout_experience" not in schemas.AdAccounts.model_fields
 
     def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
         class FakeAccount:

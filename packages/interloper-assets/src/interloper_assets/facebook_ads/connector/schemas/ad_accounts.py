@@ -100,7 +100,6 @@ class AdAccounts(Schema):
     owner: str | None = Field(default=None, description="Id of the business or user that owns the account.")
     partner: str | None = Field(default=None, description="Id of the partner business on the account.")
     rf_spec: str | None = Field(default=None, description="JSON of the account's reach and frequency limits.")
-    show_checkout_experience: bool | None = Field(default=None, description="Whether the checkout experience is shown.")
     spend_cap: int | None = Field(
         default=None,
         description="Lifetime spend cap of the account; 0 when none, in the currency's minor units (cents for EUR and USD).",
