@@ -45,6 +45,11 @@ async def get_report(
     return response.json()
 
 
+def _with_date(rows: list[dict[str, Any]], date: dt.date) -> list[dict[str, Any]]:
+    """Stamp the partition date onto each row of a single-day report, which Adservice returns without one."""
+    return [{**row, "date": date} for row in rows]
+
+
 # -- SOURCE --------------------------------------------------------------------
 
 
@@ -91,7 +96,7 @@ class Adservice(il.Source):
             end_date=context.partition_date,
             report_type="conversions",
         )
-        return response["data"]
+        return _with_date(response["data"], context.partition_date)
 
     @il.asset(
         schema=ConversionsStatsByTimeOfDay,
@@ -106,7 +111,7 @@ class Adservice(il.Source):
             end_date=context.partition_date,
             report_type="statistics/conversions/timeofday",
         )
-        return response["data"]
+        return _with_date(response["data"], context.partition_date)
 
     @il.asset(
         schema=CampaignsStatsByCity,
@@ -122,7 +127,7 @@ class Adservice(il.Source):
             report_type="statistics/devicedetails",
             group_by="city",
         )
-        return response["data"]
+        return _with_date(response["data"], context.partition_date)
 
     @il.asset(
         schema=CampaignsStatsByBrowser,
@@ -138,7 +143,7 @@ class Adservice(il.Source):
             report_type="statistics/devicedetails",
             group_by="browser",
         )
-        return response["data"]
+        return _with_date(response["data"], context.partition_date)
 
     @il.asset(
         schema=CampaignsStatsByDeviceType,
@@ -154,4 +159,4 @@ class Adservice(il.Source):
             report_type="statistics/devicedetails",
             group_by="device_type",
         )
-        return response["data"]
+        return _with_date(response["data"], context.partition_date)

@@ -10,7 +10,7 @@ class Campaigns(Schema):
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    id: int | None = Field(default=None, description="The unique identifier of the campaign.")
+    id: str | None = Field(default=None, description="The unique identifier of the campaign.")
     name: str | None = Field(default=None, description="The name of the campaign.")
     type: str | None = Field(default=None, description="The type of the campaign (e.g. SPONSORED_UPDATES, TEXT_AD).")
     status: str | None = Field(default=None, description="The status of the campaign (e.g. ACTIVE, PAUSED, ARCHIVED).")

@@ -17,9 +17,9 @@ class ReachStats(Schema):
     advertiser: str | None = Field(default=None, description="Name of the advertiser")
     advertiser_id: str | None = Field(default=None, description="ID of the advertiser")
     campaign: str | None = Field(default=None, description="Name of the campaign")
-    campaign_end_date: str | None = Field(default=None, description="End date of the campaign")
+    campaign_end_date: dt.date | None = Field(default=None, description="End date of the campaign")
     campaign_id: str | None = Field(default=None, description="ID of the campaign")
-    campaign_start_date: str | None = Field(default=None, description="Start date of the campaign")
+    campaign_start_date: dt.date | None = Field(default=None, description="Start date of the campaign")
     country: str | None = Field(default=None, description="Country of the campaign")
     impressions: float | None = Field(default=None, description="Number of impressions")
     unique_reach_duplicate_impression_reach: str | None = Field(

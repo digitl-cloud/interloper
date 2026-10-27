@@ -13,6 +13,7 @@ reconciles against the ported schemas.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 from interloper.dag import DAG, DAGSpec
@@ -117,6 +118,12 @@ class TestSpecRoundtripAndReconcile:
         reconciled = TableData.from_data(normalized).reconcile(schemas.Ads)
         assert reconciled.loc[0, "ad_texts"] == '["hello"]'
         assert reconciled.loc[0, "image_ids"] == '["img1"]'
+
+    def test_advertiser_creation_time_in_epoch_seconds_is_a_utc_instant(self):
+        child = self._child("advertisers")
+        normalized = child.normalizer.normalize([{"advertiser_id": "123", "create_time": 1600000000}])
+        reconciled = TableData.from_data(normalized).reconcile(schemas.Advertisers)
+        assert reconciled.loc[0, "create_time"] == dt.datetime(2020, 9, 13, 12, 26, 40, tzinfo=dt.timezone.utc)
 
 
 REPORT_ASSETS = (

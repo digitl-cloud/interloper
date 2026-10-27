@@ -10,7 +10,7 @@ class CampaignGroups(Schema):
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    id: int | None = Field(default=None, description="The unique identifier of the campaign group.")
+    id: str | None = Field(default=None, description="The unique identifier of the campaign group.")
     name: str | None = Field(default=None, description="The name of the campaign group.")
     status: str | None = Field(
         default=None, description="The status of the campaign group (e.g. ACTIVE, PAUSED, ARCHIVED)."

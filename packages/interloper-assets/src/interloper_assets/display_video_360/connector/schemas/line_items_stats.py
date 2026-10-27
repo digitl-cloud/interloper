@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -93,7 +95,7 @@ class LineItemsStats(Schema):
     data_management_platform_fee_partner_currency: float | None = Field(
         default=None, description="The data management platform fee in partner currency"
     )
-    date: str | None = Field(default=None, description="The date")
+    date: dt.date | None = Field(default=None, description="The date")
     double_verify_pre_bid_fee_adv_currency: float | None = Field(
         default=None, description="The DoubleVerify pre-bid fee in advertiser currency"
     )
@@ -120,9 +122,9 @@ class LineItemsStats(Schema):
     inventory_commitment: str | None = Field(default=None, description="The inventory commitment of the line item")
     inventory_delivery_method: str | None = Field(default=None, description="The inventory delivery method")
     line_item: str | None = Field(default=None, description="The line item name")
-    line_item_end_date: str | None = Field(default=None, description="The end date of the line item")
+    line_item_end_date: dt.date | None = Field(default=None, description="The end date of the line item")
     line_item_id: str | None = Field(default=None, description="The ID of the line item")
-    line_item_start_date: str | None = Field(default=None, description="The start date of the line item")
+    line_item_start_date: dt.date | None = Field(default=None, description="The start date of the line item")
     line_item_type: str | None = Field(default=None, description="The type of the line item")
     media_cost_advertiser_currency: float | None = Field(
         default=None, description="The media cost in advertiser currency"

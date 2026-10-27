@@ -64,6 +64,8 @@ class TiktokStatsNormalizer(DataFrameNormalizer):
 # ``special_industries``, …) that the schemas type as strings; reconciliation
 # JSON-encodes those nested values when casting to the declared ``str`` type.
 _ENTITY_NORMALIZER = DataFrameNormalizer(drop_na_columns=True)
+# the advertiser endpoint, unlike the campaign and ad ones, sends its creation time as seconds since the epoch
+_ADVERTISER_NORMALIZER = DataFrameNormalizer(drop_na_columns=True, epoch_columns=["create_time"], epoch_unit="s")
 
 
 # -- HELPERS: HTTP / pagination ------------------------------------------------
@@ -246,7 +248,7 @@ class TiktokAds(il.Source):
         schema=Advertisers,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
-        normalizer=_ENTITY_NORMALIZER,
+        normalizer=_ADVERTISER_NORMALIZER,
     )
     async def advertisers(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The advertiser account with its attributes.

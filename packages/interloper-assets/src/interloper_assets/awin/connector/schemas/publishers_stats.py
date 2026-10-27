@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -5,8 +7,10 @@ from pydantic import Field
 class PublishersStats(Schema):
     """Awin advertiser report by publisher with performance metrics."""
 
-    date: str | None = Field(default=None, description="Report date")
-    publisher_id: int | None = Field(default=None, description="Publisher ID")
+    date: dt.date | None = Field(
+        default=None, description="The day the report was requested for (stamped from the partition)."
+    )
+    publisher_id: str | None = Field(default=None, description="Publisher ID")
     publisher_name: str | None = Field(default=None, description="Publisher name")
     impressions: int | None = Field(default=None, description="Number of impressions")
     clicks: int | None = Field(default=None, description="Number of clicks")

@@ -12,7 +12,7 @@ class Partners(Schema):
     )
     name: str | None = Field(default=None, description="The name of the partner")
     partner_id: str | None = Field(default=None, description="The ID of the partner")
-    update_time: str | None = Field(default=None, description="The last update time of the partner")
+    update_time: dt.datetime | None = Field(default=None, description="The last update time of the partner")
     display_name: str | None = Field(default=None, description="The display name of the partner")
     entity_status: str | None = Field(default=None, description="The status of the entity")
     general_config_time_zone: str | None = Field(default=None, description="The time zone of the partner")

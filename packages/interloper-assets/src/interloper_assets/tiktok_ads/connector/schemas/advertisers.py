@@ -15,7 +15,9 @@ class Advertisers(Schema):
     balance: float | None = Field(default=None, description="Account balance of the advertiser")
     company: str | None = Field(default=None, description="Company name of the advertiser")
     country: str | None = Field(default=None, description="Country of the advertiser")
-    create_time: str | None = Field(default=None, description="Timestamp when the advertiser was created")
+    create_time: dt.datetime | None = Field(
+        default=None, description="When the advertiser was created, in UTC (TikTok sends seconds since the epoch)"
+    )
     currency: str | None = Field(default=None, description="Currency used for the advertiser's transactions")
     description: str | None = Field(default=None, description="Description or notes about the advertiser")
     display_timezone: str | None = Field(default=None, description="Timezone set for the advertiser's display")

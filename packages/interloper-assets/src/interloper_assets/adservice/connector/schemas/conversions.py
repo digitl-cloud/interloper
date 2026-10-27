@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -5,20 +7,23 @@ from pydantic import Field
 class Conversions(Schema):
     """Conversion events and attribution data including IP geolocation and user device information."""
 
-    agent_id: int = Field(description="Agent ID")
-    amount: str = Field(description="Amount")
-    camp_id: int = Field(description="Campaign ID")
+    agent_id: str = Field(description="Agent ID")
+    amount: float = Field(description="Amount")
+    camp_id: str = Field(description="Campaign ID")
     camp_title: str = Field(description="Campaign Title")
-    cart_id: int = Field(description="Cart ID")
-    click_ref_id: int = Field(description="Click Reference ID")
+    cart_id: str = Field(description="Cart ID")
+    click_ref_id: str = Field(description="Click Reference ID")
     click_stamp: int = Field(description="Click Stamp")
     coid: int = Field(description="COID")
     company_name: str = Field(description="Company Name")
     conversion_time: int = Field(description="Conversion Time")
     currency: str = Field(description="Currency")
-    id: int = Field(description="ID")
+    date: dt.date | None = Field(
+        default=None, description="The day the report was requested for (stamped from the partition)."
+    )
+    id: str = Field(description="ID")
     ip_city: str = Field(description="IP City")
-    ip_country_geoname_id: int = Field(description="IP Country Geoname ID")
+    ip_country_geoname_id: str = Field(description="IP Country Geoname ID")
     ip_country_iso_code: str = Field(description="IP Country ISO Code")
     ip_country_names_de: str = Field(description="IP Country Names (German)")
     ip_country_names_en: str = Field(description="IP Country Names (English)")
@@ -29,11 +34,11 @@ class Conversions(Schema):
     ip_country_names_ru: str = Field(description="IP Country Names (Russian)")
     ip_country_names_zh_cn: str = Field(description="IP Country Names (Chinese - Simplified)")
     leaddata: str = Field(description="Lead Data")
-    media_id: int = Field(description="Media ID")
+    media_id: str = Field(description="Media ID")
     media_url: int = Field(description="Media URL")
     medianame: str = Field(description="Media Name")
     order_id: str = Field(description="Order ID")
-    price: str = Field(description="Price")
+    price: float = Field(description="Price")
     pricevariable: str = Field(description="Price Variable")
     reject_reason: int = Field(description="Reject Reason")
     result: str = Field(description="Result")

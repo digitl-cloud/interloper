@@ -10,7 +10,7 @@ class JobFunctions(Schema):
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    id: int | None = Field(default=None, description="The job function identifier (the id of urn:li:function).")
+    id: str | None = Field(default=None, description="The job function identifier (the id of urn:li:function).")
     name_localized_en_us: str | None = Field(default=None, description="The job function name in the en_US locale.")
     name_preferred_locale_country: str | None = Field(
         default=None, description="The country of the name's preferred locale."

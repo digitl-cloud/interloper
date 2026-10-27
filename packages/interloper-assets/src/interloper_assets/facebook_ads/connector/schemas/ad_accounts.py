@@ -107,7 +107,7 @@ class AdAccounts(Schema):
     )
     tax_id_status: int | None = Field(default=None, description="Status code of the account's tax id.")
     tax_id_type: str | None = Field(default=None, description="Type of the account's tax id.")
-    timezone_id: int | None = Field(default=None, description="Meta's id of the account's timezone.")
+    timezone_id: str | None = Field(default=None, description="Meta's id of the account's timezone.")
     timezone_name: str | None = Field(
         default=None, description="IANA timezone the account reports in; every report day is in this timezone."
     )
