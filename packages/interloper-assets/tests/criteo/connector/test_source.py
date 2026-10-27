@@ -11,14 +11,20 @@ the schema (the same chain that broke in prod for AmazonAds; see
 
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
+import json
 from typing import Any
 
+import httpx2
+import interloper as il
 import pandas as pd
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.criteo import constants
+from interloper_assets.criteo.connection import CriteoConnection
 from interloper_assets.criteo.connector.schemas import AdsStats, CampaignsStats
 from interloper_assets.criteo.connector.source import Criteo
 
@@ -82,3 +88,30 @@ class TestSpecRoundtrip:
         row["Day"] = "2026-06-10"
         normalized = child.normalizer.normalize(pd.DataFrame([row]))
         TableData.from_data(normalized).reconcile(CampaignsStats)  # must not raise
+
+
+class TestApiVersion:
+    """Every call goes to the supported API version; 2025-04 is past Criteo's support window."""
+
+    def test_the_reports_and_the_advertiser_list_call_version_2026_07(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            if request.url.path.endswith("/advertisers/me"):
+                return httpx2.Response(200, json={"data": [{"id": "123", "attributes": {"advertiserName": "Example"}}]})
+            return httpx2.Response(200, json={"Rows": [{"Day": "2026-10-26", "CampaignId": "7"}]})
+
+        connection = CriteoConnection(id="criteo", client_id="cid", client_secret="x", refresh_token="x")
+        connection.__dict__["client"] = il.AsyncRESTClient(constants.BASE_URL, transport=httpx2.MockTransport(handler))
+        source = Criteo(id="src-1", advertiser_id="123", connection=connection)
+        asset = next(a for a in source.assets if type(a).key == "campaigns_stats")
+        partition = il.TimePartition(value=dt.date(2026, 10, 26))
+
+        rows = asyncio.run(asset.data(context=il.ExecutionContext(asset, partition.window)))
+        advertisers = asyncio.run(connection.advertisers())
+
+        assert [request.url.path for request in requests] == ["/2026-07/statistics/report", "/2026-07/advertisers/me"]
+        assert json.loads(requests[0].content)["dimensions"] == ["Day", "CampaignId"]
+        assert rows == [{"Day": "2026-10-26", "CampaignId": "7"}]
+        assert advertisers == [{"id": "123", "name": "Example"}]

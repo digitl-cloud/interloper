@@ -1,6 +1,6 @@
 BASE_URL = "https://api.criteo.com"
 
-API_VERSION = "2025-04"
+API_VERSION = "2026-07"
 
 STATISTICS_METRICS = [
     "Clicks",
