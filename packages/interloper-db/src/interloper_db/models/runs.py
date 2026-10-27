@@ -140,9 +140,9 @@ class Run(SQLModel, table=True):
     taken; its month tells settlement which usage period to release.
 
     ``heartbeat_at`` is the run's proof of life: the queue stamps it at
-    dispatch and the executing run renews it, so a run silent for too long is
-    dead whatever became of its pod. It is never cleared, so a finished run
-    still shows when it was last alive.
+    dispatch and every batch the executing run reports renews it, so a run
+    silent for too long is dead whatever became of its pod. It is never
+    cleared, so a finished run still shows when it was last alive.
 
     ``billable`` records the operation's declaration at creation time, so
     quota decisions survive the component (``component_id`` nulls on
