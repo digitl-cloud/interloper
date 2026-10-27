@@ -2454,6 +2454,11 @@ environment, not in <code>${VAR}</code> placeholders.</p>
 <td><code>true</code> marks a child container: events are forwarded as <code>@EVENT:</code> lines and the metrics handler is not installed.</td>
 </tr>
 <tr>
+<td><code>INTERLOPER_RUN_TOKEN</code></td>
+<td><code>interloper run</code></td>
+<td>Set by a launcher on a run's pod: the bearer the run's events are reported to the API with.</td>
+</tr>
+<tr>
 <td><code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code>, <code>_REDIRECT_URI</code></td>
 <td>OAuth connections and providers</td>
 <td>In-house OAuth app credentials per provider.</td>

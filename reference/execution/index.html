@@ -2097,6 +2097,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#interloper.DAG.check_window" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;check_window
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#interloper.DAG.from_paths" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3120,6 +3131,84 @@ into the operations it provides.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.DAG.check_window" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">check_window</span>
+
+
+<a href="#interloper.DAG.check_window" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">check_window</span><span class="p">(</span><span class="n">window</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a></span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Check the window against every enabled partitioned operation before anything executes.</p>
+<p>A run whose window no operation can serve fails as a whole, listing
+every failing operation, instead of failing the offending operations
+while the rest of the DAG executes.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>window</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionWindow&lt;/span&gt;" href="../partitioning/#interloper.PartitionWindow">PartitionWindow</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The run's window, <code>None</code> for an unscoped run.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;PartitionError&lt;/span&gt;" href="../errors/#interloper.errors.PartitionError">PartitionError</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the window is not valid for at least one enabled
+partitioned operation, naming each one with its own predicate.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 
@@ -5124,7 +5213,7 @@ The class bool is a subclass of the class int, and cannot be subclassed.</p>
 
 
 <a href="#interloper.Operation.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4dcdc046b0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7fcd29836000</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5282,7 +5371,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.Operation.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4dd0457da0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7fcd133c38f0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">

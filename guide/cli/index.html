@@ -2577,6 +2577,10 @@ destinations fixes it.</p>
 is initialized from the <code>otel</code> settings for every command. In a container with
 <code>INTERLOPER_EVENTS_TO_STDERR=true</code>, events are forwarded as <code>@EVENT:</code> lines instead of being
 printed; see <a href="../events/#events-across-processes">Events</a>.</p>
+<p>A platform run's pod runs <code>interloper run</code> with <code>INTERLOPER_RUN_TOKEN</code> set: the spec comes from a
+file (<code>--format inline @&lt;path&gt;</code>), <code>--metadata</code> carries the run's ids into every event, and the
+events are reported to the API at <code>server.internal_url</code> instead of being printed; see
+<a href="../events/#persistence">Events</a>.</p>
 <h2 id="other-commands">Other commands<a class="headerlink" href="#other-commands" title="Permanent link">&para;</a></h2>
 <p>Each platform package contributes its own commands, so a command exists exactly when its
 package is installed:</p>
@@ -2598,11 +2602,6 @@ package is installed:</p>
 <td><code>interloper scheduler</code></td>
 <td><code>interloper-scheduler</code></td>
 <td>Run cron (with hooks and credential renewal), the queue worker and the reaper: the scheduler role's command.</td>
-</tr>
-<tr>
-<td><code>interloper launch &lt;run_id&gt;</code></td>
-<td><code>interloper-scheduler</code></td>
-<td>Execute one persisted run.</td>
 </tr>
 <tr>
 <td><code>interloper db init\|reset\|upgrade\|downgrade</code></td>

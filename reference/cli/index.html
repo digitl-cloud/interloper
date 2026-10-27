@@ -1925,17 +1925,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#interloper-launch" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code>interloper launch</code>
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#interloper-run" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2607,22 +2596,6 @@
 </tr>
 </tbody>
 </table>
-<h2 id="interloper-launch"><code>interloper launch</code><a class="headerlink" href="#interloper-launch" title="Permanent link">&para;</a></h2>
-<p>Execute one persisted run. On any failure before the executor takes over, the run is marked failed.</p>
-<table>
-<thead>
-<tr>
-<th>Argument</th>
-<th>Meaning</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>run_id</code></td>
-<td>The UUID of the run to execute</td>
-</tr>
-</tbody>
-</table>
 <h2 id="interloper-run"><code>interloper run</code><a class="headerlink" href="#interloper-run" title="Permanent link">&para;</a></h2>
 <p>Execute a DAG directly with the configured runner, without persistence. The exit status is non-zero on invalid input, an import failure, or a run that did not complete.</p>
 <table>
@@ -2662,6 +2635,10 @@
 <td>Optional run identifier, forwarded as metadata to the runner</td>
 </tr>
 <tr>
+<td><code>--metadata METADATA</code></td>
+<td>Run metadata as a JSON object, spread into every event (ids and names, never secrets)</td>
+</tr>
+<tr>
 <td><code>--date DATE</code></td>
 <td>Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)</td>
 </tr>
@@ -2675,7 +2652,7 @@
 </tr>
 <tr>
 <td><code>target ...</code></td>
-<td>Inline DAGSpec JSON (when --format inline) or one or more dotted import paths</td>
+<td>Inline DAGSpec JSON or @<path> to a file holding it (when --format inline), or dotted import paths</td>
 </tr>
 </tbody>
 </table>

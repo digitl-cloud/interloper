@@ -2690,7 +2690,7 @@
 <td><code>encryption_key</code></td>
 <td><code>str</code></td>
 <td><code>''</code></td>
-<td>Fernet key encrypting stored resource payloads; required by the platform to persist resources.</td>
+<td>Fernet key encrypting stored resource payloads and run tokens; required by the platform to persist resources and to dispatch runs.</td>
 </tr>
 </tbody>
 </table>
@@ -2835,6 +2835,12 @@
 <td><code>str</code></td>
 <td><code>''</code></td>
 <td>Public base URL of the app (<code>https://app.example.com</code>), for links built outside a browser request such as the setup hand-off an MCP tool returns; empty means the deployment has none.</td>
+</tr>
+<tr>
+<td><code>internal_url</code></td>
+<td><code>str</code></td>
+<td><code>'http://localhost:3000'</code></td>
+<td>Base URL a run's pod reports its events to: the API as reached from inside the deployment.</td>
 </tr>
 </tbody>
 </table>

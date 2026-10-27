@@ -1685,6 +1685,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#launchers" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Launchers
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#events-from-children" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2504,6 +2515,15 @@ never from a thread an <code>execute</code> hands work to.</p>
 <p><code>il.Runner.from_settings(settings.runner)</code> resolves <code>runner.type</code> in the <code>RUNNERS</code> registry and
 constructs the class with <code>runner.config</code>, so a registered runner is selectable from
 <code>interloper.yaml</code> and the CLI without further wiring.</p>
+<h2 id="launchers">Launchers<a class="headerlink" href="#launchers" title="Permanent link">&para;</a></h2>
+<p>A runner decides where a run's operations execute; a launcher decides where the run itself
+executes. The scheduler's queue claims a run, mints its token, hydrates its target into a DAG
+spec, and calls <code>launch(run, spec, token)</code> on the configured <code>Launcher</code>. A launcher that starts
+another process (a container, a pod) runs <code>Launcher.command(run, spec_path)</code> there with the spec
+at <code>spec_path</code>, the run's token in <code>INTERLOPER_RUN_TOKEN</code>, and the API's <code>server.internal_url</code>
+in <code>INTERLOPER_SERVER_INTERNAL_URL</code>: that process holds no database credentials and reports its
+events through the API. Register a launcher in the <code>interloper.launchers</code> entry-point group and
+give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes launchers do.</p>
 <h2 id="events-from-children">Events from children<a class="headerlink" href="#events-from-children" title="Permanent link">&para;</a></h2>
 <p>A run that executes each operation in a child process (the Docker and Kubernetes runners) sets
 <code>reports_progress = False</code>: the child reports its operation's start, retries and asset steps

@@ -2511,7 +2511,7 @@ plus <code>message</code> and, on failures, <code>error</code> and <code>traceba
 component and type, so the same logical event produced twice (a child process and its host)
 collapses to one when persisted.</p>
 <h2 id="persistence">Persistence<a class="headerlink" href="#persistence" title="Permanent link">&para;</a></h2>
-<p>On the platform, a <code>RunRecorder</code> delivers a run's events in batches to the store, with no
+<p>On the platform, an <code>EventRecorder</code> delivers a run's events in batches to the store, with no
 deadline: a batch is whatever accumulated while the previous delivery was in flight. The store
 folds the run's state from what it receives, so <code>run_started</code> starts the run and <code>run_completed</code>
 or <code>run_failed</code> ends it. A run's verdict is the ingestion of its own terminal event and never
@@ -2521,6 +2521,10 @@ deliver for half the heartbeat timeout is lost, and the reaper fails it.</p>
 reported, or the reason the platform ended it (the reaper, a failed dispatch, an exhausted
 quota). A run that failed only because operations failed has none of its own; their reasons are
 on their <code>operation_failed</code> events.</p>
+<p>A run's pod holds no database credentials. It delivers its batches to <code>POST
+/api/runs/{run_id}/events</code> on the API's <code>server.internal_url</code>, authenticated by a token the
+scheduler mints when it dispatches the run; in the scheduler's own process the batches go
+straight to the store.</p>
 <h2 id="event-types">Event types<a class="headerlink" href="#event-types" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
