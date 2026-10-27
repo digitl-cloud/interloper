@@ -12,9 +12,9 @@ Input formats
   for any **runnable** component: the run is literally "reconstruct the
   component and run its DAG".  A Job spec is the composite form — targets
   with workload-level default destinations and resources.
-* ``--format inline <json>`` — a serialized `DAGSpec` as JSON.
-  This is the mode used by the ``DockerRunner`` to pass a mini-DAG to a
-  child container.
+* ``--format inline <json>`` — a serialized `DAGSpec` as JSON, or
+  ``@<path>`` to read it from a file. This is how a launcher hands a run's
+  pod its DAG, and a container runner a child its mini-DAG.
 * ``--format paths <path>...`` — one or more dotted import paths that
   resolve to Source or Asset classes, built into a DAG by `DAG.from_paths`.
 
@@ -35,14 +35,24 @@ shows only warnings and errors.  ``--events json`` streams raw event
 JSON lines to stdout instead, unaffected by the level.  In container
 mode (``INTERLOPER_EVENTS_TO_STDERR``) the ``@EVENT:`` forwarding lines
 are emitted instead.
+
+A platform run's pod runs this command with ``INTERLOPER_RUN_TOKEN`` set: the
+run's events are then reported to the platform through an `EventRecorder`, and
+``--metadata`` carries the run's ids and names into every event.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
-from typing import TYPE_CHECKING
+import os
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from interloper.events import EventClient
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -108,6 +118,11 @@ def register(
         help="Optional run identifier, forwarded as metadata to the runner",
     )
     run_parser.add_argument(
+        "--metadata",
+        default=None,
+        help="Run metadata as a JSON object, spread into every event (ids and names, never secrets)",
+    )
+    run_parser.add_argument(
         "--date",
         default=None,
         help="Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)",
@@ -125,7 +140,7 @@ def register(
     run_parser.add_argument(
         "target",
         nargs="*",
-        help="Inline DAGSpec JSON (when --format inline) or one or more dotted import paths",
+        help="Inline DAGSpec JSON or @<path> to a file holding it (when --format inline), or dotted import paths",
     )
     run_parser.set_defaults(handler=_cmd_run)
 
@@ -139,15 +154,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
             (``dry_run``, ``events``, ``quiet``, ``verbose``, ``run_id``).
 
     Raises:
-        SystemExit: On invalid input, import failures, or non-zero
-            execution status.
+        SystemExit: On invalid input, import failures, a recorded run that
+            was lost, or non-zero execution status.
     """
-    import os
-
     from interloper.cli.console import configure_console_logging
-    from interloper.dag import DAG, DAGSpec
-    from interloper.errors import DAGError, PartitionError, SpecError
-    from interloper.events import EventBus, StderrEventHandler
+    from interloper.errors import PartitionError, RunLostError, format_exception
+    from interloper.events import Event, EventBus, EventRecorder, EventType, StderrEventHandler
+    from interloper.partitioning import PartitionWindow, TimePartition
     from interloper.runner import ExecutionStatus, Runner
     from interloper.settings import AppSettings
 
@@ -161,6 +174,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
         log_format=settings.log.format,
     )
     is_container = os.environ.get("INTERLOPER_EVENTS_TO_STDERR") == "true"
+    token = os.environ.get("INTERLOPER_RUN_TOKEN")
+    if token is not None and not args.run_id:
+        raise SystemExit("Error: a recorded run needs --run-id.")
 
     # -- Subscribe stderr event handler (for container event forwarding) -------
     stderr_handler = None
@@ -168,35 +184,36 @@ def _cmd_run(args: argparse.Namespace) -> None:
         stderr_handler = StderrEventHandler()
         EventBus.subscribe(stderr_handler)
 
-    try:
-        # -- Build the DAG -----------------------------------------------------
-        if args.file is not None:
-            if args.target:
-                raise SystemExit("Error: --file cannot be combined with positional targets.")
-            try:
-                dag = DAG.from_spec_file(args.file)
-            except (SpecError, DAGError) as error:
-                raise SystemExit(f"Error: {error}") from error
-            except Exception as error:
-                raise SystemExit(f"Error: failed to reconstruct spec '{args.file}': {error}") from error
-        elif args.format == "inline":
-            if len(args.target) != 1:
-                raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
-            try:
-                spec = DAGSpec.model_validate_json(args.target[0])
-            except Exception as error:
-                raise SystemExit(f"Error: failed to parse inline DAGSpec: {error}") from error
-            dag = DAG.from_spec(spec)
-        else:
-            if not args.target:
-                raise SystemExit("Error: provide one or more import paths, or a spec via --file.")
-            try:
-                dag = DAG.from_paths(args.target)
-            except DAGError as error:
-                raise SystemExit(f"Error: {error}") from error
+    # A platform run reports a failure to even start as its own failure: its process holds no store.
+    recorder = None
+    if token is not None:
+        recorder = EventRecorder(
+            EventClient(settings.server.internal_url, token, args.run_id).ingest,
+            run_id=args.run_id,
+            heartbeat_interval=settings.reaper.heartbeat_interval,
+            heartbeat_timeout=settings.reaper.heartbeat_timeout,
+            on_lost=_exit_lost,
+        )
 
-        window = _resolve_window(args, dag)
-        runner = Runner.from_settings(settings.runner)
+    try:
+        try:
+            dag = _build_dag(args)
+            if recorder is None:
+                window = _resolve_window(args, dag)
+            else:
+                # A platform run's window is its partition key, read as the platform reads it.
+                window = PartitionWindow.of(TimePartition.from_key(args.date)) if args.date else None
+            runner = Runner.from_settings(settings.runner)
+            metadata: dict[str, Any] = json.loads(args.metadata) if args.metadata else {}
+        except (Exception, SystemExit) as error:
+            if recorder is not None:
+                reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
+                failed = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
+                with recorder:
+                    recorder(Event(type=EventType.RUN_FAILED, metadata=failed))
+            raise
+        if args.run_id:
+            metadata["run_id"] = args.run_id
 
         if args.dry_run:
             _print_plan(dag, window, type(runner).__name__)
@@ -210,14 +227,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         # side covers child events too, since cross-process runners re-emit
         # them on the host bus.
         on_event = None
-        if not is_container:
+        if not is_container and token is None:
             from interloper.events import ConsoleEventHandler
 
             on_event = ConsoleEventHandler(json_lines=args.events == "json")
-
-        metadata: dict[str, str] = {}
-        if args.run_id:
-            metadata["run_id"] = args.run_id
 
         enabled = [operation for operation in dag.operations if operation.enabled]
         logger.info(
@@ -227,10 +240,16 @@ def _cmd_run(args: argparse.Namespace) -> None:
             type(runner).__name__,
         )
 
-        runner.on_event = on_event
         try:
-            result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
-        except PartitionError as error:
+            if recorder is None:
+                runner.on_event = on_event
+                result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
+            else:
+                with recorder:
+                    recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
+                    result = asyncio.run(recorded.run(dag, window, metadata))
+                    recorder.finish(result)
+        except (PartitionError, RunLostError) as error:
             raise SystemExit(f"Error: {error}") from error
 
         logger.info("Run completed: %s", result.status.name)
@@ -245,6 +264,61 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
 
 # -- Internals -----------------------------------------------------------------
+
+
+def _build_dag(args: argparse.Namespace) -> DAG:
+    """Build the DAG the command runs, from a spec file, an inline spec or import paths.
+
+    Args:
+        args: Parsed CLI arguments, carrying ``file``, ``format`` and ``target``.
+
+    Returns:
+        The DAG.
+
+    Raises:
+        SystemExit: On invalid input or a spec or path that does not resolve.
+    """
+    from interloper.dag import DAG, DAGSpec
+    from interloper.errors import DAGError, SpecError
+
+    if args.file is not None:
+        if args.target:
+            raise SystemExit("Error: --file cannot be combined with positional targets.")
+        try:
+            return DAG.from_spec_file(args.file)
+        except (SpecError, DAGError) as error:
+            raise SystemExit(f"Error: {error}") from error
+        except Exception as error:
+            raise SystemExit(f"Error: failed to reconstruct spec '{args.file}': {error}") from error
+    if args.format == "inline":
+        if len(args.target) != 1:
+            raise SystemExit("Error: --format inline expects exactly one positional argument (the JSON spec).")
+        document = args.target[0]
+        try:
+            if document.startswith("@"):
+                document = Path(document[1:]).read_text()
+            spec = DAGSpec.model_validate_json(document)
+        except Exception as error:
+            raise SystemExit(f"Error: failed to parse inline DAGSpec: {error}") from error
+        return DAG.from_spec(spec)
+    if not args.target:
+        raise SystemExit("Error: provide one or more import paths, or a spec via --file.")
+    try:
+        return DAG.from_paths(args.target)
+    except DAGError as error:
+        raise SystemExit(f"Error: {error}") from error
+
+
+def _exit_lost() -> None:
+    """Exit this run's process at once: its run was ended elsewhere, or can no longer report.
+
+    The process exists for this one run, and an operation blocked in sync
+    code cannot be interrupted any other way. The recorder has delivered
+    what it held before calling this.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(1)
 
 
 def _print_plan(dag: DAG, window: PartitionWindow | None, runner_name: str) -> None:
