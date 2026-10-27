@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v0.119.0 (2026-10-27)
+
+### Bug Fixes
+
+- **assets**: Criteo calls API version 2026-07
+  ([`2024f26`](https://github.com/digitl-cloud/interloper/commit/2024f260c4fda6b118abdf984b4911157eb5ea2f))
+
+- **core**: The bus logs handler failures and a run's flush has no deadline
+  ([`8b03b2d`](https://github.com/digitl-cloud/interloper/commit/8b03b2da48c20276567f6fea619a5a34b96ec9c5))
+
+- **scheduler**: A run reports everything through the recorder and the ingest fold
+  ([`9764404`](https://github.com/digitl-cloud/interloper/commit/97644043d5f2623199a8734331e939aa33dd443b))
+
+### Documentation
+
+- A run's events are recorded in batches with no deadline
+  ([`0697594`](https://github.com/digitl-cloud/interloper/commit/0697594e24b3309f99504a52392f97bb753a9e06))
+
+### Features
+
+- **core**: RunRecorder delivers a run's events in batches with no deadline
+  ([`5d34488`](https://github.com/digitl-cloud/interloper/commit/5d344884bab37858444af0d4bcd1ba82bb7a9676))
+
+- **db**: A run ending records its reason on the run; complete is success-only
+  ([`5ca312c`](https://github.com/digitl-cloud/interloper/commit/5ca312cf31f4695073fb1cfe852d3a19470f846f))
+
+- **db**: Ingest a run's event batch and fold its state from it
+  ([`939f1cc`](https://github.com/digitl-cloud/interloper/commit/939f1cc521758de886dd4804c1f80b5bd1c3e402))
+
+- **db**: Save a batch of events in one upsert
+  ([`91f4860`](https://github.com/digitl-cloud/interloper/commit/91f4860a237d44d76259c13d6913d696cb5ec816))
+
+
 ## v0.118.0 (2026-10-27)
 
 ### Bug Fixes
