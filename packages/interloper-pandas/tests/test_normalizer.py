@@ -99,6 +99,17 @@ class TestDataFrameNormalize:
         assert isinstance(restored, DataFrameNormalizer)
         assert (restored.epoch_columns, restored.epoch_unit) == (["created_at"], "ms")
 
+    def test_integers_above_2_53_stay_exact_beside_a_null(self):
+        big = 120212345678901235
+        result = DataFrameNormalizer().normalize([{"campaignId": big}, {"campaignId": None}])
+        assert result["campaign_id"].tolist()[0] == big
+
+    def test_flattened_integers_above_2_53_stay_exact_beside_a_null(self):
+        big = 120212345678901235
+        rows = [{"campaign": {"id": big}}, {"campaign": {"id": None}}]
+        result = DataFrameNormalizer(flatten_max_level=1).normalize(rows)
+        assert result["campaign_id"].tolist()[0] == big
+
     def test_replace_empty_dicts(self):
         n = DataFrameNormalizer(
             normalize_columns_names=False, fill_missing=False, flatten_max_level=0, replace_empty_dicts=True

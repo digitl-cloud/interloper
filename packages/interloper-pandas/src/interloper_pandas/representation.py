@@ -9,7 +9,8 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from decimal import Decimal
+import numbers
+from decimal import Decimal, InvalidOperation
 from typing import Any, ClassVar
 
 import pandas as pd
@@ -55,13 +56,26 @@ class DataFrameRepresentation(Representation):
     def from_rows(self, rows: list[dict[str, Any]]) -> pd.DataFrame:
         """Materialize rows into a DataFrame.
 
+        pandas infers a column of integers holding a null as ``float64``, which
+        rounds every integer above 2**53 (ids, mostly), so such a column is
+        built as nullable ``Int64`` from the original values instead.
+
         Args:
             rows: The rows to materialize.
 
         Returns:
             A pandas ``DataFrame``.
         """
-        return pd.DataFrame(rows)
+        df = pd.DataFrame(rows, dtype=object)
+        integers = {
+            column: pd.array(df[column].tolist(), dtype="Int64")
+            for column in df.columns
+            if df[column].isna().any() and pd.api.types.infer_dtype(df[column], skipna=True) == "integer"
+        }
+        df = df.infer_objects()
+        for column, values in integers.items():
+            df[column] = values
+        return df
 
     def columns(self, data: pd.DataFrame) -> list[str]:
         """Return the DataFrame's column names.
@@ -214,6 +228,53 @@ def _dtype_to_py_type(series: pd.Series) -> Any:
     return type(non_null.iloc[0])
 
 
+def _to_integers(series: pd.Series) -> pd.Series:
+    """Cast a Series to nullable ``Int64`` without passing through float.
+
+    ``to_numeric`` reads a column holding a null as ``float64``, which rounds
+    every integer above 2**53, so values that are not already numeric convert
+    one by one.
+
+    Args:
+        series: The Series to cast.
+
+    Returns:
+        The ``Int64`` Series.
+    """
+    if pd.api.types.is_numeric_dtype(series) or pd.api.types.is_bool_dtype(series):
+        return series.astype("Int64")
+    values = [None if pd.api.types.is_scalar(value) and pd.isna(value) else _exact_integer(value) for value in series]
+    return pd.Series(pd.array(values, dtype="Int64"), index=series.index, name=series.name)
+
+
+def _exact_integer(value: Any) -> int:
+    """Read one value as an integer, refusing anything with a fractional part.
+
+    Args:
+        value: An integer, a float, a ``Decimal`` or a numeric string such as ``"12"``, ``"1.0"`` or ``"1e3"``.
+
+    Returns:
+        The integer, exact at any magnitude.
+
+    Raises:
+        ValueError: If the value is not numeric or not integral.
+    """
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    try:
+        if isinstance(value, str):
+            number = Decimal(value.strip())
+        elif isinstance(value, numbers.Real):
+            number = Decimal(float(value))
+        else:
+            number = Decimal(value)
+    except InvalidOperation as e:
+        raise ValueError(f"{value!r} is not a number") from e
+    if not number.is_finite() or number != number.to_integral_value():
+        raise ValueError(f"{value!r} is not an integer")
+    return int(number)
+
+
 def _to_datetime(series: pd.Series) -> pd.Series:
     """Parse a Series to datetime, normalizing to UTC when offsets or precision vary.
 
@@ -326,7 +387,7 @@ def _cast_series(series: pd.Series, spec: FieldSpec) -> pd.Series:
         if spec.type is bool:
             return series.astype("boolean")
         if spec.type is int:
-            return pd.to_numeric(series, errors="raise").astype("Int64")
+            return _to_integers(series)
         if spec.type is float:
             return pd.to_numeric(series, errors="raise").astype("Float64")
         if spec.type is str:

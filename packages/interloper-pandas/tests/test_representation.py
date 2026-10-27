@@ -2,6 +2,7 @@
 
 import datetime
 import json
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,8 @@ from interloper.schema import Schema
 from pydantic import Field
 
 from interloper_pandas.representation import DataFrameRepresentation
+
+BIG_ID = 120212345678901235
 
 
 class UserSchema(Schema):
@@ -59,6 +62,12 @@ class TestDataFrameRepresentation:
         df = DataFrameRepresentation().from_rows([{"a": 1}, {"a": 2}])
         assert isinstance(df, pd.DataFrame)
         assert df["a"].tolist() == [1, 2]
+
+    def test_from_rows_keeps_integers_above_2_53_exact_beside_a_null(self):
+        df = DataFrameRepresentation().from_rows([{"id": BIG_ID}, {"id": None}])
+        assert str(df["id"].dtype) == "Int64"
+        assert df["id"].tolist()[0] == BIG_ID
+        assert df["id"].isna().iloc[1]
 
     def test_columns(self):
         df = pd.DataFrame({"a": [1], "b": [2]})
@@ -118,6 +127,32 @@ class TestDataFrameReconcile:
         assert out["cost"].tolist()[0] == 1.5
         assert out["day"].tolist()[0] == datetime.date(2024, 1, 1)
         assert out["name"].tolist()[0] == "x"
+
+    def test_integer_strings_above_2_53_cast_exactly_beside_a_null(self):
+        df = pd.DataFrame({"id": [str(BIG_ID), None]}, dtype=object)
+        out = DataFrameRepresentation().reconcile(df, TypedSchema)
+        assert out["id"].tolist()[0] == BIG_ID
+
+    def test_integers_above_2_53_cast_exactly_to_text_beside_a_null(self):
+        df = DataFrameRepresentation().from_rows([{"name": BIG_ID}, {"name": None}])
+        out = DataFrameRepresentation().reconcile(df, TypedSchema)
+        assert out["name"].iloc[0] == str(BIG_ID)
+
+    def test_integral_values_in_other_spellings_still_cast_to_int(self):
+        values = ["1.0", " 12 ", "1e3", 7.0, True, np.int64(5), np.float64(4.0), Decimal("3.0"), None]
+        df = pd.DataFrame({"id": values}, dtype=object)
+        out = DataFrameRepresentation().reconcile(df, TypedSchema)
+        assert out["id"].tolist()[:8] == [1, 12, 1000, 7, 1, 5, 4, 3]
+
+    def test_fractional_values_are_refused_for_an_int_column(self):
+        df = pd.DataFrame({"id": ["1.5", None]}, dtype=object)
+        with pytest.raises(SchemaError, match="cannot cast"):
+            DataFrameRepresentation().reconcile(df, TypedSchema)
+
+    def test_non_numeric_values_are_refused_for_an_int_column(self):
+        df = pd.DataFrame({"id": ["abc", None]}, dtype=object)
+        with pytest.raises(SchemaError, match="'abc' is not a number"):
+            DataFrameRepresentation().reconcile(df, TypedSchema)
 
     def test_iso8601_timestamps_of_varying_precision_cast(self):
         class Stamped(Schema):

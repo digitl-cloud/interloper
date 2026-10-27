@@ -10,6 +10,8 @@ from interloper.normalizer import Normalizer
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
+from interloper_pandas.representation import DataFrameRepresentation
+
 
 class DataFrameNormalizer(Normalizer):
     """Type-native normalizer for pandas ``DataFrame`` asset data.
@@ -74,7 +76,7 @@ class DataFrameNormalizer(Normalizer):
         if isinstance(data, pd.DataFrame):
             df = data
         elif isinstance(data, list):
-            df = pd.DataFrame(data)
+            df = DataFrameRepresentation().from_rows(data)
         else:
             raise NormalizerError(f"DataFrameNormalizer expects list[dict] or a DataFrame, got {type(data).__name__}.")
 
@@ -119,4 +121,4 @@ class DataFrameNormalizer(Normalizer):
             return df
         rows = df.to_dict("records")
         flattened = [self._flatten_dict(row) for row in rows]
-        return pd.DataFrame(flattened)
+        return DataFrameRepresentation().from_rows(flattened)
