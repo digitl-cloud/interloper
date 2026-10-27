@@ -523,12 +523,7 @@ class RunStore:
                     "Canceled run %s: monthly successful-run quota exhausted for org %s", db_run.id, db_run.org_id
                 )
 
-    def ingest(
-        self,
-        run_id: UUID,
-        events: Sequence[il.Event],
-        effects: Mapping[str, il.Effect] | None = None,
-    ) -> bool:
+    def ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
         """Take in a batch a run's pod reports: save it, fold the run's state from it, renew its heartbeat.
 
         The one write path a run has. In one transaction: the events are
@@ -544,8 +539,8 @@ class RunStore:
 
         Args:
             run_id: The run UUID.
-            events: The batch, in emission order; may be empty.
-            effects: Operation effects keyed by component id; ``None`` for none.
+            batch: The events, in emission order and possibly none, and the
+                effects that travel with the run's own ending.
 
         Returns:
             Whether the run is still running once the batch is folded, which
@@ -553,10 +548,10 @@ class RunStore:
         """
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
-            inserted = {str(event_id) for event_id in self._events.save_many(events, db_run.org_id, db_run.id)}
-            if effects:
-                self._apply_effects_once(db_run, events, inserted, effects)
-            for event in events:
+            inserted = {str(event_id) for event_id in self._events.save_many(batch.events, db_run.org_id, db_run.id)}
+            if batch.effects:
+                self._apply_effects_once(db_run, batch.events, inserted, batch.effects)
+            for event in batch.events:
                 if event.type is il.EventType.RUN_STARTED:
                     self._start(db_run)
                 elif event.type is il.EventType.RUN_COMPLETED:

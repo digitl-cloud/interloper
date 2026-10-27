@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -10,7 +11,7 @@ import pytest
 import interloper as il
 from interloper.component import Component
 from interloper.errors import DAGError
-from interloper.operation import Operation, OperationContext, OperationResult
+from interloper.operation import Effect, Operation, OperationContext, OperationResult
 from interloper.runner import ExecutionStatus
 
 
@@ -315,3 +316,15 @@ class TestFromExecution:
 
     def test_the_exception_is_not_part_of_equality(self):
         assert OperationResult(error="x", exception=ValueError("a")) == OperationResult(error="x")
+
+
+class TestEffect:
+    def test_an_effect_survives_its_json_shape(self) -> None:
+        effect = Effect(config={"token": "x"}, state={"cursor": 3})
+
+        assert Effect.from_dict(asdict(effect)) == effect
+
+    @pytest.mark.parametrize("data", [{"config": "rotated"}, {"state": ["cursor"]}, {"secrets": {}}])
+    def test_anything_but_a_config_and_a_state_mapping_is_refused(self, data: dict[str, Any]) -> None:
+        with pytest.raises(TypeError):
+            Effect.from_dict(data)
