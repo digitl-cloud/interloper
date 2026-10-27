@@ -1,0 +1,8 @@
+from interloper_assets.criteo.star_schema.schemas.dim_accounts import DimAccounts
+from interloper_assets.criteo.star_schema.schemas.dim_ad_groups import DimAdGroups
+from interloper_assets.criteo.star_schema.schemas.dim_ads import DimAds
+from interloper_assets.criteo.star_schema.schemas.dim_campaigns import DimCampaigns
+from interloper_assets.criteo.star_schema.schemas.fact_ad_performance import FactAdPerformance
+from interloper_assets.criteo.star_schema.schemas.fact_campaign_performance import FactCampaignPerformance
+
+__all__ = ["DimAccounts", "DimAdGroups", "DimAds", "DimCampaigns", "FactAdPerformance", "FactCampaignPerformance"]
