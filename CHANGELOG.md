@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v0.120.0 (2026-10-27)
+
+### Bug Fixes
+
+- **api**: Bind Google login state to the browser and refuse off-site redirects
+  ([`1e369bc`](https://github.com/digitl-cloud/interloper/commit/1e369bcc1b3552629a06dd340d1842f454285100))
+
+- **assets**: A Facebook ad set's unused budget of 0 is not its budget type
+  ([`e6d9003`](https://github.com/digitl-cloud/interloper/commit/e6d9003343ab9ed482082fc01875a6fb258a0224))
+
+- **assets**: Facebook account and ad entities load on every account
+  ([`1065263`](https://github.com/digitl-cloud/interloper/commit/1065263cc5570997aa761eb06e0cd04b1a9e095e))
+
+### Features
+
+- **assets**: Amazon Ads ad entities per ad product
+  ([`2189a92`](https://github.com/digitl-cloud/interloper/commit/2189a92fded62ba66de24c5342d7dd4d4775efa8))
+
+- **assets**: Amazon Ads star schema dim_ads
+  ([`d57d984`](https://github.com/digitl-cloud/interloper/commit/d57d984d7215ceffe7d4e14304fe494659303d40))
+
+- **assets**: Criteo star schema on the contract, from the reports
+  ([`f32fa36`](https://github.com/digitl-cloud/interloper/commit/f32fa36342660ebccfe29ddddd39cd9d71eaf468))
+
+- **assets**: Snapchat Ads star schema on the contract
+  ([`ec0c71a`](https://github.com/digitl-cloud/interloper/commit/ec0c71a1222c8da8bb1f8929bd4ceb11366c85ef))
+
+- **sql**: Local_date reads an instant as the day it falls on in a per-row timezone
+  ([`5a072d3`](https://github.com/digitl-cloud/interloper/commit/5a072d3e6a98cf70302283ec6d347201551334bf))
+
+
 ## v0.119.0 (2026-10-27)
 
 ### Bug Fixes
