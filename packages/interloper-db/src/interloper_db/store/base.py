@@ -99,7 +99,7 @@ class Store:
         self.usage = UsageStore(self._engine)
         self.events = EventStore(self._engine)
         self.backfills = BackfillStore(self._engine, self.quotas, lambda: self.runs, self.events)
-        self.runs = RunStore(self._engine, self.quotas, self.backfills, self.events)
+        self.runs = RunStore(self._engine, self.quotas, self.backfills, self.events, lambda: self.components)
         self.executions = ExecutionStore(self._engine)
         self.components = ComponentStore(
             self._engine,

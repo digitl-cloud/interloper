@@ -33,7 +33,7 @@ from interloper.hook import HOOK_EVENT_TYPES, Hook, HookContext, HookState, Trig
 from interloper.job import CronJob, Job, JobState
 from interloper.normalizer import MaterializationStrategy, Normalizer
 from interloper.oauth import OAuthConfig, OAuthProvider, RefreshTokenResponse
-from interloper.operation import Operation, OperationContext, OperationResult, Workload
+from interloper.operation import Effect, Operation, OperationContext, OperationResult, Workload
 from interloper.partitioning import (
     ListPartition,
     ListPartitionConfig,
@@ -104,6 +104,7 @@ __all__ = [
     "CronField",
     "CronJob",
     "Destination",
+    "Effect",
     "Event",
     "EventBus",
     "EventType",
