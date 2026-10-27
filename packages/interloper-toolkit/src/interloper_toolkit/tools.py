@@ -13,13 +13,14 @@ from __future__ import annotations
 import inspect
 import types
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from interloper_toolkit import analytics, catalog, collection, jobs, lineage, scheduling, sources
 from interloper_toolkit.context import ToolkitContext
+from interloper_toolkit.models import ToolError
 
 
 class Effect(str, Enum):
@@ -66,18 +67,27 @@ class Tool:
         """
         return self.effect in (Effect.CREATE, Effect.CANCEL, Effect.DELETE)
 
-    def bind(self, context: Callable[..., ToolkitContext], *leading: inspect.Parameter) -> types.FunctionType:
+    def bind(
+        self,
+        context: Callable[..., ToolkitContext | ToolError],
+        *leading: inspect.Parameter,
+        trailing: Sequence[inspect.Parameter] = (),
+    ) -> types.FunctionType:
         """Adapt the function to a surface that supplies the context itself.
 
         The bound function keeps the name, docstring and every parameter but
         the context, so the schema a model sees is exactly the toolkit's.
         ``leading`` are the surface's own parameters in the context's place,
-        if any; ``context`` receives their values and returns the context to
-        call with.
+        if any, and ``trailing`` its own keyword-only parameters after the
+        toolkit's. ``context`` receives the leading values positionally, then
+        the trailing values as keywords, and returns the context to call with.
+        A :class:`~interloper_toolkit.models.ToolError` it returns is the
+        bound function's result: the toolkit function is not called.
 
         Args:
-            context: Derives the toolkit context from the leading arguments.
+            context: Derives the toolkit context from the surface's arguments, or refuses the call.
             *leading: Parameters the bound function takes before the toolkit's own.
+            trailing: Keyword-only parameters the bound function takes after the toolkit's own.
 
         Returns:
             The bound function, with an explicit signature and annotations.
@@ -85,18 +95,28 @@ class Tool:
         signature = inspect.signature(self.fn)
         hints = typing.get_type_hints(self.fn)
         _, *rest = signature.parameters
-        parameters = [*leading, *(signature.parameters[name].replace(annotation=hints[name]) for name in rest)]
+        parameters = [
+            *leading,
+            *(signature.parameters[name].replace(annotation=hints[name]) for name in rest),
+            *trailing,
+        ]
         returns = hints.get("return", Any)
         split = len(leading)
 
         if inspect.iscoroutinefunction(self.fn):
 
             async def tool(*args: Any, **kwargs: Any) -> Any:
-                return await self.fn(context(*args[:split]), *args[split:], **kwargs)
+                derived = self._derive(context, split, trailing, args, kwargs)
+                if isinstance(derived, ToolError):
+                    return derived
+                return await self.fn(derived, *args[split:], **kwargs)
         else:
 
             def tool(*args: Any, **kwargs: Any) -> Any:
-                return self.fn(context(*args[:split]), *args[split:], **kwargs)
+                derived = self._derive(context, split, trailing, args, kwargs)
+                if isinstance(derived, ToolError):
+                    return derived
+                return self.fn(derived, *args[split:], **kwargs)
 
         tool.__name__ = tool.__qualname__ = self.name
         tool.__module__ = self.fn.__module__
@@ -104,6 +124,34 @@ class Tool:
         tool.__signature__ = signature.replace(parameters=parameters, return_annotation=returns)  # ty: ignore[invalid-assignment]
         tool.__annotations__ = {p.name: p.annotation for p in parameters} | {"return": returns}
         return tool
+
+    @staticmethod
+    def _derive(
+        context: Callable[..., ToolkitContext | ToolError],
+        split: int,
+        trailing: Sequence[inspect.Parameter],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> ToolkitContext | ToolError:
+        """Call the surface's context with its own arguments, taking the trailing ones out of the call.
+
+        Args:
+            context: The surface's context callable.
+            split: How many leading arguments the call carries.
+            trailing: The surface's keyword-only parameters, whose values are removed from ``kwargs``.
+            args: The bound function's positional arguments.
+            kwargs: The bound function's keyword arguments, left with the toolkit function's own.
+
+        Returns:
+            The toolkit context, or the refusal the surface returned.
+        """
+        values = {
+            parameter.name: kwargs.pop(parameter.name)
+            if parameter.default is inspect.Parameter.empty
+            else kwargs.pop(parameter.name, parameter.default)
+            for parameter in trailing
+        }
+        return context(*args[:split], **values)
 
 
 TOOLS: tuple[Tool, ...] = (

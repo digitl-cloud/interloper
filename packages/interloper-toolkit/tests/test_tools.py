@@ -89,3 +89,70 @@ class TestBind:
 
         assert inspect.iscoroutinefunction(bound)
         assert isinstance(await bound("not-a-uuid"), ToolError)
+
+    def test_trailing_parameter_is_keyword_only_with_default(self):
+        trailing = inspect.Parameter(
+            "organisation", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str | None
+        )
+
+        bound = Tool(scheduling.list_recent_runs, Effect.READ).bind(
+            lambda **_: ToolError(error="x"), trailing=[trailing]
+        )
+
+        parameters = inspect.signature(bound).parameters
+        assert list(parameters) == ["component_id", "status", "limit", "offset", "organisation"]
+        assert parameters["organisation"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameters["organisation"].default is None
+        assert parameters["organisation"].annotation == (str | None)
+        assert bound.__annotations__["organisation"] == (str | None)
+
+    def test_trailing_values_reach_the_context_as_keywords_and_not_the_function(self, ctx: ToolkitContext):
+        seen: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+
+        def context(*leading: Any, **trailing: Any) -> ToolkitContext:
+            seen.append((leading, trailing))
+            return ctx
+
+        leading = inspect.Parameter("run", inspect.Parameter.POSITIONAL_ONLY)
+        trailing = inspect.Parameter("organisation", inspect.Parameter.KEYWORD_ONLY, default=None)
+        bound = Tool(scheduling.list_jobs, Effect.READ).bind(context, leading, trailing=[trailing])
+
+        assert bound("run", limit=5, organisation="acme").status == "success"
+        assert bound("run").status == "success"
+        assert seen == [(("run",), {"organisation": "acme"}), (("run",), {"organisation": None})]
+
+    def test_a_context_refusal_is_returned_without_calling_the_function(self):
+        calls: list[object] = []
+
+        def fn(context: ToolkitContext) -> str:
+            calls.append(context)
+            return "called"
+
+        refusal = ToolError(error="x")
+        bound = Tool(fn, Effect.READ).bind(lambda: refusal)
+
+        assert bound() is refusal
+        assert calls == []
+
+    async def test_an_async_context_refusal_is_returned_without_calling_the_function(self):
+        calls: list[object] = []
+
+        async def fn(context: ToolkitContext) -> str:
+            calls.append(context)
+            return "called"
+
+        refusal = ToolError(error="x")
+        bound = Tool(fn, Effect.READ).bind(lambda: refusal)
+
+        assert await bound() is refusal
+        assert calls == []
+
+    def test_trailing_follows_the_functions_own_keyword_only_parameters(self):
+        def fn(context: ToolkitContext, name: str, *, flag: bool = False) -> str:
+            return name
+
+        trailing = inspect.Parameter("organisation", inspect.Parameter.KEYWORD_ONLY, default=None)
+
+        bound = Tool(fn, Effect.READ).bind(lambda **_: ToolError(error="x"), trailing=[trailing])
+
+        assert list(inspect.signature(bound).parameters) == ["name", "flag", "organisation"]
