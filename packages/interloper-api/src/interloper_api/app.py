@@ -35,6 +35,7 @@ from interloper_api.dependencies import (
 )
 from interloper_api.routes import (
     admin,
+    apps,
     auth,
     authorization,
     backfills,
@@ -62,6 +63,7 @@ _ROUTERS: tuple[APIRouter, ...] = (
     admin.router,
     oauth.router,
     tokens.router,
+    apps.router,
     runs.router,
     health.router,
 )

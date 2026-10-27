@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, resolveComponent } from 'vue'
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
-import type { PersonalAccessToken } from '~/types/token'
+import type { AuthorisedApp, PersonalAccessToken } from '~/types/token'
 
 definePageMeta({ layout: 'settings' })
 
@@ -17,15 +17,23 @@ const { apiFetch, fetchAll } = useApi()
 const tokens = ref<PersonalAccessToken[]>([])
 const loading = ref(false)
 const createOpen = ref(false)
+const apps = ref<AuthorisedApp[]>([])
+const appsLoading = ref(false)
 
-// Anything but ?tab=tokens, unknown values included, is the sign-in pane.
-const activeTab = computed(() => route.query.tab === 'tokens' ? 'tokens' : 'signin')
+type Tab = 'signin' | 'tokens' | 'apps'
+
+// Unknown values, and none, are the sign-in pane.
+const activeTab = computed<Tab>(() => {
+    const tab = route.query.tab
+    return tab === 'tokens' || tab === 'apps' ? tab : 'signin'
+})
 
 onMounted(() => {
     if (!route.query.tab) {
         router.replace({ query: { tab: 'signin' } })
     }
     loadTokens()
+    loadApps()
 })
 
 const tabs = computed<PageTab[]>(() => [
@@ -36,6 +44,13 @@ const tabs = computed<PageTab[]>(() => [
         badge: loading.value ? undefined : tokens.value.length,
         to: { query: { tab: 'tokens' } },
         active: activeTab.value === 'tokens',
+    },
+    {
+        label: 'Authorised apps',
+        icon: 'i-lucide-plug',
+        badge: appsLoading.value ? undefined : apps.value.length,
+        to: { query: { tab: 'apps' } },
+        active: activeTab.value === 'apps',
     },
 ])
 
@@ -49,6 +64,19 @@ async function loadTokens() {
     }
     finally {
         loading.value = false
+    }
+}
+
+async function loadApps() {
+    appsLoading.value = true
+    try {
+        apps.value = await apiFetch<AuthorisedApp[]>('/auth/apps')
+    }
+    catch (err) {
+        console.error('[Settings] Failed to load authorised apps', err)
+    }
+    finally {
+        appsLoading.value = false
     }
 }
 
@@ -100,6 +128,81 @@ function rowActions(token: PersonalAccessToken): DropdownMenuItem[][] {
         ],
     ]
 }
+
+async function revokeApp(app: AuthorisedApp) {
+    const confirmed = await confirm({
+        title: 'Revoke access',
+        description: '{subject} will immediately lose access to every organisation you belong to. '
+            + 'To use it again, you will have to approve it again.',
+        subject: { name: app.name, icon: 'i-lucide-plug' },
+        confirmLabel: 'Revoke',
+        confirmColor: 'error',
+    })
+    if (!confirmed) return
+
+    try {
+        await apiFetch(`/auth/apps/${encodeURIComponent(app.id)}`, { method: 'DELETE' })
+        toast.add({ title: `${app.name} revoked`, color: 'success' })
+        await loadApps()
+    }
+    catch (err) {
+        toast.add(errorToast(err, 'Failed to revoke access'))
+    }
+}
+
+function appActions(app: AuthorisedApp): DropdownMenuItem[][] {
+    return [
+        [
+            {
+                label: 'Revoke access',
+                icon: 'i-lucide-shield-off',
+                color: 'error' as const,
+                onSelect: () => revokeApp(app),
+            },
+        ],
+    ]
+}
+
+/** The hosts an app returns to, port included; a URI with no host stands for itself. */
+function appHosts(app: AuthorisedApp): string[] {
+    const hosts = app.redirect_uris.map((uri) => {
+        try {
+            return new URL(uri).host || uri
+        }
+        catch {
+            return uri
+        }
+    })
+    return [...new Set(hosts)]
+}
+
+const appColumns: TableColumn<AuthorisedApp>[] = [
+    {
+        accessorKey: 'name',
+        header: 'Name',
+        cell: ({ row }) => h('span', { class: 'font-semibold text-highlighted' }, row.original.name),
+    },
+    {
+        id: 'returns_to',
+        header: 'Returns to',
+        accessorFn: row => appHosts(row).join(' '),
+        cell: ({ row }) => h('div', { class: 'flex flex-wrap gap-1' },
+            appHosts(row.original).map(host => h(UBadge, {
+                label: host,
+                color: 'neutral',
+                variant: 'soft',
+                class: 'font-mono',
+            })),
+        ),
+    },
+    {
+        accessorKey: 'created_at',
+        header: 'Registered',
+        cell: ({ row }) => h('span', { class: 'text-muted' }, row.original.created_at
+            ? formatDay(row.original.created_at)
+            : 'Unknown'),
+    },
+]
 
 const columns: TableColumn<PersonalAccessToken>[] = [
     {
@@ -177,7 +280,7 @@ const columns: TableColumn<PersonalAccessToken>[] = [
                 </div>
             </UCard>
 
-            <DataTable v-else
+            <DataTable v-else-if="activeTab === 'tokens'"
                        :columns="columns"
                        :data="tokens"
                        :loading="loading"
@@ -191,6 +294,15 @@ const columns: TableColumn<PersonalAccessToken>[] = [
                              @click="createOpen = true" />
                 </template>
             </DataTable>
+
+            <DataTable v-else
+                       :columns="appColumns"
+                       :data="apps"
+                       :loading="appsLoading"
+                       :row-actions="appActions"
+                       no-actions
+                       no-row-click
+                       search-placeholder="Search apps..." />
 
             <SettingsTokenCreateModal v-model:open="createOpen"
                                       @created="loadTokens" />
