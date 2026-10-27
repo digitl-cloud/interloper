@@ -35,12 +35,13 @@ from interloper_db.models.runs import (
     Run,
     RunStatus,
 )
-from interloper_db.models.tokens import PersonalAccessToken
+from interloper_db.models.tokens import Audience, Token, TokenKind
 
 __all__ = [
     "ACTIVE_BACKFILL_STATUSES",
     "OPEN_RUN_STATUSES",
     "TERMINAL_RUN_STATUSES",
+    "Audience",
     "AuthSession",
     "Backfill",
     "BackfillStatus",
@@ -52,12 +53,13 @@ __all__ = [
     "Invitation",
     "Organisation",
     "Overdue",
-    "PersonalAccessToken",
     "Profile",
     "Quota",
     "Role",
     "Run",
     "RunStatus",
+    "Token",
+    "TokenKind",
     "Usage",
     "UserOrganisation",
 ]

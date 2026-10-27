@@ -2,7 +2,6 @@ export interface PersonalAccessToken {
     id: string
     name: string
     token_prefix: string
-    organisation_id: string
     created_at: string | null
     expires_at: string | null
     last_used_at: string | null

@@ -5,13 +5,12 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from uuid import UUID
 
 from interloper.catalog import Catalog
 from interloper.settings import AppSettings
-from interloper_db import Store
+from interloper_db import Audience, Profile, Store
 
-from interloper_mcp.context import init_context, set_static_ctx
+from interloper_mcp.context import init_context, set_static_user
 from interloper_mcp.server import create_mcp_server, http_options
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,7 @@ def main() -> None:
     init_context(store, catalog)
 
     if args.transport == "stdio":
-        org_id, role = _resolve_stdio_scope(store, settings.token, settings.org_id)
-        set_static_ctx(org_id, role=role)
+        set_static_user(_resolve_stdio_user(store, settings.token))
         mcp = create_mcp_server(settings, store=None)
         mcp.run(transport="stdio")
     else:
@@ -53,38 +51,27 @@ def main() -> None:
         mcp.run(transport="streamable-http", port=settings.port, **http_options(settings))
 
 
-def _resolve_stdio_scope(store: Store, token: str, org_id: str) -> tuple[UUID, str]:
-    """Resolve the organisation scope and role for the stdio transport.
-
-    A PAT (``INTERLOPER_MCP_TOKEN``) is the normal path; a bare
-    ``INTERLOPER_MCP_ORG_ID`` is a local-development fallback that skips
-    authentication entirely and, being a developer's own instance, runs as
-    an editor.
+def _resolve_stdio_user(store: Store, token: str) -> Profile:
+    """Resolve the user the stdio transport runs as, from its token.
 
     Args:
         store: The Store to resolve the token against.
-        token: Raw personal access token, or empty.
-        org_id: Organisation UUID string, or empty.
+        token: Raw personal access token (``INTERLOPER_MCP_TOKEN``), or empty.
 
     Returns:
-        The organisation UUID to scope all tool calls to, and the role the
-        write tools are gated on.
+        The token's holder; each tool call names the organisation it acts in.
 
     Raises:
-        SystemExit: If the token is invalid, expired or revoked, or if
-            neither environment variable is set.
+        SystemExit: If the token is missing, invalid, expired or revoked.
     """
-    if token:
-        resolved = store.tokens.resolve(token)
-        if resolved is None:
-            raise SystemExit("INTERLOPER_MCP_TOKEN is invalid, expired, or revoked")
-        profile, pat, role = resolved
-        logger.info("Authenticated as %s (role %s)", profile.email, role)
-        return pat.organisation_id, role
-    if org_id:
-        logger.warning("Running without authentication as editor, scoped to org %s (INTERLOPER_MCP_ORG_ID)", org_id)
-        return UUID(org_id), "editor"
-    raise SystemExit("stdio transport needs INTERLOPER_MCP_TOKEN (or INTERLOPER_MCP_ORG_ID for local development)")
+    if not token:
+        raise SystemExit("stdio transport needs INTERLOPER_MCP_TOKEN")
+    resolved = store.tokens.resolve(token, Audience.MCP)
+    if resolved is None:
+        raise SystemExit("INTERLOPER_MCP_TOKEN is invalid, expired, or revoked")
+    profile, _ = resolved
+    logger.info("Authenticated as %s", profile.email)
+    return profile
 
 
 if __name__ == "__main__":

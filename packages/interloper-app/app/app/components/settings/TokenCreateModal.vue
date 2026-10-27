@@ -65,6 +65,7 @@ async function copy() {
 <template>
     <UModal v-model:open="open"
             title="New token"
+            description="A token acts as you in every organisation you belong to."
             :ui="{ footer: 'justify-end' }">
         <template #body>
             <div v-if="!created"

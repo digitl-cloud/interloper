@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from interloper_db import NotFoundError
+from interloper_db import Audience, NotFoundError
 from interloper_db.store import ProfileQuery, Store
 
 
@@ -56,7 +56,7 @@ class TestDelete:
         store.members.add(org.id, keeper.id, "viewer")
         session_token = store.sessions.create(admin.id)
         keeper_token = store.sessions.create(keeper.id)
-        store.tokens.create(admin.id, org.id, name="laptop")
+        _, raw_token = store.tokens.create_personal(admin.id, "laptop")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
 
         store.profiles.delete(admin.id)
@@ -64,6 +64,7 @@ class TestDelete:
         with pytest.raises(NotFoundError):
             store.profiles.get(admin.id)
         assert store.sessions.resolve(session_token) is None
+        assert store.tokens.resolve(raw_token, Audience.API) is None
         assert not store.invitations.has_pending("new@example.com")
         assert store.members.role(org.id, admin.id) is None
         # Other users' data is untouched.

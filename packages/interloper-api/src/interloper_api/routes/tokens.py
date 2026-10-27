@@ -1,7 +1,8 @@
-"""Personal access token routes — mint, list, and revoke API tokens.
+"""Personal access token routes: mint, list, and revoke the caller's own tokens.
 
-Tokens authenticate programmatic clients (the MCP server, CLIs) as their
-holder in one organisation, with the holder's live role. Management is
+A token authenticates programmatic clients (the MCP server, CLIs) as its
+holder, in every organisation the holder belongs to, with their live role in
+each. The routes are about the user, not an organisation. Management is
 session-cookie-only by design: a leaked token must not be able to mint
 further tokens.
 """
@@ -13,15 +14,10 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response
-from interloper_db import NotFoundError, Page, PageQuery, Role, TokenQuery
+from interloper_db import NotFoundError, Page, PageQuery
 from pydantic import BaseModel, Field
 
-from interloper_api.dependencies import (
-    CurrentUserDep,
-    OrgIdDep,
-    StoreDep,
-    ViewerDep,
-)
+from interloper_api.dependencies import CurrentUserDep, StoreDep
 
 router = APIRouter(prefix="/tokens", tags=["tokens"])
 
@@ -42,7 +38,6 @@ class TokenResponse(BaseModel):
     id: UUID
     name: str
     token_prefix: str
-    organisation_id: UUID
     created_at: datetime | None = None
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
@@ -61,21 +56,19 @@ class CreatedTokenResponse(TokenResponse):
 @router.post("", status_code=201)
 def create_token(
     body: CreateTokenRequest,
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
     store: StoreDep,
 ) -> CreatedTokenResponse:
-    """Create a personal access token scoped to the active organisation.
+    """Create a personal access token for the caller.
 
-    Any org member may mint one: the token conveys only the holder's own
-    live role, so no escalation is possible. The raw token is returned
-    exactly once and cannot be recovered afterwards.
+    The token acts as its holder in every organisation they belong to, with
+    their live role in each, so no escalation is possible. The raw token is
+    returned exactly once and cannot be recovered afterwards.
 
     Args:
         body: The token name and its lifetime in days; a null lifetime mints a
             token that never expires.
-        user: The authenticated caller, required to hold at least the viewer role.
-        org_id: The active organisation, resolved from the session.
+        user: The authenticated caller.
         store: The database store.
 
     Returns:
@@ -86,32 +79,23 @@ def create_token(
     if body.expires_in_days is not None:
         expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
 
-    row, raw = store.tokens.create(user.id, org_id, name=body.name, expires_at=expires_at)
+    row, raw = store.tokens.create_personal(user.id, body.name, expires_at)
     return CreatedTokenResponse(
-        id=row.id,
-        name=row.name,
-        token_prefix=row.token_prefix,
-        organisation_id=row.organisation_id,
-        created_at=row.created_at,
-        expires_at=row.expires_at,
-        last_used_at=row.last_used_at,
-        revoked_at=row.revoked_at,
+        **TokenResponse.model_validate(row, from_attributes=True).model_dump(),
         token=raw,
     )
 
 
 @router.get("")
 def list_tokens(
-    user: ViewerDep,
-    org_id: OrgIdDep,
+    user: CurrentUserDep,
     store: StoreDep,
     query: Annotated[PageQuery, Query()],
 ) -> Page[TokenResponse]:
-    """List the caller's tokens in the active organisation.
+    """List the caller's personal access tokens.
 
     Args:
-        user: The authenticated caller, required to hold at least the viewer role.
-        org_id: The active organisation, resolved from the session.
+        user: The authenticated caller.
         store: The database store.
         query: The window to read.
 
@@ -119,7 +103,7 @@ def list_tokens(
         The page of the caller's tokens, newest first, revoked and expired
         ones included, as metadata only.
     """
-    tokens = store.tokens.list(user.id, TokenQuery(org_id=org_id, **query.model_dump()))
+    tokens = store.tokens.list(user.id, query)
     return tokens.map(lambda row: TokenResponse.model_validate(row, from_attributes=True))
 
 
@@ -129,11 +113,12 @@ def revoke_token(
     user: CurrentUserDep,
     store: StoreDep,
 ) -> Response:
-    """Revoke a token.
+    """Revoke one of the caller's tokens.
 
-    The owner may revoke their own tokens; an org admin may revoke any token
-    scoped to their organisation. Missing and unauthorized get the same 404,
-    so token IDs don't act as an existence oracle.
+    Only the owner revokes a token: it is theirs, not an organisation's, and
+    removing a member's membership is what cuts their tokens off from an
+    organisation. Missing and someone else's get the same 404, so token IDs
+    don't act as an existence oracle.
 
     Args:
         token_id: The token to revoke.
@@ -144,8 +129,8 @@ def revoke_token(
         An empty 204 response; the row stays, stamped revoked.
 
     Raises:
-        HTTPException: 404 when the token does not exist, or when the caller
-            neither owns it nor administers its organisation.
+        HTTPException: 404 when the token does not exist or is not the
+            caller's.
     """
     detail = f"Token {token_id} not found"
     try:
@@ -153,7 +138,7 @@ def revoke_token(
     except NotFoundError:
         raise HTTPException(status_code=404, detail=detail) from None
 
-    if row.user_id != user.id and not Role.at_least(store.members.role(row.organisation_id, user.id), "admin"):
+    if row.user_id != user.id:
         raise HTTPException(status_code=404, detail=detail)
     store.tokens.revoke(token_id)
     return Response(status_code=204)

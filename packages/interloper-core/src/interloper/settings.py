@@ -317,8 +317,8 @@ class AgentSettings(BaseSettings):
 class McpSettings(BaseSettings):
     """MCP server settings (``interloper-mcp``).
 
-    ``token`` and ``org_id`` only apply to the stdio transport, which
-    authenticates once at startup.
+    ``token`` only applies to the stdio transport, which authenticates once
+    at startup.
     """
 
     model_config = SettingsConfigDict(env_prefix=f"{PREFIX}MCP_")
@@ -331,10 +331,6 @@ class McpSettings(BaseSettings):
         "protected-resource metadata so clients discover the auth requirements.",
     )
     token: str = Field(default="", description="Personal access token the stdio transport authenticates with.")
-    org_id: str = Field(
-        default="",
-        description="Organisation the stdio transport is scoped to without a token; local development only.",
-    )
 
 
 class QuotaSettings(BaseSettings):

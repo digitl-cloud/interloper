@@ -1,4 +1,4 @@
-"""MCP server factory: MCPServer wired with PAT auth and the toolkit's tools."""
+"""MCP server factory: MCPServer wired with bearer-token auth and the toolkit's tools."""
 
 from __future__ import annotations
 
@@ -20,12 +20,13 @@ INSTRUCTIONS = (
     "definitions, the organisation's collection (sources, connections, "
     "destinations, jobs), asset lineage, run and backfill monitoring, "
     "analytics (job health, run statistics, coverage, error breakdowns), and, for "
-    "tokens holding the editor role, the writes: editing components, creating "
+    "users holding the editor role, the writes: editing components, creating "
     "sources and jobs, toggling, triggering, retrying and canceling runs and "
     "backfills. Connections are set up in the app; request_connection_setup "
     "hands the user the link. Recap a write and get the user's explicit "
-    "confirmation before calling it. All results are scoped to the "
-    "organisation of the authenticated token."
+    "confirmation before calling it. Every tool acts in one organisation, "
+    "named by its `organisation` argument (an id from list_organisations), "
+    "which may be left out when the user belongs to exactly one."
 )
 
 
@@ -49,9 +50,9 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
 
     Args:
         settings: The MCP settings (host, port, external URL).
-        store: When provided, requests authenticate as bearer PATs against
-            this store (the streamable HTTP mode). ``None`` builds an
-            unauthenticated server for the stdio transport, whose context is
+        store: When provided, requests authenticate with bearer tokens
+            against this store (the streamable HTTP mode). ``None`` builds an
+            unauthenticated server for the stdio transport, whose user is
             seeded once at startup instead.
 
     Returns:

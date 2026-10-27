@@ -6,9 +6,15 @@ lineage, run/backfill monitoring, analytics and, for tokens holding the
 editor role, the writes (edits, creates, triggers, retries, cancels).
 
 Authentication uses **personal access tokens** (PATs) minted via the
-interloper API (`POST /api/tokens`, session-authenticated). Tokens are
-org-scoped and carry the holder's live role; revocation and membership
-removal apply immediately.
+interloper API (`POST /api/tokens`, session-authenticated). A token acts as
+its holder in every organisation they belong to, with their live role in
+each; revocation and membership removal apply immediately.
+
+Every tool takes an `organisation` argument, the id of the organisation the
+call acts in. It may be left out when the user belongs to exactly one;
+otherwise the call returns an error listing the user's organisations, which
+`list_organisations` also lists, with the role in each. A super-admin acts
+as `admin` in any organisation they name.
 
 ## Running
 
@@ -21,14 +27,12 @@ interloper-mcp
 
 Clients authenticate every request with `Authorization: Bearer ilp_...`.
 
-stdio (single-user, authenticates once at startup):
+stdio (single-user, authenticates once at startup; the token is required,
+so local development uses a PAT created in the dev instance):
 
 ```sh
 INTERLOPER_MCP_TOKEN=ilp_... interloper-mcp --transport stdio
 ```
-
-For local development without a token, `INTERLOPER_MCP_ORG_ID=<uuid>` scopes
-the stdio server to one organisation directly.
 
 ## Connecting clients
 
@@ -54,8 +58,7 @@ claude mcp add --transport http interloper http://localhost:3001/mcp \
 | `INTERLOPER_MCP_HOST` | `0.0.0.0` | HTTP bind host |
 | `INTERLOPER_MCP_PORT` | `3001` | HTTP bind port |
 | `INTERLOPER_MCP_EXTERNAL_URL` | (unset) | Public URL of the MCP endpoint (e.g. `https://app.interloper.dev/mcp`), used in OAuth protected-resource metadata |
-| `INTERLOPER_MCP_TOKEN` | (unset) | stdio only: PAT to authenticate as |
-| `INTERLOPER_MCP_ORG_ID` | (unset) | stdio only: dev fallback, direct org scope |
+| `INTERLOPER_MCP_TOKEN` | (unset) | stdio only: PAT to authenticate as (required) |
 
 Database and catalog configuration is the standard interloper set
 (`INTERLOPER_POSTGRES_*`, `INTERLOPER_CATALOG`, ...).

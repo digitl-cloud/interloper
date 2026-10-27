@@ -66,7 +66,7 @@ from interloper_db.store.quotas import QuotaStore, UsageDrift, UsageQuery, Usage
 from interloper_db.store.relations import RelationQuery, RelationStore
 from interloper_db.store.runs import RunQuery, RunStore
 from interloper_db.store.sessions import SessionStore
-from interloper_db.store.tokens import TokenQuery, TokenStore
+from interloper_db.store.tokens import TokenStore
 
 __all__ = [
     "BackfillQuery",
@@ -96,7 +96,6 @@ __all__ = [
     "RunStore",
     "SessionStore",
     "Store",
-    "TokenQuery",
     "TokenStore",
     "UsageDrift",
     "UsageQuery",
