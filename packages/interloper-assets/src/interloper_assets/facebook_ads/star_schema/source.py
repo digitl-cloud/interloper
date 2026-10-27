@@ -80,16 +80,19 @@ def _local_date(column: ir.StringValue) -> ir.Value:
 
 
 def _budget_type(table: ibis.Table) -> ir.Value:
-    """Which budget a Facebook campaign sets: ``daily``, ``lifetime``, or NULL for neither.
+    """Which budget a Facebook campaign or ad set sets: ``daily``, ``lifetime``, or NULL for neither.
+
+    Facebook sends 0 rather than null for the budget an ad set does not use,
+    so only a positive budget is set.
 
     Args:
-        table: A campaigns entity table.
+        table: A campaigns or ad sets entity table.
 
     Returns:
         A string column.
     """
-    lifetime = ibis.ifelse(table["lifetime_budget"].notnull(), "lifetime", ibis.null("string"))
-    return ibis.ifelse(table["daily_budget"].notnull(), "daily", lifetime)
+    lifetime = ibis.ifelse(table["lifetime_budget"] > 0, "lifetime", ibis.null("string"))
+    return ibis.ifelse(table["daily_budget"] > 0, "daily", lifetime)
 
 
 @il.source(

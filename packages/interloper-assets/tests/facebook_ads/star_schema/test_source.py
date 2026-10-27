@@ -370,6 +370,15 @@ class TestOnDuckDB:
             }
         ]
 
+    def test_a_zero_budget_is_the_budget_the_ad_set_does_not_use(self, warehouse):
+        # Facebook sends 0, not null, for an ad set's unused budget
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=False, adsets_entity=True)
+        warehouse.connection.client.execute("UPDATE facebook_ads.adsets__111 SET daily_budget = 0")
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_ad_groups")
+        assert row["budget_type"] == "lifetime"
+
     def test_ad_groups_take_the_adsets_entity(self, warehouse):
         first = _account("111", warehouse)
         _seed(warehouse, "111", campaigns_entity=False, adsets_entity=True)
