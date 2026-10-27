@@ -2136,7 +2136,7 @@ wheels = [
 
 [[package]]
 name = "interloper-agent"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-agent" }
 dependencies = [
     { name = "interloper-assets" },
@@ -2157,7 +2157,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-api"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-api" }
 dependencies = [
     { name = "fastapi" },
@@ -2197,7 +2197,7 @@ provides-extras = ["agent", "otel"]
 
 [[package]]
 name = "interloper-app"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-app" }
 dependencies = [
     { name = "interloper-api" },
@@ -2214,7 +2214,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-assets"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-assets" }
 dependencies = [
     { name = "httpx2" },
@@ -2252,7 +2252,7 @@ provides-extras = ["bing", "google", "facebook"]
 
 [[package]]
 name = "interloper-aws"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-aws" }
 dependencies = [
     { name = "boto3" },
@@ -2269,7 +2269,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-azure"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-azure" }
 dependencies = [
     { name = "azure-identity" },
@@ -2286,7 +2286,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-clickhouse"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-clickhouse" }
 dependencies = [
     { name = "clickhouse-connect", extra = ["pandas"] },
@@ -2311,7 +2311,7 @@ dev = [{ name = "chdb", specifier = ">=3.0" }]
 
 [[package]]
 name = "interloper-core"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-core" }
 dependencies = [
     { name = "httpx2" },
@@ -2399,7 +2399,7 @@ dev = [
 
 [[package]]
 name = "interloper-databricks"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-databricks" }
 dependencies = [
     { name = "databricks-sql-connector", extra = ["pyarrow"] },
@@ -2416,7 +2416,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-db"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-db" }
 dependencies = [
     { name = "alembic" },
@@ -2448,7 +2448,7 @@ provides-extras = ["otel"]
 
 [[package]]
 name = "interloper-docker"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-docker" }
 dependencies = [
     { name = "docker" },
@@ -2465,7 +2465,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-duckdb"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-duckdb" }
 dependencies = [
     { name = "duckdb" },
@@ -2482,7 +2482,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-google-cloud"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-google-cloud" }
 dependencies = [
     { name = "db-dtypes" },
@@ -2507,7 +2507,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-k8s"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-k8s" }
 dependencies = [
     { name = "interloper-core" },
@@ -2524,7 +2524,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-mcp"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-mcp" }
 dependencies = [
     { name = "interloper-core" },
@@ -2545,7 +2545,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-pandas"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-pandas" }
 dependencies = [
     { name = "interloper-core" },
@@ -2560,7 +2560,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-scheduler"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-scheduler" }
 dependencies = [
     { name = "croniter" },
@@ -2588,7 +2588,7 @@ provides-extras = ["docker", "k8s"]
 
 [[package]]
 name = "interloper-slack"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-slack" }
 dependencies = [
     { name = "interloper-core" },
@@ -2599,7 +2599,7 @@ requires-dist = [{ name = "interloper-core", editable = "packages/interloper-cor
 
 [[package]]
 name = "interloper-snowflake"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-snowflake" }
 dependencies = [
     { name = "interloper-core" },
@@ -2616,7 +2616,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-sql"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-sql" }
 dependencies = [
     { name = "ibis-framework" },
@@ -2640,7 +2640,7 @@ provides-extras = ["postgres"]
 
 [[package]]
 name = "interloper-toolkit"
-version = "0.117.0"
+version = "0.118.0"
 source = { editable = "packages/interloper-toolkit" }
 dependencies = [
     { name = "interloper-core" },
@@ -2655,7 +2655,7 @@ requires-dist = [
 
 [[package]]
 name = "interloper-workspace"
-version = "0.117.0"
+version = "0.118.0"
 source = { virtual = "." }
 dependencies = [
     { name = "interloper-agent" },
@@ -6546,14 +6546,9 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/74/5f/45d5200405420a9d8ac91cf9e7826622ea12f3198e8e6ac4ffb481eb53bf/zensical-0.0.33-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:f658e3c241cfbb560bd8811116a9486cff7e04d7d5aed73569dd533c74187450", size = 12416748, upload-time = "2026-04-14T11:07:43.246Z" },
     { url = "https://files.pythonhosted.org/packages/33/1e/aadaf31d6e4d20419ecedaf0b1c804e359ec23dcdb44c8d2bf6d8407080c/zensical-0.0.33-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:f9813ac3256c28e2e2f1ba5c9fab1b4bca62bbe0e0f8e85ac22d33b068b1b08a", size = 12293372, upload-time = "2026-04-14T11:07:46.569Z" },
     { url = "https://files.pythonhosted.org/packages/db/e5/838be8451ea8b2aecec39fbec3971060fc705e17f5741249740d9b6a6824/zensical-0.0.33-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3bad7ac71028769c5d1f3f84f448dbb7352db28d77095d1b40a8d1b0aa34ec30", size = 12659832, upload-time = "2026-04-14T11:07:50.754Z" },
-    { url = "https://files.pythonhosted.org/packages/1e/5c/dd957d7c83efc13a70a6058d4190a3afcf29942aefb391120bca5466347d/zensical-0.0.33-cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:06bb039daf044547c9400a52f9493b3cd486ba9baef3324fdcffd2e26e61105f", size = 12603847, upload-time = "2026-04-14T11:07:53.698Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/99/dd6ccc392ece1f34fb20ea339a01717badbbeb2fba1d4f3019a5028d0bcc/zensical-0.0.33-cp310-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:260238062b3139ece0edab93f4dbe7a12923453091f5aa580dfd73e799388076", size = 12956236, upload-time = "2026-04-14T11:07:56.728Z" },
     { url = "https://files.pythonhosted.org/packages/f4/76/e0a1b884eadf6afa7e2d56c90c268eec36836ac27e96ef250c0129e55417/zensical-0.0.33-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7dff0f4afda7b8586bc4ab2a5684bce5b282232dd4e0cad3be4c73fedd264425", size = 12701944, upload-time = "2026-04-14T11:07:59.928Z" },
     { url = "https://files.pythonhosted.org/packages/38/38/e1ff13461e406864fa2b23fc828822659a7dbac5c79398f724d17f088540/zensical-0.0.33-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:207b4d81b208d75b97dc7bd318804550b886a3e852ef67429ef0e6b9442839d1", size = 12835444, upload-time = "2026-04-14T11:08:02.998Z" },
-    { url = "https://files.pythonhosted.org/packages/41/04/7d24d52d6903fc5c511633afe8b5716fef19da09685327665cc127f61648/zensical-0.0.33-cp310-abi3-musllinux_1_2_armv7l.whl", hash = "sha256:06d2f57f7bc8cc8fd904386020ea1365eebc411e8698a871e9525c885abca574", size = 12878419, upload-time = "2026-04-14T11:08:06.054Z" },
-    { url = "https://files.pythonhosted.org/packages/9a/ec/87fc9e360c694ab006363c7834639eccafd0d26a487cd63dd609bd68f36a/zensical-0.0.33-cp310-abi3-musllinux_1_2_i686.whl", hash = "sha256:c2851b82d83aa0b2ae4f8e99731cfeedeecebfa04e6b3fc4d375deca629fa240", size = 13022474, upload-time = "2026-04-14T11:08:09.007Z" },
     { url = "https://files.pythonhosted.org/packages/10/b3/0bf174ab6ceedb31d9af462073b5339c894b2084a27d42cb9f0906050d76/zensical-0.0.33-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:90daaf512b0429d7b9147ad5e6085b455d24803eff18b508aed738ca65444683", size = 12975233, upload-time = "2026-04-14T11:08:12.535Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/27/7cc3c2d284698647f60f3b823e0101e619c87edf158d47ee11bf4bfb6228/zensical-0.0.33-cp310-abi3-win32.whl", hash = "sha256:2701820597fe19361a12371129927c58c19633dcaa5f6986d610dce58cecd8c4", size = 12012664, upload-time = "2026-04-14T11:08:14.977Z" },
     { url = "https://files.pythonhosted.org/packages/25/0b/6be5c2fdaf9f1600577e7ba5e235d86b72a26f6af389efb146f978f76ac3/zensical-0.0.33-cp310-abi3-win_amd64.whl", hash = "sha256:a5a0911b4247708a55951b74c459f4d5faec5daaf287d23a2e1f0d96be1e647f", size = 12206255, upload-time = "2026-04-14T11:08:17.375Z" },
 ]
 
@@ -6582,7 +6577,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e2/a6/7e3fda49749096cf405e09c4384e348c0f6bfeab44f18d02c1051673dc2e/zensical-0.0.62-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:a1efd661fa3241c10c94c8c2b280ac3924bc988b24d0dbf1b8499994b23e12fb", size = 14220149, upload-time = "2026-09-13T17:16:08.144Z" },
     { url = "https://files.pythonhosted.org/packages/fa/13/c8d22c4c946bf4e6ae29db81f1456fbbc35fcd165ad874e4b919422f7b08/zensical-0.0.62-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:c468e81adad37517c03de2dda13568c33d9c36b234c34e2b3a04285846d99bd5", size = 13963505, upload-time = "2026-09-13T17:16:11.529Z" },
     { url = "https://files.pythonhosted.org/packages/19/08/cce44a83dbc1070197e2006178bbf42d59e398ccb39806d3db02c9781790/zensical-0.0.62-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4dcc744b1b3f56b85cf23c393a2333dec72e555b263a2fbe3d50ac896cf85468", size = 14238419, upload-time = "2026-09-13T17:16:14.375Z" },
-    { url = "https://files.pythonhosted.org/packages/af/65/586ab984b9197ab6a7ee53dffa77ef00fdb19f8c09d520c39e3c3d7dccb8/zensical-0.0.62-cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:8b04147ac1f109ed3b1fbc74d958323243f35481926765b939638e8933a8bdc6", size = 14262571, upload-time = "2026-09-13T17:16:17.24Z" },
     { url = "https://files.pythonhosted.org/packages/57/ae/3a4aac8181caa1079c93ac996bbc418b749ae76ecd2cf2a67943b90ae277/zensical-0.0.62-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6755d7a2d3de424e07a77f68be080b4e54a34fb564c39434322e8427b9402ace", size = 14518577, upload-time = "2026-09-13T17:16:20.248Z" },
     { url = "https://files.pythonhosted.org/packages/5c/03/8de2cc9aecc13b93d4b63c06dec4af95482ab9ce1b586ad8d35d5f56a916/zensical-0.0.62-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d2b809aa8aa175f64a362d6a8ab89586ce7dd086b5bf23778f3c3cff68deeae6", size = 14413777, upload-time = "2026-09-13T17:16:23.641Z" },
     { url = "https://files.pythonhosted.org/packages/3d/36/c7ac1e27d2832f8ee524397f47193b73a1d7d78b78e407febd5f97d72e89/zensical-0.0.62-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:111cb32c405ff3a0e162860f81cf8e041447d795657720c36ba3e1b8ed607928", size = 14747349, upload-time = "2026-09-13T17:16:26.498Z" },

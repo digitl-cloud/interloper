@@ -2,6 +2,51 @@
 
 <!-- version list -->
 
+## v0.118.0 (2026-10-27)
+
+### Bug Fixes
+
+- **assets**: Facebook campaigns keep their objects whole, and campaign and ad times and amounts are
+  typed
+  ([`65c5248`](https://github.com/digitl-cloud/interloper/commit/65c524882c1e945f6b00ee93594be89708cfe1fe))
+
+- **assets**: Ids, days, instants and partition columns of the unverified connectors are typed
+  ([`0253fc0`](https://github.com/digitl-cloud/interloper/commit/0253fc0e398d80352c6b539898df0452dc89787b))
+
+- **assets**: Raw ids are text, Snapchat times are instants and TikTok's '-' metrics are NULL
+  ([`0e52119`](https://github.com/digitl-cloud/interloper/commit/0e52119e2c9b1ab991f83fd132f03932165e5239))
+
+- **pandas**: Integers above 2^53 stay exact beside a null
+  ([`1e7faf0`](https://github.com/digitl-cloud/interloper/commit/1e7faf02054c282c3260b305af661efd5f5e6de7))
+
+### Features
+
+- **app**: Asset panel as a stack of section cards
+  ([`561dbc5`](https://github.com/digitl-cloud/interloper/commit/561dbc5e78f5340b9265201cd7ac69a2e865abe4))
+
+- **app**: Graph edges drop their arrowheads and dim on hover
+  ([`37e1b22`](https://github.com/digitl-cloud/interloper/commit/37e1b22c95a82fd0aadb1e00fa46eb1518c0d73f))
+
+### Refactoring
+
+- **assets**: Snapchat ad_accounts is the source's own account, ad_account is gone
+  ([`e787eb8`](https://github.com/digitl-cloud/interloper/commit/e787eb8bb51b8b77196ad5b1cafdc0db40dc44f7))
+
+### Testing
+
+- **assets**: Field types and partition columns follow the catalog conventions
+  ([`8da61c1`](https://github.com/digitl-cloud/interloper/commit/8da61c18878105e334562dac19612691f40332dd))
+
+### Breaking Changes
+
+- **assets**: The existing tables hold the old column types, and BigQuery cannot retype a column in
+  place, so the next load into them fails until they are rewritten with interloper-data-migration
+  retype (ITLPR-163). Release only inside that migration window.
+
+- **assets**: The snapchat_ads.ad_account asset no longer exists; use ad_accounts. No organisation
+  has it enabled.
+
+
 ## v0.117.0 (2026-10-26)
 
 ### Bug Fixes
