@@ -8,10 +8,10 @@ class Transactions(Schema):
     """Awin advertiser transaction data including commission, sale amounts, and click attribution."""
 
     date: dt.date | None = Field(default=None, description="Date of the transaction")
-    id: int = Field(description="Transaction ID")
+    id: str = Field(description="Transaction ID")
     url: str | None = Field(default=None, description="Referring URL")
-    advertiser_id: int | None = Field(default=None, description="Advertiser ID")
-    publisher_id: int | None = Field(default=None, description="Publisher ID")
+    advertiser_id: str | None = Field(default=None, description="Advertiser ID")
+    publisher_id: str | None = Field(default=None, description="Publisher ID")
     site_name: str | None = Field(default=None, description="Publisher site name")
     commission_status: str | None = Field(default=None, description="Commission status (pending, approved, declined)")
     commission_amount: float | None = Field(default=None, description="Commission amount")
@@ -42,8 +42,8 @@ class Transactions(Schema):
     click_ref: str | None = Field(default=None, description="Click reference")
     transaction_parts: str | None = Field(default=None, description="Transaction parts data")
     paid_to_publisher: bool | None = Field(default=None, description="Whether commission was paid to publisher")
-    payment_id: int | None = Field(default=None, description="Payment ID")
-    transaction_query_id: int | None = Field(default=None, description="Transaction query ID")
+    payment_id: str | None = Field(default=None, description="Payment ID")
+    transaction_query_id: str | None = Field(default=None, description="Transaction query ID")
     original_sale_amount: float | None = Field(default=None, description="Original sale amount before adjustments")
     original_commission_amount: float | None = Field(
         default=None, description="Original commission amount before adjustments"

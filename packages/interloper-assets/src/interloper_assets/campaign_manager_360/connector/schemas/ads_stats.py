@@ -64,7 +64,7 @@ class AdsStats(Schema):
     placement_pixel_size: str | None = Field(default=None, description="Pixel size of the placement")
     placement_rate: str | None = Field(default=None, description="Placement Rate")
     placement_total_booked_units: str | None = Field(default=None, description="Placement Total Booked Units")
-    placement_total_planned_media_cost: str | None = Field(
+    placement_total_planned_media_cost: float | None = Field(
         default=None, description="Placement Total Planned Media Cost"
     )
     planned_media_cost: float | None = Field(default=None, description="Planned Media Cost")

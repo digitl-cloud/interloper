@@ -1,3 +1,5 @@
+import datetime as dt
+
 from interloper.schema import Schema
 from pydantic import Field
 
@@ -46,7 +48,7 @@ class LineItemsStatsByCountry(Schema):
     creative_type: str | None = Field(default=None, description="The creative type of the line item")
     data_fees_adv_currency: float | None = Field(default=None, description="The data fees in advertiser currency")
     data_fees_partner_currency: float | None = Field(default=None, description="The data fees in partner currency")
-    date: str | None = Field(default=None, description="The date associated with the line item")
+    date: dt.date | None = Field(default=None, description="The date associated with the line item")
     impressions: float | None = Field(default=None, description="The number of impressions for the line item")
     insertion_order: str | None = Field(default=None, description="The insertion order associated with the line item")
     insertion_order_id: str | None = Field(default=None, description="The ID of the insertion order")
@@ -55,9 +57,9 @@ class LineItemsStatsByCountry(Schema):
         default=None, description="The inventory delivery method of the line item"
     )
     line_item: str | None = Field(default=None, description="The name of the line item")
-    line_item_end_date: str | None = Field(default=None, description="The end date of the line item")
+    line_item_end_date: dt.date | None = Field(default=None, description="The end date of the line item")
     line_item_id: str | None = Field(default=None, description="The ID of the line item")
-    line_item_start_date: str | None = Field(default=None, description="The start date of the line item")
+    line_item_start_date: dt.date | None = Field(default=None, description="The start date of the line item")
     line_item_type: str | None = Field(default=None, description="The type of the line item")
     media_cost_advertiser_currency: float | None = Field(
         default=None, description="The media cost in advertiser currency"

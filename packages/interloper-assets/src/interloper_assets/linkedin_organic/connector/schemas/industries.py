@@ -10,7 +10,7 @@ class Industries(Schema):
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."
     )
-    id: int | None = Field(default=None, description="The industry identifier (the id of urn:li:industry).")
+    id: str | None = Field(default=None, description="The industry identifier (the id of urn:li:industry).")
     name_localized_it_it: str | None = Field(default=None, description="The industry name in the it_IT locale.")
     name_localized_ru_ru: str | None = Field(default=None, description="The industry name in the ru_RU locale.")
     name_localized_pl_pl: str | None = Field(default=None, description="The industry name in the pl_PL locale.")
