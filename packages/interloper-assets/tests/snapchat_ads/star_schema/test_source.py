@@ -22,7 +22,7 @@ def _clear_memory() -> None:
         ("fact_ad_performance", "ads_stats", "snapchat_ads.ads_stats"),
         ("dim_campaigns", "campaigns", ["snapchat_ads.campaigns", "snapchat_ads.campaigns_stats"]),
         ("dim_ads", "ads", "snapchat_ads.ads"),
-        ("dim_accounts", "accounts", "snapchat_ads.ad_account"),
+        ("dim_accounts", "ad_accounts", "snapchat_ads.ad_accounts"),
     ],
 )
 def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: str, key: str | list[str]) -> None:

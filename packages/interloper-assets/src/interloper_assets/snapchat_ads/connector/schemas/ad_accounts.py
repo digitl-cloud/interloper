@@ -5,7 +5,7 @@ from pydantic import Field
 
 
 class AdAccounts(Schema):
-    """The Ad Accounts entity provides detailed information about each advertising account, including identifiers, timestamps, names, types, statuses, and various financial and organizational details."""
+    """Snapchat ad account snapshot: the source's own account, with its identifiers, timestamps, name, type, status, and financial and organisational details."""
 
     date: dt.date | None = Field(
         default=None, description="The day the snapshot was taken (stamped from the partition)."

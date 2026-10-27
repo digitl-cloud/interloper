@@ -26,14 +26,13 @@ def _source() -> Any:
 
 
 class TestSource:
-    def test_nine_assets_present(self):
+    def test_eight_assets_present(self):
         keys = {type(a).key for a in _source().assets}
         assert keys == {
             "ads_stats",
             "campaigns_stats",
             "ads_stats_by_country",
             "videos_stats_by_os",
-            "ad_account",
             "ad_accounts",
             "ads",
             "ad_squads",
@@ -47,7 +46,7 @@ class TestSource:
 
     def test_entity_assets_use_flattening_normalizer(self):
         by_key = {type(a).key: a for a in _source().assets}
-        for key in ("ads", "ad_squads", "campaigns", "ad_account"):
+        for key in ("ads", "ad_squads", "campaigns", "ad_accounts"):
             norm = by_key[key].normalizer
             assert isinstance(norm, DataFrameNormalizer) and not isinstance(norm, SnapchatStatsNormalizer), key
             assert norm.flatten_max_level == 3
