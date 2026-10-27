@@ -64,6 +64,11 @@ _RUN_ENDINGS = frozenset({il.EventType.RUN_COMPLETED, il.EventType.RUN_FAILED})
 # which rejects outer joins.
 RUN_LOAD_OPTIONS = (joinedload(Run.target),)  # ty: ignore[invalid-argument-type]
 
+RUN_TOKEN_PREFIX = "ilr_"
+"""Prefix of a run token, next to ``ilp_`` for a personal access token."""
+
+_RUN_TOKEN_SUBJECT = "run-token:"
+
 RunSort = Literal[
     "id",
     "-id",
@@ -198,6 +203,8 @@ class RunStore:
         backfills: BackfillStore,
         events: EventStore,
         components: Callable[[], ComponentStore],
+        encrypt: Callable[[bytes], bytes] | None = None,
+        decrypt: Callable[[bytes], bytes] | None = None,
     ) -> None:
         """Bind the facet to what it works through.
 
@@ -208,12 +215,16 @@ class RunStore:
             events: Event facet a run's events and a failure's reason are recorded through.
             components: The component facet a run's effects are applied through, resolved
                 late since it is built after this one.
+            encrypt: The platform's cipher, which makes run tokens; ``None`` mints none.
+            decrypt: Its inverse, which opens them; ``None`` resolves none.
         """
         self._engine = engine
         self._quotas = quotas
         self._backfills = backfills
         self._events = events
         self._components = components
+        self._encrypt = encrypt
+        self._decrypt = decrypt
 
     def create(
         self,
@@ -522,6 +533,60 @@ class RunStore:
                 logger.warning(
                     "Canceled run %s: monthly successful-run quota exhausted for org %s", db_run.id, db_run.org_id
                 )
+
+    def token(self, run_id: UUID) -> str:
+        """The token a run's pod reports with: the run's id, encrypted with the platform's key.
+
+        Nothing is stored. The cipher is authenticated, so only a holder of
+        the key can make one, and the run's status says how long it lives.
+
+        Args:
+            run_id: The run UUID.
+
+        Returns:
+            The token.
+
+        Raises:
+            ConfigError: If the store has no encryption key to mint it with.
+        """
+        if self._encrypt is None:
+            raise ConfigError("Run tokens need INTERLOPER_ENCRYPTION_KEY")
+        return RUN_TOKEN_PREFIX + self._encrypt(f"{_RUN_TOKEN_SUBJECT}{run_id}".encode()).decode()
+
+    def resolve_token(self, raw: str, *, grace: timedelta) -> Run | None:
+        """Resolve a run token, while its run can still report.
+
+        A token lives as long as its run is dispatched or running, and for
+        *grace* after the run ended, so a pod that outlived its reaping can
+        still deliver the events it holds. Absence is an ordinary answer.
+
+        Args:
+            raw: The bearer token the pod presents.
+            grace: How long after ``completed_at`` the token is still accepted.
+
+        Returns:
+            The run, its target loaded, or ``None`` when the token is not one
+            this platform made, or its run is gone or dead.
+        """
+        if self._decrypt is None or not raw.startswith(RUN_TOKEN_PREFIX):
+            return None
+        try:
+            subject = self._decrypt(raw.removeprefix(RUN_TOKEN_PREFIX).encode()).decode()
+        except Exception:  # noqa: BLE001 - a token the key cannot open is not one of ours
+            return None
+        if not subject.startswith(_RUN_TOKEN_SUBJECT):
+            return None
+        statement = select(Run).where(Run.id == UUID(subject.removeprefix(_RUN_TOKEN_SUBJECT)))
+        with session_scope(self._engine) as session:
+            db_run = session.exec(statement.options(*RUN_LOAD_OPTIONS)).first()
+            if db_run is None:
+                return None
+            if db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING):
+                return db_run
+            ended = db_run.completed_at
+            if ended is not None and ended >= datetime.now(timezone.utc) - grace:
+                return db_run
+            return None
 
     def ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
         """Take in a batch a run's pod reports: save it, fold the run's state from it, renew its heartbeat.

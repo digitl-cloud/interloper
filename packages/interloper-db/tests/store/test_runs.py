@@ -24,6 +24,7 @@ from sqlmodel import Session, col, select
 
 from interloper_db import ConflictError, NotFoundError
 from interloper_db import engine as engine_module
+from interloper_db.crypto import make_cipher
 from interloper_db.models import (
     Backfill,
     BackfillStatus,
@@ -1132,6 +1133,69 @@ def _drain(store: Store) -> list[UUID]:
     while (run := store.runs.claim_next()) is not None:
         claimed.append(run.id)
     return claimed
+
+
+class TestRunToken:
+    """A run's token: its id, encrypted with the platform's key, alive while the run can still report."""
+
+    @pytest.fixture
+    def keyed(self, store: Store) -> Store:
+        """The same database, through a store holding the platform's key.
+
+        Args:
+            store: The store under test.
+
+        Returns:
+            A store that mints and resolves run tokens.
+        """
+        encrypt, decrypt = make_cipher("platform-key")
+        return Store(catalog=il.Catalog(components={}), engine=store.engine, encrypt=encrypt, decrypt=decrypt)
+
+    def test_a_dispatched_runs_token_resolves_to_it(self, keyed: Store) -> None:
+        keyed.runs.create(_ORG_ID)
+        run = keyed.runs.claim_next()
+        assert run is not None
+
+        token = keyed.runs.token(run.id)
+
+        assert token.startswith("ilr_")
+        resolved = keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90))
+        assert resolved is not None and resolved.id == run.id
+
+    def test_a_token_dies_a_grace_after_its_run_ended(self, keyed: Store) -> None:
+        keyed.runs.create(_ORG_ID)
+        run = keyed.runs.claim_next()
+        assert run is not None
+        token = keyed.runs.token(run.id)
+
+        keyed.runs.fail(run.id, "boom")
+
+        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90)) is not None
+        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=0)) is None
+
+    def test_a_queued_runs_token_resolves_to_nothing(self, keyed: Store) -> None:
+        run = keyed.runs.create(_ORG_ID)
+
+        assert keyed.runs.resolve_token(keyed.runs.token(run.id), grace=dt.timedelta(seconds=90)) is None
+
+    @pytest.mark.parametrize("token", ["ilr_unknown", "ilp_personal", ""])
+    def test_a_token_this_platform_did_not_make_resolves_to_nothing(self, keyed: Store, token: str) -> None:
+        assert keyed.runs.resolve_token(token, grace=dt.timedelta(seconds=90)) is None
+
+    def test_a_token_made_with_another_key_resolves_to_nothing(self, keyed: Store) -> None:
+        keyed.runs.create(_ORG_ID)
+        run = keyed.runs.claim_next()
+        assert run is not None
+        encrypt, decrypt = make_cipher("another-key")
+        elsewhere = Store(catalog=il.Catalog(components={}), engine=keyed.engine, encrypt=encrypt, decrypt=decrypt)
+
+        assert keyed.runs.resolve_token(elsewhere.runs.token(run.id), grace=dt.timedelta(seconds=90)) is None
+
+    def test_a_store_without_a_key_mints_no_token(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        with pytest.raises(ConfigError, match="INTERLOPER_ENCRYPTION_KEY"):
+            store.runs.token(run.id)
 
 
 class TestClaimNext:
