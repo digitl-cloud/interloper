@@ -2,6 +2,7 @@
 
 from interloper.events.batch import EventBatch
 from interloper.events.bus import EventBus
+from interloper.events.client import EventClient
 from interloper.events.console import ConsoleEventHandler
 from interloper.events.event import Event
 from interloper.events.logger import EventLogger
@@ -15,6 +16,7 @@ __all__ = [
     "Event",
     "EventBatch",
     "EventBus",
+    "EventClient",
     "EventLogReader",
     "EventLogger",
     "EventRecorder",

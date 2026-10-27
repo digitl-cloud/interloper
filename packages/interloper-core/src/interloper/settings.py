@@ -198,6 +198,10 @@ class ServerSettings(BaseSettings):
         description="Public base URL of the app (`https://app.example.com`), for links built outside a browser "
         "request such as the setup hand-off an MCP tool returns; empty means the deployment has none.",
     )
+    internal_url: str = Field(
+        default="http://localhost:3000",
+        description="Base URL a run's pod reports its events to: the API as reached from inside the deployment.",
+    )
 
 
 class CronSettings(BaseSettings):
