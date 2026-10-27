@@ -287,7 +287,6 @@ AD_ACCOUNT_ENTITY_FIELDS = [
     "owner",
     "partner",
     "rf_spec",
-    "show_checkout_experience",
     "spend_cap",
     "tax_id_status",
     "tax_id_type",

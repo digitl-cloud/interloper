@@ -251,7 +251,17 @@ def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[d
     return [campaign._json for campaign in account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS)]
 
 
-def _paginate(request: Callable[..., Any], fields: list[str]) -> list[dict]:
+def _asks_for_less(exc: BaseException) -> bool:
+    from facebook_business.exceptions import FacebookRequestError
+
+    return (
+        isinstance(exc, FacebookRequestError)
+        and exc.api_error_code() == 1
+        and "reduce the amount of data" in (exc.api_error_message() or "")
+    )
+
+
+def _paginate(request: Callable[..., Any], fields: list[str], limit: int = 25) -> list[dict]:
     """Read every page of an account edge, retrying each page call on rate limits.
 
     Used by the ``ads`` and ``adsets`` entity assets, the two edges large
@@ -259,19 +269,30 @@ def _paginate(request: Callable[..., Any], fields: list[str]) -> list[dict]:
     current page without consuming it, and ``load_next_page`` replaces the
     page, so each page is read by position.
 
+    Facebook refuses a page whose objects carry too much data with a 500
+    asking for less; the edge is then read again from the start with half the
+    page, since an entity read is a snapshot and a restart loses nothing.
+
     Args:
         request: The account's edge method, such as ``AdAccount.get_ads``.
         fields: The fields to request on each object.
+        limit: Objects per page; halved on every refusal down to one.
 
     Returns:
         Every object's data, in the order the API returned them.
     """
-    cursor = _rate_limit_retry(request)(fields=fields, params={"limit": 25})
-    rows: list[dict] = []
-    while True:
-        rows.extend(cursor[i].export_all_data() for i in range(len(cursor)))
-        if not _rate_limit_retry(cursor.load_next_page)():
-            return rows
+    try:
+        cursor = _rate_limit_retry(request)(fields=fields, params={"limit": limit})
+        rows: list[dict] = []
+        while True:
+            rows.extend(cursor[i].export_all_data() for i in range(len(cursor)))
+            if not _rate_limit_retry(cursor.load_next_page)():
+                return rows
+    except Exception as exc:
+        if limit == 1 or not _asks_for_less(exc):
+            raise
+        logger.warning(f"Facebook asked for less data at {limit} objects per page; retrying with {limit // 2}")
+        return _paginate(request, fields, limit // 2)
 
 
 def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
