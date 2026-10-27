@@ -159,6 +159,10 @@ class AuthSettings(BaseSettings):
     )
     cookie_secure: bool = Field(default=True, description="Send the session cookie over HTTPS only.")
     session_expiry_days: int = Field(default=30, description="Days a session stays valid.")
+    access_token_expiry_minutes: int = Field(default=60, description="Minutes an OAuth access token stays valid.")
+    refresh_token_expiry_days: int = Field(
+        default=30, description="Days an OAuth refresh token stays valid, counted again from each rotation."
+    )
     super_admin_emails: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description="Google emails promoted to platform-wide super-admin by `interloper db init` and on login; "

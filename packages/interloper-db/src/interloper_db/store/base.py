@@ -21,6 +21,7 @@ from interloper_db.store.executions import ExecutionStore
 from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
+from interloper_db.store.oauth import OAuthStore
 from interloper_db.store.organisations import OrganisationStore
 from interloper_db.store.profiles import ProfileStore
 from interloper_db.store.quotas import QuotaStore, UsageStore
@@ -46,7 +47,8 @@ class Store:
         organisations: The tenants.
         members: Who belongs to an organisation, with which role.
         invitations: Memberships not yet accepted.
-        tokens: The secrets a user authenticates with: login sessions and personal access tokens.
+        tokens: The secrets a user authenticates with: login sessions, personal and OAuth access tokens.
+        oauth: The OAuth clients and the codes and refresh tokens they are granted.
         conversations: A member's conversations with the agent.
         components: Component CRUD, hydration and catalog status, for every kind.
         relations: The vocabulary-checked edges between components.
@@ -67,6 +69,8 @@ class Store:
         decrypt: Any | None = None,
         quota_defaults: Any | None = None,
         session_expiry: timedelta = timedelta(days=30),
+        access_token_expiry: timedelta = timedelta(minutes=60),
+        refresh_token_expiry: timedelta = timedelta(days=30),
     ) -> None:
         """Initialize the store.
 
@@ -80,6 +84,10 @@ class Store:
                 an organisation has no override. None = everything unlimited.
             session_expiry: How long a login session stays valid, defaulting
                 to ``auth.session_expiry_days``'s own default.
+            access_token_expiry: How long an OAuth access token stays valid,
+                defaulting to ``auth.access_token_expiry_minutes``'s own default.
+            refresh_token_expiry: How long an OAuth refresh token stays valid,
+                defaulting to ``auth.refresh_token_expiry_days``'s own default.
         """
         self._catalog = catalog
         self._engine = engine or get_engine()
@@ -93,7 +101,8 @@ class Store:
         self.organisations = OrganisationStore(self._engine)
         self.members = MemberStore(self._engine)
         self.invitations = InvitationStore(self._engine)
-        self.tokens = TokenStore(self._engine, session_expiry=session_expiry)
+        self.tokens = TokenStore(self._engine, session_expiry=session_expiry, access_token_expiry=access_token_expiry)
+        self.oauth = OAuthStore(self._engine, refresh_token_expiry=refresh_token_expiry)
         self.conversations = ConversationStore(self._engine)
         self.relations = RelationStore(self._engine, catalog)
         self.quotas = QuotaStore(self._engine, lambda: self._quota_defaults)
@@ -143,7 +152,11 @@ class Store:
         catalog = catalog if catalog is not None else Catalog.from_settings()
         engine = engine_from_settings()
         settings = AppSettings.get()
-        session_expiry = timedelta(days=settings.auth.session_expiry_days)
+        lifetimes = {
+            "session_expiry": timedelta(days=settings.auth.session_expiry_days),
+            "access_token_expiry": timedelta(minutes=settings.auth.access_token_expiry_minutes),
+            "refresh_token_expiry": timedelta(days=settings.auth.refresh_token_expiry_days),
+        }
         key = settings.secrets.encryption_key
         if not key:
             logger.warning(
@@ -151,7 +164,7 @@ class Store:
                 "fail closed (writes are rejected rather than stored in plaintext). Set it "
                 "to enable encrypted resources at rest."
             )
-            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota, session_expiry=session_expiry)
+            return cls(catalog=catalog, engine=engine, quota_defaults=settings.quota, **lifetimes)
 
         from interloper_db.crypto import make_cipher
 
@@ -162,7 +175,7 @@ class Store:
             encrypt=encrypt,
             decrypt=decrypt,
             quota_defaults=settings.quota,
-            session_expiry=session_expiry,
+            **lifetimes,
         )
 
     # -- Session policy --------------------------------------------------------

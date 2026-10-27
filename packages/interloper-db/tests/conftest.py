@@ -18,15 +18,18 @@ from sqlalchemy.pool import StaticPool
 
 from interloper_db import engine as engine_module
 from interloper_db.models import (
+    AuthorizationCode,
     Backfill,
     Component,
     ComponentRelation,
     Conversation,
     Event,
     Invitation,
+    OAuthClient,
     Organisation,
     Profile,
     Quota,
+    RefreshToken,
     Run,
     Token,
     Usage,
@@ -82,8 +85,9 @@ def auth_db() -> Iterator[Engine]:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
     auth_models = (Profile, Organisation, UserOrganisation, Invitation, Token)
+    oauth_models = (OAuthClient, AuthorizationCode, RefreshToken)
     org_data_models = (Component, ComponentRelation, Backfill, Run, Event, Quota, Usage, Conversation)
-    for model in auth_models + org_data_models:
+    for model in auth_models + oauth_models + org_data_models:
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield eng

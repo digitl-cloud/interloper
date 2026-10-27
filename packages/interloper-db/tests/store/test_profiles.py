@@ -58,6 +58,15 @@ class TestDelete:
         keeper_token = store.tokens.create_session(keeper.id)
         _, raw_token = store.tokens.create_personal(admin.id, "laptop")
         store.invitations.create(org.id, email="new@example.com", role="viewer", invited_by=admin.id)
+        client, _ = store.oauth.register_client("Claude Code", ["http://localhost/cb"], registered_by="dynamic")
+        store.oauth.issue_code(
+            client_id=client.client_id,
+            user_id=admin.id,
+            redirect_uri="http://localhost/cb",
+            code_challenge="challenge",
+            resource=Audience.MCP,
+        )
+        store.oauth.issue_refresh(admin.id, client.client_id, Audience.MCP)
 
         store.profiles.delete(admin.id)
 
@@ -67,6 +76,7 @@ class TestDelete:
         assert store.tokens.resolve(raw_token, Audience.API) is None
         assert not store.invitations.has_pending("new@example.com")
         assert store.members.role(org.id, admin.id) is None
+        assert store.oauth.authorised_clients(admin.id) == []
         # Other users' data is untouched.
         assert store.profiles.get(keeper.id).id == keeper.id
         assert store.tokens.resolve(keeper_token, Audience.APP) is not None

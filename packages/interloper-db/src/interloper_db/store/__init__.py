@@ -20,7 +20,8 @@ part it uses rather than on all of it:
 - ``store.organisations`` — the tenants
 - ``store.members`` — who belongs to an organisation, with which role
 - ``store.invitations`` — memberships not yet accepted
-- ``store.tokens`` — the secrets proving it, login sessions and personal access tokens
+- ``store.tokens`` — the secrets proving it, login sessions, personal and OAuth access tokens
+- ``store.oauth`` — the OAuth clients and the codes and refresh tokens they are granted
 - ``store.conversations`` — a member's conversations with the agent
 - ``store.components`` — component CRUD, hydration and catalog status, for every kind
 - ``store.relations`` — the vocabulary-checked edges between components
@@ -58,6 +59,7 @@ from interloper_db.store.executions import ExecutionQuery, ExecutionStore
 from interloper_db.store.insights import InsightStore
 from interloper_db.store.invitations import InvitationStore
 from interloper_db.store.members import MemberStore
+from interloper_db.store.oauth import OAuthStore
 from interloper_db.store.organisations import OrganisationQuery, OrganisationStore
 from interloper_db.store.page import Page, PageQuery
 from interloper_db.store.profiles import ProfileQuery, ProfileStore
@@ -81,6 +83,7 @@ __all__ = [
     "InsightStore",
     "InvitationStore",
     "MemberStore",
+    "OAuthStore",
     "OrganisationQuery",
     "OrganisationStore",
     "Page",

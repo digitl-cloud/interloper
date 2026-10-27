@@ -15,13 +15,14 @@ Key design decisions:
 - Relations carry ``org_id``/``src_kind``/``dst_kind`` denormalized but drift-proof:
   composite foreign keys onto ``UNIQUE (id, org_id, kind)`` force them to match
   the referenced rows, giving DB-level kind- and tenant-safety.
-- Auth tables (profiles, organisations, tokens) live alongside data
+- Auth tables (profiles, organisations, tokens, OAuth clients and grants) live alongside data
   models so that ``create_all()`` provisions everything in one shot.
 """
 
 from interloper_db.models.auth import Invitation, Organisation, Profile, Role, UserOrganisation
 from interloper_db.models.components import Component, ComponentRelation
 from interloper_db.models.conversations import Conversation
+from interloper_db.models.oauth import AuthorizationCode, OAuthClient, RefreshToken
 from interloper_db.models.quotas import Quota, Usage
 from interloper_db.models.runs import (
     ACTIVE_BACKFILL_STATUSES,
@@ -42,6 +43,7 @@ __all__ = [
     "OPEN_RUN_STATUSES",
     "TERMINAL_RUN_STATUSES",
     "Audience",
+    "AuthorizationCode",
     "Backfill",
     "BackfillStatus",
     "Component",
@@ -50,10 +52,12 @@ __all__ = [
     "Event",
     "Execution",
     "Invitation",
+    "OAuthClient",
     "Organisation",
     "Overdue",
     "Profile",
     "Quota",
+    "RefreshToken",
     "Role",
     "Run",
     "RunStatus",

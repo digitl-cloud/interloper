@@ -186,9 +186,34 @@ class TestResolve:
         assert resolved[1].kind == TokenKind.PERSONAL
 
 
+class TestAccess:
+    def test_access_token_bound_to_resource(self, store: Store, profile: Profile):
+        raw = store.tokens.create_access(profile.id, "client-1", Audience.MCP)
+
+        resolved = store.tokens.resolve(raw, Audience.MCP)
+        assert resolved is not None
+        assert resolved[1].kind == TokenKind.ACCESS
+        assert resolved[1].client_id == "client-1"
+        assert resolved[1].resource == "mcp"
+        assert store.tokens.resolve(raw, Audience.API) is None
+        assert store.tokens.resolve(raw, Audience.APP) is None
+
+    def test_access_expiry_from_settings(self, token_db: Engine, profile: Profile):
+        tokens = TokenStore(token_db, session_expiry=timedelta(days=30), access_token_expiry=timedelta(minutes=5))
+
+        before = datetime.now(timezone.utc)
+        raw = tokens.create_access(profile.id, "client-1", Audience.API)
+
+        resolved = tokens.resolve(raw, Audience.API)
+        assert resolved is not None
+        expires_at = resolved[1].expires_at
+        assert expires_at is not None
+        assert before + timedelta(minutes=5) <= expires_at <= datetime.now(timezone.utc) + timedelta(minutes=5)
+
+
 class TestSessions:
     def test_session_expiry_from_settings(self, token_db: Engine, profile: Profile):
-        tokens = TokenStore(token_db, session_expiry=timedelta(days=2))
+        tokens = TokenStore(token_db, session_expiry=timedelta(days=2), access_token_expiry=timedelta(hours=1))
 
         before = datetime.now(timezone.utc)
         raw = tokens.create_session(profile.id)
