@@ -1,7 +1,8 @@
 """Reaper: fails the runs that will never end on their own.
 
-A running run renews its heartbeat (:mod:`~interloper_scheduler.heartbeat`),
-so the reaper needs no launcher to know it is alive. Each poll it asks the
+A running run renews its heartbeat with every batch of events it reports
+(:meth:`~interloper_db.store.runs.RunStore.ingest`), so the reaper needs no
+launcher to know it is alive. Each poll it asks the
 store which dispatched and running runs are overdue
 (:meth:`~interloper_db.store.runs.RunStore.overdue`):
 
@@ -12,8 +13,9 @@ store which dispatched and running runs are overdue
 Each is failed with its reason, the launcher's diagnosis of its workload
 appended when it has one (an OOM kill, an exit code), through
 :meth:`~interloper_db.store.runs.RunStore.reap`, which leaves alone a run that
-started or renewed its heartbeat since it was read. A failed run's executor,
-if it is still alive, learns on its next heartbeat and stops.
+started or renewed its heartbeat since it was read. A failed run's pod, if
+it is still alive, learns from its next batch, delivers what it holds and
+stops.
 """
 
 from __future__ import annotations

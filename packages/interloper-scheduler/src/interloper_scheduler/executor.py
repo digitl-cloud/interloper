@@ -1,14 +1,16 @@
-"""Run executor: the envelope that assembles a run's operations and drives the runner.
+"""Run executor: assembles a dispatched run's operations and drives the runner.
 
-The executor owns the run lifecycle: load, mark running, heartbeat, trace,
-terminal status, failure event, and skipping the retry lineage's prior
-successes.
-Flattening the hydrated target workload into its operations and joining
-bound upstreams the run itself does not materialize are the framework's own
-concern (``Workload.operations()``, ``DAG._include_read_only_upstreams()``),
-not the executor's. The runner executes the operations; their returned
-effects (config and state fields) are applied generically to each
-operation's component row after the run.
+Everything the run says reaches the store through one path. A `RunRecorder`
+delivers the runner's events in batches, and the run's effects with the last
+one, to `RunStore.ingest`, which folds the run's start, its verdict and its
+heartbeat from them: the verdict is the ingestion of the run's own terminal
+event, so it never exists without the events before it. A run that cannot
+even be assembled (its target deleted, a kind that declares no workload, a
+window its operations refuse) is failed with the reason.
+
+Flattening the hydrated target into its operations and joining the bound
+upstreams the run does not materialize are the framework's concern
+(``Workload.operations()``, the DAG), not the executor's.
 """
 
 from __future__ import annotations
@@ -16,32 +18,28 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from functools import partial
 from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.errors import format_exception
+from interloper.errors import RunLostError, format_exception
+from interloper.events import RunRecorder
 from interloper.runner import ExecutionStatus, Runner
 from interloper.settings import AppSettings, ReaperSettings
 from interloper.telemetry import attributes
 from interloper.telemetry.propagation import context_from_env, inject_metadata
 from interloper.telemetry.tracer import tracer
-from interloper_db import ConflictError, ExecutionQuery, NotFoundError, Store
+from interloper_db import ConflictError, ExecutionQuery, NotFoundError, RunStatus, Store
 from interloper_db.models import Run
 from opentelemetry.context import Context
 from opentelemetry.trace import Link, get_current_span
-
-from interloper_scheduler.heartbeat import RunHeartbeat
 
 logger = logging.getLogger(__name__)
 
 
 class RunExecutor:
-    """Executes a run: loads from DB, assembles the operations, runs them.
-
-    Uses the ``Store`` for hydration so all reconstruction goes through
-    the standard framework path.
-    """
+    """Executes a dispatched run: assembles its operations from the store and drives them, reporting through ingest."""
 
     def __init__(
         self,
@@ -57,12 +55,11 @@ class RunExecutor:
             store: The Store. Defaults to the settings-configured one.
             runner: Runner template, copied per run. Defaults to an
                 ``AsyncRunner``.
-            reaper: The run liveness settings the heartbeat follows. Defaults
+            reaper: The run liveness settings the recorder follows. Defaults
                 to the settings-configured ones.
-            on_lost: Called when a run's heartbeat learns it should stop (see
-                :class:`~interloper_scheduler.heartbeat.RunHeartbeat`); a
-                container passes its process exit. ``None`` stops only the
-                heartbeat.
+            on_lost: Called when the run is lost (ended elsewhere, or unable
+                to report for half the heartbeat timeout); a container passes
+                its process exit. ``None`` lets the run finish on its own.
         """
         self._store = store or Store.from_settings()
         self._runner = runner or il.AsyncRunner()
@@ -70,13 +67,11 @@ class RunExecutor:
         self._on_lost = on_lost
 
     def execute(self, run_id: UUID) -> bool:
-        """Execute a run with full lifecycle tracking.
+        """Execute a dispatched run.
 
-        Synchronous DB orchestration around the async DAG run; the async
-        boundary lives in :meth:`_run_dag` where the engine is actually driven.
-
-        A component whose kind declares no workload cannot be executed, and
-        fails the run rather than silently succeeding.
+        The run roots its own trace: dispatch and execution are asynchronous,
+        so the dispatch span (the ``TRACEPARENT`` env in a launched container,
+        the ambient launch span in-process) is linked, not parented.
 
         Args:
             run_id: The run to execute.
@@ -84,61 +79,16 @@ class RunExecutor:
         Returns:
             ``True`` if the run completed successfully, ``False`` otherwise.
         """
-        logger.info("Starting run %s", run_id)
         try:
-            db_run = self._store.runs.start(run_id)
-        except (NotFoundError, ConflictError) as e:
-            logger.warning("Run %s cannot start, skipping: %s", run_id, e)
+            db_run = self._store.runs.get(run_id)
+        except NotFoundError:
+            logger.warning("Run %s not found; skipping", run_id)
             return False
-        run_metadata = db_run.event_metadata(db_run.target)
-        heartbeat = RunHeartbeat(
-            self._store,
-            run_id,
-            interval=self._reaper.heartbeat_interval,
-            timeout=self._reaper.heartbeat_timeout,
-            on_lost=self._on_lost,
-        )
-        with heartbeat:
-            try:
-                return self._execute_started(db_run, run_metadata)
-            except Exception as e:
-                logger.exception("Run %s failed", run_id)
-                try:
-                    self._store.runs.fail(run_id, format_exception(e))
-                except ConflictError as conflict:
-                    logger.warning("Run %s was completed by another writer first: %s", run_id, conflict)
-                except Exception:
-                    logger.exception("Failed to mark run %s as failed", run_id)
-                return False
-
-    def _execute_started(self, db_run: Run, run_metadata: dict[str, Any]) -> bool:
-        """Assemble a started run's operations, drive them, and record the verdict.
-
-        Args:
-            db_run: The run, just marked running, its target loaded.
-            run_metadata: The run's event metadata.
-
-        Returns:
-            ``True`` if the run completed successfully, ``False`` otherwise.
-
-        Raises:
-            NotFoundError: If the run's target was deleted.
-            TypeError: If the run's component declares no workload.
-        """
-        run_id = db_run.id
-        if db_run.component_id is None:
-            raise NotFoundError(f"Run {run_id} targets a component that was deleted")
-        component_id = db_run.component_id
-        org_id = db_run.org_id
-        partition_key = db_run.partition_key
-        retry_of = db_run.retry_of if db_run.retry_scope == "failed" else None
-
-        # The run roots its own trace: dispatch and execution are
-        # asynchronous, so the dispatch span (the ``TRACEPARENT`` env in a
-        # launched container, the ambient launch span in-process) is
-        # linked, not parented. Injecting the root into the run metadata
-        # is what nests the runner span here — it prefers a metadata
-        # parent over the environment one it would inherit otherwise.
+        if db_run.status != RunStatus.DISPATCHED:
+            logger.warning("Run %s is %s, not dispatched; skipping", run_id, db_run.status)
+            return False
+        logger.info("Starting run %s", run_id)
+        metadata = db_run.event_metadata(db_run.target)
         dispatch = get_current_span(context_from_env()).get_span_context()
         with tracer().start_as_current_span(
             "interloper.run.execute",
@@ -146,57 +96,96 @@ class RunExecutor:
             links=[Link(dispatch)] if dispatch.is_valid else [],
             attributes={attributes.RUN_ID: str(run_id)},
         ):
-            inject_metadata(run_metadata)
+            # The runner nests its span under the metadata's parent before the environment's.
+            inject_metadata(metadata)
+            try:
+                dag = self._assemble(db_run)
+                if dag is None:
+                    logger.info("No operations for run %s, marking success", run_id)
+                    self._store.runs.complete(run_id)
+                    return True
+                return self._run(db_run, dag, metadata)
+            except Exception as error:
+                logger.exception("Run %s failed", run_id)
+                self._fail(run_id, format_exception(error))
+                return False
 
-            target = self._store.components.load(component_id)
-            if not isinstance(target, il.Workload):
-                raise TypeError(f"Component kind '{type(target).kind}' declares no workload")
+    def _assemble(self, db_run: Run) -> il.DAG | None:
+        """Hydrate the run's target into the DAG of operations it executes.
 
-            operations = target.operations()
-            if not operations:
-                logger.info("No operations for run %s, marking success", run_id)
-                return self._complete(run_id, il.RunResult())
-
-            if retry_of:
-                successes = self._prior_successes(org_id, retry_of)
-                for operation in operations:
-                    if UUID(operation.id) in successes:
-                        operation.enabled = False
-
-            dag = il.DAG(*operations)
-            partition = il.TimePartition.from_key(partition_key) if partition_key else None
-            result = self._run_dag(dag, partition, org_id=org_id, run_id=run_id, metadata=run_metadata)
-
-        self._apply_effects(result)
-        logger.info("Run %s completed: %s", run_id, result.status.name)
-        return self._complete(run_id, result)
-
-    def _complete(self, run_id: UUID, result: il.RunResult) -> bool:
-        """Record the run's verdict, unless another writer recorded one first.
-
-        A run can be ended while it executes (reaped, timed out, canceled);
-        its verdict is then not this executor's to write, so the store's
-        refusal is logged and read as a failure.
+        A failed-scope retry's prior successes are disabled, so the run
+        re-executes only what had not succeeded.
 
         Args:
-            run_id: The run to complete.
-            result: What the run came to.
+            db_run: The dispatched run, its target loaded.
 
         Returns:
-            Whether the run completed, once recorded; ``False`` when the run was already terminal.
-        """
-        success = result.status == ExecutionStatus.COMPLETED
-        try:
-            if success:
-                self._store.runs.complete(run_id)
-            else:
-                self._store.runs.fail(run_id, f"{len(result.failed_ids)} operation(s) failed")
-        except ValueError as e:
-            logger.warning("Run %s was completed by another writer first: %s", run_id, e)
-            return False
-        return success
+            The DAG, or ``None`` when the target selects no operations.
 
-    # -- Internals -------------------------------------------------------------
+        Raises:
+            NotFoundError: If the run's target was deleted.
+            TypeError: If the target's kind declares no workload.
+        """
+        if db_run.component_id is None:
+            raise NotFoundError(f"Run {db_run.id} targets a component that was deleted")
+        target = self._store.components.load(db_run.component_id)
+        if not isinstance(target, il.Workload):
+            raise TypeError(f"Component kind '{type(target).kind}' declares no workload")
+        operations = target.operations()
+        if not operations:
+            return None
+        if db_run.retry_scope == "failed" and db_run.retry_of is not None:
+            successes = self._prior_successes(db_run.org_id, db_run.retry_of)
+            for operation in operations:
+                if UUID(operation.id) in successes:
+                    operation.enabled = False
+        return il.DAG(*operations)
+
+    def _run(self, db_run: Run, dag: il.DAG, metadata: dict[str, Any]) -> bool:
+        """Drive the runner over the DAG, every event and the effects recorded through ingest.
+
+        An operation's failure is the run's result and its events, not an
+        exception, so the runner never re-raises it here.
+
+        Args:
+            db_run: The run.
+            dag: Its operations.
+            metadata: Its event metadata.
+
+        Returns:
+            Whether the run completed; ``False`` too when it was lost.
+        """
+        window = il.TimePartition.from_key(db_run.partition_key) if db_run.partition_key else None
+        recorder = RunRecorder(
+            partial(self._store.runs.ingest, db_run.id),
+            run_id=str(db_run.id),
+            heartbeat_interval=self._reaper.heartbeat_interval,
+            heartbeat_timeout=self._reaper.heartbeat_timeout,
+            on_lost=self._on_lost,
+        )
+        runner = self._runner.model_copy(update={"on_event": recorder, "reraise": False})
+        try:
+            with recorder:
+                result = asyncio.run(runner.run(dag, window, metadata=metadata))
+                recorder.finish(result)
+        except RunLostError:
+            return False
+        logger.info("Run %s completed: %s", db_run.id, result.status.name)
+        return result.status is ExecutionStatus.COMPLETED
+
+    def _fail(self, run_id: UUID, error: str) -> None:
+        """Fail a run that could not execute, unless another writer ended it first.
+
+        Args:
+            run_id: The run.
+            error: Why, as a reader should see it.
+        """
+        try:
+            self._store.runs.fail(run_id, error)
+        except ConflictError as conflict:
+            logger.warning("Run %s was completed by another writer first: %s", run_id, conflict)
+        except Exception:
+            logger.exception("Failed to mark run %s as failed", run_id)
 
     def _prior_successes(self, org_id: UUID, retry_of: UUID) -> set[UUID]:
         """Node row ids that already succeeded in the retry lineage.
@@ -226,49 +215,3 @@ class RunExecutor:
                 statuses.setdefault(row.component_id, row.status)
             parent_id = self._store.runs.get(parent_id, org_id=org_id).retry_of
         return {asset_id for asset_id, status in statuses.items() if status == "success"}
-
-    def _apply_effects(self, result: il.RunResult) -> None:
-        """Persist the executed operations' effects onto their component rows.
-
-        Args:
-            result: The run result whose per-node execution records carry the
-                effects; nodes without effects are untouched.
-        """
-        for info in result.executions.values():
-            effects = info.result
-            if effects is None:
-                continue
-            if effects.config:
-                self._store.components.merge_config(UUID(info.component_id), effects.config)
-            if effects.state:
-                self._store.components.stamp_state(UUID(info.component_id), **effects.state)
-
-    def _run_dag(
-        self,
-        dag: il.DAG,
-        partition: il.TimePartition | None,
-        *,
-        org_id: UUID,
-        run_id: UUID,
-        metadata: dict[str, Any],
-    ) -> il.RunResult:
-        """Drive the DAG through a per-run copy of the runner template.
-
-        Args:
-            dag: The assembled operation graph.
-            partition: The run's partition scope, when partitioned.
-            org_id: Organisation the run's events belong to.
-            run_id: The run the events attach to.
-            metadata: Run-level metadata spread into every event.
-
-        Returns:
-            The runner's result.
-        """
-
-        def handle_event(event: il.Event) -> None:
-            self._store.events.save(event, org_id=org_id, run_id=run_id)
-
-        # A fresh copy per execution: the runner template is shared across
-        # runs, but run state and the event handler are per-run.
-        runner = self._runner.model_copy(update={"on_event": handle_event})
-        return asyncio.run(runner.run(dag, partition, metadata=metadata))

@@ -8,17 +8,21 @@ completion advances in the same transaction.
 
 The lifecycle is ``pending`` (a backfill's runs beyond its concurrency) →
 ``queued`` → ``dispatched`` (:meth:`RunStore.claim_next`) → ``running``
-(:meth:`RunStore.start`) → ``success`` (:meth:`RunStore.complete`) or ``failed``
-(:meth:`RunStore.fail`, :meth:`RunStore.reap`), or ``canceled`` from any open
+(its pod's ``run_started``, :meth:`RunStore.ingest`) → ``success`` (its
+``run_completed``, or :meth:`RunStore.complete`) or ``failed`` (its ``run_failed``,
+or :meth:`RunStore.fail`, :meth:`RunStore.reap`), or ``canceled`` from any open
 state (:meth:`RunStore.cancel`). Every ending goes through one finishing step,
 so quota, retries, the backfill and the run's open operations settle the same
 way however the run ended.
 
-A run executing proves it is alive by renewing ``heartbeat_at``
-(:meth:`RunStore.heartbeat`), which also tells it whether it should still be
-running; the reaper fails the runs :meth:`RunStore.overdue` names. A run whose
-verdict will never reach hooks, canceled or failed and retried, is stamped
-``hooks_evaluated_at`` at that transition, so ``hooks_pending`` lists
+A run executing reports everything through :meth:`RunStore.ingest`: its
+events, the start and verdict they fold into, its effects, and its proof of
+life, since every batch renews ``heartbeat_at`` and answers whether the run
+should still be running. The reaper fails the runs :meth:`RunStore.overdue`
+names.
+
+A run whose verdict will never reach hooks, canceled or failed and retried,
+is stamped ``hooks_evaluated_at`` at that transition, so ``hooks_pending`` lists
 exactly the verdicts hooks still owe a reaction (:meth:`RunStore.hooks_pending`).
 """
 
@@ -35,7 +39,7 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
-from sqlalchemy import Engine, and_, exists, func, or_, update
+from sqlalchemy import Engine, and_, exists, func, or_
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
 
@@ -519,29 +523,6 @@ class RunStore:
                     "Canceled run %s: monthly successful-run quota exhausted for org %s", db_run.id, db_run.org_id
                 )
 
-    def start(self, run_id: UUID) -> Run:
-        """Mark a dispatched run as running, stamping its start and its first heartbeat.
-
-        Args:
-            run_id: The run UUID.
-
-        Returns:
-            The running Run row, its target loaded.
-
-        Raises:
-            ConflictError: If the run is not dispatched, as when it was
-                canceled, or reaped while its pod was still being scheduled.
-        """
-        with session_scope(self._engine) as session:
-            db_run = self._lock(run_id)
-            if db_run.status != RunStatus.DISPATCHED:
-                raise ConflictError(f"Run {run_id} is {db_run.status}, not dispatched")
-            db_run.status = RunStatus.RUNNING
-            db_run.started_at = datetime.now(timezone.utc)
-            db_run.heartbeat_at = database_now(session)
-            save(session, db_run, "target")
-            return db_run
-
     def ingest(
         self,
         run_id: UUID,
@@ -587,30 +568,6 @@ class RunStore:
             session.add(db_run)
             commit(session)
             return db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING)
-
-    def heartbeat(self, run_id: UUID) -> bool:
-        """Renew a running run's heartbeat, and say whether it is still running.
-
-        A single conditional update, not a locking read, so a beat never waits
-        behind a transaction that holds the row.
-
-        Args:
-            run_id: The run UUID.
-
-        Returns:
-            ``True`` once renewed; ``False`` when the run is no longer running
-            (completed, canceled or reaped elsewhere), which tells its executor
-            to stop.
-        """
-        statement = (
-            update(Run)
-            .where(col(Run.id) == run_id, col(Run.status) == RunStatus.RUNNING)
-            .values(heartbeat_at=func.now())
-        )
-        with session_scope(self._engine) as session:
-            result = session.execute(statement)  # ty: ignore[deprecated]
-            commit(session)
-            return result.rowcount == 1  # ty: ignore[unresolved-attribute]
 
     def fail(self, run_id: UUID, error: str) -> Run:
         """Fail a run with a reason, recorded on the run.

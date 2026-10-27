@@ -33,8 +33,8 @@ class Launcher(ABC):
     A launcher decides *where* a run executes: in-process, Docker, Kubernetes, etc.
     Every launcher carries a runner configuration that determines *how* the
     DAG is executed once it reaches the execution environment. Whether a run
-    is still alive is not the launcher's to say: the run's heartbeat says it
-    (see :mod:`~interloper_scheduler.heartbeat`).
+    is still alive is not the launcher's to say: the run's heartbeat, renewed
+    by every batch of events it reports, says it.
     """
 
     @classmethod
