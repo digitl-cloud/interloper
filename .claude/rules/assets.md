@@ -37,7 +37,9 @@ Vendors serialize loosely: counts as floats, numbers as strings, dates as string
 
 - counts (`impressions`, `clicks`, `purchases`, `units_sold`, view and engagement counts) are `int`
 - money, rates, ratios and percentages (`cost`, `spend`, `sales`, `cpc`, `ctr`, `roas`, `*_rate`) are `float`
-- a day is `dt.date`, an instant is `dt.datetime`, an identifier is `str` unless the vendor's own ids are numeric throughout
+- a day is `dt.date`, an instant is `dt.datetime`, an identifier is `str`, always: an id is a label, vendors are inconsistent with themselves (Amazon sends numbers in reports and strings from its entity endpoints), and an integer id above 2^53 breaks in anything that passes through a float
+
+`tests/test_catalog_conventions.py` checks these by field name over the whole catalog (`*_id`, `*_at`, `*_time`, `*_date`, amounts) and checks that every partition column is a declared `dt.date`; a deliberate exception goes in its `EXCEPTIONS`, with the reason.
 
 **Decide from the data, not from the field name.** Before typing a metric family, check real rows: a column that looks like a count may hold fractions for a good reason. Amazon Ads' 63 count metrics were declared `float` for a year; a scan of 20.5 M rows showed whole numbers in every one of them and fractions in every rate and amount, which is what settled the change. A guess here is a breaking change later: BigQuery cannot retype a column in place.
 
