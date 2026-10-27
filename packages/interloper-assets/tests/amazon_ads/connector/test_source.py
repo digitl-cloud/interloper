@@ -307,6 +307,9 @@ class TestEntities:
             ),
             "display_campaigns": ("GET", "/sd/campaigns/extended", None, None),
             "display_ad_groups": ("GET", "/sd/adGroups/extended", None, None),
+            "products_ads": ("POST", "/sp/productAds/list", "application/vnd.spProductAd.v3+json", "productAds"),
+            "brands_ads": ("POST", "/sb/v4/ads/list", "application/vnd.sbadresource.v4+json", "ads"),
+            "display_ads": ("GET", "/sd/productAds/extended", None, None),
         }
         for key, (method, path, media_type, page_key) in calls.items():
             seen: list[httpx2.Request] = []
@@ -322,6 +325,89 @@ class TestEntities:
             assert (seen[0].method, seen[0].url.path) == (method, path), key
             if media_type is not None:
                 assert seen[0].headers["Content-Type"] == media_type, key
+
+    def test_brands_ads_ask_for_no_extended_data_their_list_does_not_take(self):
+        requests: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            requests.append(request)
+            return httpx2.Response(200, json={"ads": [{"adId": "9"}]})
+
+        _run(_source_with_api(handler), "brands_ads")
+        assert json.loads(requests[0].content) == {
+            "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
+            "maxResults": 100,
+        }
+
+    def test_a_products_ad_conforms_with_its_extended_data(self):
+        row = {
+            "adId": "11",
+            "adGroupId": "2",
+            "campaignId": "1",
+            "asin": "B000TEST",
+            "state": "ENABLED",
+            "globalStoreSetting": {"catalogSourceCountryCode": "DE"},
+            "extendedData": {
+                "creationDateTime": "2026-08-01T10:00:00Z",
+                "servingStatus": "AD_STATUS_LIVE",
+                "servingStatusDetails": [{"name": "AD_STATUS_LIVE_DETAIL", "message": "Live"}],
+            },
+            "date": DAY,
+        }
+        out = _conform("products_ads", [row], schemas.ProductsAds)
+        assert (out.loc[0, "ad_id"], out.loc[0, "asin"], out.loc[0, "state"]) == ("11", "B000TEST", "ENABLED")
+        assert out.loc[0, "global_store_setting_catalog_source_country_code"] == "DE"
+        assert out.loc[0, "extended_data_creation_date_time"] == pd.Timestamp("2026-08-01T10:00:00", tz="UTC")
+        assert json.loads(out.loc[0, "extended_data_serving_status_details"])[0]["name"] == "AD_STATUS_LIVE_DETAIL"
+
+    def test_a_brands_ad_conforms_with_its_creative_and_landing_page(self):
+        row = {
+            "adId": "21",
+            "adGroupId": "3",
+            "campaignId": "1",
+            "name": "Spring video",
+            "state": "ENABLED",
+            "creative": {
+                "type": "VIDEO",
+                "asins": ["B000A", "B000B"],
+                "headline": "New in",
+                "brandLogoCrop": {"top": 0, "left": 0, "width": 400, "height": 400},
+                "creativeStatus": "APPROVED",
+            },
+            "landingPage": {"pageType": "STORE", "url": "https://www.amazon.de/stores/example"},
+            "extendedData": {"creationDate": 1785179053888, "servingStatus": "AD_STATUS_LIVE"},
+            "date": DAY,
+        }
+        out = _conform("brands_ads", [row], schemas.BrandsAds)
+        assert (out.loc[0, "name"], out.loc[0, "creative_type"], out.loc[0, "creative_headline"]) == (
+            "Spring video",
+            "VIDEO",
+            "New in",
+        )
+        assert json.loads(out.loc[0, "creative_asins"]) == ["B000A", "B000B"]
+        assert json.loads(out.loc[0, "creative_brand_logo_crop"])["width"] == 400
+        assert out.loc[0, "creative_creative_status"] == "APPROVED"
+        assert out.loc[0, "landing_page_page_type"] == "STORE"
+        assert out.loc[0, "extended_data_creation_date"] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
+
+    def test_a_display_ad_conforms_with_exact_ids_and_epoch_times(self):
+        row = {
+            "adId": 287654321098765433,
+            "adGroupId": 4,
+            "campaignId": 5,
+            "asin": "B000C",
+            "state": "enabled",
+            "servingStatus": "AD_STATUS_LIVE",
+            "creationDate": 1785179053888,
+            "date": DAY,
+        }
+        out = _conform("display_ads", [row], schemas.DisplayAds)
+        assert (out.loc[0, "ad_id"], out.loc[0, "ad_group_id"], out.loc[0, "campaign_id"]) == (
+            "287654321098765433",
+            "4",
+            "5",
+        )
+        assert out.loc[0, "creation_date"] == pd.Timestamp("2026-07-27T19:04:13.888", tz="UTC")
 
     def test_display_entities_keep_their_date_reading_normalizer_through_the_roundtrip(self):
         for key in ("display_campaigns", "display_ad_groups"):

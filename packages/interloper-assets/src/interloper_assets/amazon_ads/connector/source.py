@@ -159,22 +159,30 @@ def request_and_download_report(
 
 
 def _list_entities(
-    connection: AmazonAdsConnection, profile_id: str, path: str, media_type: str, key: str
+    connection: AmazonAdsConnection,
+    profile_id: str,
+    path: str,
+    media_type: str,
+    key: str,
+    *,
+    extended_data: bool = True,
 ) -> list[dict]:
     """List every Sponsored Products or Sponsored Brands entity of a list call, following its next token.
 
-    Used by the products and brands campaigns and ad groups assets. Their list
-    calls page through a ``nextToken`` in the POST body, which the client's
-    GET paginators cannot drive. Archived entities are asked for explicitly,
-    since the reports still carry their history, and the extended data adds
-    the serving status and lifecycle times.
+    Used by the products and brands campaigns, ad groups and ads assets. Their
+    list calls page through a ``nextToken`` in the POST body, which the
+    client's GET paginators cannot drive. Archived entities are asked for
+    explicitly, since the reports still carry their history, and the extended
+    data adds the serving status and lifecycle times.
 
     Args:
         connection: The Amazon Ads connection.
         profile_id: The profile whose entities are listed, sent as the scope header.
         path: The list call's path, such as ``/sp/campaigns/list``.
         media_type: The resource's vendor media type, sent as both content type and accept.
-        key: The response key holding the page's entities, ``campaigns`` or ``adGroups``.
+        key: The response key holding the page's entities, such as ``campaigns`` or ``adGroups``.
+        extended_data: Whether to ask for the extended data; the Sponsored
+            Brands ads list takes no such field and returns it anyway.
 
     Returns:
         Every entity, in the order the API returned them.
@@ -182,7 +190,7 @@ def _list_entities(
     headers = {"Amazon-Advertising-API-Scope": profile_id, "Content-Type": media_type, "Accept": media_type}
     body: dict[str, Any] = {
         "stateFilter": {"include": ["ENABLED", "PAUSED", "ARCHIVED"]},
-        "includeExtendedDataFields": True,
+        **({"includeExtendedDataFields": True} if extended_data else {}),
         "maxResults": 100,
     }
     rows: list[dict] = []
@@ -219,7 +227,7 @@ def _list_display(connection: AmazonAdsConnection, profile_id: str, path: str) -
     return [row for page in pages for row in page]
 
 
-_DISPLAY_IDS = frozenset({"campaignId", "adGroupId", "portfolioId"})
+_DISPLAY_IDS = frozenset({"campaignId", "adGroupId", "adId", "portfolioId"})
 
 
 class SponsoredDisplayEntityNormalizer(DataFrameNormalizer):
@@ -411,6 +419,48 @@ class AmazonAds(il.Source):
         """Sponsored Display ad groups with their default bid, tactic and serving status."""
         return _snapshot(
             _list_display(self.connection, self.profile_id, "/sd/adGroups/extended"), context.partition_date
+        )
+
+    @il.asset(
+        schema=schemas.ProductsAds,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+    )
+    def products_ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Products product ads with their advertised product and serving status."""
+        rows = _list_entities(
+            self.connection, self.profile_id, "/sp/productAds/list", "application/vnd.spProductAd.v3+json", "productAds"
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.BrandsAds,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_BRANDS_ENTITY_NORMALIZER,
+    )
+    def brands_ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Brands ads with their creative, landing page and serving status."""
+        rows = _list_entities(
+            self.connection,
+            self.profile_id,
+            "/sb/v4/ads/list",
+            "application/vnd.sbadresource.v4+json",
+            "ads",
+            extended_data=False,
+        )
+        return _snapshot(rows, context.partition_date)
+
+    @il.asset(
+        schema=schemas.DisplayAds,
+        partitioning=il.TimePartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_DISPLAY_ENTITY_NORMALIZER,
+    )
+    def display_ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """Sponsored Display product ads with their advertised product and serving status."""
+        return _snapshot(
+            _list_display(self.connection, self.profile_id, "/sd/productAds/extended"), context.partition_date
         )
 
     # --- Sponsored Products ---
