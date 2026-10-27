@@ -53,9 +53,9 @@ claude mcp add --transport http interloper http://localhost:3001/mcp \
 | --- | --- | --- |
 | `INTERLOPER_MCP_HOST` | `0.0.0.0` | HTTP bind host |
 | `INTERLOPER_MCP_PORT` | `3001` | HTTP bind port |
-| `INTERLOPER_MCP_EXTERNAL_URL` | — | Public base URL (e.g. `https://mcp.interloper.app`), used in OAuth protected-resource metadata |
-| `INTERLOPER_MCP_TOKEN` | — | stdio only: PAT to authenticate as |
-| `INTERLOPER_MCP_ORG_ID` | — | stdio only: dev fallback, direct org scope |
+| `INTERLOPER_MCP_EXTERNAL_URL` | (unset) | Public URL of the MCP endpoint (e.g. `https://app.interloper.dev/mcp`), used in OAuth protected-resource metadata |
+| `INTERLOPER_MCP_TOKEN` | (unset) | stdio only: PAT to authenticate as |
+| `INTERLOPER_MCP_ORG_ID` | (unset) | stdio only: dev fallback, direct org scope |
 
 Database and catalog configuration is the standard interloper set
 (`INTERLOPER_POSTGRES_*`, `INTERLOPER_CATALOG`, ...).

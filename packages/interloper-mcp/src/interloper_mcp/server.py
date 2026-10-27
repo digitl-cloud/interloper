@@ -1,11 +1,13 @@
-"""MCP server factory: FastMCP wired with PAT auth and the toolkit's tools."""
+"""MCP server factory: MCPServer wired with PAT auth and the toolkit's tools."""
 
 from __future__ import annotations
+
+from typing import Any
 
 from interloper.settings import McpSettings
 from interloper_db import Store
 from mcp.server.auth.settings import AuthSettings as McpAuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import AnyHttpUrl
 
 from interloper_mcp.auth import PatVerifier
@@ -27,8 +29,23 @@ INSTRUCTIONS = (
 )
 
 
-def create_mcp_server(settings: McpSettings, store: Store | None = None) -> FastMCP:
-    """Build the FastMCP server.
+def http_options(settings: McpSettings) -> dict[str, Any]:
+    """Options the streamable HTTP transport is served with.
+
+    Passed to ``run()`` and ``streamable_http_app()`` alike, so the app a test
+    drives is the one production serves.
+
+    Args:
+        settings: The MCP settings (host).
+
+    Returns:
+        The keyword arguments for the SDK's streamable HTTP entry points.
+    """
+    return {"host": settings.host, "stateless_http": True}
+
+
+def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPServer:
+    """Build the MCP server.
 
     Args:
         settings: The MCP settings (host, port, external URL).
@@ -42,25 +59,19 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> Fast
     """
     auth_kwargs: dict = {}
     if store is not None:
-        # external_url doubles as issuer and resource URL in the RFC 9728
-        # protected-resource metadata; default to the local bind address so
-        # dev servers work without configuration.
-        base_url = settings.external_url or f"http://localhost:{settings.port}"
+        # external_url names the MCP endpoint (https://host/mcp): it is the RFC 9728
+        # resource, which puts the metadata at /.well-known/oauth-protected-resource/mcp.
+        # Default to the local bind address so dev servers work without configuration.
+        local_url = f"http://localhost:{settings.port}"
         auth_kwargs = {
             "token_verifier": PatVerifier(store),
             "auth": McpAuthSettings(
-                issuer_url=AnyHttpUrl(base_url),
-                resource_server_url=AnyHttpUrl(base_url),
+                issuer_url=AnyHttpUrl(settings.external_url or local_url),
+                resource_server_url=AnyHttpUrl(settings.external_url or f"{local_url}/mcp"),
+                validate_token_resource=False,
             ),
         }
 
-    mcp = FastMCP(
-        SERVER_NAME,
-        instructions=INSTRUCTIONS,
-        host=settings.host,
-        port=settings.port,
-        stateless_http=True,
-        **auth_kwargs,
-    )
+    mcp = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS, **auth_kwargs)
     register_tools(mcp)
     return mcp

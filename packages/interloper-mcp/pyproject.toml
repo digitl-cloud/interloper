@@ -12,7 +12,7 @@ dependencies = [
     "interloper-core",
     "interloper-db",
     "interloper-toolkit",
-    "mcp>=1.28,<2",
+    "mcp>=2.3,<3",
     "uvicorn[standard]>=0.30.0",
 ]
 
