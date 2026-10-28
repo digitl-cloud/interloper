@@ -1,9 +1,8 @@
 """Round-trip tests: generic store writes → generic hydration → live framework objects.
 
 These exercise the full pipeline against a real (SQLite) database using real
-catalog classes: create rows through the generic store surface, hydrate
-through the one generic spec builder, and assert on the reconstructed
-framework instances.
+catalog classes: create rows through the generic store surface, hydrate them,
+and assert on the reconstructed framework instances.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from uuid import UUID, uuid4
 import interloper as il
 import pydantic
 import pytest
-from interloper.serializable import Spec
 from interloper_assets.demo.assets import demo_asset
 from interloper_assets.demo.basic.source import DemoSource
 from sqlalchemy import Engine
@@ -96,6 +94,14 @@ class Finance(il.Source):
             return []
 
 
+class FakeLinker(il.Component):
+    """Test-only kind whose vocabulary the hydrator has never seen."""
+
+    links: list[il.Component] = il.Relation(["source", "fake_linker"], many=True, optional=True)
+
+
+il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
+
 _CATALOG = il.Catalog.from_assets([DemoSource, demo_asset, Shop, Finance, Warehouse])
 
 
@@ -147,26 +153,10 @@ def _asset(source: il.Component, key: str) -> il.Asset:
     return next(asset for asset in source.assets if asset.key == key)
 
 
-def _init(store: Store, component_id: UUID) -> dict[str, Any]:
-    """Build the init payload of one row, in a session of its own.
+class TestRelationTargets:
+    """How a relation's targets reach the hydrated component."""
 
-    Args:
-        store: The store whose hydrator builds the payload.
-        component_id: Id of the row to build.
-
-    Returns:
-        The row's init payload.
-    """
-    with Session(store.engine) as session:
-        row = session.get(Component, component_id)
-        assert row is not None
-        return store.components._hydrator._build_init(row)
-
-
-class TestBuildInit:
-    """The one rule that decides how a relation target is written out."""
-
-    def test_parentless_target_nests(self, store: Store):
+    def test_a_parentless_target_is_hydrated_and_bound(self, store: Store):
         connection = store.components.create(_ORG, kind="connection", key="shop_connection", config={}, encrypted=False)
         warehouse = store.components.create(_ORG, kind="destination", key="warehouse")
         shop = store.components.create(
@@ -176,30 +166,13 @@ class TestBuildInit:
             relations={"connection": [connection.id], "destinations": [warehouse.id]},
         )
 
-        init = _init(store, shop.id)
+        hydrated = store.components.load(shop.id)
 
-        assert init["connection"]["id"] == str(connection.id)
-        assert init["connection"]["path"].endswith("ShopConnection")
-        assert [target["id"] for target in init["destinations"]] == [str(warehouse.id)]
+        assert isinstance(hydrated, Shop)
+        assert hydrated.connection.id == str(connection.id)
+        assert [target.id for target in hydrated.destinations] == [str(warehouse.id)]
 
-    def test_asset_target_is_a_reference(self, store: Store, shop_connection: Component):
-        shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
-        finance = store.components.create(_ORG, kind="source", key="finance")
-        store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=_child(shop, "orders").id)
-
-        init = _init(store, finance.id)
-
-        assert init["assets"]["revenue"]["orders"] == Spec.reference(str(_child(shop, "orders").id))
-
-    def test_a_source_owned_asset_carries_its_sibling_relations(self, store: Store):
-        source = store.components.create(_ORG, kind="source", key="demo_source")
-
-        init = _init(store, source.id)
-
-        assert init["assets"]["e"]["b"] == Spec.reference(str(_child(source, "b").id))
-        assert init["assets"]["b"]["a"] == Spec.reference(str(_child(source, "a").id))
-
-    def test_a_target_reached_twice_is_written_out_once_then_referenced(self, store: Store, shop_connection: Component):
+    def test_a_target_reached_twice_hydrates_once(self, store: Store, shop_connection: Component):
         warehouse = store.components.create(_ORG, kind="destination", key="warehouse")
         shop = store.components.create(
             _ORG,
@@ -218,12 +191,12 @@ class TestBuildInit:
             relations={"targets": [shop.id, finance.id]},
         )
 
-        init = _init(store, job.id)
+        hydrated = store.components.load(job.id)
 
-        emitted = [target["init"]["destinations"][0] for target in init["targets"]]
-        assert [Spec.is_reference(value) for value in emitted] == [False, True]
-        assert emitted[0]["id"] == str(warehouse.id)
-        assert emitted[1] == Spec.reference(str(warehouse.id))
+        assert isinstance(hydrated, il.Job)
+        first, second = (target.destinations[0] for target in hydrated.targets)
+        assert first is second
+        assert first.id == str(warehouse.id)
 
     def test_a_relation_name_the_class_does_not_declare_is_an_actionable_error(
         self, store: Store, shop_connection: Component, component_db: Engine
@@ -244,7 +217,7 @@ class TestBuildInit:
             session.commit()
 
         with pytest.raises(HydrationError, match="has 'mystery' relations its class does not declare"):
-            _init(store, shop.id)
+            store.components.load(shop.id)
 
     def test_two_rows_under_a_single_valued_relation_is_an_actionable_error(
         self, store: Store, shop_connection: Component, component_db: Engine
@@ -267,7 +240,7 @@ class TestBuildInit:
             session.commit()
 
         with pytest.raises(HydrationError, match="holds 2 rows under single-valued relation 'connection'"):
-            _init(store, shop.id)
+            store.components.load(shop.id)
 
 
 class TestSourceRoundTrip:
@@ -367,15 +340,15 @@ class TestCrossSourceUpstream:
         store.relations.add(_child(finance, "revenue").id, name="orders", dst_id=shop_orders.id)
         store.relations.add(_child(finance, "cogs").id, name="orders", dst_id=shop_orders.id)
 
-        original_build = Hydrator.build_component_spec
+        original_build = Hydrator._build
         shop_hydrations: list[UUID] = []
 
-        def spy(self: Hydrator, db_component: Component, *, seen: set[str] | None = None) -> Spec:
+        def spy(self: Hydrator, db_component: Component, cache: Any, chain: Any) -> il.Component:
             if db_component.key == "shop":
                 shop_hydrations.append(db_component.id)
-            return original_build(self, db_component, seen=seen)
+            return original_build(self, db_component, cache, chain)
 
-        monkeypatch.setattr(Hydrator, "build_component_spec", spy)
+        monkeypatch.setattr(Hydrator, "_build", spy)
 
         hydrated = store.components.load(finance.id)
 
@@ -387,7 +360,9 @@ class TestCrossSourceUpstream:
         assert revenue_orders.parent is cogs_orders.parent
         assert shop_hydrations == [shop.id]
 
-    def test_a_reference_cycle_across_sources_raises_with_its_trail(self, store: Store, shop_connection: Component):
+    def test_assets_of_two_sources_referencing_each_other_bind_both_ways(
+        self, store: Store, shop_connection: Component
+    ):
         shop = store.components.create(_ORG, kind="source", key="shop", relations={"connection": [shop_connection.id]})
         finance = store.components.create(_ORG, kind="source", key="finance")
         shop_orders = _child(shop, "orders")
@@ -395,8 +370,34 @@ class TestCrossSourceUpstream:
         store.relations.add(revenue.id, name="orders", dst_id=shop_orders.id)
         store.relations.add(shop_orders.id, name="back", dst_id=revenue.id)
 
-        with pytest.raises(HydrationError, match="Reference cycle while hydrating: shop"):
-            store.components.load(shop.id)
+        hydrated = store.components.load(shop.id)
+
+        orders = _asset(hydrated, "orders")
+        back = orders.bound("back")
+        assert isinstance(back, il.Asset)
+        assert back.id == str(revenue.id)
+        assert back.bound("orders") is orders
+
+    def test_a_cycle_through_parentless_components_raises_with_its_trail(self, store: Store, component_db: Engine):
+        store._catalog.components["fake_linker"] = FakeLinker.definition()
+        first = store.components.create(_ORG, kind="fake_linker", key="fake_linker", name="First")
+        second = store.components.create(_ORG, kind="fake_linker", key="fake_linker", name="Second")
+        with Session(component_db) as session:
+            for src, dst in ((first, second), (second, first)):
+                session.add(
+                    ComponentRelation(
+                        src_id=src.id,
+                        name="links",
+                        dst_id=dst.id,
+                        org_id=_ORG,
+                        src_kind="fake_linker",
+                        dst_kind="fake_linker",
+                    )
+                )
+            session.commit()
+
+        with pytest.raises(HydrationError, match="Reference cycle while hydrating: fake_linker -> fake_linker"):
+            store.components.load(first.id)
 
     def test_a_reference_to_a_drifted_component_raises_component_drift_error(
         self, store: Store, shop_connection: Component
@@ -499,15 +500,6 @@ class TestJobRoundTrip:
         assert updated.state == {"next_run_at": None, "last_run_at": "2026-07-06T06:00:00+00:00"}
 
 
-class FakeLinker(il.Component):
-    """Test-only kind whose vocabulary the hydrator has never seen."""
-
-    links: list[il.Component] = il.Relation("source", many=True, optional=True)
-
-
-il.KINDS.register(FakeLinker.kind, FakeLinker.anchor())
-
-
 class TestOpenVocabulary:
     """A novel kind + relation name persists and hydrates with no per-kind code."""
 
@@ -534,10 +526,10 @@ class TestHydrationErrorSanitisation:
         class Probe(pydantic.BaseModel):
             app_secret: str
 
-        def raise_validation_error(spec, catalog=None, *, resolve=None):
-            Probe.model_validate({"token": "s3cret-value"})
+            def __init__(self, **init: Any) -> None:
+                super().__init__(token="s3cret-value")
 
-        monkeypatch.setattr(il.Component, "from_spec", raise_validation_error)
+        monkeypatch.setattr(il.Component, "resolve_key", classmethod(lambda cls, key, catalog=None: Probe))
         with pytest.raises(HydrationError) as exc_info:
             store.components.load(db_source.id)
 
@@ -545,30 +537,6 @@ class TestHydrationErrorSanitisation:
         assert "Failed to hydrate source 'demo_source'" in message
         assert "app_secret: Field required" in message
         assert "s3cret-value" not in message
-
-
-class TestRelationsByName:
-    """The grouped relation lookup used while building a spec."""
-
-    def test_a_row_with_no_id_has_no_relations(self, store: Store):
-        assert store.components._hydrator._relations_by_name(None) == {}
-
-
-class TestResolvePath:
-    """A spec's import path comes from the catalog entry."""
-
-    def test_a_drifted_key_is_an_actionable_error(self, component_db: Engine):
-        from interloper.errors import CatalogKeyError
-
-        writer = Store(catalog=_CATALOG)
-        row = writer.components.create(_ORG, kind="source", key="demo_source")
-        reader = Store(catalog=il.Catalog(components={}))
-
-        with Session(component_db) as session:
-            db_row = session.get(type(row), row.id)
-            assert db_row is not None
-            with pytest.raises(CatalogKeyError, match="Unknown source key: demo_source"):
-                reader.components._hydrator._resolve_path(db_row)
 
 
 class TestJobTargets:
