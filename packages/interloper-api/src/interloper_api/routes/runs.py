@@ -337,9 +337,9 @@ def list_run_events(
 
 
 class IngestResponse(BaseModel):
-    """Whether the run is still running once the batch is folded."""
+    """Whether the run was live when the batch arrived."""
 
-    running: bool
+    live: bool
 
 
 @router.post("/{run_id}/events", dependencies=[Depends(require_run)])
@@ -354,7 +354,7 @@ def ingest_events(run_id: UUID, body: dict[str, Any], store: StoreDep) -> Ingest
         store: The Store instance.
 
     Returns:
-        Whether the run is still running.
+        Whether the run was live when the batch arrived.
 
     Raises:
         HTTPException: 422 when the batch does not parse.
@@ -363,4 +363,4 @@ def ingest_events(run_id: UUID, body: dict[str, Any], store: StoreDep) -> Ingest
         batch = il.EventBatch.from_dict(body)
     except EventError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    return IngestResponse(running=store.runs.ingest(run_id, batch))
+    return IngestResponse(live=store.runs.ingest(run_id, batch))

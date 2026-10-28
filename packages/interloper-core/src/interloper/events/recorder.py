@@ -12,9 +12,8 @@ large batches.
 Delivery has no deadline. Its only bound is the run's liveness rule: a
 delivery that keeps failing for half the reaper's heartbeat timeout means the
 run can no longer prove it is alive, and it is lost. A response saying the
-run is no longer running means it was ended elsewhere: what is already held
-is delivered, then the run is lost too. The run's own ending answers that
-way as well, and is not a loss.
+run was not live when a batch arrived means it was ended elsewhere: what is
+already held is delivered, then the run is lost too.
 """
 
 from __future__ import annotations
@@ -81,7 +80,7 @@ class EventRecorder:
 
         Args:
             ingest: Delivers one batch, the run's effects on the last;
-                returns whether the run is still running. A `DeliveryError`
+                returns whether the run was live when it arrived. A `DeliveryError`
                 says whether the delivery is worth retrying; any other
                 exception is retried.
             run_id: The run whose events are recorded, for the log.
@@ -107,7 +106,7 @@ class EventRecorder:
         self._component_id = component_id
         self._queue: queue.Queue[Event | None] = queue.Queue()
         self._effects: dict[str, Effect] | None = None
-        self._ended = False
+        self._ended_elsewhere = False
         self._lost: str | None = None
         self._thread = threading.Thread(target=self._write, name=f"recorder-{run_id}", daemon=True)
 
@@ -170,12 +169,12 @@ class EventRecorder:
         while True:
             batch, last = self._collect()
             try:
-                running = self._deliver(batch, self._effects if last else None)
+                live = self._deliver(batch, self._effects if last else None)
             except DeliveryError as error:
                 self._lose(f"could not deliver its events: {error}")
                 return
-            self._ended = self._ended or any(event.type in _RUN_ENDINGS for event in batch)
-            if not running and not self._ended and self._lost is None and (last or self._queue.empty()):
+            self._ended_elsewhere = self._ended_elsewhere or not live
+            if self._ended_elsewhere and self._lost is None and (last or self._queue.empty()):
                 self._lose("was ended elsewhere")
             if last:
                 return
@@ -227,7 +226,7 @@ class EventRecorder:
             effects: The effects to deliver with them, on the last batch only.
 
         Returns:
-            Whether the run is still running.
+            Whether the run was live when the batch arrived.
 
         Raises:
             DeliveryError: If the delivery cannot be retried, or kept failing
