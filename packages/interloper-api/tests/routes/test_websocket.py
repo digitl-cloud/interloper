@@ -20,7 +20,7 @@ from interloper_db import Audience
 from typing_extensions import Self
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import state as state_module
+from interloper_api.dependencies import State
 from interloper_api.routes import websocket as websocket_module
 from interloper_api.routes.websocket import ConnectionManager
 
@@ -371,7 +371,7 @@ class FakeStore:
         self.presented: list[tuple[str, Audience]] = []
         self._resolved = (profile, SimpleNamespace(kind="session")) if authenticated else None
         self.tokens = SimpleNamespace(resolve=self._resolve)
-        self.members = SimpleNamespace(role=lambda org_id, user_id: role)
+        self.members = SimpleNamespace(role_of=lambda org_id, user: role)
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
@@ -381,21 +381,18 @@ class FakeStore:
 
 @pytest.fixture
 def endpoint_client(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Mount the websocket route under the organisation prefix with the global store swapped for a fake.
-
-    The endpoint calls ``get_store()`` directly rather than through
-    ``Depends``, so the module-level state is what has to be replaced.
+    """Mount the websocket route under the organisation prefix on an app whose state holds a fake store.
 
     Args:
-        monkeypatch: Fixture used to install the fake store.
+        monkeypatch: Fixture the manager swap below rides on.
 
     Returns:
         A callable taking the fake store and returning a TestClient.
     """
 
     def build(store: FakeStore) -> TestClient:
-        monkeypatch.setattr(state_module, "_store", store)
         app = FastAPI()
+        app.state.interloper = State(store=store)  # ty: ignore[invalid-argument-type]
         install_error_handlers(app)
         app.include_router(websocket_module.org_router, prefix=ORG_PREFIX)
         return TestClient(app)

@@ -34,7 +34,7 @@ _OTHER_ORG_ID = uuid4()
 
 
 class FakeStore:
-    """Stand-in exposing ``members.role`` per organisation and ``organisations.get``."""
+    """Stand-in exposing ``members.role_of`` per organisation and ``organisations.get``."""
 
     def __init__(self, roles: dict[UUID, str] | None = None) -> None:
         """Set up the fake.
@@ -44,11 +44,13 @@ class FakeStore:
         """
         self.asked: list[UUID] = []
         self._roles = roles or {}
-        self.members = SimpleNamespace(role=self._member_role)
+        self.members = SimpleNamespace(role_of=self._role_of)
         self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
-    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
+    def _role_of(self, org_id: UUID, user: Any) -> str | None:
+        if user.is_super_admin:
+            return "admin"
         self.asked.append(org_id)
         return self._roles.get(org_id)
 

@@ -24,7 +24,7 @@ import psycopg2
 import psycopg2.extensions
 from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from interloper_api.dependencies import get_caller, get_org_scope, get_store
+from interloper_api.dependencies import get_caller, get_org_scope, get_state, get_store
 
 logger = logging.getLogger(__name__)
 org_router = APIRouter(tags=["websocket"])
@@ -184,7 +184,7 @@ async def websocket_endpoint(
         org_id: The organisation whose changes are streamed, from the path.
         session_token: The session cookie value.
     """
-    store = get_store()
+    store = get_store(get_state(websocket))
     try:
         user = get_caller(store, session_token, websocket.headers.get("authorization"))
         get_org_scope(org_id, user, store)

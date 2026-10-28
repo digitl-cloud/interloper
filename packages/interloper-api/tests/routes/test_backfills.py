@@ -7,6 +7,7 @@ tests, matching the style of ``test_runs.py``.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -52,7 +53,7 @@ class FakeStore:
         self.raise_conflict: str | None = None
         self.role: str | None = "editor"
         self.backfill_org_id: UUID = _ORG_ID
-        self.members = SimpleNamespace(role=self._member_role)
+        self.members = SimpleNamespace(role_of=self._role_of)
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.backfills = SimpleNamespace(
             get=self._get_backfill,
@@ -73,7 +74,7 @@ class FakeStore:
         backfill.org_id = self.backfill_org_id
         return backfill
 
-    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
+    def _role_of(self, org_id: UUID, user: Any) -> str | None:
         return self.role
 
     def _cancel_backfill(self, backfill_id: UUID):

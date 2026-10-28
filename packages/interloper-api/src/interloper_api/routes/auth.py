@@ -11,15 +11,15 @@ from zoneinfo import ZoneInfo
 import httpx2
 from fastapi import APIRouter, Cookie, HTTPException, Response
 from fastapi.responses import RedirectResponse
-from interloper_db import OrganisationQuery, Profile, Role, Store
+from interloper_db import OrganisationQuery, Profile, Store
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
-    AuthConfigDep,
     CurrentUserDep,
     SessionUserDep,
+    SettingsDep,
+    StateDep,
     StoreDep,
-    get_features,
     get_org_scope,
 )
 from interloper_api.routes.organisations import OrganisationResponse
@@ -107,7 +107,7 @@ class AuthUserResponse(BaseModel):
     features: dict[str, bool] = {}
 
     @classmethod
-    def from_profile(cls, profile: Profile, store: Store) -> AuthUserResponse:
+    def from_profile(cls, profile: Profile, store: Store, features: dict[str, bool]) -> AuthUserResponse:
         """Describe the caller with their memberships.
 
         A super-admin's memberships carry ``admin``, the role every
@@ -117,6 +117,7 @@ class AuthUserResponse(BaseModel):
         Args:
             profile: The caller's profile.
             store: The Store instance the memberships and roles are read through.
+            features: The optional features this deployment enables.
 
         Returns:
             The response model, carrying the enabled feature flags.
@@ -124,7 +125,7 @@ class AuthUserResponse(BaseModel):
         organisations = store.organisations.list(OrganisationQuery(user_id=profile.id, limit=None)).items
         memberships: list[MembershipResponse] = []
         for organisation in organisations:
-            role = Role.ADMIN.value if profile.is_super_admin else store.members.role(organisation.id, profile.id)
+            role = store.members.role_of(organisation.id, profile)
             if role is not None:
                 memberships.append(
                     MembershipResponse(id=organisation.id, name=organisation.name, slug=organisation.slug, role=role)
@@ -138,22 +139,22 @@ class AuthUserResponse(BaseModel):
             is_super_admin=profile.is_super_admin,
             memberships=memberships,
             last_organisation_id=profile.last_organisation_id,
-            features=get_features(),
+            features=features,
         )
 
 
 @router.get("/google")
 def google_login(
-    auth_config: AuthConfigDep,
+    settings: SettingsDep,
     redirect: str | None = None,
 ) -> RedirectResponse:
     """Redirect user to Google's OAuth consent screen.
 
     Args:
+        settings: The settings, whose ``auth`` names the Google client.
         redirect: App-relative destination to return to once the login
             completes; carried through Google in the ``state`` parameter after
             a random nonce, defaulting to the app root.
-        auth_config: The resolved auth configuration.
 
     Returns:
         A redirect to Google's consent screen, setting the nonce in a
@@ -162,6 +163,7 @@ def google_login(
     Raises:
         HTTPException: 500 when no Google client id is configured.
     """
+    auth_config = settings.auth
     client_id = auth_config.google_client_id
     redirect_uri = auth_config.google_redirect_uri
 
@@ -197,7 +199,7 @@ def google_login(
 def google_callback(
     code: str,
     store: StoreDep,
-    auth_config: AuthConfigDep,
+    settings: SettingsDep,
     state: str | None = None,
     login_state: Annotated[str | None, Cookie()] = None,
 ) -> RedirectResponse:
@@ -209,7 +211,7 @@ def google_callback(
             destination is honoured only when it is app-relative, otherwise the
             app root is used.
         store: The database store.
-        auth_config: The resolved auth configuration.
+        settings: The settings, whose ``auth`` names the Google client.
         login_state: The nonce cookie :func:`google_login` set; a callback whose
             ``state`` does not carry it was not started by this browser.
 
@@ -222,6 +224,7 @@ def google_callback(
         HTTPException: 500 when Google OAuth is not configured, 401 when the code
             exchange or the user-info lookup fails or comes back incomplete.
     """
+    auth_config = settings.auth
     client_id = auth_config.google_client_id
     client_secret = auth_config.google_client_secret
     redirect_uri = auth_config.google_redirect_uri
@@ -325,18 +328,19 @@ def logout(user: SessionUserDep, store: StoreDep) -> Response:
 
 
 @router.get("/me")
-def get_me(user: CurrentUserDep, store: StoreDep) -> AuthUserResponse:
+def get_me(user: CurrentUserDep, store: StoreDep, state: StateDep) -> AuthUserResponse:
     """Return the current user and the organisations they belong to.
 
     Args:
         user: The authenticated caller.
         store: The database store.
+        state: The application's state, read for the enabled features.
 
     Returns:
         The caller's profile, their memberships with the role in each, the
         organisation they last used, and the enabled feature flags.
     """
-    return AuthUserResponse.from_profile(user, store)
+    return AuthUserResponse.from_profile(user, store, state.features)
 
 
 # -- Profile -------------------------------------------------------------------
@@ -354,13 +358,14 @@ class UpdateMeRequest(BaseModel):
 
 
 @router.patch("/me")
-def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep) -> AuthUserResponse:
+def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep, state: StateDep) -> AuthUserResponse:
     """Update the current user's profile (display name, timezone).
 
     Args:
         body: The fields to change; omitted fields stay untouched.
         user: The authenticated caller.
         store: The database store.
+        state: The application's state, read for the enabled features.
 
     Returns:
         The caller as :func:`get_me` describes them, after the update.
@@ -374,7 +379,7 @@ def update_me(body: UpdateMeRequest, user: CurrentUserDep, store: StoreDep) -> A
         except (KeyError, ValueError):
             raise HTTPException(status_code=422, detail=f"Unknown timezone {body.timezone!r}")
     profile = store.profiles.update(user.id, name=body.name, timezone=body.timezone)
-    return AuthUserResponse.from_profile(profile, store)
+    return AuthUserResponse.from_profile(profile, store, state.features)
 
 
 class LastOrganisationRequest(BaseModel):

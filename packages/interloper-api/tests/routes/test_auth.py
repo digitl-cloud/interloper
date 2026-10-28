@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from interloper_db import NotFoundError, Page
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_auth_config, get_caller, get_store
+from interloper_api.dependencies import get_caller, get_settings, get_store
 from interloper_api.routes import auth as auth_module
 
 
@@ -87,7 +87,9 @@ def _client(
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_auth_config] = lambda: _auth_config(super_admin_emails or [], allowed_domains or [])
+    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(
+        auth=_auth_config(super_admin_emails or [], allowed_domains or [])
+    )
     client = TestClient(app, follow_redirects=False)
     client.cookies.set(auth_module.LOGIN_STATE_COOKIE, NONCE)
     return client
@@ -216,7 +218,7 @@ class FakeProfileStore:
         self.updates: list[tuple[UUID, str | None, str | None]] = []
         self.profiles = SimpleNamespace(update=self._update_profile)
         self.organisations = SimpleNamespace(list=lambda query: Page(items=[self.org], total=1))
-        self.members = SimpleNamespace(role=lambda org_id, user_id: "editor")
+        self.members = SimpleNamespace(role_of=lambda org_id, user: "admin" if user.is_super_admin else "editor")
 
     def _update_profile(self, user_id: UUID, *, name: str | None = None, timezone: str | None = None):
         self.updates.append((user_id, name, timezone))
@@ -337,7 +339,7 @@ class TestGoogleLogin:
         app.dependency_overrides[get_store] = lambda: FakeStore()
         config = _auth_config([], [])
         config.google_client_id = ""
-        app.dependency_overrides[get_auth_config] = lambda: config
+        app.dependency_overrides[get_settings] = lambda: SimpleNamespace(auth=config)
 
         response = TestClient(app, follow_redirects=False).get("/auth/google")
 
@@ -355,7 +357,7 @@ class TestGoogleCallbackFailures:
         app.dependency_overrides[get_store] = lambda: FakeStore()
         config = _auth_config([], [])
         config.google_client_secret = ""
-        app.dependency_overrides[get_auth_config] = lambda: config
+        app.dependency_overrides[get_settings] = lambda: SimpleNamespace(auth=config)
 
         response = TestClient(app, follow_redirects=False).get("/auth/google/callback", params=_callback_params())
 
@@ -522,7 +524,9 @@ class CallerStore:
             list=lambda query: Page(items=self._organisations, total=len(self._organisations)),
             get=self._get_organisation,
         )
-        self.members = SimpleNamespace(role=lambda org_id, user_id: self._roles.get(org_id))
+        self.members = SimpleNamespace(
+            role_of=lambda org_id, user: "admin" if user.is_super_admin else self._roles.get(org_id)
+        )
         self.invitations = SimpleNamespace(accept=self._accept)
 
     def _get_organisation(self, org_id: UUID) -> Any:
@@ -545,7 +549,7 @@ def _session_client(store: CallerStore) -> TestClient:
     install_error_handlers(app)
     app.include_router(auth_module.router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_auth_config] = lambda: _auth_config([], [])
+    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(auth=_auth_config([], []))
     client = TestClient(app, follow_redirects=False)
     client.cookies.set("session_token", "tok")
     return client

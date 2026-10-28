@@ -23,14 +23,7 @@ from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import METRIC_SUCCESSFUL_RUNS, QUOTAS
 from pydantic import BaseModel, RootModel, field_validator
 
-from interloper_api.dependencies import (
-    AdminConfigDep,
-    AuthConfigDep,
-    QuotaDefaultsDep,
-    StoreDep,
-    SuperAdminDep,
-    get_smtp_config,
-)
+from interloper_api.dependencies import SettingsDep, StateDep, StoreDep, SuperAdminDep
 from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes.organisations import CreateOrganisationRequest
 
@@ -623,16 +616,12 @@ def _quota_fields(defaults: AdminQuotaLimits) -> list[AdminQuotaField]:
 
 
 @router.get("/config")
-def get_instance_config(
-    user: SuperAdminDep,
-    config: AdminConfigDep,
-) -> AdminConfigResponse:
+def get_instance_config(user: SuperAdminDep, state: StateDep) -> AdminConfigResponse:
     """Read-only snapshot of the instance configuration (secrets redacted).
 
     Args:
         user: The calling super-admin, resolved from the session.
-        config: The snapshot built at startup, ``None`` when the app could not
-            build one.
+        state: The application's state, holding the snapshot built at startup.
 
     Returns:
         The instance-config snapshot.
@@ -640,9 +629,9 @@ def get_instance_config(
     Raises:
         HTTPException: 503 when no snapshot was built at startup.
     """
-    if config is None:
+    if state.admin_config is None:
         raise HTTPException(status_code=503, detail="Instance configuration not available")
-    return config
+    return state.admin_config
 
 
 # -- Quotas --------------------------------------------------------------------
@@ -652,20 +641,20 @@ def get_instance_config(
 def get_quotas(
     user: SuperAdminDep,
     store: StoreDep,
-    quota_defaults: QuotaDefaultsDep,
+    settings: SettingsDep,
 ) -> AdminQuotasResponse:
     """Quota limits and current-period usage for every organisation.
 
     Args:
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
-        quota_defaults: The instance-wide quota defaults from settings.
+        settings: The settings, whose ``quota`` holds the instance-wide defaults.
 
     Returns:
         The current period start, the global defaults, the field descriptors,
         and one status entry per organisation, soft-deleted ones included.
     """
-    defaults = _quota_limits(quota_defaults)
+    defaults = _quota_limits(settings.quota)
     period_start = store.usage.current_period()
     overrides = store.quotas.all_overrides()
     usage = {
@@ -822,7 +811,7 @@ def update_user(
     body: AdminUserUpdateRequest,
     user: SuperAdminDep,
     store: StoreDep,
-    auth_config: AuthConfigDep,
+    settings: SettingsDep,
     request: Request,
 ) -> AdminUserResponse:
     """Grant or revoke a user's super-admin access.
@@ -837,8 +826,8 @@ def update_user(
         body: Whether the profile is a super-admin.
         user: The calling super-admin, resolved from the session.
         store: The database store backing the request.
-        auth_config: The resolved auth configuration, read for the configured
-            super-admin emails.
+        settings: The settings, read for the configured super-admin emails and
+            the mailer.
         request: The incoming request, whose base URL the email links back to.
 
     Returns:
@@ -851,7 +840,7 @@ def update_user(
     if user_id == user.id:
         raise HTTPException(status_code=400, detail="You cannot change your own super-admin access")
     target = store.profiles.get(user_id)
-    if not body.is_super_admin and target.email.lower() in auth_config.super_admin_emails:
+    if not body.is_super_admin and target.email.lower() in settings.auth.super_admin_emails:
         raise HTTPException(
             status_code=409,
             detail=f"{target.email} is listed in auth.super_admin_emails; remove it there to revoke access",
@@ -862,7 +851,7 @@ def update_user(
     if promoted:
         email = SuperAdminPromotionEmail.from_promotion(updated, promoted_by=user, base_url=str(request.base_url))
         for recipient in store.profiles.list(ProfileQuery(super_admin=True, limit=None)).items:
-            email.deliver(get_smtp_config(), recipient.email)
+            email.deliver(settings.smtp, recipient.email)
     return AdminUserResponse.from_profile(updated)
 
 

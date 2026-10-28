@@ -31,7 +31,7 @@ class RelationStore:
         self.rows: list[Any] = []
         self.listed: list[tuple[UUID, RelationQuery]] = []
         self.relations = SimpleNamespace(list=self._list)
-        self.members = SimpleNamespace(role=lambda org_id, user_id: "viewer")
+        self.members = SimpleNamespace(role_of=lambda org_id, user: "viewer")
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
 
     def _list(self, org_id: UUID, query: RelationQuery) -> Page[Any]:

@@ -21,7 +21,7 @@ from interloper.errors import ConfigError
 from interloper_db import ConflictError, NotFoundError, OrganisationQuery, Page, PageQuery
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_caller, get_session_caller, get_store
+from interloper_api.dependencies import get_caller, get_session_caller, get_settings, get_store
 from interloper_api.notifications import InvitationEmail
 from interloper_api.routes import organisations as organisations_module
 
@@ -101,7 +101,7 @@ class FakeStore:
         )
         self.tokens = SimpleNamespace(resolve=lambda raw, audience: None)
         self.members = SimpleNamespace(
-            role=lambda org_id, user_id: self.roles.get((org_id, user_id)),
+            role_of=lambda org_id, user: "admin" if user.is_super_admin else self.roles.get((org_id, user.id)),
             list=self._list_members,
             add=self._add_member,
             update=self._update_member,
@@ -205,38 +205,39 @@ def store() -> FakeStore:
 
 
 @pytest.fixture
-def no_smtp(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Default the route tests to email being unconfigured.
+def settings() -> SimpleNamespace:
+    """The settings the routes read, email unconfigured unless a test says otherwise.
 
-    Args:
-        monkeypatch: Fixture used to stub the SMTP lookup.
+    Returns:
+        The settings-shaped namespace.
     """
-    monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: None)
+    return SimpleNamespace(smtp=None)
 
 
 @pytest.fixture
-def mailer(monkeypatch: pytest.MonkeyPatch) -> list[tuple[InvitationEmail, str]]:
+def mailer(settings: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> list[tuple[InvitationEmail, str]]:
     """Configure email and record every invitation handed to SMTP instead of sending it.
 
     Args:
-        monkeypatch: Fixture used to stub the SMTP lookup and the send.
+        settings: The settings the routes read, given an enabled mailer.
+        monkeypatch: Fixture used to stub the send.
 
     Returns:
         The ``(email, recipient)`` pairs sent, in order.
     """
     sent: list[tuple[InvitationEmail, str]] = []
-    monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: SimpleNamespace(enabled=True))
+    settings.smtp = SimpleNamespace(enabled=True)
     monkeypatch.setattr(InvitationEmail, "send", lambda email, smtp_config, to: sent.append((email, to)))
     return sent
 
 
 @pytest.fixture
-def app(store: FakeStore, no_smtp: None) -> FastAPI:
+def app(store: FakeStore, settings: SimpleNamespace) -> FastAPI:
     """Mount the organisations router, the caller being ``_USER_ID``.
 
     Args:
         store: The fake store the routes resolve against.
-        no_smtp: Leaves email unconfigured unless a test says otherwise.
+        settings: The settings the routes read.
 
     Returns:
         The probe app.
@@ -246,6 +247,7 @@ def app(store: FakeStore, no_smtp: None) -> FastAPI:
     app.include_router(organisations_module.router)
     app.include_router(organisations_module.org_router, prefix=ORG_PREFIX)
     app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_caller] = lambda: _profile()
     app.dependency_overrides[get_session_caller] = lambda: _profile()
     return app
@@ -809,9 +811,9 @@ class TestInviteMember:
         assert "SMTP not configured" in caplog.text
 
     def test_a_disabled_mailer_is_treated_as_unconfigured(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+        self, client: TestClient, settings: SimpleNamespace, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.setattr(organisations_module, "get_smtp_config", lambda: SimpleNamespace(enabled=False))
+        settings.smtp = SimpleNamespace(enabled=False)
 
         with caplog.at_level("WARNING", logger="interloper_api.notifications.invitations"):
             response = client.post(f"/organisations/{_ORG_ID}/invitations", json={"email": "new@example.com"})

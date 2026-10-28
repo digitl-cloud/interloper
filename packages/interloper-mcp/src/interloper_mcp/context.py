@@ -22,7 +22,7 @@ from typing import Any
 from uuid import UUID
 
 from interloper.catalog import Catalog
-from interloper_db import NotFoundError, Organisation, OrganisationQuery, Profile, Role, Store
+from interloper_db import NotFoundError, Organisation, OrganisationQuery, Profile, Store
 from interloper_toolkit import ToolError, ToolkitContext
 from mcp.server.auth.middleware.auth_context import get_access_token
 
@@ -98,9 +98,10 @@ def organisations() -> list[tuple[Organisation, str]]:
         Each live organisation the caller belongs to, oldest first, with
         their role in it (``admin`` for a super-admin).
     """
-    user_id, _ = _caller()
-    listed = _require_store().organisations.list(OrganisationQuery(user_id=user_id, limit=None)).items
-    return [(org, role) for org in listed if (role := _role(org.id)) is not None]
+    user = _caller()
+    store = _require_store()
+    listed = store.organisations.list(OrganisationQuery(user_id=user.id, limit=None)).items
+    return [(org, role) for org in listed if (role := store.members.role_of(org.id, user)) is not None]
 
 
 def _not_found(organisation: str) -> ToolError:
@@ -130,24 +131,20 @@ def _role(org_id: UUID) -> str | None:
         ``admin`` for a super-admin in a live organisation, else the caller's
         membership role; ``None`` when they cannot act in it.
     """
-    user_id, is_super_admin = _caller()
     store = _require_store()
-    if not is_super_admin:
-        return store.members.role(org_id, user_id)
     try:
         store.organisations.get(org_id)
     except NotFoundError:
         return None
-    return Role.ADMIN.value
+    return store.members.role_of(org_id, _caller())
 
 
-def _caller() -> tuple[UUID, bool]:
+def _caller() -> Profile:
     """The user the current tool call runs as.
 
     Returns:
-        Their profile id and whether they are a super-admin: from the
-        request's verified bearer token (HTTP), else the startup-seeded user
-        (stdio).
+        Their profile: from the request's verified bearer token (HTTP), else
+        the startup-seeded user (stdio).
 
     Raises:
         RuntimeError: When no authenticated user exists (a programming
@@ -155,12 +152,12 @@ def _caller() -> tuple[UUID, bool]:
     """
     token = get_access_token()
     if isinstance(token, UserAccessToken):
-        return UUID(token.profile_id), token.is_super_admin
+        return token.profile
 
     profile = _static_user.get()
     if profile is None:
         raise RuntimeError("No authenticated user for this tool call")
-    return profile.id, profile.is_super_admin
+    return profile
 
 
 def _require_store() -> Store:

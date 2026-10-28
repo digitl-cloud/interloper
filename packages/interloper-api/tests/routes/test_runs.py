@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import interloper as il
@@ -73,7 +74,7 @@ class FakeStore:
         self.execution_rows: list[SimpleNamespace] = []
         self.role: str | None = "editor"
         self.run_org_id: UUID = _ORG_ID
-        self.members = SimpleNamespace(role=self._member_role)
+        self.members = SimpleNamespace(role_of=self._role_of)
         self.ingested: list[tuple[UUID, il.EventBatch]] = []
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(
@@ -91,7 +92,7 @@ class FakeStore:
             raise NotFoundError(f"Run {run_id} not found")
         return _fake_run(run_id, self.run_org_id)
 
-    def _member_role(self, org_id: UUID, user_id: UUID) -> str | None:
+    def _role_of(self, org_id: UUID, user: Any) -> str | None:
         return self.role
 
     def _list_runs(self, org_id: UUID, query: RunQuery) -> Page:
@@ -583,7 +584,7 @@ class EventsStore:
     def __init__(self, total: int = 777) -> None:
         self.total = total
         self.list_calls: list[tuple[UUID, EventQuery, UUID | None]] = []
-        self.members = SimpleNamespace(role=lambda org_id, user_id: "viewer")
+        self.members = SimpleNamespace(role_of=lambda org_id, user: "viewer")
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(get=lambda run_id: SimpleNamespace(id=run_id, org_id=_ORG_ID))
         self.events = SimpleNamespace(list=self._list_events)

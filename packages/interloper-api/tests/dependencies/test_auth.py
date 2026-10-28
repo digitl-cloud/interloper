@@ -22,8 +22,8 @@ from interloper_api.dependencies import (
     OrgScope,
     get_caller,
     get_org_scope,
-    get_reaper_config,
     get_session_caller,
+    get_settings,
     get_store,
     require_run,
 )
@@ -66,11 +66,14 @@ class FakeStore:
         self._roles = roles or {}
         self._live_orgs = live_orgs
         self.tokens = SimpleNamespace(resolve=self._resolve)
-        self.members = SimpleNamespace(role=lambda org_id, user_id: self._roles.get(org_id))
+        self.members = SimpleNamespace(role_of=self._role_of)
         self.organisations = SimpleNamespace(get=self._get_organisation)
         self.resolved_run_tokens: list[tuple[str, timedelta]] = []
         self._run = run
         self.runs = SimpleNamespace(resolve_token=self._resolve_run_token)
+
+    def _role_of(self, org_id: UUID, user: Any) -> str | None:
+        return "admin" if user.is_super_admin else self._roles.get(org_id)
 
     def _resolve(self, raw: str, audience: Audience) -> tuple[Any, Any] | None:
         self.presented.append((raw, audience))
@@ -316,7 +319,7 @@ def _run_client(store: FakeStore) -> TestClient:
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_reaper_config] = lambda: SimpleNamespace(heartbeat_timeout=90)
+    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(reaper=SimpleNamespace(heartbeat_timeout=90))
     return TestClient(app)
 
 

@@ -7,27 +7,9 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from interloper_db import NotFoundError, Profile, Role
+from interloper_db import NotFoundError, Profile
 
 from interloper_api.dependencies.auth import OrgDep, OrgScope, SessionUserDep
-
-
-def _at_least(scope: OrgScope, minimum: str) -> OrgScope:
-    """Refuse a caller whose role in the scope's organisation is below *minimum*.
-
-    Args:
-        scope: The organisation the request acts in and the caller's role there.
-        minimum: Minimum role required (``viewer``, ``editor``, ``admin``).
-
-    Returns:
-        The scope, passed through for the route.
-
-    Raises:
-        HTTPException: 403 when the role is below the minimum.
-    """
-    if not Role.at_least(scope.role, minimum):
-        raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
-    return scope
 
 
 def load_authorized(
@@ -65,7 +47,7 @@ def load_authorized(
         raise HTTPException(status_code=404, detail=detail)
     if entity.org_id != scope.organisation.id:
         raise HTTPException(status_code=404, detail=detail)
-    _at_least(scope, minimum)
+    scope.require(minimum)
     return entity
 
 
@@ -78,7 +60,7 @@ def require_viewer(scope: OrgDep) -> OrgScope:
     Returns:
         The scope.
     """
-    return _at_least(scope, "viewer")
+    return scope.require("viewer")
 
 
 def require_editor(scope: OrgDep) -> OrgScope:
@@ -90,7 +72,7 @@ def require_editor(scope: OrgDep) -> OrgScope:
     Returns:
         The scope.
     """
-    return _at_least(scope, "editor")
+    return scope.require("editor")
 
 
 def require_admin(scope: OrgDep) -> OrgScope:
@@ -102,7 +84,7 @@ def require_admin(scope: OrgDep) -> OrgScope:
     Returns:
         The scope.
     """
-    return _at_least(scope, "admin")
+    return scope.require("admin")
 
 
 def require_super_admin(user: SessionUserDep) -> Profile:
@@ -124,8 +106,6 @@ def require_super_admin(user: SessionUserDep) -> Profile:
         raise HTTPException(status_code=403, detail="Requires super-admin privileges")
     return user
 
-
-# -- Dependency aliases --------------------------------------------------------
 
 ViewerDep = Annotated[OrgScope, Depends(require_viewer)]
 EditorDep = Annotated[OrgScope, Depends(require_editor)]

@@ -21,18 +21,7 @@ from interloper_db import (
 )
 
 from interloper_api.authorization import AuthorizationServer, CrossOriginMiddleware
-from interloper_api.dependencies import (
-    set_admin_config,
-    set_agent,
-    set_auth_config,
-    set_authorization_server,
-    set_catalog,
-    set_features,
-    set_quota_defaults,
-    set_reaper_config,
-    set_smtp_config,
-    set_store,
-)
+from interloper_api.dependencies import State
 from interloper_api.routes import (
     admin,
     apps,
@@ -230,10 +219,7 @@ def create_app(
     app.include_router(api)
     app.include_router(authorization.well_known_router)
 
-    # After mounting, so the feature flag and the config snapshot can record
-    # whether the agent actually mounted. Routes read state per request, never
-    # at mount time, so the order is safe.
-    _install_state(store, catalog, settings, agent_available=agent_available)
+    app.state.interloper = _state(store, catalog, settings, agent_available=agent_available)
 
     oauth.log_provider_status()
 
@@ -271,43 +257,38 @@ def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
     return True
 
 
-def _install_state(
-    store: Store | None,
-    catalog: Catalog | None,
-    settings: Any | None,
-    *,
-    agent_available: bool,
-) -> None:
-    """Install the process-wide state the request dependencies read back.
+def _state(store: Store | None, catalog: Catalog | None, settings: Any | None, *, agent_available: bool) -> State:
+    """Build the state the request dependencies read back.
 
     Args:
-        store: The ``Store`` instance, or ``None`` to leave it unset.
-        catalog: Catalog instance, or ``None`` to leave it unset.
-        settings: Full ``AppSettings``, or ``None`` to install neither the
-            settings slices nor the admin config snapshot.
+        store: The ``Store`` instance, or ``None``.
+        catalog: Catalog instance, or ``None``.
+        settings: Full ``AppSettings``, or ``None`` for neither an
+            authorization server nor an admin config snapshot.
         agent_available: Whether the agent routes mounted, recorded as a
             feature flag and in the admin config snapshot.
+
+    Returns:
+        The state.
     """
-    if store:
-        set_store(store)
-    if catalog:
-        set_catalog(catalog)
+    features = {"agent": agent_available}
+    agent = None
     if agent_available:
         from interloper.settings import AgentSettings
         from interloper_agent import build_agent
 
-        set_agent(build_agent(settings.agent.model if settings else AgentSettings().model))
-    set_features({"agent": agent_available})
-
-    if settings:
-        set_authorization_server(_authorization_server(store, settings))
-        set_auth_config(settings.auth)
-        set_smtp_config(settings.smtp)
-        set_quota_defaults(settings.quota)
-        set_reaper_config(settings.reaper)
-        set_admin_config(
-            admin.AdminConfigResponse.from_settings(settings, features={"agent": agent_available}, catalog=catalog)
-        )
+        agent = build_agent(settings.agent.model if settings else AgentSettings().model)
+    if settings is None:
+        return State(store=store, catalog=catalog, agent=agent, features=features)
+    return State(
+        store=store,
+        catalog=catalog,
+        settings=settings,
+        agent=agent,
+        features=features,
+        admin_config=admin.AdminConfigResponse.from_settings(settings, features=features, catalog=catalog),
+        authorization_server=_authorization_server(store, settings),
+    )
 
 
 def _authorization_server(store: Store | None, settings: Any) -> AuthorizationServer | None:
