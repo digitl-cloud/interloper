@@ -64,9 +64,6 @@ class AdAccounts(Schema):
     has_migrated_permissions: bool | None = Field(
         default=None, description="Whether the account has migrated to the unified permissions model."
     )
-    has_page_authorized_adaccount: bool | None = Field(
-        default=None, description="Whether a Page has authorized the account."
-    )
     id: str | None = Field(default=None, description="Graph node id: act_ followed by account_id.")
     io_number: str | None = Field(default=None, description="Insertion order number.")
     is_attribution_spec_system_default: bool | None = Field(

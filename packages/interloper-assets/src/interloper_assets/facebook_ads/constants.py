@@ -266,7 +266,6 @@ AD_ACCOUNT_ENTITY_FIELDS = [
     "fb_entity",
     "funding_source",
     "has_migrated_permissions",
-    "has_page_authorized_adaccount",
     "id",
     "io_number",
     "is_attribution_spec_system_default",

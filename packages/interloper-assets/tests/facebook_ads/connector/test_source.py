@@ -352,9 +352,35 @@ class TestPagination:
         assert limits == [25]
 
     def test_the_account_requests_no_field_that_needs_a_parameter(self):
-        # Facebook answers 400 for the whole account when show_checkout_experience comes without a page_id
-        assert "show_checkout_experience" not in constants.AD_ACCOUNT_ENTITY_FIELDS
-        assert "show_checkout_experience" not in schemas.AdAccounts.model_fields
+        # Facebook answers 400 for the whole account when either comes without a page_id
+        for field in ("show_checkout_experience", "has_page_authorized_adaccount"):
+            assert field not in constants.AD_ACCOUNT_ENTITY_FIELDS, field
+            assert field not in schemas.AdAccounts.model_fields, field
+
+    def test_a_field_the_account_cannot_serve_is_dropped_and_the_account_read_again(self, monkeypatch):
+        calls: list[list[str]] = []
+
+        class FakeAccount:
+            def api_get(self, **kwargs: Any) -> _FakeObject:
+                calls.append(kwargs["fields"])
+                if "currency" in kwargs["fields"]:
+                    raise _facebook_error(100, "(#100) For field 'currency': The parameter page_id is required")
+                return _FakeObject({"id": "act_123", "account_id": "123"})
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        row = connector._get_ad_account(None, "123")  # ty: ignore[invalid-argument-type]
+        assert row == {"id": "act_123", "account_id": "123"}
+        assert "currency" in calls[0] and "currency" not in calls[1]
+        assert len(calls[1]) == len(calls[0]) - 1
+
+    def test_any_other_account_error_is_raised(self, monkeypatch):
+        class FakeAccount:
+            def api_get(self, **kwargs: Any) -> _FakeObject:
+                raise _facebook_error(190, "Invalid OAuth access token")
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        with pytest.raises(FacebookRequestError, match="Call was not successful"):
+            connector._get_ad_account(None, "123")  # ty: ignore[invalid-argument-type]
 
     def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
         class FakeAccount:

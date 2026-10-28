@@ -304,8 +304,37 @@ def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict
 
 
 def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
-    account = _rate_limit_retry(_account(connection, account_id).api_get)(fields=constants.AD_ACCOUNT_ENTITY_FIELDS)
-    return account.export_all_data()
+    """Read the ad account, dropping any field Facebook refuses to serve without a parameter.
+
+    Facebook answers 400 for the whole account when one requested field needs
+    a parameter it was not given (``(#100) For field 'x': The parameter
+    page_id is required``), and names only that field. The account is read
+    again without it, with a warning so the field can leave the requested list.
+
+    Args:
+        connection: The Facebook Ads connection.
+        account_id: The ad account id, without the ``act_`` prefix.
+
+    Returns:
+        The account's data.
+    """
+    from facebook_business.exceptions import FacebookRequestError
+
+    fields = list(constants.AD_ACCOUNT_ENTITY_FIELDS)
+    while True:
+        try:
+            account = _rate_limit_retry(_account(connection, account_id).api_get)(fields=fields)
+            return account.export_all_data()
+        except FacebookRequestError as error:
+            refused = re.match(
+                r"\(#100\) For field '(\w+)': The parameter \w+ is required", error.api_error_message() or ""
+            )
+            if refused is None or refused.group(1) not in fields:
+                raise
+            logger.warning(
+                f"Facebook refused the ad account field {refused.group(1)!r}; reading the account without it"
+            )
+            fields = [field for field in fields if field != refused.group(1)]
 
 
 def _time_range(date: dt.date) -> dict[str, str]:
