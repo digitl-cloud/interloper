@@ -11,19 +11,16 @@ the browser submits credentials to the API directly.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 from urllib.parse import urlencode
 from uuid import UUID
 
-import httpx2
 from interloper.component import KINDS
 from interloper.connection import Connection
-from interloper.errors import CatalogKeyError, ConfigError, ConnectionCheckError
+from interloper.errors import CatalogKeyError, ConfigError
 from interloper.oauth import OAuthAppCredentials
 from interloper.settings import AppSettings
-from interloper.utils import invoke
 from interloper_db import ComponentDriftError, ComponentQuery, HydrationError, InUseError, NotFoundError
 from pydantic import ValidationError
 
@@ -453,24 +450,10 @@ async def check_connection(ctx: ToolkitContext, connection_id: str) -> Connectio
                 message = "The stored connection could not be reconstructed."
             return ConnectionCheck(connection=info, ok=False, live=False, category="config", message=message)
 
-        if not isinstance(conn, Connection) or not conn.checkable():
-            return ConnectionCheck(
-                connection=info,
-                ok=True,
-                live=False,
-                message="This connection type implements no live check; the stored config hydrates.",
-            )
-        try:
-            ok = bool(await asyncio.wait_for(invoke(conn.check), timeout=_CHECK_TIMEOUT))
-        except Exception as e:
-            logger.error("Connection check failed for '%s' (%s): %s", component.name, component.key, e)
-            category, message = categorise(e)
-            return ConnectionCheck(connection=info, ok=False, live=True, category=category, message=message)
-        if not ok:
-            return ConnectionCheck(
-                connection=info, ok=False, live=True, category="error", message="The connection check failed."
-            )
-        return ConnectionCheck(connection=info, ok=True, live=True)
+        if not isinstance(conn, Connection):
+            return ConnectionCheck(connection=info, ok=True, live=False)
+        result = await conn.verify(timeout=_CHECK_TIMEOUT)
+        return ConnectionCheck(connection=info, **result.model_dump())
     except Exception as e:
         return ToolError(error=str(e))
 
@@ -492,30 +475,3 @@ def _setup_url(ctx: ToolkitContext, connection_key: str, name: str | None) -> st
     slug = ctx.store.organisations.get(ctx.org_id).slug
     query = {"new": connection_key, **({"name": name} if name else {})}
     return f"{base}/{slug}/components/connections?{urlencode(query)}"
-
-
-def categorise(exc: Exception) -> tuple[str, str]:
-    """Map a provider call's failure to an LLM-safe ``(category, message)`` pair.
-
-    Written against the categorisation contract documented on
-    ``Connection.check()``. Raw provider errors may carry URLs with tokens,
-    and a tool's output enters the model context — only curated messages
-    leave here; details are logged server-side.
-
-    Args:
-        exc: The exception the provider call raised.
-
-    Returns:
-        The ``(category, message)`` pair.
-    """
-    if isinstance(exc, ConnectionCheckError):
-        return "error", str(exc)
-    if isinstance(exc, httpx2.HTTPStatusError):
-        if exc.response.status_code in (401, 403):
-            return "auth", "The provider rejected the credentials."
-        return "error", f"The provider responded with HTTP {exc.response.status_code}."
-    if isinstance(exc, (TimeoutError, httpx2.TimeoutException)):
-        return "network", "The provider did not respond in time."
-    if isinstance(exc, httpx2.TransportError):
-        return "network", "The provider could not be reached."
-    return "error", "The connection check failed unexpectedly."

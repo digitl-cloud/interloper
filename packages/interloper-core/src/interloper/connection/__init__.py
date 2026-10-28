@@ -1,6 +1,7 @@
 """Connection: a resource holding connection and credential values, OAuth variants included."""
 
 from interloper.connection.base import (
+    CheckResult,
     Connection,
     ConnectionState,
     OAuthConnection,
@@ -10,6 +11,7 @@ from interloper.connection.base import (
 from interloper.connection.decorator import connection
 
 __all__ = [
+    "CheckResult",
     "Connection",
     "ConnectionState",
     "OAuthConnection",

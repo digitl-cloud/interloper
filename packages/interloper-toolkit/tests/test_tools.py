@@ -12,7 +12,7 @@ from interloper_toolkit import ToolkitContext, analytics, catalog, collection, j
 from interloper_toolkit.models import ToolError
 from interloper_toolkit.tools import TOOLS, Effect, Tool
 
-MODULE_HELPERS = {"categorise", "normalized_asset_keys", "source_relations", "unresolved_requirements"}
+MODULE_HELPERS = {"normalized_asset_keys", "source_relations", "unresolved_requirements"}
 
 
 class TestTable:

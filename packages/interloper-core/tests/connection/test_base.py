@@ -8,7 +8,8 @@ import httpx2
 import pytest
 from pydantic_settings import SettingsConfigDict
 
-from interloper.connection import Connection, OAuthConnection, RefreshTokenOAuthConnection, Renewal
+from interloper.connection import CheckResult, Connection, OAuthConnection, RefreshTokenOAuthConnection, Renewal
+from interloper.errors import ConnectionCheckError
 from interloper.oauth import OAuthConfig
 from interloper.operation import OperationContext
 from interloper.resource import InputField, SecretField
@@ -440,3 +441,55 @@ class TestConnectionOperation:
         assert "SECRET" not in str(failure.state)
         retry_at = dt.datetime.fromisoformat(failure.state["next_renewal_at"])
         assert retry_at > dt.datetime.now(dt.timezone.utc)
+
+
+class TestCheckResultFromFailure:
+    """A failed connection check is a categorised result, never a raised error."""
+
+    @staticmethod
+    def _status_error(status: int) -> httpx2.HTTPStatusError:
+        request = httpx2.Request("GET", "https://provider.example.com/x")
+        return httpx2.HTTPStatusError("boom", request=request, response=httpx2.Response(status, request=request))
+
+    def test_a_connection_check_error_carries_its_own_message(self) -> None:
+        response = CheckResult.from_failure(ConnectionCheckError("missing httpx2 extra"))
+
+        assert (response.ok, response.live, response.category) == (False, True, "error")
+        assert response.message == "missing httpx2 extra"
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_a_rejected_credential_is_categorised_as_auth(self, status: int) -> None:
+        response = CheckResult.from_failure(self._status_error(status))
+
+        assert response.category == "auth"
+        assert response.message == "The provider rejected the credentials."
+
+    def test_another_provider_status_is_reported_verbatim(self) -> None:
+        response = CheckResult.from_failure(self._status_error(503))
+
+        assert response.category == "error"
+        assert response.message == "The provider responded with HTTP 503."
+
+    @pytest.mark.parametrize(
+        "exception",
+        [TimeoutError("slow"), httpx2.TimeoutException("slow")],
+    )
+    def test_a_timeout_is_categorised_as_network(self, exception: Exception) -> None:
+        response = CheckResult.from_failure(exception)
+
+        assert response.category == "network"
+        assert response.message == "The provider did not respond in time."
+
+    def test_an_unreachable_provider_is_categorised_as_network(self) -> None:
+        response = CheckResult.from_failure(httpx2.ConnectError("no route"))
+
+        assert response.category == "network"
+        assert response.message == "The provider could not be reached."
+
+    def test_anything_else_is_a_generic_error(self) -> None:
+        # The raw exception text may carry credentials, so it is not echoed.
+        response = CheckResult.from_failure(RuntimeError("token=SECRET"))
+
+        assert response.category == "error"
+        assert response.message == "The connection check failed unexpectedly."
+        assert "SECRET" not in response.message

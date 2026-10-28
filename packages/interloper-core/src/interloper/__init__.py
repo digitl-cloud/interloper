@@ -12,6 +12,7 @@ from interloper.component import (
 )
 from interloper.config import Config, config
 from interloper.connection import (
+    CheckResult,
     Connection,
     ConnectionState,
     OAuthConnection,
@@ -95,6 +96,7 @@ __all__ = [
     "BasePaginator",
     "CSVDestination",
     "Catalog",
+    "CheckResult",
     "Component",
     "ComponentDefinition",
     "ComponentIdentity",

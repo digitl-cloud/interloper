@@ -9,15 +9,14 @@ read the catalog and whose editors run it.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Literal, NoReturn
+from typing import Any, NoReturn
 
 import httpx2
 import interloper as il
 from fastapi import APIRouter, Depends, HTTPException
-from interloper.connection import Connection
-from interloper.errors import ConnectionCheckError, format_exception
+from interloper.connection import CheckResult, Connection
+from interloper.errors import format_exception
 from interloper.resource import is_fetch_field_provider
 from interloper.utils import import_from_path, invoke
 from pydantic import BaseModel, Field, ValidationError
@@ -210,49 +209,10 @@ class CheckRequest(BaseModel):
     config: dict[str, Any] = {}
 
 
-class CheckResponse(BaseModel):
-    """The outcome of a connection check.
+class CheckResponse(CheckResult):
+    """The outcome of a connection check, with the static tier's per-field errors."""
 
-    ``live`` distinguishes a full check from a static-only one (the class
-    implements no ``check()`` hook). ``category`` classifies failures so the
-    UI can hint at a fix: bad ``config`` values, rejected ``auth``,
-    unreachable ``network``, or an uncategorised ``error``.
-    """
-
-    ok: bool
-    live: bool
-    message: str | None = None
-    category: Literal["config", "auth", "network", "error"] | None = None
     errors: list[FieldError] = Field(default_factory=list)
-
-    @classmethod
-    def from_failure(cls, exception: Exception, key: str) -> CheckResponse:
-        """Map a live-check exception to its response.
-
-        Full details are logged server-side only — provider errors may carry
-        URLs with tokens.
-
-        Args:
-            exception: The exception the live check raised.
-            key: The connection's catalog key, for the log line.
-
-        Returns:
-            The categorised failure response.
-        """
-        logger.error("Connection check failed for '%s': %s", key, exception)
-
-        if isinstance(exception, ConnectionCheckError):
-            return cls(ok=False, live=True, category="error", message=str(exception))
-        if isinstance(exception, httpx2.HTTPStatusError):
-            status = exception.response.status_code
-            if status in (401, 403):
-                return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
-            return cls(ok=False, live=True, category="error", message=f"The provider responded with HTTP {status}.")
-        if isinstance(exception, (TimeoutError, httpx2.TimeoutException)):
-            return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
-        if isinstance(exception, httpx2.TransportError):
-            return cls(ok=False, live=True, category="network", message="The provider could not be reached.")
-        return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
 
 
 @org_router.post("/{key}/check")
@@ -304,13 +264,5 @@ async def check_connection(
             ok=False, live=False, category="config", message="The configuration is invalid.", errors=errors
         )
 
-    if not connection_cls.checkable():
-        return CheckResponse(ok=True, live=False)
-
-    try:
-        ok = bool(await asyncio.wait_for(invoke(connection.check), timeout=CHECK_TIMEOUT))
-    except Exception as exception:  # noqa: BLE001 — a failed check is a result, never a raise
-        return CheckResponse.from_failure(exception, key)
-    if not ok:
-        return CheckResponse(ok=False, live=True, category="error", message="The connection check failed.")
-    return CheckResponse(ok=True, live=True)
+    result = await connection.verify(timeout=CHECK_TIMEOUT)
+    return CheckResponse(**result.model_dump())

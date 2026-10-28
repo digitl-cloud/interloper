@@ -13,6 +13,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from interloper.connection import CheckResult
 from interloper.errors import CatalogKeyError, ConfigError
 from interloper.resource import is_fetch_field_provider
 from interloper.utils import invoke
@@ -56,9 +57,6 @@ async def resolve_source_field_options(
             names: most definitions have exactly one fetchable field and it
             is picked automatically (the response names it).
     """
-    # Imported here: collection imports this module for the asset helpers.
-    from interloper_toolkit.collection import categorise
-
     try:
         defn = ctx.catalog.get(source_key)
         if defn is None or defn.get("kind") != "source":
@@ -93,8 +91,8 @@ async def resolve_source_field_options(
             items = list(await asyncio.wait_for(invoke(fn), timeout=_RESOLVE_TIMEOUT) or [])
         except Exception as e:
             logger.error("Resolving %s.%s via '%s' failed: %s", source_key, field, component.name, e)
-            category, message = categorise(e)
-            return ToolError(error=message, category=category)
+            failure = CheckResult.from_failure(e)
+            return ToolError(error=failure.message or "The provider call failed.", category=failure.category)
 
         label_key, value_key = fetch.get("label_key"), fetch.get("value_key")
         options = [
