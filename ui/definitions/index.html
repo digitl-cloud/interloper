@@ -2490,7 +2490,8 @@ entry point, and the UI knows how to list, create, configure, check and run it.<
 <h2 id="from-class-to-catalog">From class to catalog<a class="headerlink" href="#from-class-to-catalog" title="Permanent link">&para;</a></h2>
 <p>Every component class describes itself through <code>definition()</code>: kind, key, import path, display
 name, icon, tags, the docstring as description, the JSON Schema of its configuration fields, the
-JSON Schema of its state model, and its relation vocabulary. The API serves the catalog as JSON:</p>
+JSON Schema of its state model, and its relation vocabulary. The API serves the catalog as JSON, to
+the members of an organisation (<code>{org_id}</code>), whose editors may also run the checks:</p>
 <table>
 <thead>
 <tr>
@@ -2500,19 +2501,19 @@ JSON Schema of its state model, and its relation vocabulary. The API serves the 
 </thead>
 <tbody>
 <tr>
-<td><code>GET /api/catalog</code></td>
+<td><code>GET /api/organisations/{org_id}/catalog</code></td>
 <td>Every enabled definition, keyed by component key.</td>
 </tr>
 <tr>
-<td><code>GET /api/catalog/resource-kinds</code></td>
+<td><code>GET /api/organisations/{org_id}/catalog/resource-kinds</code></td>
 <td>The resource kinds present (<code>connection</code>, <code>config</code>, …).</td>
 </tr>
 <tr>
-<td><code>POST /api/catalog/{key}/check</code></td>
+<td><code>POST /api/organisations/{org_id}/catalog/{key}/check</code></td>
 <td>A live check of a connection's unsaved config.</td>
 </tr>
 <tr>
-<td><code>POST /api/catalog/{key}/resolve</code></td>
+<td><code>POST /api/organisations/{org_id}/catalog/{key}/resolve</code></td>
 <td>The options of a provider-backed FetchField.</td>
 </tr>
 <tr>
@@ -2680,9 +2681,9 @@ when the selected targets are partitioned, with a preview of what a run covers.<
 <h3 id="fetched-options">Fetched options<a class="headerlink" href="#fetched-options" title="Permanent link">&para;</a></h3>
 <p>A <code>FetchField(provider="connection.accounts")</code> renders as a dropdown that fills itself once the
 <code>connection</code> relation is filled. The form posts the component key, the field name and that
-component's credentials to <code>POST /api/catalog/{key}/resolve</code>; the API reads the provider reference
-from its own copy of the schema (never from the client), instantiates the resource, calls the
-method, and returns the items. Only methods marked <code>@fetch_field_provider</code> may be called this
+component's credentials to <code>POST /api/organisations/{org_id}/catalog/{key}/resolve</code>; the API
+reads the provider reference from its own copy of the schema (never from the client),
+instantiates the resource, calls the method, and returns the items. Only methods marked <code>@fetch_field_provider</code> may be called this
 way. Until the relation is filled, the field degrades to a text input.</p>
 <h3 id="oauth-sign-in">OAuth sign-in<a class="headerlink" href="#oauth-sign-in" title="Permanent link">&para;</a></h3>
 <p>A connection with an <code>OAuthConfig</code> carries an <code>x-oauth</code> extension at the root of its schema. When
@@ -2715,7 +2716,7 @@ and <code>last_renewal_error</code>, hooks show <code>last_fired_at</code> and <
 <tbody>
 <tr>
 <td><code>ResourceDefinition.checkable</code></td>
-<td>A "Test connection" action calling <code>POST /api/catalog/{key}/check</code>, which runs the class's <code>check()</code> against the unsaved form values and surfaces <code>ConnectionCheckError</code> messages under the fields.</td>
+<td>A "Test connection" action calling <code>POST /api/organisations/{org_id}/catalog/{key}/check</code>, which runs the class's <code>check()</code> against the unsaved form values and surfaces <code>ConnectionCheckError</code> messages under the fields.</td>
 </tr>
 <tr>
 <td><code>ResourceDefinition.renewable</code></td>
