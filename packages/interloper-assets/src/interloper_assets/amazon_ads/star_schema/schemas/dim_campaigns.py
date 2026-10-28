@@ -9,7 +9,6 @@ class DimCampaigns(Schema):
     account_id: str | None = Field(default=None, description="Profile the campaign belongs to.")
     campaign_name: str | None = Field(default=None, description="Campaign name.")
     status: str | None = Field(default=None, description="Campaign status as the campaign report carries it.")
-    objective: str | None = Field(default=None, description="NULL: Amazon Ads campaigns carry no objective.")
     campaign_type: str | None = Field(
         default=None, description="The ad product: sponsored_products, sponsored_brands or sponsored_display."
     )

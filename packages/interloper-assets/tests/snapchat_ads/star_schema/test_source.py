@@ -19,20 +19,6 @@ from interloper_assets.snapchat_ads.star_schema.source import SnapchatAdsStarSch
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
-FACT_CORE = [
-    "date",
-    "account_id",
-    "campaign_id",
-    "impressions",
-    "clicks",
-    "cost",
-    "currency",
-    "conversions",
-    "conversion_value",
-    "purchases",
-    "revenue",
-]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 
 
 @pytest.fixture
@@ -150,43 +136,9 @@ class TestWiring:
             "dim_ads": {"fact_ad_performance": "fact_ad_performance", "dim_ad_groups": "dim_ad_groups"},
         }
 
-    def test_views_carry_the_core_columns_first(self):
-        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_CORE
-        assert list(schemas.DimAccounts.model_fields) == [
-            "account_id",
-            "account_name",
-            "currency",
-            "timezone",
-            "as_of_date",
-        ]
-        assert list(schemas.DimCampaigns.model_fields) == [
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "objective",
-            "campaign_type",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAdGroups.model_fields) == [
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "status",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAds.model_fields) == [
-            "ad_id",
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_name",
-            "status",
-            "created_at",
-            "updated_at",
-            "as_of_date",
-        ]
+    def test_views_omit_what_snapchat_does_not_fill(self):
+        for fact in (schemas.FactCampaignPerformance, schemas.FactAdPerformance):
+            assert "conversions" not in fact.model_fields and "conversion_value" not in fact.model_fields
 
     def test_views_are_unpartitioned_and_tagged(self):
         for asset in SnapchatAdsStarSchema.asset_types:
@@ -220,7 +172,6 @@ class TestOnDuckDB:
         assert (row["date"], row["campaign_id"]) == (DAY, "caaa")
         assert (row["impressions"], row["clicks"], row["cost"]) == (150, 15, 15.0)
         assert (row["purchases"], row["revenue"]) == (3, 50.0)
-        assert row["conversions"] is None and row["conversion_value"] is None
 
     def test_the_currency_is_the_accounts_latest(self, warehouse):
         first = _account("aaa", warehouse)

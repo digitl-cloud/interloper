@@ -30,7 +30,7 @@ AD_GROUP_REPORTS = [
     "amazon_ads.brands_ad_groups_stats",
     "amazon_ads.display_ad_groups_stats",
 ]
-FACT_CORE = [
+FACT_COLUMNS = [
     "date",
     "account_id",
     "campaign_id",
@@ -43,7 +43,6 @@ FACT_CORE = [
     "purchases",
     "revenue",
 ]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 
 
 @pytest.fixture
@@ -223,7 +222,7 @@ class TestWiring:
             "amazon_ads.display_advertised_products_stats",
         ]
 
-    def test_the_ad_dimension_carries_the_core_columns_then_the_advertised_product(self):
+    def test_the_ad_dimension_carries_the_advertised_product_last(self):
         assert list(schemas.DimAds.model_fields) == [
             "ad_id",
             "ad_group_id",
@@ -238,32 +237,11 @@ class TestWiring:
             "sku",
         ]
 
-    def test_views_carry_the_core_columns_first(self):
-        assert list(schemas.FactCampaignPerformance.model_fields) == [*FACT_CORE, "campaign_type"]
-        assert list(schemas.DimAccounts.model_fields)[:5] == [
-            "account_id",
-            "account_name",
-            "currency",
-            "timezone",
-            "as_of_date",
-        ]
-        assert list(schemas.DimCampaigns.model_fields) == [
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "objective",
-            "campaign_type",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAdGroups.model_fields) == [
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "status",
-            *ATTRIBUTE_CORE,
-        ]
+    def test_the_campaign_fact_carries_its_ad_product_last(self):
+        assert list(schemas.FactCampaignPerformance.model_fields) == [*FACT_COLUMNS, "campaign_type"]
+
+    def test_views_omit_what_amazon_does_not_fill(self):
+        assert "objective" not in schemas.DimCampaigns.model_fields
 
     def test_views_are_unpartitioned_tagged_and_grouped_under_amazon_ads(self):
         for asset in AmazonAdsStarSchema.asset_types:

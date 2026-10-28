@@ -12,12 +12,6 @@ class FactCampaignPerformance(Schema):
     clicks: int | None = Field(default=None, description="Clicks on the ads.")
     cost: float | None = Field(default=None, description="Amount spent, in the account currency.")
     currency: str | None = Field(default=None, description="Currency of every amount in the row.")
-    conversions: int | None = Field(
-        default=None,
-        description="NULL: TikTok counts each ad group's own optimization event, so there is no single primary "
-        "conversion; see purchases.",
-    )
-    conversion_value: float | None = Field(default=None, description="NULL, see conversions.")
     purchases: int | None = Field(
         default=None, description="Website purchases (complete payment) under the advertiser's attribution setting."
     )

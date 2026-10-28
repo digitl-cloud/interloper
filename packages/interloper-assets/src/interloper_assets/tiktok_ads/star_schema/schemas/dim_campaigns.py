@@ -13,8 +13,6 @@ class DimCampaigns(Schema):
     campaign_type: str | None = Field(default=None, description="Campaign type; entity rows only.")
     budget: float | None = Field(default=None, description="Budget, in the account currency; entity rows only.")
     budget_type: str | None = Field(default=None, description="Budget mode; entity rows only.")
-    start_date: dt.date | None = Field(default=None, description="NULL: TikTok schedules the ad group.")
-    end_date: dt.date | None = Field(default=None, description="NULL: TikTok schedules the ad group.")
     created_at: dt.datetime | None = Field(default=None, description="When the campaign was created; entity rows only.")
     updated_at: dt.datetime | None = Field(
         default=None, description="When the campaign was last changed; entity rows only."

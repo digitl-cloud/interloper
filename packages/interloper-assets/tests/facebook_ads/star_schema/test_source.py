@@ -18,20 +18,6 @@ from interloper_assets.facebook_ads.star_schema.source import FacebookAdsStarSch
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
-FACT_CORE = [
-    "date",
-    "account_id",
-    "campaign_id",
-    "impressions",
-    "clicks",
-    "cost",
-    "currency",
-    "conversions",
-    "conversion_value",
-    "purchases",
-    "revenue",
-]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 
 
 @pytest.fixture
@@ -155,43 +141,11 @@ class TestWiring:
         assert FacebookAdsStarSchema.dim_accounts.relations["ad_accounts"].key == "facebook_ads.ad_accounts"
         assert FacebookAdsStarSchema.dim_ads.relations["ads"].key == "facebook_ads.ads"
 
-    def test_views_carry_the_core_columns_first(self):
-        assert list(schemas.FactCampaignPerformance.model_fields)[:11] == FACT_CORE
-        assert list(schemas.DimAccounts.model_fields)[:5] == [
-            "account_id",
-            "account_name",
-            "currency",
-            "timezone",
-            "as_of_date",
-        ]
-        assert list(schemas.DimCampaigns.model_fields)[:13] == [
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "objective",
-            "campaign_type",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAdGroups.model_fields)[:12] == [
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "status",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAds.model_fields)[:9] == [
-            "ad_id",
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_name",
-            "status",
-            "created_at",
-            "updated_at",
-            "as_of_date",
-        ]
+    def test_views_omit_what_facebook_does_not_fill(self):
+        for fact in (schemas.FactCampaignPerformance, schemas.FactAdPerformance):
+            assert "conversions" not in fact.model_fields and "conversion_value" not in fact.model_fields
+        assert "budget" not in schemas.DimCampaigns.model_fields
+        assert "budget" not in schemas.DimAdGroups.model_fields
         assert "spend" not in schemas.FactAdPerformance.model_fields
 
     def test_views_are_unpartitioned_and_tagged(self):
@@ -227,7 +181,6 @@ class TestOnDuckDB:
         [row] = [row for row in rows if row["account_id"] == "111"]
         assert (row["date"], row["campaign_id"]) == (DAY, "c111")
         assert (row["impressions"], row["clicks"], row["cost"], row["currency"]) == (150, 15, 15.0, "EUR")
-        assert row["conversions"] is None and row["conversion_value"] is None
         assert (row["purchases"], row["revenue"]) == (3, 50.0)
         assert "reach" not in row
 
@@ -254,7 +207,7 @@ class TestOnDuckDB:
             "ACTIVE",
         )
         assert (entity["objective"], entity["campaign_type"]) == ("OUTCOME_SALES", "AUCTION")
-        assert (entity["budget"], entity["budget_type"]) == (None, "daily")
+        assert entity["budget_type"] == "daily"
         report = rows["222"]
         assert (report["campaign_name"], report["objective"]) == ("Camp from report", "OUTCOME_SALES")
         assert report["status"] is None and report["budget_type"] is None and report["start_date"] is None
@@ -325,7 +278,7 @@ class TestOnDuckDB:
         _materialize(warehouse, first)
         [row] = _rows(warehouse, "dim_ad_groups")
         assert (row["ad_group_id"], row["campaign_id"], row["account_id"]) == ("s1", "c111", "111")
-        assert (row["ad_group_name"], row["status"], row["budget"], row["start_date"]) == ("Set", None, None, None)
+        assert (row["ad_group_name"], row["status"], row["start_date"]) == ("Set", None, None)
         assert row["as_of_date"] == DAY
 
     def test_an_ad_entity_wins_over_the_report(self, warehouse):
@@ -385,12 +338,7 @@ class TestOnDuckDB:
         _materialize(warehouse, first)
         [row] = _rows(warehouse, "dim_ad_groups")
         assert (row["ad_group_id"], row["campaign_id"], row["account_id"]) == ("s1", "c111", "111")
-        assert (row["ad_group_name"], row["status"], row["budget"], row["budget_type"]) == (
-            "Set from entity",
-            "ACTIVE",
-            None,
-            "lifetime",
-        )
+        assert (row["ad_group_name"], row["status"], row["budget_type"]) == ("Set from entity", "ACTIVE", "lifetime")
         assert (row["start_date"], row["end_date"]) == (dt.date(2026, 10, 1), None)
         assert row["created_at"] == dt.datetime(2026, 9, 1, 8, 0, tzinfo=dt.timezone.utc)
         assert row["as_of_date"] == dt.date(2026, 9, 30)

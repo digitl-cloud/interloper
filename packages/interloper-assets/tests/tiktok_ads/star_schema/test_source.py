@@ -20,20 +20,6 @@ duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
 SNAPSHOT = dt.date(2026, 9, 30)
-FACT_CORE = [
-    "date",
-    "account_id",
-    "campaign_id",
-    "impressions",
-    "clicks",
-    "cost",
-    "currency",
-    "conversions",
-    "conversion_value",
-    "purchases",
-    "revenue",
-]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 REPORT_COLUMNS = (
     "stat_time_day, campaign_id, campaign_name, adgroup_id, adgroup_name, ad_id, ad_name, currency, "
     "impressions, clicks, reach, spend, complete_payment, total_complete_payment_rate"
@@ -144,43 +130,11 @@ class TestWiring:
         relation = getattr(TiktokAdsStarSchema, view).relations[name]
         assert (relation.key, relation.many, relation.optional) == (key, True, True)
 
-    def test_views_carry_the_core_columns_first(self):
-        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_CORE
-        assert list(schemas.DimAccounts.model_fields) == [
-            "account_id",
-            "account_name",
-            "currency",
-            "timezone",
-            "as_of_date",
-        ]
-        assert list(schemas.DimCampaigns.model_fields)[:13] == [
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "objective",
-            "campaign_type",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAdGroups.model_fields)[:12] == [
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "status",
-            *ATTRIBUTE_CORE,
-        ]
-        assert list(schemas.DimAds.model_fields)[:9] == [
-            "ad_id",
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_name",
-            "status",
-            "created_at",
-            "updated_at",
-            "as_of_date",
-        ]
+    def test_views_omit_what_tiktok_does_not_fill(self):
+        for fact in (schemas.FactCampaignPerformance, schemas.FactAdPerformance):
+            assert "conversions" not in fact.model_fields and "conversion_value" not in fact.model_fields
+        assert "start_date" not in schemas.DimCampaigns.model_fields
+        assert "end_date" not in schemas.DimCampaigns.model_fields
 
     def test_views_are_unpartitioned_and_tagged(self):
         for asset in TiktokAdsStarSchema.asset_types:
@@ -210,7 +164,6 @@ class TestOnDuckDB:
         [row] = [row for row in facts if row["account_id"] == "111"]
         assert (row["date"], row["campaign_id"], row["impressions"], row["clicks"]) == (DAY, "c111", 200, 20)
         assert (row["cost"], row["currency"], row["purchases"], row["revenue"]) == (15.0, "EUR", 4, 80.0)
-        assert row["conversions"] is None and row["conversion_value"] is None
         assert "reach" not in row
 
     def test_the_ad_fact_keeps_the_ads_keys_and_reach(self, warehouse):
@@ -251,7 +204,6 @@ class TestOnDuckDB:
             100.0,
             "BUDGET_MODE_DAY",
         )
-        assert (row["start_date"], row["end_date"]) == (None, None)
         assert row["updated_at"] == dt.datetime(2026, 9, 2, 8, 0, tzinfo=dt.timezone.utc)
 
     def test_without_entities_the_dimensions_take_the_reports_names(self, warehouse):

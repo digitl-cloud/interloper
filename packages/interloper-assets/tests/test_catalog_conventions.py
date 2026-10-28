@@ -10,6 +10,10 @@ Field types follow rule 3 of ``.claude/rules/assets.md``: a field whose name
 says what its value is (an identifier, an instant, a day, an amount) carries
 the matching type. A field that deliberately does not is listed in
 ``EXCEPTIONS`` with the reason, and an exception nothing needs any more fails.
+
+Star schema views follow rule 2 of ``.claude/rules/star-schema.md``: each
+platform publishes the columns it fills, under the shared vocabulary's names
+and types, in the vocabulary's order and before its own extras.
 """
 
 from __future__ import annotations
@@ -48,6 +52,67 @@ _TIME = re.compile(r"_time$")
 _DAY = re.compile(r"^(date|day)$|_date$")
 _AMOUNT = re.compile(r"(^|_)(amount|balance|budget|cap|cost|price|revenue|spend)$")
 
+_ATTRIBUTES = {
+    "budget": float,
+    "budget_type": str,
+    "start_date": dt.date,
+    "end_date": dt.date,
+    "created_at": dt.datetime,
+    "updated_at": dt.datetime,
+    "as_of_date": dt.date,
+}
+VOCABULARY: dict[str, dict[str, type]] = {
+    "fact_campaign_performance": {
+        "date": dt.date,
+        "account_id": str,
+        "campaign_id": str,
+        "impressions": int,
+        "clicks": int,
+        "cost": float,
+        "currency": str,
+        "conversions": int,
+        "conversion_value": float,
+        "purchases": int,
+        "revenue": float,
+    },
+    "dim_accounts": {"account_id": str, "account_name": str, "currency": str, "timezone": str, "as_of_date": dt.date},
+    "dim_campaigns": {
+        "campaign_id": str,
+        "account_id": str,
+        "campaign_name": str,
+        "status": str,
+        "objective": str,
+        "campaign_type": str,
+        **_ATTRIBUTES,
+    },
+    "dim_ad_groups": {
+        "ad_group_id": str,
+        "campaign_id": str,
+        "account_id": str,
+        "ad_group_name": str,
+        "status": str,
+        **_ATTRIBUTES,
+    },
+    "dim_ads": {
+        "ad_id": str,
+        "ad_group_id": str,
+        "campaign_id": str,
+        "account_id": str,
+        "ad_name": str,
+        "status": str,
+        "created_at": dt.datetime,
+        "updated_at": dt.datetime,
+        "as_of_date": dt.date,
+    },
+}
+KEYS = {
+    "fact_campaign_performance": ["date", "account_id", "campaign_id"],
+    "dim_accounts": ["account_id", "as_of_date"],
+    "dim_campaigns": ["campaign_id", "account_id", "as_of_date"],
+    "dim_ad_groups": ["ad_group_id", "campaign_id", "account_id", "as_of_date"],
+    "dim_ads": ["ad_id", "ad_group_id", "campaign_id", "account_id", "as_of_date"],
+}
+
 
 def _catalog_sources() -> list[type[Source]]:
     sources = []
@@ -65,6 +130,15 @@ def _fields() -> Iterator[tuple[str, FieldSpec]]:
                 continue
             for spec in asset_type.schema.field_specs():
                 yield f"{source.__name__}.{asset_type.key}.{spec.name}", spec
+
+
+def _star_schema_views() -> Iterator[tuple[str, str, list[FieldSpec]]]:
+    for source in _catalog_sources():
+        if not source.__name__.endswith("StarSchema"):
+            continue
+        for asset_type in source.asset_types:
+            if asset_type.key in VOCABULARY and asset_type.schema is not None:
+                yield f"{source.__name__}.{asset_type.key}", asset_type.key, asset_type.schema.field_specs()
 
 
 def _breaks_a_rule(spec: FieldSpec) -> bool:
@@ -138,3 +212,23 @@ def test_every_exception_is_still_needed():
     breaking = [path for path, spec in _fields() if _breaks_a_rule(spec)]
     stale = [pattern for pattern in EXCEPTIONS if not any(fnmatch.fnmatchcase(path, pattern) for path in breaking)]
     assert not stale, "EXCEPTIONS entries no field needs any more:\n" + "\n".join(stale)
+
+
+def test_star_schema_views_use_the_shared_vocabulary():
+    misses, checked = [], 0
+    for path, view, specs in _star_schema_views():
+        checked += 1
+        vocabulary = VOCABULARY[view]
+        names = [spec.name for spec in specs]
+        shared = [name for name in names if name in vocabulary]
+        if missing := [key for key in KEYS[view] if key not in names]:
+            misses.append(f"{path}: lacks its keys {missing}")
+        if names[: len(shared)] != sorted(shared, key=list(vocabulary).index):
+            misses.append(f"{path}: {names} must list {list(vocabulary)} first, in that order, then its extras")
+        misses.extend(
+            _describe(f"{path}.{spec.name}", spec)
+            for spec in specs
+            if spec.name in vocabulary and spec.type is not vocabulary[spec.name]
+        )
+    assert checked >= 30, f"expected the five contracted views of at least six star schemas, found {checked}"
+    assert not misses, "star schema views off the shared vocabulary:\n" + "\n".join(misses)

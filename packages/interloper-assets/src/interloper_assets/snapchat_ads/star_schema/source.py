@@ -140,8 +140,6 @@ class SnapchatAdsStarSchema(il.Source):
             clicks=rows["clicks"],
             cost=rows["cost"],
             currency=rows["currency"],
-            conversions=ibis.null("int64"),
-            conversion_value=ibis.null("float64"),
             purchases=rows["purchases"],
             revenue=rows["revenue"],
         )
@@ -168,8 +166,6 @@ class SnapchatAdsStarSchema(il.Source):
             clicks=rows["clicks"],
             cost=rows["cost"],
             currency=rows["currency"],
-            conversions=ibis.null("int64"),
-            conversion_value=ibis.null("float64"),
             purchases=rows["purchases"],
             revenue=rows["revenue"],
         )

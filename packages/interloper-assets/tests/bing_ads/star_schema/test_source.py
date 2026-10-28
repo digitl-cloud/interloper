@@ -19,7 +19,7 @@ from interloper_assets.bing_ads.star_schema.source import BingAdsStarSchema
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
-FACT_CORE = [
+FACT_COLUMNS = [
     "date",
     "account_id",
     "campaign_id",
@@ -29,10 +29,7 @@ FACT_CORE = [
     "currency",
     "conversions",
     "conversion_value",
-    "purchases",
-    "revenue",
 ]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 REPORT_COLUMNS = (
     "time_period, account_id, account_name, customer_id, currency_code, campaign_id, campaign_name, "
     "campaign_status, campaign_type, ad_group_id, ad_group_name, ad_group_status, ad_id, ad_status, ad_type, "
@@ -106,23 +103,22 @@ class TestWiring:
         relation = getattr(BingAdsStarSchema, view).relations["ads_stats"]
         assert (relation.key, relation.many, relation.optional) == ("bing_ads.ads_stats", True, True)
 
-    def test_views_carry_the_core_columns_first(self):
-        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_CORE
-        assert list(schemas.DimAccounts.model_fields)[:5] == [
+    def test_views_publish_only_what_the_ad_report_fills(self):
+        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_COLUMNS
+        assert list(schemas.DimAccounts.model_fields) == [
             "account_id",
             "account_name",
             "currency",
-            "timezone",
             "as_of_date",
+            "customer_id",
         ]
         assert list(schemas.DimCampaigns.model_fields) == [
             "campaign_id",
             "account_id",
             "campaign_name",
             "status",
-            "objective",
             "campaign_type",
-            *ATTRIBUTE_CORE,
+            "as_of_date",
         ]
         assert list(schemas.DimAdGroups.model_fields) == [
             "ad_group_id",
@@ -130,18 +126,17 @@ class TestWiring:
             "account_id",
             "ad_group_name",
             "status",
-            *ATTRIBUTE_CORE,
+            "as_of_date",
         ]
-        assert list(schemas.DimAds.model_fields)[:9] == [
+        assert list(schemas.DimAds.model_fields) == [
             "ad_id",
             "ad_group_id",
             "campaign_id",
             "account_id",
-            "ad_name",
             "status",
-            "created_at",
-            "updated_at",
             "as_of_date",
+            "ad_type",
+            "headline",
         ]
 
     def test_views_are_unpartitioned_and_tagged(self):
@@ -177,7 +172,6 @@ class TestOnDuckDB:
         [row] = [row for row in facts if row["account_id"] == "111"]
         assert (row["date"], row["campaign_id"], row["impressions"], row["clicks"]) == (DAY, "c111", 150, 15)
         assert (row["cost"], row["currency"], row["conversions"], row["conversion_value"]) == (15.0, "EUR", 3, 90.0)
-        assert row["purchases"] is None and row["revenue"] is None
 
     def test_the_ad_fact_keeps_one_row_per_ad_and_day(self, warehouse):
         first = _account("111", warehouse)
@@ -197,7 +191,6 @@ class TestOnDuckDB:
                 "account_id": "111",
                 "account_name": "Acct 111",
                 "currency": "EUR",
-                "timezone": None,
                 "as_of_date": DAY,
                 "customer_id": "cust1",
             }
@@ -215,7 +208,6 @@ class TestOnDuckDB:
             "Search",
             DAY,
         )
-        assert row["budget"] is None and row["start_date"] is None
 
     def test_ad_groups_and_ads_take_their_names_and_parents_from_the_report(self, warehouse):
         first = _account("111", warehouse)
@@ -224,10 +216,9 @@ class TestOnDuckDB:
         [group] = _rows(warehouse, "dim_ad_groups")
         assert (group["ad_group_name"], group["campaign_id"], group["status"]) == ("Group", "c111", "Active")
         [ad] = _rows(warehouse, "dim_ads")
-        assert (ad["ad_group_id"], ad["campaign_id"], ad["ad_name"], ad["ad_type"], ad["headline"]) == (
+        assert (ad["ad_group_id"], ad["campaign_id"], ad["ad_type"], ad["headline"]) == (
             "s111",
             "c111",
-            None,
             "Responsive search ad",
             "Shop now",
         )

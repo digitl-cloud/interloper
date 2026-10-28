@@ -12,12 +12,6 @@ class FactCampaignPerformance(Schema):
     clicks: int | None = Field(default=None, description="Clicks on the ads.")
     cost: float | None = Field(default=None, description="Amount spent, in the account currency.")
     currency: str | None = Field(default=None, description="Currency of every amount in the row.")
-    conversions: int | None = Field(
-        default=None,
-        description="NULL: Facebook reports no single primary conversion, its results depend on the objective; "
-        "see purchases.",
-    )
-    conversion_value: float | None = Field(default=None, description="NULL, see conversions.")
     purchases: int | None = Field(
         default=None,
         description="Facebook purchase actions under the account's attribution setting "

@@ -16,8 +16,6 @@ class FactAdPerformance(Schema):
     currency: str | None = Field(
         default=None, description="Currency of every amount in the row; NULL until an ad accounts entity is collected."
     )
-    conversions: int | None = Field(default=None, description="NULL, see the campaign fact.")
-    conversion_value: float | None = Field(default=None, description="NULL, see the campaign fact.")
     purchases: int | None = Field(
         default=None,
         description="Snapchat purchase conversions under its default attribution (28-day swipe, 1-day view).",

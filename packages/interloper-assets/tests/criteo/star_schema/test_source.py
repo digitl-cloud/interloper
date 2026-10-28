@@ -19,7 +19,7 @@ from interloper_assets.criteo.star_schema.source import CriteoStarSchema
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
-FACT_CORE = [
+FACT_COLUMNS = [
     "date",
     "account_id",
     "campaign_id",
@@ -32,7 +32,6 @@ FACT_CORE = [
     "purchases",
     "revenue",
 ]
-ATTRIBUTE_CORE = ["budget", "budget_type", "start_date", "end_date", "created_at", "updated_at", "as_of_date"]
 MEASURES = "displays, clicks, advertiser_cost, currency, sales_client_attribution, revenue_generated_client_attribution"
 
 
@@ -113,31 +112,16 @@ class TestWiring:
             "dim_ads": {"fact_ad_performance": "fact_ad_performance"},
         }
 
-    def test_views_carry_the_core_columns_in_order(self):
-        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_CORE
-        assert list(schemas.DimAccounts.model_fields) == [
-            "account_id",
-            "account_name",
-            "currency",
-            "timezone",
-            "as_of_date",
-        ]
-        assert list(schemas.DimCampaigns.model_fields) == [
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "objective",
-            "campaign_type",
-            *ATTRIBUTE_CORE,
-        ]
+    def test_views_publish_only_what_the_reports_fill(self):
+        assert list(schemas.FactCampaignPerformance.model_fields) == FACT_COLUMNS
+        assert list(schemas.DimAccounts.model_fields) == ["account_id", "currency", "as_of_date"]
+        assert list(schemas.DimCampaigns.model_fields) == ["campaign_id", "account_id", "campaign_name", "as_of_date"]
         assert list(schemas.DimAdGroups.model_fields) == [
             "ad_group_id",
             "campaign_id",
             "account_id",
             "ad_group_name",
-            "status",
-            *ATTRIBUTE_CORE,
+            "as_of_date",
         ]
         assert list(schemas.DimAds.model_fields) == [
             "ad_id",
@@ -145,9 +129,6 @@ class TestWiring:
             "campaign_id",
             "account_id",
             "ad_name",
-            "status",
-            "created_at",
-            "updated_at",
             "as_of_date",
         ]
 
@@ -195,9 +176,7 @@ class TestOnDuckDB:
         first = _advertiser("111", warehouse)
         _seed_one(warehouse, "111")
         _materialize(warehouse, first)
-        assert _rows(warehouse, "dim_accounts") == [
-            {"account_id": "111", "account_name": None, "currency": "EUR", "timezone": None, "as_of_date": DAY}
-        ]
+        assert _rows(warehouse, "dim_accounts") == [{"account_id": "111", "currency": "EUR", "as_of_date": DAY}]
 
     def test_a_campaign_takes_the_name_of_its_latest_report(self, warehouse):
         first = _advertiser("111", warehouse)
@@ -211,7 +190,6 @@ class TestOnDuckDB:
             "New name",
             DAY,
         )
-        assert row["status"] is None and row["budget"] is None and row["start_date"] is None
 
     def test_tied_report_rows_collapse_deterministically(self, warehouse):
         first = _advertiser("111", warehouse)

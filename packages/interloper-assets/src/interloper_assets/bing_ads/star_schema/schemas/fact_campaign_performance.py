@@ -19,8 +19,3 @@ class FactCampaignPerformance(Schema):
         default=None, description="Bing conversions: the conversion goals the advertiser counts in Conversions."
     )
     conversion_value: float | None = Field(default=None, description="Revenue of the conversions, in currency.")
-    purchases: int | None = Field(
-        default=None,
-        description="NULL: Bing does not mark which conversion goals are purchases; see conversions.",
-    )
-    revenue: float | None = Field(default=None, description="NULL, see purchases.")
