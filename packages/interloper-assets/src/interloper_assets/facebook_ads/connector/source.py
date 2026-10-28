@@ -312,9 +312,9 @@ def _time_range(date: dt.date) -> dict[str, str]:
     return {"since": date.isoformat(), "until": date.isoformat()}
 
 
-# Entity nodes nest objects (targeting, promoted_object, business) that the source normalizer would
+# Entity nodes nest objects (targeting, creative, business) that the source normalizer would
 # flatten into open-ended columns, and flattening business.name would overwrite the vendor's own
-# business_name; these assets keep every object whole as JSON under the vendor's name.
+# business_name; the entity assets keep every object whole as JSON under the vendor's name.
 _ENTITY_NORMALIZER = FacebookActionsNormalizer()
 
 
@@ -456,9 +456,10 @@ class FacebookAds(il.Source):
         schema=schemas.Ads,
         partitioning=il.TimePartitionConfig(column="date"),
         tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
     )
     def ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Ad entities including creative, status, and configuration."""
+        """Ad entities including creative, status, bidding and targeting."""
         return [{**row, "date": context.partition_date} for row in _get_ads(self.connection, self.account_id)]
 
     @il.asset(
@@ -488,5 +489,5 @@ class FacebookAds(il.Source):
         normalizer=_ENTITY_NORMALIZER,
     )
     def adsets(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-        """Ad set entities including schedule, budget, bidding, optimisation and targeting."""
+        """Ad set entities including schedule, budget, bidding, learning stage and targeting."""
         return [{**row, "date": context.partition_date} for row in _get_adsets(self.connection, self.account_id)]
