@@ -31,6 +31,7 @@ from interloper_db.models import (
     Component,
     ComponentRelation,
     Event,
+    Execution,
     Quota,
     Run,
     RunStatus,
@@ -81,7 +82,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Backfill, Component, ComponentRelation, Run, Event, Quota, Usage):
+    for model in (Backfill, Component, ComponentRelation, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog.from_assets([DemoSource]), engine=engine)
@@ -159,6 +160,24 @@ def _operation_event(run: Run, event_type: il.EventType, component_id: UUID, *, 
     )
 
 
+def _open_execution(run: Run, component_id: UUID, status: str) -> None:
+    """Seed the executions row the trigger would have folded from an operation's events.
+
+    SQLite carries no trigger, so a test that leaves an operation open writes
+    the row itself.
+
+    Args:
+        run: The run the operation belongs to.
+        component_id: The operation.
+        status: ``queued`` or ``running``.
+    """
+    with Session(engine_module.get_engine()) as session:
+        session.add(
+            Execution(run_id=run.id, component_id=component_id, org_id=run.org_id, component_key="a", status=status)
+        )
+        session.commit()
+
+
 def _run_event(run: Run, event_type: il.EventType, **metadata: Any) -> il.Event:
     """One of a run's own lifecycle events, as its runner reports it.
 
@@ -215,6 +234,7 @@ class TestIngest:
         component_id = uuid4()
         started = _operation_event(run, il.EventType.OPERATION_STARTED, component_id)
         failed = _run_event(run, il.EventType.RUN_FAILED, error="RuntimeError: destination unreachable")
+        _open_execution(run, component_id, "running")
 
         assert store.runs.ingest(run.id, il.EventBatch([started, failed])) is True
 
@@ -334,8 +354,7 @@ class TestEndings:
 
     def test_fail_labels_a_started_operation_failed_with_the_reason(self, store: Store) -> None:
         run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
-        component_id = uuid4()
-        store.events.save(_operation_event(run, il.EventType.OPERATION_STARTED, component_id), run.org_id, run.id)
+        _open_execution(run, uuid4(), "running")
 
         store.runs.fail(run.id, "No heartbeat since noon")
 
@@ -346,7 +365,7 @@ class TestEndings:
         self, store: Store, caplog: pytest.LogCaptureFixture
     ) -> None:
         run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
-        store.events.save(_operation_event(run, il.EventType.OPERATION_QUEUED, uuid4()), run.org_id, run.id)
+        _open_execution(run, uuid4(), "queued")
 
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
             store.runs.complete(run.id)

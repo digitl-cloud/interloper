@@ -20,7 +20,7 @@ from sqlmodel import Session, col, select
 
 from interloper_db import BackfillStatus, ConflictError, NotFoundError, RunStatus
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, Event, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, Event, Execution, Quota, Run, Usage
 from interloper_db.store import BackfillQuery, Store
 
 _ORG_ID = uuid4()
@@ -64,7 +64,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Backfill, Component, Run, Event, Quota, Usage):
+    for model in (Backfill, Component, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
