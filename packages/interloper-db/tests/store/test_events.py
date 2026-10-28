@@ -14,7 +14,7 @@ from sqlmodel import Session
 
 from interloper_db import NotFoundError
 from interloper_db import engine as engine_module
-from interloper_db.models import Event, Run
+from interloper_db.models import Component, Event, Execution, Run
 from interloper_db.store import EventQuery, Page, Store
 
 _RUN_ID = UUID("99c018d6-98fe-4de5-a867-1f1a9a545a38")
@@ -35,9 +35,10 @@ def store() -> Iterator[Store]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    # Only the events table is exercised here; creating the full schema would
-    # pull in Postgres-only column types (e.g. ARRAY) that SQLite can't render.
-    Event.__table__.create(engine)  # ty: ignore[unresolved-attribute]
+    # Only what these tests exercise; creating the full schema would pull in
+    # Postgres-only column types (e.g. ARRAY) that SQLite can't render.
+    for model in (Component, Event, Execution):
+        model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}), engine=engine)
     finally:
@@ -45,9 +46,9 @@ def store() -> Iterator[Store]:
         engine_module._engine = None
 
 
-def _seed(events: list[Event]) -> None:
+def _seed(rows: list[Event] | list[Execution] | list[Component]) -> None:
     with Session(engine_module.get_engine()) as session:
-        session.add_all(events)
+        session.add_all(rows)
         session.commit()
 
 
@@ -368,17 +369,14 @@ class TestCloseOperations:
     """Ending a run outside its executor records a verdict for every operation it left open."""
 
     @staticmethod
-    def _operation(component_id: UUID, event_type: str, *, second: int, attempt: int = 1) -> Event:
-        return Event(
-            id=uuid4(),
-            org_id=_ORG_ID,
+    def _execution(component_id: UUID, status: str, *, attempts: int = 1) -> Execution:
+        return Execution(
             run_id=_RUN_ID,
             component_id=component_id,
-            component_kind="asset",
+            org_id=_ORG_ID,
             component_key=f"asset_{component_id.hex[:4]}",
-            event_type=event_type,
-            data={"attempt": attempt, "qualified_key": "source.asset"},
-            timestamp=_BASE_TS + timedelta(seconds=second),
+            status=status,
+            attempts=attempts,
         )
 
     @staticmethod
@@ -397,15 +395,15 @@ class TestCloseOperations:
         done, started, queued = uuid4(), uuid4(), uuid4()
         _seed(
             [
-                self._operation(done, "operation_started", second=0),
-                self._operation(done, "operation_completed", second=1),
-                self._operation(started, "operation_started", second=2),
-                self._operation(queued, "operation_queued", second=3),
+                self._execution(done, "success"),
+                self._execution(started, "running"),
+                self._execution(queued, "queued"),
             ]
         )
 
-        store.events.close_operations(self._run(), error="Timed out after 60s")
+        closed = store.events.close_operations(self._run(), error="Timed out after 60s")
 
+        assert closed == 2
         assert self._verdicts(store) == {
             started: ("operation_failed", "Timed out after 60s"),
             queued: ("operation_canceled", None),
@@ -413,30 +411,37 @@ class TestCloseOperations:
 
     def test_a_cancel_cancels_every_open_operation(self, store: Store) -> None:
         started = uuid4()
-        _seed([self._operation(started, "operation_started", second=0)])
+        _seed([self._execution(started, "running")])
 
         store.events.close_operations(self._run(), error=None)
 
         assert self._verdicts(store) == {started: ("operation_canceled", None)}
 
-    def test_only_the_latest_attempt_is_judged(self, store: Store) -> None:
+    def test_the_verdict_names_the_attempt_the_operation_was_on(self, store: Store) -> None:
         retried = uuid4()
-        _seed(
-            [
-                self._operation(retried, "operation_started", second=0),
-                self._operation(retried, "operation_failed", second=1),
-                self._operation(retried, "operation_started", second=2, attempt=2),
-            ]
-        )
+        _seed([self._execution(retried, "running", attempts=2)])
 
         store.events.close_operations(self._run(), error="lost")
 
-        closing = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
-        assert sorted(int((event.data or {})["attempt"]) for event in closing) == [1, 2]
+        [closing] = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
+        assert (closing.data or {})["attempt"] == 2
+        assert str(closing.id) == RunState.operation_event_id(
+            str(_RUN_ID), str(retried), il.EventType.OPERATION_FAILED, attempt=2
+        )
+
+    def test_the_verdict_names_the_operations_component(self, store: Store) -> None:
+        asset = uuid4()
+        _seed([Component(id=asset, org_id=_ORG_ID, kind="asset", key="orders", name="Orders")])
+        _seed([self._execution(asset, "queued")])
+
+        store.events.close_operations(self._run(), error=None)
+
+        [closing] = store.events.list(_ORG_ID, EventQuery(event_type=["operation_canceled"]), run_id=_RUN_ID).items
+        assert (closing.component_kind, (closing.data or {})["qualified_key"]) == ("asset", "orders")
 
     def test_the_verdict_takes_the_runners_id_so_a_late_one_dedups(self, store: Store) -> None:
         started = uuid4()
-        _seed([self._operation(started, "operation_started", second=0)])
+        _seed([self._execution(started, "running")])
 
         store.events.close_operations(self._run(), error="lost")
         store.events.close_operations(self._run(), error="lost")

@@ -23,22 +23,13 @@ from sqlalchemy import Engine
 from sqlmodel import col, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import Event, Run
+from interloper_db.models import Component, Event, Execution, Run
 from interloper_db.session import commit, dialect_insert, session_scope
 from interloper_db.store.page import Page, PageQuery
 
 logger = logging.getLogger(__name__)
 
-_OPERATION_EVENT_TYPES = (
-    "operation_queued",
-    "operation_started",
-    "operation_retried",
-    "operation_completed",
-    "operation_failed",
-    "operation_canceled",
-    "operation_skipped",
-)
-_OPERATION_VERDICTS = frozenset({"operation_completed", "operation_failed", "operation_canceled", "operation_skipped"})
+_OPEN_EXECUTION_STATUSES = ("queued", "running")
 
 
 class EventQuery(PageQuery):
@@ -204,10 +195,11 @@ class EventStore:
 
         A run that ends outside its executor (reaped, timed out, canceled)
         leaves its in-flight and queued operations open, and the executions
-        view would read them as running forever. Each operation's latest
-        attempt that has no verdict gets one: ``operation_failed`` carrying
-        *error* when it had started, ``operation_canceled`` otherwise or when
-        no *error* is given. The ids are the ones the runner derives, so the
+        view would read them as running forever. The executions table, folded
+        from the events as they were saved, says which operations are open
+        and on which attempt: each gets ``operation_failed`` carrying *error*
+        when it had started, ``operation_canceled`` otherwise or when no
+        *error* is given. The ids are the ones the runner derives, so the
         same verdict arriving late from a stopping pod dedups.
 
         Args:
@@ -218,45 +210,29 @@ class EventStore:
             How many verdicts were authored.
         """
         statement = (
-            select(Event)
-            .where(
-                Event.run_id == db_run.id,
-                col(Event.event_type).in_(_OPERATION_EVENT_TYPES),
-                col(Event.component_id).is_not(None),
-            )
-            .order_by(col(Event.timestamp).asc(), col(Event.id).asc())
+            select(Execution, Component)
+            .join(Component, col(Component.id) == col(Execution.component_id), isouter=True)
+            .where(Execution.run_id == db_run.id, col(Execution.status).in_(_OPEN_EXECUTION_STATUSES))
+            .order_by(col(Execution.component_id))
         )
         with session_scope(self._engine) as session:
-            latest: dict[UUID, tuple[int, list[Event]]] = {}
-            for event in session.exec(statement).all():
-                assert event.component_id is not None
-                attempt = int((event.data or {}).get("attempt", 1))
-                current = latest.get(event.component_id)
-                if current is None or attempt > current[0]:
-                    latest[event.component_id] = (attempt, [event])
-                elif attempt == current[0]:
-                    current[1].append(event)
-
-            closed = 0
-            for component_id, (attempt, events) in latest.items():
-                types = {event.event_type for event in events}
-                if types & _OPERATION_VERDICTS:
-                    continue
-                closed += 1
-                failed = "operation_started" in types and error is not None
+            open_executions = session.exec(statement).all()
+            for execution, component in open_executions:
+                failed = execution.status == "running" and error is not None
                 event_type = il.EventType.OPERATION_FAILED if failed else il.EventType.OPERATION_CANCELED
-                last = events[-1]
                 metadata: dict[str, Any] = {
-                    **(last.data or {}),
-                    "component_id": str(component_id),
-                    "component_kind": last.component_kind,
-                    "component_key": last.component_key,
-                    "attempt": attempt,
-                    "message": f"Operation '{last.component_key}' {'failed' if failed else 'canceled'}",
+                    "component_id": str(execution.component_id),
+                    "component_kind": component.kind if component is not None else None,
+                    "component_key": execution.component_key,
+                    "qualified_key": component.qualified_key if component is not None else None,
+                    "attempt": execution.attempts,
+                    "message": f"Operation '{execution.component_key}' {'failed' if failed else 'canceled'}",
                 }
                 if failed:
                     metadata["error"] = error
-                event_id = RunState.operation_event_id(str(db_run.id), str(component_id), event_type, attempt=attempt)
+                event_id = RunState.operation_event_id(
+                    str(db_run.id), str(execution.component_id), event_type, attempt=execution.attempts
+                )
                 self.save(il.Event(type=event_type, metadata=metadata, id=event_id), db_run.org_id, db_run.id)
             commit(session)
-            return closed
+            return len(open_executions)

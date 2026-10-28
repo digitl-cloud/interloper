@@ -18,7 +18,7 @@ import pytest
 from interloper.errors import ConfigError
 from interloper_db import RunStatus, Store
 from interloper_db import engine as engine_module
-from interloper_db.models import Backfill, Component, ComponentRelation, Event, Quota, Run, Usage
+from interloper_db.models import Backfill, Component, ComponentRelation, Event, Execution, Quota, Run, Usage
 from sqlalchemy import event
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, select
@@ -45,7 +45,7 @@ def store() -> Iterator[Store]:
     def _sqlite_uuid(dbapi_connection: Any, _record: Any) -> None:
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Component, ComponentRelation, Run, Backfill, Event, Quota, Usage):
+    for model in (Component, ComponentRelation, Run, Backfill, Event, Execution, Quota, Usage):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))
