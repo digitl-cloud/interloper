@@ -2514,10 +2514,10 @@ constructs the class with <code>runner.config</code>, so a registered runner is 
 <p>A runner decides where a run's operations execute; a launcher decides where the run itself
 executes. The scheduler's queue claims a run, mints its token, hydrates its target into a DAG
 spec, and calls <code>launch(run, spec, token)</code> on the configured <code>Launcher</code>. A launcher that starts
-another process (a container, a pod) runs <code>Launcher.command(run, spec_path)</code> there with the spec
-at <code>spec_path</code>, the run's token in <code>INTERLOPER_RUN_TOKEN</code>, and the API's <code>server.internal_url</code>
-in <code>INTERLOPER_SERVER_INTERNAL_URL</code>: that process holds no database credentials and reports its
-events through the API. Register a launcher in the <code>interloper.launchers</code> entry-point group and
+another process (a container, a pod) runs <code>Launcher.command(run, spec)</code> there, <code>spec</code> being the
+spec's JSON or <code>@&lt;path&gt;</code> to a file holding it, with the run's token in <code>INTERLOPER_RUN_TOKEN</code> and
+the API's <code>server.internal_url</code> in <code>INTERLOPER_SERVER_INTERNAL_URL</code>: that process holds no
+database credentials and reports its events through the API. Register a launcher in the <code>interloper.launchers</code> entry-point group and
 give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes launchers do.</p>
 <h2 id="events-from-children">Events from children<a class="headerlink" href="#events-from-children" title="Permanent link">&para;</a></h2>
 <p>A run that makes each attempt in a child process (the Docker and Kubernetes runners) still owns
