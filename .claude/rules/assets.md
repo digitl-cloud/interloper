@@ -17,6 +17,8 @@ That cuts three ways, and each has bitten us:
 - **Never add a field the response does not carry.** See rule 2 for the one exception, which is narrow.
 - **Never rename a vendor field.** The normalizer's casing pass is the only permitted transformation, and it is a spelling change, not a rename. Where the vendor's casing defeats the snake-caser, fix it with `column_overrides` on the source's normalizer rather than shipping the mangled name: `eCPAddToCart` is `ecp_add_to_cart`, never `e_cp_add_to_cart`.
 
+An API that returns only the fields a request names (Facebook's Graph API) has no fixed response: the response is the field list. That list is never the API reference's full catalogue, which mixes fields any account serves with fields that need a parameter, a permission or a particular token, and one such field fails the whole request. It is derived from a maintained connector that requests it from every client's accounts: Facebook's entity fields are Airbyte's certified connector's at a pinned commit, with the derivation stated above the lists in `constants.py`, and are never curated field by field.
+
 Derived columns, joins and reshapes belong downstream, not in the asset.
 
 ## 2. Stamp a partition column only when the response has no day

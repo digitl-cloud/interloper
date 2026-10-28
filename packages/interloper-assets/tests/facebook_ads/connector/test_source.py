@@ -117,12 +117,13 @@ class TestSpecRoundtripAndReconcile:
         df = pd.DataFrame([{"date_start": "2026-06-10", "account_id": "123", "actions_link_click": 7}])
         TableData.from_data(df).reconcile(schemas.AdsStats, strict=True)  # must not raise
 
-    def test_entity_row_flattens_creative_and_reconciles(self):
+    def test_entity_row_keeps_the_creative_whole_and_reconciles(self):
         child = self._child("ads")
-        rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789", "name": "Creative A"}}]
+        rows = [{"id": "456", "name": "My Ad", "creative": {"id": "789"}}]
         normalized = child.normalizer.normalize(rows)
-        assert "creative_id" in normalized.columns  # nested dict flattened by the normalizer
-        TableData.from_data(normalized).reconcile(schemas.Ads)  # must not raise
+        assert "creative_id" not in normalized.columns
+        out = TableData.from_data(normalized).reconcile(schemas.Ads)
+        assert json.loads(out.loc[0, "creative"]) == {"id": "789"}
 
 
 class TestSchemaParity:
@@ -163,13 +164,19 @@ class TestSchemaParity:
         for name in ("attribution_setting", "quality_ranking", "converted_product_quantity"):
             assert name in schemas.CampaignsStats.model_fields, name
 
-    def test_ad_accounts_declares_every_requested_field(self):
-        missing = sorted(set(constants.AD_ACCOUNT_ENTITY_FIELDS) - set(schemas.AdAccounts.model_fields))
-        assert not missing, f"requested but undeclared on AdAccounts (silently dropped): {missing}"
-
-    def test_adsets_declares_every_requested_field(self):
-        missing = sorted(set(constants.ADSET_ENTITY_FIELDS) - set(schemas.Adsets.model_fields))
-        assert not missing, f"requested but undeclared on Adsets (silently dropped): {missing}"
+    @pytest.mark.parametrize(
+        ("fields", "schema"),
+        [
+            (constants.AD_ACCOUNT_ENTITY_FIELDS, schemas.AdAccounts),
+            (constants.ADSET_ENTITY_FIELDS, schemas.Adsets),
+            (constants.AD_ENTITY_FIELDS, schemas.Ads),
+            (constants.CAMPAIGN_ENTITY_FIELDS, schemas.Campaigns),
+        ],
+    )
+    def test_entity_schemas_declare_exactly_the_requested_fields(self, fields: list[str], schema: type[il.Schema]):
+        declared = set(schema.model_fields) - {"date"}
+        assert sorted(set(fields) - declared) == [], "requested but undeclared (silently dropped)"
+        assert sorted(declared - set(fields)) == [], "declared but never requested (always NULL)"
 
 
 class TestNewEntities:
@@ -179,7 +186,7 @@ class TestNewEntities:
         return TestSpecRoundtripAndReconcile()._child(key)
 
     def test_entity_normalizer_survives_roundtrip_without_flattening(self):
-        for key in ("ad_accounts", "adsets"):
+        for key in ("ad_accounts", "adsets", "ads", "campaigns"):
             normalizer = self._child(key).normalizer
             assert isinstance(normalizer, FacebookActionsNormalizer), key
             assert normalizer.flatten_max_level == 0, key
@@ -216,15 +223,11 @@ class TestNewEntities:
                 "updated_time": "2026-09-02T10:00:00+0200",
                 "daily_budget": "1500",
                 "budget_remaining": "0",
-                "min_budget_spend_percentage": "12.5",
-                "campaign_active_time": "86400",
             }
         ]
         out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Adsets, strict=True)
         assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
         assert (out.loc[0, "daily_budget"], out.loc[0, "budget_remaining"]) == (1500, 0)
-        assert out.loc[0, "min_budget_spend_percentage"] == 12.5
-        assert out.loc[0, "campaign_active_time"] == 86400.0
 
     def test_ad_account_instants_and_minor_unit_amounts_are_typed(self):
         child = self._child("ad_accounts")
@@ -235,43 +238,39 @@ class TestNewEntities:
 
     def test_campaign_objects_stay_whole_and_its_instants_and_amounts_are_typed(self):
         child = self._child("campaigns")
-        promoted_object = {"pixel_id": "9", "custom_event_type": "PURCHASE"}
+        adlabels = [{"id": "7", "name": "brand"}]
         rows = [
             {
                 "id": "1",
-                "promoted_object": promoted_object,
+                "adlabels": adlabels,
                 "created_time": "2026-09-01T10:00:00+0200",
-                "last_budget_toggling_time": "2026-09-03T10:00:00+0200",
                 "daily_budget": "1500",
                 "spend_cap": "0",
                 "start_time": "2026-09-05T00:00:00+0200",
             }
         ]
         out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Campaigns, strict=True)
-        assert json.loads(out.loc[0, "promoted_object"]) == promoted_object
+        assert json.loads(out.loc[0, "adlabels"]) == adlabels
         assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
-        assert out.loc[0, "last_budget_toggling_time"] == pd.Timestamp("2026-09-03T08:00:00", tz="UTC")
         assert (out.loc[0, "daily_budget"], out.loc[0, "spend_cap"]) == (1500, 0)
         assert out.loc[0, "start_time"] == "2026-09-05T00:00:00+0200"
 
-    def test_ad_instants_bid_schedule_and_labels_are_typed(self):
+    def test_ad_instants_bid_and_objects_are_typed(self):
         child = self._child("ads")
         rows = [
             {
                 "id": "1",
                 "created_time": "2026-09-01T10:00:00+0200",
                 "bid_amount": 250,
-                "ad_schedule_start_time": "2026-09-05T00:00:00+0200",
                 "adlabels": [{"id": "7", "name": "brand"}],
-                "creative": {"id": "c1", "name": "Spring"},
+                "targeting": {"geo_locations": {"countries": ["DE"]}},
             }
         ]
         out = TableData.from_data(child.normalizer.normalize(rows)).reconcile(schemas.Ads, strict=True)
         assert out.loc[0, "created_time"] == pd.Timestamp("2026-09-01T08:00:00", tz="UTC")
         assert out.loc[0, "bid_amount"] == 250
-        assert out.loc[0, "ad_schedule_start_time"] == "2026-09-05T00:00:00+0200"
         assert json.loads(out.loc[0, "adlabels"]) == [{"id": "7", "name": "brand"}]
-        assert out.loc[0, "creative_name"] == "Spring"
+        assert json.loads(out.loc[0, "targeting"]) == {"geo_locations": {"countries": ["DE"]}}
 
 
 def _facebook_error(code: int, message: str) -> FacebookRequestError:
@@ -351,10 +350,10 @@ class TestPagination:
             connector._paginate(request, ["id"])
         assert limits == [25]
 
-    def test_the_account_requests_no_field_that_needs_a_parameter(self):
-        # Facebook answers 400 for the whole account when show_checkout_experience comes without a page_id
-        assert "show_checkout_experience" not in constants.AD_ACCOUNT_ENTITY_FIELDS
-        assert "show_checkout_experience" not in schemas.AdAccounts.model_fields
+    def test_the_account_requests_no_field_that_needs_a_page(self):
+        # Facebook answers 400 for the whole account when one of these comes without a page_id
+        for name in ("show_checkout_experience", "has_page_authorized_adaccount"):
+            assert name not in constants.AD_ACCOUNT_ENTITY_FIELDS
 
     def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
         class FakeAccount:
