@@ -1,10 +1,8 @@
-"""Tests for ``interloper_docker.launcher``: one container per run, its spec copied in, no database in it."""
+"""Tests for ``interloper_docker.launcher``: one container per run, its spec as its argument, no database in it."""
 
 from __future__ import annotations
 
-import io
 import json
-import tarfile
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -99,19 +97,14 @@ def test_the_heartbeat_settings_reach_the_run_container(monkeypatch: pytest.Monk
 
 
 class _CreatedContainer:
-    """A created container recording the files copied in, whether it started, and whether it was removed."""
+    """A created container recording whether it started and whether it was removed."""
 
     short_id = "abc123"
 
     def __init__(self, *, start_fails: bool = False) -> None:
-        self.archives: list[tuple[str, bytes]] = []
         self.started = False
         self.removed = False
         self._start_fails = start_fails
-
-    def put_archive(self, path: str, data: bytes) -> bool:
-        self.archives.append((path, data))
-        return True
 
     def start(self) -> None:
         if self._start_fails:
@@ -122,7 +115,7 @@ class _CreatedContainer:
         self.removed = force
 
 
-def test_the_container_runs_the_spec_copied_in_before_it_starts(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_container_runs_the_spec_given_as_its_argument(monkeypatch: pytest.MonkeyPatch) -> None:
     launcher = _launcher(monkeypatch)
     created: list[dict[str, Any]] = []
     container = _CreatedContainer()
@@ -137,16 +130,12 @@ def test_the_container_runs_the_spec_copied_in_before_it_starts(monkeypatch: pyt
     launcher.launch(run, DAGSpec(items=[]), "ilr_x")
 
     (kwargs,) = created
-    assert kwargs["command"][:5] == ["interloper", "run", "--format", "inline", "@/interloper/run/spec.json"]
+    assert kwargs["command"][:4] == ["interloper", "run", "--format", "inline"]
+    assert json.loads(kwargs["command"][4]) == {"items": []}
     assert kwargs["environment"]["INTERLOPER_RUN_TOKEN"] == "ilr_x"
     assert kwargs["environment"]["INTERLOPER_SERVER_INTERNAL_URL"] == "http://api"
     assert not [name for name in kwargs["environment"] if name.startswith("INTERLOPER_POSTGRES")]
-    ((path, data),) = container.archives
-    with tarfile.open(fileobj=io.BytesIO(data)) as archive:
-        assert archive.getmember("interloper/run").isdir()
-        member = archive.extractfile("interloper/run/spec.json")
-        assert member is not None and json.loads(member.read()) == {"items": []}
-    assert path == "/" and container.started
+    assert container.started
 
 
 def test_a_container_that_cannot_start_is_removed_with_its_spec(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -109,10 +109,10 @@ constructs the class with `runner.config`, so a registered runner is selectable 
 A runner decides where a run's operations execute; a launcher decides where the run itself
 executes. The scheduler's queue claims a run, mints its token, hydrates its target into a DAG
 spec, and calls `launch(run, spec, token)` on the configured `Launcher`. A launcher that starts
-another process (a container, a pod) runs `Launcher.command(run, spec_path)` there with the spec
-at `spec_path`, the run's token in `INTERLOPER_RUN_TOKEN`, and the API's `server.internal_url`
-in `INTERLOPER_SERVER_INTERNAL_URL`: that process holds no database credentials and reports its
-events through the API. Register a launcher in the `interloper.launchers` entry-point group and
+another process (a container, a pod) runs `Launcher.command(run, spec)` there, `spec` being the
+spec's JSON or `@<path>` to a file holding it, with the run's token in `INTERLOPER_RUN_TOKEN` and
+the API's `server.internal_url` in `INTERLOPER_SERVER_INTERNAL_URL`: that process holds no
+database credentials and reports its events through the API. Register a launcher in the `interloper.launchers` entry-point group and
 give it a `from_settings` classmethod, as the Docker and Kubernetes launchers do.
 
 ## Events from children
