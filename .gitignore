@@ -17,3 +17,5 @@ data/
 site
 .adk
 chart/interloper/values-local.yaml
+docs/superpowers/
+.superpowers/
