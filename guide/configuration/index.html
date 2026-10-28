@@ -2449,9 +2449,9 @@ environment, not in <code>${VAR}</code> placeholders.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>INTERLOPER_EVENTS_TO_STDERR</code></td>
+<td><code>INTERLOPER_RUN_OPERATION</code></td>
 <td><code>interloper run</code>, telemetry setup</td>
-<td><code>true</code> marks a child container: events are forwarded as <code>@EVENT:</code> lines and the metrics handler is not installed.</td>
+<td>Set by a container runner on a child: the one operation of the host's run it reports events for; its metrics count destination I/O only.</td>
 </tr>
 <tr>
 <td><code>INTERLOPER_RUN_TOKEN</code></td>

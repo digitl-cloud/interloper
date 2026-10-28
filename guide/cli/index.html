@@ -2574,13 +2574,12 @@ destinations fixes it.</p>
 </span></code></pre></div>
 <h2 id="environment">Environment<a class="headerlink" href="#environment" title="Permanent link">&para;</a></h2>
 <p>A <code>.env</code> file in the working directory is loaded when <code>python-dotenv</code> is installed. Telemetry
-is initialized from the <code>otel</code> settings for every command. In a container with
-<code>INTERLOPER_EVENTS_TO_STDERR=true</code>, events are forwarded as <code>@EVENT:</code> lines instead of being
-printed; see <a href="../events/#events-across-processes">Events</a>.</p>
+is initialized from the <code>otel</code> settings for every command.</p>
 <p>A platform run's pod runs <code>interloper run</code> with <code>INTERLOPER_RUN_TOKEN</code> set: the spec comes from a
 file (<code>--format inline @&lt;path&gt;</code>), <code>--metadata</code> carries the run's ids into every event, and the
 events are reported to the API at <code>server.internal_url</code> instead of being printed; see
-<a href="../events/#persistence">Events</a>.</p>
+<a href="../events/#persistence">Events</a>. A child a container runner starts for one operation of that run
+also carries <code>INTERLOPER_RUN_OPERATION</code>, and reports that operation's events only.</p>
 <h2 id="other-commands">Other commands<a class="headerlink" href="#other-commands" title="Permanent link">&para;</a></h2>
 <p>Each platform package contributes its own commands, so a command exists exactly when its
 package is installed:</p>

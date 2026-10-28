@@ -2675,10 +2675,12 @@ instrumentation is installed, so REST-based sources get egress spans for free.</
 </tbody>
 </table>
 <p>Metrics are computed by a subscriber on the <a href="../events/">event bus</a>, so they cost nothing on the
-execution path, and they dedupe on event id so re-emitted child events count once. Attributes
-stay low-cardinality by design: ids and partitions never become metric attributes. In a child
-container (<code>INTERLOPER_EVENTS_TO_STDERR=true</code>) the metrics handler is not installed; the host
-that re-emits the events is authoritative.</p>
+execution path, and they dedupe on event id so one outcome reported twice counts once. Attributes
+stay low-cardinality by design: ids and partitions never become metric attributes. A child
+container executing one operation of its host's run (<code>INTERLOPER_RUN_OPERATION</code>) counts only
+destination I/O, which happens nowhere else; the host counts its run and every operation's
+verdict, which it authors. Operation durations are therefore not recorded for operations that
+execute in a child.</p>
 <p>The platform adds its own instruments where the event bus does not reach:</p>
 <table>
 <thead>

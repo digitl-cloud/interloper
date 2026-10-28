@@ -2583,11 +2583,11 @@ any other subscriber, not just a local logger. <code>EventLogger(component_key, 
 <code>interloper.events</code> builds the same logger for code outside an asset. Emitting an arbitrary
 event is <code>il.EventBus.emit(il.EventType.LOG, metadata={...})</code>.</p>
 <h2 id="events-across-processes">Events across processes<a class="headerlink" href="#events-across-processes" title="Permanent link">&para;</a></h2>
-<p>Container-based runners run assets in child processes that have their own bus. With
-<code>INTERLOPER_EVENTS_TO_STDERR=true</code>, the <code>interloper run</code> command subscribes a
-<code>StderrEventHandler</code> that writes each event as an <code>@EVENT:{json}</code> line on stderr; the host
-parses those lines with <code>Event.from_log_line()</code> and re-emits them with <code>EventBus.emit_event()</code>,
-preserving ids and timestamps. Subscribers on the host therefore see one unified stream.</p>
+<p>Container-based runners run each operation in a child process with its own bus. On the
+platform, the child reports its operation's events to the API itself, with its host run's token,
+and the host authors the operation's verdict from the child's exit; deterministic ids make the
+two verdicts one row. The host's own bus does not see the child's events, so a subscriber on the
+host sees the run's and the operations' lifecycle, not the steps inside a child.</p>
 <h2 id="metrics">Metrics<a class="headerlink" href="#metrics" title="Permanent link">&para;</a></h2>
 <p>The built-in OpenTelemetry metrics are computed from these events by a bus subscriber, so they
 cost nothing on the execution path. See <a href="../telemetry/">Telemetry</a>.</p>

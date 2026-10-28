@@ -2530,17 +2530,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.Event.from_log_line" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_log_line
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#interloper.Event.to_dict" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3804,7 +3793,7 @@ a hook's firing.</p>
 arbitrary metadata dict.  The <code>id</code> is assigned once by the producer
 and preserved across serialization, so the same logical event can be
 persisted idempotently even when it is delivered more than once (e.g.
-re-emitted from a child process's log stream and also written directly).</p>
+reported by a child process and authored by its host).</p>
 <p>Supports JSON and dict serialization for forwarding and persistence.</p>
 
 
@@ -4075,83 +4064,6 @@ metadata.</p>
             <td>
               <div class="doc-md-description">
                 <p>The deserialized Event instance.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="interloper.Event.from_log_line" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_log_line</span>
-
-
-<a href="#interloper.Event.from_log_line" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_log_line</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="n"><span title="str">str</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Event&lt;/span&gt;" href="./#interloper.Event">Event</a></span> <span class="o">|</span> <span class="kc">None</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Try to parse an <code>Event</code> from a log line.</p>
-<p>An event line is <code>@EVENT:{...}</code>, as <code>StderrEventHandler</code> writes
-it. Any other line, or one whose JSON is malformed, is not an event
-and <code>None</code> is returned.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>line</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>A single log line (may include trailing newline).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Event&lt;/span&gt;" href="./#interloper.Event">Event</a> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>The parsed Event, or <code>None</code> if the line is not an event.</p>
               </div>
             </td>
           </tr>
