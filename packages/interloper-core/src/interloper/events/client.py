@@ -41,7 +41,7 @@ class EventClient:
                 effects that travel with the run's own ending.
 
         Returns:
-            Whether the run is still running.
+            Whether the run was live when the batch arrived.
 
         Raises:
             DeliveryError: If the platform did not take the batch; its
@@ -53,4 +53,4 @@ class EventClient:
             raise DeliveryError(f"{type(error).__name__}: {error}") from error
         if response.is_error:
             raise DeliveryError(f"HTTP {response.status_code}", retryable=response.status_code not in _FINAL_STATUSES)
-        return bool(response.json()["running"])
+        return bool(response.json()["live"])

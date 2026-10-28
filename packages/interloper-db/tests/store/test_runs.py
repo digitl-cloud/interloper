@@ -193,21 +193,21 @@ def _running_over_a_source(store: Store) -> tuple[Run, UUID]:
 
 
 class TestIngest:
-    """One batch a pod reports: saved, folded into the run's state, and answered with whether to carry on."""
+    """One batch a pod reports: saved, folded into the run's state, and answered with whether the run was live."""
 
     def test_run_started_starts_the_run_and_renews_the_heartbeat(self, store: Store) -> None:
         run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
         assert store.runs.claim_next() is not None
 
-        running = store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
+        live = store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
 
         saved = store.runs.get(run.id)
-        assert running is True
+        assert live is True
         assert saved.status == RunStatus.RUNNING and saved.started_at is not None and saved.heartbeat_at is not None
 
     def test_run_completed_ends_the_run_as_a_success(self, store: Store) -> None:
         run = store.runs.get(_running(store, component_id=_component(store, kind="job")))
-        assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_COMPLETED)])) is False
+        assert store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_COMPLETED)])) is True
         assert store.runs.get(run.id).status == RunStatus.SUCCESS
 
     def test_run_failed_ends_the_run_with_the_events_reason(self, store: Store) -> None:
@@ -216,7 +216,7 @@ class TestIngest:
         started = _operation_event(run, il.EventType.OPERATION_STARTED, component_id)
         failed = _run_event(run, il.EventType.RUN_FAILED, error="RuntimeError: destination unreachable")
 
-        assert store.runs.ingest(run.id, il.EventBatch([started, failed])) is False
+        assert store.runs.ingest(run.id, il.EventBatch([started, failed])) is True
 
         ended = store.runs.get(run.id)
         assert (ended.status, ended.error) == (RunStatus.FAILED, "RuntimeError: destination unreachable")
@@ -237,9 +237,10 @@ class TestIngest:
         store.runs.ingest(run.id, il.EventBatch([_run_event(run, il.EventType.RUN_STARTED)]))
         batch = [_run_event(run, il.EventType.RUN_FAILED, error="boom")]
 
-        store.runs.ingest(run.id, il.EventBatch(batch))
-        store.runs.ingest(run.id, il.EventBatch(batch))
+        first = store.runs.ingest(run.id, il.EventBatch(batch))
+        replayed = store.runs.ingest(run.id, il.EventBatch(batch))
 
+        assert first is True and replayed is True
         assert store.events.list(run.org_id, EventQuery(event_type=["run_failed"]), run_id=run.id).total == 1
         assert len(store.runs.attempts(run.root_run_id)) == 2
 
@@ -251,9 +252,9 @@ class TestIngest:
         late = il.Event(type=il.EventType.LOG, metadata={"run_id": str(run.id), "message": "still here"})
 
         with caplog.at_level("WARNING", logger="interloper_db.store.runs"):
-            running = store.runs.ingest(run.id, il.EventBatch([late, _run_event(run, il.EventType.RUN_COMPLETED)]))
+            live = store.runs.ingest(run.id, il.EventBatch([late, _run_event(run, il.EventType.RUN_COMPLETED)]))
 
-        assert running is False
+        assert live is False
         assert store.runs.get(run.id).status == RunStatus.FAILED
         assert store.events.list(run.org_id, EventQuery(event_type=["log"]), run_id=run.id).total == 1
         assert "already failed" in caplog.text

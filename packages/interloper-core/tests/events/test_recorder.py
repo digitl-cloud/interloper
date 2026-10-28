@@ -15,20 +15,26 @@ from interloper.runner import ExecutionInfo, ExecutionStatus, RunResult
 
 
 class Sink:
-    """Records every delivery; scripted to fail, refuse or report the run ended."""
+    """Records every delivery; scripted to fail, refuse, report the run ended or hold a delivery."""
 
-    def __init__(self, *, fail_times: int = 0, running: bool = True, final: bool = False) -> None:
+    def __init__(
+        self, *, fail_times: int = 0, live: bool = True, final: bool = False, gate: threading.Event | None = None
+    ) -> None:
         """Script the sink.
 
         Args:
             fail_times: How many deliveries raise before one succeeds.
-            running: What every successful delivery answers.
+            live: What every successful delivery answers.
             final: Whether the failures are final rather than retryable.
+            gate: When set, the first delivery waits for it, and ``holding``
+                tells when that delivery has arrived.
         """
         self.batches: list[tuple[list[Event], Any]] = []
         self.fail_times = fail_times
-        self.running = running
+        self.live = live
         self.final = final
+        self.gate = gate
+        self.holding = threading.Event()
         self.lock = threading.Lock()
 
     def __call__(self, batch: EventBatch) -> bool:
@@ -38,17 +44,20 @@ class Sink:
             batch: The events and the effects sent with them.
 
         Returns:
-            Whether the run is still running.
+            Whether the run was live when the batch arrived.
 
         Raises:
             DeliveryError: While scripted to fail.
         """
+        if self.gate is not None and not self.holding.is_set():
+            self.holding.set()
+            self.gate.wait()
         with self.lock:
             if self.fail_times:
                 self.fail_times -= 1
                 raise DeliveryError("down", retryable=not self.final)
             self.batches.append((list(batch.events), batch.effects))
-            return self.running
+            return self.live
 
     @property
     def events(self) -> list[Event]:
@@ -152,23 +161,44 @@ class TestLiveness:
         assert time.monotonic() - started < 1.0
 
     def test_a_run_ended_elsewhere_drains_then_is_lost(self) -> None:
-        sink = Sink(running=False)
+        sink = Sink(live=False)
         lost = threading.Event()
         with pytest.raises(RunLostError, match="ended elsewhere"):
             _record(sink, 2, on_lost=lost.set, heartbeat_interval=10.0)
         assert [event.metadata["message"] for event in sink.events] == ["1", "2"]
         assert lost.is_set()
 
-    def test_the_runs_own_ending_is_not_a_loss(self) -> None:
-        sink = Sink(running=False)
+    def test_a_run_ended_before_its_own_ending_arrived_is_lost(self) -> None:
         lost = threading.Event()
-        with _recorder(sink, on_lost=lost.set, heartbeat_interval=10.0) as recorder:
-            recorder(Event(type=EventType.RUN_COMPLETED, metadata={"run_id": "run-1"}))
-        assert not lost.is_set()
+
+        def record() -> None:
+            with _recorder(Sink(live=False), on_lost=lost.set, heartbeat_interval=10.0) as recorder:
+                recorder(_event(1))
+                recorder(Event(type=EventType.RUN_COMPLETED, metadata={"run_id": "run-1"}))
+
+        with pytest.raises(RunLostError, match="ended elsewhere"):
+            record()
+        assert lost.is_set()
+
+    def test_a_run_ended_elsewhere_while_more_is_queued_is_still_lost(self) -> None:
+        gate = threading.Event()
+        sink = Sink(live=False, gate=gate)
+
+        def record() -> None:
+            with _recorder(sink, heartbeat_interval=10.0) as recorder:
+                recorder(_event(1))
+                assert sink.holding.wait(5)
+                recorder(_event(2))
+                recorder(Event(type=EventType.RUN_COMPLETED, metadata={"run_id": "run-1"}))
+                gate.set()
+
+        with pytest.raises(RunLostError, match="ended elsewhere"):
+            record()
+        assert [event.metadata.get("message") for event in sink.events][:2] == ["1", "2"]
 
     def test_an_exception_leaving_the_block_is_not_masked(self) -> None:
         def raise_inside() -> None:
-            with _recorder(Sink(running=False), heartbeat_interval=10.0) as recorder:
+            with _recorder(Sink(live=False), heartbeat_interval=10.0) as recorder:
                 recorder(_event(1))
                 raise ValueError("mine")
 

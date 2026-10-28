@@ -669,14 +669,14 @@ def test_tail_page_reaches_terminal_events(events_store: EventsStore) -> None:
 # -- Ingest -------------------------------------------------------------------
 
 
-def test_ingest_hands_the_batch_to_the_store_and_reports_running(store: FakeStore) -> None:
+def test_ingest_hands_the_batch_to_the_store_and_reports_whether_the_run_was_live(store: FakeStore) -> None:
     event_id = str(uuid4())
     event = {"event_id": event_id, "type": "log", "timestamp": "2026-10-26T10:00:00+00:00", "message": "hi"}
     effects = {"a": {"config": {"k": 1}, "state": {}}}
 
     response = _client(store).post(f"/runs/{_RUN_ID}/events", json={"events": [event], "effects": effects})
 
-    assert response.status_code == 200 and response.json() == {"running": True}
+    assert response.status_code == 200 and response.json() == {"live": True}
     ((run_id, batch),) = store.ingested
     assert run_id == _RUN_ID
     assert [(item.id, item.metadata["message"]) for item in batch.events] == [(event_id, "hi")]

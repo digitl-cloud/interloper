@@ -26,21 +26,21 @@ def _client(handler: Any) -> EventClient:
 
 
 class TestIngest:
-    """One batch per request, the run's token as the bearer, the answer as whether to carry on."""
+    """One batch per request, the run's token as the bearer, the answer as whether the run was live."""
 
-    def test_posts_the_batch_as_json_with_the_bearer_and_reads_running(self) -> None:
+    def test_posts_the_batch_as_json_with_the_bearer_and_reads_whether_the_run_was_live(self) -> None:
         seen: dict[str, Any] = {}
 
         def handler(request: httpx2.Request) -> httpx2.Response:
             seen["url"] = str(request.url)
             seen["auth"] = request.headers["authorization"]
             seen["body"] = json.loads(request.content)
-            return httpx2.Response(200, json={"running": False})
+            return httpx2.Response(200, json={"live": False})
 
         event = Event(type=EventType.LOG, metadata={"message": "hi"})
-        running = _client(handler).ingest(EventBatch([event], {"a": Effect(config={"k": 1})}))
+        live = _client(handler).ingest(EventBatch([event], {"a": Effect(config={"k": 1})}))
 
-        assert running is False
+        assert live is False
         assert seen["url"] == "http://api.internal/api/runs/run-1/events"
         assert seen["auth"] == "Bearer ilr_secret"
         assert seen["body"] == {"events": [event.to_dict()], "effects": {"a": {"config": {"k": 1}, "state": {}}}}

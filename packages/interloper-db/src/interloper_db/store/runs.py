@@ -601,17 +601,23 @@ class RunStore:
         reaper ended the run) is a no-op with a warning: the events are the
         truth of what happened and are kept either way.
 
+        The answer is about the run as the batch found it, not as the batch
+        left it: the run's own ending is answered as live, so a pod told
+        otherwise knows its run was ended elsewhere. A replayed batch, all of
+        whose events were saved before, is answered as it was the first time.
+
         Args:
             run_id: The run UUID.
             batch: The events, in emission order and possibly none, and the
                 effects that travel with the run's own ending.
 
         Returns:
-            Whether the run is still running once the batch is folded, which
-            tells its pod to carry on or to stop.
+            Whether the run was live (dispatched or running) when the batch
+            arrived, which tells its pod whether its run is still its own.
         """
         with session_scope(self._engine) as session:
             db_run = self._lock(run_id)
+            live = db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING)
             inserted = {str(event_id) for event_id in self._events.save_many(batch.events, db_run.org_id, db_run.id)}
             if batch.effects:
                 self._apply_effects_once(db_run, batch.events, inserted, batch.effects)
@@ -626,7 +632,7 @@ class RunStore:
                 db_run.heartbeat_at = database_now(session)
             session.add(db_run)
             commit(session)
-            return db_run.status in (RunStatus.DISPATCHED, RunStatus.RUNNING)
+            return live or bool(batch.events) and not inserted
 
     def fail(self, run_id: UUID, error: str) -> Run:
         """Fail a run with a reason, recorded on the run.
