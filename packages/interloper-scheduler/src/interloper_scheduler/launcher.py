@@ -124,15 +124,16 @@ class Launcher(ABC):
         """
 
     @staticmethod
-    def command(run: Run, spec_path: str) -> list[str]:
-        """The ``interloper run`` argv that executes *run* from the spec at *spec_path*.
+    def command(run: Run, spec: str) -> list[str]:
+        """The ``interloper run`` argv that executes *run* from *spec*.
 
         The token is not an argument: it travels in the environment, which a
         process listing does not show.
 
         Args:
             run: The run.
-            spec_path: Where the run's process finds the spec file.
+            spec: The spec as ``interloper run --format inline`` takes it: the
+                DAG spec's JSON, or ``@<path>`` to a file holding it.
 
         Returns:
             The argv.
@@ -142,7 +143,7 @@ class Launcher(ABC):
             "run",
             "--format",
             "inline",
-            f"@{spec_path}",
+            spec,
             f"--run-id={run.id}",
             "--metadata",
             json.dumps(run.event_metadata(run.target)),

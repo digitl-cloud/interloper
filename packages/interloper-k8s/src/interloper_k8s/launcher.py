@@ -191,7 +191,7 @@ class KubernetesLauncher(Launcher):
         Returns:
             The Job to create.
         """
-        command = self.command(run, f"{_SPEC_DIRECTORY}/spec.json")
+        command = self.command(run, f"@{_SPEC_DIRECTORY}/spec.json")
         token = client.V1EnvVar(
             name="INTERLOPER_RUN_TOKEN",
             value_from=client.V1EnvVarSource(secret_key_ref=client.V1SecretKeySelector(name=name, key="token")),

@@ -126,7 +126,7 @@ class TestCommand:
         run = _dispatched_run()
         run.partition_key = "2026-10-26"
 
-        argv = Launcher.command(run, "/interloper/run/spec.json")
+        argv = Launcher.command(run, "@/interloper/run/spec.json")
 
         assert argv[:5] == ["interloper", "run", "--format", "inline", "@/interloper/run/spec.json"]
         assert f"--run-id={run.id}" in argv
@@ -134,7 +134,7 @@ class TestCommand:
         assert argv[-2:] == ["--date", "2026-10-26"]
 
     def test_an_unpartitioned_run_has_no_date(self) -> None:
-        assert "--date" not in Launcher.command(_dispatched_run(), "/spec.json")
+        assert "--date" not in Launcher.command(_dispatched_run(), "@/spec.json")
 
 
 class TestDiagnoseDefault:

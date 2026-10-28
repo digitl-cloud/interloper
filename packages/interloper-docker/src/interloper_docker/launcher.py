@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import os
-import tarfile
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -23,17 +21,13 @@ from interloper_scheduler.launcher import Launcher
 
 logger = logging.getLogger(__name__)
 
-_SPEC_DIRECTORY = "/interloper/run"
-
 
 class DockerLauncher(Launcher):
     """Launches each run in its own Docker container.
 
-    The container runs ``interloper run`` on the run's DAG spec, copied into
-    it before it starts: a bind mount would need the scheduler and the Docker
-    host to share a filesystem, which a containerised scheduler does not. The
-    container holds no database credentials: it reports its events to the
-    API's ``internal_url`` with the run's token.
+    The container runs ``interloper run`` on the run's DAG spec, passed as its
+    argument. The container holds no database credentials: it reports its
+    events to the API's ``internal_url`` with the run's token.
     """
 
     @classmethod
@@ -130,59 +124,31 @@ class DockerLauncher(Launcher):
             self._volumes["/var/run/docker.sock"] = {"bind": "/var/run/docker.sock", "mode": "rw"}
 
     def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
-        """Create a container for the run, copy its spec in, and start it.
+        """Create a container for the run and start it.
 
         A container that cannot be started is removed: it holds the spec,
         and the spec holds the run's connection secrets.
 
         Args:
             run: The dispatched run.
-            spec: The DAG it executes, copied into the container.
+            spec: The DAG it executes, the container's argument.
             token: The run's token, in the container's environment.
         """
         container = self._client.containers.create(
             image=self._image,
             name=f"interloper_run_{str(run.id)[:8]}",
-            command=self.command(run, f"{_SPEC_DIRECTORY}/spec.json"),
+            command=self.command(run, spec.model_dump_json()),
             environment=self._build_environment(token),
             volumes=self._volumes or None,
             user="root" if self._runner_type == "docker" else None,
             labels={"interloper.run_id": str(run.id)},
         )
         try:
-            container.put_archive("/", self._archive(spec))
             container.start()
         except Exception:
             container.remove(force=True)
             raise
         logger.info("Started container %s for run %s", container.short_id, run.id)
-
-    @staticmethod
-    def _archive(spec: DAGSpec) -> bytes:
-        """Pack the spec, and the directory it lives in, as the tar archive Docker copies into a container's root.
-
-        Docker extracts an archive only into a directory that already exists,
-        and no image carries the spec's, so the archive brings it along.
-
-        Args:
-            spec: The run's DAG spec.
-
-        Returns:
-            The archive's bytes.
-        """
-        directory = _SPEC_DIRECTORY.lstrip("/")
-        document = spec.model_dump_json().encode()
-        buffer = io.BytesIO()
-        with tarfile.open(fileobj=buffer, mode="w") as archive:
-            folder = tarfile.TarInfo(directory)
-            folder.type = tarfile.DIRTYPE
-            folder.mode = 0o755
-            archive.addfile(folder)
-            member = tarfile.TarInfo(f"{directory}/spec.json")
-            member.size = len(document)
-            member.mode = 0o444
-            archive.addfile(member, io.BytesIO(document))
-        return buffer.getvalue()
 
     def diagnose(self, run_id: UUID) -> str | None:
         """Say why a run's container stopped, from its exit state.
