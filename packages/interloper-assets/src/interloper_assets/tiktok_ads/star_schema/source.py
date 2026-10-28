@@ -88,8 +88,6 @@ class TiktokAdsStarSchema(il.Source):
             clicks=summed["clicks"],
             cost=summed["cost"],
             currency=summed["currency"],
-            conversions=ibis.null("int64"),
-            conversion_value=ibis.null("float64"),
             purchases=summed["purchases"],
             revenue=summed["revenue"],
         )
@@ -127,8 +125,6 @@ class TiktokAdsStarSchema(il.Source):
             reach=summed["reach"],
             cost=summed["cost"],
             currency=summed["currency"],
-            conversions=ibis.null("int64"),
-            conversion_value=ibis.null("float64"),
             purchases=summed["purchases"],
             revenue=summed["revenue"],
         )
@@ -256,12 +252,10 @@ class TiktokAdsStarSchema(il.Source):
             "campaign_type",
             "budget",
             "budget_type",
-            start_date=ibis.null("date"),
-            end_date=ibis.null("date"),
-            created_at=kept["created_at"],
-            updated_at=kept["updated_at"],
-            as_of_date=kept["as_of_date"],
-            effective_status=kept["effective_status"],
+            "created_at",
+            "updated_at",
+            "as_of_date",
+            "effective_status",
         )
 
     @ibis_view(

@@ -11,9 +11,6 @@ class DimCampaigns(Schema):
     status: str | None = Field(default=None, description="Configured status, known from the entity rows only.")
     objective: str | None = Field(default=None, description="Campaign objective.")
     campaign_type: str | None = Field(default=None, description="Buying type (AUCTION, RESERVED), entity rows only.")
-    budget: float | None = Field(
-        default=None, description="NULL: Facebook reports budgets in the currency's minor units, not converted yet."
-    )
     budget_type: str | None = Field(
         default=None, description="daily or lifetime, by which budget the campaign sets; entity rows only."
     )

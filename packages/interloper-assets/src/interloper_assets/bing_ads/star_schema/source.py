@@ -10,7 +10,6 @@ from interloper_sql import ibis_view, latest, union
 from interloper_assets.bing_ads.star_schema import schemas
 
 MEASURE_COLUMNS = ("impressions", "clicks", "spend", "conversions", "revenue", "currency_code")
-INSTANT = "timestamp('UTC')"
 REPORT, FACT = 1, 2
 
 
@@ -42,10 +41,12 @@ class BingAdsStarSchema(il.Source):
     day, the campaign fact to one row per campaign and day. A goal's
     conversions arrive on rows of their own with no delivery, so the sums
     count nothing twice. Conversions are the goals the advertiser counts in
-    Bing's Conversions; Bing does not say which goals are purchases. The
-    report names every account, campaign and ad group and states their
-    status, so the dimensions take them from the latest report and fall back
-    to the facts' keys; budget and schedule wait for Bing's entity services.
+    Bing's Conversions; Bing does not say which goals are purchases, so the
+    facts publish no purchases. The report names every account, campaign and
+    ad group and states their status, so the dimensions take them from the
+    latest report and fall back to the facts' keys. Budgets, schedules and
+    timezones come only from Bing's entity services, which are not collected
+    yet, so the dimensions publish no such column.
     Days are in the Amsterdam-Berlin zone the connector requests. Every bound
     upstream's table must exist, or the view fails when it is created. Views
     are recreated on every run, so they follow the accounts bound to them; an
@@ -81,8 +82,6 @@ class BingAdsStarSchema(il.Source):
             currency=summed["currency"],
             conversions=summed["conversions"],
             conversion_value=summed["conversion_value"],
-            purchases=ibis.null("int64"),
-            revenue=ibis.null("float64"),
         )
 
     @ibis_view(
@@ -120,8 +119,6 @@ class BingAdsStarSchema(il.Source):
             currency=summed["currency"],
             conversions=summed["conversions"],
             conversion_value=summed["conversion_value"],
-            purchases=ibis.null("int64"),
-            revenue=ibis.null("float64"),
         )
 
     @ibis_view(
@@ -143,7 +140,6 @@ class BingAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 account_name=days["account_name"],
                 currency=days["currency"],
-                timezone=ibis.null("string"),
                 as_of_date=days["time_period"],
                 customer_id=days["customer_id"],
                 priority=ibis.literal(REPORT),
@@ -155,7 +151,6 @@ class BingAdsStarSchema(il.Source):
                 account_id=days["account_id"],
                 account_name=ibis.null("string"),
                 currency=days["currency"],
-                timezone=ibis.null("string"),
                 as_of_date=days["date"],
                 customer_id=ibis.null("string"),
                 priority=ibis.literal(FACT),
@@ -216,15 +211,8 @@ class BingAdsStarSchema(il.Source):
             "account_id",
             "campaign_name",
             "status",
-            objective=ibis.null("string"),
-            campaign_type=kept["campaign_type"],
-            budget=ibis.null("float64"),
-            budget_type=ibis.null("string"),
-            start_date=ibis.null("date"),
-            end_date=ibis.null("date"),
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
+            "campaign_type",
+            "as_of_date",
         )
 
     @ibis_view(
@@ -278,13 +266,7 @@ class BingAdsStarSchema(il.Source):
             "account_id",
             "ad_group_name",
             "status",
-            budget=ibis.null("float64"),
-            budget_type=ibis.null("string"),
-            start_date=ibis.null("date"),
-            end_date=ibis.null("date"),
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
+            "as_of_date",
         )
 
     @ibis_view(
@@ -345,11 +327,8 @@ class BingAdsStarSchema(il.Source):
             "ad_group_id",
             "campaign_id",
             "account_id",
-            ad_name=ibis.null("string"),
-            status=kept["status"],
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
-            ad_type=kept["ad_type"],
-            headline=kept["headline"],
+            "status",
+            "as_of_date",
+            "ad_type",
+            "headline",
         )

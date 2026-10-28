@@ -2,7 +2,7 @@
 
 How a platform's star schema is written in `interloper-assets`. Naming of the raw assets it reads is in [AGENTS.md](../../AGENTS.md#asset-naming) and their contents in [assets.md](assets.md); these rules govern the views built over them. They are binding for all produced code.
 
-A star schema is the platform's **public contract**: Looker, LEA, the cross-platform sources and client queries bind to its view names and columns. The views themselves are cheap to change (recreated on every run, no stored data, no backfill); their consumers are not. So the contract below is fixed from the first implementation, and the internals behind it are free to evolve.
+A star schema is the platform's **public contract**: Looker, LEA, the cross-platform sources and client queries bind to its view names and columns. The views themselves are cheap to change (recreated on every run, no stored data, no backfill); their consumers are not. So the names below are fixed from the first implementation: a view gains a column when its platform starts filling one, and never renames, retypes or drops one. The internals behind it are free to evolve.
 
 ## 1. Every platform publishes the same views
 
@@ -15,11 +15,15 @@ A platform's star schema source (`<platform>/star_schema/`, key `<platform>_star
 - **`dim_ads`** — where the platform has ads. One row per ad.
 - **`fact_<grain>_performance`** — optional, at most one, at the platform's native finer grain (`fact_ad_performance` on Facebook with its placement breakdown, `fact_ad_group_performance` on The Trade Desk). It serves platform-internal analysis only.
 
-Cross-platform sources (`campaign/`) bind `*.fact_campaign_performance`, `*.dim_campaigns` and `*.dim_accounts`, never the finer fact, and read columns by the names below. They stamp the platform themselves, from the upstream's source key; a platform's views carry no `platform` column. A consumer that guesses a column name (`_first(row, "campaign_name", "name", ...)`) is a contract violation, not a convenience.
+Cross-platform sources (`campaign/`) bind `*.fact_campaign_performance`, `*.dim_campaigns` and `*.dim_accounts`, never the finer fact, and read columns by the names below. They stamp the platform themselves, from the upstream's source key; a platform's views carry no `platform` column. A column one platform does not publish is absent from its view, so the cross-platform source that needs it states in its own code what stands in for it on that platform (`NULL`, or another measure), per upstream. A consumer that guesses a column name (`_first(row, "campaign_name", "name", ...)`) is a contract violation, not a convenience.
 
-## 2. Core columns are the same everywhere
+## 2. Each platform publishes what it fills, under one vocabulary
 
-Every view carries its **core** columns under exactly these names and types, then any number of **platform extras**. Core columns exist on every platform; one the platform cannot fill is `NULL`, never omitted or renamed.
+A view publishes the columns its platform fills, under exactly the names and types below and in their order, then any number of **platform extras**. Views of the same name therefore differ by platform: a column the platform cannot fill is **omitted**, never published as a column of `NULL`s. Facebook's campaign fact has no `conversions`, Bing's no `purchases`, Criteo's campaign dimension no `status`.
+
+What the platform fills is decided by the implementation, not by what is bound: a column one of the view's tiers fills (rule 5) is published even while that tier's raw asset is unbound or not yet collected, and is `NULL` on the rows the lower tiers build, as its description says. A column no tier fills is omitted until one does, which adds it to the view. The keys (`date`, `account_id`, `campaign_id` on the campaign fact; each dimension's own id, its parents' ids and `as_of_date`) are always published.
+
+`tests/test_catalog_conventions.py` checks the names, types and order over every star schema.
 
 `fact_campaign_performance`:
 
@@ -37,7 +41,7 @@ Every view carries its **core** columns under exactly these names and types, the
 | `purchases` | `int` | purchases, where the platform reports purchases as such; same window as the description states |
 | `revenue` | `float` | the value of `purchases`, in `currency` |
 
-`conversions` and `purchases` are different columns because they mean different things: a client comparing platforms reads `purchases` and `revenue`, which mean the same everywhere they are filled, and `conversions` only within one platform. A platform with no single primary conversion metric (Facebook, whose results depend on the objective) leaves `conversions` `NULL` and fills `purchases`.
+`conversions` and `purchases` are different columns because they mean different things: a client comparing platforms reads `purchases` and `revenue`, which mean the same everywhere they are published, and `conversions` only within one platform. A platform with no single primary conversion metric (Facebook, whose results depend on the objective) publishes `purchases` and no `conversions`; one that does not say which conversions are purchases (Bing) publishes `conversions` and no `purchases`.
 
 `dim_accounts`: `account_id`, `account_name`, `currency`, `timezone` (IANA name the vendor reports the account's days in), `as_of_date`.
 
@@ -45,8 +49,8 @@ Every view carries its **core** columns under exactly these names and types, the
 
 - `status` is the **configured** status, in the vendor's vocabulary; a platform that also reports an effective status carries it as the extra `effective_status`.
 - `objective`, `campaign_type` and `budget_type` hold the vendor's vocabulary. `campaign_type` is the platform's own sub-product of a campaign (Amazon's ad product, Bing's campaign type, Facebook's buying type); where it also qualifies the fact's grain it is the fact's degenerate dimension under the same name.
-- `budget` is in the account's currency, as the platform reports it; a vendor that reports minor units (Facebook) is `NULL` until the conversion is implemented with the currency's own offset, never divided by a constant.
-- `start_date` and `end_date` are the campaign's **scheduled** dates as the platform holds them, in the account's timezone (Facebook's `start_time`/`stop_time`, Snapchat's `start_time`/`end_time`), `NULL` where the platform schedules at another level (TikTok, Criteo, Bing schedule the ad group) or the organisation collects no entity snapshot. They are never derived from the days the facts show activity; a first or last active day is a different fact and gets its own name if ever needed. A vendor that reports the schedule as a local wall-clock timestamp (`2026-10-01T00:00:00+0200`) gives the date by taking the timestamp's date part, never by converting through UTC, and an empty string is `NULL`. A vendor that reports it as a UTC instant (Snapchat) gives the date with `interloper_sql.local_date(instant, timezone)` and the account's timezone from `dim_accounts`, never by casting the instant to a date: 22:00 UTC on 30 September is 1 October in Berlin. Without the account's timezone the date is `NULL`.
+- `budget` is in the account's currency, as the platform reports it; a vendor that reports minor units (Facebook) publishes no `budget` until the conversion is implemented with the currency's own offset, never divided by a constant.
+- `start_date` and `end_date` are the campaign's **scheduled** dates as the platform holds them, in the account's timezone (Facebook's `start_time`/`stop_time`, Snapchat's `start_time`/`end_time`). A platform that schedules at another level (TikTok, Criteo and Bing schedule the ad group) publishes none on its campaigns. They are never derived from the days the facts show activity; a first or last active day is a different fact and gets its own name if ever needed. A vendor that reports the schedule as a local wall-clock timestamp (`2026-10-01T00:00:00+0200`) gives the date by taking the timestamp's date part, never by converting through UTC, and an empty string is `NULL`. A vendor that reports it as a UTC instant (Snapchat) gives the date with `interloper_sql.local_date(instant, timezone)` and the account's timezone from `dim_accounts`, never by casting the instant to a date: 22:00 UTC on 30 September is 1 October in Berlin. Without the account's timezone the date is `NULL`.
 - `created_at` and `updated_at` are the vendor's instants (`dt.datetime`), known from entity rows only.
 
 `dim_ad_groups`: `ad_group_id`, `campaign_id`, `account_id`, `ad_group_name`, `status`, `budget`, `budget_type`, `start_date`, `end_date`, `created_at`, `updated_at`, `as_of_date`, with the same meanings.
@@ -55,7 +59,7 @@ Every view carries its **core** columns under exactly these names and types, the
 
 `cost` is the house word for spend, on every platform, whatever the vendor calls it. Counts are `int`, amounts and rates `float`, days `dt.date`, ids `str`, as in the raw layer.
 
-Platform extras keep the vendor's word where the raw layer has one (`ad_product`, `objective`, `marketplace_id`, `publisher_platform`) and go after the core. An extra that two platforms share by meaning gets one name on both; check the other star schemas before adding one.
+Platform extras keep the vendor's word where the raw layer has one (`ad_product`, `objective`, `marketplace_id`, `publisher_platform`) and go after the shared columns. An extra that two platforms share by meaning gets one name on both; check the other star schemas before adding one.
 
 ## 3. Facts are lean, dimensions carry the attributes
 
@@ -91,4 +95,4 @@ Dimensions are type 1: the latest row wins. `as_of_date` says which day it refle
 
 ## 8. Tests
 
-Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the core columns in order and their types, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), the empty-relation behaviour, and that a missing upstream table fails with the table name.
+Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the columns the platform omits, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), the empty-relation behaviour, and that a missing upstream table fails with the table name.

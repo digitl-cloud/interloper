@@ -17,7 +17,6 @@ MEASURE_COLUMNS = (
     "sales_client_attribution",
     "revenue_generated_client_attribution",
 )
-INSTANT = "timestamp('UTC')"
 REPORT, FACT = 1, 2
 
 
@@ -50,8 +49,9 @@ class CriteoStarSchema(il.Source):
     the advertiser's own attribution setting, its primary conversion. The
     reports name every campaign, ad set and ad, so the dimensions take their
     names from the reports and fall back to the facts' keys, so every key a
-    fact carries resolves; status, budget and schedule wait for Criteo's
-    entity endpoints. Every bound upstream's table must exist, or the view
+    fact carries resolves. Statuses, budgets and schedules come only from
+    Criteo's entity endpoints, which are not collected yet, so the dimensions
+    publish no such column. Every bound upstream's table must exist, or the view
     fails when it is created. Views are recreated on every run, so they
     follow the advertisers bound to them; an advertiser added to the
     organisation is absent until it is bound.
@@ -134,9 +134,7 @@ class CriteoStarSchema(il.Source):
         days = table.group_by(["account_id", "date"]).aggregate(currency=table["currency"].max())
         rows = days.select(
             account_id=days["account_id"],
-            account_name=ibis.null("string"),
             currency=days["currency"],
-            timezone=ibis.null("string"),
             as_of_date=days["date"],
         )
         return latest(rows, "account_id", rows["as_of_date"].desc())
@@ -180,16 +178,7 @@ class CriteoStarSchema(il.Source):
             "campaign_id",
             "account_id",
             "campaign_name",
-            status=ibis.null("string"),
-            objective=ibis.null("string"),
-            campaign_type=ibis.null("string"),
-            budget=ibis.null("float64"),
-            budget_type=ibis.null("string"),
-            start_date=ibis.null("date"),
-            end_date=ibis.null("date"),
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
+            "as_of_date",
         )
 
     @ibis_view(
@@ -238,14 +227,7 @@ class CriteoStarSchema(il.Source):
             "campaign_id",
             "account_id",
             "ad_group_name",
-            status=ibis.null("string"),
-            budget=ibis.null("float64"),
-            budget_type=ibis.null("string"),
-            start_date=ibis.null("date"),
-            end_date=ibis.null("date"),
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
+            "as_of_date",
         )
 
     @ibis_view(
@@ -301,8 +283,5 @@ class CriteoStarSchema(il.Source):
             "campaign_id",
             "account_id",
             "ad_name",
-            status=ibis.null("string"),
-            created_at=ibis.null(INSTANT),
-            updated_at=ibis.null(INSTANT),
-            as_of_date=kept["as_of_date"],
+            "as_of_date",
         )

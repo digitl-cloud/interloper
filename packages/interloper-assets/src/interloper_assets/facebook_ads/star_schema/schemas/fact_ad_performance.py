@@ -20,8 +20,6 @@ class FactAdPerformance(Schema):
     reach: int | None = Field(default=None, description="People who saw the ad; not additive across days.")
     cost: float | None = Field(default=None, description="Amount spent, in the account currency.")
     currency: str | None = Field(default=None, description="Currency of every amount in the row.")
-    conversions: int | None = Field(default=None, description="NULL, see the campaign fact.")
-    conversion_value: float | None = Field(default=None, description="NULL, see the campaign fact.")
     purchases: int | None = Field(
         default=None,
         description="Facebook purchase actions under the account's attribution setting "

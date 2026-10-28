@@ -19,5 +19,3 @@ class FactAdPerformance(Schema):
     currency: str | None = Field(default=None, description="Currency of every amount in the row.")
     conversions: int | None = Field(default=None, description="Bing conversions, see the campaign fact.")
     conversion_value: float | None = Field(default=None, description="Revenue of the conversions, in currency.")
-    purchases: int | None = Field(default=None, description="NULL, see the campaign fact.")
-    revenue: float | None = Field(default=None, description="NULL, see the campaign fact.")

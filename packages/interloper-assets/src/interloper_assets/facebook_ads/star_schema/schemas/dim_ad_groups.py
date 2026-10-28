@@ -10,7 +10,6 @@ class DimAdGroups(Schema):
     account_id: str | None = Field(default=None, description="Ad account the ad set belongs to.")
     ad_group_name: str | None = Field(default=None, description="Ad set name.")
     status: str | None = Field(default=None, description="NULL until an ad sets entity is collected.")
-    budget: float | None = Field(default=None, description="NULL until an ad sets entity is collected.")
     budget_type: str | None = Field(default=None, description="NULL until an ad sets entity is collected.")
     start_date: dt.date | None = Field(default=None, description="NULL until an ad sets entity is collected.")
     end_date: dt.date | None = Field(default=None, description="NULL until an ad sets entity is collected.")
