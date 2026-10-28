@@ -1,46 +1,45 @@
 """Hydration: turns component rows into live framework components.
 
-A row becomes a ``Spec`` tree (:meth:`Hydrator.build_component_spec`), which
-``Component.from_spec`` reconstructs; :meth:`Hydrator.load` does both and
-fails closed on drift. Whether a key resolves is asked of the catalog
-directly: hydration needs a yes or no, while the descriptive status a
-response shows (disabled, missing, unreadable) is the row store's
+A row's component is built directly: its class from the catalog, its init
+from its config, the targets of its relations hydrated first and handed to
+the constructor, and a source's children as the ``assets`` override map the
+source builds its instances from. A target that is itself owned by a source
+(an asset) cannot be handed to a constructor, since its own source is the
+unit of construction: it is bound once it exists, after that source has
+been hydrated within the same call.
+
+One cache backs a whole call (see :meth:`Hydrator._load`), so a component
+reached several times (a destination two sources share, a job's own target
+reached again through a cross-source upstream) hydrates once and every
+consumer binds the identical instance. Hydration fails closed on catalog
+drift. Whether a key resolves is asked of the catalog directly: hydration
+needs a yes or no, while the descriptive status a response shows
+(disabled, missing, unreadable) is the row store's
 :meth:`~interloper_db.store.components.base.ComponentStore.read`.
-
-One builder covers every kind: a component's init is its ``config`` (or its
-decrypted ``data`` for secret-bearing kinds) plus whatever its outgoing
-relations and children contribute. Relations are read by name and checked
-against the row's own vocabulary (the catalog class's declaration, the
-kind's anchor as drift fallback), so the walk needs no kind dispatch: an
-asset simply holds no ``targets`` edges, a destination no upstream ones.
-
-A target is written out by the rule ``Component.to_spec`` follows: one
-owned by a source travels inside that source's own spec, so it is always a
-``{"ref": id}``, and a parentless one is written out in full the first time
-the walk reaches it and referenced afterwards. Resolving a reference the
-document does not carry is resolved through :meth:`Hydrator.load` itself,
-within the same call.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 import interloper as il
 from interloper.catalog import Catalog
-from interloper.errors import CatalogKeyError, format_exception
-from interloper.serializable import Spec
+from interloper.errors import format_exception
 from interloper.source import SourceDefinition
 from interloper.telemetry import attributes
 from interloper.telemetry.tracer import tracer
 from sqlalchemy import Engine
-from sqlmodel import select
+from sqlmodel import col, select
 
 from interloper_db.errors import ComponentDriftError, HydrationError, NotFoundError
 from interloper_db.models import Component, ComponentRelation
 from interloper_db.session import session_scope
+
+Cache = dict[UUID, il.Component]
+Chain = tuple[tuple[UUID, str], ...]
+Owed = list[tuple[UUID, str, list[UUID]]]
 
 
 class Hydrator:
@@ -67,14 +66,8 @@ class Hydrator:
     def load(self, component_id: UUID) -> il.Component:
         """Hydrate a framework component of any kind from its row.
 
-        Source-owned assets hydrate through their parent source and are
-        extracted from it; jobs drift-check every target first. One cache
-        backs the whole call (see :meth:`_load`), so a component reached
-        several times within the same document (a job's own target and,
-        through a cross-source upstream, that same target again) hydrates
-        once and every consumer binds the identical instance. Fails closed
-        on any catalog drift: see :meth:`_load` for what a missing row, a
-        drifted key or a failed reconstruction raises.
+        Source-owned assets hydrate through their parent source; jobs
+        drift-check every target first.
 
         Args:
             component_id: The component UUID.
@@ -85,69 +78,32 @@ class Hydrator:
         with tracer().start_as_current_span(
             "interloper.store.load", attributes={attributes.TARGET_ID: str(component_id)}
         ):
-            return self._load(component_id, {})
-
-    def build_component_spec(self, db_component: Component, *, seen: set[str] | None = None) -> Spec:
-        """Build a spec for a component row of any kind.
-
-        Args:
-            db_component: The component row.
-            seen: Ids the walk has already written out in full, extended with
-                this row's own. One set is shared by every spec of a document,
-                which is what turns a repeated target into a reference.
-                Defaults to ``None``, which starts a document of this row alone.
-
-        Returns:
-            A ``Spec`` with the row's ``id`` and a fully resolved
-            init payload (nested components as nested specs).
-        """
-        with session_scope(self._engine):
-            init = self._build_init(db_component, seen=seen)
-            path = self._resolve_path(db_component)
-        return Spec(
-            path=path,
-            id=str(db_component.id) if db_component.id else "",
-            init=init or None,
-        )
+            return self._load(component_id, {}, ())
 
     # -- Internals -------------------------------------------------------------
 
-    def _load(
-        self,
-        component_id: UUID,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...] = (),
-    ) -> il.Component:
+    def _load(self, component_id: UUID, cache: Cache, chain: Chain) -> il.Component:
         """Hydrate a component row (the traced body of :meth:`load`).
 
-        A spec reference (``{"ref": id}``) is resolved from the document
-        first, which reconstruction does on its own, and only then through
-        :meth:`_resolve_reference`, which re-enters here with the same
-        *cache* and *chain* rather than starting a fresh call: a job that
-        targets both a source and a consumer of that source's asset holds
-        one instance of it, not two, and an owned asset's parent (loaded
-        through :meth:`_load_owned_asset`) shares the cache the same way.
-        *chain* is the trail of ids currently being hydrated, paired with
-        the catalog key each was hydrated under; a reference back onto one
-        of them is a cycle, reported from the trail rather than left to
-        exhaust the stack.
+        *chain* is the trail of ids currently being hydrated, paired with the
+        catalog key each was hydrated under; a relation back onto one of them
+        is a cycle, reported from the trail rather than left to exhaust the
+        stack.
 
         Args:
             component_id: The component UUID.
             cache: Components already hydrated within this :meth:`load` call,
                 by id, consulted before doing any work.
             chain: Ids currently being hydrated in this call, in resolution
-                order. Defaults to ``()``, the top-level call's empty trail.
+                order.
 
         Returns:
             The reconstructed framework component.
 
         Raises:
             NotFoundError: If the component is not found.
-            ComponentDriftError: If a catalog key no longer resolves.
-            HydrationError: If the stored payload does not decrypt, if
-                reconstruction fails, or if a reference revisits an id
-                already being hydrated earlier in the same call.
+            HydrationError: If a relation revisits an id already being
+                hydrated earlier in the same call.
         """
         if component_id in cache:
             return cache[component_id]
@@ -165,58 +121,24 @@ class Hydrator:
                 self._check_resolves(db_component)
                 if db_component.kind == "job":
                     self._check_job_targets(db_component)
-                spec = self.build_component_spec(db_component)
 
-        # Reconstruction happens outside the session: it imports classes and,
-        # for owned assets, recursively loads the parent source.
         chain = (*chain, (component_id, db_component.key))
         if owned_asset:
-            component = self._load_owned_asset(db_component.parent_id, db_component.key, component_id, cache, chain)
-        else:
+            return self._load_owned_asset(db_component, cache, chain)
+        return self._build(db_component, cache, chain)
 
-            def resolve(reference: str) -> il.Component:
-                return self._load(UUID(reference), cache, chain)
-
-            try:
-                component = il.Component.from_spec(spec, resolve=resolve)
-            except (ComponentDriftError, NotFoundError):
-                # A dedicated handler (the API's drift endpoint, say) needs to
-                # tell these apart from a generic hydration failure, so they
-                # pass through untouched rather than folding into the catch-all.
-                raise
-            except Exception as e:
-                # format_exception, never str(e): a ValidationError here carries the
-                # decrypted payload of sensitive kinds in its input_value dumps, and
-                # this message is persisted into run events and shown in the UI.
-                raise HydrationError(
-                    f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): "
-                    f"{format_exception(e)}"
-                ) from e
-        cache[component_id] = component
-        return component
-
-    def _load_owned_asset(
-        self,
-        parent_id: UUID,
-        key: str,
-        asset_id: UUID,
-        cache: dict[UUID, il.Component],
-        chain: tuple[tuple[UUID, str], ...],
-    ) -> il.Asset:
+    def _load_owned_asset(self, db_asset: Component, cache: Cache, chain: Chain) -> il.Component:
         """Hydrate a source-owned asset through its parent source.
 
-        The parent source is the unit of reconstruction: loading it binds all
-        its assets, and the child is picked out by key. The parent loads
-        through the same *cache* and *chain* as the asset itself, so a
-        source hydrates once even when several of its owned assets are each
-        reached independently within one :meth:`load` call.
+        The parent source is the unit of construction: hydrating it builds
+        and caches every asset it declares, so the child is read back from
+        the cache. The parent loads through the same *cache* and *chain* as
+        the asset itself, so a source hydrates once even when several of its
+        owned assets are each reached independently within one call.
 
         Args:
-            parent_id: UUID of the owning source component.
-            key: Catalog key of the asset to pick out of the source.
-            asset_id: UUID of the asset row, for the drift error message.
-            cache: Components already hydrated within the enclosing
-                :meth:`load` call.
+            db_asset: The asset row, owned by a source.
+            cache: Components already hydrated within the enclosing call.
             chain: Ids currently being hydrated in the enclosing call.
 
         Returns:
@@ -225,13 +147,138 @@ class Hydrator:
         Raises:
             ComponentDriftError: If the source no longer declares the key.
         """
-        source = cast(il.Source, self._load(parent_id, cache, chain))
-        for asset in source.assets:
-            if asset.key == key:
-                return asset
-        raise ComponentDriftError(
-            f"Asset '{key}' ({asset_id}) is no longer declared by source '{source.key}'; its catalog key has drifted."
+        assert db_asset.parent_id is not None
+        source = self._load(db_asset.parent_id, cache, chain)
+        asset = cache.get(db_asset.id)
+        if asset is None:
+            raise ComponentDriftError(
+                f"Asset '{db_asset.key}' ({db_asset.id}) is no longer declared by source '{source.key}'; "
+                "its catalog key has drifted."
+            )
+        return asset
+
+    def _build(self, db_component: Component, cache: Cache, chain: Chain) -> il.Component:
+        """Construct a parentless row's component, bind what exists only once it does, and check it.
+
+        Args:
+            db_component: The component row, parentless.
+            cache: Components already hydrated within the enclosing call; the
+                component and the children it owns join it here.
+            chain: Ids currently being hydrated in the enclosing call.
+
+        Returns:
+            The component, its relations bound and checked.
+
+        Raises:
+            ComponentDriftError: If a target's catalog key no longer resolves.
+            NotFoundError: If a target row is gone.
+            HydrationError: If the stored payload does not decrypt, or the
+                class refuses it or the bound relations.
+        """
+        cls = il.Component.resolve_key(db_component.qualified_key, self._catalog)
+        init, owed = self._init(db_component, cache, chain)
+        try:
+            component = cls(**init)
+            cache[db_component.id] = component
+            for child in component.owned:
+                cache[UUID(child.id)] = child
+            for owner_id, name, target_ids in owed:
+                cache[owner_id].bind(name, *(self._load(target_id, cache, chain) for target_id in target_ids))
+            component.validate_relations()
+        except (ComponentDriftError, HydrationError, NotFoundError):
+            raise
+        except Exception as e:
+            # format_exception, never str(e): a ValidationError here carries the
+            # decrypted payload of sensitive kinds in its input_value dumps, and
+            # this message is persisted into run events and shown in the UI.
+            raise HydrationError(
+                f"Failed to hydrate {db_component.kind} '{db_component.key}' ({db_component.id}): {format_exception(e)}"
+            ) from e
+        return component
+
+    def _init(self, db_component: Component, cache: Cache, chain: Chain) -> tuple[dict[str, Any], Owed]:
+        """The constructor arguments of a row, and the bindings owed once the component exists.
+
+        The row's config, then each relation name the row holds edges under,
+        a list when the declared relation is ``many`` and a single value
+        otherwise: a parentless target is hydrated and handed over, an owned
+        one (an asset) is owed, since its source is built as a whole. A
+        source's children embed as the ``assets`` override map, their own
+        config and relations read the same way; a child the parent's
+        declaration has dropped is refused as drift by :meth:`_check_declared`
+        before its relations are read, since those are declared by the class
+        the child no longer belongs to.
+
+        Args:
+            db_component: The component row.
+            cache: Components already hydrated within the enclosing call.
+            chain: Ids currently being hydrated in the enclosing call.
+
+        Returns:
+            The keyword arguments to construct with, and the bindings owed as
+            ``(owner row id, relation name, target row ids)``.
+
+        Raises:
+            HydrationError: If the row holds edges under a relation name its
+                class does not declare, or holds more than one row under a
+                relation its class declares single-valued.
+        """
+        init: dict[str, Any] = {"id": str(db_component.id), **db_component.read_config(self._decrypt)}
+        vocabulary = self._catalog.vocabulary(db_component.kind, db_component.qualified_key)
+        owed: Owed = []
+        for name, targets in self._targets(db_component.id).items():
+            relation = vocabulary.get(name)
+            if relation is None:
+                raise HydrationError(
+                    f"Component {db_component.id} ({db_component.kind}) has '{name}' relations "
+                    "its class does not declare"
+                )
+            if not relation.many and len(targets) > 1:
+                raise HydrationError(
+                    f"Component {db_component.id} ({db_component.kind}) holds {len(targets)} rows under "
+                    f"single-valued relation '{name}'"
+                )
+            built = [self._load(target.id, cache, chain) for target in targets if target.parent_id is None]
+            owned = [target.id for target in targets if target.parent_id is not None]
+            if built:
+                init[name] = built if relation.many else built[0]
+            if owned:
+                owed.append((db_component.id, name, owned))
+
+        children_statement = (
+            select(Component).where(Component.parent_id == db_component.id).order_by(col(Component.created_at))
         )
+        assets: dict[str, Any] = {}
+        with session_scope(self._engine) as session:
+            for child in session.exec(children_statement).all():
+                self._check_declared(db_component, child)
+                child_init, child_owed = self._init(child, cache, chain)
+                assets[child.key] = child_init
+                owed.extend(child_owed)
+        if assets:
+            init["assets"] = assets
+        return init, owed
+
+    def _targets(self, src_id: UUID) -> dict[str, list[Component]]:
+        """The rows a component's outgoing relations point at, by relation name, ordered stably.
+
+        Args:
+            src_id: The source component's id.
+
+        Returns:
+            A ``{name: target rows}`` mapping ordered by ``(name, dst_id)``.
+        """
+        statement = (
+            select(ComponentRelation.name, Component)
+            .join(Component, col(Component.id) == col(ComponentRelation.dst_id))
+            .where(ComponentRelation.src_id == src_id)
+            .order_by(col(ComponentRelation.name), col(ComponentRelation.dst_id))
+        )
+        grouped: dict[str, list[Component]] = {}
+        with session_scope(self._engine) as session:
+            for name, target in session.exec(statement).all():
+                grouped.setdefault(name, []).append(target)
+        return grouped
 
     def _check_job_targets(self, db_job: Component) -> None:
         """Fail closed when any job target's catalog key no longer resolves.
@@ -239,14 +286,8 @@ class Hydrator:
         Args:
             db_job: The job row being hydrated.
         """
-        statement = select(ComponentRelation).where(
-            ComponentRelation.src_id == db_job.id, ComponentRelation.name == "targets"
-        )
-        with session_scope(self._engine) as session:
-            for relation in session.exec(statement).all():
-                target = session.get(Component, relation.dst_id)
-                if target is not None:
-                    self._check_resolves(target, subject=f"Job '{db_job.name}' ({db_job.id})")
+        for target in self._targets(db_job.id).get("targets", []):
+            self._check_resolves(target, subject=f"Job '{db_job.name}' ({db_job.id})")
 
     def _check_resolves(self, db_component: Component, *, subject: str | None = None) -> None:
         """Fail closed when a row's key does not resolve in this deployment's catalog.
@@ -268,79 +309,12 @@ class Hydrator:
             )
         raise ComponentDriftError(f"{subject} cannot be hydrated: target {row} does not resolve in this deployment.")
 
-    def _build_init(self, db_component: Component, *, seen: set[str] | None = None) -> dict[str, Any]:
-        """Build the init payload for a component row.
-
-        Each relation name the row holds edges under sits in the payload
-        under that name, a list when the declared relation is ``many`` and a
-        single value otherwise. Children are the one non-relation
-        contribution: they embed as the ``assets`` override map, since the
-        parent source is the unit of reconstruction. A child the parent's
-        declaration has dropped is refused as drift by :meth:`_check_declared`
-        before its own relations are read: those rows are declared by the
-        class the child no longer belongs to, so reading them would report
-        the parent's drift as an undeclared relation name on the child.
-
-        Args:
-            db_component: The component row whose init payload is built.
-            seen: Ids the walk has already written out in full, extended with
-                this row's own before anything else runs (so a cycle back
-                onto it is caught the same way whether this is the top of the
-                walk or a nested call). Defaults to ``None``, which starts a
-                document of this row alone.
-
-        Returns:
-            A dict suitable for use as a ``Spec.init``.
-
-        Raises:
-            HydrationError: If the row holds edges under a relation name its
-                class does not declare, or holds more than one row under a
-                relation its class declares single-valued.
-        """
-        seen = set() if seen is None else seen
-        seen.add(str(db_component.id) if db_component.id else "")
-        init = db_component.read_config(self._decrypt)
-        vocabulary = self._catalog.vocabulary(db_component.kind, db_component.qualified_key)
-        for name, rows in self._relations_by_name(db_component.id).items():
-            relation = vocabulary.get(name)
-            if relation is None:
-                raise HydrationError(
-                    f"Component {db_component.id} ({db_component.kind}) has '{name}' relations "
-                    "its class does not declare"
-                )
-            values = [self._dst_value(row, seen) for row in rows]
-            if relation.many:
-                init[name] = values
-            elif len(values) > 1:
-                raise HydrationError(
-                    f"Component {db_component.id} ({db_component.kind}) holds {len(values)} rows under "
-                    f"single-valued relation '{name}'"
-                )
-            else:
-                init[name] = values[0]
-
-        children_statement = (
-            select(Component).where(Component.parent_id == db_component.id).order_by(Component.created_at)  # ty: ignore[invalid-argument-type]
-        )
-        assets: dict[str, Any] = {}
-        with session_scope(self._engine) as session:
-            for child in session.exec(children_statement).all():
-                self._check_declared(db_component, child)
-                assets[child.key] = {"id": str(child.id), **self._build_init(child, seen=seen)}
-        if assets:
-            init["assets"] = assets
-
-        return init
-
     def _check_declared(self, db_parent: Component, db_child: Component) -> None:
         """Refuse a child row whose key its parent no longer declares.
 
-        The question a row's qualified key asks of the catalog, asked here
-        of the parent's whole child set: the
-        catalog's own declaration of the parent is authoritative, and a child
-        outside it has drifted out of the source. A parent that does not
-        resolve as a source declares nothing to check against, and is left to
-        :meth:`_resolve_path` to report.
+        The catalog's own declaration of the parent is authoritative, and a
+        child outside it has drifted out of the source. A parent that does
+        not resolve as a source declares nothing to check against.
 
         Args:
             db_parent: The owning component row, whose declaration decides.
@@ -358,75 +332,3 @@ class Hydrator:
                 f"Asset '{db_child.key}' ({db_child.id}) is no longer declared by source "
                 f"'{db_parent.key}' ({db_parent.id}); its catalog key has drifted."
             )
-
-    def _relations_by_name(self, src_id: UUID | None) -> dict[str, list[ComponentRelation]]:
-        """Group a component's outgoing relations by name, ordered stably.
-
-        Args:
-            src_id: The source component's id, or ``None`` for an unflushed row.
-
-        Returns:
-            A ``{name: relations}`` mapping ordered by ``(name, dst_id)``, or
-            ``{}`` when ``src_id`` is ``None``.
-        """
-        if src_id is None:
-            return {}
-        statement = (
-            select(ComponentRelation)
-            .where(ComponentRelation.src_id == src_id)
-            .order_by(ComponentRelation.name, ComponentRelation.dst_id)  # ty: ignore[invalid-argument-type]
-        )
-        with session_scope(self._engine) as session:
-            rows = session.exec(statement).all()
-        grouped: dict[str, list[ComponentRelation]] = {}
-        for row in rows:
-            grouped.setdefault(row.name, []).append(row)
-        return grouped
-
-    def _dst_value(self, row: ComponentRelation, seen: set[str]) -> dict[str, Any]:
-        """Write out one edge's destination, in full or as a reference.
-
-        Args:
-            row: The edge whose ``dst_id`` is written out.
-            seen: Ids the walk has already written out in full, extended with
-                the destination's own when it is written out here.
-
-        Returns:
-            The destination's own spec as a JSON-able mapping, or the
-            ``{"ref": id}`` reference standing in for it.
-
-        Raises:
-            HydrationError: If the edge points at a component row that does
-                not exist.
-        """
-        with session_scope(self._engine) as session:
-            db_dst = session.get(Component, row.dst_id)
-            if db_dst is None:  # defensive: FKs make this unreachable
-                raise HydrationError(
-                    f"Relation {row.src_id} -[{row.name}]-> {row.dst_id} points at a missing component"
-                )
-            if db_dst.parent_id is not None or str(db_dst.id) in seen:
-                return Spec.reference(str(db_dst.id))
-            return self.build_component_spec(db_dst, seen=seen).model_dump(mode="json")
-
-    def _resolve_path(self, db_component: Component) -> str:
-        """Look up a component's import path via the catalog.
-
-        A source-owned asset resolves through its parent, whose declaration
-        carries the composite path (``module:Source.Asset``) the flat key
-        cannot name. An asset row referenced as a relation destination (a job
-        target, a hook watch) therefore builds a reconstructible spec.
-
-        Args:
-            db_component: The component row whose import path is resolved.
-
-        Returns:
-            The resolved import path.
-
-        Raises:
-            CatalogKeyError: If the catalog has no entry for the row's key.
-        """
-        definition = self._catalog.get(db_component.qualified_key)
-        if not definition:
-            raise CatalogKeyError(f"Unknown {db_component.kind} key: {db_component.key}")
-        return definition.path
