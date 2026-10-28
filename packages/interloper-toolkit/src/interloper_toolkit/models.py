@@ -27,6 +27,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
+from interloper.connection import CheckResult
 from interloper_db.models import Backfill, Component, Event, Execution, Run
 from interloper_db.store.insights import (
     Activity,
@@ -293,7 +294,7 @@ class ConnectionSetup(UserRequest):
     setup_url: str | None = None
 
 
-class ConnectionCheck(BaseModel):
+class ConnectionCheck(CheckResult):
     """The outcome of a connection's health check.
 
     ``live`` is false when the type implements no check and only hydration
@@ -303,10 +304,6 @@ class ConnectionCheck(BaseModel):
 
     status: Literal["success"] = "success"
     connection: ComponentRef
-    ok: bool
-    live: bool
-    category: str | None = None
-    message: str | None = None
 
 
 class BindResult(BaseModel):

@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 import os
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 import httpx2
 from pydantic import BaseModel, Field, model_validator
 
-from interloper.errors import format_exception
+from interloper.errors import ConnectionCheckError, format_exception
 from interloper.oauth import PROVIDERS, OAuthAppCredentials, OAuthConfig
 from interloper.operation import Operation, OperationContext, OperationResult
 from interloper.resource import InputField, Resource, ResourceDefinition, SecretField
 from interloper.retry import RetryPolicy
 from interloper.utils.concurrency import invoke
+
+logger = logging.getLogger(__name__)
 
 #: Hard cap on one credential exchange — a renewal must never hold a run pod hostage.
 _RENEWAL_TIMEOUT = 60
@@ -59,6 +62,54 @@ class Renewal(BaseModel):
 
     fields: dict[str, str] = Field(default_factory=dict)
     expires_in: int | None = None
+
+
+CheckCategory = Literal["config", "auth", "network", "error"]
+
+
+class CheckResult(BaseModel):
+    """What a connection's check came to.
+
+    ``live`` is false when the class implements no check, so only the
+    connection's construction was verified. ``category`` classes a failure
+    so a surface can hint at a fix: bad ``config`` values, rejected ``auth``,
+    an unreachable ``network``, or an uncategorised ``error``.
+    """
+
+    ok: bool
+    live: bool
+    category: CheckCategory | None = None
+    message: str | None = None
+
+    @classmethod
+    def from_failure(cls, error: Exception) -> CheckResult:
+        """The result of a live check that raised, categorised as `Connection.check` documents.
+
+        Raw provider errors may carry URLs with tokens, and the message
+        reaches a browser or a model: only curated messages leave here.
+
+        Args:
+            error: The exception the check raised.
+
+        Returns:
+            The failed result.
+        """
+        if isinstance(error, ConnectionCheckError):
+            return cls(ok=False, live=True, category="error", message=str(error))
+        if isinstance(error, httpx2.HTTPStatusError):
+            if error.response.status_code in (401, 403):
+                return cls(ok=False, live=True, category="auth", message="The provider rejected the credentials.")
+            return cls(
+                ok=False,
+                live=True,
+                category="error",
+                message=f"The provider responded with HTTP {error.response.status_code}.",
+            )
+        if isinstance(error, (TimeoutError, httpx2.TimeoutException)):
+            return cls(ok=False, live=True, category="network", message="The provider did not respond in time.")
+        if isinstance(error, httpx2.TransportError):
+            return cls(ok=False, live=True, category="network", message="The provider could not be reached.")
+        return cls(ok=False, live=True, category="error", message="The connection check failed unexpectedly.")
 
 
 class Connection(Resource, Operation):
@@ -131,6 +182,30 @@ class Connection(Resource, Operation):
             True when the class overrides the base hook.
         """
         return cls.check is not Connection.check
+
+    async def verify(self, *, timeout: float) -> CheckResult:
+        """Run `check` within a deadline and say what it came to.
+
+        A class without a check is verified by its construction alone. A
+        check that raises has failed, its error categorised and logged here
+        in full; one that returns ``False`` failed for no stated reason.
+
+        Args:
+            timeout: Seconds the check may take.
+
+        Returns:
+            The result.
+        """
+        if not self.checkable():
+            return CheckResult(ok=True, live=False)
+        try:
+            ok = bool(await asyncio.wait_for(invoke(self.check), timeout=timeout))
+        except Exception as error:  # noqa: BLE001 - a failed check is a result, never a raise
+            logger.error("Connection check failed for '%s': %s", self.key, error)
+            return CheckResult.from_failure(error)
+        if not ok:
+            return CheckResult(ok=False, live=True, category="error", message="The connection check failed.")
+        return CheckResult(ok=True, live=True)
 
     def renew(self) -> Renewal:
         """Renew this connection's credentials before they age out.
