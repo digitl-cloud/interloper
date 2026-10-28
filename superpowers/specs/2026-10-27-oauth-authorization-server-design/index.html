@@ -1,0 +1,2550 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="The ultra-portable data asset framework">
+      
+      
+        <meta name="author" content="Digitl Cloud">
+      
+      
+        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-27-oauth-authorization-server-design/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/favicon.png">
+      <meta name="generator" content="zensical-0.0.62">
+    
+    
+      
+        <title>OAuth authorization server, user-level credentials, organisation in the address - Interloper</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#oauth-authorization-server-user-level-credentials-organisation-in-the-address" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Interloper
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              OAuth authorization server, user-level credentials, organisation in the address
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+    
+      
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  Getting started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../tutorial/" class="md-tabs__link">
+        
+  
+  Tutorial
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../guide/assets/" class="md-tabs__link">
+          
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../ui/" class="md-tabs__link">
+          
+  
+  Web UI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../extending/components/" class="md-tabs__link">
+          
+  
+  Extending
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+      
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../reference/settings/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+    
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+      
+  <img src="../../../assets/logo.svg" alt="Interloper">
+
+    </a>
+    Interloper
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/digitl-cloud/interloper" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.3.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Tutorial
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/decorators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Decorator options
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Dependencies
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/views/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Views & references
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & configs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/oauth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OAuth providers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/fields/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & data contracts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/normalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/backfilling/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Backfilling
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events & logging
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Specs & serialization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/telemetry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Telemetry
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/ecosystem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Ecosystem
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../guide/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Claude Code plugin
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../ui/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Web UI
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Web UI
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/definitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../ui/running/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Running the app
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Extending
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Extending
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Component model
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/representations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Representations & conformers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/runners/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Runners
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Operations & workloads
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../extending/entry-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Entry points & registries
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Settings
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  CLI
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/components/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Assets
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Sources
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/destinations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Destinations
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connections & OAuth
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Resources & fields
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jobs & hooks
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/partitioning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Partitioning
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Execution
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Schemas & normalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/rest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  REST client
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/catalog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Catalog & specs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Events
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Errors
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../reference/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Utilities
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+  
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+  
+
+
+<h1 id="oauth-authorization-server-user-level-credentials-organisation-in-the-address">OAuth authorization server, user-level credentials, organisation in the address<a class="headerlink" href="#oauth-authorization-server-user-level-credentials-organisation-in-the-address" title="Permanent link">&para;</a></h1>
+<h2 id="why">Why<a class="headerlink" href="#why" title="Permanent link">&para;</a></h2>
+<p>interloper is getting a public Slack app: people install it in their own Slack workspace and talk to the
+interloper agent there, with exactly the rights they hold on the platform. The Slack backend is treated as a
+third party from day one: it never touches the database or the agent, it calls the API with a token per
+linked user, like any other client. That needs interloper to issue tokens to clients, which is also what
+MCP connectors (claude.ai, ChatGPT) have been waiting for (ITLPR-131).</p>
+<p>Building that on today's auth model would pile up special cases: login sessions and personal access tokens
+are separate tables with separate lookups, each pinned to one organisation, and a third and fourth kind of
+token would join them. This design first makes two rules true everywhere, then adds the authorization server
+on top:</p>
+<ol>
+<li><strong>A credential identifies a user, and nothing else.</strong></li>
+<li><strong>The thing being acted on names its organisation</strong>: the app URL, the API path, the MCP tool call, the
+   agent conversation.</li>
+</ol>
+<p>The Slack app itself is a separate, later design. This one delivers everything it builds on.</p>
+<h2 id="goals">Goals<a class="headerlink" href="#goals" title="Permanent link">&para;</a></h2>
+<ul>
+<li>One credential store and one resolver for everything that authenticates a request: login sessions,
+  personal access tokens, OAuth access tokens. Secret in, profile out.</li>
+<li>The organisation is part of the address on every surface, so one user works across organisations side by
+  side (two tabs, two Slack threads, one MCP connection).</li>
+<li>An OAuth 2.1 authorization server in <code>interloper-api</code>: authorization code with mandatory PKCE, rotating
+  refresh tokens, dynamic client registration (RFC 7591), revocation (RFC 7009), server metadata
+  (RFC 8414). The consent leg reuses the existing Google login.</li>
+<li>MCP accepts OAuth tokens and becomes multi-organisation; claude.ai custom connectors connect without a
+  pasted PAT.</li>
+<li>Users see and revoke the apps they authorised, next to their PATs.</li>
+</ul>
+<h2 id="non-goals">Non-goals<a class="headerlink" href="#non-goals" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The Slack app (install flow, event handling, account linking UI, Block Kit rendering): next design.</li>
+<li>OAuth scopes. A token acts with the user's live role in each organisation, exactly as the app does
+  (decided). Revisit only if a client ever needs less than the user's rights.</li>
+<li>Questions that span organisations within one agent conversation. A conversation belongs to one
+  organisation.</li>
+<li>Client ID Metadata Documents. claude.ai supports both CIMD and DCR out of the box
+  (<a href="https://www.claude.com/docs/connectors/building/authentication">Anthropic connector docs</a>); DCR ships
+  first because Authlib implements it. CIMD can follow if a client needs it.</li>
+<li>Moving Google login onto Authlib's client. Optional cleanup, later.</li>
+<li>Redirects from an organisation's old slug after a rename.</li>
+</ul>
+<h2 id="anti-goals">Anti-goals<a class="headerlink" href="#anti-goals" title="Permanent link">&para;</a></h2>
+<ul>
+<li>An adapter or compatibility layer left behind between steps. Each step lands whole.</li>
+<li>A hand-rolled OAuth protocol implementation.</li>
+<li>Any path where a credential, rather than the request, decides the organisation.</li>
+<li>A write landing in an organisation the caller did not name.</li>
+</ul>
+<h2 id="decisions">Decisions<a class="headerlink" href="#decisions" title="Permanent link">&para;</a></h2>
+<h3 id="credentials">Credentials<a class="headerlink" href="#credentials" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Login sessions, personal access tokens and OAuth access tokens become kinds of one row in one table
+  (working name <code>tokens</code>, model <code>Token</code>, replacing <code>sessions</code> and <code>personal_access_tokens</code>). Shared columns:
+  <code>user_id</code>, <code>kind</code> (<code>session</code>, <code>personal</code>, <code>access</code>), <code>client_id</code> (OAuth client, access tokens only),
+  <code>name</code> (personal tokens), <code>resource</code> (access tokens only, below), <code>token_prefix</code>, <code>token_hash</code>,
+  <code>expires_at</code>, <code>last_used_at</code>, <code>revoked_at</code>, <code>created_at</code>. No <code>organisation_id</code>.</li>
+<li><strong>Each surface accepts only its kinds.</strong> The MCP spec requires a server to reject tokens issued for
+  another audience, so an access token is bound to the resource the client named (RFC 8707 <code>resource</code>
+  parameter: the API or the MCP server) and only that surface accepts it. The cookie accepts <code>session</code>
+  only; API bearer accepts <code>personal</code> and <code>access</code> for the API; MCP accepts <code>personal</code> and <code>access</code> for
+  MCP. The resolver takes the surface and applies that rule. PATs stay valid on both, as today. Authlib
+  does not implement RFC 8707, so the authorization server validates and records <code>resource</code> itself.</li>
+<li>Tokens stay <strong>opaque</strong>, stored as their SHA-256 hash (<code>interloper_db.crypto.hash_token</code>), as today. No
+  JWTs: every check hits the database anyway, and opacity gives instant revocation and live roles.</li>
+<li>One store method resolves a raw secret to <code>(Profile, Token)</code>, enforcing expiry and revocation and
+  stamping <code>last_used_at</code>. The API's auth dependency takes the session cookie or <code>Authorization: Bearer</code>
+  and calls it; the MCP server's <code>TokenVerifier</code> calls it too.</li>
+<li>Authorization codes and refresh tokens are not presented to the API, so they are not in this table: they
+  live with the authorization server (below).</li>
+<li>Migration: existing session and PAT rows move into <code>tokens</code> with their hashes, so nobody is logged out
+  and no PAT stops working. A PAT that was created for one organisation now reaches every organisation its
+  owner belongs to, with the owner's role in each (accepted). The sessions' organisation is dropped;
+  <code>profiles.last_organisation_id</code> already records the last one used.</li>
+<li>Invitation tokens stay as they are: single-use, not a credential.</li>
+<li>An organisation admin can no longer revoke a member's PAT (today's <code>revoke_token</code> allows it), since the
+  token is no longer the organisation's. Cutting a member off is removing their membership, which the live
+  role check applies to every token they hold at once.</li>
+<li>Lifetimes are read from settings by the store. Today the session row's expiry is a hard-coded
+  <code>SESSION_EXPIRY_DAYS</code> in <code>interloper_db/store/sessions.py</code> while <code>auth.session_expiry_days</code> only sets the
+  cookie's <code>max_age</code>; both come from the setting.</li>
+</ul>
+<h3 id="organisations-in-the-address">Organisations in the address<a class="headerlink" href="#organisations-in-the-address" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>organisations</code> gets a <code>slug</code>: unique, lowercase, URL-safe, editable by an organisation admin when the
+  new value is free. The migration derives one from each name, de-duplicated.</li>
+<li>Slugs share the app's top-level URL space with its own routes, so a fixed list of reserved words is
+  refused: every top-level app route (<code>settings</code>, <code>admin</code>, <code>login</code>, <code>invite</code>, <code>welcome</code>, …) plus <code>api</code>,
+  <code>mcp</code>, <code>oauth</code>, <code>.well-known</code> and the asset paths. The list lives next to the slug validation.</li>
+<li><strong>App:</strong> every organisation page lives under <code>/&lt;slug&gt;/…</code> (<code>https://app.interloper.dev/swarovski/graph</code>).
+  <code>/</code> sends a user to their last-used organisation. Pages that are not about an organisation (<code>/settings</code>,
+  <code>/admin</code>, <code>/login</code>, <code>/invite</code>, the consent page) stay at the top level. A slug that no longer exists, or
+  that the user is not a member of, shows a not-found page.</li>
+<li><strong>API:</strong> organisation-scoped routes move under <code>/api/organisations/{org_id}/…</code> (the house word; today's
+  organisation management routes already live there, so there is one prefix, not two), <code>org_id</code> being the
+  organisation's id. One dependency reads it, checks live membership and returns the organisation and the
+  caller's role; every route gate (<code>ViewerDep</code>, <code>EditorDep</code>, …) reads the role from it, and
+  <code>authorize_organisation</code> in <code>dependencies/rbac.py</code> folds into it. Detail routes live there too and check
+  that the resource belongs to that organisation, which replaces today's membership-scoped detail reads.
+  Routes about the user (<code>/api/auth/me</code>, tokens, authorised apps) and super-admin routes stay outside it.
+  The realtime websocket takes the organisation in its path the same way.</li>
+<li><strong>Super-admins keep access to every organisation</strong> (decided): the shared membership check lets a
+  super-admin into any organisation with the <code>admin</code> role, on the API routes, the app pages under
+  <code>/&lt;slug&gt;/…</code> and the MCP tools alike, as <code>authorize_organisation</code> does for the organisation routes today.
+  <code>list_organisations</code> and the omitted-<code>organisation</code> rule count memberships only, so a super-admin
+  names any other organisation explicitly.</li>
+<li><strong>Machines use the id, people see the slug.</strong> The app maps the slug in its URL to the id from the
+  memberships it already loads; API clients and MCP pass ids. A rename therefore never breaks an API
+  client or a stored conversation.</li>
+<li><strong>Agent:</strong> a conversation keeps its <code>org_id</code>; its routes move under <code>/api/organisations/{org_id}/agent/…</code>
+  and a conversation must belong to the organisation in the path. The model never chooses the
+  organisation.</li>
+<li><strong>MCP:</strong> every tool gets an <code>organisation</code> argument (the organisation's id), added by the MCP layer;
+  <code>get_ctx</code> checks membership, reads the role and builds the usual <code>ToolkitContext</code>. The toolkit table and
+  its functions do not change, but <code>Tool.bind</code> does: today its surface parameters lead the toolkit's own,
+  which cannot carry a default ahead of required parameters, and the context callable cannot refuse.
+  <code>bind</code> learns to take a surface's parameters as keyword-only after the toolkit's, and to return a
+  <code>ToolError</code> the context callable produces instead of calling the function. Leaving the argument out
+  works when the user belongs to exactly one organisation; with several, the call returns a <code>ToolError</code>
+  whose <code>valid_values</code> lists them. Leaving it out never falls back to "last used". An MCP-only
+  <code>list_organisations</code> tool returns the user's organisations (id, slug, name, role). The server
+  instructions say so.</li>
+<li>Links the platform builds into the app carry the slug: the hook's "View in interloper" URL
+  (<code>interloper_scheduler/hooks.py</code>) and the toolkit's connection setup URL (<code>_setup_url</code> in
+  <code>interloper_toolkit/collection.py</code>).</li>
+<li>What this removes from the app: switching organisation becomes navigation, so the session's active
+  organisation, <code>POST /api/auth/switch-org</code>, the refetch-on-switch watcher (<code>useOrgScopedRefetch</code>), the
+  wrong-organisation interstitial (<code>OrganizationGate</code>, <code>useOrgGate</code>) and <code>orgSwitchTarget</code> lose their
+  reason to exist. The builder removes what no longer has a job rather than adapting it.</li>
+</ul>
+<h3 id="authorization-server">Authorization server<a class="headerlink" href="#authorization-server" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Lives in <code>interloper-api</code>, which owns login. Built on <strong>Authlib</strong>'s framework-agnostic
+  <code>authlib.oauth2.rfc6749.AuthorizationServer</code>: Authlib ships server integrations for Flask and Django only,
+  so the API gets a small Starlette adapter (the four methods the framework integrations implement:
+  <code>create_oauth2_request</code>, <code>create_json_request</code>, <code>handle_response</code>, <code>send_signal</code>) plus the storage hooks
+  over the store. Grants: authorization code with PKCE required (<code>S256</code>), refresh token with rotation.
+  Endpoints: client registration (RFC 7591), revocation (RFC 7009), metadata (RFC 8414).</li>
+<li><strong>A spike comes first</strong> and is thrown away: the adapter plus one authorization-code-with-PKCE flow end
+  to end against the real login. If Authlib's core turns out not to fit FastAPI cleanly, the fallback is
+  the MCP SDK's <code>mcp.server.auth</code> routes, and that choice comes back to Guillaume before step 4 starts.</li>
+<li>Storage, new tables owned by the authorization server: OAuth clients (registered dynamically or by an
+  operator: <code>client_id</code>, hashed secret for confidential clients, name, redirect URIs, created_at),
+  authorization codes (single use, short-lived, hashed, with the PKCE challenge, redirect URI, client and
+  user), refresh tokens (hashed, rotated on use, a reused rotated token revokes its whole family).
+  Access tokens are <code>tokens</code> rows of kind <code>access</code>.</li>
+<li>Lifetimes: access token 1 hour, refresh token 30 days and rolling with each rotation. Settings in
+  <code>AuthSettings</code> next to <code>session_expiry_days</code>.</li>
+<li><strong>Consent:</strong> the authorize endpoint validates the request, then sends the browser to a consent page in
+  the app (top level, outside any organisation). Not logged in: the existing Google login runs first and
+  returns there. The page shows the client's name, the host it will redirect to, and that it will act as
+  the user in every organisation they belong to, with their role in each. Approve issues the code; deny
+  returns the OAuth error. Consent is asked on every authorization (no remembered grants), which keeps
+  the model free of a grants table.</li>
+<li>Dynamically registered clients are unverified by nature; the consent page shows the redirect host
+  prominently for that reason. Signup gating (<code>auth.allowed_domains</code>) applies to the login leg as it does
+  today.</li>
+<li>The consent page relies on the Google login, which today has two flaws that must be fixed before it
+  does (a separate fix, ahead of this work): its <code>state</code> carries only the return path, with no nonce
+  bound to the browser (login CSRF), and the callback accepts any <code>state</code> starting with <code>/</code>, so
+  <code>//evil.host</code> is an open redirect (<code>routes/auth.py</code>).</li>
+<li>Operator-registered confidential clients (the Slack backend will be the first) are created through an
+  <code>interloper</code> CLI command run by an operator; the secret is shown once.</li>
+<li><strong>Paths.</strong> The existing <code>/api/oauth/*</code> routes are interloper acting as a <em>client</em> of data providers
+  (connector OAuth). The authorization server mounts under <code>/api/auth/oauth/…</code> (authorize, token,
+  register, revoke) so the two never share a prefix. Metadata is served at
+  <code>/.well-known/oauth-authorization-server</code> on the app host. The issuer is <code>server.external_url</code>.</li>
+<li><strong>Authorised apps:</strong> the settings authentication page lists, next to PATs, the OAuth clients holding a
+  live refresh token for the user. Revoking one revokes its refresh tokens and access tokens.</li>
+</ul>
+<h3 id="mcp">MCP<a class="headerlink" href="#mcp" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Bump the MCP SDK to 2.x first, as ITLPR-131 states (spec revision 2026-07-28; the server already runs
+  <code>stateless_http=True</code>).</li>
+<li>The protected-resource metadata it already publishes names the interloper issuer as its authorization
+  server. The verifier resolves both PATs and OAuth access tokens through the shared resolver.</li>
+<li>The stdio transport keeps <code>INTERLOPER_MCP_TOKEN</code> and requires it; <code>INTERLOPER_MCP_ORG_ID</code> and its
+  unauthenticated fallback disappear with organisation-pinned credentials (the <code>organisation</code> argument
+  covers it). Local development uses a PAT created in the dev instance.</li>
+</ul>
+<h3 id="deployment">Deployment<a class="headerlink" href="#deployment" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The chart routes <code>/.well-known/oauth-authorization-server</code> on the app hostnames to the api service, in
+  both the HTTPRoute and the Ingress (the frontend would otherwise swallow it). Today only the HTTPRoute
+  routes <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code>; the Ingress has neither, a gap left as a
+  follow-up since prod runs on the HTTPRoute.</li>
+<li>No new role, image or process.</li>
+<li>Self-managed instances are their own issuer with no extra configuration.</li>
+</ul>
+<h2 id="order-of-work">Order of work<a class="headerlink" href="#order-of-work" title="Permanent link">&para;</a></h2>
+<p>Each step is its own PR, leaves no adapter behind and passes the full check suite.</p>
+<p>Before any of it: the Google login fix above, as its own <code>fix:</code> PR.</p>
+<ol>
+<li><strong>Spike</strong> (throwaway): Authlib adapter + authorization code with PKCE end to end.</li>
+<li><strong>MCP SDK 2.x.</strong></li>
+<li><strong>PATs stand for the user:</strong> <code>personal_access_tokens</code> becomes the <code>tokens</code> table without
+   <code>organisation_id</code> (migration keeps hashes), the token routes become the user's (no organisation), the
+   shared resolver with per-surface kinds, <code>Tool.bind</code>'s keyword-only surface
+   parameters, the MCP <code>organisation</code> argument and <code>list_organisations</code>, stdio changes. Sessions are
+   untouched and still carry the app's active organisation.</li>
+<li><strong>The organisation in the address:</strong> slug, reserved words, migration; API routes under
+   <code>/api/organisations/{org_id}</code>; bearer auth on the API (it needs the organisation in the path); the
+   app under <code>/&lt;slug&gt;/…</code>; agent routes; websocket; link builders;
+   sessions fold into <code>tokens</code> as kind <code>session</code> and lose their organisation; removal of the switch
+   machinery; lifetimes from settings.</li>
+<li><strong>The authorization server:</strong> clients, codes, refresh tokens, <code>resource</code> binding, Authlib adapter,
+   consent page, metadata, chart routes, CLI client registration, authorised apps in settings, MCP
+   metadata pointing at the issuer.</li>
+</ol>
+<h2 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h2>
+<p>Mirroring the package layout, unit tests only, at least:</p>
+<ul>
+<li>Resolver: each kind resolves; expired, revoked and unknown secrets do not; <code>last_used_at</code> is stamped.</li>
+<li>Migration of sessions and PATs into <code>tokens</code> keeps their hashes valid.</li>
+<li>API dependency: cookie and bearer both authenticate; a path organisation the user is not a member of is
+  refused; the role comes from that organisation; a detail route refuses a resource of another
+  organisation.</li>
+<li>Slugs: derivation and de-duplication, reserved words refused, rename refused when taken.</li>
+<li>MCP: <code>organisation</code> omitted with one membership works, with several returns the list, a non-member
+  organisation is refused, the role gate uses that organisation's role.</li>
+<li>Authorization server: registration; authorize without PKCE refused; code single use and bound to client,
+  redirect URI and verifier; refresh rotation; reuse of a rotated refresh token revokes the family;
+  revocation; metadata contents; consent deny.</li>
+<li>Frontend: lint and typecheck; routes resolve under a slug.</li>
+</ul>
+<h2 id="left-to-the-builder">Left to the builder<a class="headerlink" href="#left-to-the-builder" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Table, model and column names beyond those fixed above; the refresh-token family mechanism.</li>
+<li>The slug format limits and the exact reserved list.</li>
+<li>How the app resolves a slug and where it keeps the memberships it maps from.</li>
+<li>The CLI command's name and shape for registering confidential clients.</li>
+<li>Splitting a step into several commits.</li>
+</ul>
+<h2 id="open-follow-ups-jira-itlpr">Open follow-ups (Jira ITLPR)<a class="headerlink" href="#open-follow-ups-jira-itlpr" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The Slack app design, building on this.</li>
+<li>Client ID Metadata Documents if a client needs them.</li>
+<li>Google login on Authlib's client.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 Digitl Cloud
+
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      
+    
+  </body>
+</html>
