@@ -20,7 +20,7 @@ from interloper_db import (
 )
 
 from interloper_api.app import create_app, install_error_handlers
-from interloper_api.dependencies import get_features, get_store
+from interloper_api.dependencies import get_store
 
 _ORG = "00000000-0000-0000-0000-000000000000"
 
@@ -44,7 +44,7 @@ def test_agent_routes_absent_when_disabled(fake_settings: SimpleNamespace):
     client = TestClient(app)
 
     assert client.post(f"/api/organisations/{_ORG}/agent/conversations").status_code == 404
-    assert get_features() == {"agent": False}
+    assert app.state.interloper.features == {"agent": False}
 
 
 def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
@@ -54,7 +54,7 @@ def test_agent_routes_mounted_when_enabled(fake_settings: SimpleNamespace):
 
     # 401 (not 404): the router is mounted and the auth guard answers first.
     assert client.post(f"/api/organisations/{_ORG}/agent/conversations").status_code == 401
-    assert get_features() == {"agent": True}
+    assert app.state.interloper.features == {"agent": True}
 
 
 @pytest.mark.parametrize(
@@ -201,34 +201,24 @@ class TestCreateApp:
         assert TestClient(app).post("/api/agent/conversations").status_code == 404
 
     def test_the_agent_feature_flag_follows_the_mount(self, fake_settings: SimpleNamespace) -> None:
-        from interloper_api.dependencies import get_features
+        app = create_app(settings=fake_settings)
 
-        create_app(settings=fake_settings)
+        assert app.state.interloper.features == {"agent": True}
 
-        assert get_features() == {"agent": True}
+    def test_an_app_built_without_settings_holds_none(self) -> None:
+        state = create_app().state.interloper
 
-    def test_state_slots_are_left_alone_when_not_supplied(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # ``create_app()`` with no store or catalog must not clobber whatever
-        # a caller installed beforehand.
-        from interloper_api.dependencies import state as state_module
-
-        sentinel_store, sentinel_catalog = SimpleNamespace(name="s"), SimpleNamespace(name="c")
-        monkeypatch.setattr(state_module, "_store", sentinel_store)
-        monkeypatch.setattr(state_module, "_catalog", sentinel_catalog)
-
-        create_app()
-
-        assert state_module._store is sentinel_store
-        assert state_module._catalog is sentinel_catalog
+        assert state.settings is None
+        assert state.admin_config is None
+        assert state.authorization_server is None
 
     def test_a_supplied_store_and_catalog_are_installed(self, fake_settings: SimpleNamespace) -> None:
         import interloper as il
 
-        from interloper_api.dependencies import get_catalog
-
         store, catalog = SimpleNamespace(name="s"), il.Catalog(components={})
 
-        create_app(store=store, catalog=catalog, settings=fake_settings)  # ty: ignore[invalid-argument-type]
+        app = create_app(store=store, catalog=catalog, settings=fake_settings)  # ty: ignore[invalid-argument-type]
 
-        assert get_store() is store
-        assert get_catalog() is catalog
+        assert app.state.interloper.store is store
+        assert app.state.interloper.catalog is catalog
+        assert app.state.interloper.settings is fake_settings

@@ -4,26 +4,56 @@ The caller proves who they are with the app's session cookie or an
 ``Authorization: Bearer`` token, each resolved for its own surface, so a
 secret presented on the wrong one is refused; the routes that manage
 credentials and memberships, and the super-admin ones, take the cookie alone.
-The organisation is named by the path, never remembered between requests. A run's pod authenticates as its
-run, with the run token, and nothing else.
+The organisation is named by the path, never remembered between requests. A
+run's pod authenticates as its run, with the run token, and nothing else.
 """
 
 from __future__ import annotations
 
-from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Cookie, Depends, Header, HTTPException
 from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store
 
-from interloper_api.dependencies.state import get_reaper_config, get_store
+from interloper_api.dependencies.state import SettingsDep, StoreDep
+
+
+def bearer(authorization: str | None) -> str | None:
+    """The bearer token an ``Authorization`` header presents.
+
+    Any other scheme (a proxy's HTTP Basic in front of a staging deployment)
+    is not ours and reads as no token at all.
+
+    Args:
+        authorization: The header value, or ``None`` when absent.
+
+    Returns:
+        The token, empty when the scheme is bearer and nothing follows it;
+        ``None`` for no header or another scheme.
+    """
+    scheme, _, secret = (authorization or "").partition(" ")
+    return secret if scheme.lower() == "bearer" else None
+
+
+def session_user(store: Store, session_token: str | None) -> Profile | None:
+    """The user a session cookie stands for, when it stands for one.
+
+    Args:
+        store: The Store instance.
+        session_token: The session cookie value, or ``None`` when absent.
+
+    Returns:
+        The user, or ``None`` when there is no cookie or it does not resolve.
+    """
+    resolved = store.tokens.resolve(session_token, Audience.APP) if session_token else None
+    return resolved[0] if resolved else None
 
 
 def get_caller(
-    store: Store = Depends(get_store),
+    store: StoreDep,
     session_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
 ) -> Profile:
@@ -31,9 +61,7 @@ def get_caller(
 
     A bearer token resolves as an API credential (personal or access token)
     and the cookie as a login session; a bearer token, when presented, is the
-    credential, so a failing one is never rescued by a cookie. Any other
-    ``Authorization`` scheme (a proxy's HTTP Basic in front of a staging
-    deployment) is not ours and leaves the cookie to authenticate.
+    credential, so a failing one is never rescued by a cookie.
 
     Args:
         store: The Store instance.
@@ -47,24 +75,24 @@ def get_caller(
         HTTPException: 401 when no credential is presented or the secret does
             not resolve for its surface.
     """
-    scheme, _, secret = (authorization or "").partition(" ")
-    if scheme.lower() == "bearer":
-        resolved = store.tokens.resolve(secret, Audience.API) if secret else None
-    elif session_token:
-        resolved = store.tokens.resolve(session_token, Audience.APP)
+    token = bearer(authorization)
+    if token is None:
+        if not session_token:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        user = session_user(store, session_token)
     else:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if resolved is None:
+        resolved = store.tokens.resolve(token, Audience.API) if token else None
+        user = resolved[0] if resolved else None
+    if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired credentials")
-    profile, _ = resolved
-    return profile
+    return user
 
 
 CurrentUserDep = Annotated[Profile, Depends(get_caller)]
 
 
 def get_session_caller(
-    store: Store = Depends(get_store),
+    store: StoreDep,
     session_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
 ) -> Profile:
@@ -89,15 +117,14 @@ def get_session_caller(
         HTTPException: 401 when a bearer token is presented, or the session
             cookie is missing or does not resolve.
     """
-    if (authorization or "").partition(" ")[0].lower() == "bearer":
+    if bearer(authorization) is not None:
         raise HTTPException(status_code=401, detail="This route accepts only the session cookie")
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    resolved = store.tokens.resolve(session_token, Audience.APP)
-    if resolved is None:
+    user = session_user(store, session_token)
+    if user is None:
         raise HTTPException(status_code=401, detail="Invalid or expired credentials")
-    profile, _ = resolved
-    return profile
+    return user
 
 
 SessionUserDep = Annotated[Profile, Depends(get_session_caller)]
@@ -115,13 +142,27 @@ class OrgScope:
     organisation: Organisation
     role: str
 
+    def require(self, minimum: str) -> OrgScope:
+        """Refuse a caller whose role is below *minimum*.
 
-def get_org_scope(org_id: UUID, user: CurrentUserDep, store: Store = Depends(get_store)) -> OrgScope:
+        Args:
+            minimum: Minimum role required (``viewer``, ``editor``, ``admin``).
+
+        Returns:
+            This scope, passed through for the route.
+
+        Raises:
+            HTTPException: 403 when the role is below the minimum.
+        """
+        if not Role.at_least(self.role, minimum):
+            raise HTTPException(status_code=403, detail=f"Requires {minimum} role or higher")
+        return self
+
+
+def get_org_scope(org_id: UUID, user: CurrentUserDep, store: StoreDep) -> OrgScope:
     """Resolve the organisation the path names and the caller's role in it.
 
-    A super-admin acts as ``admin`` in every live organisation; anyone else
-    must be a member. A non-member reads the organisation as missing, so an id
-    reveals nothing.
+    A non-member reads the organisation as missing, so an id reveals nothing.
 
     Args:
         org_id: The organisation id from the path.
@@ -133,13 +174,16 @@ def get_org_scope(org_id: UUID, user: CurrentUserDep, store: Store = Depends(get
 
     Raises:
         HTTPException: 404 when the organisation is missing, deleted, or the
-            caller is neither a member nor a super-admin.
+            caller cannot act in it.
     """
-    role = Role.ADMIN.value if user.is_super_admin else store.members.role(org_id, user.id)
-    if role is not None:
-        with suppress(NotFoundError):
-            return OrgScope(organisation=store.organisations.get(org_id), role=role)
-    raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
+    try:
+        organisation = store.organisations.get(org_id)
+    except NotFoundError:
+        organisation = None
+    role = store.members.role_of(org_id, user) if organisation is not None else None
+    if organisation is None or role is None:
+        raise HTTPException(status_code=404, detail=f"Organisation {org_id} not found")
+    return OrgScope(organisation=organisation, role=role)
 
 
 OrgDep = Annotated[OrgScope, Depends(get_org_scope)]
@@ -147,8 +191,8 @@ OrgDep = Annotated[OrgScope, Depends(get_org_scope)]
 
 def require_run(
     run_id: UUID,
-    store: Store = Depends(get_store),
-    reaper: Any = Depends(get_reaper_config),
+    store: StoreDep,
+    settings: SettingsDep,
     authorization: str | None = Header(default=None),
 ) -> Run:
     """Resolve the run a bearer run token stands for, and check it is the run the path names.
@@ -159,8 +203,8 @@ def require_run(
     Args:
         run_id: The run the path names.
         store: The Store instance.
-        reaper: The run liveness settings; a token outlives its run by the
-            heartbeat timeout, for a pod still delivering after its reaping.
+        settings: The settings, whose run liveness a token outlives its run by:
+            the heartbeat timeout, for a pod still delivering after its reaping.
         authorization: The ``Authorization`` header.
 
     Returns:
@@ -170,10 +214,10 @@ def require_run(
         HTTPException: 401 without a live run token; 404 when the token's run
             is not the path's, so a token cannot learn whether another run exists.
     """
-    scheme, _, token = (authorization or "").partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    token = bearer(authorization)
+    if not token:
         raise HTTPException(status_code=401, detail="Run token required")
-    run = store.runs.resolve_token(token, grace=timedelta(seconds=reaper.heartbeat_timeout))
+    run = store.runs.resolve_token(token, grace=timedelta(seconds=settings.reaper.heartbeat_timeout))
     if run is None:
         raise HTTPException(status_code=401, detail="Unknown or expired run token")
     if run.id != run_id:

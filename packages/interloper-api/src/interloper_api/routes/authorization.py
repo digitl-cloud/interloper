@@ -36,7 +36,7 @@ from interloper_api.authorization import (
     OAuthRequest,
     RegistrationRequest,
 )
-from interloper_api.dependencies import AuthorizationServerDep, SessionUserDep, StoreDep
+from interloper_api.dependencies import AuthorizationServerDep, SessionUserDep, StoreDep, session_user
 
 router = APIRouter(prefix="/auth/oauth", tags=["authorization"])
 
@@ -150,11 +150,10 @@ def authorize(
         server.get_consent_grant(oauth_request)
     except OAuth2Error as error:
         return server.handle_error_response(oauth_request, error)
-    resolved = store.tokens.resolve(session_token, Audience.APP) if session_token else None
-    if resolved is None:
+    user = session_user(store, session_token)
+    if user is None:
         login = urlencode({"redirect": f"{AUTHORIZE_PATH}?{request.url.query}"})
         return RedirectResponse(f"/api/auth/google?{login}", status_code=302)
-    user, _ = resolved
     consent = urlencode({"request": server.seal(oauth_request, user.id)})
     return RedirectResponse(f"/authorize?{consent}", status_code=302)
 

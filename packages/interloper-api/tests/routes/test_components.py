@@ -43,7 +43,7 @@ class TestDelete:
 
         class FakeStore:
             def __init__(self):
-                self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
+                self.members = SimpleNamespace(role_of=lambda org_id, user: "admin")
                 self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
                 self.components = SimpleNamespace(
                     get=lambda component_id: SimpleNamespace(id=component_id, org_id=_ORG_ID),
@@ -258,7 +258,7 @@ class CrudStore:
         self.impact_requested: list[list[UUID]] = []
         self.impact = DeleteImpact(blocking=[], detaching=[])
 
-        self.members = SimpleNamespace(role=lambda org_id, user_id: self.role)
+        self.members = SimpleNamespace(role_of=lambda org_id, user: self.role)
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.components = SimpleNamespace(
             list=self._list,

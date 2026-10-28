@@ -15,7 +15,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import col, func, select
 
 from interloper_db.errors import NotFoundError
-from interloper_db.models import Role, UserOrganisation
+from interloper_db.models import Profile, Role, UserOrganisation
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.page import Page, PageQuery
 
@@ -44,6 +44,22 @@ class MemberStore:
         with session_scope(self._engine) as session:
             membership = session.get(UserOrganisation, (user_id, org_id))
             return membership.role if membership else None
+
+    def role_of(self, org_id: UUID, user: Profile) -> str | None:
+        """The role a user acts with in a live organisation.
+
+        A super-admin acts as ``admin`` in every organisation; anyone else
+        with their membership. Liveness is the caller's to establish: the
+        organisation was just read, or listed among the user's.
+
+        Args:
+            org_id: Organisation UUID.
+            user: The user.
+
+        Returns:
+            The role name, or ``None`` when the user cannot act in the organisation.
+        """
+        return Role.ADMIN.value if user.is_super_admin else self.role(org_id, user.id)
 
     def list(self, org_id: UUID, query: PageQuery) -> Page[UserOrganisation]:
         """List an organisation's members, oldest membership first.

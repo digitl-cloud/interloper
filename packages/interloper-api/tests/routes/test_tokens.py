@@ -47,7 +47,7 @@ class FakeStore:
     def __init__(self) -> None:
         self.rows: dict[UUID, SimpleNamespace] = {}
         self.listed: list[tuple[UUID, PageQuery]] = []
-        self.members = SimpleNamespace(role=lambda org_id, user_id: "admin")
+        self.members = SimpleNamespace(role_of=lambda org_id, user: "admin")
         self.secrets: dict[str, TokenKind] = {}
         self.tokens = SimpleNamespace(
             resolve=self._resolve,

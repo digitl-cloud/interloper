@@ -11,15 +11,14 @@ the organisation it acts in.
 from __future__ import annotations
 
 import anyio.to_thread
-from interloper_db import Audience, Store
+from interloper_db import Audience, Profile, Store
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 
 class UserAccessToken(AccessToken):
     """An access token standing for a verified user."""
 
-    profile_id: str
-    is_super_admin: bool
+    profile: Profile
 
 
 class PatVerifier(TokenVerifier):
@@ -58,6 +57,5 @@ class PatVerifier(TokenVerifier):
             client_id=str(profile.id),
             scopes=[],
             expires_at=int(row.expires_at.timestamp()) if row.expires_at else None,
-            profile_id=str(profile.id),
-            is_super_admin=profile.is_super_admin,
+            profile=profile,
         )

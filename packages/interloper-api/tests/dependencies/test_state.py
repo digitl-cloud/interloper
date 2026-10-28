@@ -1,142 +1,99 @@
-"""Tests for ``interloper_api.dependencies.state``.
-
-The module holds process-wide state, so every test restores whatever it
-found — otherwise a setter here reconfigures the suites that run later.
-"""
+"""Tests for ``interloper_api.dependencies.state``."""
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from types import SimpleNamespace
+from typing import Annotated, Any
 
 import pytest
+from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 
-from interloper_api.dependencies import state
+from interloper_api.dependencies import (
+    State,
+    get_agent,
+    get_authorization_server,
+    get_catalog,
+    get_settings,
+    get_store,
+)
 
 
-@pytest.fixture(autouse=True)
-def restore_state() -> Iterator[None]:
-    """Put every module-level slot back the way the test found it.
+def _client(state: State) -> TestClient:
+    """Mount one probe per dependency on an app carrying *state*.
 
-    Yields:
-        ``None``; the teardown restores the saved values.
+    Args:
+        state: The state the app holds.
+
+    Returns:
+        A client for the probe app.
     """
-    saved = (
-        state._store,
-        state._catalog,
-        state._auth_config,
-        state._smtp_config,
-        state._features,
-        state._admin_config,
-        state._quota_defaults,
-    )
-    yield
-    (
-        state._store,
-        state._catalog,
-        state._auth_config,
-        state._smtp_config,
-        state._features,
-        state._admin_config,
-        state._quota_defaults,
-    ) = saved
+    app = FastAPI()
+    app.state.interloper = state
+
+    @app.get("/store")
+    def store(store: Annotated[Any, Depends(get_store)]) -> dict[str, Any]:
+        return {"name": store.name}
+
+    @app.get("/catalog")
+    def catalog(catalog: Annotated[Any, Depends(get_catalog)]) -> dict[str, Any]:
+        return {"name": catalog.name}
+
+    @app.get("/settings")
+    def settings(settings: Annotated[Any, Depends(get_settings)]) -> dict[str, Any]:
+        return {"name": settings.name}
+
+    @app.get("/agent")
+    def agent(agent: Annotated[Any, Depends(get_agent)]) -> dict[str, Any]:
+        return {"name": agent.name}
+
+    @app.get("/authorization-server")
+    def authorization_server(server: Annotated[Any, Depends(get_authorization_server)]) -> dict[str, Any]:
+        return {"name": server.name}
+
+    return TestClient(app, raise_server_exceptions=False)
 
 
-class TestRequiredSlots:
-    """Store, catalog and auth config must be installed before any request."""
-
-    def test_the_store_round_trips(self) -> None:
-        store = SimpleNamespace(name="store")
-
-        state.set_store(store)  # ty: ignore[invalid-argument-type]
-
-        assert state.get_store() is store
-
-    def test_an_uninitialized_store_is_an_actionable_error(self) -> None:
-        state._store = None
-
-        with pytest.raises(RuntimeError, match=r"Store not initialized. Call set_store\(\) first."):
-            state.get_store()
-
-    def test_the_catalog_round_trips(self) -> None:
-        catalog = SimpleNamespace(name="catalog")
-
-        state.set_catalog(catalog)  # ty: ignore[invalid-argument-type]
-
-        assert state.get_catalog() is catalog
-
-    def test_an_uninitialized_catalog_is_an_actionable_error(self) -> None:
-        state._catalog = None
-
-        with pytest.raises(RuntimeError, match=r"Catalog not initialized. Call set_catalog\(\) first."):
-            state.get_catalog()
-
-    def test_the_auth_config_round_trips(self) -> None:
-        auth_config = SimpleNamespace(google_client_id="cid")
-
-        state.set_auth_config(auth_config)
-
-        assert state.get_auth_config() is auth_config
-
-    def test_an_uninitialized_auth_config_is_an_actionable_error(self) -> None:
-        state._auth_config = None
-
-        with pytest.raises(RuntimeError, match=r"Auth config not initialized. Call set_auth_config\(\) first."):
-            state.get_auth_config()
+def _state(**slots: Any) -> State:
+    return State(**{name: SimpleNamespace(name=name) for name in slots if slots[name]})  # ty: ignore[invalid-argument-type]
 
 
-class TestOptionalSlots:
-    """The rest degrade to a falsy default rather than raising."""
+class TestInstalledSlots:
+    """A slot the app was built with is what its dependency returns."""
 
-    def test_the_smtp_config_round_trips(self) -> None:
-        smtp = SimpleNamespace(host="smtp.example.com")
+    @pytest.mark.parametrize("slot", ["store", "catalog", "settings", "agent"])
+    def test_a_slot_reads_back(self, slot: str) -> None:
+        response = _client(_state(**{slot: True})).get(f"/{slot}")
 
-        state.set_smtp_config(smtp)
+        assert response.json() == {"name": slot}
 
-        assert state.get_smtp_config() is smtp
+    def test_the_authorization_server_reads_back(self) -> None:
+        response = _client(_state(authorization_server=True)).get("/authorization-server")
 
-    def test_an_unset_smtp_config_is_none(self) -> None:
-        state._smtp_config = None
+        assert response.json() == {"name": "authorization_server"}
 
-        assert state.get_smtp_config() is None
+    def test_two_apps_hold_their_own_state(self) -> None:
+        first = _client(_state(store=True))
+        second = _client(State(store=SimpleNamespace(name="other")))  # ty: ignore[invalid-argument-type]
 
-    def test_the_feature_flags_round_trip(self) -> None:
-        state.set_features({"agent": True, "mcp": False})
+        assert first.get("/store").json() == {"name": "store"}
+        assert second.get("/store").json() == {"name": "other"}
 
-        assert state.get_features() == {"agent": True, "mcp": False}
 
-    def test_unset_feature_flags_are_empty(self) -> None:
-        state._features = {}
+class TestMissingSlots:
+    """A slot the app was built without is a loud failure, not a silent ``None``."""
 
-        assert state.get_features() == {}
+    @pytest.mark.parametrize("slot", ["store", "catalog", "settings", "agent"])
+    def test_a_missing_slot_is_a_programming_error(self, slot: str) -> None:
+        response = _client(State()).get(f"/{slot}")
 
-    def test_the_admin_config_snapshot_round_trips(self) -> None:
-        snapshot = SimpleNamespace(launcher={"type": "kubernetes"})
+        assert response.status_code == 500
 
-        state.set_admin_config(snapshot)
+    def test_a_missing_authorization_server_is_a_503(self) -> None:
+        response = _client(State()).get("/authorization-server")
 
-        assert state.get_admin_config() is snapshot
+        assert response.status_code == 503
+        assert response.json()["detail"] == "OAuth authorization server not configured"
 
-    def test_an_unset_admin_config_is_none(self) -> None:
-        state._admin_config = None
-
-        assert state.get_admin_config() is None
-
-    def test_the_quota_defaults_round_trip(self) -> None:
-        defaults = SimpleNamespace(max_sources=10)
-
-        state.set_quota_defaults(defaults)
-
-        assert state.get_quota_defaults() is defaults
-
-    def test_unset_quota_defaults_are_none(self) -> None:
-        state._quota_defaults = None
-
-        assert state.get_quota_defaults() is None
-
-    def test_the_reaper_config_round_trips(self) -> None:
-        reaper = SimpleNamespace(heartbeat_timeout=90)
-
-        state.set_reaper_config(reaper)
-
-        assert state.get_reaper_config() is reaper
+    def test_features_default_to_none_enabled(self) -> None:
+        assert State().features == {}

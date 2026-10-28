@@ -20,14 +20,7 @@ from interloper_db import Organisation, OrganisationQuery, Page, PageQuery, Role
 from interloper_db.models import UserOrganisation
 from pydantic import BaseModel
 
-from interloper_api.dependencies import (
-    AdminDep,
-    CurrentUserDep,
-    StoreDep,
-    SuperAdminDep,
-    ViewerDep,
-    get_smtp_config,
-)
+from interloper_api.dependencies import AdminDep, CurrentUserDep, SettingsDep, StoreDep, SuperAdminDep, ViewerDep
 from interloper_api.notifications import InvitationEmail
 
 router = APIRouter(prefix="/organisations", tags=["organisations"])
@@ -354,6 +347,7 @@ def create_invitation(
     user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
+    settings: SettingsDep,
 ) -> InvitationResponse:
     """Invite someone by email. Requires the organisation's admin role, or super-admin.
 
@@ -366,6 +360,7 @@ def create_invitation(
         user: The authenticated caller, the inviter.
         scope: The organisation the path names, the caller an admin there.
         store: The database store.
+        settings: The settings, whose ``smtp`` is the mailer.
 
     Returns:
         The created invitation.
@@ -374,7 +369,7 @@ def create_invitation(
     invitation = store.invitations.create(organisation.id, email=body.email.strip(), role=body.role, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=organisation.name, inviter=user, base_url=str(request.base_url)
-    ).deliver(get_smtp_config(), invitation.email)
+    ).deliver(settings.smtp, invitation.email)
     return InvitationResponse.model_validate(invitation, from_attributes=True)
 
 
@@ -406,6 +401,7 @@ def resend_invitation(
     user: CurrentUserDep,
     scope: AdminDep,
     store: StoreDep,
+    settings: SettingsDep,
 ) -> InvitationResponse:
     """Reissue an invitation with a fresh token and expiry, and mail it again.
 
@@ -418,6 +414,7 @@ def resend_invitation(
         user: The authenticated caller, the inviter.
         scope: The organisation the path names, the caller an admin there.
         store: The database store.
+        settings: The settings, whose ``smtp`` is the mailer.
 
     Returns:
         The reissued invitation.
@@ -426,5 +423,5 @@ def resend_invitation(
     invitation = store.invitations.reissue(invitation_id, org_id=organisation.id, invited_by=user.id)
     InvitationEmail.from_invitation(
         invitation, org_name=organisation.name, inviter=user, base_url=str(request.base_url)
-    ).deliver(get_smtp_config(), invitation.email)
+    ).deliver(settings.smtp, invitation.email)
     return InvitationResponse.model_validate(invitation, from_attributes=True)

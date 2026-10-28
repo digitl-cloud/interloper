@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -21,7 +22,7 @@ from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
 from interloper_api.app import install_error_handlers
-from interloper_api.dependencies import get_admin_config, get_auth_config, get_session_caller, get_store
+from interloper_api.dependencies import State, get_session_caller, get_settings, get_store
 from interloper_api.notifications import SuperAdminPromotionEmail
 from interloper_api.routes import admin as admin_module
 
@@ -279,7 +280,7 @@ def test_non_super_admin_cannot_read_config(store: FakeStore) -> None:
 def test_super_admin_reads_config(store: FakeStore, fake_settings: SimpleNamespace) -> None:
     app = _app(store, is_super_admin=True)
     snapshot = admin_module.AdminConfigResponse.from_settings(fake_settings, features={"agent": True})
-    app.dependency_overrides[get_admin_config] = lambda: snapshot
+    app.state.interloper = State(admin_config=snapshot)
     client = TestClient(app)
     resp = client.get("/admin/config")
     assert resp.status_code == 200
@@ -298,11 +299,9 @@ def test_non_super_admin_cannot_read_quotas(store: FakeStore) -> None:
 
 
 def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
-    from interloper_api.dependencies import get_quota_defaults
-
     app = _app(store, is_super_admin=True)
-    app.dependency_overrides[get_quota_defaults] = lambda: SimpleNamespace(
-        max_sources=10, max_assets_per_source=20, max_successful_runs_per_month=100
+    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(
+        quota=SimpleNamespace(max_sources=10, max_assets_per_source=20, max_successful_runs_per_month=100)
     )
     client = TestClient(app)
     resp = client.get("/admin/quotas")
@@ -330,10 +329,8 @@ def test_super_admin_reads_quota_overview(store: FakeStore) -> None:
 
 
 def test_quota_overview_defaults_absent_means_unlimited(store: FakeStore) -> None:
-    from interloper_api.dependencies import get_quota_defaults
-
     app = _app(store, is_super_admin=True)
-    app.dependency_overrides[get_quota_defaults] = lambda: None
+    app.dependency_overrides[get_settings] = lambda: SimpleNamespace(quota=None)
     client = TestClient(app)
     resp = client.get("/admin/quotas")
     assert resp.status_code == 200
@@ -411,31 +408,36 @@ def test_cannot_delete_own_account(store: FakeStore) -> None:
     assert store.deleted_profiles == []
 
 
+_SMTP_ENABLED = SimpleNamespace(enabled=True)
+
+
 class TestUpdateUser:
     """``PATCH /admin/users/{id}`` grants and revokes super-admin access."""
 
     @pytest.fixture
     def mailer(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[SuperAdminPromotionEmail, str]]:
-        """Configure SMTP and record every promotion email instead of sending it.
+        """Record every promotion email instead of sending it.
 
         Args:
-            monkeypatch: Fixture used to swap the SMTP config and the transport.
+            monkeypatch: Fixture used to swap the transport.
 
         Returns:
             The recorded ``(email, recipient)`` pairs.
         """
         sent: list[tuple[SuperAdminPromotionEmail, str]] = []
-        monkeypatch.setattr(admin_module, "get_smtp_config", lambda: SimpleNamespace(enabled=True))
         monkeypatch.setattr(SuperAdminPromotionEmail, "send", lambda email, smtp_config, to: sent.append((email, to)))
         return sent
 
     @staticmethod
-    def _client(store: FakeStore, *, configured: list[str] | None = None) -> tuple[TestClient, SimpleNamespace]:
+    def _client(
+        store: FakeStore, *, configured: list[str] | None = None, smtp: Any = _SMTP_ENABLED
+    ) -> tuple[TestClient, SimpleNamespace]:
         """A client signed in as a stored super-admin.
 
         Args:
             store: The fake store the routes resolve against.
             configured: The emails ``auth.super_admin_emails`` lists.
+            smtp: The mailer configuration, enabled by default.
 
         Returns:
             The client and the calling super-admin's row.
@@ -443,7 +445,8 @@ class TestUpdateUser:
         me = store.add_profile("me@test", name="Me", is_super_admin=True)
         app = _app(store, is_super_admin=True)
         app.dependency_overrides[get_session_caller] = lambda: me
-        app.dependency_overrides[get_auth_config] = lambda: SimpleNamespace(super_admin_emails=configured or [])
+        settings = SimpleNamespace(auth=SimpleNamespace(super_admin_emails=configured or []), smtp=smtp)
+        app.dependency_overrides[get_settings] = lambda: settings
         return TestClient(app), me
 
     def test_non_super_admin_is_forbidden(self, store: FakeStore) -> None:
@@ -518,9 +521,8 @@ class TestUpdateUser:
 
         assert resp.status_code == 404
 
-    def test_promotion_succeeds_without_smtp(self, store: FakeStore, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(admin_module, "get_smtp_config", lambda: None)
-        client, _ = self._client(store)
+    def test_promotion_succeeds_without_smtp(self, store: FakeStore) -> None:
+        client, _ = self._client(store, smtp=None)
 
         resp = client.patch(f"/admin/users/{store.member.id}", json={"is_super_admin": True})
 
