@@ -85,7 +85,7 @@ class ExecutionContext:
 
         The typed reading of ``context.partition.value``: the one accessor that hands an asset a
         real ``date`` without narrowing a type first, and it asserts the daily granularity rather
-        than assuming it.
+        than assuming it. A snapshot's partition is the day the run observed in.
 
         Raises:
             AttributeError: If the asset is not time-partitioned at the daily granularity, no

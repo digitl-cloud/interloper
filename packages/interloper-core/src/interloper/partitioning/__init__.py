@@ -1,7 +1,8 @@
-"""Partitioning: the ordered space an asset is split into, the window a run covers, and the two kinds."""
+"""Partitioning: the ordered space an asset is split into, the window a run covers, and its kinds."""
 
 from interloper.partitioning.base import Partition, PartitionConfig, PartitionFilter, PartitionWindow
 from interloper.partitioning.list import ListPartition, ListPartitionConfig, ListPartitionWindow
+from interloper.partitioning.snapshot import SnapshotPartitionConfig
 from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig, TimePartitionWindow
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "PartitionConfig",
     "PartitionFilter",
     "PartitionWindow",
+    "SnapshotPartitionConfig",
     "TimeGranularity",
     "TimePartition",
     "TimePartitionConfig",

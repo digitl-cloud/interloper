@@ -358,6 +358,14 @@ class TestTimePartitioning:
         assert tp is not None
         assert tp.field == "date"
 
+    def test_a_snapshot_is_time_partitioned_at_its_granularity_without_a_schema(self):
+        monthly = il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH)
+
+        tp = _time_partitioning(monthly, None)
+
+        assert tp is not None
+        assert (tp.type_, tp.field) == ("MONTH", "date")
+
     def test_generic_config_with_date_column(self):
         days = il.ListPartitionConfig(column="day", values=("2024-01-01", "2024-01-02", "2024-01-03"))
         tp = _time_partitioning(days, to_fields(_RowSchema.field_specs()))

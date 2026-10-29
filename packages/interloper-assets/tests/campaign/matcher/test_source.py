@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime as dt
 import re
 from pathlib import Path
 from typing import Any
@@ -13,35 +12,27 @@ from interloper.errors import ConfigError
 
 from interloper_assets.campaign.matcher.source import CampaignMatcher, normalise
 
-PARTITION = il.TimePartitionConfig(column="date")
-
 
 class CampaignsSchema(il.Schema):
-    date: dt.date | None
     id: str
     name: str
 
 
 class TiktokLikeCampaignsSchema(il.Schema):
-    date: dt.date | None
     campaign_id: str
     campaign_name: str
 
 
 class NeitherSpellingCampaignsSchema(il.Schema):
-    date: dt.date | None
     unrelated_field: str
 
 
 def _star_schema(source_key: str, names: list[str]) -> type[il.Source]:
     @il.source(key=source_key)
     class Connector(il.Source):
-        @il.asset(schema=CampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        @il.asset(schema=CampaignsSchema, tags=["Dimension"])
         def dim_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [
-                {"date": context.partition_date, "id": f"{source_key}-{i}", "name": name}
-                for i, name in enumerate(names)
-            ]
+            return [{"id": f"{source_key}-{i}", "name": name} for i, name in enumerate(names)]
 
     return Connector
 
@@ -49,12 +40,9 @@ def _star_schema(source_key: str, names: list[str]) -> type[il.Source]:
 def _tiktok_like_star_schema(source_key: str, names: list[str]) -> type[il.Source]:
     @il.source(key=source_key)
     class Connector(il.Source):
-        @il.asset(schema=TiktokLikeCampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        @il.asset(schema=TiktokLikeCampaignsSchema, tags=["Dimension"])
         def dim_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [
-                {"date": context.partition_date, "campaign_id": f"{source_key}-{i}", "campaign_name": name}
-                for i, name in enumerate(names)
-            ]
+            return [{"campaign_id": f"{source_key}-{i}", "campaign_name": name} for i, name in enumerate(names)]
 
     return Connector
 
@@ -62,9 +50,9 @@ def _tiktok_like_star_schema(source_key: str, names: list[str]) -> type[il.Sourc
 def _neither_spelling_star_schema(source_key: str, count: int) -> type[il.Source]:
     @il.source(key=source_key)
     class Connector(il.Source):
-        @il.asset(schema=NeitherSpellingCampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        @il.asset(schema=NeitherSpellingCampaignsSchema, tags=["Dimension"])
         def dim_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"date": context.partition_date, "unrelated_field": str(i)} for i in range(count)]
+            return [{"unrelated_field": str(i)} for i in range(count)]
 
     return Connector
 
@@ -81,9 +69,8 @@ def test_relation_is_a_many_valued_wildcard() -> None:
 
 def _matches(matcher: il.Source, *connectors: il.Source) -> list[dict[str, Any]]:
     memory = matcher.destinations[0]
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    il.DAG(*connectors, matcher).materialize(partition)
-    return memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
+    il.DAG(*connectors, matcher).materialize()
+    return memory.read(il.IOContext(asset=matcher.campaign_matches, window=None))
 
 
 def test_dag_binds_every_dim_campaigns_asset_and_matches_each_leg() -> None:
@@ -110,9 +97,9 @@ def test_platform_and_account_identify_the_campaign_owner() -> None:
     class Connector(il.Source):
         account_id: str = il.InputField(default="", discriminator=True)
 
-        @il.asset(schema=CampaignsSchema, partitioning=PARTITION, tags=["Entity"])
+        @il.asset(schema=CampaignsSchema, tags=["Dimension"])
         def dim_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
-            return [{"date": context.partition_date, "id": "1", "name": "x"}]
+            return [{"id": "1", "name": "x"}]
 
     connector = Connector(account_id="act_42", destinations=[memory])
     rows = _matches(CampaignMatcher(destinations=[memory]), connector)
@@ -173,23 +160,21 @@ def test_leg_without_data_is_skipped_not_fatal() -> None:
     tt = _star_schema("tt_like", ["y"])(destinations=[memory])
     matcher = CampaignMatcher(destinations=[memory])
     tt.dim_campaigns.enabled = False  # nothing written for tt: its leg reads as None
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    il.DAG(fb, tt, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
+    il.DAG(fb, tt, matcher).materialize()
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=None))
     assert [r["campaign_id"] for r in rows] == ["fb_like-0"]
 
 
 def test_matcher_alone_reads_bound_upstreams_read_only() -> None:
     memory = il.MemoryDestination()
     fb = _star_schema("fb_like", ["x"])(destinations=[memory])
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    il.DAG(fb).materialize(partition)
+    il.DAG(fb).materialize()
     matcher = CampaignMatcher(destinations=[memory])
     matcher.campaign_matches.bind("campaigns", fb.dim_campaigns)
     dag = il.DAG(matcher)
     assert dag.operation_map[fb.dim_campaigns.id].enabled is False
-    dag.materialize(partition)
-    assert len(memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))) == 1
+    dag.materialize()
+    assert len(memory.read(il.IOContext(asset=matcher.campaign_matches, window=None))) == 1
 
 
 def test_matcher_with_no_campaigns_in_dag_is_a_build_error() -> None:
@@ -202,9 +187,8 @@ def test_matches_across_connector_schemas_with_different_field_names() -> None:
     fb = _star_schema("fb_like", ["Summer Sale"])(destinations=[memory])
     tt = _tiktok_like_star_schema("tt_like", ["Brand Awareness"])(destinations=[memory])
     matcher = CampaignMatcher(destinations=[memory])
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    il.DAG(fb, tt, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
+    il.DAG(fb, tt, matcher).materialize()
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=None))
     by_id = {r["campaign_id"]: r for r in rows}
     assert by_id["fb_like-0"]["canonical_name"] == "summer sale"
     assert by_id["tt_like-0"]["canonical_name"] == "brand awareness"
@@ -215,9 +199,8 @@ def test_a_row_with_neither_spelling_is_still_emitted_with_empty_placeholders() 
     memory = il.MemoryDestination()
     fb = _neither_spelling_star_schema("fb_like", 1)(destinations=[memory])
     matcher = CampaignMatcher(destinations=[memory])
-    partition = il.TimePartition(dt.date(2026, 9, 1))
-    il.DAG(fb, matcher).materialize(partition)
-    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=partition.window))
+    il.DAG(fb, matcher).materialize()
+    rows = memory.read(il.IOContext(asset=matcher.campaign_matches, window=None))
     assert len(rows) == 1
     assert rows[0]["campaign_id"] == ""
     assert rows[0]["canonical_name"] == ""

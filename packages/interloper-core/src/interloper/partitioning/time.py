@@ -471,12 +471,14 @@ class TimePartitionConfig(PartitionConfig):
         return TimePartitionWindow(first.value, last.value, self.granularity)
 
     def compatible(self, other: PartitionConfig) -> bool:
-        """Whether *other* is a time partitioning of the same granularity.
+        """Whether *other* is a time partitioning of the same granularity, partitioned on the run's window.
+
+        A snapshot holds the period it observed in, not the one the run names, so it is refused.
 
         Args:
             other: The partitioning at the other end of a DAG edge.
 
         Returns:
-            True when both share the granularity.
+            True when both share the granularity and *other* writes the run's window.
         """
-        return isinstance(other, TimePartitionConfig) and other.granularity is self.granularity
+        return isinstance(other, TimePartitionConfig) and other.windowed and other.granularity is self.granularity

@@ -5,6 +5,7 @@ export interface DayAggregate {
     expected: number
     covered: number
     failed: number
+    missed: number
 }
 
 /** Cell colours from Tailwind's status scales; the low states are their tints. */
@@ -27,6 +28,15 @@ export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5
     const ratio = day.covered / day.expected
     if (ratio >= 1) return 5
     return ratio >= 0.6 ? 4 : 3
+}
+
+/** A day's cell title: what its sources delivered, missed snapshots named but never counted as owed. */
+export function describeDay(date: string, day: DayAggregate | undefined, separator: string): string {
+    if (!day) return `${date}${separator}nothing expected`
+    const parts = [`${day.covered}/${day.expected} covered`]
+    if (day.failed) parts.push(`${day.failed} failed`)
+    if (day.missed) parts.push(`${day.missed} snapshot${day.missed === 1 ? '' : 's'} missed`)
+    return `${date}${separator}${parts.join(' · ')}`
 }
 
 const DAY_MS = 86_400_000
@@ -55,6 +65,7 @@ export function sourceDay(source: CoverageSource, date: string): CoverageDay | n
         expected,
         covered: source.covered[i] ?? 0,
         failed: source.failed[i] ?? 0,
+        missed: source.missed[i] ?? 0,
         failed_run_id: source.failed_run_ids[String(i)] ?? null,
     }
 }
@@ -73,10 +84,11 @@ export function useCoverageCalendar(
             source.expected.forEach((expected, i) => {
                 if (expected <= 0) return
                 const date = new Date(start + i * DAY_MS).toISOString().slice(0, 10)
-                const agg = map.get(date) ?? { expected: 0, covered: 0, failed: 0 }
+                const agg = map.get(date) ?? { expected: 0, covered: 0, failed: 0, missed: 0 }
                 agg.expected += expected
                 agg.covered += source.covered[i] ?? 0
                 agg.failed += source.failed[i] ?? 0
+                agg.missed += source.missed[i] ?? 0
                 map.set(date, agg)
             })
         }

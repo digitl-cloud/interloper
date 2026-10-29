@@ -19,7 +19,8 @@ executed; it executes once, since the host owns its retries; and what it came
 to is left in the termination message the host reads back. A platform run is
 executed by its id instead, with ``interloper launch``.
 
-The window comes from the date flags. The runner is the one configured in
+The window comes from the date flags; a snapshot asset writes the period the
+run started in instead, in UTC. The runner is the one configured in
 ``AppSettings.runner`` (top-level ``runner`` key in ``interloper.yaml`` or
 ``INTERLOPER_RUNNER_*`` environment variables).
 
@@ -38,6 +39,7 @@ event JSON lines to stdout instead, unaffected by the level.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -147,11 +149,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
     from interloper.settings import AppSettings
 
     configure_logging(quiet=args.quiet, verbose=args.verbose)
+    metadata = {"observed_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     try:
         dag = _build_dag(args)
         window = _resolve_window(args, dag)
         if args.operation_id is not None:
-            dag, window = for_operation(dag, window, args.operation_id)
+            dag, window = for_operation(dag, window, args.operation_id, metadata)
         runner = Runner.from_settings(AppSettings.get().runner)
     except (Exception, SystemExit) as error:
         leave_failure(args.operation_id, str(error) if isinstance(error, SystemExit) else format_exception(error))
@@ -164,7 +167,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     # Events become records on the ``interloper.run`` logger, so the console logging set up above
     # governs their visibility and format.
     runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
-    execute(runner, dag, window, {}, operation_id=args.operation_id)
+    execute(runner, dag, window, metadata, operation_id=args.operation_id)
 
 
 # -- Internals -----------------------------------------------------------------
@@ -239,7 +242,8 @@ def _resolve_window(args: argparse.Namespace, dag: DAG) -> PartitionWindow | Non
     The keys are parsed by the partitioning of the DAG's first enabled partitioned operation,
     so a key means what that asset means (a day key for a daily asset, a declared value for a
     list-partitioned one); the DAG already enforces that every edge shares a partitioning, and
-    the runner's preflight checks the window against every operation.
+    the runner's preflight checks the window against every operation. A snapshot ignores the
+    keys, so an operation partitioned on the run's window parses them when there is one.
 
     Args:
         args: Parsed CLI arguments, carrying ``date``, ``start_date`` and ``end_date``.
@@ -264,10 +268,11 @@ def _resolve_window(args: argparse.Namespace, dag: DAG) -> PartitionWindow | Non
     if has_window and not (args.start_date and args.end_date):
         raise SystemExit("Error: both --start-date and --end-date must be provided.")
 
-    partitioning = next(
-        (operation.partitioning for operation in dag.operations if operation.enabled and operation.partitioning),
-        None,
-    )
+    partitionings = [
+        operation.partitioning for operation in dag.operations if operation.enabled and operation.partitioning
+    ]
+    partitioning = next((partitioning for partitioning in partitionings if partitioning.windowed), None)
+    partitioning = partitioning or next(iter(partitionings), None)
     if partitioning is None:
         raise SystemExit("Error: a partition key was given, but no enabled operation of the DAG is partitioned.")
     start_key, end_key = (args.date, args.date) if has_date else (args.start_date, args.end_date)

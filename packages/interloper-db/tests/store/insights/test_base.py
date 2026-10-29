@@ -47,6 +47,15 @@ _ORG = uuid4()
 _T0 = dt.datetime(2026, 6, 4, 12, tzinfo=dt.timezone.utc)
 
 
+@il.source(key="snapshot_source")
+class SnapshotSource(il.Source):
+    """A source whose one asset observes the vendor's current state."""
+
+    @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    def campaigns(self) -> list[dict[str, Any]]:
+        return []
+
+
 @pytest.fixture
 def store() -> Iterator[Store]:
     """A store over a fresh in-memory database with every table the facet reads.
@@ -64,7 +73,7 @@ def store() -> Iterator[Store]:
     for model in (*tenant, Component, ComponentRelation, Backfill, Run, Event, Execution, Quota, Usage):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
-        yield Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, demo_asset]))
+        yield Store(catalog=il.Catalog.from_assets([DemoSource, DemoMonthlySource, SnapshotSource, demo_asset]))
     finally:
         engine.dispose()
         engine_module._engine = None
@@ -121,18 +130,20 @@ def _error(run_id: UUID, event_type: str, error: str | None, *, second: int = 0,
     )
 
 
-def _execution(run_id: UUID, asset_id: UUID, status: str) -> None:
+def _execution(run_id: UUID, asset_id: UUID, status: str, partition_key: str | None = None) -> None:
     """Record an asset's execution in a run, under the run's organisation and stamped with its partition key.
 
     Args:
         run_id: The run.
         asset_id: The executed asset.
         status: The execution's status.
+        partition_key: The key its operation's events named, as a snapshot's observed period;
+            ``None`` stamps the run's.
     """
     with Session(engine_module.get_engine()) as session:
         run = session.get(Run, run_id)
         assert run is not None
-        org_id, partition_key = run.org_id, run.partition_key
+        org_id, partition_key = run.org_id, partition_key or run.partition_key
     _add(
         Execution(
             run_id=run_id,
@@ -283,7 +294,7 @@ class TestCoverageByKey:
         _execution(_run(job.id, partition_key="2026-07-02"), assets["a"], "failed")
         _execution(_run(job.id, partition_key="2026-07-03"), assets["a"], "success")
 
-        coverage = store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07-02")
+        coverage = store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07-02", now=_T0)
 
         assert coverage.keys == ["2026-07-01", "2026-07-02"]
         by_key = {asset.asset_key: asset for asset in coverage.assets}
@@ -294,7 +305,27 @@ class TestCoverageByKey:
         job = store.components.create(_ORG, kind="job", key="cron_job")
 
         with pytest.raises(ConfigError, match="different granularities"):
-            store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07")
+            store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07", now=_T0)
+
+    def test_a_snapshot_is_read_under_the_period_it_observed_whatever_its_run(self, store: Store) -> None:
+        source = store.components.create(_ORG, kind="source", key="snapshot_source")
+        job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
+        [campaigns] = [child.id for child in source.children]
+        # a backfill of 1-3 July dispatched on the 3rd observes once, in its newest run, on the 3rd
+        _execution(_run(job.id, partition_key="2026-07-03"), campaigns, "success", partition_key="2026-07-03")
+        # an earlier firing's observation of the 1st failed and was never healed
+        _execution(_run(job.id, partition_key="2026-06-30"), campaigns, "failed", partition_key="2026-07-01")
+        now = dt.datetime(2026, 7, 3, 10, tzinfo=dt.timezone.utc)
+
+        coverage = store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07-03", now=now)
+
+        [asset] = coverage.assets
+        assert (asset.expected, asset.covered, asset.failed, asset.missed) == (
+            {"2026-07-03"},
+            {"2026-07-03"},
+            frozenset(),
+            {"2026-07-01"},
+        )
 
 
 class TestHealth:

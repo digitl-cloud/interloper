@@ -83,6 +83,7 @@ const groups = computed<TypeGroup[]>(() => {
                     expected: owed.reduce((n, day) => n + day.expected, 0),
                     covered: owed.reduce((n, day) => n + day.covered, 0),
                     failed: owed.reduce((n, day) => n + day.failed, 0),
+                    missed: owed.reduce((n, day) => n + day.missed, 0),
                 }
             })
             return {

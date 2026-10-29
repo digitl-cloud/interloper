@@ -33,6 +33,8 @@ Never both: an asset that declares the vendor's day *and* stamps one has two col
 
 Object lifecycle fields (`created_at`, `updated_at`, `create_time`, `modify_time`) are attributes of the object, not the day it was observed; they never serve as the partition column.
 
+**A snapshot is dated by the day it was taken.** An asset that reads the vendor's *current* state (every `Entity`) declares `il.SnapshotPartitionConfig(column="date")`, never `il.TimePartitionConfig`: its partition is the day the run observed in, on the job's clock, whatever window the run was given, and `context.partition_date` returns that day. Declared as a time partition, it writes today's state under whatever past day a backfill or retry names, and a missed day reads as recoverable when no API can read the past. A report whose rows are dated only by the request is the opposite case: it can be asked for any day, so it stays a time partition.
+
 ## 3. Types describe the data, not the vendor's serialization
 
 Vendors serialize loosely: counts as floats, numbers as strings, dates as strings. The schema declares what the value *is*, and the conformer casts on the way in.

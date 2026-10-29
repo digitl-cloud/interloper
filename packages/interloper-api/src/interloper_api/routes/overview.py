@@ -160,7 +160,9 @@ class CoverageSource(BaseModel):
 
     The arrays run from :attr:`start` to the group's last expected day in the
     window: index ``i`` is the day ``start + i``, and a day inside that run
-    with nothing expected is a zero in every array.
+    with nothing expected is a zero in every array. ``missed`` counts the
+    snapshot observations that ended without a success, which are not
+    expected.
     """
 
     id: UUID
@@ -171,6 +173,7 @@ class CoverageSource(BaseModel):
     expected: list[int]
     covered: list[int]
     failed: list[int]
+    missed: list[int]
     failed_run_ids: dict[int, UUID]
 
     @classmethod
@@ -193,6 +196,7 @@ class CoverageSource(BaseModel):
             expected=days.expected,
             covered=days.covered,
             failed=days.failed,
+            missed=days.missed,
             failed_run_ids=days.failed_run_ids,
         )
 

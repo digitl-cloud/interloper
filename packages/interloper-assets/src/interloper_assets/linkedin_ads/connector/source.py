@@ -131,7 +131,7 @@ class LinkedinAds(il.Source):
         response.raise_for_status()
         return response.json().get("elements", [])
 
-    @il.asset(schema=AdAccounts, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=AdAccounts, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def ad_accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The ad account with its name, currency and status."""
         response = await self.connection.client.get(
@@ -140,13 +140,13 @@ class LinkedinAds(il.Source):
         response.raise_for_status()
         return _with_date([response.json()], context.partition_date)
 
-    @il.asset(schema=CampaignGroups, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=CampaignGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaign_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaign groups of the ad account with their status and run schedule."""
         rows = await self._search("adCampaignGroups", constants.CAMPAIGN_GROUP_FIELDS)
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Campaigns, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=Campaigns, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """All campaigns of the ad account with their type, objective, budget and run schedule."""
         rows = await self._search("adCampaigns", constants.CAMPAIGN_FIELDS)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -158,6 +159,33 @@ class TestQueue:
 
         queued = {event.metadata["component_id"] for event in events if event.type is EventType.OPERATION_QUEUED}
         assert queued == {operation.id for operation in operations.values()}
+
+
+class TestPartitionKey:
+    """Every lifecycle event names the partition its operation consumes, which files its execution."""
+
+    def test_a_snapshot_names_the_period_it_observes_and_a_dated_asset_the_runs(self) -> None:
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def entities() -> list:  # pragma: no cover
+            return []
+
+        @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+        def report() -> list:  # pragma: no cover
+            return []
+
+        @il.asset
+        def lookup() -> list:  # pragma: no cover
+            return []
+
+        dag = il.DAG(entities(id="entities"), report(id="report"), lookup(id="lookup"))
+        window = il.TimePartition(dt.date(2026, 10, 26)).window
+        state = RunState(dag, window, {"run_id": "run-1", "observed_at": "2026-10-29T14:00:00+00:00"})
+
+        with _capture() as events:
+            state.queue()
+
+        named = {event.metadata["component_id"]: event.metadata.get("partition_key") for event in events}
+        assert named == {"entities": "2026-10-29", "report": "2026-10-26", "lookup": None}
 
 
 class TestStart:

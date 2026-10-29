@@ -328,7 +328,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.Profiles,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def profiles(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
@@ -341,7 +341,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.ProductsCampaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def products_campaigns(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
@@ -353,7 +353,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.ProductsAdGroups,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def products_ad_groups(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
@@ -365,7 +365,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.BrandsCampaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_BRANDS_ENTITY_NORMALIZER,
     )
@@ -382,7 +382,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.BrandsAdGroups,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_BRANDS_ENTITY_NORMALIZER,
     )
@@ -399,7 +399,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.DisplayCampaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_DISPLAY_ENTITY_NORMALIZER,
     )
@@ -411,7 +411,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.DisplayAdGroups,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_DISPLAY_ENTITY_NORMALIZER,
     )
@@ -423,7 +423,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.ProductsAds,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def products_ads(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
@@ -435,7 +435,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.BrandsAds,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_BRANDS_ENTITY_NORMALIZER,
     )
@@ -453,7 +453,7 @@ class AmazonAds(il.Source):
 
     @il.asset(
         schema=schemas.DisplayAds,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_DISPLAY_ENTITY_NORMALIZER,
     )

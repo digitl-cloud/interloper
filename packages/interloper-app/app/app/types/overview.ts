@@ -48,7 +48,8 @@ export interface Overview {
 
 /**
  * A calendar group and its days: index `i` of each array is the day `start + i`, from the group's first to its last
- * expected day in the window. A day inside that run with nothing expected is a zero.
+ * expected day in the window. A day inside that run with nothing expected is a zero. `missed` counts the snapshot
+ * observations that ended without a success: not expected, and not recoverable by a backfill.
  */
 export interface CoverageSource {
     id: string
@@ -59,6 +60,7 @@ export interface CoverageSource {
     expected: number[]
     covered: number[]
     failed: number[]
+    missed: number[]
     failed_run_ids: Record<string, string>
 }
 
@@ -75,6 +77,7 @@ export interface CoverageDay {
     expected: number
     covered: number
     failed: number
+    missed: number
     failed_run_id: string | null
 }
 

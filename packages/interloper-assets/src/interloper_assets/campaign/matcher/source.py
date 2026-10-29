@@ -70,7 +70,8 @@ class CampaignMatcher(il.Source):
     name is reduced to a normalised key, optionally through a
     naming-convention pattern, and campaigns sharing a key share a match.
     Keys that merely resemble each other can be merged too, above a
-    similarity threshold.
+    similarity threshold. The table is the current matching, replaced on
+    every run.
     """
 
     key_pattern: str | None = il.InputField(
@@ -84,8 +85,6 @@ class CampaignMatcher(il.Source):
 
     @il.asset(
         schema=schemas.CampaignMatches,
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Entity"],
         relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)},
     )
     def campaign_matches(
@@ -98,14 +97,13 @@ class CampaignMatcher(il.Source):
         rows: list[dict[str, Any]] = []
         for leg in campaigns:
             if leg.data is None:
-                context.logger.warning(f"No data for upstream '{leg.asset.qualified_key}' in this partition; skipped")
+                context.logger.warning(f"No data for upstream '{leg.asset.qualified_key}'; skipped")
                 continue
             source = leg.asset.source
             for row in leg.rows:
                 name = _first(row, "campaign_name", "name", "campaign")
                 rows.append(
                     {
-                        "date": context.partition_date,
                         "platform": source.key if source else "",
                         "account": (source.discriminator or source.id) if source else "",
                         "campaign_id": _first(row, "campaign_id", "id"),

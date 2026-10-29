@@ -91,7 +91,7 @@ def _cmd_launch(args: argparse.Namespace) -> None:
             raise SystemExit(f"Error: {error}") from error
         dag, window = DAG.from_spec(spec.dag), spec.window
         if args.operation_id is not None:
-            dag, window = for_operation(dag, window, args.operation_id)
+            dag, window = for_operation(dag, window, args.operation_id, spec.metadata)
         runner = Runner.from_settings(settings.runner)
     except (Exception, SystemExit) as error:
         reason = str(error) if isinstance(error, SystemExit) else format_exception(error)

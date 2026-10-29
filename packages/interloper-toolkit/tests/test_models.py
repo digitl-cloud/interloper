@@ -7,9 +7,9 @@ from uuid import uuid4
 
 from interloper_db import ComponentStatus
 from interloper_db.models import Component
-from interloper_db.store.insights import Attention, ErrorCause, ErrorGroup
+from interloper_db.store.insights import AssetKeyCoverage, Attention, ErrorCause, ErrorGroup, JobCoverage
 
-from interloper_toolkit.models import AttentionRow
+from interloper_toolkit.models import AssetCoverage, AttentionRow
 
 SINCE = datetime.datetime(2026, 10, 6, 9, tzinfo=datetime.timezone.utc)
 
@@ -59,3 +59,23 @@ class TestAttentionRow:
 
         assert (drift.error, drift.component_name, drift.runs) == ("missing", "old_source", None)
         assert renewal.error == "invalid_grant"
+
+
+class TestAssetCoverage:
+    def test_a_missed_snapshot_is_counted_but_never_offered_for_a_backfill(self):
+        keys = ["2026-07-01", "2026-07-02", "2026-07-03"]
+        snapshot = AssetKeyCoverage(
+            uuid4(),
+            "campaigns",
+            expected=frozenset({"2026-07-03"}),
+            covered=frozenset(),
+            failed=frozenset({"2026-07-03"}),
+            missed=frozenset({"2026-07-01"}),
+        )
+
+        coverage = AssetCoverage.from_coverage(JobCoverage(uuid4(), keys, [snapshot]), limit=10, offset=0)
+
+        [row] = coverage.assets
+        assert (row.covered, row.failed, row.missed, row.never_run) == (0, 1, 1, 0)
+        assert [(r.start_key, r.end_key) for r in row.missing] == [("2026-07-03", "2026-07-03")]
+        assert (coverage.all_covered, coverage.partly_covered, coverage.none_covered) == (0, 0, 1)

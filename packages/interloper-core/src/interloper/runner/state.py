@@ -96,7 +96,9 @@ class RunState:
         Returns:
             Its context.
         """
-        return OperationContext(window=operation.effective_window(self.window), dag=self.dag, metadata=self.metadata)
+        return OperationContext(
+            window=operation.effective_window(self.window, self.metadata), dag=self.dag, metadata=self.metadata
+        )
 
     # -- Transitions -------------------------------------------------------------
 
@@ -245,6 +247,10 @@ class RunState:
     def _emit(self, event_type: EventType, operation: Operation, message: str, **extra: Any) -> None:
         """Emit an operation-lifecycle event with its deterministic id.
 
+        The event is scoped to the window the operation consumes, and names its partition when
+        that window holds one: the platform files the execution under it, which for a snapshot
+        is the period observed rather than the run's partition.
+
         Args:
             event_type: The lifecycle event.
             operation: The operation it is about.
@@ -252,8 +258,11 @@ class RunState:
             **extra: More metadata (``error``, ``traceback``).
         """
         attempt = self.executions[operation.id].attempt
+        window = operation.effective_window(self.window, self.metadata)
+        if window is not None and len(window) == 1:
+            extra["partition_key"] = window.first.key
         metadata = {
-            **operation.event_metadata(self.metadata, self.window, attempt=attempt, **extra),
+            **operation.event_metadata(self.metadata, window, attempt=attempt, **extra),
             "message": message,
         }
         event_id = self.operation_event_id(self.run_id, operation.id, event_type, attempt=attempt)
