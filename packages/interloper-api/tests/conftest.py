@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import interloper as il
 import pytest
-from interloper.settings import ServerSettings
+from interloper.settings import McpSettings, ServerSettings
 from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -80,7 +80,7 @@ def fake_settings() -> SimpleNamespace:
             metrics=True,
             sample_ratio=1.0,
         ),
-        mcp=SimpleNamespace(external_url="", token="mcp-secret"),
+        mcp=McpSettings(token="mcp-secret"),
         server=ServerSettings(external_url="", port=3000),
         secrets=SimpleNamespace(encryption_key="key-material"),
         postgres=SimpleNamespace(password="pg-secret"),

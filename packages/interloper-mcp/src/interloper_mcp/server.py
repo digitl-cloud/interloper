@@ -63,11 +63,9 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
     """
     auth_kwargs: dict = {}
     if store is not None:
-        # external_url names the MCP endpoint (https://host/mcp): it is the RFC 9728
-        # resource, which puts the metadata at /.well-known/oauth-protected-resource/mcp.
-        # Default to the local bind address so dev servers work without configuration.
-        local_url = f"http://localhost:{settings.port}"
-        issuer = AppSettings.get().server.public_url
+        # The endpoint's URL (https://host/mcp) is the RFC 9728 resource, which puts the
+        # metadata at /.well-known/oauth-protected-resource/mcp.
+        server = AppSettings.get().server
         # Strings, not AnyHttpUrl instances: the SDK's settings model keeps a path-less URL
         # as given only when it validates the string itself, and the issuer must match the
         # authorization server's own metadata exactly (RFC 8414 section 3.3).
@@ -75,8 +73,8 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
             "token_verifier": PatVerifier(store),
             "auth": McpAuthSettings.model_validate(
                 {
-                    "issuer_url": issuer,
-                    "resource_server_url": settings.external_url or f"{local_url}/mcp",
+                    "issuer_url": server.public_url,
+                    "resource_server_url": settings.public_url(server),
                     "validate_token_resource": False,
                 }
             ),

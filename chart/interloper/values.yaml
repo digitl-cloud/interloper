@@ -173,9 +173,11 @@ mcp:
   image:
     repository: ""  # defaults to {image.registry}/interloper-mcp
     tag: ""
-  # Public URL of the MCP endpoint (e.g. https://app.example.com/mcp), used
-  # in OAuth protected-resource metadata. Ignored when extraConfig carries
-  # an `mcp` section (the YAML block then owns the whole submodel).
+  # Public URL of the MCP endpoint, the OAuth resource clients sign in to.
+  # Empty means /mcp on the root-level `externalUrl`, where the HTTPRoute
+  # serves it; set it only when the endpoint lives elsewhere. Ignored when
+  # extraConfig carries an `mcp` section (the YAML block then owns the whole
+  # submodel).
   externalUrl: ""
   resources:
     requests:

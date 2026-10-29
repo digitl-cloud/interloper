@@ -7,6 +7,7 @@ from interloper.settings import (
     AgentSettings,
     AppSettings,
     AuthSettings,
+    McpSettings,
     PostgresSettings,
     ServerSettings,
     TelemetrySettings,
@@ -180,3 +181,17 @@ def test_server_internal_url_env_override(monkeypatch: pytest.MonkeyPatch):
 def test_server_public_url_is_the_external_url_else_the_local_server(external_url: str, public_url: str):
     """The OAuth issuer the API and the MCP server both name."""
     assert ServerSettings(external_url=external_url, port=3100).public_url == public_url
+
+
+@pytest.mark.parametrize(
+    ("external_url", "public_url"),
+    [
+        ("", "https://app.example.com/mcp"),
+        ("https://mcp.example.com/mcp", "https://mcp.example.com/mcp"),
+        ("https://mcp.example.com/mcp/", "https://mcp.example.com/mcp"),
+    ],
+)
+def test_mcp_public_url_is_the_external_url_else_mcp_on_the_app(external_url: str, public_url: str):
+    """The OAuth resource the MCP server advertises and the authorization server accepts."""
+    server = ServerSettings(external_url="https://app.example.com/")
+    assert McpSettings(external_url=external_url).public_url(server) == public_url

@@ -115,22 +115,24 @@ async def test_protected_resource_metadata_names_interloper_issuer(store: Store,
 
 
 async def test_protected_resource_metadata_falls_back_to_the_local_api(store: Store, catalog: il.Catalog, seeded: dict):
-    # The issuer is the API's, as the authorization server derives it, not the MCP server's own port.
+    # Both the issuer and the resource are the API's, as the authorization server derives them, not the MCP server's
+    # own port: a client signs in to the resource the authorization server accepts.
     settings = AppSettings(
         server=ServerSettings(external_url="", port=3100), secrets=SecretsSettings(encryption_key="key-material")
     )
     AppSettings.activate(settings)
     try:
         app = _app(store, catalog, McpSettings(port=8123))
-        issuer = AuthorizationServer.from_settings(store, settings).metadata["issuer"]
+        server = AuthorizationServer.from_settings(store, settings)
     finally:
         AppSettings.clear_active()
 
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://testserver") as client:
         metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
 
-    assert metadata.json()["resource"] == "http://localhost:8123/mcp"
-    assert metadata.json()["authorization_servers"] == [issuer] == ["http://localhost:3100"]
+    assert metadata.json()["resource"] == "http://localhost:3100/mcp"
+    assert server.resources[metadata.json()["resource"]] is Audience.MCP
+    assert metadata.json()["authorization_servers"] == [server.metadata["issuer"]] == ["http://localhost:3100"]
 
 
 async def test_session_token_refused(store: Store, catalog: il.Catalog, seeded: dict):
