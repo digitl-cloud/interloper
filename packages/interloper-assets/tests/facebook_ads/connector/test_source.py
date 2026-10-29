@@ -18,12 +18,13 @@ from typing import Any
 import interloper as il
 import pandas as pd
 import pytest
-from facebook_business.exceptions import FacebookRequestError
 from interloper.dag import DAG, DAGSpec
 from interloper.representation import TableData
 from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.facebook_ads import constants
+from interloper_assets.facebook_ads.api import FacebookGraphApi
+from interloper_assets.facebook_ads.connection import FacebookAdsConnection
 from interloper_assets.facebook_ads.connector import schemas
 from interloper_assets.facebook_ads.connector import source as connector
 from interloper_assets.facebook_ads.connector.source import PIVOT_COLUMNS, FacebookActionsNormalizer, FacebookAds
@@ -273,11 +274,6 @@ class TestNewEntities:
         assert json.loads(out.loc[0, "targeting"]) == {"geo_locations": {"countries": ["DE"]}}
 
 
-def _facebook_error(code: int, message: str) -> FacebookRequestError:
-    body = json.dumps({"error": {"code": code, "message": message}})
-    return FacebookRequestError("Call was not successful", {"method": "GET", "path": "act_1/ads"}, 500, {}, body)
-
-
 class _FakeObject:
     def __init__(self, data: dict) -> None:
         self.data = data
@@ -286,84 +282,46 @@ class _FakeObject:
         return self.data
 
 
-class _FakeCursor:
-    """A Facebook SDK cursor: indexing reads the current page, `load_next_page` replaces it."""
-
-    def __init__(self, pages: list[list[dict]]) -> None:
-        self._pages = [[_FakeObject(row) for row in page] for page in pages]
-        self._queue = self._pages.pop(0)
-
-    def __len__(self) -> int:
-        return len(self._queue)
-
-    def __getitem__(self, index: int) -> _FakeObject:
-        return self._queue[index]
-
-    def load_next_page(self) -> bool:
-        if not self._pages:
-            return False
-        self._queue = self._pages.pop(0)
-        return True
-
-
-class TestPagination:
-    def test_every_row_of_every_page_is_read_once(self):
-        pages = [[{"id": "1"}, {"id": "2"}], [{"id": "3"}]]
-        calls: list[dict] = []
-
-        def request(**kwargs: Any) -> _FakeCursor:
-            calls.append(kwargs)
-            return _FakeCursor(pages)
-
-        rows = connector._paginate(request, ["id"])
-        assert [row["id"] for row in rows] == ["1", "2", "3"]
-        assert calls == [{"fields": ["id"], "params": {"limit": 25}}]
-
-    def test_an_edge_too_heavy_to_page_is_reread_with_half_the_page_until_it_fits(self):
-        limits: list[int] = []
-
-        def request(**kwargs: Any) -> _FakeCursor:
-            limits.append(kwargs["params"]["limit"])
-            if kwargs["params"]["limit"] > 6:
-                raise _facebook_error(1, "Please reduce the amount of data you're asking for, then retry your request")
-            return _FakeCursor([[{"id": "1"}], [{"id": "2"}]])
-
-        rows = connector._paginate(request, ["id"])
-        assert [row["id"] for row in rows] == ["1", "2"]
-        assert limits == [25, 12, 6]
-
-    def test_a_page_that_is_still_too_heavy_alone_fails(self):
-        def request(**kwargs: Any) -> _FakeCursor:
-            raise _facebook_error(1, "Please reduce the amount of data you're asking for, then retry your request")
-
-        with pytest.raises(FacebookRequestError, match="Call was not successful"):
-            connector._paginate(request, ["id"])
-
-    def test_any_other_error_is_not_retried_with_a_smaller_page(self):
-        limits: list[int] = []
-
-        def request(**kwargs: Any) -> _FakeCursor:
-            limits.append(kwargs["params"]["limit"])
-            raise _facebook_error(100, "(#100) Invalid parameter")
-
-        with pytest.raises(FacebookRequestError):
-            connector._paginate(request, ["id"])
-        assert limits == [25]
+class TestEntityReads:
+    def test_every_request_goes_through_the_graph_engine(self):
+        connection = FacebookAdsConnection(id="fb", access_token="x", app_id="1", app_secret="x")
+        assert isinstance(connection.api, FacebookGraphApi)
 
     def test_the_account_requests_no_field_that_needs_a_page(self):
         # Facebook answers 400 for the whole account when one of these comes without a page_id
         for name in ("show_checkout_experience", "has_page_authorized_adaccount"):
             assert name not in constants.AD_ACCOUNT_ENTITY_FIELDS
 
+    def test_an_insights_report_runs_as_an_async_job_and_returns_its_rows(self, monkeypatch):
+        class FakeRow:
+            def __init__(self, data: dict) -> None:
+                self._json = data
+
+        class FakeJob:
+            def api_get(self) -> FakeRow:
+                return FakeRow({"async_status": "Job Completed", "async_percent_completion": 100})
+
+            def get_result(self) -> list[FakeRow]:
+                return [FakeRow({"campaign_id": "c1", "spend": "1.5"})]
+
+        class FakeAccount:
+            def get_insights(self, **kwargs: Any) -> FakeJob:
+                assert (kwargs["fields"], kwargs["params"], kwargs["is_async"]) == (["spend"], {"level": "ad"}, True)
+                return FakeJob()
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        rows = connector._get_ads_insights(_source().connection, "123", fields=["spend"], params={"level": "ad"})
+        assert rows == [{"campaign_id": "c1", "spend": "1.5"}]
+
     def test_entity_assets_read_their_edges_and_stamp_the_day(self, monkeypatch):
         class FakeAccount:
-            def get_ads(self, **kwargs: Any) -> _FakeCursor:
+            def get_ads(self, **kwargs: Any) -> list[_FakeObject]:
                 assert kwargs["fields"] == constants.AD_ENTITY_FIELDS
-                return _FakeCursor([[{"id": "a1"}], [{"id": "a2"}]])
+                return [_FakeObject({"id": "a1"}), _FakeObject({"id": "a2"})]
 
-            def get_ad_sets(self, **kwargs: Any) -> _FakeCursor:
+            def get_ad_sets(self, **kwargs: Any) -> list[_FakeObject]:
                 assert kwargs["fields"] == constants.ADSET_ENTITY_FIELDS
-                return _FakeCursor([[{"id": "s1"}]])
+                return [_FakeObject({"id": "s1"})]
 
             def api_get(self, **kwargs: Any) -> _FakeObject:
                 assert kwargs["fields"] == constants.AD_ACCOUNT_ENTITY_FIELDS

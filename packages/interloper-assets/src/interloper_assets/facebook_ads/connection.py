@@ -56,14 +56,16 @@ class FacebookAdsConnection(il.OAuthConnection):
 
     @cached_property
     def api(self) -> Any:
-        """Initialise and return the Facebook Ads SDK API client."""
-        from facebook_business.api import FacebookAdsApi
+        """Initialise and return the Facebook Ads SDK API client every request goes through."""
+        from interloper_assets.facebook_ads.api import FacebookGraphApi
 
-        return FacebookAdsApi.init(
+        return FacebookGraphApi.init(
             app_id=self.app_id,
             app_secret=self.app_secret,
             access_token=self.access_token,
             api_version=f"v{constants.API_VERSION}",
+            # the SDK's crash reporter would send our tracebacks to Meta
+            crash_log=False,
         )
 
     @il.fetch_field_provider
