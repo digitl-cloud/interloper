@@ -80,6 +80,15 @@ class TestClients:
         assert stored is not None
         assert stored.redirect_uris == ["https://slack.example.com/cb"]
 
+    def test_a_client_id_never_reads_as_a_command_line_option(self, store: Store):
+        # An id is typed after `interloper oauth delete`, where a leading dash would read as an option.
+        ids = [
+            store.oauth.register_client("App", ["http://127.0.0.1/cb"], registered_by="dynamic")[0].client_id
+            for _ in range(512)
+        ]
+
+        assert not [client_id for client_id in ids if client_id.startswith("-")]
+
     def test_unknown_client_is_none(self, store: Store):
         assert store.oauth.get_client("no-such-client") is None
 
