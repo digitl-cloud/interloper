@@ -234,6 +234,31 @@ class TestOnDuckDB:
         }
         assert {row["account_id"] for row in _rows(warehouse, "dim_accounts")} == {"111", "222"}
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _advertiser("111", warehouse)
+        _seed_one(warehouse, "111")
+        client = warehouse.connection.client
+        client.execute(
+            "INSERT INTO criteo.campaigns_stats__111 SELECT * REPLACE (NULL AS campaign_id) "
+            f"FROM (VALUES {_campaign_row('c2', 'Camp')}) AS t(day, campaign_id, campaign, {MEASURES})"
+        )
+        client.execute(
+            "INSERT INTO criteo.ads_stats__111 "
+            "SELECT * REPLACE (NULL AS campaign_id, NULL AS adset_id, NULL AS ad_id) "
+            f"FROM (VALUES {_ad_row('a2', 'Ad')}) "
+            f"AS t(day, campaign_id, campaign, adset_id, adset, ad_id, ad, {MEASURES})"
+        )
+        _materialize(warehouse, first)
+        keys = {
+            ("fact_campaign_performance", "campaign_id"): {"c1"},
+            ("fact_ad_performance", "ad_id"): {"a1"},
+            ("dim_campaigns", "campaign_id"): {"c1"},
+            ("dim_ad_groups", "ad_group_id"): {"s1"},
+            ("dim_ads", "ad_id"): {"a1"},
+        }
+        for (table, key), expected in keys.items():
+            assert {row[key] for row in _rows(warehouse, table)} == expected
+
     def test_a_missing_advertiser_table_fails_the_view(self, warehouse):
         first = _advertiser("111", warehouse)
         star = CriteoStarSchema(destinations=[warehouse])

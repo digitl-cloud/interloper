@@ -211,6 +211,15 @@ def test_latest_keeps_the_first_row_per_key_in_the_given_order():
     assert "ROW_NUMBER() OVER" in sql and "PARTITION BY" in sql and "ORDER BY" in sql
 
 
+def test_latest_drops_the_rows_without_a_key():
+    duckdb = pytest.importorskip("duckdb")
+    rows = ibis.table({"key": "string", "tier": "int64"}, name="candidates")
+    kept = latest(rows, "key", rows["tier"].asc())
+    client = duckdb.connect()
+    client.execute("CREATE TABLE candidates AS SELECT * FROM (VALUES ('a', 1), (NULL, 1), (NULL, 2)) AS t(key, tier)")
+    assert client.execute(ibis.to_sql(kept, dialect="duckdb")).fetchall() == [("a", 1)]
+
+
 def test_union_keeps_only_the_named_columns():
     table = ibis.table({"date": "date", "total": "float64"}, name="orders__1")
     rows = union([il.Upstream(asset=Shop(account_id="1").orders, data=table)], "total")

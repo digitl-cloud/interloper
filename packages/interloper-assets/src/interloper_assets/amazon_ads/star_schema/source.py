@@ -157,6 +157,7 @@ class AmazonAdsStarSchema(il.Source):
             ),
             distinct=False,
         )
+        rows = rows.filter(rows["campaign_id"].notnull())
         # Sponsored Products reports one row per ad group, so the grain is restored by summing.
         summed = rows.group_by(["date", "account_id", "campaign_type", "campaign_id"]).aggregate(
             impressions=rows["impressions"].sum(),

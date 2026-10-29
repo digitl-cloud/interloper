@@ -74,6 +74,7 @@ def _performance(reports: list[il.Upstream], ad_accounts: list[il.Upstream]) -> 
         date, account_id, id and the summed measures, with currency.
     """
     rows = union(reports, *REPORT_COLUMNS, account_id=_account)
+    rows = rows.filter(rows["id"].notnull())
     summed = rows.group_by(["date", "account_id", "id"]).aggregate(
         impressions=rows["impressions"].sum(),
         clicks=rows["swipes"].sum(),
