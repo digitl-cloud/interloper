@@ -169,5 +169,5 @@ async def test_list_organisations_lists_memberships_with_roles(store: Store, cat
 
     assert result == {
         "status": "success",
-        "organisations": [{"id": str(seeded["org"].id), "slug": "acme", "name": "Acme", "role": "viewer"}],
+        "organisations": [{"id": str(seeded["org"].id), "key": "acme", "name": "Acme", "role": "viewer"}],
     }

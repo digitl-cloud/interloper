@@ -49,7 +49,7 @@ export function useApi() {
  * caller sets around a call (a `loading` or `creating` flag) must be reset on
  * the switch by whoever outlives it: a store in its `$reset`, a component kept
  * across organisations (the layout's agent panel) in its own switch watcher.
- * Pages under `/<slug>/` remount on a switch and need nothing.
+ * Pages under `/<key>/` remount on a switch and need nothing.
  */
 export function useOrgApi() {
     const { apiFetch: baseFetch } = useApi()

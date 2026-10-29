@@ -27,8 +27,8 @@ from interloper_db.models import (
     Role,
     UserOrganisation,
 )
+from interloper_db.organisation_keys import MAX_LENGTH, derive_key, unique_key, validate_key
 from interloper_db.session import commit, save, session_scope
-from interloper_db.slugs import MAX_LENGTH, slugify, unique_slug, validate_slug
 from interloper_db.store.page import Page, PageQuery
 
 
@@ -74,22 +74,22 @@ class OrganisationStore:
                 raise NotFoundError(f"Organisation {org_id} not found")
             return organisation
 
-    def get_by_slug(self, slug: str) -> Organisation:
-        """Get an organisation by its slug; soft-deleted organisations read as missing.
+    def get_by_key(self, key: str) -> Organisation:
+        """Get an organisation by its key; soft-deleted organisations read as missing.
 
         Args:
-            slug: The organisation's slug.
+            key: The organisation's key.
 
         Returns:
             The organisation row.
 
         Raises:
-            NotFoundError: If no live organisation carries that slug.
+            NotFoundError: If no live organisation carries that key.
         """
         with session_scope(self._engine) as session:
-            organisation = session.exec(select(Organisation).where(Organisation.slug == slug)).first()
+            organisation = session.exec(select(Organisation).where(Organisation.key == key)).first()
             if not organisation or organisation.deleted_at is not None:
-                raise NotFoundError(f"Organisation {slug!r} not found")
+                raise NotFoundError(f"Organisation {key!r} not found")
             return organisation
 
     def list(self, query: OrganisationQuery) -> Page[Organisation]:
@@ -114,9 +114,9 @@ class OrganisationStore:
     def create(self, name: str, creator_id: UUID | None = None) -> Organisation:
         """Create an organisation, optionally making the creator an admin.
 
-        The slug is derived from the name: free and not reserved, with a number
-        appended when the name's own slug is not (``acme``, ``acme-2``, ...).
-        Slugs of deleted organisations stay taken.
+        The key is derived from the name: free and not reserved, with a number
+        appended when the name's own key is not (``acme``, ``acme-2``, ...).
+        Keys of deleted organisations stay taken.
 
         Args:
             name: Organisation name.
@@ -128,9 +128,9 @@ class OrganisationStore:
             The created Organisation row.
         """
         with session_scope(self._engine) as session:
-            stem = slugify(name)[: MAX_LENGTH - len("-99999")]
-            taken = set(session.exec(select(Organisation.slug).where(col(Organisation.slug).like(f"{stem}%"))))
-            db_organisation = Organisation(name=name, slug=unique_slug(name, taken))
+            stem = derive_key(name)[: MAX_LENGTH - len("-99999")]
+            taken = set(session.exec(select(Organisation.key).where(col(Organisation.key).like(f"{stem}%"))))
+            db_organisation = Organisation(name=name, key=unique_key(name, taken))
             session.add(db_organisation)
             session.flush()
             if creator_id is not None:
@@ -140,33 +140,33 @@ class OrganisationStore:
             save(session, db_organisation)
             return db_organisation
 
-    def update(self, org_id: UUID, *, name: str | None = None, slug: str | None = None) -> Organisation:
-        """Rename an organisation or change its slug.
+    def update(self, org_id: UUID, *, name: str | None = None, key: str | None = None) -> Organisation:
+        """Rename an organisation or change its key.
 
-        Renaming leaves the slug alone: it is part of the addresses people have
-        bookmarked and shared. A slug that is malformed or reserved raises
-        ``ConfigError`` from :func:`~interloper_db.slugs.validate_slug`.
+        Renaming leaves the key alone: it is part of the addresses people have
+        bookmarked and shared. A key that is malformed or reserved raises
+        ``ConfigError`` from :func:`~interloper_db.organisation_keys.validate_key`.
 
         Args:
             org_id: Organisation UUID.
             name: New organisation name; ``None`` keeps the current one.
-            slug: New slug; ``None`` keeps the current one.
+            key: New key; ``None`` keeps the current one.
 
         Returns:
             The updated Organisation.
 
         Raises:
-            ConflictError: If another organisation, deleted ones included, carries the slug.
+            ConflictError: If another organisation, deleted ones included, carries the key.
         """
         with session_scope(self._engine) as session:
             db_organisation = self.get(org_id)
             if name is not None:
                 db_organisation.name = name
-            if slug is not None and slug != db_organisation.slug:
-                validate_slug(slug)
-                if session.exec(select(Organisation.id).where(Organisation.slug == slug)).first() is not None:
-                    raise ConflictError(f"Slug {slug!r} is already taken")
-                db_organisation.slug = slug
+            if key is not None and key != db_organisation.key:
+                validate_key(key)
+                if session.exec(select(Organisation.id).where(Organisation.key == key)).first() is not None:
+                    raise ConflictError(f"Key {key!r} is already taken")
+                db_organisation.key = key
             save(session, db_organisation)
             return db_organisation
 

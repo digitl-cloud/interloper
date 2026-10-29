@@ -1,7 +1,7 @@
 export interface Organisation {
     id: string
     name: string
-    slug: string
+    key: string
     created_at: string | null
 }
 
@@ -9,7 +9,7 @@ export interface Organisation {
 export interface Membership {
     id: string
     name: string
-    slug: string
+    key: string
     role: string
 }
 

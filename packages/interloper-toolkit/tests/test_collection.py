@@ -268,7 +268,7 @@ class TestGetDeleteImpact:
 
 class TestConnections:
     @pytest.mark.parametrize("external_url", ["https://app.example.com/", ""], indirect=True)
-    def test_setup_url_carries_slug(self, ctx: ToolkitContext, store: Store, external_url: str):
+    def test_setup_url_carries_key(self, ctx: ToolkitContext, store: Store, external_url: str):
         organisation = store.organisations.create("Swarovski")
         ctx = dataclasses.replace(ctx, org_id=organisation.id)
 

@@ -17,7 +17,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from interloper_db import NotFoundError, OrganisationQuery, Page, PageQuery, ProfileQuery, UsageQuery
-from interloper_db.slugs import slugify
+from interloper_db.organisation_keys import derive_key
 from interloper_db.store.insights import ActivityEntry
 from interloper_db.store.quotas import QUOTAS
 
@@ -32,7 +32,7 @@ class FakeStore:
 
     def __init__(self) -> None:
         self.org = SimpleNamespace(
-            id=uuid4(), name="Acme", slug="acme", created_at=datetime.now(timezone.utc), deleted_at=None
+            id=uuid4(), name="Acme", key="acme", created_at=datetime.now(timezone.utc), deleted_at=None
         )
         self.profile_rows: dict[UUID, SimpleNamespace] = {}
         self.member = self.add_profile("member@acme.test", name="Member")
@@ -126,7 +126,7 @@ class FakeStore:
 
     def _create_organisation(self, name: str, creator_id: UUID | None = None):
         return SimpleNamespace(
-            id=uuid4(), name=name, slug=slugify(name), created_at=datetime.now(timezone.utc), deleted_at=None
+            id=uuid4(), name=name, key=derive_key(name), created_at=datetime.now(timezone.utc), deleted_at=None
         )
 
     def _get_organisation(self, org_id: UUID):
@@ -537,7 +537,7 @@ def test_super_admin_lists_all_organisations(store: FakeStore) -> None:
     assert body["total"] == 1
     (org,) = body["items"]
     assert org["name"] == "Acme"
-    assert org["slug"] == "acme"
+    assert org["key"] == "acme"
     assert org["member_count"] == 1
     # Soft-deleted organisations stay listed on the admin surface.
     assert store.listed_orgs == [OrganisationQuery(include_deleted=True)]

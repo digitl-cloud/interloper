@@ -462,7 +462,7 @@ def _setup_url(ctx: ToolkitContext, connection_key: str, name: str | None) -> st
     """The app's connection form for a definition in the context's organisation, pre-filled with a name.
 
     Args:
-        ctx: The call's context, whose organisation's slug leads the path.
+        ctx: The call's context, whose organisation's key leads the path.
         connection_key: The connection definition to open the form for.
         name: The display name to prefill, or ``None``.
 
@@ -472,6 +472,6 @@ def _setup_url(ctx: ToolkitContext, connection_key: str, name: str | None) -> st
     base = AppSettings.get().server.external_url.rstrip("/")
     if not base:
         return None
-    slug = ctx.store.organisations.get(ctx.org_id).slug
+    organisation_key = ctx.store.organisations.get(ctx.org_id).key
     query = {"new": connection_key, **({"name": name} if name else {})}
-    return f"{base}/{slug}/components/connections?{urlencode(query)}"
+    return f"{base}/{organisation_key}/components/connections?{urlencode(query)}"

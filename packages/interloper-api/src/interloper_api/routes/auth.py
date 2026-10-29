@@ -89,7 +89,7 @@ class MembershipResponse(BaseModel):
 
     id: UUID
     name: str
-    slug: str
+    key: str
     role: str
 
 
@@ -128,7 +128,7 @@ class AuthUserResponse(BaseModel):
             role = store.members.role_of(organisation.id, profile)
             if role is not None:
                 memberships.append(
-                    MembershipResponse(id=organisation.id, name=organisation.name, slug=organisation.slug, role=role)
+                    MembershipResponse(id=organisation.id, name=organisation.name, key=organisation.key, role=role)
                 )
         return cls(
             id=profile.id,

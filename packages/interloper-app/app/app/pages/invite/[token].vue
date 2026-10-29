@@ -22,7 +22,7 @@ onMounted(async () => {
         })
         toast.add({ title: `You have joined ${joined.name}`, color: 'success' })
         await userStore.fetchMe()
-        await navigateTo(`/${joined.slug}`)
+        await navigateTo(`/${joined.key}`)
     }
     catch (err) {
         status.value = 'error'

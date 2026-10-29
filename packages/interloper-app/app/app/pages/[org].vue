@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * An organisation's pages, under its slug. The route is what makes an
- * organisation the active one; before it does, the slug must name one the
+ * An organisation's pages, under its key. The route is what makes an
+ * organisation the active one; before it does, the key must name one the
  * user can act in (unknown, deleted, or not theirs is a not-found, whatever
  * lies beneath it) and the catalog must be loaded.
  */

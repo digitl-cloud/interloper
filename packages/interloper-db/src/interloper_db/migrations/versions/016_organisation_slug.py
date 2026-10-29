@@ -1,7 +1,7 @@
 """Organisations carry a slug: their name in the app's address.
 
 Every existing organisation takes the slug derived from its name by
-:func:`interloper_db.slugs.unique_slug`, the oldest organisation of a name
+:func:`interloper_db.organisation_keys.unique_key`, the oldest organisation of a name
 getting the plain one and later ones a number, so a migrated database holds
 what ``OrganisationStore.create`` would have given it. Deleted organisations
 get one too: the unique index spans every row. The derivation is imported
@@ -20,7 +20,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-from interloper_db.slugs import unique_slug
+from interloper_db.organisation_keys import unique_key
 
 # revision identifiers, used by Alembic.
 revision: str = "016"
@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.text("SELECT id, name FROM organisations WHERE slug IS NULL ORDER BY created_at, id")
     ).all()
     for org_id, name in pending:
-        slug = unique_slug(name, taken)
+        slug = unique_key(name, taken)
         taken.add(slug)
         connection.execute(sa.text("UPDATE organisations SET slug = :s WHERE id = :id"), {"s": slug, "id": org_id})
     op.execute("ALTER TABLE organisations ALTER COLUMN slug SET NOT NULL")
