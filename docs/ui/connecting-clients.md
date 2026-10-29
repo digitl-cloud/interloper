@@ -122,4 +122,4 @@ interloper oauth delete <client_id>
 `delete` removes a client together with its codes and refresh tokens and revokes its access
 tokens for every user, so nothing it was given keeps working. The commands read and write the
 database the settings point at, so run them where the database is configured, like
-`interloper db`. Every flag is in [CLI](../reference/cli.md#interloper-clients).
+`interloper db`. Every flag is in [CLI](../reference/cli.md#interloper-oauth).
