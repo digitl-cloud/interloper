@@ -16,7 +16,9 @@ class TheTradeDeskStarSchema(il.Source):
     """Star schema over every The Trade Desk partner (placeholder, not yet implemented).
 
     The fact table unions each partner's ad group performance. The Trade Desk
-    collects no entity snapshots, so every dimension comes from the facts.
+    collects no entity snapshots, so every dimension will come from the facts;
+    until then they are unpartitioned placeholders, as every star schema's
+    dimensions are.
     """
 
     @il.asset(
@@ -32,23 +34,17 @@ class TheTradeDeskStarSchema(il.Source):
         """Ad group performance of every partner, one row per ad group and day."""
         return []
 
-    @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_campaigns(
-        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
-    ) -> list[dict[str, Any]]:
+    @il.asset(tags=["Dimension"])
+    def dim_campaigns(self) -> list[dict[str, Any]]:
         """One row per campaign, from the facts."""
         return []
 
-    @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_ad_groups(
-        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
-    ) -> list[dict[str, Any]]:
+    @il.asset(tags=["Dimension"])
+    def dim_ad_groups(self) -> list[dict[str, Any]]:
         """One row per ad group with its campaign, from the facts."""
         return []
 
-    @il.asset(partitioning=PARTITIONING, tags=["Dimension"])
-    def dim_accounts(
-        self, context: il.ExecutionContext, fact_ad_group_performance: il.Upstream
-    ) -> list[dict[str, Any]]:
+    @il.asset(tags=["Dimension"])
+    def dim_accounts(self) -> list[dict[str, Any]]:
         """One row per advertiser with its partner, from the facts."""
         return []

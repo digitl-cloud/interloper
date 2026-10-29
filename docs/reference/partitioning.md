@@ -10,7 +10,11 @@ Partitions scope a run to a slice of time; windows span several.
 
 ::: interloper.TimeGranularity
 
+::: interloper.PeriodPartitionConfig
+
 ::: interloper.TimePartitionConfig
+
+::: interloper.SnapshotPartitionConfig
 
 ::: interloper.TimePartition
 

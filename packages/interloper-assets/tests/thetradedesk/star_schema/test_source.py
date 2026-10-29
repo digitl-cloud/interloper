@@ -27,12 +27,14 @@ def test_raw_upstreams_fan_in_every_account_and_are_optional(asset: str, name: s
     assert (relation.key, relation.many, relation.optional) == (key, True, True)
 
 
-def test_dimensions_are_built_from_the_facts() -> None:
-    assert TheTradeDeskStarSchema.sibling_bindings() == {
-        "dim_campaigns": {"fact_ad_group_performance": "fact_ad_group_performance"},
-        "dim_ad_groups": {"fact_ad_group_performance": "fact_ad_group_performance"},
-        "dim_accounts": {"fact_ad_group_performance": "fact_ad_group_performance"},
-    }
+def test_dimensions_are_unpartitioned_placeholders() -> None:
+    star = TheTradeDeskStarSchema()
+    dimensions = {asset.key: asset for asset in star.assets if asset.key.startswith("dim_")}
+
+    assert TheTradeDeskStarSchema.sibling_bindings() == {}
+    assert {key: asset.partitioning for key, asset in dimensions.items()} == dict.fromkeys(
+        ("dim_campaigns", "dim_ad_groups", "dim_accounts")
+    )
 
 
 def test_materializes_no_rows_yet() -> None:
@@ -43,5 +45,6 @@ def test_materializes_no_rows_yet() -> None:
     il.DAG(star).materialize(partition)
 
     for asset in star.assets:
+        window = partition.window if asset.partitioning is not None else None
         with pytest.raises(DataNotFoundError):
-            memory.read(il.IOContext(asset=asset, window=partition.window))
+            memory.read(il.IOContext(asset=asset, window=window))

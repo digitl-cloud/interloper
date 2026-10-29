@@ -59,7 +59,7 @@ from interloper_db.store.insights.health import (
 )
 from interloper_db.store.insights.outcomes import Activity, JobOutcome
 from interloper_db.store.page import Page, PageQuery
-from interloper_db.store.runs import RunQuery, RunStore, partition_key_range, partition_keys_overlapping
+from interloper_db.store.runs import RunQuery, RunStore, partition_keys_overlapping
 
 # Every operation attempt that failed, retried ones included; step-level failures
 # (dest_write_failed and the like) repeat their operation's own verdict. A run's
@@ -263,17 +263,24 @@ class InsightStore:
         )
         return CoverageGroup.from_assets(assets, since, until, now)
 
-    def coverage_by_key(self, org_id: UUID, job_id: UUID, *, start_key: str, end_key: str) -> JobCoverage:
+    def coverage_by_key(
+        self, org_id: UUID, job_id: UUID, *, start_key: str, end_key: str, now: dt.datetime
+    ) -> JobCoverage:
         """The coverage of a job's target assets over a range of partition keys.
+
+        The evidence read is every key overlapping the range's days, so a
+        snapshot target's observations of another granularity are read too.
 
         Args:
             org_id: Organisation UUID.
             job_id: The job, of the organisation.
             start_key: First partition key of the range.
             end_key: Last partition key, inclusive.
+            now: The reference instant, aware UTC: it decides which snapshot
+                periods have ended.
 
         Returns:
-            Every target asset with its covered and failed keys.
+            Every target asset with the keys it owes, and its covered, failed and missed ones.
 
         Raises:
             ConfigError: If the keys are of different granularities.
@@ -284,9 +291,14 @@ class InsightStore:
             raise ConfigError(f"{start_key!r} and {end_key!r} are keys of different granularities")
         keys = [first.granularity.format(value) for value in first.granularity.period_range(first.value, last.value)]
         assets = self._components.target_assets(job)
-        in_range = partition_key_range(col(Execution.partition_key), start_key, end_key)
-        rows = self._coverage_rows(org_id, in_range, asset_ids=list(assets))
-        return JobCoverage.from_rows(job.id, keys, assets, rows)
+        partitionings = self._components.asset_partitionings(org_id)
+        snapshots = frozenset(
+            asset_id for asset_id in assets if asset_id in partitionings and not partitionings[asset_id].windowed
+        )
+        span = PartitionSpan.from_spans([PartitionSpan.from_key(start_key), PartitionSpan.from_key(end_key)])
+        overlapping = partition_keys_overlapping(col(Execution.partition_key), span.first, span.last)
+        rows = self._coverage_rows(org_id, [overlapping], asset_ids=list(assets))
+        return JobCoverage.from_rows(job.id, keys, assets, rows, snapshots=snapshots, now=now)
 
     def feed(self, org_id: UUID, query: PageQuery) -> Page[ActivityEntry]:
         """A derived activity feed for one organisation, newest first.
@@ -508,8 +520,9 @@ class InsightStore:
     ) -> list[CoverageRow]:
         """Per asset and time partition, whether any execution of it succeeded or failed.
 
-        Runs of every target count: the partition key is the run's, stamped
-        on each execution.
+        Runs of every target count: the partition key is the one stamped on
+        each execution, which its operation named (a snapshot's observed
+        period), else its run's.
 
         Args:
             org_id: Organisation UUID.

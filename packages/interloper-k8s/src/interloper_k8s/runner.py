@@ -29,6 +29,8 @@ from kubernetes import client, config
 from pydantic import Field
 
 if TYPE_CHECKING:
+    import datetime as dt
+
     from interloper.dag import DAG
     from interloper.partitioning import PartitionWindow
 
@@ -47,7 +49,12 @@ class KubernetesRun(Run):
     core: client.CoreV1Api
 
     def __init__(
-        self, runner: KubernetesRunner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]
+        self,
+        runner: KubernetesRunner,
+        dag: DAG,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        observed_at: dt.datetime,
     ) -> None:
         """Open a polling pool sized to the runner's capacity.
 
@@ -56,8 +63,9 @@ class KubernetesRun(Run):
             dag: The DAG to walk.
             window: The window the run covers, ``None`` when unscoped.
             metadata: Run-level metadata, carrying the ``run_id``.
+            observed_at: The run's observation instant, aware.
         """
-        super().__init__(runner, dag, window, metadata)
+        super().__init__(runner, dag, window, metadata, observed_at)
         self.polling = ThreadPoolExecutor(max_workers=runner.max_jobs)
 
     async def open(self) -> None:
@@ -203,11 +211,12 @@ class KubernetesRun(Run):
 
         Returns:
             The argv, with the operation's own window as ``--date`` or
-            ``--start-date``/``--end-date``.
+            ``--start-date``/``--end-date``, and the run's observation instant.
         """
         spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
-        window = operation.effective_window(self.state.window)
+        command.append(f"--observed-at={self.state.observed_at.isoformat()}")
+        window = self.state.window_of(operation)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
         elif window is not None:

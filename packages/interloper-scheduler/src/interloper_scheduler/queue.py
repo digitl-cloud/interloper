@@ -85,8 +85,12 @@ class QueueController(Controller):
         """Hydrate the run's target into the DAG spec its process executes.
 
         A failed-scope retry's prior successes are disabled in the spec, so
-        the run re-executes only what had not succeeded. A run whose window its
-        operations refuse is refused here, before anything is launched.
+        the run re-executes only what had not succeeded. A snapshot asset
+        writes the period it observes whatever the window, so a backfill
+        observes once: its snapshot assets are enabled only in the run of its
+        newest partition, the one a backfill executes first, and disabled in
+        the others. A run whose window its operations refuse is refused here,
+        before anything is launched.
 
         Args:
             run: The dispatched run, its target loaded.
@@ -110,6 +114,10 @@ class QueueController(Controller):
             successes = self._store.executions.prior_successes(run)
             for operation in operations:
                 if UUID(operation.id) in successes:
+                    operation.enabled = False
+        if run.backfill_id is not None and run.partition_key != self._store.backfills.get(run.backfill_id).end_key:
+            for operation in operations:
+                if operation.partitioning is not None and not operation.partitioning.windowed:
                     operation.enabled = False
         dag = il.DAG(*operations)
         dag.check_window(

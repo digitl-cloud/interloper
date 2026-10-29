@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -396,6 +397,7 @@ class DAG:
     def materialize(
         self,
         window: Partition | PartitionWindow | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> RunResult:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
@@ -412,23 +414,28 @@ class DAG:
         Args:
             window: The window every operation in the DAG is run for; a partition is
                 accepted as the window of one. ``None`` for an unpartitioned DAG.
+            observed_at: The instant the run observes, aware: a snapshot-partitioned asset
+                writes the period holding it. ``None`` is now, in UTC.
 
         Returns:
             The result of the DAG execution.
         """
         from interloper.utils import concurrency
 
-        return concurrency.run(self.materialize_async(window))
+        return concurrency.run(self.materialize_async(window, observed_at))
 
     async def materialize_async(
         self,
         window: Partition | PartitionWindow | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> RunResult:
         """Execute all operations in dependency order using a default ``AsyncRunner``.
 
         Args:
             window: The window every operation in the DAG is run for; a partition is
                 accepted as the window of one. ``None`` for an unpartitioned DAG.
+            observed_at: The instant the run observes, aware: a snapshot-partitioned asset
+                writes the period holding it. ``None`` is now, in UTC.
 
         Returns:
             The result of the DAG execution.
@@ -439,7 +446,7 @@ class DAG:
         if window is not None:
             span_attributes[attributes.PARTITION] = str(window)
         with tracer().start_as_current_span("interloper.dag.materialize", attributes=span_attributes) as span:
-            result = await AsyncRunner().run(dag=self, window=window)
+            result = await AsyncRunner().run(dag=self, window=window, observed_at=observed_at)
             # A failed run is returned, not raised; without this the trace's
             # root span reads OK while the failure sits on a descendant.
             if result.status is ExecutionStatus.FAILED:

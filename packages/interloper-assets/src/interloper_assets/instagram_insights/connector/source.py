@@ -221,7 +221,7 @@ class InstagramInsights(il.Source):
         return rows
 
     # -- ENTITIES --------------------------------------------------------------
-    @il.asset(schema=Profiles, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=Profiles, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def profiles(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """The Instagram account's profile with its follower, following and media counts."""
         response = await self.connection.client.get(
@@ -231,7 +231,7 @@ class InstagramInsights(il.Source):
         response.raise_for_status()
         return [{**response.json(), "date": context.partition_date}]
 
-    @il.asset(schema=Media, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=Media, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def media(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """Every media item of the Instagram account with its attributes, like and comment counts."""
         items = await _paginate(

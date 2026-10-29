@@ -20,7 +20,9 @@ Input formats
 
 The runner is the one configured in ``AppSettings.runner`` (top-level
 ``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
-environment variables); the partition comes from the CLI date flags.
+environment variables); the partition comes from the CLI date flags. A snapshot
+asset writes the period of ``--observed-at`` instead, now in UTC unless a
+launcher passes the dispatch instant in its job's timezone.
 
 ``--dry-run`` validates and prints the resolved plan (operations grouped by
 execution generation, runner, partition) without materializing anything —
@@ -47,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime as dt
 import json
 import logging
 import os
@@ -128,6 +131,12 @@ def register(
         "--date",
         default=None,
         help="Partition key (e.g. 2026-04-09; also 2026-04, 2026, or 2026-04-09T13)",
+    )
+    run_parser.add_argument(
+        "--observed-at",
+        type=_instant,
+        default=None,
+        help="The instant the run observes, ISO-8601 with an offset; snapshot assets write its period. Defaults to now",
     )
     run_parser.add_argument(
         "--start-date",
@@ -233,11 +242,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
             # Events become records on the ``interloper.run`` logger, so the console logging set up above
             # governs their visibility and format.
             runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
-            result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
+            result = asyncio.run(runner.run(dag, window, metadata=metadata or None, observed_at=args.observed_at))
         else:
             with recorder:
                 recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
-                result = asyncio.run(recorded.run(dag, window, metadata))
+                result = asyncio.run(recorded.run(dag, window, metadata, args.observed_at))
                 recorder.finish(result)
     except Exception as error:
         if attempted is not None:
@@ -336,7 +345,8 @@ def _print_plan(dag: DAG, window: PartitionWindow | None, runner_name: str) -> N
 def _resolve_window(args: argparse.Namespace, dag: DAG) -> PartitionWindow | None:
     """Resolve the CLI date flags into the run's window, through the DAG's partitioning.
 
-    The keys are parsed by the partitioning of the DAG's first enabled partitioned operation,
+    The keys are parsed by the partitioning of the DAG's first enabled operation partitioned on
+    the run's window (a snapshot writes the period it observes, whatever the keys),
     so a key means what that asset means (a day key for a daily asset, a declared value for a
     list-partitioned one); the DAG already enforces that every edge shares a partitioning, and
     the runner's preflight checks the window against every operation.
@@ -365,13 +375,40 @@ def _resolve_window(args: argparse.Namespace, dag: DAG) -> PartitionWindow | Non
         raise SystemExit("Error: both --start-date and --end-date must be provided.")
 
     partitioning = next(
-        (operation.partitioning for operation in dag.operations if operation.enabled and operation.partitioning),
+        (
+            operation.partitioning
+            for operation in dag.operations
+            if operation.enabled and operation.partitioning and operation.partitioning.windowed
+        ),
         None,
     )
     if partitioning is None:
-        raise SystemExit("Error: a partition key was given, but no enabled operation of the DAG is partitioned.")
+        raise SystemExit(
+            "Error: a partition key was given, but no enabled operation of the DAG is partitioned on the run's window."
+        )
     start_key, end_key = (args.date, args.date) if has_date else (args.start_date, args.end_date)
     try:
         return partitioning.window(start_key, end_key)
     except PartitionError as error:
         raise SystemExit(f"Error: {error}") from error
+
+
+def _instant(value: str) -> dt.datetime:
+    """Parse ``--observed-at``: an ISO-8601 instant carrying its offset.
+
+    Args:
+        value: The flag's value.
+
+    Returns:
+        The aware instant.
+
+    Raises:
+        argparse.ArgumentTypeError: If the value is not ISO-8601, or carries no offset.
+    """
+    try:
+        instant = dt.datetime.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(f"not an ISO-8601 instant: {value!r}") from error
+    if instant.tzinfo is None:
+        raise argparse.ArgumentTypeError(f"an instant needs its offset (e.g. +01:00 or Z): {value!r}")
+    return instant

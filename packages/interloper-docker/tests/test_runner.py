@@ -18,6 +18,8 @@ from interloper.runner import ExecutionStatus
 
 from interloper_docker.runner import DockerRun, DockerRunner
 
+OBSERVED_AT = dt.datetime(2026, 10, 29, 14, tzinfo=dt.timezone.utc)
+
 
 class FakeContainer:
     """A container whose exit code and termination message are scripted."""
@@ -221,7 +223,7 @@ class TestCommand:
     def _command(monkeypatch: pytest.MonkeyPatch, asset: il.Asset, window: Any) -> list[str]:
         monkeypatch.setattr(docker, "from_env", lambda: FakeDocker())
         dag = il.DAG(asset)
-        run = DockerRun(DockerRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
+        run = DockerRun(DockerRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"}, OBSERVED_AT)
         return run.command(dag.operations[0])
 
     def test_an_unscoped_run_adds_no_flags(self, monkeypatch, asset):
@@ -229,7 +231,7 @@ class TestCommand:
 
         assert command[:5] == ["interloper", "run", "--format", "inline", "--run-id=r1"]
         assert json.loads(command[5])
-        assert len(command) == 6
+        assert command[6:] == [f"--observed-at={OBSERVED_AT.isoformat()}"]
 
     def test_one_partition_is_a_date(self, monkeypatch):
         @il.asset(partitioning=TimePartitionConfig(column="date"))
@@ -262,7 +264,16 @@ class TestCommand:
     def test_an_unpartitioned_operation_gets_no_window(self, monkeypatch, asset):
         command = self._command(monkeypatch, asset, TimePartition(dt.date(2026, 1, 1)))
 
-        assert len(command) == 6
+        assert len(command) == 7
+
+    def test_a_snapshot_is_given_the_period_it_observes_and_the_instant(self, monkeypatch):
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def entities() -> list:
+            return []
+
+        command = self._command(monkeypatch, entities(id="entities"), TimePartition(dt.date(2026, 1, 1)))
+
+        assert command[-3:] == [f"--observed-at={OBSERVED_AT.isoformat()}", "--date", "2026-10-29"]
 
 
 def test_the_run_kind_is_named_after_its_runner():

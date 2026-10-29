@@ -439,7 +439,7 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.CustomAudiences,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def custom_audiences(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
@@ -454,7 +454,7 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.Ads,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -464,7 +464,7 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.Campaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -474,7 +474,7 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.AdAccounts,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -484,7 +484,7 @@ class FacebookAds(il.Source):
 
     @il.asset(
         schema=schemas.Adsets,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )

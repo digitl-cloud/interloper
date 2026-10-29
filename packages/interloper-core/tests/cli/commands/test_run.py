@@ -63,6 +63,7 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "date": None,
         "start_date": None,
         "end_date": None,
+        "observed_at": None,
         "target": [],
         "events": "pretty",
         "quiet": False,
@@ -252,6 +253,16 @@ class TestResolveWindow:
         with pytest.raises(SystemExit, match="no enabled operation of the DAG is partitioned"):
             _resolve_window(_args(date="2026-06-01"), il.DAG(FakeRunSource()))
 
+    def test_a_snapshot_does_not_parse_the_keys(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
+
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+        def entities() -> list:  # pragma: no cover
+            return []
+
+        window = _resolve_window(_args(date="2026-06-01"), il.DAG(entities(), FakePartitionedSource()))
+        assert str(window) == "2026-06-01"
+
     def test_no_flags_is_no_window(self) -> None:
         from interloper.cli.commands.run import _resolve_window
 
@@ -297,6 +308,33 @@ class TestRegister:
             "abc",
             "2026-01-01",
         )
+
+    def test_the_observation_instant_keeps_its_offset(self) -> None:
+        import datetime as dt
+
+        parser = argparse.ArgumentParser(prog="interloper")
+        register(parser.add_subparsers(dest="command"))
+
+        args = parser.parse_args(["run", "--observed-at", "2026-10-29T00:30:00+01:00", "pkg.mod.Source"])
+
+        assert args.observed_at == dt.datetime(2026, 10, 29, 0, 30, tzinfo=dt.timezone(dt.timedelta(hours=1)))
+        assert parser.parse_args(["run", "pkg.mod.Source"]).observed_at is None
+
+    def test_an_instant_without_an_offset_is_refused(self, capsys: pytest.CaptureFixture[str]) -> None:
+        parser = argparse.ArgumentParser(prog="interloper")
+        register(parser.add_subparsers(dest="command"))
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["run", "--observed-at", "2026-10-29T00:30:00", "pkg.mod.Source"])
+        assert "needs its offset" in capsys.readouterr().err
+
+    def test_a_value_that_is_no_instant_is_refused(self, capsys: pytest.CaptureFixture[str]) -> None:
+        parser = argparse.ArgumentParser(prog="interloper")
+        register(parser.add_subparsers(dest="command"))
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["run", "--observed-at", "yesterday", "pkg.mod.Source"])
+        assert "not an ISO-8601 instant" in capsys.readouterr().err
 
 
 class TestRunInlineMode:

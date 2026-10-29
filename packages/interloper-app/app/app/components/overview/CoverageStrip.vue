@@ -22,9 +22,7 @@ const cells = computed(() => {
             date,
             owed: !!day,
             color: CELL[CELL_ORDER[cellStatus(day)]][mode],
-            title: day
-                ? `${date} · ${day.covered}/${day.expected} covered${day.failed ? ` · ${day.failed} failed` : ''}`
-                : `${date} · nothing expected`,
+            title: describeDay(date, day, ' · '),
         }
     })
 })

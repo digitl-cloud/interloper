@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -14,7 +15,7 @@ from interloper.dag import DAGSpec
 from interloper.errors import ConfigError
 from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
 from interloper_db import RunStatus
-from interloper_db.models import Run
+from interloper_db.models import Component, Run
 
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
 
@@ -135,6 +136,18 @@ class TestCommand:
 
     def test_an_unpartitioned_run_has_no_date(self) -> None:
         assert "--date" not in Launcher.command(_dispatched_run(), "@/spec.json")
+
+    def test_the_run_observes_now_on_its_jobs_clock(self) -> None:
+        run = _dispatched_run()
+        run.target = Component(org_id=run.org_id, kind="job", key="cron_job", config={"timezone": "Asia/Kolkata"})
+        before = datetime.now(timezone.utc)
+
+        argv = Launcher.command(run, "@/spec.json")
+
+        [flag] = [argument for argument in argv if argument.startswith("--observed-at=")]
+        observed_at = datetime.fromisoformat(flag.removeprefix("--observed-at="))
+        assert observed_at.utcoffset() == timedelta(hours=5, minutes=30)
+        assert before <= observed_at <= datetime.now(timezone.utc)
 
 
 class TestDiagnoseDefault:

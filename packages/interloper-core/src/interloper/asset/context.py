@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from interloper.events import EventLogger
 from interloper.partitioning.base import Partition, PartitionWindow
-from interloper.partitioning.time import TimeGranularity, TimePartition, TimePartitionConfig
+from interloper.partitioning.time import PeriodPartitionConfig, TimeGranularity, TimePartition
 
 if TYPE_CHECKING:
     from interloper.asset.base import Asset
@@ -81,11 +81,11 @@ class ExecutionContext:
 
     @property
     def partition_date(self) -> dt.date:
-        """The partition's day, for daily time partitioning only.
+        """The partition's day, for daily time or snapshot partitioning only.
 
         The typed reading of ``context.partition.value``: the one accessor that hands an asset a
         real ``date`` without narrowing a type first, and it asserts the daily granularity rather
-        than assuming it.
+        than assuming it. A snapshot's partition is the day the run observed in.
 
         Raises:
             AttributeError: If the asset is not time-partitioned at the daily granularity, no
@@ -94,7 +94,7 @@ class ExecutionContext:
         partitioning = self._asset.partitioning
         if partitioning is None:
             raise AttributeError("`context.partition_date` is not available, asset is not partitioned.")
-        if not isinstance(partitioning, TimePartitionConfig):
+        if not isinstance(partitioning, PeriodPartitionConfig):
             raise AttributeError(  # noqa: TRY004 - the accessor is unavailable, not mistyped
                 "`context.partition_date` is not available, asset is not time-partitioned."
             )

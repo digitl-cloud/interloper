@@ -922,36 +922,43 @@ class AssetCoverageRow(BaseModel):
 
     A partition is ``covered`` once any run's execution of the asset
     succeeded, ``failed`` when executions of it only failed, and
-    ``never_run`` when no run executed the asset for it. ``missing`` lists
-    the uncovered partitions as ranges, at most 20 of them.
+    ``never_run`` when it is owed and no execution of it reached a verdict.
+    A snapshot asset (an entity read as the vendor holds it now) owes only
+    the periods a run observed in while they are current; one that ended
+    without a success is ``missed``, which no backfill can recover.
+    ``missing`` lists the owed, uncovered partitions as ranges, at most 20
+    of them, missed ones excluded.
     """
 
     asset_id: UUID
     asset_key: str | None = None
     covered: int
     failed: int
+    missed: int
     never_run: int
     missing: list[PartitionRange]
     missing_ranges_total: int
 
     @classmethod
     def from_coverage(cls, asset: AssetKeyCoverage, keys: list[str]) -> AssetCoverageRow:
-        """Count an asset's keys by state and range its uncovered ones.
+        """Count an asset's keys by state and range its owed, uncovered ones.
 
         Args:
-            asset: The asset's covered and failed keys.
+            asset: The asset's owed, covered, failed and missed keys.
             keys: Every key of the range, in order.
 
         Returns:
             The row.
         """
-        ranges = PartitionRange.from_keys([key for key in keys if key not in asset.covered], keys)
+        owed = [key for key in keys if key in asset.expected and key not in asset.covered]
+        ranges = PartitionRange.from_keys(owed, keys)
         return cls(
             asset_id=asset.asset_id,
             asset_key=asset.asset_key,
             covered=len(asset.covered),
             failed=len(asset.failed),
-            never_run=len(keys) - len(asset.covered) - len(asset.failed),
+            missed=len(asset.missed),
+            never_run=len(asset.expected) - len(asset.covered) - len(asset.failed),
             missing=ranges[:_MISSING_RANGES_LIMIT],
             missing_ranges_total=len(ranges),
         )
@@ -960,8 +967,9 @@ class AssetCoverageRow(BaseModel):
 class AssetCoverage(BaseModel):
     """Per-asset partition coverage of a job over a range, least covered first.
 
-    The rollup counts the range's partitions by how many of the job's assets
-    are covered for them: all, some, or none.
+    The rollup counts the range's partitions by how many of the assets owing
+    them are covered: all, some, or none. A partition no asset owes (only
+    snapshot assets, none observing in it) counts in none of the three.
     """
 
     status: Literal["success"] = "success"
@@ -993,17 +1001,22 @@ class AssetCoverage(BaseModel):
             (AssetCoverageRow.from_coverage(asset, keys) for asset in coverage.assets),
             key=lambda row: (row.covered, row.asset_key or ""),
         )
-        per_key = [sum(key in asset.covered for asset in coverage.assets) for key in keys]
-        everyone = len(coverage.assets)
+        per_key = [
+            (
+                sum(key in asset.covered for asset in coverage.assets),
+                sum(key in asset.expected for asset in coverage.assets),
+            )
+            for key in keys
+        ]
         page = assets[offset : offset + limit]
         return cls(
             component_id=coverage.job_id,
             start_key=keys[0],
             end_key=keys[-1],
             partitions=len(keys),
-            all_covered=sum(count == everyone for count in per_key) if everyone else 0,
-            partly_covered=sum(0 < count < everyone for count in per_key),
-            none_covered=sum(count == 0 for count in per_key),
+            all_covered=sum(0 < owed == count for count, owed in per_key),
+            partly_covered=sum(0 < count < owed for count, owed in per_key),
+            none_covered=sum(count == 0 < owed for count, owed in per_key),
             count=len(page),
             total=len(assets),
             assets=page,

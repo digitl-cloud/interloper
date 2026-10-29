@@ -386,54 +386,22 @@ class TimePartitionWindow(PartitionWindow):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TimePartitionConfig(PartitionConfig):
-    """Partitioning by time periods of one granularity.
+class PeriodPartitionConfig(PartitionConfig):
+    """Partitioning by time periods of one granularity: the space the time and snapshot kinds share.
+
+    The kinds differ in which period a run writes: the run's window for `TimePartitionConfig`,
+    the period it observed in for `interloper.partitioning.snapshot.SnapshotPartitionConfig`.
+    Their keys, partitions and windows are the same.
 
     Attributes:
         granularity: The period one partition covers.
-        start: Optional lower bound. Windows reaching before it are rejected, and trailing
-            windows built against this asset are clamped to it.
     """
 
-    kind: ClassVar[str] = "time"
-
     granularity: TimeGranularity = TimeGranularity.DAY
-    start: dt.date | None = None
 
     def __post_init__(self) -> None:
-        """Coerce what a definition round trip loosens: the granularity name and the start."""
+        """Coerce what a definition round trip loosens: the granularity name."""
         object.__setattr__(self, "granularity", TimeGranularity(self.granularity))
-        if self.start is not None:
-            object.__setattr__(self, "start", self.granularity.truncate(self.start))
-
-    def __str__(self) -> str:
-        """Describe the partitioning, as an error message names it.
-
-        Returns:
-            ``partitioned by <granularity>``, e.g. ``partitioned by day``.
-        """
-        return f"partitioned by {self.granularity.value}"
-
-    def _check(self, window: PartitionWindow) -> None:
-        """Require a time window of this granularity that does not reach before ``start``.
-
-        Args:
-            window: The run's window.
-
-        Raises:
-            PartitionError: If the window is not a time window, has another granularity, or
-                starts before ``start``.
-        """
-        if not isinstance(window, TimePartitionWindow):
-            raise PartitionError(f"expects a time window, but the run was given a {type(window).__name__}")
-        if window.granularity is not self.granularity:
-            raise PartitionError(
-                f"is partitioned by {self.granularity.value}, but the run was given a {window.granularity.value} window"
-            )
-        if self.start is not None and window.start < self.start:
-            raise PartitionError(
-                f"has no data before {self.start.isoformat()}, but the run reaches back to {window.start.isoformat()}"
-            )
 
     def partition(self, key: str) -> TimePartition:
         """Parse a key at this granularity.
@@ -469,6 +437,55 @@ class TimePartitionConfig(PartitionConfig):
         if last.value < first.value:
             raise PartitionError(f"window ends before it starts: {first.key!r} to {last.key!r}")
         return TimePartitionWindow(first.value, last.value, self.granularity)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TimePartitionConfig(PeriodPartitionConfig):
+    """Partitioning by time periods of one granularity, the run's window naming the ones it writes.
+
+    Attributes:
+        start: Optional lower bound. Windows reaching before it are rejected, and trailing
+            windows built against this asset are clamped to it.
+    """
+
+    kind: ClassVar[str] = "time"
+
+    start: dt.date | None = None
+
+    def __post_init__(self) -> None:
+        """Coerce what a definition round trip loosens: the granularity name and the start."""
+        super().__post_init__()
+        if self.start is not None:
+            object.__setattr__(self, "start", self.granularity.truncate(self.start))
+
+    def __str__(self) -> str:
+        """Describe the partitioning, as an error message names it.
+
+        Returns:
+            ``partitioned by <granularity>``, e.g. ``partitioned by day``.
+        """
+        return f"partitioned by {self.granularity.value}"
+
+    def _check(self, window: PartitionWindow) -> None:
+        """Require a time window of this granularity that does not reach before ``start``.
+
+        Args:
+            window: The run's window.
+
+        Raises:
+            PartitionError: If the window is not a time window, has another granularity, or
+                starts before ``start``.
+        """
+        if not isinstance(window, TimePartitionWindow):
+            raise PartitionError(f"expects a time window, but the run was given a {type(window).__name__}")
+        if window.granularity is not self.granularity:
+            raise PartitionError(
+                f"is partitioned by {self.granularity.value}, but the run was given a {window.granularity.value} window"
+            )
+        if self.start is not None and window.start < self.start:
+            raise PartitionError(
+                f"has no data before {self.start.isoformat()}, but the run reaches back to {window.start.isoformat()}"
+            )
 
     def compatible(self, other: PartitionConfig) -> bool:
         """Whether *other* is a time partitioning of the same granularity.

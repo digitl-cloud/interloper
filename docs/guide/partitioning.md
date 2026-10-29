@@ -98,6 +98,30 @@ partitions long, clamped to `start`, or `None` when clamping leaves nothing. `no
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
 calendar, while hour windows are always UTC because hour keys are UTC labels.
 
+## Snapshot partitioning
+
+An asset that reads a vendor's *current* state, such as its campaigns or ads, cannot read the
+past, so it is partitioned by the period it observed in rather than by the run's window:
+
+```py
+@il.asset(partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+def campaigns(self, context: il.ExecutionContext) -> list[dict]:
+    return [{**row, "date": context.partition_date} for row in fetch_campaigns()]
+```
+
+A snapshot accepts any window and ignores it, as an unpartitioned asset does. Its one partition
+is the period holding the run's observation instant, `granularity.truncate(observed_at)`, and
+`context.partition_date` returns it. The platform observes at dispatch, on the job's timezone
+(UTC for a run of anything but a job), and `interloper run` at now in UTC unless given
+`--observed-at`. A backfill or a retry of a past day therefore writes the current period, and a
+second observation in one period replaces the first: a monthly snapshot in a daily job holds the
+month's latest state. A backfill observes once, in the run of its newest partition.
+
+A snapshot may feed views, and another snapshot of the same granularity, which reads its
+upstream's observation; an asset partitioned on the run's window cannot read one. Coverage owes
+a snapshot only the periods a run observed in, and a past period without a success is missed,
+which no backfill can recover.
+
 ## List partitioning
 
 An asset partitioned by a declared list of values, such as regions or markets:
@@ -146,7 +170,7 @@ not allow windows.
 |----------|-----------|-------------|
 | `context.partition` | The window's only `Partition`: `.key`, and `.bounds` or `.value` by kind | not partitioned, no window given, or the window covers several partitions |
 | `context.window` | The `PartitionWindow`: `.start`, `.end`, `len()`, iteration | not partitioned, or no window given |
-| `context.partition_date` | `partition.value` as a `date` | not time-partitioned at `DAY`, or the window covers several partitions |
+| `context.partition_date` | `partition.value` as a `date` | not time- or snapshot-partitioned at `DAY`, or the window covers several partitions |
 
 ## Validation
 

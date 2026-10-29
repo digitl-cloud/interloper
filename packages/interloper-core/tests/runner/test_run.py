@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 from typing import Any, ClassVar
 
 import pytest
@@ -12,6 +13,8 @@ from interloper.errors import PartitionError, RunnerError
 from interloper.events import Event, EventType
 from interloper.operation import Operation, OperationResult
 from interloper.runner import ExecutionStatus, Run, RunState
+
+OBSERVED_AT = dt.datetime(2026, 10, 29, 14, tzinfo=dt.timezone.utc)
 
 
 class First(il.Asset):
@@ -195,7 +198,7 @@ class TestWalk:
         asset = upstream(id="upstream", destinations=[il.MemoryDestination()])
         asset.enabled = False
 
-        ScriptedRun(ScriptedRunner(), il.DAG(asset), None, {"run_id": "run-1"})
+        ScriptedRun(ScriptedRunner(), il.DAG(asset), None, {"run_id": "run-1"}, OBSERVED_AT)
 
 
 class TestLifecycle:

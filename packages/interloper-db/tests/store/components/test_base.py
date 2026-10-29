@@ -151,6 +151,15 @@ class WireDownMixedSource(il.Source):
             return []
 
 
+@il.source(key="entities_source")
+class EntitiesSource(il.Source):
+    """A source whose one asset is a monthly snapshot."""
+
+    @il.asset(partitioning=il.SnapshotPartitionConfig(column="date", granularity=TimeGranularity.MONTH))
+    def entities(self) -> list:  # pragma: no cover
+        return []
+
+
 class DiscriminatedSource(il.Source):
     """Source class whose instances are discriminated by ``account_id``."""
 
@@ -1399,6 +1408,19 @@ class TestJobPartitionGranularities:
         granularities = store.components.job_partition_granularities([job.id])
 
         assert granularities == {job.id: {TimeGranularity.DAY, TimeGranularity.MONTH}}
+
+    def test_a_snapshot_contributes_no_granularity(self, component_db: Engine):
+        store = self._store(DemoSource, EntitiesSource)
+        daily = store.components.create(_ORG, kind="source", key="demo_source")
+        entities = store.components.create(_ORG, kind="source", key="entities_source")
+        mixed = store.components.create(
+            _ORG, kind="job", key="cron_job", relations={"targets": [daily.id, entities.id]}
+        )
+        alone = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [entities.id]})
+
+        granularities = store.components.job_partition_granularities([mixed.id, alone.id])
+
+        assert granularities == {mixed.id: {TimeGranularity.DAY}, alone.id: set()}
 
     def test_a_drifted_target_contributes_nothing(self, component_db: Engine):
         # Drift is the run path's problem, not the scheduler's.

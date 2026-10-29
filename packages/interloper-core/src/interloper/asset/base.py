@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import functools
 import inspect
 import warnings
@@ -398,7 +399,7 @@ class Asset(Operation, metaclass=AssetMeta):
             An effectless result: a materialization's effects are its
             destination writes and the events it emits.
         """
-        await self.materialize_async(context.window, context.dag, context.metadata)
+        await self.materialize_async(context.window, context.dag, context.metadata, context.observed_at)
         return OperationResult()
 
     def run(
@@ -406,6 +407,7 @@ class Asset(Operation, metaclass=AssetMeta):
         window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
@@ -423,17 +425,20 @@ class Asset(Operation, metaclass=AssetMeta):
             window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+            observed_at: The instant the run observes, aware; a snapshot-partitioned asset writes
+                its period. ``None`` is now, in UTC.
 
         Returns:
             The raw execution result.
         """
-        return concurrency.run(self.run_async(window, dag, metadata))
+        return concurrency.run(self.run_async(window, dag, metadata, observed_at))
 
     async def run_async(
         self,
         window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> Any:
         """Execute the asset and return the result without writing to destination.
 
@@ -445,11 +450,13 @@ class Asset(Operation, metaclass=AssetMeta):
             window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+            observed_at: The instant the run observes, aware; a snapshot-partitioned asset writes
+                its period. ``None`` is now, in UTC.
 
         Returns:
             The raw execution result.
         """
-        window = self.effective_window(PartitionWindow.of(window))
+        window = self.effective_window(PartitionWindow.of(window), observed_at or dt.datetime.now(dt.timezone.utc))
         return (await self._produce(window, dag, metadata or {})).data
 
     def materialize(
@@ -457,6 +464,7 @@ class Asset(Operation, metaclass=AssetMeta):
         window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> Any:
         """Execute the asset and write the result to all configured destinations.
 
@@ -474,17 +482,20 @@ class Asset(Operation, metaclass=AssetMeta):
             window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+            observed_at: The instant the run observes, aware; a snapshot-partitioned asset writes
+                its period. ``None`` is now, in UTC.
 
         Returns:
             The execution result, or ``None`` if the asset is disabled.
         """
-        return concurrency.run(self.materialize_async(window, dag, metadata))
+        return concurrency.run(self.materialize_async(window, dag, metadata, observed_at))
 
     async def materialize_async(
         self,
         window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> Any:
         """Execute the asset and write the result to all configured destinations.
 
@@ -492,13 +503,15 @@ class Asset(Operation, metaclass=AssetMeta):
             window: The window the run covers; a partition is accepted as the window of one.
             dag: DAG for dependency resolution (required if asset has upstreams).
             metadata: Arbitrary metadata dict (e.g. run_id, backfill_id).
+            observed_at: The instant the run observes, aware; a snapshot-partitioned asset writes
+                its period. ``None`` is now, in UTC.
 
         Returns:
             The execution result, or ``None`` if the asset is disabled.
         """
         if not self.enabled:
             return None
-        window = self.effective_window(PartitionWindow.of(window))
+        window = self.effective_window(PartitionWindow.of(window), observed_at or dt.datetime.now(dt.timezone.utc))
         metadata = metadata or {}
         output = await self._produce(window, dag, metadata)
         await self._land(output, window, metadata)
