@@ -307,18 +307,22 @@ class Operation(Component, Workload):
         """
         return [self]
 
-    def effective_window(self, window: PartitionWindow | None) -> PartitionWindow | None:
+    def effective_window(self, window: PartitionWindow | None, metadata: dict[str, Any]) -> PartitionWindow | None:
         """The window this operation actually consumes.
 
-        Unpartitioned operations ignore any window the run was given.
+        Unpartitioned operations ignore any window the run was given; a partitioned one consumes
+        what its partitioning says (see `PartitionConfig.effective_window`).
 
         Args:
             window: The window the run was scoped to, ``None`` when it was unscoped.
+            metadata: The run's metadata.
 
         Returns:
-            The window unchanged for a partitioned operation, ``None`` otherwise.
+            The partitioning's window, ``None`` for an unpartitioned operation.
         """
-        return window if self.partitioning is not None else None
+        if self.partitioning is None:
+            return None
+        return self.partitioning.effective_window(window, metadata)
 
     def upstream_relations(self) -> dict[str, Relation]:
         """The node's relations that another node in the graph fills.

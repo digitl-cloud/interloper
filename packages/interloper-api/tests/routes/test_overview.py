@@ -976,6 +976,7 @@ class TestCoverage:
                     "expected": [1, 1, 1],
                     "covered": [1, 0, 0],
                     "failed": [0, 1, 0],
+                    "missed": [0, 0, 0],
                     "failed_run_ids": {"1": str(failed.id)},
                 }
             ],
@@ -1002,6 +1003,7 @@ class TestCoverage:
                 "expected": [1],
                 "covered": [1],
                 "failed": [0],
+                "missed": [0],
                 "failed_run_ids": {},
             }
         ]

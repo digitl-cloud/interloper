@@ -222,7 +222,8 @@ class TestCommand:
     def _command(connect: Any, asset: il.Asset, window: Any) -> list[str]:
         connect()
         dag = il.DAG(asset)
-        run = KubernetesRun(KubernetesRunner(image="img"), dag, il.PartitionWindow.of(window), {"run_id": "r1"})
+        metadata = {"run_id": "r1", "observed_at": "2026-10-29T14:00:00+00:00"}
+        run = KubernetesRun(KubernetesRunner(image="img"), dag, il.PartitionWindow.of(window), metadata)
         return run.command(dag.operations[0])
 
     def test_an_unscoped_run_adds_no_flags(self, connect, asset):
@@ -271,6 +272,15 @@ class TestCommand:
         command = self._command(connect, asset, TimePartition(dt.date(2026, 1, 1)))
 
         assert command[5:] == [f"--operation-id={asset.id}"]
+
+    def test_a_snapshot_is_given_the_period_it_observes(self, connect):
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def entities() -> list:
+            return []
+
+        command = self._command(connect, entities(id="entities"), TimePartition(dt.date(2026, 1, 1)))
+
+        assert command[-2:] == ["--date", "2026-10-29"]
 
 
 def test_the_run_kind_is_named_after_its_runner():

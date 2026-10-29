@@ -75,7 +75,9 @@ class Upstream:
         Args:
             upstream: The asset whose data is read.
             reader: The asset reading it, whose identity the events carry.
-            window: The run's window, narrowed here to what *upstream* consumes.
+            window: The window the reader consumes. A partitioned upstream is read for it as is,
+                since the DAG only joins partitionings that accept the same windows (a snapshot
+                reads its upstream snapshot's observation); an unpartitioned one is read whole.
             metadata: Run-level metadata carried onto the emitted events.
             parameter: The reader's ``data()`` parameter the upstream is bound
                 to, which the missing-data warning names.
@@ -87,7 +89,7 @@ class Upstream:
             AssetError: If the read fails for any reason other than missing data.
         """
         destination = upstream.default_destination
-        window = upstream.effective_window(window)
+        window = window if upstream.partitioning is not None else None
         context = IOContext(asset=upstream, window=window, metadata=metadata, schema=upstream.schema)
         step = Step(
             StepKind.DEST_READ,

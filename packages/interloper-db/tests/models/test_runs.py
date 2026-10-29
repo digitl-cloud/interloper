@@ -13,11 +13,13 @@ from sqlmodel import Session
 
 from interloper_db.models import Component, Event, Run
 
+_CREATED = dt.datetime(2026, 10, 30, 23, 30, tzinfo=dt.timezone.utc)
+
 
 def test_event_metadata_carries_target_context() -> None:
     org = uuid4()
     target = Component(org_id=org, kind="job", key="nightly", name="Nightly sync")
-    run = Run(id=uuid4(), org_id=org, component_id=target.id, backfill_id=uuid4())
+    run = Run(id=uuid4(), org_id=org, component_id=target.id, backfill_id=uuid4(), created_at=_CREATED)
 
     metadata = run.event_metadata(target)
 
@@ -26,6 +28,7 @@ def test_event_metadata_carries_target_context() -> None:
         "backfill_id": str(run.backfill_id),
         "org_id": str(org),
         "attempt": 1,
+        "observed_at": "2026-10-30T23:30:00+00:00",
         "target_id": str(target.id),
         "target_kind": "job",
         "target_key": "nightly",
@@ -34,11 +37,17 @@ def test_event_metadata_carries_target_context() -> None:
 
 
 def test_event_metadata_without_target() -> None:
-    run = Run(id=uuid4(), org_id=uuid4())
+    run = Run(id=uuid4(), org_id=uuid4(), created_at=_CREATED)
 
     metadata = run.event_metadata(None)
 
-    assert metadata == {"run_id": str(run.id), "backfill_id": None, "org_id": str(run.org_id), "attempt": 1}
+    assert metadata == {
+        "run_id": str(run.id),
+        "backfill_id": None,
+        "org_id": str(run.org_id),
+        "attempt": 1,
+        "observed_at": "2026-10-30T23:30:00+00:00",
+    }
 
 
 def test_a_stack_holds_one_run_per_attempt(auth_db: Engine) -> None:
@@ -243,6 +252,29 @@ def test_event_values_preserves_producer_assigned_id() -> None:
 
 
 # -- Listing -------------------------------------------------------------------
+
+
+class TestObservedAt:
+    """A run observes when it became due, on its job's clock, and on UTC for any other target."""
+
+    def test_a_job_run_observes_in_the_jobs_timezone(self):
+        job = Component(org_id=uuid4(), kind="job", key="cron_job", config={"timezone": "Europe/Berlin"})
+
+        observed_at = Run(org_id=job.org_id, target=job, created_at=_CREATED).observed_at
+
+        assert observed_at == _CREATED
+        assert observed_at.date() == dt.date(2026, 10, 31)
+
+    def test_any_other_target_observes_in_utc(self):
+        source = Component(org_id=uuid4(), kind="source", key="shop", config={"timezone": "Europe/Berlin"})
+
+        assert Run(org_id=source.org_id, target=source, created_at=_CREATED).observed_at.date() == dt.date(2026, 10, 30)
+        assert Run(org_id=source.org_id, created_at=_CREATED).observed_at.tzinfo is dt.timezone.utc
+
+    def test_a_held_retry_observes_when_its_backoff_ends(self):
+        due = _CREATED + dt.timedelta(hours=2)
+
+        assert Run(org_id=uuid4(), created_at=_CREATED, scheduled_for=due).observed_at == due
 
 
 class TestEventValues:

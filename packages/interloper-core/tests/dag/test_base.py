@@ -4,6 +4,7 @@
 # ``data()`` methods whose parameter annotations must be real classes (not lazy
 # strings) for ``Asset._collect`` to infer their relations.
 
+import datetime as dt
 from typing import Any, ClassVar, cast
 
 import pytest
@@ -145,6 +146,12 @@ class FakeDaily(il.Asset):
 
     partitioning: ClassVar[PartitionConfig | None] = il.TimePartitionConfig(column="date")
     upstream: il.Asset | None = il.Relation("asset", optional=True)
+
+
+class FakeSnapshot(il.Asset):
+    """Daily snapshot asset."""
+
+    partitioning: ClassVar[PartitionConfig | None] = il.SnapshotPartitionConfig(column="date")
 
 
 class FakeMonthly(il.Asset):
@@ -608,6 +615,46 @@ class TestGranularityAcrossEdges:
         regions = Regions()
         with pytest.raises(DAGError, match="accept different windows"):
             DAG(regions, DailyOverRegions(regions=regions))
+
+
+class TestSnapshotEdges:
+    """A snapshot feeds views and same-granularity snapshots, never an asset partitioned on the run's window."""
+
+    @staticmethod
+    def _reader(partitioning: PartitionConfig | None, reads: bool = True) -> type[il.Asset]:
+        class Reader(il.Asset):
+            reads_upstream_data: ClassVar[bool] = reads
+            entities: FakeSnapshot = il.Relation("asset", "fake_snapshot")
+
+            def data(self, entities: il.Upstream) -> Any:  # pragma: no cover
+                return None
+
+        Reader.partitioning = partitioning
+        return Reader
+
+    def test_a_snapshot_of_the_same_granularity_reads_it(self):
+        snapshot = FakeSnapshot()
+        DAG(snapshot, self._reader(il.SnapshotPartitionConfig(column="date"))(entities=snapshot))
+
+    def test_a_view_over_a_snapshot_is_allowed(self):
+        snapshot = FakeSnapshot()
+        DAG(snapshot, self._reader(None, reads=False)(entities=snapshot))
+
+    @pytest.mark.parametrize(
+        "partitioning",
+        [
+            il.TimePartitionConfig(column="date"),
+            il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH),
+        ],
+    )
+    def test_an_asset_partitioned_another_way_cannot_read_it(self, partitioning: PartitionConfig):
+        snapshot = FakeSnapshot()
+        with pytest.raises(DAGError, match="accept different windows"):
+            DAG(snapshot, self._reader(partitioning)(entities=snapshot))
+
+    def test_a_run_of_any_window_is_valid_for_a_snapshot(self):
+        DAG(FakeSnapshot()).check_window(il.TimePartition(dt.date(2026, 1, 1), il.TimeGranularity.MONTH).window)
+        DAG(FakeSnapshot()).check_window(None)
 
 
 class TestDeclaredResolution:

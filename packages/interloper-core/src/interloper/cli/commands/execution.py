@@ -41,7 +41,9 @@ def configure_logging(*, quiet: bool = False, verbose: bool = False) -> None:
     )
 
 
-def for_operation(dag: DAG, window: PartitionWindow | None, operation_id: str) -> tuple[DAG, PartitionWindow | None]:
+def for_operation(
+    dag: DAG, window: PartitionWindow | None, operation_id: str, metadata: dict[str, Any]
+) -> tuple[DAG, PartitionWindow | None]:
     """The DAG and window executing one operation of *dag* for its host.
 
     The operation's upstreams are read, not executed, and it carries no retry
@@ -51,6 +53,7 @@ def for_operation(dag: DAG, window: PartitionWindow | None, operation_id: str) -
         dag: The DAG the operation belongs to.
         window: The run's window.
         operation_id: The operation to execute.
+        metadata: The run's metadata.
 
     Returns:
         The operation's DAG, and the window it consumes from the run's.
@@ -66,7 +69,7 @@ def for_operation(dag: DAG, window: PartitionWindow | None, operation_id: str) -
         raise SystemExit(f"Error: {error}") from error
     operation = operation_dag.operation_map[operation_id]
     operation.retry = None
-    return operation_dag, operation.effective_window(window)
+    return operation_dag, operation.effective_window(window, metadata)
 
 
 def leave_failure(operation_id: str | None, reason: str) -> None:

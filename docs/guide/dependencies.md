@@ -105,22 +105,9 @@ four forms:
 ```py
 @il.source(tags=["Analytics"])
 class CampaignMatcher(il.Source):
-    @il.asset(
-        partitioning=il.TimePartitionConfig(column="date"),
-        tags=["Entity"],
-        relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)},
-    )
-    def campaign_matches(
-        self,
-        context: il.ExecutionContext,
-        campaigns: list[il.Upstream],
-    ) -> list[dict]:
-        return [
-            {"date": context.partition_date, **row}
-            for leg in campaigns
-            if leg.data is not None
-            for row in leg.data
-        ]
+    @il.asset(relations={"campaigns": il.Relation("asset", "*.dim_campaigns", many=True)})
+    def campaign_matches(self, campaigns: list[il.Upstream]) -> list[dict]:
+        return [row for leg in campaigns if leg.data is not None for row in leg.data]
 ```
 
 The DAG binds every `dim_campaigns` asset it holds, so the set of legs is decided by wiring, not by

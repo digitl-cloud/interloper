@@ -449,8 +449,9 @@ class Asset(Operation, metaclass=AssetMeta):
         Returns:
             The raw execution result.
         """
-        window = self.effective_window(PartitionWindow.of(window))
-        return (await self._produce(window, dag, metadata or {})).data
+        metadata = metadata or {}
+        window = self.effective_window(PartitionWindow.of(window), metadata)
+        return (await self._produce(window, dag, metadata)).data
 
     def materialize(
         self,
@@ -498,8 +499,8 @@ class Asset(Operation, metaclass=AssetMeta):
         """
         if not self.enabled:
             return None
-        window = self.effective_window(PartitionWindow.of(window))
         metadata = metadata or {}
+        window = self.effective_window(PartitionWindow.of(window), metadata)
         output = await self._produce(window, dag, metadata)
         await self._land(output, window, metadata)
         return output.data

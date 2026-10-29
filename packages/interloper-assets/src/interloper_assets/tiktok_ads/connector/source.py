@@ -226,7 +226,7 @@ class TiktokAds(il.Source):
 
     @il.asset(
         schema=Ads,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -237,7 +237,7 @@ class TiktokAds(il.Source):
 
     @il.asset(
         schema=Campaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -248,7 +248,7 @@ class TiktokAds(il.Source):
 
     @il.asset(
         schema=Adgroups,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -259,7 +259,7 @@ class TiktokAds(il.Source):
 
     @il.asset(
         schema=Advertisers,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ADVERTISER_NORMALIZER,
     )

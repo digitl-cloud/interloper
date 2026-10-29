@@ -263,7 +263,7 @@ class CampaignManager360(il.Source):
 
     @il.asset(
         schema=schemas.CustomAudiences,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:

@@ -428,7 +428,7 @@ class AmazonSellingPartner(il.Source):
 
     @il.asset(
         schema=schemas.Products,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     async def products(self, context: il.ExecutionContext) -> list[_Record]:

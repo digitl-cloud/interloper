@@ -46,7 +46,7 @@ class Adup(il.Source):
     connection: AdupConnection
 
     @il.asset(
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         schema=Account,
     )

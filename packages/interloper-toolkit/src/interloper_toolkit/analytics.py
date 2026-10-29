@@ -118,7 +118,10 @@ def asset_coverage(
     An asset counts as covered for a partition once any run's execution of it
     succeeded, whatever the run targeted, so a run where most assets
     succeeded shows what is actually missing. Every asset the job targets
-    appears, directly or through a source it targets.
+    appears, directly or through a source it targets. A snapshot asset (an
+    entity read as the vendor holds it now) owes only the periods a run
+    observed in; a past one without a success is missed, and is never
+    offered for a backfill, which cannot read the past.
 
     Args:
         component_id: UUID of the job.
@@ -130,13 +133,17 @@ def asset_coverage(
         offset: Number of assets to skip, for paging past the first page.
 
     Returns the page of assets, least covered first, each with its covered,
-    failed and never-run partition counts and its missing partitions as
+    failed, missed and never-run partition counts and its missing partitions as
     ranges ready for a backfill, plus a rollup of the range's partitions by
     whether all, some or none of the assets are covered.
     """
     try:
         coverage = ctx.store.insights.coverage_by_key(
-            ctx.org_id, UUID(component_id), start_key=start_key, end_key=end_key
+            ctx.org_id,
+            UUID(component_id),
+            start_key=start_key,
+            end_key=end_key,
+            now=datetime.datetime.now(tz=datetime.timezone.utc),
         )
         return AssetCoverage.from_coverage(coverage, limit=limit, offset=offset)
     except Exception as e:

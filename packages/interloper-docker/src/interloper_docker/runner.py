@@ -179,7 +179,7 @@ class DockerRun(Run):
             return ["interloper", "launch", self.state.run_id, f"--operation-id={operation.id}"]
         spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
-        window = operation.effective_window(self.state.window)
+        window = operation.effective_window(self.state.window, self.state.metadata)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
         elif window is not None:

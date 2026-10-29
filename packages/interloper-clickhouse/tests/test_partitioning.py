@@ -2,7 +2,12 @@
 
 import pytest
 from interloper.errors import ConfigError
-from interloper.partitioning import ListPartitionConfig, TimeGranularity, TimePartitionConfig
+from interloper.partitioning import (
+    ListPartitionConfig,
+    SnapshotPartitionConfig,
+    TimeGranularity,
+    TimePartitionConfig,
+)
 
 from interloper_clickhouse.partitioning import partition_key, same_key
 
@@ -33,6 +38,12 @@ PARSED = "parseDateTime64BestEffort(`d`, 6, 'UTC')"
 )
 def test_time_partitioning(config, column_type, expected):
     assert partition_key(config, "`d`", column_type) == expected
+
+
+def test_a_snapshot_partitions_by_its_granularity():
+    monthly = SnapshotPartitionConfig(column="d", granularity=TimeGranularity.MONTH)
+
+    assert partition_key(monthly, "`d`", "Date32") == "toStartOfMonth(`d`)"
 
 
 def test_non_time_partitioning_is_the_column():

@@ -198,7 +198,7 @@ class PinterestAds(il.Source):
     # -- ENTITIES --------------------------------------------------------------
     @il.asset(
         schema=schemas.AdAccounts,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -210,7 +210,7 @@ class PinterestAds(il.Source):
 
     @il.asset(
         schema=schemas.Campaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -220,7 +220,7 @@ class PinterestAds(il.Source):
 
     @il.asset(
         schema=schemas.AdGroups,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -230,7 +230,7 @@ class PinterestAds(il.Source):
 
     @il.asset(
         schema=schemas.Ads,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )

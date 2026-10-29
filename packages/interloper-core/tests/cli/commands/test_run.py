@@ -250,6 +250,16 @@ class TestResolveWindow:
         with pytest.raises(SystemExit, match="no enabled operation of the DAG is partitioned"):
             _resolve_window(_args(date="2026-06-01"), il.DAG(FakeRunSource()))
 
+    def test_a_snapshot_does_not_parse_the_keys(self) -> None:
+        from interloper.cli.commands.run import _resolve_window
+
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date", granularity=il.TimeGranularity.MONTH))
+        def entities() -> list:  # pragma: no cover
+            return []
+
+        window = _resolve_window(_args(date="2026-06-01"), il.DAG(entities(), FakePartitionedSource()))
+        assert str(window) == "2026-06-01"
+
     def test_no_flags_is_no_window(self) -> None:
         from interloper.cli.commands.run import _resolve_window
 

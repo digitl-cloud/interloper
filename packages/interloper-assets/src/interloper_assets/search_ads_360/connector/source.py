@@ -92,7 +92,7 @@ class SearchAds360(il.Source):
 
     @il.asset(
         schema=schemas.CustomerClients,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     async def customer_clients(self, context: il.ExecutionContext) -> list[_Row]:

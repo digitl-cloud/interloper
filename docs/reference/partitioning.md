@@ -12,6 +12,8 @@ Partitions scope a run to a slice of time; windows span several.
 
 ::: interloper.TimePartitionConfig
 
+::: interloper.SnapshotPartitionConfig
+
 ::: interloper.TimePartition
 
 ::: interloper.TimePartitionWindow

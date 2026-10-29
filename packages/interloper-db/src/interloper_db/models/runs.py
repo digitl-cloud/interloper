@@ -256,6 +256,21 @@ class Run(SQLModel, table=True):
         if self.hooks_evaluated_at is None:
             self.hooks_evaluated_at = datetime.now(timezone.utc)
 
+    @property
+    def observed_at(self) -> datetime:
+        """The instant the run observes at: when it became due, on its job's clock.
+
+        A snapshot asset writes the period holding this instant. A run is due
+        when it was created, or at ``scheduled_for`` when a retry's backoff
+        holds it; a run not yet saved is due now. The clock is the job's
+        timezone, so a daily snapshot of a Berlin job is Berlin's day, and UTC
+        for any other target. The target must be loaded.
+        """
+        due = self.scheduled_for or self.created_at or datetime.now(timezone.utc)
+        if self.target is None or self.target.kind != "job":
+            return due.astimezone(timezone.utc)
+        return due.astimezone(il.CronJob.zone(self.target.config or {}))
+
     def event_metadata(self, target: Component | None) -> dict[str, Any]:
         """This run's ids plus its target's identity, for the events it emits.
 
@@ -263,7 +278,9 @@ class Run(SQLModel, table=True):
         keys have no structured column on ``events`` — they land in each
         event's ``data``, making events self-describing for telemetry (which
         component the run executed, under what name at the time) without a
-        join back through ``runs``.
+        join back through ``runs``. ``observed_at`` is the instant a snapshot
+        asset writes the period of (see `observed_at`), so the run and every
+        process executing one of its operations write the same one.
 
         Args:
             target: The component this run targets, or None when it no longer
@@ -277,6 +294,7 @@ class Run(SQLModel, table=True):
             "backfill_id": str(self.backfill_id) if self.backfill_id else None,
             "org_id": str(self.org_id),
             "attempt": self.attempt,
+            "observed_at": self.observed_at.isoformat(),
         }
         if target is not None:
             metadata |= {
@@ -465,9 +483,11 @@ class Execution(SQLModel, table=True):
     final outcome. The fold is a Postgres trigger on ``events``, so the
     application never writes this table; migration 012 creates the table,
     the trigger and the backfill, which is why ``create_all`` skips it (see
-    the ``migration_owned`` marker). The run's partition key is stamped on
-    the row as it is created (migration 013), so coverage reads executions
-    by partition without joining every one to its run.
+    the ``migration_owned`` marker). The partition the operation's events
+    name, else its run's, is stamped on the row as it is created (migrations
+    013 and 020), so coverage reads executions by partition without joining
+    every one to its run, and a snapshot's execution is filed under the
+    period it observed.
     """
 
     __tablename__: ClassVar[str] = "executions"
