@@ -1,9 +1,6 @@
 import datetime as dt
-import json
 import logging
 import re
-from collections.abc import Callable
-from time import sleep
 from typing import Any
 
 import interloper as il
@@ -47,9 +44,6 @@ PIVOT_COLUMNS = [
 # Shared insights breakdowns for the ad/campaign/video reports.
 _PLATFORM_BREAKDOWNS = ["publisher_platform", "platform_position", "impression_device"]
 _ACTION_BREAKDOWNS = ["action_device", "action_type"]
-
-# Facebook rate-limit error codes (user request limit / app throttling).
-_RATE_LIMIT_CODES = (17, 80004)
 
 # Async insights reports can run long (they often sit at "Job Running 99%" for
 # minutes before completing), so poll generously before giving up.
@@ -130,54 +124,6 @@ def _account(connection: FacebookAdsConnection, account_id: str) -> Any:
     return AdAccount(f"act_{account_id}", api=connection.api)
 
 
-def _is_rate_limit_error(exc: BaseException) -> bool:
-    from facebook_business.exceptions import FacebookRequestError
-
-    return isinstance(exc, FacebookRequestError) and exc.api_error_code() in _RATE_LIMIT_CODES
-
-
-_rate_limit_retry = tc.retry(
-    retry=tc.retry_if_exception(_is_rate_limit_error),
-    wait=tc.wait_random_exponential(multiplier=2, min=5, max=300),
-    stop=tc.stop_after_attempt(5),
-    reraise=True,
-)
-
-
-def _insights_usage(headers: dict[str, str], account_id: str) -> int:
-    """Read the worst-case rate-limit usage percentage from insights headers."""
-    if "x-app-usage" in headers:
-        business_limit = json.loads(headers["x-app-usage"])
-    elif "x-business-use-case-usage" in headers:
-        business_limit = json.loads(headers["x-business-use-case-usage"])[account_id][0]
-    else:
-        logger.warning("Rate limit headers are missing; cannot check rate limits.")
-        return 0
-
-    throttle = json.loads(headers["x-fb-ads-insights-throttle"])
-    return max(
-        business_limit["call_count"],
-        business_limit["total_cputime"],
-        business_limit["total_time"],
-        throttle["app_id_util_pct"],
-    )
-
-
-def _insights_headers(account: Any) -> dict[str, str]:
-    from facebook_business.exceptions import FacebookRequestError
-
-    @tc.retry(
-        retry=tc.retry_if_exception_type(FacebookRequestError),
-        wait=tc.wait_fixed(30),
-        stop=tc.stop_after_attempt(3),
-        reraise=True,
-    )
-    def _fetch() -> dict[str, str]:
-        return account.get_insights().headers()
-
-    return _fetch()
-
-
 def _wait_for_job(job: Any, timeout: dt.timedelta = INSIGHTS_TIMEOUT) -> None:
     """Poll an async report run until it completes.
 
@@ -221,17 +167,8 @@ def _get_ads_insights(
     fields: list[str],
     params: dict,
 ) -> list[dict]:
-    """Run an async insights report, waiting out rate limits, and return rows."""
-    account = _account(connection, account_id)
-
-    usage = _insights_usage(_insights_headers(account), account_id)
-    while usage > 80:
-        wait_time = max(usage * 2, 150)
-        logger.info(f"Rate-limit usage at {usage}%; sleeping {wait_time}s before requesting insights...")
-        sleep(wait_time)
-        usage = _insights_usage(_insights_headers(account), account_id)
-
-    job = account.get_insights(fields=fields, params=params, is_async=True)
+    """Run an async insights report and return its rows."""
+    job = _account(connection, account_id).get_insights(fields=fields, params=params, is_async=True)
     _wait_for_job(job)
     return [item._json for item in job.get_result()]
 
@@ -251,61 +188,18 @@ def _get_campaigns(connection: FacebookAdsConnection, account_id: str) -> list[d
     return [campaign._json for campaign in account.get_campaigns(fields=constants.CAMPAIGN_ENTITY_FIELDS)]
 
 
-def _asks_for_less(exc: BaseException) -> bool:
-    from facebook_business.exceptions import FacebookRequestError
-
-    return (
-        isinstance(exc, FacebookRequestError)
-        and exc.api_error_code() == 1
-        and "reduce the amount of data" in (exc.api_error_message() or "")
-    )
-
-
-def _paginate(request: Callable[..., Any], fields: list[str], limit: int = 25) -> list[dict]:
-    """Read every page of an account edge, retrying each page call on rate limits.
-
-    Used by the ``ads`` and ``adsets`` entity assets, the two edges large
-    enough to page and to hit the rate limit. Indexing an SDK cursor reads its
-    current page without consuming it, and ``load_next_page`` replaces the
-    page, so each page is read by position.
-
-    Facebook refuses a page whose objects carry too much data with a 500
-    asking for less; the edge is then read again from the start with half the
-    page, since an entity read is a snapshot and a restart loses nothing.
-
-    Args:
-        request: The account's edge method, such as ``AdAccount.get_ads``.
-        fields: The fields to request on each object.
-        limit: Objects per page; halved on every refusal down to one.
-
-    Returns:
-        Every object's data, in the order the API returned them.
-    """
-    try:
-        cursor = _rate_limit_retry(request)(fields=fields, params={"limit": limit})
-        rows: list[dict] = []
-        while True:
-            rows.extend(cursor[i].export_all_data() for i in range(len(cursor)))
-            if not _rate_limit_retry(cursor.load_next_page)():
-                return rows
-    except Exception as exc:
-        if limit == 1 or not _asks_for_less(exc):
-            raise
-        logger.warning(f"Facebook asked for less data at {limit} objects per page; retrying with {limit // 2}")
-        return _paginate(request, fields, limit // 2)
-
-
 def _get_ads(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    return _paginate(_account(connection, account_id).get_ads, constants.AD_ENTITY_FIELDS)
+    account = _account(connection, account_id)
+    return [ad.export_all_data() for ad in account.get_ads(fields=constants.AD_ENTITY_FIELDS)]
 
 
 def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict]:
-    return _paginate(_account(connection, account_id).get_ad_sets, constants.ADSET_ENTITY_FIELDS)
+    account = _account(connection, account_id)
+    return [adset.export_all_data() for adset in account.get_ad_sets(fields=constants.ADSET_ENTITY_FIELDS)]
 
 
 def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
-    account = _rate_limit_retry(_account(connection, account_id).api_get)(fields=constants.AD_ACCOUNT_ENTITY_FIELDS)
-    return account.export_all_data()
+    return _account(connection, account_id).api_get(fields=constants.AD_ACCOUNT_ENTITY_FIELDS).export_all_data()
 
 
 def _time_range(date: dt.date) -> dict[str, str]:
