@@ -171,10 +171,10 @@ class HookController(Controller):
             )
 
     def _subject_url(self, org_id: UUID, path: str) -> str | None:
-        """The app page for a run or backfill, under its organisation's slug, when the deployment has a public URL.
+        """The app page for a run or backfill, under its organisation's key, when the deployment has a public URL.
 
         Args:
-            org_id: The subject's organisation, whose slug leads the path.
+            org_id: The subject's organisation, whose key leads the path.
             path: The page's path under the organisation, such as ``/executions/runs/<id>``.
 
         Returns:
@@ -185,10 +185,10 @@ class HookController(Controller):
         if not base:
             return None
         try:
-            slug = self._store.organisations.get(org_id).slug
+            organisation_key = self._store.organisations.get(org_id).key
         except NotFoundError:
             return None
-        return f"{base}/{slug}{path}"
+        return f"{base}/{organisation_key}{path}"
 
     def _unclaimed_hooks(
         self, org_id: UUID, target: Component, subject_id: UUID, event_type: str

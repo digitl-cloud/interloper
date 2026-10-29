@@ -21,6 +21,7 @@ export function useCommandPalette() {
     const colorMode = useColorMode()
     const { open: agentOpen } = useAgentPanel()
     const destinations = useNavDestinations()
+    const organizationViews = useOrganizationViews()
     const assetNames = useAssetDisplayName()
     const assetIcons = useAssetIcon()
 
@@ -77,13 +78,13 @@ export function useCommandPalette() {
         }
 
         const settingsItems: CommandPaletteItem[] = [
-            toItem({ label: 'Organization', icon: 'i-lucide-building-2', to: orgStore.path('/organization') }),
+            ...organizationViews.value.map(view => toItem({ ...view, label: `Organization ${view.label.toLowerCase()}` })),
         ]
         if (userStore.isSuperAdmin)
             settingsItems.push(toItem({ label: 'Platform admin', icon: 'i-lucide-shield', to: '/admin' }))
         for (const membership of userStore.user?.memberships ?? []) {
             if (membership.id === orgStore.organisation?.id) continue
-            settingsItems.push(toItem({ label: `Switch to ${membership.name}`, icon: 'i-lucide-building-2', to: `/${membership.slug}` }))
+            settingsItems.push(toItem({ label: `Switch to ${membership.name}`, icon: 'i-lucide-building-2', to: `/${membership.key}` }))
         }
 
         const runItems: CommandPaletteItem[] = recentRuns.value.map(run => ({

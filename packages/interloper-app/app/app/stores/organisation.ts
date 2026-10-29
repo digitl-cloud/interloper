@@ -13,11 +13,11 @@ export const useOrganisationStore = defineStore('organisation', () => {
      * without belonging to it, or one updated here since `/auth/me` was read.
      */
     const discovered = ref<Membership[]>([])
-    /** The slug of the last organisation route: pages outside any organisation (settings, admin) keep it. */
-    const slug = ref<string | null>(null)
+    /** The key of the last organisation route: pages outside any organisation (settings, admin) keep it. */
+    const key = ref<string | null>(null)
     const router = useRouter()
     watch(() => router.currentRoute.value.params.org, (value) => {
-        if (typeof value === 'string') slug.value = value
+        if (typeof value === 'string') key.value = value
     }, { immediate: true, flush: 'sync' })
 
     /** Aborts every call `useOrgApi` made under the active organisation, once the route leaves it. */
@@ -27,7 +27,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
      * Getters
      **********************/
     /** The organisation the route names, `null` until one it names is known. */
-    const organisation = computed(() => slug.value ? _find(slug.value) ?? null : null)
+    const organisation = computed(() => key.value ? _find(key.value) ?? null : null)
     /** The role the user acts with in the organisation. */
     const role = computed(() => organisation.value?.role ?? null)
 
@@ -43,21 +43,21 @@ export const useOrganisationStore = defineStore('organisation', () => {
     /**********************
      * Internals
      **********************/
-    function _find(slug: string): Membership | undefined {
-        return discovered.value.find(m => m.slug === slug) ?? userStore.user?.memberships.find(m => m.slug === slug)
+    function _find(key: string): Membership | undefined {
+        return discovered.value.find(m => m.key === key) ?? userStore.user?.memberships.find(m => m.key === key)
     }
 
     /**
-     * A slug the memberships do not know: one joined or renamed since `/auth/me` was read,
+     * A key the memberships do not know: one joined or renamed since `/auth/me` was read,
      * or, for a super-admin, any live organisation in the admin listing.
      */
-    async function _lookUp(slug: string): Promise<Membership | undefined> {
+    async function _lookUp(key: string): Promise<Membership | undefined> {
         await userStore.fetchMe()
-        const member = _find(slug)
+        const member = _find(key)
         if (member || !userStore.isSuperAdmin) return member
-        const listed = (await adminStore.listOrganisations()).find(o => o.slug === slug && !o.deleted_at)
+        const listed = (await adminStore.listOrganisations()).find(o => o.key === key && !o.deleted_at)
         if (!listed) return undefined
-        const opened: Membership = { id: listed.id, name: listed.name, slug: listed.slug, role: 'admin' }
+        const opened: Membership = { id: listed.id, name: listed.name, key: listed.key, role: 'admin' }
         discovered.value.push(opened)
         return opened
     }
@@ -66,11 +66,11 @@ export const useOrganisationStore = defineStore('organisation', () => {
      * Actions
      **********************/
     /**
-     * The organisation a slug names, looked up when the memberships do not know it; `null` when the
+     * The organisation a key names, looked up when the memberships do not know it; `null` when the
      * user cannot act in it. The route that names it makes it the active one.
      */
-    async function resolve(slug: string): Promise<Membership | null> {
-        return _find(slug) ?? await _lookUp(slug) ?? null
+    async function resolve(key: string): Promise<Membership | null> {
+        return _find(key) ?? await _lookUp(key) ?? null
     }
 
     /** The signal `useOrgApi` gives each call: aborted once the route leaves the active organisation. */
@@ -82,12 +82,12 @@ export const useOrganisationStore = defineStore('organisation', () => {
     function home(): string {
         const memberships = userStore.user?.memberships ?? []
         const last = memberships.find(m => m.id === userStore.user?.last_organisation_id) ?? memberships[0]
-        return last ? `/${last.slug}` : '/welcome'
+        return last ? `/${last.key}` : '/welcome'
     }
 
-    /** A path inside the active organisation: `path('/graph')` is `/<slug>/graph`, `path('/')` its landing page. */
+    /** A path inside the active organisation: `path('/graph')` is `/<key>/graph`, `path('/')` its landing page. */
     function path(subpath: string): string {
-        const base = `/${requireOrganisation().slug}`
+        const base = `/${requireOrganisation().key}`
         return subpath === '/' ? base : `${base}${subpath}`
     }
 
@@ -101,11 +101,11 @@ export const useOrganisationStore = defineStore('organisation', () => {
     }
 
     /**
-     * Rename an organisation or change its slug. The update is known under its new slug at once,
+     * Rename an organisation or change its key. The update is known under its new key at once,
      * while its old one still resolves from the memberships until `/auth/me` is read again, so the
      * route can move from one to the other without passing through an unknown organisation.
      */
-    async function updateOrganisation(orgId: string, patch: { name?: string, slug?: string }): Promise<Organisation> {
+    async function updateOrganisation(orgId: string, patch: { name?: string, key?: string }): Promise<Organisation> {
         const updated = await apiFetch<Organisation>(`/organisations/${orgId}`, {
             method: 'PATCH',
             body: patch,
@@ -115,7 +115,7 @@ export const useOrganisationStore = defineStore('organisation', () => {
         if (role) {
             discovered.value = [
                 ...discovered.value.filter(m => m.id !== orgId),
-                { id: updated.id, name: updated.name, slug: updated.slug, role },
+                { id: updated.id, name: updated.name, key: updated.key, role },
             ]
         }
         return updated

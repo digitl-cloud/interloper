@@ -205,7 +205,7 @@ class FakeProfileStore:
     """In-memory stand-in for ``PATCH /auth/me``: the profile update and what ``GET /auth/me`` reads."""
 
     def __init__(self) -> None:
-        self.org = SimpleNamespace(id=uuid4(), name="Dev Org", slug="dev-org", created_at=None)
+        self.org = SimpleNamespace(id=uuid4(), name="Dev Org", key="dev-org", created_at=None)
         self.profile = SimpleNamespace(
             id=uuid4(),
             email="user@example.com",
@@ -258,7 +258,7 @@ def test_update_me_answers_the_same_shape_as_get_me() -> None:
     assert patched.status_code == 200
     assert patched.json() == fetched.json()
     assert patched.json()["memberships"] == [
-        {"id": str(store.org.id), "name": "Dev Org", "slug": "dev-org", "role": "editor"}
+        {"id": str(store.org.id), "name": "Dev Org", "key": "dev-org", "role": "editor"}
     ]
     assert set(patched.json()) == set(auth_module.AuthUserResponse.model_fields)
 
@@ -569,12 +569,12 @@ def _me_profile(**overrides: Any) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
-def _organisation(name: str, slug: str) -> SimpleNamespace:
-    return SimpleNamespace(id=uuid4(), name=name, slug=slug, created_at=None)
+def _organisation(name: str, key: str) -> SimpleNamespace:
+    return SimpleNamespace(id=uuid4(), name=name, key=key, created_at=None)
 
 
 class TestGetMe:
-    """``GET /auth/me``: identity plus every organisation the caller belongs to, by slug."""
+    """``GET /auth/me``: identity plus every organisation the caller belongs to, by key."""
 
     def test_no_cookie_is_a_401(self) -> None:
         client = _session_client(CallerStore())
@@ -590,7 +590,7 @@ class TestGetMe:
 
         assert response.status_code == 401
 
-    def test_memberships_carry_the_slug_and_the_role(self) -> None:
+    def test_memberships_carry_the_key_and_the_role(self) -> None:
         dev, acme = _organisation("Dev Org", "dev-org"), _organisation("Acme", "acme")
         store = CallerStore(organisations=[dev, acme], roles={dev.id: "admin", acme.id: "viewer"})
 
@@ -598,8 +598,8 @@ class TestGetMe:
 
         assert payload["email"] == "ada@example.com"
         assert payload["memberships"] == [
-            {"id": str(dev.id), "name": "Dev Org", "slug": "dev-org", "role": "admin"},
-            {"id": str(acme.id), "name": "Acme", "slug": "acme", "role": "viewer"},
+            {"id": str(dev.id), "name": "Dev Org", "key": "dev-org", "role": "admin"},
+            {"id": str(acme.id), "name": "Acme", "key": "acme", "role": "viewer"},
         ]
         assert "organisation" not in payload
         assert "role" not in payload
@@ -719,7 +719,7 @@ class TestAcceptInvite:
     def test_the_joined_organisation_is_returned(self) -> None:
         org_id = uuid4()
         created_at = dt.datetime(2026, 1, 2, tzinfo=dt.timezone.utc)
-        store = CallerStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", slug="dev-org", created_at=created_at))
+        store = CallerStore(accepted=SimpleNamespace(id=org_id, name="Dev Org", key="dev-org", created_at=created_at))
 
         response = _session_client(store).post("/auth/accept-invite", json={"token": "invite-token"})
 
@@ -728,7 +728,7 @@ class TestAcceptInvite:
         assert response.json() == {
             "id": str(org_id),
             "name": "Dev Org",
-            "slug": "dev-org",
+            "key": "dev-org",
             "created_at": "2026-01-02T00:00:00Z",
         }
 

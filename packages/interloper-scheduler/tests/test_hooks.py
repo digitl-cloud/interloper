@@ -825,7 +825,7 @@ class TestBackfillEvents:
 
 
 class TestSubjectUrl:
-    """The context links to the subject's page, under its organisation's slug, when the app has a public URL."""
+    """The context links to the subject's page, under its organisation's key, when the app has a public URL."""
 
     @pytest.fixture
     def public_url(self) -> Iterator[None]:
@@ -847,7 +847,7 @@ class TestSubjectUrl:
             relations={"watches": [component_id]},
         )
 
-    def test_hook_url_carries_slug(self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None, org_id: UUID):
+    def test_hook_url_carries_key(self, store: Store, monkeypatch: pytest.MonkeyPatch, public_url: None, org_id: UUID):
         payloads = _capture_posts(monkeypatch)
         source = store.components.create(org_id, kind="source", key="demo_source", name="Demo")
         leaf = next(c for c in source.children if c.key == "e")

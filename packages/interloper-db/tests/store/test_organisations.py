@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from interloper.errors import ConfigError
-from sqlalchemy import Engine
+from sqlalchemy import Engine, inspect, text
 from sqlmodel import Session as SQLSession
 from sqlmodel import select
 
@@ -26,67 +29,103 @@ from interloper_db.models import (
 from interloper_db.store import OrganisationQuery, Store
 
 
-class TestSlug:
-    def test_create_derives_the_slug_from_the_name(self, store: Store):
-        assert store.organisations.create(name="Swarovski AG").slug == "swarovski-ag"
+class TestKey:
+    def test_create_derives_the_key_from_the_name(self, store: Store):
+        assert store.organisations.create(name="Swarovski AG").key == "swarovski-ag"
 
     def test_reserved_name_gets_suffix(self, store: Store):
-        assert store.organisations.create(name="Settings").slug == "settings-2"
+        assert store.organisations.create(name="Settings").key == "settings-2"
 
     def test_duplicate_name_dedupes(self, store: Store):
-        slugs = [store.organisations.create(name="Acme").slug for _ in range(3)]
-        assert slugs == ["acme", "acme-2", "acme-3"]
+        keys = [store.organisations.create(name="Acme").key for _ in range(3)]
+        assert keys == ["acme", "acme-2", "acme-3"]
 
-    def test_a_deleted_organisation_keeps_its_slug(self, store: Store):
+    def test_a_deleted_organisation_keeps_its_key(self, store: Store):
         first = store.organisations.create(name="Acme")
         store.organisations.delete(first.id)
-        assert store.organisations.create(name="Acme").slug == "acme-2"
+        assert store.organisations.create(name="Acme").key == "acme-2"
 
-    def test_get_by_slug(self, store: Store):
+    def test_get_by_key(self, store: Store):
         org = store.organisations.create(name="Swarovski AG")
-        assert store.organisations.get_by_slug("swarovski-ag").id == org.id
+        assert store.organisations.get_by_key("swarovski-ag").id == org.id
 
-    def test_get_by_slug_misses_unknown_and_deleted(self, store: Store):
+    def test_get_by_key_misses_unknown_and_deleted(self, store: Store):
         org = store.organisations.create(name="Acme")
         with pytest.raises(NotFoundError):
-            store.organisations.get_by_slug("nope")
+            store.organisations.get_by_key("nope")
         store.organisations.delete(org.id)
         with pytest.raises(NotFoundError):
-            store.organisations.get_by_slug("acme")
+            store.organisations.get_by_key("acme")
 
-    def test_update_renames_without_touching_the_slug(self, store: Store):
+    def test_update_renames_without_touching_the_key(self, store: Store):
         org = store.organisations.create(name="Acme")
         updated = store.organisations.update(org.id, name="Acme Corp")
-        assert (updated.name, updated.slug) == ("Acme Corp", "acme")
+        assert (updated.name, updated.key) == ("Acme Corp", "acme")
 
-    def test_update_sets_a_free_slug(self, store: Store):
+    def test_update_sets_a_free_key(self, store: Store):
         org = store.organisations.create(name="Acme")
-        updated = store.organisations.update(org.id, slug="acme-eu")
-        assert updated.slug == "acme-eu"
-        assert store.organisations.get_by_slug("acme-eu").id == org.id
+        updated = store.organisations.update(org.id, key="acme-eu")
+        assert updated.key == "acme-eu"
+        assert store.organisations.get_by_key("acme-eu").id == org.id
 
-    def test_update_sets_name_and_slug_together(self, store: Store):
+    def test_update_sets_name_and_key_together(self, store: Store):
         org = store.organisations.create(name="Acme")
-        updated = store.organisations.update(org.id, name="Acme Corp", slug="acme-corp")
-        assert (updated.name, updated.slug) == ("Acme Corp", "acme-corp")
+        updated = store.organisations.update(org.id, name="Acme Corp", key="acme-corp")
+        assert (updated.name, updated.key) == ("Acme Corp", "acme-corp")
 
-    def test_update_to_its_own_slug_is_a_no_op(self, store: Store):
+    def test_update_to_its_own_key_is_a_no_op(self, store: Store):
         org = store.organisations.create(name="Acme")
-        assert store.organisations.update(org.id, slug="acme").slug == "acme"
+        assert store.organisations.update(org.id, key="acme").key == "acme"
 
-    def test_rename_to_taken_slug_conflicts(self, store: Store):
+    def test_rename_to_taken_key_conflicts(self, store: Store):
         store.organisations.create(name="Acme")
         other = store.organisations.create(name="Globex")
         with pytest.raises(ConflictError, match="acme"):
-            store.organisations.update(other.id, slug="acme")
-        assert store.organisations.get(other.id).slug == "globex"
+            store.organisations.update(other.id, key="acme")
+        assert store.organisations.get(other.id).key == "globex"
 
-    def test_update_refuses_a_reserved_or_malformed_slug(self, store: Store):
+    def test_update_refuses_a_reserved_or_malformed_key(self, store: Store):
         org = store.organisations.create(name="Acme")
         with pytest.raises(ConfigError):
-            store.organisations.update(org.id, slug="admin")
+            store.organisations.update(org.id, key="admin")
         with pytest.raises(ConfigError):
-            store.organisations.update(org.id, slug="Not Valid")
+            store.organisations.update(org.id, key="Not Valid")
+
+
+class TestMigration019:
+    @staticmethod
+    def _migrate(auth_db: Engine, step: str) -> None:
+        """Run one step of migration 019 against the fixture database.
+
+        Args:
+            auth_db: The fixture database.
+            step: ``"upgrade"`` or ``"downgrade"``.
+        """
+        migration = importlib.import_module("interloper_db.migrations.versions.019_organisation_key")
+        with auth_db.begin() as connection, Operations.context(MigrationContext.configure(connection)):
+            getattr(migration, step)()
+
+    def test_an_upgraded_database_keeps_its_slugs_as_keys(self, store: Store, auth_db: Engine):
+        org = store.organisations.create(name="Acme")
+        self._migrate(auth_db, "downgrade")
+        self._migrate(auth_db, "upgrade")
+        assert store.organisations.get_by_key("acme").id == org.id
+        assert "ix_organisations_key" in {index["name"] for index in inspect(auth_db).get_indexes("organisations")}
+
+    def test_a_fresh_database_drops_the_empty_slug(self, store: Store, auth_db: Engine):
+        # Migration 016 adds ``slug`` beside the ``key`` create_all made.
+        with auth_db.begin() as connection:
+            connection.execute(text("ALTER TABLE organisations ADD COLUMN slug varchar"))
+            connection.execute(text("CREATE UNIQUE INDEX ix_organisations_slug ON organisations (slug)"))
+        self._migrate(auth_db, "upgrade")
+        columns = {column["name"] for column in inspect(auth_db).get_columns("organisations")}
+        assert "slug" not in columns
+        assert store.organisations.create(name="Acme").key == "acme"
+
+    def test_a_database_already_on_key_is_left_alone(self, store: Store, auth_db: Engine):
+        org = store.organisations.create(name="Acme")
+        self._migrate(auth_db, "upgrade")
+        assert store.organisations.get_by_key("acme").id == org.id
 
 
 class TestDeleteOrganisation:

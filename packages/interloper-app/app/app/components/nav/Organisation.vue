@@ -26,7 +26,7 @@ const orgItems = computed<DropdownMenuItem[]>(() => {
         return {
             label: membership.name,
             icon: 'i-lucide-building-2',
-            to: `/${membership.slug}`,
+            to: `/${membership.key}`,
         }
     })
 })
@@ -51,7 +51,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
                  variant="ghost"
                  color="neutral"
                  :square="collapsed"
-                 :class="{ 'text-highlighted': route.path === orgStore.path('/organization') }"
+                 :class="{ 'text-highlighted': route.path.startsWith(orgStore.path('/organization')) }"
                  truncate>
             <template v-if="!collapsed"
                       #trailing>

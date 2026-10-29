@@ -35,7 +35,7 @@ class OrganisationResponse(BaseModel):
 
     id: UUID
     name: str
-    slug: str
+    key: str
     created_at: datetime | None = None
 
     @classmethod
@@ -48,9 +48,7 @@ class OrganisationResponse(BaseModel):
         Returns:
             The response model.
         """
-        return cls(
-            id=organisation.id, name=organisation.name, slug=organisation.slug, created_at=organisation.created_at
-        )
+        return cls(id=organisation.id, name=organisation.name, key=organisation.key, created_at=organisation.created_at)
 
 
 class CreateOrganisationRequest(BaseModel):
@@ -60,10 +58,10 @@ class CreateOrganisationRequest(BaseModel):
 
 
 class UpdateOrganisationRequest(BaseModel):
-    """Request body for renaming an organisation or changing its slug; omitted fields stay untouched."""
+    """Request body for renaming an organisation or changing its key; omitted fields stay untouched."""
 
     name: str | None = None
-    slug: str | None = None
+    key: str | None = None
 
 
 class DeleteOrganisationRequest(BaseModel):
@@ -171,20 +169,20 @@ def create_organisation(body: CreateOrganisationRequest, user: CurrentUserDep, s
 
 @org_router.patch("")
 def update_organisation(body: UpdateOrganisationRequest, scope: AdminDep, store: StoreDep) -> OrganisationResponse:
-    """Rename an organisation or change its slug. Requires its admin role, or super-admin.
+    """Rename an organisation or change its key. Requires its admin role, or super-admin.
 
-    A slug that is taken answers 409 and one that is malformed or reserved 400,
+    A key that is taken answers 409 and one that is malformed or reserved 400,
     through the store's errors.
 
     Args:
-        body: The new name and/or slug.
+        body: The new name and/or key.
         scope: The organisation the path names, the caller an admin there.
         store: The database store.
 
     Returns:
         The updated organisation.
     """
-    updated = store.organisations.update(scope.organisation.id, name=body.name, slug=body.slug)
+    updated = store.organisations.update(scope.organisation.id, name=body.name, key=body.key)
     return OrganisationResponse.from_organisation(updated)
 
 

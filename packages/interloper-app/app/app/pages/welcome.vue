@@ -19,7 +19,7 @@ async function create() {
     try {
         const created = await organisationStore.createOrganisation(name.value.trim())
         toast.add({ title: 'Organisation created', color: 'success' })
-        await navigateTo(`/${created.slug}`)
+        await navigateTo(`/${created.key}`)
     }
     catch (e) {
         toast.add(errorToast(e, 'Failed to create organisation'))

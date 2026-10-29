@@ -42,7 +42,7 @@ class AdminOrganisationResponse(BaseModel):
 
     id: UUID
     name: str
-    slug: str
+    key: str
     member_count: int
     created_at: datetime | None = None
     deleted_at: datetime | None = None
@@ -61,7 +61,7 @@ class AdminOrganisationResponse(BaseModel):
         return cls(
             id=organisation.id,
             name=organisation.name,
-            slug=organisation.slug,
+            key=organisation.key,
             member_count=member_count,
             created_at=organisation.created_at,
             deleted_at=organisation.deleted_at,

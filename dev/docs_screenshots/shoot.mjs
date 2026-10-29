@@ -60,7 +60,7 @@ const shots = [
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 
-/** The seeded organisation: its id addresses the API, its slug the app's pages. */
+/** The seeded organisation: its id addresses the API, its key the app's pages. */
 async function organisation(page) {
     const res = await page.request.get(`${base}/api/auth/me`)
     const [membership] = (await res.json()).memberships
@@ -83,7 +83,7 @@ for (const scheme of ['light', 'dark']) {
     const org = await organisation(page)
     for (const shot of shots) {
         if (only && !only.split(',').includes(shot.name)) continue
-        const target = `/${org.slug}${shot.path === '__best_run__' ? await bestRunPath(page, org.id) : shot.path}`
+        const target = `/${org.key}${shot.path === '__best_run__' ? await bestRunPath(page, org.id) : shot.path}`
         try {
             await page.goto(`${base}${target}`, { waitUntil: 'networkidle', timeout: 60000 })
             await page.waitForTimeout(1200)

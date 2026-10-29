@@ -11,7 +11,7 @@ description: Build, launch, and drive a seeded interloper dev instance headlessl
 
 ## Authenticate headlessly (no OAuth)
 
-Sessions are plain DB rows in `tokens` (`kind = 'session'`, `token_hash` = sha256 hexdigest of a `secrets.token_urlsafe(48)` token). Mint one with a short psycopg2 script inserting `(user_id, kind, token_prefix, token_hash, expires_at)` = `(<seeded profile>, 'session', '', <hash>, <expiry>)`, keep the raw token in a scratchpad file, and send it as the `session_token` cookie. A session carries no organisation: organisation pages live under `/<slug>/…` and API calls under `/api/organisations/{org_id}/…`. Delete the token row when done.
+Sessions are plain DB rows in `tokens` (`kind = 'session'`, `token_hash` = sha256 hexdigest of a `secrets.token_urlsafe(48)` token). Mint one with a short psycopg2 script inserting `(user_id, kind, token_prefix, token_hash, expires_at)` = `(<seeded profile>, 'session', '', <hash>, <expiry>)`, keep the raw token in a scratchpad file, and send it as the `session_token` cookie. A session carries no organisation: organisation pages live under `/<key>/…` and API calls under `/api/organisations/{org_id}/…`. Delete the token row when done.
 
 Note: shell commands that interpolate the token (`TOK=$(cat …); curl -b …`) get denied — drive everything from python (httpx2) / node scripts that read the token file themselves.
 

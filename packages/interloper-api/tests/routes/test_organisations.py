@@ -70,8 +70,8 @@ class FakeStore:
     def __init__(self) -> None:
         """Set up the recorders and the default fixture data."""
         self.orgs: dict[UUID, SimpleNamespace] = {
-            _ORG_ID: SimpleNamespace(id=_ORG_ID, name="Dev Org", slug="dev-org", created_at=_NOW),
-            _OTHER_ORG_ID: SimpleNamespace(id=_OTHER_ORG_ID, name="Other Org", slug="other-org", created_at=_NOW),
+            _ORG_ID: SimpleNamespace(id=_ORG_ID, name="Dev Org", key="dev-org", created_at=_NOW),
+            _OTHER_ORG_ID: SimpleNamespace(id=_OTHER_ORG_ID, name="Other Org", key="other-org", created_at=_NOW),
         }
         self.roles: dict[tuple[UUID, UUID], str] = {(_ORG_ID, _USER_ID): "admin"}
         self.profiles: dict[UUID, SimpleNamespace] = {_USER_ID: _profile()}
@@ -118,7 +118,7 @@ class FakeStore:
 
     def _create_org(self, name: str, creator_id: UUID | None = None) -> SimpleNamespace:
         self.created_orgs.append((name, creator_id))
-        return SimpleNamespace(id=_ORG_ID, name=name, slug=name.lower(), created_at=_NOW)
+        return SimpleNamespace(id=_ORG_ID, name=name, key=name.lower(), created_at=_NOW)
 
     def _list_orgs(self, query: OrganisationQuery) -> Page:
         self.listed_orgs.append(query)
@@ -129,12 +129,12 @@ class FakeStore:
             raise NotFoundError(f"Organisation {org_id} not found")
         return self.orgs[org_id]
 
-    def _update_org(self, org_id: UUID, *, name: str | None = None, slug: str | None = None) -> SimpleNamespace:
+    def _update_org(self, org_id: UUID, *, name: str | None = None, key: str | None = None) -> SimpleNamespace:
         if self.update_error is not None:
             raise self.update_error
-        self.updated_orgs.append((org_id, name, slug))
+        self.updated_orgs.append((org_id, name, key))
         current = self.orgs[org_id]
-        return SimpleNamespace(id=org_id, name=name or current.name, slug=slug or current.slug, created_at=_NOW)
+        return SimpleNamespace(id=org_id, name=name or current.name, key=key or current.key, created_at=_NOW)
 
     def _delete_org(self, org_id: UUID) -> None:
         self.deleted_orgs.append(org_id)
@@ -310,7 +310,7 @@ class TestCreateOrganisation:
         assert response.json() == {
             "id": str(_ORG_ID),
             "name": "Acme",
-            "slug": "acme",
+            "key": "acme",
             "created_at": "2026-06-01T00:00:00Z",
         }
         assert store.created_orgs == [("Acme", _USER_ID)]
@@ -324,8 +324,8 @@ class TestListOrganisations:
 
     def test_lists_the_users_organisations(self, client: TestClient, store: FakeStore) -> None:
         store.user_orgs = [
-            SimpleNamespace(id=_ORG_ID, name="Dev Org", slug="dev-org", created_at=_NOW),
-            SimpleNamespace(id=uuid4(), name="Other", slug="other", created_at=None),
+            SimpleNamespace(id=_ORG_ID, name="Dev Org", key="dev-org", created_at=_NOW),
+            SimpleNamespace(id=uuid4(), name="Other", key="other", created_at=None),
         ]
 
         response = client.get("/organisations")
@@ -349,42 +349,42 @@ class TestListOrganisations:
 
 
 class TestUpdateOrganisation:
-    """``PATCH /organisations/{org_id}``: the org's admin or a super-admin renames it or changes its slug."""
+    """``PATCH /organisations/{org_id}``: the org's admin or a super-admin renames it or changes its key."""
 
-    def test_an_org_admin_changes_the_slug(self, client: TestClient, store: FakeStore) -> None:
-        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "acme"})
+    def test_an_org_admin_changes_the_key(self, client: TestClient, store: FakeStore) -> None:
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"key": "acme"})
 
         assert response.status_code == 200
-        assert response.json()["slug"] == "acme"
+        assert response.json()["key"] == "acme"
         assert response.json()["name"] == "Dev Org"
         assert store.updated_orgs == [(_ORG_ID, None, "acme")]
 
-    def test_a_taken_slug_is_a_409(self, client: TestClient, store: FakeStore) -> None:
-        store.update_error = ConflictError("Slug 'other-org' is taken")
+    def test_a_taken_key_is_a_409(self, client: TestClient, store: FakeStore) -> None:
+        store.update_error = ConflictError("Key 'other-org' is taken")
 
-        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "other-org"})
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"key": "other-org"})
 
         assert response.status_code == 409
-        assert response.json()["detail"] == "Slug 'other-org' is taken"
+        assert response.json()["detail"] == "Key 'other-org' is taken"
 
-    def test_a_reserved_or_malformed_slug_is_a_400(self, client: TestClient, store: FakeStore) -> None:
-        store.update_error = ConfigError("Slug 'settings' is reserved")
+    def test_a_reserved_or_malformed_key_is_a_400(self, client: TestClient, store: FakeStore) -> None:
+        store.update_error = ConfigError("Key 'settings' is reserved")
 
-        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "settings"})
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"key": "settings"})
 
         assert response.status_code == 400
-        assert response.json()["detail"] == "Slug 'settings' is reserved"
+        assert response.json()["detail"] == "Key 'settings' is reserved"
 
-    def test_an_editor_cannot_change_the_slug(self, client: TestClient, store: FakeStore) -> None:
+    def test_an_editor_cannot_change_the_key(self, client: TestClient, store: FakeStore) -> None:
         store.roles[(_ORG_ID, _USER_ID)] = "editor"
 
-        response = client.patch(f"/organisations/{_ORG_ID}", json={"slug": "acme"})
+        response = client.patch(f"/organisations/{_ORG_ID}", json={"key": "acme"})
 
         assert response.status_code == 403
         assert store.updated_orgs == []
 
-    def test_a_super_admin_changes_any_slug(self, super_client: TestClient, store: FakeStore) -> None:
-        response = super_client.patch(f"/organisations/{_OTHER_ORG_ID}", json={"slug": "renamed"})
+    def test_a_super_admin_changes_any_key(self, super_client: TestClient, store: FakeStore) -> None:
+        response = super_client.patch(f"/organisations/{_OTHER_ORG_ID}", json={"key": "renamed"})
 
         assert response.status_code == 200
         assert store.updated_orgs == [(_OTHER_ORG_ID, None, "renamed")]
@@ -396,7 +396,7 @@ class TestUpdateOrganisation:
         assert response.json() == {
             "id": str(_ORG_ID),
             "name": "Renamed",
-            "slug": "dev-org",
+            "key": "dev-org",
             "created_at": "2026-06-01T00:00:00Z",
         }
         assert store.updated_orgs == [(_ORG_ID, "Renamed", None)]

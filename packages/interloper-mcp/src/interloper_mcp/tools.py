@@ -63,7 +63,7 @@ class OrganisationEntry(BaseModel):
     """One organisation the user can name, with the role tool calls hold in it."""
 
     id: UUID
-    slug: str
+    key: str
     name: str
     role: str
 
@@ -83,7 +83,7 @@ def list_organisations() -> OrganisationList:
     """
     return OrganisationList(
         organisations=[
-            OrganisationEntry(id=org.id, slug=org.slug, name=org.name, role=role) for org, role in organisations()
+            OrganisationEntry(id=org.id, key=org.key, name=org.name, role=role) for org, role in organisations()
         ]
     )
 

@@ -59,6 +59,18 @@ export function useExecutionViews() {
     ])
 }
 
+/** Views of the Organization hub; its settings only for the organisation's admins. */
+export function useOrganizationViews() {
+    const organisationStore = useOrganisationStore()
+
+    return computed<NavPage[]>(() => [
+        { label: 'Members', icon: 'i-lucide-users', to: organisationStore.path('/organization/members'), keywords: ['team', 'invite'] },
+        ...(organisationStore.role === 'admin'
+            ? [{ label: 'Settings', icon: 'i-lucide-sliders-horizontal', to: organisationStore.path('/organization/settings'), keywords: ['name', 'key'] }]
+            : []),
+    ])
+}
+
 /** Views of the Components hub, one per kind, in lifecycle order. */
 export function useComponentViews() {
     const catalogStore = useCatalogStore()
