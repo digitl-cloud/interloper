@@ -72,6 +72,7 @@ class TiktokAdsStarSchema(il.Source):
         Key: date, account_id, campaign_id.
         """
         rows = union(ads_stats, *REPORT_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["campaign_id"].notnull())
         summed = rows.group_by(["stat_time_day", "account_id", "campaign_id"]).aggregate(
             impressions=rows["impressions"].sum(),
             clicks=rows["clicks"].sum(),
@@ -103,6 +104,7 @@ class TiktokAdsStarSchema(il.Source):
         Key: date, account_id, ad_id.
         """
         rows = union(ads_stats, *REPORT_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["ad_id"].notnull())
         summed = rows.group_by(["stat_time_day", "account_id", "ad_id"]).aggregate(
             campaign_id=rows["campaign_id"].max(),
             ad_group_id=rows["adgroup_id"].max(),

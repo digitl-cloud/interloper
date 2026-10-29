@@ -278,6 +278,30 @@ class TestOnDuckDB:
             row["campaign_id"] for row in _rows(warehouse, "dim_campaigns")
         }
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _advertiser("111", warehouse)
+        _seed(warehouse, "111")
+        client = warehouse.connection.client
+        client.execute(
+            "INSERT INTO tiktok_ads.ads_stats__111 SELECT * REPLACE (NULL AS campaign_id) "
+            f"FROM (VALUES {_report_row('111', 'a112')}) AS t({REPORT_COLUMNS})"
+        )
+        client.execute(
+            "INSERT INTO tiktok_ads.ads_stats__111 "
+            "SELECT * REPLACE (NULL AS campaign_id, NULL AS adgroup_id, NULL AS ad_id) "
+            f"FROM (VALUES {_report_row('111', 'a113')}) AS t({REPORT_COLUMNS})"
+        )
+        _materialize(warehouse, first)
+        keys = {
+            ("fact_campaign_performance", "campaign_id"): {"c111"},
+            ("fact_ad_performance", "ad_id"): {"a111", "a112"},
+            ("dim_campaigns", "campaign_id"): {"c111"},
+            ("dim_ad_groups", "ad_group_id"): {"s111"},
+            ("dim_ads", "ad_id"): {"a111", "a112"},
+        }
+        for (table, key), expected in keys.items():
+            assert {row[key] for row in _rows(warehouse, table)} == expected
+
     def test_a_missing_advertiser_table_fails_the_view(self, warehouse):
         first = _advertiser("111", warehouse)
         star = TiktokAdsStarSchema(destinations=[warehouse])

@@ -239,6 +239,30 @@ class TestOnDuckDB:
         assert {row["ad_group_id"] for row in ads} <= {row["ad_group_id"] for row in _rows(warehouse, "dim_ad_groups")}
         assert {row["account_id"] for row in _rows(warehouse, "dim_accounts")} == {"111", "222"}
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111")
+        client = warehouse.connection.client
+        client.execute(
+            f"INSERT INTO bing_ads.ads_stats__111 SELECT * REPLACE (NULL AS campaign_id) "
+            f"FROM (VALUES {_row('111', ad_id='a2')}) AS t({REPORT_COLUMNS})"
+        )
+        client.execute(
+            "INSERT INTO bing_ads.ads_stats__111 "
+            "SELECT * REPLACE (NULL AS campaign_id, NULL AS ad_group_id, NULL AS ad_id) "
+            f"FROM (VALUES {_row('111', ad_id='a3')}) AS t({REPORT_COLUMNS})"
+        )
+        _materialize(warehouse, first)
+        keys = {
+            ("fact_campaign_performance", "campaign_id"): {"c111"},
+            ("fact_ad_performance", "ad_id"): {"a1", "a2"},
+            ("dim_campaigns", "campaign_id"): {"c111"},
+            ("dim_ad_groups", "ad_group_id"): {"s111"},
+            ("dim_ads", "ad_id"): {"a1", "a2"},
+        }
+        for (table, key), expected in keys.items():
+            assert {row[key] for row in _rows(warehouse, table)} == expected
+
     def test_a_missing_account_table_fails_the_view(self, warehouse):
         first = _account("111", warehouse)
         star = BingAdsStarSchema(destinations=[warehouse])

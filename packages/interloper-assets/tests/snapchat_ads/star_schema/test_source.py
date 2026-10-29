@@ -309,6 +309,25 @@ class TestOnDuckDB:
         }
         assert {row["account_id"] for row in _rows(warehouse, "dim_accounts")} == {"aaa", "bbb"}
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _account("aaa", warehouse)
+        _seed(warehouse, "aaa")
+        client = warehouse.connection.client
+        for table in ("campaigns_stats", "ads_stats"):
+            client.execute(
+                f"INSERT INTO snapchat_ads.{table}__aaa VALUES (DATE '2026-10-01', NULL, 100, 10, 12500000, 2, 4000000)"
+            )
+        _materialize(warehouse, first)
+        keys = {
+            ("fact_campaign_performance", "campaign_id"): {"caaa"},
+            ("fact_ad_performance", "ad_id"): {"aaaa", "a_unknown"},
+            ("dim_campaigns", "campaign_id"): {"caaa"},
+            ("dim_ad_groups", "ad_group_id"): {"saaa"},
+            ("dim_ads", "ad_id"): {"aaaa", "a_unknown"},
+        }
+        for (table, key), expected in keys.items():
+            assert {row[key] for row in _rows(warehouse, table)} == expected
+
     def test_a_missing_account_table_fails_the_view(self, warehouse):
         first = _account("aaa", warehouse)
         star = SnapchatAdsStarSchema(destinations=[warehouse])

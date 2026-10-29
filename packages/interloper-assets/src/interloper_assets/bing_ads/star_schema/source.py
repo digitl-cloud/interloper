@@ -64,6 +64,7 @@ class BingAdsStarSchema(il.Source):
         Key: date, account_id, campaign_id.
         """
         rows = union(ads_stats, "time_period", "campaign_id", *MEASURE_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["campaign_id"].notnull())
         summed = rows.group_by(["time_period", "account_id", "campaign_id"]).aggregate(
             impressions=rows["impressions"].sum(),
             clicks=rows["clicks"].sum(),
@@ -97,6 +98,7 @@ class BingAdsStarSchema(il.Source):
         rows = union(
             ads_stats, "time_period", "campaign_id", "ad_group_id", "ad_id", *MEASURE_COLUMNS, account_id=_account
         )
+        rows = rows.filter(rows["ad_id"].notnull())
         summed = rows.group_by(["time_period", "account_id", "ad_id"]).aggregate(
             campaign_id=rows["campaign_id"].max(),
             ad_group_id=rows["ad_group_id"].max(),

@@ -380,6 +380,23 @@ class TestOnDuckDB:
         assert (only["asin"], only["sku"], only["status"], only["as_of_date"]) == ("B000ONLY", "SKU-2", None, DAY)
         assert rows["93"]["ad_name"] is None
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _profile("1", warehouse)
+        _seed(warehouse, "1", entity=False, campaign_entities=True)
+        client = warehouse.connection.client
+        client.execute(
+            f"INSERT INTO amazon_ads.brands_ads__1 SELECT DATE '2026-09-30', NULL, '3', '221', NULL, 'ARCHIVED', "
+            f"{CREATED_SQL}, {UPDATED_SQL}"
+        )
+        client.execute(
+            "INSERT INTO amazon_ads.brands_campaigns_stats__1 SELECT DATE '2026-10-01', NULL, NULL, NULL, NULL, NULL, "
+            "'EUR', 7, 1, 1.0, 0, 0.0"
+        )
+        _materialize(warehouse, first)
+        assert None not in [row["campaign_id"] for row in _rows(warehouse, "fact_campaign_performance")]
+        assert None not in [row["campaign_id"] for row in _rows(warehouse, "dim_campaigns")]
+        assert [row["ad_id"] for row in _rows(warehouse, "dim_ads")] == ["91", "92", "93", "94"]
+
     def test_an_ad_dimension_with_nothing_bound_fails_clearly(self, warehouse):
         star = AmazonAdsStarSchema(destinations=[warehouse])
         result = il.DAG(star).materialize()

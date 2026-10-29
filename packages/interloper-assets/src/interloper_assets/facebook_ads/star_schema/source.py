@@ -127,6 +127,7 @@ class FacebookAdsStarSchema(il.Source):
         Key: date, account_id, campaign_id.
         """
         rows = union(campaigns_stats, *CAMPAIGN_REPORT_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["campaign_id"].notnull())
         rows = rows.select(
             date=rows["date_start"],
             account_id=rows["account_id"],
@@ -168,6 +169,7 @@ class FacebookAdsStarSchema(il.Source):
     def fact_ad_performance(self, ads_stats: list[il.Upstream]) -> ibis.Table:
         """Ad performance of every account at the ad report's grain: per ad, day, platform, placement and device."""
         rows = union(ads_stats, *AD_REPORT_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["ad_id"].notnull())
         return rows.select(
             date=rows["date_start"],
             account_id=rows["account_id"],

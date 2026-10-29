@@ -68,6 +68,7 @@ class CriteoStarSchema(il.Source):
         Key: date, account_id, campaign_id.
         """
         rows = union(campaigns_stats, "day", "campaign_id", *MEASURE_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["campaign_id"].notnull())
         summed = rows.group_by(["day", "account_id", "campaign_id"]).aggregate(
             impressions=rows["displays"].sum(),
             clicks=rows["clicks"].sum(),
@@ -101,6 +102,7 @@ class CriteoStarSchema(il.Source):
         Key: date, account_id, ad_id.
         """
         rows = union(ads_stats, "day", "campaign_id", "adset_id", "ad_id", *MEASURE_COLUMNS, account_id=_account)
+        rows = rows.filter(rows["ad_id"].notnull())
         summed = rows.group_by(["day", "account_id", "ad_id"]).aggregate(
             campaign_id=rows["campaign_id"].max(),
             ad_group_id=rows["adset_id"].max(),

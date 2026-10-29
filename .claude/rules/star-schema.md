@@ -74,6 +74,7 @@ A **degenerate dimension** is a column that qualifies the row's grain and has no
 - `account_id` is the source's **discriminator** on every platform, whatever the vendor calls it (Amazon's `profile_id`, TikTok's `advertiser_id`). It is stamped from the upstream's source, not read from the rows, because vendor reports rarely carry it.
 - `campaign_id`, `ad_group_id` and `ad_id` are the vendor's ids, cast to `str`.
 - A dimension has exactly one row per key. Its key is the join column the facts carry, under the same name.
+- A row whose key the vendor left NULL identifies nothing and joins nothing, so no view publishes it: `interloper_sql.latest` drops it from every dimension, and each fact filters its grain's id (`campaign_id`, `ad_id`) right after the union, before anything is summed. Facebook reports placeholder campaign rows without a campaign, Amazon lists archived Sponsored Brands ads without an ad id.
 
 ## 5. Dimensions are built from raw assets, in tiers, deterministically
 
@@ -95,4 +96,4 @@ Dimensions are type 1: the latest row wins. `as_of_date` says which day it refle
 
 ## 8. Tests
 
-Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the columns the platform omits, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), the empty-relation behaviour, and that a missing upstream table fails with the table name.
+Each star schema has DuckDB tests in `tests/<platform>/star_schema/test_source.py` that seed two accounts and assert, at least: the fact's grain (finer vendor rows summed to one row per key and day, and no two rows share the stated key), the columns the platform omits, the tier preference (entity beats report beats fact), tie determinism (two tied candidates with different values yield the same row on every evaluation), that a raw row without a key reaches no view, the empty-relation behaviour, and that a missing upstream table fails with the table name.

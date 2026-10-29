@@ -157,6 +157,9 @@ def union(upstreams: Sequence[Upstream], *columns: str, **stamps: Callable[[Upst
 def latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
     """One row per *key*, the first in *order*: the dimension pattern over candidate rows.
 
+    A row whose key is NULL is dropped: it identifies nothing, joins nothing,
+    and every such row would otherwise collapse into one NULL-keyed row.
+
     Args:
         rows: Candidate rows, several per key.
         key: The column one row is kept per value of.
@@ -166,5 +169,6 @@ def latest(rows: ibis.Table, key: str, *order: ibis.Expr) -> ibis.Table:
     Returns:
         The kept rows, without the ranking column.
     """
+    rows = rows.filter(rows[key].notnull())
     ranked = rows.mutate(rank=ibis.row_number().over(group_by=key, order_by=list(order)))
     return ranked.filter(ranked["rank"] == 0).drop("rank")

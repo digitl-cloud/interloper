@@ -358,6 +358,29 @@ class TestOnDuckDB:
         frame = warehouse.read(il.IOContext(asset=star.dim_campaigns))
         assert frame["campaign_id"].tolist() == ["c111"]
 
+    def test_a_row_without_a_key_reaches_no_view(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", campaigns_entity=True, ads_entity=True)
+        client = warehouse.connection.client
+        client.execute(
+            "INSERT INTO facebook_ads.campaigns_stats__111 SELECT DATE '2026-10-01', 111, 'Acct 111', 'EUR', NULL, "
+            "NULL, NULL, 0, 0, 0, 0.0, 0, 0.0"
+        )
+        client.execute(
+            "INSERT INTO facebook_ads.ads_stats__111 SELECT DATE '2026-10-01', '111', 'Acct 111', 'EUR', NULL, NULL, "
+            "NULL, NULL, NULL, NULL, 'facebook', 'feed', 'mobile', 5, 1, 4, 1.0, 0, 0.0"
+        )
+        _materialize(warehouse, first)
+        keys = {
+            "fact_campaign_performance": ("campaign_id", "c111"),
+            "fact_ad_performance": ("ad_id", "a1"),
+            "dim_campaigns": ("campaign_id", "c111"),
+            "dim_ad_groups": ("ad_group_id", "s1"),
+            "dim_ads": ("ad_id", "a1"),
+        }
+        for view, (key, value) in keys.items():
+            assert [row[key] for row in _rows(warehouse, view)] == [value], view
+
     def test_a_missing_account_table_fails_the_view(self, warehouse):
         first = _account("111", warehouse)
         star = FacebookAdsStarSchema(destinations=[warehouse])
