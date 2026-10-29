@@ -2,6 +2,128 @@
 
 <!-- version list -->
 
+## v0.121.0 (2026-10-29)
+
+### Bug Fixes
+
+- **core**: A run ended elsewhere is lost even when its own ending is in flight
+  ([`4c0ddb7`](https://github.com/digitl-cloud/interloper/commit/4c0ddb7ed0bdb97b96a0793d64721077cf3ef861))
+
+- **db**: A refresh-token family is revoked once
+  ([`f77f6aa`](https://github.com/digitl-cloud/interloper/commit/f77f6aad48b15c52f1a3f216ac7e01201ea67c98))
+
+- **db**: An OAuth client id never starts with a dash
+  ([`000174c`](https://github.com/digitl-cloud/interloper/commit/000174c3751a791f0c96b6d9bd4757686e2bf764))
+
+- **docs**: The OAuth clients link names interloper oauth
+  ([`4ea89b2`](https://github.com/digitl-cloud/interloper/commit/4ea89b2379998fee4390d6e3816fc589fc10866a))
+
+- **mcp**: The MCP server advertises the resource the authorization server accepts
+  ([`bbf8906`](https://github.com/digitl-cloud/interloper/commit/bbf89069427f23c944fa15c06578e1d63f875e26))
+
+### Chores
+
+- **docs**: Drop the checked-in plans and specs
+  ([`788a370`](https://github.com/digitl-cloud/interloper/commit/788a3703fca61476369cb5441d84dd67be47472f))
+
+- **mcp**: Move to the MCP SDK 2.x
+  ([`c36ec44`](https://github.com/digitl-cloud/interloper/commit/c36ec44b446ed646d6364ee699dd88ce4399d28f))
+
+### Documentation
+
+- Design and plan for the OAuth authorization server
+  ([`a49757c`](https://github.com/digitl-cloud/interloper/commit/a49757c957573464967e0d2166f1c43f296f446c))
+
+- **chart**: Run pods report through the API; internal URL and spec Secret RBAC
+  ([`a10be2b`](https://github.com/digitl-cloud/interloper/commit/a10be2b144b7b08f74257951cbbc149367ca5250))
+
+### Features
+
+- Operator OAuth clients and the authorization server in the chart
+  ([`e4cb8eb`](https://github.com/digitl-cloud/interloper/commit/e4cb8ebac9f1a6a6bb91e3df554564ed8cd0a36e))
+
+- **api**: An OAuth 2.1 authorization server
+  ([`379306c`](https://github.com/digitl-cloud/interloper/commit/379306c1e561006cb9e86a08703583536340a55b))
+
+- **api**: The run ingest route, authenticated by the run token
+  ([`22f9c9b`](https://github.com/digitl-cloud/interloper/commit/22f9c9b7aed0269e84e38c75958dd3798dd530b3))
+
+- **app**: Consent to an app and revoke it
+  ([`c701239`](https://github.com/digitl-cloud/interloper/commit/c7012392f050b527407530ef504fbf39f9091aa0))
+
+- **assets**: Bing Ads star schema on the contract, from the ad report
+  ([`aa2ab8b`](https://github.com/digitl-cloud/interloper/commit/aa2ab8b30fd1efe71b4ae60b0f6082c82e4f7b59))
+
+- **assets**: TikTok Ads ad groups entity
+  ([`8dd8720`](https://github.com/digitl-cloud/interloper/commit/8dd872023631f9e12f85d2088f07d981d0213ed1))
+
+- **assets**: TikTok Ads star schema on the contract
+  ([`6ce02df`](https://github.com/digitl-cloud/interloper/commit/6ce02df050405538c32122bc18aa513359941296))
+
+- **core**: EventClient and the API's internal URL
+  ([`101ba78`](https://github.com/digitl-cloud/interloper/commit/101ba7858956d6bf8d24f66505961d2f130e8823))
+
+- **core**: Interloper run records a platform run from a spec file, metadata and a run token
+  ([`b633cbd`](https://github.com/digitl-cloud/interloper/commit/b633cbd6618ccf852d52e937b660e01a1abafdb1))
+
+- **db**: A run token is the run's id encrypted with the platform key, alive while the run can
+  report
+  ([`9bfd55a`](https://github.com/digitl-cloud/interloper/commit/9bfd55aaca629efe1f546bbb3e963760e08a4a2b))
+
+- **db**: Organisations carry a slug
+  ([`40563c7`](https://github.com/digitl-cloud/interloper/commit/40563c78ea9418a5ee2f8a2cd45d6db01182b9df))
+
+- **db**: Store OAuth clients, codes and refresh tokens
+  ([`19a0b46`](https://github.com/digitl-cloud/interloper/commit/19a0b46698cb320efa28688d0b27d2aa66e4fb95))
+
+- **scheduler**: Dispatch hands a run its spec and token; run pods hold no database
+  ([`00251a6`](https://github.com/digitl-cloud/interloper/commit/00251a6d0561dd8c44e368306d2f96bfe3ae5fa7))
+
+- **toolkit**: A surface binds keyword-only parameters after a tool's own
+  ([`96c0277`](https://github.com/digitl-cloud/interloper/commit/96c0277d9ded2e1825de96be4e640ae0c8c738e2))
+
+### Refactoring
+
+- A personal access token stands for its user
+  ([`4c89049`](https://github.com/digitl-cloud/interloper/commit/4c8904986068934d786610b006e75571d01e1e26))
+
+- The request names its organisation
+  ([`440f54f`](https://github.com/digitl-cloud/interloper/commit/440f54fbdc223c6f1e8ae517c79a76bb2fad1164))
+
+- **api**: The app holds its state, and one rule says who acts as what
+  ([`86099a6`](https://github.com/digitl-cloud/interloper/commit/86099a6033e1402217321a7fb1eec7eb7fb398b0))
+
+- **assets**: Facebook entity fields are Airbyte's connector's
+  ([`b485f8d`](https://github.com/digitl-cloud/interloper/commit/b485f8d2c13e93ecc4230d6e7e6b4affc3b17699))
+
+- **assets**: Star schema views publish only the columns their platform fills
+  ([`63aea7d`](https://github.com/digitl-cloud/interloper/commit/63aea7d58ef83f900220e765f872ac53cec6713b))
+
+- **chart**: The release Secret is mounted whole, and nothing is required
+  ([`b3ec51f`](https://github.com/digitl-cloud/interloper/commit/b3ec51f6ff441f53cb9a33522538f5515f1e67ad))
+
+- **core**: A run's events are delivered as one EventBatch
+  ([`c8daba1`](https://github.com/digitl-cloud/interloper/commit/c8daba144903cd49927bcc9410c0cff15312a765))
+
+- **core**: One connection check contract
+  ([`add647a`](https://github.com/digitl-cloud/interloper/commit/add647a51dda2476453ae351f0c1ea2c9b80cc08))
+
+- **core**: RunRecorder is renamed EventRecorder
+  ([`34a70bd`](https://github.com/digitl-cloud/interloper/commit/34a70bd1765025f93eec979ab472c8d8f0a37965))
+
+- **db**: A run's open operations are closed from the executions table
+  ([`5f3bc94`](https://github.com/digitl-cloud/interloper/commit/5f3bc94877bf6b7a1b1c03759e22b38ec4a127ad))
+
+- **db**: Hydrate components straight from their rows
+  ([`d1c25f0`](https://github.com/digitl-cloud/interloper/commit/d1c25f017e616a17bc472454252f1ab243c9e58e))
+
+- **docker**: The launcher passes a run's spec as the container's argument
+  ([`c0c2b5f`](https://github.com/digitl-cloud/interloper/commit/c0c2b5f6acbd3b529f722196bb8b200e53cf9920))
+
+- **runners**: The host owns each operation's lifecycle, a child makes one attempt
+  ([`87fe275`](https://github.com/digitl-cloud/interloper/commit/87fe275010c33963093cf0af75e35f46cce966e7))
+
+
 ## v0.120.0 (2026-10-27)
 
 ### Bug Fixes
