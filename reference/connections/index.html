@@ -326,6 +326,8 @@
       
         
       
+        
+      
     
     
     
@@ -1341,6 +1343,8 @@
       
         
       
+        
+      
     
     
     
@@ -1408,6 +1412,33 @@
     
   
   Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/connecting-clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connecting MCP clients
 
     
   </span>
@@ -2241,6 +2272,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;renewal_failure_message
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper.Connection.verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;verify
       </span>
     </span>
   </a>
@@ -3241,7 +3283,7 @@ The class bool is a subclass of the class int, and cannot be subclassed.</p>
 
 
 <a href="#interloper.Connection.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc6988e30</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f94e2b830</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3421,7 +3463,7 @@ Arguments may be integers or floats, and may be positive or negative.</p>
 
 
 <a href="#interloper.Connection.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc4ee5040</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f94254860</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4051,6 +4093,83 @@ strips pydantic input values).</p>
 
 </div>
 
+<div class="doc doc-object doc-function">
+
+
+<h3 id="interloper.Connection.verify" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">verify</span>
+
+
+<a href="#interloper.Connection.verify" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">verify</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="n"><span title="float">float</span></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="interloper.connection.base.CheckResult">CheckResult</span></span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Run <code>check</code> within a deadline and say what it came to.</p>
+<p>A class without a check is verified by its construction alone. A
+check that raises has failed, its error categorised and logged here
+in full; one that returns <code>False</code> failed for no stated reason.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>timeout</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Seconds the check may take.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="interloper.connection.base.CheckResult">CheckResult</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
 
 
   </div>
@@ -4204,7 +4323,7 @@ drives the whole form: those fields are hidden in sign-in mode, the
 
 
 <a href="#interloper.OAuthConnection.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc4ee5dc0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f94d2f4d0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4311,7 +4430,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.OAuthConnection.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc4ee5c40</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f954ac950</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4803,7 +4922,7 @@ app; when neither the caller nor env supplies one, the required check fails.</p>
 
 
 <a href="#interloper.RefreshTokenOAuthConnection.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc4ee7020</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f94256300</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4910,7 +5029,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.RefreshTokenOAuthConnection.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f6dc4ee6bd0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f4f942566f0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">

@@ -12,32 +12,36 @@
         <meta name="author" content="Digitl Cloud">
       
       
-        <link rel="canonical" href="https://docs.interloper.dev/superpowers/specs/2026-10-06-coverage-window-design/">
+        <link rel="canonical" href="https://docs.interloper.dev/ui/connecting-clients/">
       
       
+        <link rel="prev" href="../definitions/">
+      
+      
+        <link rel="next" href="../running/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/favicon.png">
+      <link rel="icon" href="../../assets/favicon.png">
       <meta name="generator" content="zensical-0.0.62">
     
     
       
-        <title>Coverage reads its window - Interloper</title>
+        <title>Connecting MCP clients - Interloper</title>
       
     
     
       
         
       
-      <link rel="stylesheet" href="../../../assets/stylesheets/modern/main.ce62732f.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.ce62732f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/modern/palette.812a03bb.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -56,9 +60,9 @@
       
     
     
-      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -83,7 +87,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#coverage-reads-its-window" class="md-skip">
+        <a href="#connecting-mcp-clients" class="md-skip">
           Skip to content
         </a>
       
@@ -99,9 +103,9 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../.." title="Interloper" class="md-header__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../../assets/logo.svg" alt="Interloper">
+  <img src="../../assets/logo.svg" alt="Interloper">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
@@ -118,7 +122,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Coverage reads its window
+              Connecting MCP clients
             
           </span>
         </div>
@@ -206,7 +210,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../.." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   Getting started
@@ -222,7 +226,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../../tutorial/" class="md-tabs__link">
+      <a href="../../tutorial/" class="md-tabs__link">
         
   
   Tutorial
@@ -295,7 +299,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../guide/assets/" class="md-tabs__link">
+        <a href="../../guide/assets/" class="md-tabs__link">
           
   
   Guide
@@ -310,6 +314,8 @@
   
   
   
+    
+  
   
     
       
@@ -322,12 +328,14 @@
       
         
       
+        
+      
     
     
     
     
-      <li class="md-tabs__item">
-        <a href="../../../ui/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   Web UI
@@ -361,7 +369,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../extending/components/" class="md-tabs__link">
+        <a href="../../extending/components/" class="md-tabs__link">
           
   
   Extending
@@ -419,7 +427,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../reference/settings/" class="md-tabs__link">
+        <a href="../../reference/settings/" class="md-tabs__link">
           
   
   Reference
@@ -460,9 +468,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
+    <a href="../.." title="Interloper" class="md-nav__button md-logo" aria-label="Interloper" data-md-component="logo">
       
-  <img src="../../../assets/logo.svg" alt="Interloper">
+  <img src="../../assets/logo.svg" alt="Interloper">
 
     </a>
     Interloper
@@ -489,7 +497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -515,7 +523,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../tutorial/" class="md-nav__link">
+      <a href="../../tutorial/" class="md-nav__link">
         
   
   
@@ -643,7 +651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/assets/" class="md-nav__link">
+      <a href="../../guide/assets/" class="md-nav__link">
         
   
   
@@ -670,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/sources/" class="md-nav__link">
+      <a href="../../guide/sources/" class="md-nav__link">
         
   
   
@@ -697,7 +705,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/decorators/" class="md-nav__link">
+      <a href="../../guide/decorators/" class="md-nav__link">
         
   
   
@@ -724,7 +732,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/dependencies/" class="md-nav__link">
+      <a href="../../guide/dependencies/" class="md-nav__link">
         
   
   
@@ -751,7 +759,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/views/" class="md-nav__link">
+      <a href="../../guide/views/" class="md-nav__link">
         
   
   
@@ -778,7 +786,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/resources/" class="md-nav__link">
+      <a href="../../guide/resources/" class="md-nav__link">
         
   
   
@@ -805,7 +813,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/connections/" class="md-nav__link">
+      <a href="../../guide/connections/" class="md-nav__link">
         
   
   
@@ -832,7 +840,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/oauth/" class="md-nav__link">
+      <a href="../../guide/oauth/" class="md-nav__link">
         
   
   
@@ -859,7 +867,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/fields/" class="md-nav__link">
+      <a href="../../guide/fields/" class="md-nav__link">
         
   
   
@@ -886,7 +894,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/destinations/" class="md-nav__link">
+      <a href="../../guide/destinations/" class="md-nav__link">
         
   
   
@@ -913,7 +921,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/schema/" class="md-nav__link">
+      <a href="../../guide/schema/" class="md-nav__link">
         
   
   
@@ -940,7 +948,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/normalization/" class="md-nav__link">
+      <a href="../../guide/normalization/" class="md-nav__link">
         
   
   
@@ -967,7 +975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/partitioning/" class="md-nav__link">
+      <a href="../../guide/partitioning/" class="md-nav__link">
         
   
   
@@ -994,7 +1002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/execution/" class="md-nav__link">
+      <a href="../../guide/execution/" class="md-nav__link">
         
   
   
@@ -1021,7 +1029,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/backfilling/" class="md-nav__link">
+      <a href="../../guide/backfilling/" class="md-nav__link">
         
   
   
@@ -1048,7 +1056,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/events/" class="md-nav__link">
+      <a href="../../guide/events/" class="md-nav__link">
         
   
   
@@ -1075,7 +1083,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/jobs/" class="md-nav__link">
+      <a href="../../guide/jobs/" class="md-nav__link">
         
   
   
@@ -1102,7 +1110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/hooks/" class="md-nav__link">
+      <a href="../../guide/hooks/" class="md-nav__link">
         
   
   
@@ -1129,7 +1137,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/specs/" class="md-nav__link">
+      <a href="../../guide/specs/" class="md-nav__link">
         
   
   
@@ -1156,7 +1164,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/catalog/" class="md-nav__link">
+      <a href="../../guide/catalog/" class="md-nav__link">
         
   
   
@@ -1183,7 +1191,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/cli/" class="md-nav__link">
+      <a href="../../guide/cli/" class="md-nav__link">
         
   
   
@@ -1210,7 +1218,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/configuration/" class="md-nav__link">
+      <a href="../../guide/configuration/" class="md-nav__link">
         
   
   
@@ -1237,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/telemetry/" class="md-nav__link">
+      <a href="../../guide/telemetry/" class="md-nav__link">
         
   
   
@@ -1264,7 +1272,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/ecosystem/" class="md-nav__link">
+      <a href="../../guide/ecosystem/" class="md-nav__link">
         
   
   
@@ -1291,7 +1299,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../guide/claude-code/" class="md-nav__link">
+      <a href="../../guide/claude-code/" class="md-nav__link">
         
   
   
@@ -1322,6 +1330,8 @@
       
   
   
+    
+  
   
   
     
@@ -1335,24 +1345,29 @@
       
         
       
+        
+      
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../ui/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1369,13 +1384,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1394,7 +1409,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../ui/definitions/" class="md-nav__link">
+      <a href="../definitions/" class="md-nav__link">
         
   
   
@@ -1418,10 +1433,167 @@
                 
   
   
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connecting MCP clients
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connecting MCP clients
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#connecting-claudeai" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Connecting claude.ai
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Connecting claude.ai">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#revoking-a-connection" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Revoking a connection
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifetimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Lifetimes
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#personal-access-tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Personal access tokens
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        The deployment
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signing-in-to-the-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Signing in to the API
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#registering-a-client-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Registering a client yourself
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
   
   
     <li class="md-nav__item">
-      <a href="../../../ui/running/" class="md-nav__link">
+      <a href="../running/" class="md-nav__link">
         
   
   
@@ -1517,7 +1689,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../extending/components/" class="md-nav__link">
+      <a href="../../extending/components/" class="md-nav__link">
         
   
   
@@ -1544,7 +1716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../extending/representations/" class="md-nav__link">
+      <a href="../../extending/representations/" class="md-nav__link">
         
   
   
@@ -1571,7 +1743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../extending/runners/" class="md-nav__link">
+      <a href="../../extending/runners/" class="md-nav__link">
         
   
   
@@ -1598,7 +1770,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../extending/operations/" class="md-nav__link">
+      <a href="../../extending/operations/" class="md-nav__link">
         
   
   
@@ -1625,7 +1797,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../extending/entry-points/" class="md-nav__link">
+      <a href="../../extending/entry-points/" class="md-nav__link">
         
   
   
@@ -1745,7 +1917,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/settings/" class="md-nav__link">
+      <a href="../../reference/settings/" class="md-nav__link">
         
   
   
@@ -1772,7 +1944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/cli/" class="md-nav__link">
+      <a href="../../reference/cli/" class="md-nav__link">
         
   
   
@@ -1799,7 +1971,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/components/" class="md-nav__link">
+      <a href="../../reference/components/" class="md-nav__link">
         
   
   
@@ -1826,7 +1998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/assets/" class="md-nav__link">
+      <a href="../../reference/assets/" class="md-nav__link">
         
   
   
@@ -1853,7 +2025,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/sources/" class="md-nav__link">
+      <a href="../../reference/sources/" class="md-nav__link">
         
   
   
@@ -1880,7 +2052,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/destinations/" class="md-nav__link">
+      <a href="../../reference/destinations/" class="md-nav__link">
         
   
   
@@ -1907,7 +2079,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/connections/" class="md-nav__link">
+      <a href="../../reference/connections/" class="md-nav__link">
         
   
   
@@ -1934,7 +2106,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/resources/" class="md-nav__link">
+      <a href="../../reference/resources/" class="md-nav__link">
         
   
   
@@ -1961,7 +2133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/jobs/" class="md-nav__link">
+      <a href="../../reference/jobs/" class="md-nav__link">
         
   
   
@@ -1988,7 +2160,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/partitioning/" class="md-nav__link">
+      <a href="../../reference/partitioning/" class="md-nav__link">
         
   
   
@@ -2015,7 +2187,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/execution/" class="md-nav__link">
+      <a href="../../reference/execution/" class="md-nav__link">
         
   
   
@@ -2042,7 +2214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/schema/" class="md-nav__link">
+      <a href="../../reference/schema/" class="md-nav__link">
         
   
   
@@ -2069,7 +2241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/rest/" class="md-nav__link">
+      <a href="../../reference/rest/" class="md-nav__link">
         
   
   
@@ -2096,7 +2268,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/catalog/" class="md-nav__link">
+      <a href="../../reference/catalog/" class="md-nav__link">
         
   
   
@@ -2123,7 +2295,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/events/" class="md-nav__link">
+      <a href="../../reference/events/" class="md-nav__link">
         
   
   
@@ -2150,7 +2322,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/errors/" class="md-nav__link">
+      <a href="../../reference/errors/" class="md-nav__link">
         
   
   
@@ -2177,7 +2349,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../reference/utils/" class="md-nav__link">
+      <a href="../../reference/utils/" class="md-nav__link">
         
   
   
@@ -2222,6 +2394,63 @@
   
 
 
+  <nav class="md-path" aria-label="Navigation" >
+    <ol class="md-path__list">
+      
+        
+  
+  
+    <li class="md-path__item">
+      <a href="../.." class="md-path__link">
+        
+  
+  <span class="md-ellipsis">
+    Getting started
+  </span>
+
+      </a>
+    </li>
+  
+
+      
+      
+        
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+      <li class="md-path__item">
+        <a href="../" class="md-path__link">
+          
+  
+  <span class="md-ellipsis">
+    Web UI
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ol>
+  </nav>
+
               
               <article class="md-content__inner md-typeset">
                 
@@ -2230,52 +2459,123 @@
   
 
 
-<h1 id="coverage-reads-its-window">Coverage reads its window<a class="headerlink" href="#coverage-reads-its-window" title="Permanent link">&para;</a></h1>
-<p>Follows the executions table (#433), after which coverage was the slowest route.</p>
-<h2 id="problem">Problem<a class="headerlink" href="#problem" title="Permanent link">&para;</a></h2>
-<p><code>coverage_by_day</code> read every asset's coverage rows all-time, because each asset's expected span starts at its first attempted partition and ends at its last. The rows came from joining every execution to its run for the partition key: about 1.2 s of SQL at 600k executions, plus about 1 s of Python building 264k row objects, most of them outside the window the calendar shows.</p>
-<h2 id="decisions">Decisions<a class="headerlink" href="#decisions" title="Permanent link">&para;</a></h2>
+<h1 id="connecting-mcp-clients">Connecting MCP clients<a class="headerlink" href="#connecting-mcp-clients" title="Permanent link">&para;</a></h1>
+<p>The platform runs an MCP server (<code>interloper-mcp</code>, served at <code>/mcp</code>) that gives an AI client the
+same view of an organisation the app has: the catalog, the collection, lineage, runs and
+backfills, and, for editors, the writes. A client authenticates in one of two ways: it signs in
+through OAuth, or it is handed a personal access token.</p>
+<h2 id="connecting-claudeai">Connecting claude.ai<a class="headerlink" href="#connecting-claudeai" title="Permanent link">&para;</a></h2>
+<p>claude.ai and any other MCP client that supports remote servers connect as a custom connector,
+with nothing to copy between the two sides.</p>
 <ol>
-<li><strong>The partition key is stamped on the execution</strong> (migration 013). <code>stamp_execution_partition_key</code>, a <code>BEFORE INSERT</code> trigger on <code>executions</code>, copies it from the run as the fold creates the row, leaving migration 012's fold as it was. A run's partition key is set at creation and never changes, so the copy cannot drift. The migration backfills it in the same transaction that adds the column, so concurrent folds wait and then meet the trigger.</li>
-<li><strong>Two indexes</strong> serve the two questions: <code>(org_id, partition_key) INCLUDE (component_id, status, run_id)</code> for a window's rows, and <code>(org_id, component_id, partition_key)</code> for an asset's first and last attempted key.</li>
-<li><strong>Coverage reads the window plus the bounds.</strong> <code>_coverage_rows</code> reads executions alone, filtered by <code>partition_keys_overlapping(first, last)</code>: the keys of every granularity whose period meets the days, with one outer string range so the index seeks to the window. <code>_attempted_spans</code> gives each asset's first and last attempted day from two index probes per asset. The calendar's result is unchanged.</li>
-<li><strong><code>partition_key_range</code> takes the column it filters</strong>, so runs and executions share it.</li>
+<li>In the client, add a custom connector and enter the MCP endpoint as its URL, for example
+   <code>https://app.example.com/mcp</code>.</li>
+<li>The client discovers the authorization server on its own, registers itself with it, and opens
+   the app's consent page in a browser.</li>
+<li>Sign in to the app if you are not already, check that the application named on the page is the
+   one you just started, and approve.</li>
+<li>The client returns with an access token and a refresh token and keeps itself signed in.</li>
 </ol>
-<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Permanent link">&para;</a></h2>
-<ul>
-<li>On the perf database (two organisations, windows of 3, 12 and 18 months) and on the dev database, the windowed calendar equals, group by group and day by day, what the all-time computation gives.</li>
-<li>Migration 013 by hand on Postgres: backfilled keys match their runs on all 1.3M perf executions (65 s), the trigger stamps a live insert, and a fresh database, a downgrade to 012 and a re-upgrade all land in the expected state.</li>
-</ul>
-<h2 id="measured-perf-database-10m-events">Measured (perf database, 10M events)<a class="headerlink" href="#measured-perf-database-10m-events" title="Permanent link">&para;</a></h2>
+<p>The consent page names the application, where it returns you to and the account it will act as.
+Approve only a connection you started.</p>
+<p>A connection acts as you, in every organisation you belong to, with the role you hold in each:
+an editor can use the write tools in the organisations where they are editor and only read in the
+others, and a role change applies to the connection at once. Every tool takes an <code>organisation</code>
+argument naming the organisation it acts in (an id from <code>list_organisations</code>), which can be left
+out when you belong to exactly one.</p>
+<h3 id="revoking-a-connection">Revoking a connection<a class="headerlink" href="#revoking-a-connection" title="Permanent link">&para;</a></h3>
+<p>Open <strong>Settings</strong>, <strong>Authentication</strong>, <strong>Authorised apps</strong>. Each application you have approved is
+listed; revoking one ends its refresh token and its access tokens straight away, and it must ask
+for your consent again to reconnect.</p>
+<h3 id="lifetimes">Lifetimes<a class="headerlink" href="#lifetimes" title="Permanent link">&para;</a></h3>
+<p>Access tokens are short lived and refresh tokens replace themselves on every use, so a client that
+stays in use never asks you again. Both lifetimes are settings:</p>
 <table>
 <thead>
 <tr>
-<th>Route</th>
-<th>Big org before</th>
-<th>after</th>
-<th>Small org before</th>
-<th>after</th>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>coverage, 3 months</td>
-<td>2,507 ms</td>
-<td>785 ms</td>
-<td>686 ms</td>
-<td>341 ms</td>
+<td><code>auth.access_token_expiry_minutes</code></td>
+<td><code>60</code></td>
+<td>Minutes an OAuth access token stays valid.</td>
 </tr>
 <tr>
-<td>coverage, 12 months</td>
-<td>2,568 ms</td>
-<td>1,553 ms</td>
-<td>724 ms</td>
-<td>682 ms</td>
+<td><code>auth.refresh_token_expiry_days</code></td>
+<td><code>30</code></td>
+<td>Days a refresh token stays valid, counted again from each rotation.</td>
 </tr>
 </tbody>
 </table>
-<h2 id="not-done-here">Not done here<a class="headerlink" href="#not-done-here" title="Permanent link">&para;</a></h2>
-<p>Most of what remains, about 1.1 s of the big org's 12-month read, is Python: building a row object per asset and partition, then rolling them up by day. Aggregating by day in SQL, or building the arrays without the intermediate rows, is the next lever.</p>
+<p>A client idle for longer than the refresh lifetime has to ask for consent again. Presenting a
+refresh token that was already used is treated as theft: the whole chain it belongs to is revoked.</p>
+<h2 id="personal-access-tokens">Personal access tokens<a class="headerlink" href="#personal-access-tokens" title="Permanent link">&para;</a></h2>
+<p>A client that cannot run a browser flow (a script, a CI job, an older MCP client) takes a
+personal access token instead. Create one under <strong>Settings</strong>, <strong>Authentication</strong>, <strong>Personal
+Access Tokens</strong>, and send it as <code>Authorization: Bearer &lt;token&gt;</code>. The token is shown once, acts as
+you in every organisation you belong to with your role in each, and works until it expires or
+you revoke it on the same page. Treat it like a password.</p>
+<h2 id="the-deployment">The deployment<a class="headerlink" href="#the-deployment" title="Permanent link">&para;</a></h2>
+<p>Both sides need to know where they are reachable.</p>
+<ul>
+<li><code>server.external_url</code> (<code>INTERLOPER_SERVER_EXTERNAL_URL</code>, the chart's <code>externalUrl</code>) is the
+  public base URL of the app. It is the issuer of the authorization server, whose metadata the
+  API serves at <code>/.well-known/oauth-authorization-server</code>, and the MCP server names it as the
+  authorization server in its own metadata. Every pod of the deployment gets it.</li>
+<li>The MCP endpoint's public URL is the resource clients sign in to. It is <code>/mcp</code> on the app's
+  public URL, <code>https://app.example.com/mcp</code>, where the chart serves it. Set
+  <code>mcp.external_url</code> (<code>INTERLOPER_MCP_EXTERNAL_URL</code>, the chart's <code>mcp.externalUrl</code>) only when the
+  endpoint lives elsewhere; the API and the MCP server both read it, so the resource the MCP
+  server advertises is the one the authorization server accepts.</li>
+</ul>
+<p>The chart's HTTPRoute sends <code>/mcp</code> and <code>/.well-known/oauth-protected-resource</code> to the MCP service
+and <code>/.well-known/oauth-authorization-server</code> to the API, all on the app hostnames. The Ingress
+sends the authorization server's metadata to the API as well; it does not route the MCP
+endpoint, so an Ingress deployment that serves MCP clients adds those routes itself.</p>
+<p>Outside the chart, <code>interloper app</code>, the compose stack's nginx and the Nuxt dev server route
+<code>/.well-known/oauth-authorization-server</code> to the API too, and <code>make dev-up</code> and the compose stack
+set <code>server.external_url</code> to the address the browser opens.</p>
+<p>Without <code>server.external_url</code>, the issuer falls back to <code>http://localhost:&lt;port&gt;</code>, which serves a
+local development instance and nothing else. The API and the MCP server derive it, and the MCP
+resource under it, the same way, so the issuer the MCP server names is the one the API serves.</p>
+<p>The metadata, registration, token and revocation endpoints answer cross-origin requests from any
+origin, without credentials, so a client running in a browser (MCP Inspector) can sign in. The
+authorization and consent steps stay on the app's own origin.</p>
+<h2 id="signing-in-to-the-api">Signing in to the API<a class="headerlink" href="#signing-in-to-the-api" title="Permanent link">&para;</a></h2>
+<p>The authorization server also issues tokens for the HTTP API, for an application that calls it
+rather than the MCP server (the Slack backend, a connector a vendor hosts). Such a client names
+the API as the <code>resource</code> of its authorization request, <code>&lt;issuer&gt;/api</code>, for example
+<code>https://app.example.com/api</code>, and sends the access token it receives as
+<code>Authorization: Bearer &lt;token&gt;</code> on <code>/api/...</code> calls. A token is bound to the one resource it was
+granted for: an API token is refused by the MCP server, and an MCP token by the API. Every
+authorization request names exactly one resource; a trailing slash on it is ignored. Such a client
+usually has a fixed client id and secret, registered as below.</p>
+<h2 id="registering-a-client-yourself">Registering a client yourself<a class="headerlink" href="#registering-a-client-yourself" title="Permanent link">&para;</a></h2>
+<p>A client that registers itself needs no setup, and it is shown to the user by the name it gave.
+An application that cannot, because it is configured with a fixed client id and secret (a Slack
+app, a connector a vendor hosts), is registered by an operator from the command line:</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>create<span class="w"> </span>--name<span class="w"> </span><span class="s2">"Acme connector"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span>--redirect-uri<span class="w"> </span>https://connector.example.com/oauth/callback
+</span></code></pre></div>
+<p>The command prints the <code>client_id</code> and the <code>client_secret</code>. The secret is shown once and cannot
+be recovered: only its hash is stored, so a lost secret means deleting the client and creating
+another. Repeat <code>--redirect-uri</code> to register several. A redirect URI must be <code>https</code>, <code>http</code> on
+<code>localhost</code>, <code>127.0.0.1</code> or <code>[::1]</code>, or the private-use scheme of a known client (<code>cursor</code>,
+<code>vscode</code>, <code>vscode-insiders</code>, <code>windsurf</code>); the same rule applies to clients that register
+themselves. A request must name a registered redirect URI exactly, except that a loopback <code>http</code>
+one matches on any port, since a native app picks a free port for each sign-in.</p>
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>list
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>interloper<span class="w"> </span>oauth<span class="w"> </span>delete<span class="w"> </span>&lt;client_id&gt;
+</span></code></pre></div>
+<p><code>list</code> shows the clients an operator registered, not the ones that registered themselves.
+<code>delete</code> removes a client together with its codes and refresh tokens and revokes its access
+tokens for every user, so nothing it was given keeps working. The commands read and write the
+database the settings point at, so run them where the database is configured, like
+<code>interloper db</code>. Every flag is in <a href="../../reference/cli/#interloper-oauth">CLI</a>.</p>
 
 
 
@@ -2310,6 +2610,44 @@
       
         <footer class="md-footer">
   
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../definitions/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Generated from definitions">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Generated from definitions
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../running/" class="md-footer__link md-footer__link--next" aria-label="Next: Running the app">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Running the app
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        
+      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -2346,10 +2684,10 @@
       
         
         
-      <script id="__config" type="application/json">{"annotate":null,"base":"../../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.tabs","navigation.tabs.sticky","navigation.top","navigation.tracking","search.highlight","toc.follow","toc.integrate"],"redirect":null,"search":"../../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
+      <script src="../../assets/javascripts/bundle.8dcc8e9c.min.js"></script>
       
     
   </body>

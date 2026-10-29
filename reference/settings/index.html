@@ -326,6 +326,8 @@
       
         
       
+        
+      
     
     
     
@@ -1341,6 +1343,8 @@
       
         
       
+        
+      
     
     
     
@@ -1408,6 +1412,33 @@
     
   
   Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/connecting-clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connecting MCP clients
 
     
   </span>
@@ -2787,6 +2818,18 @@
 <td>Days a session stays valid.</td>
 </tr>
 <tr>
+<td><code>access_token_expiry_minutes</code></td>
+<td><code>int</code></td>
+<td><code>60</code></td>
+<td>Minutes an OAuth access token stays valid.</td>
+</tr>
+<tr>
+<td><code>refresh_token_expiry_days</code></td>
+<td><code>int</code></td>
+<td><code>30</code></td>
+<td>Days an OAuth refresh token stays valid, counted again from each rotation.</td>
+</tr>
+<tr>
 <td><code>super_admin_emails</code></td>
 <td><code>list[str]</code></td>
 <td><code>[]</code></td>
@@ -3114,7 +3157,7 @@
 <td><code>external_url</code></td>
 <td><code>str</code></td>
 <td><code>''</code></td>
-<td>Public URL of the MCP endpoint (<code>https://app.example.com/mcp</code>), fed to the OAuth protected-resource metadata so clients discover the auth requirements.</td>
+<td>Public URL of the MCP endpoint, the OAuth resource clients sign in to; empty means <code>/mcp</code> on the app's public URL, where the chart serves it.</td>
 </tr>
 <tr>
 <td><code>token</code></td>

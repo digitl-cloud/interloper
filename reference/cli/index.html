@@ -326,6 +326,8 @@
       
         
       
+        
+      
     
     
     
@@ -1341,6 +1343,8 @@
       
         
       
+        
+      
     
     
     
@@ -1408,6 +1412,33 @@
     
   
   Generated from definitions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/connecting-clients/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Connecting MCP clients
 
     
   </span>
@@ -1913,6 +1944,56 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         <code>interloper db downgrade</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interloper-oauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper oauth</code>
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="interloper oauth">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#interloper-oauth-create" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper oauth create</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper-oauth-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper oauth list</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#interloper-oauth-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper oauth delete</code>
       </span>
     </span>
   </a>
@@ -2593,6 +2674,46 @@
 <tr>
 <td><code>revision [optional]</code></td>
 <td>Target revision (default: -1)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interloper-oauth"><code>interloper oauth</code><a class="headerlink" href="#interloper-oauth" title="Permanent link">&para;</a></h2>
+<p>Manage the OAuth clients an operator registers for apps that cannot register themselves (a Slack app, a shared connector). Clients that register dynamically are not listed or deleted here.</p>
+<h3 id="interloper-oauth-create"><code>interloper oauth create</code><a class="headerlink" href="#interloper-oauth-create" title="Permanent link">&para;</a></h3>
+<p>Register a confidential client. The secret is printed once and cannot be recovered.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--name NAME</code></td>
+<td>Name shown on the consent page and in Authorised apps</td>
+</tr>
+<tr>
+<td><code>--redirect-uri URI</code></td>
+<td>Exact URI a code may be sent to; repeat for several</td>
+</tr>
+</tbody>
+</table>
+<h3 id="interloper-oauth-list"><code>interloper oauth list</code><a class="headerlink" href="#interloper-oauth-list" title="Permanent link">&para;</a></h3>
+<p>List operator-registered clients</p>
+<h3 id="interloper-oauth-delete"><code>interloper oauth delete</code><a class="headerlink" href="#interloper-oauth-delete" title="Permanent link">&para;</a></h3>
+<p>Delete a client by id.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>client_id</code></td>
+<td>The client id <code>oauth list</code> shows</td>
 </tr>
 </tbody>
 </table>
