@@ -26,7 +26,7 @@ Ingress: https://{{ .Values.ingress.host }}
 HTTPRoute hostnames: {{ join ", " .Values.httpRoute.hostnames }}
 {{- end }}
 
-{{- if not .Values.secrets.encryptionKey }}
+{{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.encryptionKey) }}
 
 ⚠  No secrets.encryptionKey set — resource data will NOT be encrypted at rest.
    Generate one and re-apply:   openssl rand -base64 32

@@ -42,9 +42,9 @@ spec:
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.scheduler.extraEnvFrom }}
+          {{- with include "interloper.envFrom" (dict "root" . "component" .Values.scheduler) }}
           envFrom:
-            {{- toYaml . | nindent 12 }}
+            {{- . | nindent 12 }}
           {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
@@ -52,8 +52,8 @@ spec:
             - name: INTERLOPER_OTEL_SERVICE_NAME
               value: interloper-scheduler
             {{- end }}
-            {{- with .Values.scheduler.extraEnv }}
-            {{- toYaml . | nindent 12 }}
+            {{- with include "interloper.extraEnv" (dict "root" . "component" .Values.scheduler) }}
+            {{- . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: config

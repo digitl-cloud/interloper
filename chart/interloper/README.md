@@ -126,15 +126,55 @@ there — a YAML-provided field would override the injected env vars.
 
 ### `secrets.*`
 
-Either inline values (dev) or reference a pre-existing Secret:
+Interloper reads every setting from its environment, and the chart's job is
+to set it. The release Secret is mounted whole: each of its keys reaches the
+api, scheduler, mcp and db-init pods as the env var of the same name, so a
+credential is added by adding a key, whichever component reads it. That
+covers the platform's own (`INTERLOPER_ENCRYPTION_KEY`,
+`INTERLOPER_POSTGRES_PASSWORD`, `INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET`,
+`INTERLOPER_SMTP_PASSWORD`, `INTERLOPER_OTEL_HEADERS`) and the connector
+credentials (`INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`,
+`_REDIRECT_URI`, the Google Ads and Bing Ads developer tokens), which the
+api, the scheduler and the MCP server all resolve connections with.
+
+Point the chart at a Secret you manage:
 
 ```yaml
 secrets:
   existingSecret: my-interloper-secret
 ```
 
-Expected keys: `INTERLOPER_POSTGRES_PASSWORD`, `INTERLOPER_ENCRYPTION_KEY`
-(recommended), `INTERLOPER_SMTP_PASSWORD` (optional).
+or let it create one from inline values (dev):
+
+```yaml
+secrets:
+  postgresPassword: "..."
+  encryptionKey: "..."     # openssl rand -base64 32
+  env:
+    INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN: "..."
+```
+
+Nothing is required: without `existingSecret` or an inline value, the chart
+creates and mounts no Secret.
+
+### `extraEnv` / `extraEnvFrom`
+
+For secrets that do not live in one Secret, the root-level `extraEnv` and
+`extraEnvFrom` are added to every interloper pod, after the release Secret
+and before each component's own `extraEnv` / `extraEnvFrom`. Map keys one by
+one, from whichever Secrets hold them:
+
+```yaml
+extraEnv:
+  - name: INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: google-ads
+        key: developer-token
+```
+
+An explicit `extraEnv` entry wins over the same key mounted whole, so it also
+overrides a key of the release Secret.
 
 ### Ingress vs Gateway API
 
@@ -226,11 +266,11 @@ scheduler hydrates the run's target before launching it and hands the pod
 its DAG spec, connections resolved, in a Secret owned by the run's Job, plus
 a token minted for the run. The pod reports its events to the API's
 in-cluster service (`server.internal_url`, auto-filled) with that token, and
-the platform folds the run's state from them. The scheduler therefore needs
-every connection credential the API resolves from its environment (the
-connector OAuth provider apps, the Bing Ads and Google Ads developer tokens):
-give it the same Secret through `scheduler.extraEnvFrom`. Without it, every
-run whose connections read one fails at dispatch.
+the platform folds the run's state from them. The connector credentials a
+run's connections need arrive resolved in that spec, so run pods get none of
+the root-level `extraEnv` / `extraEnvFrom`; `launcher.config.env_from` names
+Secrets mounted into every run pod, only for what your own assets read from
+their environment.
 
 ### RBAC (Kubernetes launcher)
 

@@ -49,12 +49,8 @@ scheduler:
   affinity: {}
   podAnnotations: {}
   extraEnv: []
-  # Extra `envFrom` sources (secretRef / configMapRef) injected verbatim. Use
-  # this to bulk-map a Secret whose keys already match the desired env var
-  # names instead of one entry per key. The scheduler resolves each run's
-  # connections before launching it, so it needs every connection credential
-  # the API resolves from its environment (OAuth provider apps, developer
-  # tokens): mount the same Secret here.
+  # Added after the root-level `extraEnv` / `extraEnvFrom`, for what only
+  # this component reads.
   extraEnvFrom: []
 
 # ── Core (per-asset Job target; only consumed when config.runner.type=kubernetes (or legacy alias k8s)) ─
@@ -109,9 +105,8 @@ api:
   affinity: {}
   podAnnotations: {}
   extraEnv: []
-  # Extra `envFrom` sources (secretRef / configMapRef) injected verbatim. Use
-  # this to bulk-map a Secret whose keys already match the desired env var
-  # names (e.g. connector OAuth provider creds) instead of one entry per key.
+  # Added after the root-level `extraEnv` / `extraEnvFrom`, for what only
+  # this component reads.
   extraEnvFrom: []
 
 # ── Frontend (nginx serving the pre-built Nuxt SPA) ────────────────────────
@@ -251,12 +246,12 @@ launcher:
     namespace: ""  # defaults to release namespace
     # service_account_name: "{{ .Release.Name }}-launcher"  # auto-filled if rbac.create
     # image_pull_policy: IfNotPresent
-    # Run pods hold no database credentials: the scheduler hands each its DAG
-    # spec, connections resolved, and a token it reports its events to the
-    # API with (server.internal_url, auto-filled). The scheduler resolves the
-    # connections, so it is the one that needs the connection credentials, via
-    # scheduler.extraEnvFrom. env_from mounts Secrets into every run pod for
-    # whatever else a deployment's runs read from their environment.
+    # Run pods hold no database credentials and get none of the root-level
+    # `extraEnv` / `extraEnvFrom`: the scheduler hands each its DAG spec,
+    # connections resolved, and a token it reports its events to the API with
+    # (server.internal_url, auto-filled), in a Secret of the run's own.
+    # env_from names Secrets mounted into every run pod, only for what your
+    # own assets read from their environment.
     # env_from: [my-run-secret]
     # resources:
     #   requests: {cpu: "100m", memory: "256Mi"}
@@ -325,26 +320,49 @@ log:
 extraConfig: {}
 
 # =============================================================================
+# Environment of every interloper pod
+# =============================================================================
+
+# Env vars every interloper pod gets (api, scheduler, mcp, db-init; not the
+# frontend, not run pods), after the release Secret (`secrets`) and before
+# each component's own `extraEnv` / `extraEnvFrom`. Use them for what the
+# release Secret does not hold: more Secrets or ConfigMaps to mount whole
+# with extraEnvFrom, or keys mapped one by one, from whichever Secrets hold
+# them, with extraEnv (an explicit entry wins over the same key mounted
+# whole):
+#
+#   extraEnv:
+#     - name: INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN
+#       valueFrom:
+#         secretKeyRef:
+#           name: google-ads
+#           key: developer-token
+extraEnv: []
+extraEnvFrom: []
+
+# =============================================================================
 # Secrets
 # =============================================================================
 
-# Sensitive values.  Either set them inline (dev) or reference an existing
-# Secret via `existingSecret`.
+# The release Secret, mounted whole: every key reaches the api, scheduler,
+# mcp and db-init pods as the env var of the same name, so its keys are the
+# env var names (INTERLOPER_ENCRYPTION_KEY, INTERLOPER_POSTGRES_PASSWORD, the
+# connector credentials INTERLOPER_<PROVIDER>_CLIENT_ID / _CLIENT_SECRET /
+# _REDIRECT_URI, INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN, ...). Nothing is
+# required here: a deployment whose secrets live elsewhere leaves this
+# empty and maps them with the root-level `extraEnv`. Run pods never get it.
 secrets:
-  # If set, the chart does NOT create a Secret and reads credentials from
-  # the named existing Secret.  It must contain the keys referenced below.
+  # Mount this existing Secret, and create none.
   existingSecret: ""
 
-  # Inline values (only used when existingSecret is empty).
-  # Required keys:
-  #   - INTERLOPER_POSTGRES_PASSWORD
-  #   - INTERLOPER_ENCRYPTION_KEY (used to encrypt resource secrets at rest)
-  # Optional:
-  #   - INTERLOPER_SMTP_PASSWORD
+  # Otherwise the chart creates the Secret from these, when any is set.
   postgresPassword: "postgres"
-  encryptionKey: ""  # recommended to generate: openssl rand -base64 32
+  encryptionKey: ""  # encrypts connections at rest and signs run tokens: openssl rand -base64 32
   smtpPassword: ""
-  googleClientSecret: ""  # OAuth client secret (paired with config.auth.google_client_id)
+  googleClientSecret: ""  # OAuth client secret (paired with auth.google_client_id)
+  # Any other key, under the env var name it is read as.
+  env: {}
+  #   INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN: "..."
 
 # =============================================================================
 # Postgres

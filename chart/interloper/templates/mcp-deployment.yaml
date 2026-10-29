@@ -40,9 +40,9 @@ spec:
             - name: http
               containerPort: 3001
               protocol: TCP
-          {{- with .Values.mcp.extraEnvFrom }}
+          {{- with include "interloper.envFrom" (dict "root" . "component" .Values.mcp) }}
           envFrom:
-            {{- toYaml . | nindent 12 }}
+            {{- . | nindent 12 }}
           {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
@@ -50,8 +50,8 @@ spec:
             - name: INTERLOPER_OTEL_SERVICE_NAME
               value: interloper-mcp
             {{- end }}
-            {{- with .Values.mcp.extraEnv }}
-            {{- toYaml . | nindent 12 }}
+            {{- with include "interloper.extraEnv" (dict "root" . "component" .Values.mcp) }}
+            {{- . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: config

@@ -132,8 +132,41 @@ Postgres host: either the bundled subchart service or external config.
 {{- end -}}
 
 {{/*
-Environment variables shared by all interloper pods (scheduler, api, frontend).
-Contains Postgres connection info + the encryption key secret.
+Whether the release has a Secret to mount: the operator's existingSecret, or
+the one the chart creates when any inline secret is given.
+*/}}
+{{- define "interloper.hasSecret" -}}
+{{- with .Values.secrets -}}
+{{- if or .existingSecret .postgresPassword .encryptionKey .smtpPassword .googleClientSecret .env -}}true{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The env lists an interloper pod gets beyond the chart's plain env: every key
+of the release Secret (its names are the env var names), then the root-level
+lists every interloper pod shares, then the component's.
+Usage: include "interloper.extraEnv" (dict "root" . "component" .Values.api)
+       include "interloper.envFrom" (dict "root" . "component" .Values.api)
+*/}}
+{{- define "interloper.extraEnv" -}}
+{{- with concat (.root.Values.extraEnv | default list) (.component.extraEnv | default list) }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{- define "interloper.envFrom" -}}
+{{- $secret := list -}}
+{{- if include "interloper.hasSecret" .root -}}
+{{- $secret = list (dict "secretRef" (dict "name" (include "interloper.secretName" .root))) -}}
+{{- end -}}
+{{- with concat $secret (.root.Values.extraEnvFrom | default list) (.component.extraEnvFrom | default list) }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Plain environment variables shared by all interloper pods (api, scheduler,
+mcp, db-init); their secrets come from the release Secret (interloper.envFrom).
 */}}
 {{- define "interloper.commonEnv" -}}
 {{- with .Values.externalUrl }}
@@ -152,30 +185,6 @@ Contains Postgres connection info + the encryption key secret.
   value: {{ include "interloper.postgresUser" . | quote }}
 - name: INTERLOPER_POSTGRES_DATABASE
   value: {{ include "interloper.postgresDatabase" . | quote }}
-- name: INTERLOPER_POSTGRES_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "interloper.secretName" . }}
-      key: INTERLOPER_POSTGRES_PASSWORD
-      optional: true
-- name: INTERLOPER_ENCRYPTION_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "interloper.secretName" . }}
-      key: INTERLOPER_ENCRYPTION_KEY
-      optional: true
-- name: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "interloper.secretName" . }}
-      key: INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET
-      optional: true
-- name: INTERLOPER_SMTP_PASSWORD
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "interloper.secretName" . }}
-      key: INTERLOPER_SMTP_PASSWORD
-      optional: true
 - name: INTERLOPER_LOG_FORMAT
   value: {{ .Values.log.format | quote }}
 {{- if .Values.otel.enabled }}
@@ -197,11 +206,5 @@ per process, unreadable on a dashboard and unmatched across signals. */}}
 - name: INTERLOPER_OTEL_PROTOCOL
   value: {{ . | quote }}
 {{- end }}
-- name: INTERLOPER_OTEL_HEADERS
-  valueFrom:
-    secretKeyRef:
-      name: {{ include "interloper.secretName" . }}
-      key: INTERLOPER_OTEL_HEADERS
-      optional: true
 {{- end }}
 {{- end -}}

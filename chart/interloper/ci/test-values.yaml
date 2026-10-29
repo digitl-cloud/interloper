@@ -14,6 +14,8 @@ externalPostgres:
 
 secrets:
   postgresPassword: ci-test-password
+  env:
+    INTERLOPER_BING_ADS_DEVELOPER_TOKEN: ci-test-token
 
 # Render the optional MCP workload and the HTTPRoute so lint covers them
 # (disabled templates are skipped entirely).
@@ -24,3 +26,18 @@ httpRoute:
   enabled: true
   parentRefs:
     - name: ci-gateway
+
+# Cover the env every interloper pod shares, with a component's own after it.
+extraEnvFrom:
+  - secretRef:
+      name: ci-connectors
+extraEnv:
+  - name: INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: ci-google-ads
+        key: developer-token
+scheduler:
+  extraEnv:
+    - name: CI_SCHEDULER_ONLY
+      value: "1"
