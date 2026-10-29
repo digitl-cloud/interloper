@@ -43,9 +43,9 @@ spec:
             - name: http
               containerPort: {{ dig "server" "port" 3000 .Values.extraConfig }}
               protocol: TCP
-          {{- with .Values.api.extraEnvFrom }}
+          {{- with include "interloper.envFrom" (dict "root" . "component" .Values.api) }}
           envFrom:
-            {{- toYaml . | nindent 12 }}
+            {{- . | nindent 12 }}
           {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
@@ -57,8 +57,8 @@ spec:
             - name: FORWARDED_ALLOW_IPS
               value: {{ . | quote }}
             {{- end }}
-            {{- with .Values.api.extraEnv }}
-            {{- toYaml . | nindent 12 }}
+            {{- with include "interloper.extraEnv" (dict "root" . "component" .Values.api) }}
+            {{- . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: config

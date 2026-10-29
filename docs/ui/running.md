@@ -124,7 +124,9 @@ bootstraps platform administrators, promoted by `interloper db init` and at logi
 one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET` and `_REDIRECT_URI`; a provider without them
 has no sign-in tab, only manual credential entry. The full settings list is in
-[Settings](../reference/settings.md).
+[Settings](../reference/settings.md). With the Helm chart, each key of the release Secret (`secrets`)
+reaches every interloper pod as the variable of the same name; the root-level `extraEnv` maps
+keys from other Secrets one by one.
 
 ## Database
 

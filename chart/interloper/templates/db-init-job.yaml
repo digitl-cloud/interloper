@@ -42,8 +42,15 @@ spec:
           {{- with .Values.securityContext }}
           securityContext: {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with include "interloper.envFrom" (dict "root" . "component" dict) }}
+          envFrom:
+            {{- . | nindent 12 }}
+          {{- end }}
           env:
             {{- include "interloper.commonEnv" . | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           # The config carries auth.super_admin_emails, which `db init` applies.
           volumeMounts:
             - name: config
