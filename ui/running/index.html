@@ -2594,7 +2594,9 @@ bootstraps platform administrators, promoted by <code>interloper db init</code> 
 one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 <code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code> and <code>_REDIRECT_URI</code>; a provider without them
 has no sign-in tab, only manual credential entry. The full settings list is in
-<a href="../../reference/settings/">Settings</a>.</p>
+<a href="../../reference/settings/">Settings</a>. With the Helm chart, each key of the release Secret (<code>secrets</code>)
+reaches every interloper pod as the variable of the same name; the root-level <code>extraEnv</code> maps
+keys from other Secrets one by one.</p>
 <h2 id="database">Database<a class="headerlink" href="#database" title="Permanent link">&para;</a></h2>
 <div class="language-sh highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>interloper<span class="w"> </span>db<span class="w"> </span>init<span class="w">          </span><span class="c1"># create the database, tables and run migrations; idempotent</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>interloper<span class="w"> </span>db<span class="w"> </span>upgrade<span class="w">       </span><span class="c1"># migrate an existing database to head</span>
