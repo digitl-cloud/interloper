@@ -86,7 +86,8 @@ class OAuthStore:
         """
         raw_secret = CLIENT_SECRET_PREFIX + secrets.token_urlsafe(36) if confidential else None
         client = OAuthClient(
-            client_id=secrets.token_urlsafe(24),
+            # Hex, so the id never starts with a dash and reads as an option on a command line.
+            client_id=secrets.token_hex(16),
             secret_hash=hash_token(raw_secret) if raw_secret else None,
             name=name,
             redirect_uris=redirect_uris,
