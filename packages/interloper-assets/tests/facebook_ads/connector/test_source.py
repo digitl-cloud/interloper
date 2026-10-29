@@ -350,6 +350,40 @@ class TestPagination:
             connector._paginate(request, ["id"])
         assert limits == [25]
 
+    def test_an_account_too_heavy_to_read_at_once_is_read_in_halves_of_its_fields(self, monkeypatch):
+        requested: list[list[str]] = []
+        refusal = "Please reduce the amount of data you're asking for, then retry your request"
+
+        class FakeAccount:
+            def api_get(self, **kwargs: Any) -> _FakeObject:
+                requested.append(kwargs["fields"])
+                if "failed_delivery_checks" in kwargs["fields"] and len(kwargs["fields"]) > 2:
+                    raise _facebook_error(1, refusal)
+                return _FakeObject({"id": "act_123", **{field: field for field in kwargs["fields"]}})
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        fields = ["account_id", "name", "failed_delivery_checks", "currency", "timezone_name", "rf_spec"]
+        monkeypatch.setattr(constants, "AD_ACCOUNT_ENTITY_FIELDS", fields)
+        account = connector._get_ad_account(_source().connection, "123")
+        assert account == {"id": "act_123", **{field: field for field in fields}}
+        assert requested == [
+            fields,
+            ["account_id", "name", "failed_delivery_checks"],
+            ["account_id"],
+            ["name", "failed_delivery_checks"],
+            ["currency", "timezone_name", "rf_spec"],
+        ]
+
+    def test_an_account_field_too_heavy_alone_fails(self, monkeypatch):
+        class FakeAccount:
+            def api_get(self, **kwargs: Any) -> _FakeObject:
+                raise _facebook_error(1, "Please reduce the amount of data you're asking for, then retry your request")
+
+        monkeypatch.setattr(connector, "_account", lambda connection, account_id: FakeAccount())
+        monkeypatch.setattr(constants, "AD_ACCOUNT_ENTITY_FIELDS", ["account_id", "failed_delivery_checks"])
+        with pytest.raises(FacebookRequestError, match="Call was not successful"):
+            connector._get_ad_account(_source().connection, "123")
+
     def test_the_account_requests_no_field_that_needs_a_page(self):
         # Facebook answers 400 for the whole account when one of these comes without a page_id
         for name in ("show_checkout_experience", "has_page_authorized_adaccount"):

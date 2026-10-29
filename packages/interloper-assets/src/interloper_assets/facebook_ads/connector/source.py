@@ -304,8 +304,33 @@ def _get_adsets(connection: FacebookAdsConnection, account_id: str) -> list[dict
 
 
 def _get_ad_account(connection: FacebookAdsConnection, account_id: str) -> dict:
-    account = _rate_limit_retry(_account(connection, account_id).api_get)(fields=constants.AD_ACCOUNT_ENTITY_FIELDS)
-    return account.export_all_data()
+    return _read_fields(_account(connection, account_id), constants.AD_ACCOUNT_ENTITY_FIELDS)
+
+
+def _read_fields(node: Any, fields: list[str]) -> dict:
+    """Read a single Graph API object's fields, retrying on rate limits.
+
+    Used by the ``ad_accounts`` entity asset. Facebook refuses an object whose
+    fields carry too much data with the same 500 asking for less that it
+    gives a heavy page, and an object has no page to shrink: its fields are
+    read again in two halves and the answers merged, halving until each read
+    fits, so every field is still read.
+
+    Args:
+        node: The SDK object to read, such as an ``AdAccount``.
+        fields: The fields to request; split in halves on every refusal down to one.
+
+    Returns:
+        The object's data for every requested field it carries.
+    """
+    try:
+        return _rate_limit_retry(node.api_get)(fields=fields).export_all_data()
+    except Exception as exc:
+        if len(fields) == 1 or not _asks_for_less(exc):
+            raise
+    middle = len(fields) // 2
+    logger.warning(f"Facebook asked for less data reading {len(fields)} fields; reading them in two halves")
+    return {**_read_fields(node, fields[:middle]), **_read_fields(node, fields[middle:])}
 
 
 def _time_range(date: dt.date) -> dict[str, str]:
