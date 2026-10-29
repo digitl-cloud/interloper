@@ -62,9 +62,11 @@ Both sides need to know where they are reachable.
   public base URL of the app. It is the issuer of the authorization server, whose metadata the
   API serves at `/.well-known/oauth-authorization-server`, and the MCP server names it as the
   authorization server in its own metadata. Every pod of the deployment gets it.
-- `mcp.external_url` (`INTERLOPER_MCP_EXTERNAL_URL`, the chart's `mcp.externalUrl`) is the public
-  URL of the MCP endpoint, `https://app.example.com/mcp`, which clients take as the resource they
-  are signing in to.
+- The MCP endpoint's public URL is the resource clients sign in to. It is `/mcp` on the app's
+  public URL, `https://app.example.com/mcp`, where the chart serves it. Set
+  `mcp.external_url` (`INTERLOPER_MCP_EXTERNAL_URL`, the chart's `mcp.externalUrl`) only when the
+  endpoint lives elsewhere; the API and the MCP server both read it, so the resource the MCP
+  server advertises is the one the authorization server accepts.
 
 The chart's HTTPRoute sends `/mcp` and `/.well-known/oauth-protected-resource` to the MCP service
 and `/.well-known/oauth-authorization-server` to the API, all on the app hostnames. The Ingress
@@ -76,8 +78,8 @@ Outside the chart, `interloper app`, the compose stack's nginx and the Nuxt dev 
 set `server.external_url` to the address the browser opens.
 
 Without `server.external_url`, the issuer falls back to `http://localhost:<port>`, which serves a
-local development instance and nothing else. The API and the MCP server derive it the same way,
-so the issuer the MCP server names is the one the API serves.
+local development instance and nothing else. The API and the MCP server derive it, and the MCP
+resource under it, the same way, so the issuer the MCP server names is the one the API serves.
 
 The metadata, registration, token and revocation endpoints answer cross-origin requests from any
 origin, without credentials, so a client running in a browser (MCP Inspector) can sign in. The

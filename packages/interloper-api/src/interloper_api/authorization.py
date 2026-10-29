@@ -889,8 +889,8 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
     def from_settings(cls, store: Store, settings: Any) -> AuthorizationServer:
         """Build the server from the application settings.
 
-        The issuer is the app's public URL (``server.public_url``); without
-        ``mcp.external_url``, the MCP endpoint is ``/mcp`` on the issuer.
+        The issuer is the app's public URL (``server.public_url``); the MCP
+        resource is the one the MCP server advertises (``mcp.public_url``).
 
         Args:
             store: The store every hook reads and writes through.
@@ -903,7 +903,7 @@ class AuthorizationServer(rfc6749.AuthorizationServer):
         return cls(
             store,
             issuer=issuer,
-            mcp_url=settings.mcp.external_url or f"{issuer}/mcp",
+            mcp_url=settings.mcp.public_url(settings.server),
             encryption_key=settings.secrets.encryption_key,
             access_token_expiry=timedelta(minutes=settings.auth.access_token_expiry_minutes),
         )

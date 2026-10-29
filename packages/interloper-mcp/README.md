@@ -70,7 +70,7 @@ claude mcp add --transport http interloper http://localhost:3001/mcp \
 | --- | --- | --- |
 | `INTERLOPER_MCP_HOST` | `0.0.0.0` | HTTP bind host |
 | `INTERLOPER_MCP_PORT` | `3001` | HTTP bind port |
-| `INTERLOPER_MCP_EXTERNAL_URL` | (unset) | Public URL of the MCP endpoint (e.g. `https://app.interloper.dev/mcp`), used in OAuth protected-resource metadata |
+| `INTERLOPER_MCP_EXTERNAL_URL` | (unset) | Public URL of the MCP endpoint, the OAuth resource clients sign in to; unset means `/mcp` on `INTERLOPER_SERVER_EXTERNAL_URL`. The API reads it too |
 | `INTERLOPER_MCP_TOKEN` | (unset) | stdio only: PAT to authenticate as (required) |
 
 Database and catalog configuration is the standard interloper set
@@ -81,8 +81,8 @@ Database and catalog configuration is the standard interloper set
 The `mcp` dockerfile target ships as `interloper-mcp:<version>` alongside the
 other role images (Makefile `ROLES` + the publish workflow). The Helm chart
 deploys it with `mcp.enabled=true`: the workload shares the release's
-Postgres/catalog configuration, sets `INTERLOPER_MCP_EXTERNAL_URL` from
-`mcp.externalUrl`, and the chart's HTTPRoute forwards `/mcp` and
+Postgres/catalog configuration, gives every pod `INTERLOPER_MCP_EXTERNAL_URL`
+when `mcp.externalUrl` is set, and the chart's HTTPRoute forwards `/mcp` and
 `/.well-known/oauth-protected-resource` on the app hostnames to it. What
 remains for the operator is supplying the environment values and, if it should
 not share the app's identity, a database identity of its own.

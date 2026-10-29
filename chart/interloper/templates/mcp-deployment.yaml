@@ -50,10 +50,6 @@ spec:
             - name: INTERLOPER_OTEL_SERVICE_NAME
               value: interloper-mcp
             {{- end }}
-            {{- with .Values.mcp.externalUrl }}
-            - name: INTERLOPER_MCP_EXTERNAL_URL
-              value: {{ . | quote }}
-            {{- end }}
             {{- with .Values.mcp.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
