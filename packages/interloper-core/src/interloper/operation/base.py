@@ -40,6 +40,7 @@ from interloper.telemetry.tracer import tracer
 _MESSAGE_BYTES = 3500
 
 if TYPE_CHECKING:
+    import datetime as dt
     from collections.abc import Awaitable, Callable
 
     from interloper.component.relation import Relation
@@ -54,12 +55,14 @@ class OperationContext:
     Handed down by the runner, one per node execution: the operation-level
     counterpart of the asset-level ``ExecutionContext``. ``dag`` is the graph
     the node belongs to, how an operation reaches its upstream nodes'
-    outputs; operations without dependencies ignore it.
+    outputs; operations without dependencies ignore it. ``observed_at`` is
+    the run's observation instant, ``None`` being now.
     """
 
     window: PartitionWindow | None = None
     dag: DAG | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    observed_at: dt.datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -307,18 +310,22 @@ class Operation(Component, Workload):
         """
         return [self]
 
-    def effective_window(self, window: PartitionWindow | None) -> PartitionWindow | None:
+    def effective_window(self, window: PartitionWindow | None, observed_at: dt.datetime) -> PartitionWindow | None:
         """The window this operation actually consumes.
 
-        Unpartitioned operations ignore any window the run was given.
+        Unpartitioned operations ignore any window the run was given; a partitioned one consumes
+        what its partitioning says (see `PartitionConfig.effective_window`).
 
         Args:
             window: The window the run was scoped to, ``None`` when it was unscoped.
+            observed_at: The run's observation instant, aware.
 
         Returns:
-            The window unchanged for a partitioned operation, ``None`` otherwise.
+            The partitioning's window, ``None`` for an unpartitioned operation.
         """
-        return window if self.partitioning is not None else None
+        if self.partitioning is None:
+            return None
+        return self.partitioning.effective_window(window, observed_at)
 
     def upstream_relations(self) -> dict[str, Relation]:
         """The node's relations that another node in the graph fills.

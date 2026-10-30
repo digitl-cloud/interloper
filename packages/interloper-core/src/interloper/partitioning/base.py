@@ -6,12 +6,13 @@ keys, decides whether another config accepts the same windows, and renders its c
 definition. A `Partition` is the storage unit and a `PartitionWindow` the run scope: a contiguous,
 never empty range of the space, named by its first and last partition. Both render the
 `PartitionFilter` a database selects their rows with, so no destination branches on the kind of
-partitioning. The time kind lives in `interloper.partitioning.time`, the list kind in
-`interloper.partitioning.list`.
+partitioning. The time kind lives in `interloper.partitioning.time`, the snapshot kind in
+`interloper.partitioning.snapshot`, the list kind in `interloper.partitioning.list`.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, fields
@@ -193,12 +194,18 @@ class PartitionConfig(ABC):
     class creation, so a catalog definition rebuilds the right one through `from_definition`.
     The check messages read as predicates of the asset, so callers prefix them with its name.
 
+    ``windowed`` says whether the partitions a run writes are the ones its window names. They
+    are for every kind but the snapshot, which writes the period it observed in whatever the
+    window (see `effective_window`), so a scheduler neither sizes a window by it nor runs it
+    once per partition of one.
+
     Attributes:
         column: The column the rows carry the partition value in.
         allow_window: Whether one run may cover several partitions.
     """
 
     kind: ClassVar[str]
+    windowed: ClassVar[bool] = True
     _kinds: ClassVar[dict[str, type[PartitionConfig]]] = {}
 
     column: str
@@ -247,6 +254,19 @@ class PartitionConfig(ABC):
         Args:
             window: The run's window, never ``None`` and within ``allow_window``.
         """
+
+    def effective_window(self, window: PartitionWindow | None, observed_at: dt.datetime) -> PartitionWindow | None:
+        """The window an asset of this partitioning consumes in a run.
+
+        Args:
+            window: The run's window, ``None`` when the run was unscoped.
+            observed_at: The run's observation instant, aware; a kind that writes the period it
+                observed in reads it (see ``windowed``).
+
+        Returns:
+            The run's window, unchanged.
+        """
+        return window
 
     @abstractmethod
     def partition(self, key: str) -> Partition:

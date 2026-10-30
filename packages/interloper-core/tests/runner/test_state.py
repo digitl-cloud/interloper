@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -12,6 +13,8 @@ import interloper as il
 from interloper.events import Event, EventBus, EventType
 from interloper.operation import OperationResult
 from interloper.runner import ExecutionStatus, RunState
+
+OBSERVED_AT = dt.datetime(2026, 10, 29, 14, tzinfo=dt.timezone.utc)
 
 
 class ChainSource(il.Source):
@@ -81,13 +84,13 @@ def _capture() -> Iterator[list[Event]]:
 
 def _state(source: il.Source) -> tuple[RunState, dict[str, Any]]:
     dag = il.DAG(source)
-    state = RunState(dag, None, {"run_id": "run-1"})
+    state = RunState(dag, None, {"run_id": "run-1"}, OBSERVED_AT)
     return state, {operation.key: operation for operation in dag.operations}
 
 
 def _single(run_id: str, asset_id: str) -> tuple[RunState, il.Asset]:
     asset = _Asset(id=asset_id)
-    return RunState(il.DAG(asset), None, {"run_id": run_id}), asset
+    return RunState(il.DAG(asset), None, {"run_id": run_id}, OBSERVED_AT), asset
 
 
 @pytest.fixture
@@ -104,7 +107,7 @@ class TestIdentity:
     """The metadata the state carries for every event it emits."""
 
     def test_the_run_id_comes_from_the_metadata(self) -> None:
-        state = RunState(il.DAG(ChainSource()), None, {"run_id": "r1", "backfill_id": "b1"})
+        state = RunState(il.DAG(ChainSource()), None, {"run_id": "r1", "backfill_id": "b1"}, OBSERVED_AT)
 
         assert state.run_id == "r1"
         assert state.metadata["backfill_id"] == "b1"
@@ -122,7 +125,7 @@ class TestInitialisation:
 
     def test_non_enabled_operations_are_skipped_from_the_start(self) -> None:
         dag = il.DAG(ChainSource(destinations=[il.MemoryDestination()]))
-        state = RunState(dag, None, {"run_id": "run-1"})
+        state = RunState(dag, None, {"run_id": "run-1"}, OBSERVED_AT)
         skipped = [
             operation
             for operation in dag.operations
@@ -140,7 +143,7 @@ class TestInitialisation:
         # the property is installed, not overridden.
         monkeypatch.setattr(type(root), "enabled", property(lambda self: self.key != "root"), raising=False)
 
-        state = RunState(dag, None, {"run_id": "run-1"})
+        state = RunState(dag, None, {"run_id": "run-1"}, OBSERVED_AT)
 
         assert state.executions[root.id].status is ExecutionStatus.SKIPPED
         middle = next(operation for operation in dag.operations if operation.key == "middle")
@@ -158,6 +161,33 @@ class TestQueue:
 
         queued = {event.metadata["component_id"] for event in events if event.type is EventType.OPERATION_QUEUED}
         assert queued == {operation.id for operation in operations.values()}
+
+
+class TestPartitionKey:
+    """Every lifecycle event names the partition its operation consumes, which files its execution."""
+
+    def test_a_snapshot_names_the_period_it_observes_and_a_dated_asset_the_runs(self) -> None:
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def entities() -> list:  # pragma: no cover
+            return []
+
+        @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+        def report() -> list:  # pragma: no cover
+            return []
+
+        @il.asset
+        def lookup() -> list:  # pragma: no cover
+            return []
+
+        dag = il.DAG(entities(id="entities"), report(id="report"), lookup(id="lookup"))
+        window = il.TimePartition(dt.date(2026, 10, 26)).window
+        state = RunState(dag, window, {"run_id": "run-1"}, OBSERVED_AT)
+
+        with _capture() as events:
+            state.queue()
+
+        named = {event.metadata["component_id"]: event.metadata.get("partition_key") for event in events}
+        assert named == {"entities": "2026-10-29", "report": "2026-10-26", "lookup": None}
 
 
 class TestStart:

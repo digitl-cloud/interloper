@@ -247,7 +247,7 @@ class DisplayVideo360(il.Source):
 
     @il.asset(
         schema=schemas.Partners,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def partners(self, context: il.ExecutionContext) -> list[_Record]:
@@ -262,7 +262,7 @@ class DisplayVideo360(il.Source):
 
     @il.asset(
         schema=schemas.Audiences,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def audiences(self, context: il.ExecutionContext) -> list[_Record]:
@@ -272,7 +272,7 @@ class DisplayVideo360(il.Source):
 
     @il.asset(
         schema=schemas.CustomAudiences,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
     )
     def custom_audiences(self, context: il.ExecutionContext) -> list[_Record]:

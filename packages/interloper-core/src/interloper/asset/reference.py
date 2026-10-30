@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from interloper.asset.base import Asset
 
 if TYPE_CHECKING:
+    import datetime as dt
+
     from interloper.dag.base import DAG
     from interloper.partitioning import Partition, PartitionWindow
 
@@ -30,6 +32,7 @@ class Reference(Asset):
         window: Partition | PartitionWindow | None = None,
         dag: DAG | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> Any:
         """Do nothing: the table exists already.
 
@@ -37,6 +40,7 @@ class Reference(Asset):
             window: Ignored.
             dag: Ignored.
             metadata: Ignored.
+            observed_at: Ignored.
 
         Returns:
             ``None``.

@@ -182,7 +182,7 @@ class SnapchatAds(il.Source):
 
     @il.asset(
         schema=AdAccounts,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -194,7 +194,7 @@ class SnapchatAds(il.Source):
 
     @il.asset(
         schema=Ads,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -206,7 +206,7 @@ class SnapchatAds(il.Source):
 
     @il.asset(
         schema=AdSquads,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )
@@ -218,7 +218,7 @@ class SnapchatAds(il.Source):
 
     @il.asset(
         schema=Campaigns,
-        partitioning=il.TimePartitionConfig(column="date"),
+        partitioning=il.SnapshotPartitionConfig(column="date"),
         tags=["Entity"],
         normalizer=_ENTITY_NORMALIZER,
     )

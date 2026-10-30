@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from abc import abstractmethod
 from collections.abc import Callable
@@ -95,6 +96,7 @@ class Runner(Serializable):
         dag: DAG,
         window: Partition | PartitionWindow | None = None,
         metadata: dict[str, Any] | None = None,
+        observed_at: dt.datetime | None = None,
     ) -> RunResult:
         """Run the DAG and return the result.
 
@@ -110,6 +112,8 @@ class Runner(Serializable):
             window: The window the run covers; a partition is accepted as the window of one.
             metadata: Run-level metadata (``run_id``, ``backfill_id``, ...); a
                 ``run_id`` is generated when absent.
+            observed_at: The instant the run observes, aware: a snapshot-partitioned
+                asset writes the period holding it, in its zone. ``None`` is now, in UTC.
 
         Returns:
             The run's result.
@@ -124,7 +128,8 @@ class Runner(Serializable):
                 "interloper.runner.run", context=parent, attributes=self._span_attributes(metadata, window)
             ) as span:
                 inject_metadata(metadata)
-                async with self.Run(self, dag, window, metadata) as run:
+                observed_at = observed_at or dt.datetime.now(dt.timezone.utc)
+                async with self.Run(self, dag, window, metadata, observed_at) as run:
                     result = await run.walk()
                 if result.status is ExecutionStatus.FAILED:
                     span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")

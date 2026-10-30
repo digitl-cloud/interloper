@@ -1,7 +1,7 @@
 """Operation runs, the backfills that batch them, and the events they emit."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from enum import Enum
 from typing import Any, ClassVar, NamedTuple, Optional
 from uuid import UUID, uuid4
@@ -256,6 +256,18 @@ class Run(SQLModel, table=True):
         if self.hooks_evaluated_at is None:
             self.hooks_evaluated_at = datetime.now(timezone.utc)
 
+    @property
+    def clock(self) -> tzinfo:
+        """The zone the run observes in: its job's timezone, UTC for any other target.
+
+        A snapshot asset writes the period the run observes in, read on this
+        clock at dispatch, so a daily snapshot of a Berlin job is Berlin's day.
+        The target must be loaded.
+        """
+        if self.target is None or self.target.kind != "job":
+            return timezone.utc
+        return il.CronJob.zone(self.target.config or {})
+
     def event_metadata(self, target: Component | None) -> dict[str, Any]:
         """This run's ids plus its target's identity, for the events it emits.
 
@@ -465,9 +477,11 @@ class Execution(SQLModel, table=True):
     final outcome. The fold is a Postgres trigger on ``events``, so the
     application never writes this table; migration 012 creates the table,
     the trigger and the backfill, which is why ``create_all`` skips it (see
-    the ``migration_owned`` marker). The run's partition key is stamped on
-    the row as it is created (migration 013), so coverage reads executions
-    by partition without joining every one to its run.
+    the ``migration_owned`` marker). The partition the operation's events
+    name, else its run's, is stamped on the row as it is created (migrations
+    013 and 020), so coverage reads executions by partition without joining
+    every one to its run, and a snapshot's execution is filed under the
+    period it observed.
     """
 
     __tablename__: ClassVar[str] = "executions"

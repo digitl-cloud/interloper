@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import asdict
 from functools import partial
 from typing import Any, ClassVar
@@ -14,6 +15,8 @@ from interloper.component import Component
 from interloper.errors import DAGError
 from interloper.operation import Effect, Operation, OperationContext, OperationResult
 from interloper.runner import ExecutionStatus
+
+OBSERVED_AT = dt.datetime(2026, 10, 29, 14, tzinfo=dt.timezone.utc)
 
 
 class _NoopOperation(Operation):
@@ -80,7 +83,7 @@ class TestContract:
         operation = _NoopOperation()
         assert operation.enabled is True
         assert operation.partitioning is None
-        assert operation.effective_window(None) is None
+        assert operation.effective_window(None, OBSERVED_AT) is None
         assert type(operation).capture_traceback is True
 
 

@@ -184,19 +184,19 @@ class LinkedinOrganic(il.Source):
         return _with_date(rows, context.partition_date)
 
     # -- TAXONOMIES ------------------------------------------------------------
-    @il.asset(schema=Industries, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=Industries, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def industries(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """LinkedIn's industry taxonomy, to resolve the industry URNs of the follower statistics."""
         rows = await self._taxonomy("/industryTaxonomyVersions/DEFAULT/industries")
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=JobFunctions, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=JobFunctions, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def job_functions(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """LinkedIn's job function taxonomy, to resolve the function URNs of the follower statistics."""
         rows = await self._taxonomy("/functions")
         return _with_date(rows, context.partition_date)
 
-    @il.asset(schema=Seniorities, partitioning=il.TimePartitionConfig(column="date"), tags=["Entity"])
+    @il.asset(schema=Seniorities, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
     async def seniorities(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
         """LinkedIn's seniority taxonomy, to resolve the seniority URNs of the follower statistics."""
         rows = await self._taxonomy("/seniorities")

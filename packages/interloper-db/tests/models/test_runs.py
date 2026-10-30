@@ -245,6 +245,21 @@ def test_event_values_preserves_producer_assigned_id() -> None:
 # -- Listing -------------------------------------------------------------------
 
 
+class TestClock:
+    """A run observes on its job's clock, and on UTC for any other target."""
+
+    def test_a_job_run_observes_in_the_jobs_timezone(self):
+        job = Component(org_id=uuid4(), kind="job", key="cron_job", config={"timezone": "Europe/Berlin"})
+
+        assert str(Run(org_id=job.org_id, target=job).clock) == "Europe/Berlin"
+
+    def test_any_other_target_observes_in_utc(self):
+        source = Component(org_id=uuid4(), kind="source", key="shop", config={"timezone": "Europe/Berlin"})
+
+        assert Run(org_id=source.org_id, target=source).clock is dt.timezone.utc
+        assert Run(org_id=source.org_id).clock is dt.timezone.utc
+
+
 class TestEventValues:
     """The row values derived from a framework event."""
 

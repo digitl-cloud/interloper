@@ -36,7 +36,14 @@ class Run(ABC):
     retries, every lifecycle event and the result are the same for every kind.
     """
 
-    def __init__(self, runner: Runner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        runner: Runner,
+        dag: DAG,
+        window: PartitionWindow | None,
+        metadata: dict[str, Any],
+        observed_at: dt.datetime,
+    ) -> None:
         """Make a run of a runner, checking the window before anything is emitted.
 
         Args:
@@ -44,10 +51,11 @@ class Run(ABC):
             dag: The DAG to walk.
             window: The window the run covers, ``None`` when unscoped.
             metadata: Run-level metadata, carrying the ``run_id``.
+            observed_at: The run's observation instant, aware.
         """
         dag.check_window(window)
         self.runner = runner
-        self.state = RunState(dag, window, metadata)
+        self.state = RunState(dag, window, metadata, observed_at)
         self.fault: BaseException | None = None
         self.started_at = dt.datetime.now(dt.timezone.utc)
 

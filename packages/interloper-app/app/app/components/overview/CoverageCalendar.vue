@@ -89,9 +89,7 @@ const option = computed(() => {
             textStyle: { color: ink },
             formatter: (params: any) => {
                 const date = params.data.value[0]
-                const day = byDate.value.get(date)
-                if (!day) return `<b>${date}</b><br/>nothing expected`
-                return `<b>${date}</b><br/>${day.covered}/${day.expected} covered${day.failed ? ` · ${day.failed} failed` : ''}`
+                return describeDay(`<b>${date}</b>`, byDate.value.get(date), '<br/>')
             },
         },
         visualMap: {

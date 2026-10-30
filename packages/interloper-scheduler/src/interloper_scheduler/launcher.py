@@ -7,6 +7,7 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
+from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
@@ -125,10 +126,12 @@ class Launcher(ABC):
 
     @staticmethod
     def command(run: Run, spec: str) -> list[str]:
-        """The ``interloper run`` argv that executes *run* from *spec*.
+        """The ``interloper run`` argv that executes *run* from *spec*, observing now on the run's clock.
 
         The token is not an argument: it travels in the environment, which a
-        process listing does not show.
+        process listing does not show. The observation instant is fixed here,
+        at dispatch, so a pod that starts late still writes the period it was
+        dispatched in (see `Run.clock`).
 
         Args:
             run: The run.
@@ -147,6 +150,7 @@ class Launcher(ABC):
             f"--run-id={run.id}",
             "--metadata",
             json.dumps(run.event_metadata(run.target)),
+            f"--observed-at={datetime.now(run.clock).isoformat()}",
         ]
         if run.partition_key:
             argv.extend(["--date", run.partition_key])
@@ -260,10 +264,12 @@ class InProcessLauncher(Launcher):
             heartbeat_timeout=self._reaper.heartbeat_timeout,
         )
         window = TimePartition.from_key(run.partition_key) if run.partition_key else None
+        observed_at = datetime.now(run.clock)
         try:
             with recorder:
                 recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
-                recorder.finish(asyncio.run(recorded.run(dag, window, run.event_metadata(run.target))))
+                metadata = run.event_metadata(run.target)
+                recorder.finish(asyncio.run(recorded.run(dag, window, metadata, observed_at)))
         except Exception:
             logger.exception("Run %s did not complete", run.id)
         finally:

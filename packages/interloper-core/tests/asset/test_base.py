@@ -18,7 +18,7 @@ import interloper as il
 from interloper.asset.base import AssetDefinition
 from interloper.component import Component, ComponentIdentity
 from interloper.dag import DAG
-from interloper.errors import AssetError, ConfigError, PartitionError
+from interloper.errors import AssetError, ConfigError, DataNotFoundError, PartitionError
 from interloper.events import Event, EventBus, EventType
 from interloper.partitioning import (
     ListPartition,
@@ -796,6 +796,36 @@ class TestWindowValidation:
             return [{"date": context.partition_date}]
 
         assert daily().run(TimePartition(dt.date(2026, 1, 1))) == [{"date": dt.date(2026, 1, 1)}]
+
+
+class TestSnapshot:
+    """A snapshot writes the period it observed in, whatever window its run was given."""
+
+    def test_a_past_window_writes_the_observation_slice(self):
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def campaigns(context: il.ExecutionContext) -> list:
+            return [{"date": context.partition_date, "id": "1"}]
+
+        memory = il.MemoryDestination()
+        asset = campaigns(destinations=[memory])
+        observed_at = dt.datetime(2026, 10, 29, 6, tzinfo=dt.timezone.utc)
+
+        asset.materialize(TimePartition(dt.date(2026, 10, 26)), observed_at=observed_at)
+
+        observed = TimePartition(dt.date(2026, 10, 29)).window
+        assert memory.read(il.IOContext(asset=asset, window=observed)) == [{"date": dt.date(2026, 10, 29), "id": "1"}]
+        with pytest.raises(DataNotFoundError):
+            memory.read(il.IOContext(asset=asset, window=TimePartition(dt.date(2026, 10, 26)).window))
+
+    def test_an_unscoped_run_observes_now(self):
+        @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"))
+        def campaigns(context: il.ExecutionContext) -> list:
+            return [{"date": context.partition_date}]
+
+        before = dt.datetime.now(dt.timezone.utc).date()
+        [row] = campaigns().run()
+
+        assert before <= row["date"] <= dt.datetime.now(dt.timezone.utc).date()
 
 
 # -- __call__ reconfiguration --------------------------------------------------

@@ -1,10 +1,10 @@
 """Conventions every asset in the catalog follows, checked over the whole catalog at once.
 
-Entity assets are dimension snapshots; partitioning them (even where the
-partition seems redundant) keeps every asset uniformly partitioned for the
-scheduling and destination machinery. The BigQuery destination requires the
-partition column to exist on the schema, as a date, so every time-partitioned
-schema must declare it.
+Entity assets are dimension snapshots, so they are snapshot-partitioned: the
+partition is the day the run observed the vendor, never the run's window
+(rule 2 of ``.claude/rules/assets.md``), and only an entity is. The BigQuery
+destination requires the partition column to exist on the schema, as a date,
+so every time- or snapshot-partitioned schema must declare it.
 
 Field types follow rule 3 of ``.claude/rules/assets.md``: a field whose name
 says what its value is (an identifier, an instant, a day, an amount) carries
@@ -161,7 +161,7 @@ def _describe(path: str, spec: FieldSpec) -> str:
     return f"{path}: {kind}"
 
 
-def test_every_entity_asset_is_partitioned_on_date():
+def test_every_entity_asset_is_snapshot_partitioned_on_date():
     checked = 0
     for source in _catalog_sources():
         for asset_type in source.asset_types:
@@ -169,8 +169,8 @@ def test_every_entity_asset_is_partitioned_on_date():
                 continue
             checked += 1
             partitioning = asset_type.partitioning
-            assert isinstance(partitioning, il.TimePartitionConfig), (
-                f"{source.__name__}.{asset_type.key} is an Entity asset without time partitioning"
+            assert isinstance(partitioning, il.SnapshotPartitionConfig), (
+                f"{source.__name__}.{asset_type.key} is an Entity asset without snapshot partitioning"
             )
             assert partitioning.column == "date", (
                 f"{source.__name__}.{asset_type.key} must partition on 'date', not {partitioning.column!r}"
@@ -185,12 +185,22 @@ def test_every_entity_asset_is_partitioned_on_date():
     assert checked >= 18, f"expected at least 18 entity assets in the catalog, found {checked}"
 
 
+def test_only_an_entity_asset_is_snapshot_partitioned():
+    misses = [
+        f"{source.__name__}.{asset_type.key}"
+        for source in _catalog_sources()
+        for asset_type in source.asset_types
+        if isinstance(asset_type.partitioning, il.SnapshotPartitionConfig) and "Entity" not in (asset_type.tags or [])
+    ]
+    assert not misses, "snapshot-partitioned assets not tagged Entity:\n" + "\n".join(misses)
+
+
 def test_every_partition_column_is_a_declared_date():
     misses = []
     for source in _catalog_sources():
         for asset_type in source.asset_types:
             partitioning = asset_type.partitioning
-            if not isinstance(partitioning, il.TimePartitionConfig) or asset_type.schema is None:
+            if not isinstance(partitioning, il.PeriodPartitionConfig) or asset_type.schema is None:
                 continue
             types = {spec.name: spec.type for spec in asset_type.schema.field_specs()}
             if types.get(partitioning.column) is not dt.date:

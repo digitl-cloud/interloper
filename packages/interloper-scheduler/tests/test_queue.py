@@ -28,7 +28,20 @@ class EmptySource(il.Source):
     """A source that declares no assets."""
 
 
-_CATALOG = il.Catalog.from_assets([DemoSource, EmptySource])
+@il.source(key="entities_source")
+class EntitiesSource(il.Source):
+    """A source observing its vendor's entities beside a dated report."""
+
+    @il.asset(partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    def entities(self) -> list:
+        return []
+
+    @il.asset(partitioning=il.TimePartitionConfig(column="date"))
+    def report(self) -> list:
+        return []
+
+
+_CATALOG = il.Catalog.from_assets([DemoSource, EmptySource, EntitiesSource])
 
 
 class _FakeLauncher(Launcher):
@@ -128,6 +141,28 @@ def test_a_failed_scope_retry_disables_the_prior_successes(store: Store) -> None
         operation.id for operation in il.DAG.from_spec(spec, catalog=_CATALOG).operations if not operation.enabled
     }
     assert str(asset_id) in disabled
+
+
+def test_a_backfill_observes_its_snapshots_once_in_its_newest_run(store: Store) -> None:
+    source = store.components.create(_ORG, kind="source", key="entities_source")
+    store.backfills.create(_ORG, component_id=source.id, start_key="2026-10-26", end_key="2026-10-28", concurrency=3)
+    launcher = _FakeLauncher()
+
+    QueueController(launcher=launcher, store=store)._tick()
+
+    with Session(store.engine) as session:
+        keys = {run.id: run.partition_key for run in session.exec(select(Run)).all()}
+    enabled = {
+        keys[run_id]: sorted(
+            operation.key for operation in il.DAG.from_spec(spec, catalog=_CATALOG).operations if operation.enabled
+        )
+        for run_id, spec, _token in launcher.launched
+    }
+    assert enabled == {
+        "2026-10-26": ["report"],
+        "2026-10-27": ["report"],
+        "2026-10-28": ["entities", "report"],
+    }
 
 
 def test_a_run_that_cannot_be_assembled_fails_with_the_reason(store: Store) -> None:

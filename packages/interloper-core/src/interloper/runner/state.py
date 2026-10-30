@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,7 @@ class RunState:
         dag: DAG,
         window: PartitionWindow | None,
         metadata: dict[str, Any],
+        observed_at: dt.datetime,
     ) -> None:
         """Track a DAG's operations for one run, roots ready.
 
@@ -45,10 +47,12 @@ class RunState:
             dag: The DAG the run walks.
             window: The window the run covers, ``None`` when unscoped.
             metadata: Run-level metadata, carrying the ``run_id``.
+            observed_at: The run's observation instant, aware.
         """
         self.dag = dag
         self.window = window
         self.metadata = metadata
+        self.observed_at = observed_at
         self.executions: dict[str, ExecutionInfo] = {
             operation.id: ExecutionInfo(
                 component_id=operation.id,
@@ -87,8 +91,19 @@ class RunState:
         """Whether every operation reached a final status."""
         return all(info.is_terminal for info in self.executions.values())
 
+    def window_of(self, operation: Operation) -> PartitionWindow | None:
+        """The window an operation consumes in this run (see `Operation.effective_window`).
+
+        Args:
+            operation: One of the run's operations.
+
+        Returns:
+            Its window, ``None`` for an unpartitioned operation.
+        """
+        return operation.effective_window(self.window, self.observed_at)
+
     def context(self, operation: Operation) -> OperationContext:
-        """The facts an operation executes with: its own window, the DAG and the run's metadata.
+        """The facts an operation executes with: its own window, the DAG, the run's metadata and instant.
 
         Args:
             operation: The operation about to execute.
@@ -96,7 +111,9 @@ class RunState:
         Returns:
             Its context.
         """
-        return OperationContext(window=operation.effective_window(self.window), dag=self.dag, metadata=self.metadata)
+        return OperationContext(
+            window=self.window_of(operation), dag=self.dag, metadata=self.metadata, observed_at=self.observed_at
+        )
 
     # -- Transitions -------------------------------------------------------------
 
@@ -245,6 +262,10 @@ class RunState:
     def _emit(self, event_type: EventType, operation: Operation, message: str, **extra: Any) -> None:
         """Emit an operation-lifecycle event with its deterministic id.
 
+        The event is scoped to the window the operation consumes, and names its partition when
+        that window holds one: the platform files the execution under it, which for a snapshot
+        is the period observed rather than the run's partition.
+
         Args:
             event_type: The lifecycle event.
             operation: The operation it is about.
@@ -252,8 +273,11 @@ class RunState:
             **extra: More metadata (``error``, ``traceback``).
         """
         attempt = self.executions[operation.id].attempt
+        window = self.window_of(operation)
+        if window is not None and len(window) == 1:
+            extra["partition_key"] = window.first.key
         metadata = {
-            **operation.event_metadata(self.metadata, self.window, attempt=attempt, **extra),
+            **operation.event_metadata(self.metadata, window, attempt=attempt, **extra),
             "message": message,
         }
         event_id = self.operation_event_id(self.run_id, operation.id, event_type, attempt=attempt)

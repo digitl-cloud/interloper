@@ -829,12 +829,14 @@ class ComponentStore:
         self._relations.bind_siblings(source_cls, children)
 
     def job_partition_granularities(self, job_ids: Sequence[UUID]) -> dict[UUID, set[TimeGranularity]]:
-        """The granularities each job's partitioned targets declare, in three queries.
+        """The granularities each job's window-partitioned targets declare, in three queries.
 
         Granularity lives on the target assets' catalog definitions, never on
         the job's config (a denormalized copy could silently drift from the
         catalog). A source target contributes its partitioned assets'
-        granularities, an asset target its own; a target whose key does not
+        granularities, an asset target its own; a snapshot asset ignores the
+        window and contributes none, so a job of snapshots alone runs
+        unwindowed. A target whose key does not
         resolve contributes nothing (drift is the run path's problem, not the
         scheduler's). The jobs' target relations, the target rows and their
         parents are each read in one query, whatever the number of jobs.
@@ -873,14 +875,15 @@ class ComponentStore:
                 partitionings = [definition.partitioning]
             else:
                 partitionings = []
+            configs = [il.PartitionConfig.from_definition(partitioning) for partitioning in partitionings]
             granularities[relation.src_id].update(
-                TimeGranularity(partitioning["granularity"])
-                for partitioning in partitionings
-                if partitioning.get("granularity") is not None
+                config.granularity
+                for config in configs
+                if config.windowed and isinstance(config, il.PeriodPartitionConfig)
             )
         return granularities
 
-    def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.TimePartitionConfig]:
+    def asset_partitionings(self, org_id: UUID) -> dict[UUID, il.PeriodPartitionConfig]:
         """The partitioning of every partitioned asset row of an organisation.
 
         Partitioning lives on the catalog definition, never on the row, which
@@ -892,8 +895,8 @@ class ComponentStore:
             org_id: Organisation UUID.
 
         Returns:
-            Each time-partitioned asset's partitioning by row id; an asset partitioned another
-            way has no coverage yet and is skipped.
+            Each time- or snapshot-partitioned asset's partitioning by row id; an asset
+            partitioned another way has no coverage yet and is skipped.
         """
         statement = (
             select(Component)
@@ -902,13 +905,13 @@ class ComponentStore:
         )
         with session_scope(self._engine) as session:
             assets = {row.id: row.qualified_key for row in session.exec(statement).all()}
-        partitionings: dict[UUID, il.TimePartitionConfig] = {}
+        partitionings: dict[UUID, il.PeriodPartitionConfig] = {}
         for asset_id, key in assets.items():
             definition = self._catalog.get(key)
             if not isinstance(definition, il.AssetDefinition) or (partitioning := definition.partitioning) is None:
                 continue
             config = il.PartitionConfig.from_definition(partitioning)
-            if isinstance(config, il.TimePartitionConfig):
+            if isinstance(config, il.PeriodPartitionConfig):
                 partitionings[asset_id] = config
         return partitionings
 
