@@ -16,6 +16,7 @@ from interloper_db import Store
 from starlette.requests import HTTPConnection
 
 from interloper_api.authorization import AuthorizationServer
+from interloper_api.login import GoogleLogin
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class State:
             super-admin surface shows.
         authorization_server: The OAuth authorization server, or ``None`` on
             a deployment that cannot run one.
+        google_login: The Google login, or ``None`` on a deployment that
+            cannot run one.
     """
 
     store: Store | None = None
@@ -42,6 +45,7 @@ class State:
     features: dict[str, bool] = field(default_factory=dict)
     admin_config: Any | None = None
     authorization_server: AuthorizationServer | None = None
+    google_login: GoogleLogin | None = None
 
 
 def get_state(connection: HTTPConnection) -> State:
@@ -145,8 +149,27 @@ def get_authorization_server(state: StateDep) -> AuthorizationServer:
     return state.authorization_server
 
 
+def get_google_login(state: StateDep) -> GoogleLogin:
+    """The Google login.
+
+    Args:
+        state: The application's state.
+
+    Returns:
+        The login.
+
+    Raises:
+        HTTPException: 503 when the deployment runs none (no Google client or
+            no encryption key).
+    """
+    if state.google_login is None:
+        raise HTTPException(status_code=503, detail="Google login not configured")
+    return state.google_login
+
+
 StoreDep = Annotated[Store, Depends(get_store)]
 CatalogDep = Annotated[Catalog, Depends(get_catalog)]
 SettingsDep = Annotated[Any, Depends(get_settings)]
 AgentDep = Annotated[Any, Depends(get_agent)]
 AuthorizationServerDep = Annotated[AuthorizationServer, Depends(get_authorization_server)]
+GoogleLoginDep = Annotated[GoogleLogin, Depends(get_google_login)]

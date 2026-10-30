@@ -2,33 +2,28 @@
 
 from __future__ import annotations
 
-import secrets
-from typing import Annotated, Any
-from urllib.parse import urlencode, urlsplit
+from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-import httpx2
-from fastapi import APIRouter, Cookie, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from interloper_db import OrganisationQuery, Profile, Store
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from interloper_api.dependencies import (
     CurrentUserDep,
+    GoogleLoginDep,
     SessionUserDep,
     SettingsDep,
     StateDep,
     StoreDep,
     get_org_scope,
 )
+from interloper_api.login import GoogleAccount, LoginError
 from interloper_api.routes.organisations import OrganisationResponse
-
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-LOGIN_STATE_COOKIE = "login_state"
-LOGIN_STATE_MAX_AGE = 600
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -144,164 +139,91 @@ class AuthUserResponse(BaseModel):
 
 
 @router.get("/google")
-def google_login(
-    settings: SettingsDep,
-    redirect: str | None = None,
-) -> RedirectResponse:
-    """Redirect user to Google's OAuth consent screen.
+async def google_login(request: Request, login: GoogleLoginDep, redirect: str | None = None) -> RedirectResponse:
+    """Send the browser to Google's account picker.
 
     Args:
-        settings: The settings, whose ``auth`` names the Google client.
+        request: The login request, whose session keeps the login's state.
+        login: The Google login.
         redirect: App-relative destination to return to once the login
-            completes; carried through Google in the ``state`` parameter after
-            a random nonce, defaulting to the app root.
+            completes, defaulting to the app root.
 
     Returns:
-        A redirect to Google's consent screen, setting the nonce in a
-        short-lived cookie the callback checks ``state`` against.
-
-    Raises:
-        HTTPException: 500 when no Google client id is configured.
+        A redirect to Google, or to the login page when Google cannot be
+        reached.
     """
-    auth_config = settings.auth
-    client_id = auth_config.google_client_id
-    redirect_uri = auth_config.google_redirect_uri
-
-    if not client_id:
-        raise HTTPException(status_code=500, detail="Google OAuth not configured")
-
-    nonce = secrets.token_urlsafe(32)
-    params = urlencode(
-        {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": "openid email profile",
-            "access_type": "offline",
-            "prompt": "consent",
-            "state": f"{nonce}:{redirect or '/'}",
-        }
-    )
-    response = RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{params}")
-    response.set_cookie(
-        key=LOGIN_STATE_COOKIE,
-        value=nonce,
-        httponly=True,
-        samesite="lax",
-        secure=auth_config.cookie_secure,
-        max_age=LOGIN_STATE_MAX_AGE,
-        path="/",
-    )
-    return response
+    try:
+        return await login.redirect(request, redirect or "/")
+    except LoginError as error:
+        return RedirectResponse(url=f"/login?error={error.reason}", status_code=302)
 
 
 @router.get("/google/callback")
-def google_callback(
-    code: str,
-    store: StoreDep,
-    settings: SettingsDep,
-    state: str | None = None,
-    login_state: Annotated[str | None, Cookie()] = None,
+async def google_callback(
+    request: Request, login: GoogleLoginDep, store: StoreDep, settings: SettingsDep
 ) -> RedirectResponse:
-    """Exchange Google's authorization code, upsert the profile, and open a login session.
+    """Complete the Google login and open a login session.
 
     Args:
-        code: The single-use authorization code handed back by Google.
-        state: The nonce and destination recorded at the start of the flow; the
-            destination is honoured only when it is app-relative, otherwise the
-            app root is used.
+        request: Google's callback, carrying the code and ``state``.
+        login: The Google login.
         store: The database store.
-        settings: The settings, whose ``auth`` names the Google client.
-        login_state: The nonce cookie :func:`google_login` set; a callback whose
-            ``state`` does not carry it was not started by this browser.
+        settings: The settings, whose ``auth`` holds the signup and session
+            policy.
 
     Returns:
-        A redirect to the post-login destination carrying the session cookie, or
-        a redirect back to the login page when the nonce does not match or
-        signup is not allowed.
-
-    Raises:
-        HTTPException: 500 when Google OAuth is not configured, 401 when the code
-            exchange or the user-info lookup fails or comes back incomplete.
+        A redirect to the login's destination carrying the session cookie, or
+        to the login page when the login did not complete or signup is not
+        allowed.
     """
-    auth_config = settings.auth
-    client_id = auth_config.google_client_id
-    client_secret = auth_config.google_client_secret
-    redirect_uri = auth_config.google_redirect_uri
-    cookie_secure: bool = auth_config.cookie_secure
-    session_expiry_days: int = auth_config.session_expiry_days
+    try:
+        account, destination = await login.complete(request)
+    except LoginError as error:
+        return RedirectResponse(url=f"/login?error={error.reason}", status_code=302)
+    return await run_in_threadpool(_sign_in, account, destination, store, settings.auth)
 
-    if not client_id or not client_secret:
-        raise HTTPException(status_code=500, detail="Google OAuth not configured")
 
-    nonce, _, redirect = (state or "").partition(":")
-    if not login_state or not secrets.compare_digest(nonce, login_state):
-        response = RedirectResponse(url="/login?error=login_expired", status_code=302)
-        response.delete_cookie(LOGIN_STATE_COOKIE, path="/")
-        return response
+def _sign_in(account: GoogleAccount, destination: str, store: Store, auth_config: Any) -> RedirectResponse:
+    """Open a login session for the account Google proved.
 
-    token_resp = httpx2.post(
-        GOOGLE_TOKEN_URL,
-        data={
-            "code": code,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        },
-    )
-    if token_resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Failed to exchange authorization code")
+    Args:
+        account: The verified Google account.
+        destination: The destination the login asked for; honoured only when
+            it is app-relative, otherwise the app root is used.
+        store: The database store.
+        auth_config: The resolved auth configuration.
 
-    tokens = token_resp.json()
-    access_token = tokens.get("access_token")
-    if not access_token:
-        raise HTTPException(status_code=401, detail="No access token in response")
-
-    userinfo_resp = httpx2.get(
-        GOOGLE_USERINFO_URL,
-        headers={"Authorization": f"Bearer {access_token}"},
-    )
-    if userinfo_resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Failed to fetch user info")
-
-    userinfo = userinfo_resp.json()
-    google_id = userinfo.get("id")
-    email = userinfo.get("email")
-    name = userinfo.get("name")
-    avatar_url = userinfo.get("picture")
-
-    if not google_id or not email:
-        raise HTTPException(status_code=401, detail="Incomplete user info from Google")
-
+    Returns:
+        A redirect to the destination carrying the session cookie, or to the
+        login page when signup is not allowed.
+    """
     # Gate signup only: existing profiles always sign in, a first login must
     # pass the allowlist before a profile is created.
-    if not store.profiles.get_by_google_id(google_id) and not _signup_allowed(email, auth_config, store):
+    if not store.profiles.get_by_google_id(account.google_id) and not _signup_allowed(
+        account.email, auth_config, store
+    ):
         return RedirectResponse(url="/login?error=signup_not_allowed", status_code=302)
 
     profile = store.profiles.upsert(
-        google_id=google_id,
-        email=email,
-        name=name,
-        avatar_url=avatar_url,
+        google_id=account.google_id,
+        email=account.email,
+        name=account.name,
+        avatar_url=account.avatar_url,
     )
 
     # Bootstrap super-admins from settings. Promote-only: removing an email from
     # the list never demotes an existing super-admin.
-    if not profile.is_super_admin and email.lower() in auth_config.super_admin_emails:
+    if not profile.is_super_admin and account.email.lower() in auth_config.super_admin_emails:
         profile = store.profiles.set_super_admin(profile.id, value=True)
 
-    token = store.tokens.create_session(profile.id)
-
-    response = RedirectResponse(url=_app_relative(redirect), status_code=302)
-    response.delete_cookie(LOGIN_STATE_COOKIE, path="/")
+    response = RedirectResponse(url=_app_relative(destination), status_code=302)
     response.set_cookie(
         key="session_token",
-        value=token,
+        value=store.tokens.create_session(profile.id),
         httponly=True,
         samesite="lax",
-        secure=cookie_secure,
-        max_age=session_expiry_days * 86400,
+        secure=auth_config.cookie_secure,
+        max_age=auth_config.session_expiry_days * 86400,
         path="/",
     )
     return response
