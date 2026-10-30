@@ -58,7 +58,7 @@ const rangeLabel = computed(() => {
     const format = (ms: number) => `${formatShortDay(new Date(ms))} ${formatClockTime(new Date(ms))}`
     return `${format(rangeStart.value)} → ${format(rangeEnd.value)}`
 })
-const height = computed(() => AXIS_HEIGHT + (loaded.value ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
+const height = computed(() => AXIS_HEIGHT + (loaded.value && rows.value.length ? Math.min(rows.value.length, MAX_ROWS) : SKELETON_ROWS) * ROW_HEIGHT + 1)
 
 function onBarClick(bar: TimelineBar) {
     if (bar.status === 'scheduled') navigateTo(organisationStore.path(kindPath('job')))
@@ -110,6 +110,14 @@ onUnmounted(() => timelineStore.$reset())
                 <USkeleton class="h-3 flex-1" />
             </div>
         </div>
+        <UEmpty v-else-if="!rows.length"
+                icon="i-lucide-gantt-chart"
+                title="No runs in this window"
+                description="Runs show up here as they execute, and each job's next firing as a dashed bar."
+                variant="naked"
+                class="transition-opacity"
+                :class="switching ? 'opacity-50' : ''"
+                :style="{ minHeight: `${height}px` }" />
         <div v-else
              class="transition-opacity"
              :class="switching ? 'opacity-50' : ''"
@@ -126,7 +134,8 @@ onUnmounted(() => timelineStore.$reset())
                                     :empty-message="loading ? '' : 'No runs in this window'"
                                     @bar-click="onBarClick" />
         </div>
-        <div class="mt-2.5 flex items-center gap-4 text-xs text-dimmed">
+        <div v-if="!loaded || rows.length"
+             class="mt-2.5 flex items-center gap-4 text-xs text-dimmed">
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-success" />Success</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-error" />Failed</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3.5 rounded-[3px] bg-primary" />Running</span>
