@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version
 from typing import Any
 
 from interloper.settings import AppSettings, McpSettings
 from interloper_db import Store
 from mcp.server.auth.settings import AuthSettings as McpAuthSettings
 from mcp.server.mcpserver import MCPServer
+from mcp.types import Icon
 
 from interloper_mcp.auth import PatVerifier
 from interloper_mcp.tools import register_tools
 
 SERVER_NAME = "interloper"
+SERVER_TITLE = "Interloper"
 
 INSTRUCTIONS = (
     "Access to an interloper deployment: the catalog of available component "
@@ -47,9 +50,11 @@ def http_options(settings: McpSettings) -> dict[str, Any]:
 def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPServer:
     """Build the MCP server.
 
-    The protected-resource metadata names the interloper authorization server
-    as the issuer of the tokens the server accepts, by the URL the API serves
-    it at (``server.public_url``).
+    The server introduces itself to clients with its title, version, the app's
+    URL and the app's icon, all from the app's public URL
+    (``server.public_url``). The protected-resource metadata names the
+    interloper authorization server, served at that same URL, as the issuer of
+    the tokens the server accepts.
 
     Args:
         settings: The MCP settings (host, port, external URL).
@@ -61,11 +66,11 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
     Returns:
         The configured server with the tools registered.
     """
+    server = AppSettings.get().server
     auth_kwargs: dict = {}
     if store is not None:
         # The endpoint's URL (https://host/mcp) is the RFC 9728 resource, which puts the
         # metadata at /.well-known/oauth-protected-resource/mcp.
-        server = AppSettings.get().server
         # Strings, not AnyHttpUrl instances: the SDK's settings model keeps a path-less URL
         # as given only when it validates the string itself, and the issuer must match the
         # authorization server's own metadata exactly (RFC 8414 section 3.3).
@@ -80,6 +85,14 @@ def create_mcp_server(settings: McpSettings, store: Store | None = None) -> MCPS
             ),
         }
 
-    mcp = MCPServer(SERVER_NAME, instructions=INSTRUCTIONS, **auth_kwargs)
+    mcp = MCPServer(
+        SERVER_NAME,
+        title=SERVER_TITLE,
+        instructions=INSTRUCTIONS,
+        website_url=server.public_url,
+        icons=[Icon(src=f"{server.public_url}/icon.svg", mime_type="image/svg+xml", sizes=["any"])],
+        version=version("interloper-mcp"),
+        **auth_kwargs,
+    )
     register_tools(mcp)
     return mcp
