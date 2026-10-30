@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.122.1 (2026-10-30)
+
+### Refactoring
+
+- **api**: Google login on Authlib's Starlette client
+  ([`6013a22`](https://github.com/digitl-cloud/interloper/commit/6013a220ae06340c4bc2157f50f8d7cf23ebf01c))
+
+
 ## v0.122.0 (2026-10-30)
 
 ### Bug Fixes
