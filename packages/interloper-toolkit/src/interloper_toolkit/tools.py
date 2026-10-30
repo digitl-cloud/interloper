@@ -42,11 +42,14 @@ class Tool:
     Args:
         fn: The toolkit function, sync or async, taking the context first.
         effect: What it does to the platform.
+        title: Its human-readable name, an imperative a person can scan
+            (``Trigger a run``), for surfaces that show tools to people.
         carries_secrets: Whether its arguments carry credentials.
     """
 
     fn: types.FunctionType
     effect: Effect
+    title: str
     carries_secrets: bool = False
 
     @property
@@ -156,53 +159,53 @@ class Tool:
 
 TOOLS: tuple[Tool, ...] = (
     # Catalog
-    Tool(catalog.list_definitions, Effect.READ),
-    Tool(catalog.get_definition, Effect.READ),
-    Tool(catalog.get_asset_schema, Effect.READ),
-    Tool(catalog.search_fields, Effect.READ),
-    Tool(catalog.compare_schemas, Effect.READ),
+    Tool(catalog.list_definitions, Effect.READ, "Browse the catalog"),
+    Tool(catalog.get_definition, Effect.READ, "Read a definition"),
+    Tool(catalog.get_asset_schema, Effect.READ, "Read an asset schema"),
+    Tool(catalog.search_fields, Effect.READ, "Search fields"),
+    Tool(catalog.compare_schemas, Effect.READ, "Compare schemas"),
     # Collection
-    Tool(collection.list_components, Effect.READ),
-    Tool(collection.update_component, Effect.EDIT),
-    Tool(collection.get_delete_impact, Effect.READ),
-    Tool(collection.delete_component, Effect.DELETE),
-    Tool(collection.bind_relation, Effect.EDIT),
-    Tool(collection.unbind_relation, Effect.EDIT),
-    Tool(collection.request_connection_setup, Effect.READ),
-    Tool(collection.check_connection, Effect.READ_PROVIDER),
-    Tool(collection.create_connections, Effect.CREATE, carries_secrets=True),
+    Tool(collection.list_components, Effect.READ, "List components"),
+    Tool(collection.update_component, Effect.EDIT, "Update a component"),
+    Tool(collection.get_delete_impact, Effect.READ, "Preview a deletion"),
+    Tool(collection.delete_component, Effect.DELETE, "Delete a component"),
+    Tool(collection.bind_relation, Effect.EDIT, "Bind a relation"),
+    Tool(collection.unbind_relation, Effect.EDIT, "Unbind a relation"),
+    Tool(collection.request_connection_setup, Effect.READ, "Request a connection setup"),
+    Tool(collection.check_connection, Effect.READ_PROVIDER, "Check a connection"),
+    Tool(collection.create_connections, Effect.CREATE, "Create connections", carries_secrets=True),
     # Sources and jobs
-    Tool(sources.resolve_source_field_options, Effect.READ_PROVIDER),
-    Tool(sources.create_source, Effect.CREATE),
-    Tool(sources.create_sources, Effect.CREATE),
-    Tool(jobs.create_job, Effect.CREATE),
+    Tool(sources.resolve_source_field_options, Effect.READ_PROVIDER, "Fetch a source field's options"),
+    Tool(sources.create_source, Effect.CREATE, "Create a source"),
+    Tool(sources.create_sources, Effect.CREATE, "Create sources"),
+    Tool(jobs.create_job, Effect.CREATE, "Create a job"),
     # Lineage
-    Tool(lineage.get_upstream, Effect.READ),
-    Tool(lineage.get_downstream, Effect.READ),
-    Tool(lineage.get_full_lineage, Effect.READ),
-    Tool(lineage.impact_analysis, Effect.READ),
-    Tool(lineage.cross_source_dependencies, Effect.READ),
+    Tool(lineage.get_upstream, Effect.READ, "Trace upstream assets"),
+    Tool(lineage.get_downstream, Effect.READ, "Trace downstream assets"),
+    Tool(lineage.get_full_lineage, Effect.READ, "Trace the full lineage"),
+    Tool(lineage.impact_analysis, Effect.READ, "Analyse impact"),
+    Tool(lineage.cross_source_dependencies, Effect.READ, "Find cross-source dependencies"),
     # Scheduling
-    Tool(scheduling.list_jobs, Effect.READ),
-    Tool(scheduling.toggle_job, Effect.EDIT),
-    Tool(scheduling.toggle_asset, Effect.EDIT),
-    Tool(scheduling.list_recent_runs, Effect.READ),
-    Tool(scheduling.get_run_detail, Effect.READ),
-    Tool(scheduling.list_run_events, Effect.READ),
-    Tool(scheduling.get_event, Effect.READ),
-    Tool(scheduling.list_failures, Effect.READ),
-    Tool(scheduling.error_breakdown, Effect.READ),
-    Tool(scheduling.trigger_run, Effect.LAUNCH),
-    Tool(scheduling.retry_run, Effect.LAUNCH),
-    Tool(scheduling.cancel_run, Effect.CANCEL),
-    Tool(scheduling.list_backfills, Effect.READ),
-    Tool(scheduling.backfill_timeline, Effect.READ),
-    Tool(scheduling.trigger_backfill, Effect.LAUNCH),
-    Tool(scheduling.cancel_backfill, Effect.CANCEL),
+    Tool(scheduling.list_jobs, Effect.READ, "List jobs"),
+    Tool(scheduling.toggle_job, Effect.EDIT, "Toggle a job"),
+    Tool(scheduling.toggle_asset, Effect.EDIT, "Toggle an asset"),
+    Tool(scheduling.list_recent_runs, Effect.READ, "List recent runs"),
+    Tool(scheduling.get_run_detail, Effect.READ, "Read a run"),
+    Tool(scheduling.list_run_events, Effect.READ, "List a run's events"),
+    Tool(scheduling.get_event, Effect.READ, "Read an event"),
+    Tool(scheduling.list_failures, Effect.READ, "List recent failures"),
+    Tool(scheduling.error_breakdown, Effect.READ, "Break down errors"),
+    Tool(scheduling.trigger_run, Effect.LAUNCH, "Trigger a run"),
+    Tool(scheduling.retry_run, Effect.LAUNCH, "Retry a run"),
+    Tool(scheduling.cancel_run, Effect.CANCEL, "Cancel a run"),
+    Tool(scheduling.list_backfills, Effect.READ, "List backfills"),
+    Tool(scheduling.backfill_timeline, Effect.READ, "Read a backfill's timeline"),
+    Tool(scheduling.trigger_backfill, Effect.LAUNCH, "Trigger a backfill"),
+    Tool(scheduling.cancel_backfill, Effect.CANCEL, "Cancel a backfill"),
     # Analytics
-    Tool(analytics.pipeline_overview, Effect.READ),
-    Tool(analytics.job_health, Effect.READ),
-    Tool(analytics.run_stats, Effect.READ),
-    Tool(analytics.asset_coverage, Effect.READ),
+    Tool(analytics.pipeline_overview, Effect.READ, "Read the pipeline overview"),
+    Tool(analytics.job_health, Effect.READ, "Check job health"),
+    Tool(analytics.run_stats, Effect.READ, "Compute run statistics"),
+    Tool(analytics.asset_coverage, Effect.READ, "Check asset coverage"),
 )
 """Every tool the surfaces expose."""
