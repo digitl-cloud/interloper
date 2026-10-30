@@ -211,6 +211,25 @@ class TestCreateApp:
         assert state.settings is None
         assert state.admin_config is None
         assert state.authorization_server is None
+        assert state.google_login is None
+
+    def test_a_configured_google_login_keeps_its_session(self, fake_settings: SimpleNamespace) -> None:
+        app = create_app(settings=fake_settings)
+
+        assert app.state.interloper.google_login is not None
+        assert any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
+
+    def test_without_an_encryption_key_google_login_is_unavailable(
+        self, fake_settings: SimpleNamespace, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        fake_settings.secrets.encryption_key = ""
+
+        with caplog.at_level("WARNING", logger="interloper_api.app"):
+            app = create_app(settings=fake_settings)
+
+        assert "Google login unavailable: INTERLOPER_ENCRYPTION_KEY is not configured" in caplog.text
+        assert not any("SessionMiddleware" in getattr(m.cls, "__name__", "") for m in app.user_middleware)
+        assert TestClient(app).get("/api/auth/google", follow_redirects=False).status_code == 503
 
     def test_a_supplied_store_and_catalog_are_installed(self, fake_settings: SimpleNamespace) -> None:
         import interloper as il

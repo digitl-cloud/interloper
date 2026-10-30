@@ -99,8 +99,8 @@ class SecretsSettings(BaseSettings):
     encryption_key: str = Field(
         default="",
         description=(
-            "Fernet key encrypting stored resource payloads and run tokens; required by the platform to persist "
-            "resources and to dispatch runs."
+            "Fernet key encrypting stored resource payloads and run tokens, and signing the Google login's state; "
+            "required by the platform to persist resources, to dispatch runs and for Google login."
         ),
     )
 

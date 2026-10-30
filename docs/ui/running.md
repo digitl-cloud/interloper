@@ -119,7 +119,8 @@ catalog:
 
 The file is not interpolated: a field left out of a block is read from its `INTERLOPER_<SECTION>_<FIELD>`
 variable, which is where secrets go. `INTERLOPER_ENCRYPTION_KEY` is required: resource configs are
-encrypted at rest. Login is Google OAuth. `allowed_domains` restricts who may sign up; `super_admin_emails`
+encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
+derived from it, so every replica can finish a login another one started. Login is Google OAuth. `allowed_domains` restricts who may sign up; `super_admin_emails`
 bootstraps platform administrators, promoted by `interloper db init` and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 `INTERLOPER_<PROVIDER>_CLIENT_ID` and `_CLIENT_SECRET`; a provider without them has no sign-in

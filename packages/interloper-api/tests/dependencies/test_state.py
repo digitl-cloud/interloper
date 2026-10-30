@@ -14,6 +14,7 @@ from interloper_api.dependencies import (
     get_agent,
     get_authorization_server,
     get_catalog,
+    get_google_login,
     get_settings,
     get_store,
 )
@@ -51,6 +52,10 @@ def _client(state: State) -> TestClient:
     def authorization_server(server: Annotated[Any, Depends(get_authorization_server)]) -> dict[str, Any]:
         return {"name": server.name}
 
+    @app.get("/google-login")
+    def google_login(login: Annotated[Any, Depends(get_google_login)]) -> dict[str, Any]:
+        return {"name": login.name}
+
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -71,6 +76,11 @@ class TestInstalledSlots:
         response = _client(_state(authorization_server=True)).get("/authorization-server")
 
         assert response.json() == {"name": "authorization_server"}
+
+    def test_the_google_login_reads_back(self) -> None:
+        response = _client(_state(google_login=True)).get("/google-login")
+
+        assert response.json() == {"name": "google_login"}
 
     def test_two_apps_hold_their_own_state(self) -> None:
         first = _client(_state(store=True))
@@ -94,6 +104,12 @@ class TestMissingSlots:
 
         assert response.status_code == 503
         assert response.json()["detail"] == "OAuth authorization server not configured"
+
+    def test_a_missing_google_login_is_a_503(self) -> None:
+        response = _client(State()).get("/google-login")
+
+        assert response.status_code == 503
+        assert response.json()["detail"] == "Google login not configured"
 
     def test_features_default_to_none_enabled(self) -> None:
         assert State().features == {}

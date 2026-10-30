@@ -10,6 +10,7 @@ const loading = ref(false)
 const errorMessages: Record<string, string> = {
     signup_not_allowed: 'This Google account is not allowed to sign up. Ask an administrator for an invitation.',
     login_expired: 'The sign-in did not complete in time. Please try again.',
+    login_failed: 'Google sign-in did not complete. Please try again.',
 }
 const error = ref(errorMessages[route.query.error as string] ?? '')
 

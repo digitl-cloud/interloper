@@ -2171,6 +2171,8 @@ dependencies = [
     { name = "httpx2" },
     { name = "interloper-core" },
     { name = "interloper-db" },
+    { name = "itsdangerous" },
+    { name = "joserfc" },
     { name = "psycopg2-binary" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "wsproto" },
@@ -2196,6 +2198,8 @@ requires-dist = [
     { name = "interloper-core", editable = "packages/interloper-core" },
     { name = "interloper-core", extras = ["otel"], marker = "extra == 'otel'", editable = "packages/interloper-core" },
     { name = "interloper-db", editable = "packages/interloper-db" },
+    { name = "itsdangerous", specifier = ">=2.2" },
+    { name = "joserfc", specifier = ">=1.7" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.65b0" },
     { name = "psycopg2-binary", specifier = ">=2.9.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.41.0" },
@@ -2743,6 +2747,15 @@ dev = [
     { name = "ruff", specifier = ">=0.9.4" },
     { name = "ty", specifier = ">=0.0.46" },
     { name = "zensical", specifier = ">=0.0.24" },
+]
+
+[[package]]
+name = "itsdangerous"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
 ]
 
 [[package]]
