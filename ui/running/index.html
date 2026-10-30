@@ -2589,7 +2589,8 @@ the Nuxt dev server with hot reload instead of the built assets.</p>
 </span></code></pre></div>
 <p>The file is not interpolated: a field left out of a block is read from its <code>INTERLOPER_&lt;SECTION&gt;_&lt;FIELD&gt;</code>
 variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is required: resource configs are
-encrypted at rest. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
+encrypted at rest, and the Google login signs the cookie it keeps between Google's two legs with a key
+derived from it, so every replica can finish a login another one started. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
 bootstraps platform administrators, promoted by <code>interloper db init</code> and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
 <code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code> and <code>_CLIENT_SECRET</code>; a provider without them has no sign-in
