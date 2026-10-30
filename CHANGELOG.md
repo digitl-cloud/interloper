@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v0.123.0 (2026-10-30)
+
+### Features
+
+- **mcp**: Every tool carries a human-readable title
+  ([`55f4c3d`](https://github.com/digitl-cloud/interloper/commit/55f4c3de50eb2acfb3def6238b442cadd96d3686))
+
+- **mcp**: The server introduces itself with its title, website and icon
+  ([`e3b1b53`](https://github.com/digitl-cloud/interloper/commit/e3b1b53b76aea004b07420c360c541efa68c71f9))
+
+### Refactoring
+
+- A platform run executes by its id
+  ([`cd23c04`](https://github.com/digitl-cloud/interloper/commit/cd23c043c6ce88253b53fb7efab5891fffebe2ee))
+
+### Testing
+
+- Cover a lost or broken in-process run, a target without a workload, and a lost container
+  ([`9eafa96`](https://github.com/digitl-cloud/interloper/commit/9eafa9606bdcb16cfa1ad990ed3ad26afc2469bd))
+
+### Breaking Changes
+
+- A Run subclass implements `execute(operation)` instead of `attempt(operation)`;
+  `OperationResult.from_attempt` is `from_execution` and the retry loop formerly named
+  `from_execution` is `from_retries`. `Launcher.launch` takes `(run, token)` and `Launcher.command`
+  only the run, which it executes with `interloper launch <run-id>`. `interloper run` loses
+  `--run-id` and `--metadata`; INTERLOPER_RUN_OPERATION and `EventClient` are removed. Run pods of
+  this version load their spec from the API, so the API rolls before the scheduler.
+
+
 ## v0.122.1 (2026-10-30)
 
 ### Refactoring
