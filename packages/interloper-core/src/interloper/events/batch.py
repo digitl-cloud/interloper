@@ -5,11 +5,16 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from interloper.errors import EventError
+import httpx2
+
+from interloper.errors import DeliveryError, EventError
 from interloper.events.event import Event
 
 if TYPE_CHECKING:
     from interloper.operation.base import Effect
+
+# A refused token or batch: delivering it again cannot help.
+_FINAL_STATUSES = frozenset({401, 422})
 
 
 @dataclass(frozen=True)
@@ -17,9 +22,9 @@ class EventBatch:
     """A run's events in emission order and, with its own ending, its operations' effects.
 
     The one shape every delivery takes, wherever it travels: the store's
-    ingest folds it, the API's ingest route reads it, and the client that
-    reports a pod's run posts it. Effects never ride inside events, since they
-    may carry rotated credentials.
+    ingest folds it, the API's ingest route reads it, and a launched run's
+    process posts it there (`post`). Effects never ride inside events, since
+    they may carry rotated credentials.
     """
 
     events: list[Event] = field(default_factory=list)
@@ -60,3 +65,30 @@ class EventBatch:
         except (KeyError, TypeError, AttributeError) as error:
             raise EventError(f"Malformed event batch: {error}") from error
         return cls(events=events, effects=effects or None)
+
+    def post(self, client: httpx2.Client, run_id: str) -> bool:
+        """Deliver the batch to the API's ``POST /api/runs/{run_id}/events``, as the run's token.
+
+        A refused token or batch (401, 422) is final. Anything else is for the
+        recorder to retry, a 404 included: the only way a run's process meets
+        one is an API replica that has not rolled to the version serving the
+        route yet.
+
+        Args:
+            client: A client of the API, authenticated with the run's token.
+            run_id: The run the batch belongs to.
+
+        Returns:
+            Whether the run was live when the batch arrived.
+
+        Raises:
+            DeliveryError: If the platform did not take the batch; its
+                ``retryable`` says whether trying again can help.
+        """
+        try:
+            response = client.post(f"/api/runs/{run_id}/events", json=self.to_dict())
+        except httpx2.HTTPError as error:
+            raise DeliveryError(f"{type(error).__name__}: {error}") from error
+        if response.is_error:
+            raise DeliveryError(f"HTTP {response.status_code}", retryable=response.status_code not in _FINAL_STATUSES)
+        return bool(response.json()["live"])

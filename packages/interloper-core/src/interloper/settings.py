@@ -89,9 +89,10 @@ class SecretsSettings(BaseSettings):
     """Secrets used to protect sensitive data at rest.
 
     Encryption is the default, so a key is required to persist resources:
-    with none set, writes fail closed rather than storing plaintext. The
-    Helm chart and the runner launchers forward ``INTERLOPER_ENCRYPTION_KEY``
-    into spawned containers.
+    with none set, writes fail closed rather than storing plaintext. Only
+    the processes holding the store read it (the API, the scheduler, the MCP
+    server, ``interloper db``); a run's process never does, since what it
+    loads arrives decrypted and its token is opaque to it.
     """
 
     model_config = SettingsConfigDict(env_prefix=PREFIX)
@@ -285,6 +286,18 @@ class ReaperSettings(BaseSettings):
     )
 
 
+class RunSettings(BaseSettings):
+    """The platform run this process executes, as the launcher that started it sets it; never set by hand."""
+
+    model_config = SettingsConfigDict(env_prefix=f"{PREFIX}RUN_")
+
+    token: str = Field(
+        default="",
+        description="The run's token, with which `interloper launch` loads the run from the API and reports "
+        "its events back.",
+    )
+
+
 class LauncherSettings(BaseSettings):
     """Launcher settings: the launcher type and its own configuration."""
 
@@ -412,6 +425,7 @@ class AppSettings(BaseSettings):
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     reaper: ReaperSettings = Field(default_factory=ReaperSettings)
     launcher: LauncherSettings = Field(default_factory=LauncherSettings)
+    run: RunSettings = Field(default_factory=RunSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     mcp: McpSettings = Field(default_factory=McpSettings)

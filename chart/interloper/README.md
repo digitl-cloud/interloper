@@ -262,12 +262,13 @@ which points at `replicaCount` or `maxUnavailable` instead.
 ### Run pods
 
 A run's pod holds no database credentials and no encryption key. The
-scheduler hydrates the run's target before launching it and hands the pod
-its DAG spec, connections resolved, in a Secret owned by the run's Job, plus
-a token minted for the run. The pod reports its events to the API's
-in-cluster service (`server.internal_url`, auto-filled) with that token, and
-the platform folds the run's state from them. The connector credentials a
-run's connections need arrive resolved in that spec, so run pods get none of
+scheduler checks the run can be built, then starts a Job running
+`interloper launch <run-id>` with a token minted for the run, in a Secret
+the Job owns. With that token, the pod loads what the run executes from the
+API's in-cluster service (`server.internal_url`, auto-filled), its
+connections resolved, and reports its events back there; the platform folds
+the run's state from them. The connector credentials a run's connections
+need arrive resolved in what it loads, so run pods get none of
 the root-level `extraEnv` / `extraEnvFrom`; `launcher.config.env_from` names
 Secrets mounted into every run pod, only for what your own assets read from
 their environment.
@@ -276,7 +277,7 @@ their environment.
 
 `rbac.create: true` (the default) creates a ServiceAccount + Role +
 RoleBinding that let the scheduler manage Jobs, create the Secrets that
-carry their specs, and read pod logs in the release namespace.  The launcher config auto-wires the
+carry their tokens, and read pod logs in the release namespace.  The launcher config auto-wires the
 ServiceAccount name.  Set `rbac.create: false` if you manage RBAC
 externally — provide the ServiceAccount name via `serviceAccount.name`.
 

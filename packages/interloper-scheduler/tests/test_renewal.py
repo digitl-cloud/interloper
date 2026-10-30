@@ -16,7 +16,6 @@ from uuid import UUID, uuid4
 import httpx2
 import interloper as il
 import pytest
-from interloper.dag import DAGSpec
 from interloper.events import EventRecorder
 from interloper_db import Store
 from interloper_db import engine as engine_module
@@ -171,11 +170,13 @@ class _RightHereLauncher(Launcher):
         super().__init__()
         self._store = store
 
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+    def launch(self, run: Run, token: str) -> None:
+        spec = self._store.runs.spec(run.id)
+        assert spec is not None
         with EventRecorder(partial(self._store.runs.ingest, run.id), run_id=str(run.id)) as recorder:
             runner = il.AsyncRunner(on_event=recorder)
-            dag = il.DAG.from_spec(spec, catalog=_CATALOG)
-            recorder.finish(asyncio.run(runner.run(dag, None, run.event_metadata(run.target))))
+            dag = il.DAG.from_spec(spec.dag, catalog=_CATALOG)
+            recorder.finish(asyncio.run(runner.run(dag, spec.window, spec.metadata)))
 
 
 def _execute(store: Store, conn_id: UUID) -> UUID:

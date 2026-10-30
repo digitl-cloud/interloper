@@ -1,60 +1,46 @@
-"""``interloper run`` — execute a DAG directly using the configured runner.
+"""``interloper run``: execute a DAG with the configured runner, without persistence.
 
-Framework-level execution with no database or persistence layer.  Used
-both for direct user invocation and as the entry point that
-`interloper_docker.DockerRunner` calls inside spawned containers.
+What to execute
+---------------
 
-Input formats
--------------
+* import paths (positional, the default): dotted paths to Source or Asset
+  classes, built into a DAG by `DAG.from_paths`.
+* ``--file/-f <spec.yaml>``: a component spec document (`Spec`,
+  ``{key|path, init}``) for any **runnable** component: the run is literally
+  "reconstruct the component and run its DAG". A Job spec is the composite
+  form: targets with workload-level default destinations and resources.
+* ``--format inline <json>``: a serialized `DAGSpec` as JSON, or ``@<path>``
+  to read it from a file.
 
-* ``--file/-f <spec.yaml>`` — a component spec document
-  (`Spec`, ``{key|path, init}``)
-  for any **runnable** component: the run is literally "reconstruct the
-  component and run its DAG".  A Job spec is the composite form — targets
-  with workload-level default destinations and resources.
-* ``--format inline <json>`` — a serialized `DAGSpec` as JSON, or
-  ``@<path>`` to read it from a file. This is how a launcher hands a run's
-  pod its DAG, and a container runner a child its mini-DAG.
-* ``--format paths <path>...`` — one or more dotted import paths that
-  resolve to Source or Asset classes, built into a DAG by `DAG.from_paths`.
+``--operation-id <id>`` executes one operation of that DAG for a host run
+whose runner executes each operation in its own process (the Docker and
+Kubernetes runners, outside the platform): its upstreams are read, not
+executed; it executes once, since the host owns its retries; and what it came
+to is left in the termination message the host reads back. A platform run is
+executed by its id instead, with ``interloper launch``.
 
-The runner is the one configured in ``AppSettings.runner`` (top-level
-``runner`` key in ``interloper.yaml`` or ``INTERLOPER_RUNNER_*``
-environment variables); the partition comes from the CLI date flags.
+The window comes from the date flags. The runner is the one configured in
+``AppSettings.runner`` (top-level ``runner`` key in ``interloper.yaml`` or
+``INTERLOPER_RUNNER_*`` environment variables).
 
 ``--dry-run`` validates and prints the resolved plan (operations grouped by
-execution generation, runner, partition) without materializing anything —
+execution generation, runner, partition) without materializing anything,
 useful for checking a curated set of workload files.
 
 During execution, run/operation lifecycle events and ``context.logger``
 messages flow through the standard logging stack (via
-`ConsoleEventHandler`), sharing one
-format and stream with regular log lines.  Verbosity is the logging
-level: ``-v`` shows DEBUG (execution / destination-I/O events), ``-q``
-shows only warnings and errors.  ``--events json`` streams raw event
-JSON lines to stdout instead, unaffected by the level.
-
-A platform run's pod runs this command with ``INTERLOPER_RUN_TOKEN`` set: the
-run's events are then reported to the platform through an `EventRecorder`, and
-``--metadata`` carries the run's ids and names into every event. A child a
-container runner starts for one attempt at an operation of its host's run
-carries ``INTERLOPER_RUN_OPERATION``: it makes that one attempt, reports only
-what happens inside the operation, and leaves a failed attempt's verdict in
-its termination message for the host, which owns the operation's lifecycle.
+`ConsoleEventHandler`), sharing one format and stream with regular log lines.
+Verbosity is the logging level: ``-v`` shows DEBUG (execution / destination-I/O
+events), ``-q`` shows only warnings and errors. ``--events json`` streams raw
+event JSON lines to stdout instead, unaffected by the level.
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
-import json
 import logging
-import os
-import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from interloper.events import EventClient
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -115,14 +101,10 @@ def register(
         help="Debug verbosity: include execution and destination I/O events",
     )
     run_parser.add_argument(
-        "--run-id",
+        "--operation-id",
         default=None,
-        help="Optional run identifier, forwarded as metadata to the runner",
-    )
-    run_parser.add_argument(
-        "--metadata",
-        default=None,
-        help="Run metadata as a JSON object, spread into every event (ids and names, never secrets)",
+        help="Execute only this operation of the DAG, once, its upstreams read rather than executed, leaving what "
+        "it came to for the host run that started this process",
     )
     run_parser.add_argument(
         "--date",
@@ -148,111 +130,41 @@ def register(
 
 
 def _cmd_run(args: argparse.Namespace) -> None:
-    """Execute a DAG from either an inline spec or import paths.
+    """Execute a DAG from import paths, a spec file or an inline spec.
 
     Args:
-        args: Parsed CLI arguments, carrying the DAG input (``file``, ``format``,
-            ``target``), the partition flags, and the output controls
-            (``dry_run``, ``events``, ``quiet``, ``verbose``, ``run_id``).
+        args: Parsed CLI arguments, carrying what to execute (``target``,
+            ``file``, ``format``, ``operation_id``), the partition flags, and
+            the output controls (``dry_run``, ``events``, ``quiet``, ``verbose``).
 
     Raises:
-        SystemExit: On invalid input, import failures, a recorded run that
-            was lost, or non-zero execution status.
+        SystemExit: On invalid input, import failures, or non-zero execution status.
     """
-    from interloper.cli.console import configure_console_logging
-    from interloper.errors import PartitionError, RunLostError, format_exception
-    from interloper.events import ConsoleEventHandler, Event, EventRecorder, EventType
-    from interloper.operation import OperationResult
-    from interloper.partitioning import PartitionWindow, TimePartition
-    from interloper.runner import ExecutionStatus, Runner
+    from interloper.cli.commands.execution import configure_logging, execute, for_operation, leave_failure
+    from interloper.errors import format_exception
+    from interloper.events import ConsoleEventHandler
+    from interloper.runner import Runner
     from interloper.settings import AppSettings
 
-    # One logging setup for everything the command prints: framework log
-    # lines and run events share the same format, stream, and level.
-    settings = AppSettings.get()
-    configure_console_logging(
-        logging.WARNING if args.quiet else logging.DEBUG if args.verbose else logging.INFO,
-        "%(asctime)s.%(msecs)03d %(levelname)-7s %(message)s",
-        "%H:%M:%S",
-        log_format=settings.log.format,
-    )
-    token = os.environ.get("INTERLOPER_RUN_TOKEN")
-    attempted = os.environ.get("INTERLOPER_RUN_OPERATION") or None
-    if token is not None and not args.run_id:
-        raise SystemExit("Error: a recorded run needs --run-id.")
-
-    # A failure to even start is the run's own failure, or a child's attempt's: neither process holds a store.
-    recorder = None
-    if token is not None:
-        recorder = EventRecorder(
-            EventClient(settings.server.internal_url, token, args.run_id).ingest,
-            run_id=args.run_id,
-            heartbeat_interval=settings.reaper.heartbeat_interval,
-            heartbeat_timeout=settings.reaper.heartbeat_timeout,
-            on_lost=_exit_lost,
-            component_id=attempted,
-        )
-
+    configure_logging(quiet=args.quiet, verbose=args.verbose)
     try:
         dag = _build_dag(args)
-        if recorder is None:
-            window = _resolve_window(args, dag)
-        else:
-            # A platform run's window is its partition key, read as the platform reads it.
-            window = PartitionWindow.of(TimePartition.from_key(args.date)) if args.date else None
-        runner = Runner.from_settings(settings.runner)
-        if attempted is not None:
-            dag.operation_map[attempted].retry = None
-        metadata: dict[str, Any] = json.loads(args.metadata) if args.metadata else {}
+        window = _resolve_window(args, dag)
+        if args.operation_id is not None:
+            dag, window = for_operation(dag, window, args.operation_id)
+        runner = Runner.from_settings(AppSettings.get().runner)
     except (Exception, SystemExit) as error:
-        reason = str(error) if isinstance(error, SystemExit) else format_exception(error)
-        if attempted is not None:
-            OperationResult(error=reason).write_termination_message()
-        elif recorder is not None:
-            ending = {"run_id": args.run_id, "error": reason, "message": f"Run failed: {reason}"}
-            with recorder:
-                recorder(Event(type=EventType.RUN_FAILED, metadata=ending))
+        leave_failure(args.operation_id, str(error) if isinstance(error, SystemExit) else format_exception(error))
         raise
-    if args.run_id:
-        metadata["run_id"] = args.run_id
 
     if args.dry_run:
         _print_plan(dag, window, type(runner).__name__)
         return
 
-    enabled = [operation for operation in dag.operations if operation.enabled]
-    logger.info(
-        "Running DAG with %d enabled operation(s) (%d total) using %s",
-        len(enabled),
-        len(dag.operations),
-        type(runner).__name__,
-    )
-
-    try:
-        if recorder is None:
-            # Events become records on the ``interloper.run`` logger, so the console logging set up above
-            # governs their visibility and format.
-            runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
-            result = asyncio.run(runner.run(dag, window, metadata=metadata or None))
-        else:
-            with recorder:
-                recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
-                result = asyncio.run(recorded.run(dag, window, metadata))
-                recorder.finish(result)
-    except Exception as error:
-        if attempted is not None:
-            OperationResult(error=format_exception(error)).write_termination_message()
-        if isinstance(error, (PartitionError, RunLostError)):
-            raise SystemExit(f"Error: {error}") from error
-        raise
-
-    if attempted is not None and (failed := result.executions[attempted].result) and not failed.succeeded:
-        failed.write_termination_message()
-
-    logger.info("Run completed: %s", result.status.name)
-
-    if result.status != ExecutionStatus.COMPLETED:
-        raise SystemExit(1)
+    # Events become records on the ``interloper.run`` logger, so the console logging set up above
+    # governs their visibility and format.
+    runner.on_event = ConsoleEventHandler(json_lines=args.events == "json")
+    execute(runner, dag, window, {}, operation_id=args.operation_id)
 
 
 # -- Internals -----------------------------------------------------------------
@@ -299,18 +211,6 @@ def _build_dag(args: argparse.Namespace) -> DAG:
         return DAG.from_paths(args.target)
     except DAGError as error:
         raise SystemExit(f"Error: {error}") from error
-
-
-def _exit_lost() -> None:
-    """Exit this run's process at once: its run was ended elsewhere, or can no longer report.
-
-    The process exists for this one run, and an operation blocked in sync
-    code cannot be interrupted any other way. The recorder has delivered
-    what it held before calling this.
-    """
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os._exit(1)
 
 
 def _print_plan(dag: DAG, window: PartitionWindow | None, runner_name: str) -> None:

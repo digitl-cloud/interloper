@@ -67,7 +67,9 @@ class TestMain:
         """
         recorded: dict[str, list[bool]] = {"init": [], "shutdown": []}
         monkeypatch.setattr(cli_main, "_load_dotenv", lambda: None)
-        monkeypatch.setattr("interloper.telemetry.init_telemetry", lambda settings: recorded["init"].append(True))
+        monkeypatch.setattr(
+            "interloper.telemetry.init_telemetry", lambda settings, operation: recorded["init"].append(True)
+        )
         monkeypatch.setattr("interloper.telemetry.shutdown_telemetry", lambda: recorded["shutdown"].append(True))
         return recorded
 
@@ -127,6 +129,19 @@ class TestMain:
         assert isolated_process_state["shutdown"] == [True]
         assert AppSettings._active is None
 
+    def test_a_process_executing_one_operation_tells_telemetry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[bool] = []
+        monkeypatch.setattr(cli_main, "_load_dotenv", lambda: None)
+        monkeypatch.setattr("interloper.telemetry.init_telemetry", lambda settings, operation: seen.append(operation))
+        monkeypatch.setattr("interloper.telemetry.shutdown_telemetry", lambda: None)
+        monkeypatch.setattr("interloper.cli.commands.run._cmd_run", lambda args: None)
+
+        for argv, operation in ((["run", "pkg.Asset"], False), (["run", "pkg.Asset", "--operation-id", "op-1"], True)):
+            monkeypatch.setattr(sys, "argv", ["interloper", *argv])
+            cli_main.main()
+
+        assert seen == [False, True]
+
 
 class TestBuildParser:
     """The parser the CLI runs on, and the documentation renders from."""
@@ -136,8 +151,7 @@ class TestBuildParser:
         subparsers = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
 
         assert list(subparsers.choices) == sorted(subparsers.choices)
-        assert {"app", "db", "run", "scheduler"} <= set(subparsers.choices)
-        assert "launch" not in subparsers.choices
+        assert {"app", "db", "launch", "run", "scheduler"} <= set(subparsers.choices)
 
     def test_naming_a_command_builds_that_command_alone(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def unrelated(_subparsers: Any) -> None:

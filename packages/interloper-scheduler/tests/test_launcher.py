@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import threading
 from types import SimpleNamespace
 from typing import Any
@@ -10,10 +9,10 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.dag import DAGSpec
 from interloper.errors import ConfigError
+from interloper.runner.spec import RunSpec
 from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
-from interloper_db import RunStatus
+from interloper_db import NotFoundError, RunStatus
 from interloper_db.models import Run
 
 from interloper_scheduler.launcher import LAUNCHERS, InProcessLauncher, Launcher
@@ -69,33 +68,69 @@ def _dispatched_run() -> Run:
     return Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED)
 
 
-def _spec() -> DAGSpec:
-    return il.DAG(_Solo(id=str(uuid4()), destinations=[il.MemoryDestination()])).to_spec()
+def _spec(run_id: UUID) -> RunSpec:
+    dag = il.DAG(_Solo(id=str(uuid4()), destinations=[il.MemoryDestination()])).to_spec()
+    return RunSpec(dag=dag, metadata={"run_id": str(run_id), "org_id": "org-1"})
+
+
+class _Store:
+    """The store a launched run loads its spec from and reports through, recording every batch."""
+
+    def __init__(self, spec: RunSpec | Exception | None) -> None:
+        """Serve *spec*, or raise it.
+
+        Args:
+            spec: What ``runs.spec`` returns, or raises.
+        """
+        self.batches: list[tuple[UUID, list[il.Event]]] = []
+        self.done = threading.Event()
+        self.runs = SimpleNamespace(spec=self._spec, ingest=self._ingest)
+        self._served = spec
+
+    def _spec(self, run_id: UUID) -> RunSpec | None:
+        if isinstance(self._served, Exception):
+            raise self._served
+        return self._served
+
+    def _ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
+        self.batches.append((run_id, list(batch.events)))
+        if any(event.type in (il.EventType.RUN_COMPLETED, il.EventType.RUN_FAILED) for event in batch.events):
+            self.done.set()
+        return True
+
+    @property
+    def events(self) -> list[il.Event]:
+        """Every event delivered, in order."""
+        return [event for _, batch in self.batches for event in batch]
 
 
 class TestInProcessLauncher:
-    """A run launched in this process reports straight through the store's ingest."""
+    """A run launched in this process loads its spec and reports straight through the store."""
 
-    def test_a_launched_run_reports_every_event_through_ingest(self) -> None:
-        delivered: list[tuple[UUID, list[il.Event]]] = []
-        done = threading.Event()
-
-        def ingest(run_id: UUID, batch: il.EventBatch) -> bool:
-            delivered.append((run_id, list(batch.events)))
-            if any(event.type is il.EventType.RUN_COMPLETED for event in batch.events):
-                done.set()
-            return True
-
-        store = SimpleNamespace(runs=SimpleNamespace(ingest=ingest))
-        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+    def test_a_launched_run_loads_its_spec_and_reports_every_event_through_ingest(self) -> None:
         run = _dispatched_run()
+        store = _Store(_spec(run.id))
+        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
 
-        launcher.launch(run, _spec(), "ilr_unused")
+        launcher.launch(run, "ilr_unused")
 
-        assert done.wait(5)
-        events = [event for _, batch in delivered for event in batch]
-        assert {run_id for run_id, _ in delivered} == {run.id}
-        assert events[0].type is il.EventType.RUN_STARTED
+        assert store.done.wait(5)
+        assert {run_id for run_id, _ in store.batches} == {run.id}
+        assert store.events[0].type is il.EventType.RUN_STARTED
+        assert store.events[0].metadata["org_id"] == "org-1"
+
+    @pytest.mark.parametrize("served", [NotFoundError("Run targets a component that was deleted"), None])
+    def test_a_run_that_cannot_be_built_fails_with_the_reason(self, served: Exception | None) -> None:
+        run = _dispatched_run()
+        store = _Store(served)
+        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+
+        launcher.launch(run, "ilr_unused")
+
+        assert store.done.wait(5)
+        (failed,) = store.events
+        assert failed.type is il.EventType.RUN_FAILED
+        assert ("deleted" if served else "selects no operations") in failed.metadata["error"]
 
     def test_the_launch_thread_carries_the_launch_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from interloper.events import EventRecorder
@@ -110,10 +145,11 @@ class TestInProcessLauncher:
             done.set()
 
         monkeypatch.setattr(EventRecorder, "finish", finish)
-        launcher = InProcessLauncher(store=SimpleNamespace(runs=SimpleNamespace(ingest=lambda *args: True)))  # ty: ignore[invalid-argument-type]
+        run = _dispatched_run()
+        launcher = InProcessLauncher(store=_Store(_spec(run.id)))  # ty: ignore[invalid-argument-type]
 
         with tracer().start_as_current_span("interloper.launcher.launch") as span:
-            launcher.launch(_dispatched_run(), _spec(), "ilr_unused")
+            launcher.launch(run, "ilr_unused")
 
         assert done.wait(5)
         assert captured["trace_id"] == span.get_span_context().trace_id
@@ -122,19 +158,12 @@ class TestInProcessLauncher:
 class TestCommand:
     """The argv a container launcher starts a run's pod with."""
 
-    def test_it_runs_the_spec_file_with_the_runs_ids_and_partition(self) -> None:
+    def test_the_pod_executes_the_run_by_its_id(self) -> None:
         run = _dispatched_run()
         run.partition_key = "2026-10-26"
 
-        argv = Launcher.command(run, "@/interloper/run/spec.json")
-
-        assert argv[:5] == ["interloper", "run", "--format", "inline", "@/interloper/run/spec.json"]
-        assert f"--run-id={run.id}" in argv
-        assert json.loads(argv[argv.index("--metadata") + 1])["run_id"] == str(run.id)
-        assert argv[-2:] == ["--date", "2026-10-26"]
-
-    def test_an_unpartitioned_run_has_no_date(self) -> None:
-        assert "--date" not in Launcher.command(_dispatched_run(), "@/spec.json")
+        # The DAG, the partition and the metadata are the run's own, which the pod loads.
+        assert Launcher.command(run) == ["interloper", "launch", str(run.id)]
 
 
 class TestDiagnoseDefault:
@@ -145,7 +174,7 @@ class TestDiagnoseDefault:
         class MinimalLauncher(Launcher):
             """Launcher implementing only the required half."""
 
-            def launch(self, run, spec, token):  # pragma: no cover - unused
+            def launch(self, run, token):  # pragma: no cover - unused
                 raise NotImplementedError
 
         assert MinimalLauncher().diagnose(uuid4()) is None

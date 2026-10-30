@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.errors import ConfigError
+from interloper.errors import ConfigError, PartitionError
 from interloper.runner import RunState
 from interloper_assets.demo.basic.source import DemoSource
 from pydantic import ValidationError
@@ -1153,6 +1153,51 @@ def _drain(store: Store) -> list[UUID]:
     while (run := store.runs.claim_next()) is not None:
         claimed.append(run.id)
     return claimed
+
+
+class TestSpec:
+    """What a run executes, built from its row whenever it is asked for."""
+
+    def test_it_is_the_targets_dag_with_the_runs_partition_and_event_metadata(self, store: Store) -> None:
+        source = store.components.create(_ORG_ID, kind="source", key="demo_source")
+        run = store.runs.create(_ORG_ID, component_id=source.id, partition_key="2026-10-25")
+
+        spec = store.runs.spec(run.id)
+
+        assert spec is not None
+        assert len(il.DAG.from_spec(spec.dag).operations) == 5
+        assert spec.partition_key == "2026-10-25"
+        assert (spec.metadata["run_id"], spec.metadata["org_id"]) == (str(run.id), str(_ORG_ID))
+
+    def test_a_failed_scope_retry_disables_what_already_succeeded(self, store: Store) -> None:
+        source = store.components.create(_ORG_ID, kind="source", key="demo_source")
+        first = store.runs.create(_ORG_ID, component_id=source.id, partition_key="2026-10-25")
+        with Session(store.engine) as session:
+            asset = session.exec(select(Component).where(Component.parent_id == source.id, Component.key == "a")).one()
+            asset_id = asset.id
+            session.add(Execution(run_id=first.id, component_id=asset_id, org_id=_ORG_ID, status="success", attempts=1))
+            session.commit()
+        store.runs.fail(first.id, "boom")
+        retry = store.runs.retry(first.id, scope="failed")
+
+        spec = store.runs.spec(retry.id)
+
+        assert spec is not None
+        disabled = {operation.id for operation in il.DAG.from_spec(spec.dag).operations if not operation.enabled}
+        assert disabled == {str(asset_id)}
+
+    def test_a_run_whose_target_was_deleted_cannot_be_built(self, store: Store) -> None:
+        run = store.runs.create(_ORG_ID)
+
+        with pytest.raises(NotFoundError, match="deleted"):
+            store.runs.spec(run.id)
+
+    def test_a_window_its_operations_refuse_cannot_be_built(self, store: Store) -> None:
+        source = store.components.create(_ORG_ID, kind="source", key="demo_source")
+        run = store.runs.create(_ORG_ID, component_id=source.id)
+
+        with pytest.raises(PartitionError, match="not valid for every operation"):
+            store.runs.spec(run.id)
 
 
 class TestRunToken:

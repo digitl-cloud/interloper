@@ -43,8 +43,7 @@ environment, not in `${VAR}` placeholders.
 
 | Variable | Read by | Meaning |
 |----------|---------|---------|
-| `INTERLOPER_RUN_OPERATION` | `interloper run`, telemetry setup | Set by a container runner on a child: the one operation of the host's run it reports events for; its metrics count destination I/O only. |
-| `INTERLOPER_RUN_TOKEN` | `interloper run` | Set by a launcher on a run's pod: the bearer the run's events are reported to the API with. |
+| `INTERLOPER_RUN_TOKEN` | `interloper launch` | `run.token`, set by a launcher on a run's pod and forwarded by a container runner to its children: the bearer the run is loaded from the API and its events are reported with. |
 | `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET` | OAuth connections and providers | In-house OAuth app credentials per provider. |
 | `INTERLOPER_<PROVIDER>_REDIRECT_URI` | the API's connect flow | Overrides a provider's redirect URI, `<server.external_url>/auth/<provider>` by default. |
 | `TRACEPARENT`, `TRACESTATE` | telemetry propagation | Parent trace context for a spawned process. |

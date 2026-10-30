@@ -14,7 +14,6 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.dag import DAGSpec
     from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
     from interloper_db.models import Run
 from interloper_scheduler.launcher import Launcher
@@ -25,9 +24,9 @@ logger = logging.getLogger(__name__)
 class DockerLauncher(Launcher):
     """Launches each run in its own Docker container.
 
-    The container runs ``interloper run`` on the run's DAG spec, passed as its
-    argument. The container holds no database credentials: it reports its
-    events to the API's ``internal_url`` with the run's token.
+    The container runs ``interloper launch``: it loads what the run
+    executes from the API's ``internal_url`` and reports its events there,
+    with the run's token. It holds no database credentials.
     """
 
     @classmethod
@@ -123,21 +122,20 @@ class DockerLauncher(Launcher):
         if runner_type == "docker" and "/var/run/docker.sock" not in self._volumes:
             self._volumes["/var/run/docker.sock"] = {"bind": "/var/run/docker.sock", "mode": "rw"}
 
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+    def launch(self, run: Run, token: str) -> None:
         """Create a container for the run and start it.
 
-        A container that cannot be started is removed: it holds the spec,
-        and the spec holds the run's connection secrets.
+        A container that cannot be started is removed: it holds the run's
+        token.
 
         Args:
             run: The dispatched run.
-            spec: The DAG it executes, the container's argument.
             token: The run's token, in the container's environment.
         """
         container = self._client.containers.create(
             image=self._image,
             name=f"interloper_run_{str(run.id)[:8]}",
-            command=self.command(run, spec.model_dump_json()),
+            command=self.command(run),
             environment=self._build_environment(token),
             volumes=self._volumes or None,
             user="root" if self._runner_type == "docker" else None,

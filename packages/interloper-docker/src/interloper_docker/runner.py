@@ -1,12 +1,14 @@
 """DockerRunner: each operation in its own container.
 
-Each attempt at an operation is one container, which runs the operation's
-mini-DAG (the operation and its upstream ancestors, the ancestors read-only)
-through ``interloper run --format inline``, so the operation resolves its
-upstreams from their destinations without recomputing them. The host owns the
-operation's lifecycle and its retries; the container reports only what
-happens inside the operation, and leaves why its attempt failed in its
-termination message.
+Each execution of an operation is one container executing that operation for
+the host: on the platform, ``interloper launch <run> --operation-id`` loads the
+host's run by its id; outside it, ``interloper run --operation-id`` is given the
+operation's mini-DAG (the operation and its upstreams, the upstreams
+read-only). Either way the operation
+resolves its upstreams from their destinations without recomputing them. The
+host owns the operation's lifecycle and its retries; the container reports only
+what happens inside the operation, and leaves why it failed in its termination
+message.
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ import contextvars
 import io
 import json
 import logging
-import os
 import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -29,6 +30,7 @@ from docker.models.containers import Container
 from interloper.errors import RunnerError, format_exception
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
+from interloper.settings import AppSettings
 from interloper.telemetry.propagation import child_process_env
 from pydantic import Field
 
@@ -40,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 class DockerRun(Run):
-    """One run of a DockerRunner: each attempt at an operation in its own container.
+    """One run of a DockerRunner: each execution of an operation in its own container.
 
     Following a container (start it, wait for its exit code) blocks, so each
     one is followed on a thread of the run's polling pool, one thread per
@@ -68,24 +70,24 @@ class DockerRun(Run):
         """Connect to the Docker daemon."""
         self.docker = docker.from_env()
 
-    async def attempt(self, operation: Operation) -> OperationResult:
-        """Make one attempt in its own container, followed on the polling pool.
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Execute the operation once in its own container, followed on the polling pool.
 
         Args:
-            operation: The operation to attempt.
+            operation: The operation to execute.
 
         Returns:
-            The attempt's result.
+            The execution's result.
         """
         # The child continues the run's trace, which only this context carries onto the pool thread.
         follow = partial(contextvars.copy_context().run, self.follow, operation)
         return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
 
     def follow(self, operation: Operation) -> OperationResult:
-        """Start the attempt's container and wait for it to exit.
+        """Start the execution's container and wait for it to exit.
 
         Args:
-            operation: The operation the container attempts.
+            operation: The operation the container executes.
 
         Returns:
             An empty result for exit code 0; otherwise the failure the
@@ -94,12 +96,12 @@ class DockerRun(Run):
         """
         try:
             container = self.launch(operation)
-        except Exception as error:  # noqa: BLE001 - a container that cannot start fails its attempt
+        except Exception as error:  # noqa: BLE001 - a container that cannot start fails its execution
             return OperationResult(error=format_exception(error))
         try:
             status_code = container.wait().get("StatusCode", 1)
             message = self.termination_message(container) if status_code else None
-        except Exception as error:  # noqa: BLE001 - losing the container fails its attempt, never the run
+        except Exception as error:  # noqa: BLE001 - losing the container fails its execution, never the run
             return OperationResult(error=format_exception(error))
         finally:
             if self.runner.auto_remove:
@@ -139,7 +141,7 @@ class DockerRun(Run):
             image=self.runner.image,
             name=self.name(operation),
             command=self.command(operation),
-            environment={**self.runner.environment(), "INTERLOPER_RUN_OPERATION": operation.id},
+            environment=self.runner.environment(),
             volumes=self.runner.mounts() or None,
             labels={"interloper.component_id": operation.id},
             remove=False,
@@ -160,17 +162,23 @@ class DockerRun(Run):
             logger.warning("Removing container %s failed", container.short_id, exc_info=True)
 
     def command(self, operation: Operation) -> list[str]:
-        """The command the container runs: its operation's mini-DAG through ``interloper run --format inline``.
+        """The command the container runs to execute one operation of the host's run.
+
+        A platform run's child runs ``interloper launch <run> --operation-id``
+        and loads the run by its id, as the host's token; any other run's
+        child runs ``interloper run --operation-id`` on the operation's
+        mini-DAG and window, given as its arguments.
 
         Args:
             operation: The operation the container executes.
 
         Returns:
-            The argv, with the operation's own window as ``--date`` or
-            ``--start-date``/``--end-date``.
+            The argv.
         """
+        if AppSettings.get().run.token:
+            return ["interloper", "launch", self.state.run_id, f"--operation-id={operation.id}"]
         spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
-        command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
+        command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
         window = operation.effective_window(self.state.window)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
@@ -179,16 +187,17 @@ class DockerRun(Run):
         return command
 
     def name(self, operation: Operation) -> str:
-        """A container name unique to this attempt at the operation in this run.
+        """A container name unique to this execution of the operation in this run.
 
         Args:
-            operation: The operation the container attempts.
+            operation: The operation the container executes.
 
         Returns:
-            ``interloper_run_<run>_<operation>_<attempt>``, each id cut to 8 characters.
+            ``interloper_run_<run>_<operation>_<n>``, each id cut to 8 characters, ``n`` counting the
+            operation's executions.
         """
-        attempt = self.state.executions[operation.id].attempt
-        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}_{attempt}"
+        number = self.state.executions[operation.id].attempt
+        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}_{number}"
 
     async def close(self) -> None:
         """Release the polling pool.
@@ -202,8 +211,8 @@ class DockerRun(Run):
 class DockerRunner(Runner):
     """Execute each operation in its own Docker container, ``max_containers`` at a time.
 
-    Each attempt's container runs the image's ``interloper`` CLI on the
-    operation's mini-DAG; the host records the attempt and retries it:
+    Each execution's container runs the image's ``interloper`` CLI on that
+    one operation; the host records the execution and retries it:
 
     ```py
     result = await DockerRunner(image="my-image", on_event=log_event).run(dag)
@@ -231,14 +240,15 @@ class DockerRunner(Runner):
 
         Returns:
             ``env_vars``, the trace context the child continues and, on the
-            platform, the host run's token and the API's URL its child reports
-            to; each container adds its own operation.
+            platform, the host run's token and the API's URL, with which the
+            child loads the run and reports to it.
         """
         environment = dict(self.env_vars)
         environment.update(child_process_env())
-        for name in ("INTERLOPER_RUN_TOKEN", "INTERLOPER_SERVER_INTERNAL_URL"):
-            if value := os.environ.get(name):
-                environment[name] = value
+        settings = AppSettings.get()
+        if settings.run.token:
+            environment["INTERLOPER_RUN_TOKEN"] = settings.run.token
+            environment["INTERLOPER_SERVER_INTERNAL_URL"] = settings.server.internal_url
         return environment
 
     def mounts(self) -> dict[str, dict[str, str]]:

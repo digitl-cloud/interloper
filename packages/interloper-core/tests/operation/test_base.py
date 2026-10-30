@@ -259,7 +259,7 @@ class _Curated(Operation):
 
 
 class _Attempts:
-    """Records what the attempt loop reports, in order."""
+    """Records what the retry loop reports, in order."""
 
     def __init__(self) -> None:
         self.reported: list[str] = []
@@ -272,9 +272,9 @@ class _Attempts:
 
 
 async def _execute(operation: Operation, attempts: _Attempts) -> OperationResult:
-    return await OperationResult.from_execution(
+    return await OperationResult.from_retries(
         operation,
-        partial(OperationResult.from_attempt, operation, OperationContext()),
+        partial(OperationResult.from_execution, operation, OperationContext()),
         on_retry=attempts.retry,
         on_restart=attempts.restart,
     )

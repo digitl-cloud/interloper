@@ -47,7 +47,7 @@ A `Run` implements:
 
 | Member | Role |
 |--------|------|
-| `attempt(operation) -> OperationResult` | Make one attempt at an operation where this kind of run executes it, and return what it came to. An attempt's own failure is a result with its `error` and `retryable` set, never an exception; an `attempt` that raises is a fault of the run itself and fails the whole run. |
+| `execute(operation) -> OperationResult` | Execute an operation once where this kind of run executes it, and return what it came to. An execution's own failure is a result with its `error` and `retryable` set, never an exception; an `execute` that raises is a fault of the run itself and fails the whole run. |
 | `open()` | Acquire what the run holds from outside the process (a client, a connection). Optional; the walk calls it after `RUN_STARTED`, so a failure fails the run with its events, like any other fault of the run. |
 | `close()` | Release what the run holds (pools, clients). Optional; a failure here is logged and never masks the run's result. |
 
@@ -63,12 +63,12 @@ starts every ready operation while fewer than `capacity` are in flight, records 
 lands, stops starting new ones after a failure under `fail_fast` (what is in flight always
 finishes), cancels whatever never started, and emits `RUN_COMPLETED` or `RUN_FAILED`.
 
-The walk retries every kind of run the same way: it makes attempts under the operation's
-`RetryPolicy` while each failed attempt is `retryable`, reporting each one. An in-process attempt
-is `OperationResult.from_attempt(operation, context)`: it executes the operation inside its span
+The walk retries every kind of run the same way: it executes the operation again under its
+`RetryPolicy` while each failed execution is `retryable`, reporting each one. An in-process
+execution is `OperationResult.from_execution(operation, context)`: it executes the operation inside its span
 and turns a failure into the operation's `failure(error)` result, completed with the traceback
 (when the operation's class allows one), the original exception, so `reraise` can raise it, and
-whether `operation.retryable(error)` thinks another attempt may help.
+whether `operation.retryable(error)` thinks another execution may help.
 
 ## RunState
 
@@ -82,14 +82,14 @@ state.done                         # every operation terminal
 state.context(operation)           # the OperationContext it executes with
 
 state.start(operation)             # RUNNING; OPERATION_STARTED
-state.retry(operation, error)      # OPERATION_RETRIED; the next attempt
+state.retry(operation, error)      # OPERATION_RETRIED; the next execution
 state.finish(operation, result)    # COMPLETED or FAILED; promotes or cancels its dependents
 state.cancel_pending()             # cancels everything not yet terminal
 ```
 
-The walk calls every transition; a run's `attempt` calls none. Non-enabled operations start as `SKIPPED` and count
+The walk calls every transition; a run's `execute` calls none. Non-enabled operations start as `SKIPPED` and count
 as satisfied predecessors. `RunState` is not thread-safe: call it from the run's event loop only,
-never from a thread an `attempt` hands work to.
+never from a thread an `execute` hands work to.
 
 ## Registering
 
@@ -105,31 +105,33 @@ constructs the class with `runner.config`, so a registered runner is selectable 
 ## Launchers
 
 A runner decides where a run's operations execute; a launcher decides where the run itself
-executes. The scheduler's queue claims a run, mints its token, hydrates its target into a DAG
-spec, and calls `launch(run, spec, token)` on the configured `Launcher`. A launcher that starts
-another process (a container, a pod) runs `Launcher.command(run, spec)` there, `spec` being the
-spec's JSON or `@<path>` to a file holding it, with the run's token in `INTERLOPER_RUN_TOKEN` and
-the API's `server.internal_url` in `INTERLOPER_SERVER_INTERNAL_URL`: that process holds no
-database credentials and reports its events through the API. Register a launcher in the `interloper.launchers` entry-point group and
-give it a `from_settings` classmethod, as the Docker and Kubernetes launchers do.
+executes. The scheduler's queue claims a run, checks that its spec can be built, mints its token,
+and calls `launch(run, token)` on the configured `Launcher`. A launcher that starts another
+process (a container, a pod) runs `Launcher.command(run)` there, `interloper launch <run-id>`,
+with the run's token in `INTERLOPER_RUN_TOKEN` and the API's `server.internal_url` in
+`INTERLOPER_SERVER_INTERNAL_URL`. That process holds no database credentials: it loads what the
+run executes from the API (`RunSpec`: the DAG, connections resolved, its partition and its event
+metadata) and reports its events back there. Register a launcher in the `interloper.launchers`
+entry-point group and give it a `from_settings` classmethod, as the Docker and Kubernetes
+launchers do.
 
 ## Events from children
 
-A run that makes each attempt in a child process (the Docker and Kubernetes runners) still owns
-its operations' lifecycle: the host reports every start, retry and verdict, and the child only
-what happens inside the operation. Have the child run
-`interloper run --format inline --run-id=<id> <spec>` with `INTERLOPER_RUN_OPERATION` set to the
-operation's id, and, on the platform, the host's `INTERLOPER_RUN_TOKEN` and
-`INTERLOPER_SERVER_INTERNAL_URL`: the child then makes one attempt, reports that operation's
-asset and destination events to the API, and drops every lifecycle event and its upstreams'
-events. A failed attempt leaves its error and whether a retry may help at
-`OperationResult.TERMINATION_MESSAGE_PATH`; the host reads it back with
-`OperationResult.from_termination_message` once the child exits (Kubernetes surfaces it as the
-container's termination message; a Docker host copies it out of the stopped container). A child
-that dies without writing one fails its attempt with its exit code, and may be retried. Pass
-`child_process_env()` into the child for trace continuity.
+A run that executes each operation in a child process (the Docker and Kubernetes runners) still
+owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
+only what happens inside the operation. On the platform, have the child run
+`interloper launch <run-id> --operation-id <id>` with the host's `INTERLOPER_RUN_TOKEN`
+and `INTERLOPER_SERVER_INTERNAL_URL`: the child loads the run, executes that one operation once,
+reports its asset and destination events to the API, and drops every lifecycle event and its
+upstreams' events. Outside the platform, hand the child the operation's DAG instead,
+`interloper run --format inline <dag> --operation-id <id>`. A failed execution leaves its
+error and whether a retry may help at `OperationResult.TERMINATION_MESSAGE_PATH`; the host reads
+it back with `OperationResult.from_termination_message` once the child exits (Kubernetes surfaces
+it as the container's termination message; a Docker host copies it out of the stopped
+container). A child that dies without writing one fails its execution with its exit code, and
+may be retried. Pass `child_process_env()` into the child for trace continuity.
 
-Run the child on the host's interloper version. The spec and the flags it receives are written
-by the host's version and read by the child's, so a child image older than its host can refuse
+Run the child on the host's interloper version. The command it receives is written by the host's
+version and read by the child's, so a child image older than its host can refuse
 a spec field or a flag it does not know yet. Upgrade the runner image together with the host,
 and roll them back together.

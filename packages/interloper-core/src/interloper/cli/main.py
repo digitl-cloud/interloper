@@ -67,7 +67,7 @@ def main() -> None:
 
     from interloper.telemetry import init_telemetry, shutdown_telemetry
 
-    init_telemetry(AppSettings.get().otel)
+    init_telemetry(AppSettings.get().otel, operation=getattr(args, "operation_id", None) is not None)
     try:
         args.handler(args)
     finally:

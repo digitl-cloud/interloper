@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
 from abc import ABC, abstractmethod
@@ -11,9 +10,8 @@ from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from interloper.dag import DAG
-from interloper.errors import ConfigError
-from interloper.events import EventRecorder
-from interloper.partitioning import TimePartition
+from interloper.errors import ConfigError, RunLostError, format_exception
+from interloper.events import Event, EventRecorder, EventType
 from interloper.registry import Registry
 from interloper.runner import Runner
 from interloper.settings import AppSettings, RunnerSettings
@@ -24,7 +22,6 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from interloper.catalog import Catalog
-    from interloper.dag import DAGSpec
     from interloper.settings import LauncherSettings, ReaperSettings, ServerSettings
     from interloper_db.models import Run
 
@@ -113,44 +110,31 @@ class Launcher(ABC):
         self._runner_config = runner_config or {}
 
     @abstractmethod
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
-        """Start executing a dispatched run somewhere, with everything it needs in hand.
+    def launch(self, run: Run, token: str) -> None:
+        """Start executing a dispatched run somewhere.
+
+        The process loads what the run executes by its id, as its token, and
+        reports back with the same token.
 
         Args:
-            run: The run, dispatched, its target loaded; its partition and its
-                event metadata come from it.
-            spec: The DAG the run executes, its connections resolved.
-            token: The run's token, which its reports carry.
+            run: The run, dispatched.
+            token: The run's token.
         """
 
     @staticmethod
-    def command(run: Run, spec: str) -> list[str]:
-        """The ``interloper run`` argv that executes *run* from *spec*.
+    def command(run: Run) -> list[str]:
+        """The ``interloper launch`` argv that executes *run*.
 
         The token is not an argument: it travels in the environment, which a
         process listing does not show.
 
         Args:
             run: The run.
-            spec: The spec as ``interloper run --format inline`` takes it: the
-                DAG spec's JSON, or ``@<path>`` to a file holding it.
 
         Returns:
             The argv.
         """
-        argv = [
-            "interloper",
-            "run",
-            "--format",
-            "inline",
-            spec,
-            f"--run-id={run.id}",
-            "--metadata",
-            json.dumps(run.event_metadata(run.target)),
-        ]
-        if run.partition_key:
-            argv.extend(["--date", run.partition_key])
-        return argv
+        return ["interloper", "launch", str(run.id)]
 
     def diagnose(self, run_id: UUID) -> str | None:
         """Say why a launched run's workload stopped, when the launcher can tell.
@@ -170,10 +154,10 @@ class Launcher(ABC):
 
 
 class InProcessLauncher(Launcher):
-    """Launches runs in a detached thread of this process, reporting straight through the store's ingest.
+    """Launches runs in a detached thread of this process, loading and reporting straight through the store.
 
     The store is shared, so the run needs no token and makes no HTTP call;
-    otherwise it runs exactly as a pod's ``interloper run`` does.
+    otherwise it runs exactly as a pod's ``interloper launch`` does.
     """
 
     def __init__(
@@ -223,7 +207,7 @@ class InProcessLauncher(Launcher):
         """
         return cls(runner_type=runner.type, runner_config=runner.config, store=store, reaper=reaper)
 
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+    def launch(self, run: Run, token: str) -> None:
         """Launch a run in a background thread.
 
         The run shares this process, so a lost run cannot exit it: the run is
@@ -231,40 +215,48 @@ class InProcessLauncher(Launcher):
 
         Args:
             run: The dispatched run.
-            spec: The DAG it executes.
-            token: Unused: the run reports through the shared store.
+            token: Unused: the run loads and reports through the shared store.
         """
         runner = Runner.from_settings(RunnerSettings(type=self._runner_type, config=self._runner_config))
-        dag = DAG.from_spec(spec)
         # A bare thread does not inherit contextvars: the launch span is carried across so the run continues it.
         context = otel_context.get_current()
         threading.Thread(
-            target=self._execute, args=(run, runner, dag, context), name=f"run-{run.id}", daemon=True
+            target=self._execute, args=(run.id, runner, context), name=f"run-{run.id}", daemon=True
         ).start()
         logger.info("Launched run %s in a background thread", run.id)
 
-    def _execute(self, run: Run, runner: Runner, dag: DAG, context: otel_context.Context) -> None:
-        """Drive the run on its thread, its events and effects reported through the store's ingest.
+    def _execute(self, run_id: UUID, runner: Runner, context: otel_context.Context) -> None:
+        """Load the run and drive it on its thread, its events and effects reported through the store's ingest.
 
         Args:
-            run: The dispatched run.
+            run_id: The dispatched run.
             runner: The runner to drive.
-            dag: The DAG it executes.
             context: The launching thread's trace context, which the run continues.
         """
         attached = otel_context.attach(context)
         recorder = EventRecorder(
-            partial(self._store.runs.ingest, run.id),
-            run_id=str(run.id),
+            partial(self._store.runs.ingest, run_id),
+            run_id=str(run_id),
             heartbeat_interval=self._reaper.heartbeat_interval,
             heartbeat_timeout=self._reaper.heartbeat_timeout,
         )
-        window = TimePartition.from_key(run.partition_key) if run.partition_key else None
         try:
             with recorder:
+                try:
+                    spec = self._store.runs.spec(run_id)
+                    dag = DAG.from_spec(spec.dag) if spec is not None else None
+                    reason = f"Run {run_id} selects no operations"
+                except Exception as error:  # noqa: BLE001 - a run that cannot be built fails with the reason
+                    spec, dag, reason = None, None, format_exception(error)
+                if spec is None or dag is None:
+                    ending = {"run_id": str(run_id), "error": reason, "message": f"Run failed: {reason}"}
+                    recorder(Event(type=EventType.RUN_FAILED, metadata=ending))
+                    return
                 recorded = runner.model_copy(update={"on_event": recorder, "reraise": False})
-                recorder.finish(asyncio.run(recorded.run(dag, window, run.event_metadata(run.target))))
+                recorder.finish(asyncio.run(recorded.run(dag, spec.window, spec.metadata)))
+        except RunLostError as error:
+            logger.info("%s", error)
         except Exception:
-            logger.exception("Run %s did not complete", run.id)
+            logger.exception("Run %s did not complete", run_id)
         finally:
             otel_context.detach(attached)

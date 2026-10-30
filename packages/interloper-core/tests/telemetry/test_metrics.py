@@ -118,10 +118,9 @@ class TestOtelMetricsHandler:
 
 
 class TestRegistration:
-    def test_a_child_counts_only_its_destination_io(self, metric_reader, monkeypatch):
+    def test_an_operations_process_counts_only_its_destination_io(self, metric_reader):
         # The host counts runs and authors every operation verdict; destination I/O happens only in the child.
-        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", "op-1")
-        handler = _register_metrics_handler()
+        handler = _register_metrics_handler(operation=True)
         try:
             assert handler is not None
             assert EventBus()._handlers[handler] == OtelMetricsHandler.DESTINATION_EVENT_TYPES
@@ -129,9 +128,8 @@ class TestRegistration:
             if handler is not None:
                 EventBus.unsubscribe(handler)
 
-    def test_host_subscribes_the_handler(self, metric_reader, monkeypatch):
-        monkeypatch.delenv("INTERLOPER_RUN_OPERATION", raising=False)
-        handler = _register_metrics_handler()
+    def test_host_subscribes_the_handler(self, metric_reader):
+        handler = _register_metrics_handler(operation=False)
         try:
             assert handler is not None
             assert handler in EventBus()._handlers

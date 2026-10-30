@@ -1,11 +1,13 @@
 """KubernetesRunner: each operation in its own Job.
 
-Each attempt at an operation is one Job, whose pod runs the operation's
-mini-DAG (the operation and its upstream ancestors, the ancestors read-only)
-through ``interloper run --format inline``, so the operation resolves its
-upstreams from their destinations without recomputing them. The host owns the
-operation's lifecycle and its retries; the pod reports only what happens
-inside the operation, and leaves why its attempt failed in its termination
+Each execution of an operation is one Job, whose pod executes that operation
+for the host: on the platform, ``interloper launch <run> --operation-id`` loads
+the host's run by its id; outside it, ``interloper run --operation-id`` is given
+the operation's mini-DAG (the operation and its upstreams, the upstreams
+read-only). Either way the operation
+resolves its upstreams from their destinations without recomputing them. The
+host owns the operation's lifecycle and its retries; the pod reports only what
+happens inside the operation, and leaves why it failed in its termination
 message.
 """
 
@@ -15,7 +17,6 @@ import asyncio
 import contextvars
 import json
 import logging
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -24,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 from interloper.errors import RunnerError, format_exception
 from interloper.operation import Operation, OperationResult
 from interloper.runner import Run, Runner
+from interloper.settings import AppSettings
 from interloper.telemetry.propagation import child_process_env
 from kubernetes import client, config
 from pydantic import Field
@@ -36,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 class KubernetesRun(Run):
-    """One run of a KubernetesRunner: each attempt at an operation in its own Job.
+    """One run of a KubernetesRunner: each execution of an operation in its own Job.
 
     Following a Job blocks, so each one is followed on a thread of the run's
     polling pool.
@@ -69,24 +71,24 @@ class KubernetesRun(Run):
         self.batch = client.BatchV1Api()
         self.core = client.CoreV1Api()
 
-    async def attempt(self, operation: Operation) -> OperationResult:
-        """Make one attempt in its own Job, followed on the polling pool.
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Execute the operation once in its own Job, followed on the polling pool.
 
         Args:
-            operation: The operation to attempt.
+            operation: The operation to execute.
 
         Returns:
-            The attempt's result.
+            The execution's result.
         """
         # The child continues the run's trace, which only this context carries onto the pool thread.
         follow = partial(contextvars.copy_context().run, self.follow, operation)
         return await asyncio.get_running_loop().run_in_executor(self.polling, follow)
 
     def follow(self, operation: Operation) -> OperationResult:
-        """Create the attempt's Job and wait for it to finish.
+        """Create the execution's Job and wait for it to finish.
 
         Args:
-            operation: The operation the Job attempts.
+            operation: The operation the Job executes.
 
         Returns:
             An empty result when the Job succeeded; otherwise the failure its
@@ -99,7 +101,7 @@ class KubernetesRun(Run):
             if self.wait(name):
                 return OperationResult()
             message = self.termination_message(name)
-        except Exception as error:  # noqa: BLE001 - a Job that cannot be created or watched fails its attempt
+        except Exception as error:  # noqa: BLE001 - a Job that cannot be created or watched fails its execution
             return OperationResult(error=format_exception(error))
         return OperationResult.from_termination_message(message, format_exception(RunnerError(f"Job {name} failed")))
 
@@ -166,7 +168,7 @@ class KubernetesRun(Run):
             image_pull_policy=self.runner.image_pull_policy,
             command=command[:1],
             args=command[1:],
-            env=[*self.runner.environment(), client.V1EnvVar(name="INTERLOPER_RUN_OPERATION", value=operation.id)],
+            env=self.runner.environment(),
             resources=self.runner.requirements(),
             termination_message_path=OperationResult.TERMINATION_MESSAGE_PATH,
         )
@@ -196,17 +198,23 @@ class KubernetesRun(Run):
         )
 
     def command(self, operation: Operation) -> list[str]:
-        """The command the pod runs: its operation's mini-DAG through ``interloper run --format inline``.
+        """The command the pod runs to execute one operation of the host's run.
+
+        A platform run's child runs ``interloper launch <run> --operation-id``
+        and loads the run by its id, as the host's token; any other run's
+        child runs ``interloper run --operation-id`` on the operation's
+        mini-DAG and window, given as its arguments.
 
         Args:
             operation: The operation the pod executes.
 
         Returns:
-            The argv, with the operation's own window as ``--date`` or
-            ``--start-date``/``--end-date``.
+            The argv.
         """
+        if AppSettings.get().run.token:
+            return ["interloper", "launch", self.state.run_id, f"--operation-id={operation.id}"]
         spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
-        command = ["interloper", "run", "--format", "inline", f"--run-id={self.state.run_id}", json.dumps(spec)]
+        command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
         window = operation.effective_window(self.state.window)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
@@ -215,16 +223,17 @@ class KubernetesRun(Run):
         return command
 
     def name(self, operation: Operation) -> str:
-        """A Job name unique to this attempt at the operation in this run, within Kubernetes' 63 characters.
+        """A Job name unique to this execution of the operation in this run, within Kubernetes' 63 characters.
 
         Args:
-            operation: The operation the Job attempts.
+            operation: The operation the Job executes.
 
         Returns:
-            ``interloper-run-<run>-<operation>-<attempt>``, each id cut to 8 characters.
+            ``interloper-run-<run>-<operation>-<n>``, each id cut to 8 characters, ``n`` counting the
+            operation's executions.
         """
-        attempt = self.state.executions[operation.id].attempt
-        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}-{attempt}"[:63]
+        number = self.state.executions[operation.id].attempt
+        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}-{number}"[:63]
 
     async def close(self) -> None:
         """Release the polling pool.
@@ -238,8 +247,8 @@ class KubernetesRun(Run):
 class KubernetesRunner(Runner):
     """Execute each operation in its own Kubernetes Job, ``max_jobs`` at a time.
 
-    Each attempt's pod runs the image's ``interloper`` CLI on the
-    operation's mini-DAG; the host records the attempt and retries it:
+    Each execution's pod runs the image's ``interloper`` CLI on that one
+    operation; the host records the execution and retries it:
 
     ```py
     result = await KubernetesRunner(image="my-image", on_event=log_event).run(dag)
@@ -274,14 +283,19 @@ class KubernetesRunner(Runner):
 
         Returns:
             ``env_vars``, the trace context the child continues and, on the
-            platform, the host run's token and the API's URL its child reports
-            to; each Job adds its own operation.
+            platform, the host run's token and the API's URL, with which the
+            child loads the run and reports to it.
         """
         environment = [client.V1EnvVar(name=name, value=value) for name, value in self.env_vars.items()]
         environment.extend(client.V1EnvVar(name=name, value=value) for name, value in child_process_env().items())
-        for name in ("INTERLOPER_RUN_TOKEN", "INTERLOPER_SERVER_INTERNAL_URL"):
-            if value := os.environ.get(name):
-                environment.append(client.V1EnvVar(name=name, value=value))
+        settings = AppSettings.get()
+        if settings.run.token:
+            environment.extend(
+                [
+                    client.V1EnvVar(name="INTERLOPER_RUN_TOKEN", value=settings.run.token),
+                    client.V1EnvVar(name="INTERLOPER_SERVER_INTERNAL_URL", value=settings.server.internal_url),
+                ]
+            )
         return environment
 
     def requirements(self) -> client.V1ResourceRequirements | None:

@@ -80,10 +80,10 @@ reported, or the reason the platform ended it (the reaper, a failed dispatch, an
 quota). A run that failed only because operations failed has none of its own; their reasons are
 on their `operation_failed` events.
 
-A run's pod holds no database credentials. It delivers its batches to `POST
-/api/runs/{run_id}/events` on the API's `server.internal_url`, authenticated by a token the
-scheduler mints when it dispatches the run; in the scheduler's own process the batches go
-straight to the store.
+A run's pod holds no database credentials. With a token the scheduler mints when it dispatches
+the run, it loads the run from `GET /api/runs/{run_id}/spec` and delivers its batches to `POST
+/api/runs/{run_id}/events`, both on the API's `server.internal_url`; in the scheduler's own
+process the run is loaded and its batches go straight through the store.
 
 ## Event types
 

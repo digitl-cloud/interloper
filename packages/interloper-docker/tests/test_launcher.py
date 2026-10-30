@@ -1,15 +1,13 @@
-"""Tests for ``interloper_docker.launcher``: one container per run, its spec as its argument, no database in it."""
+"""Tests for ``interloper_docker.launcher``: one container per run, executing it by its id, no database in it."""
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.dag import DAGSpec
 from interloper_db import RunStatus
 from interloper_db.models import Run
 
@@ -115,7 +113,7 @@ class _CreatedContainer:
         self.removed = force
 
 
-def test_the_container_runs_the_spec_given_as_its_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_container_executes_the_run_by_its_id_with_its_token(monkeypatch: pytest.MonkeyPatch) -> None:
     launcher = _launcher(monkeypatch)
     created: list[dict[str, Any]] = []
     container = _CreatedContainer()
@@ -127,23 +125,22 @@ def test_the_container_runs_the_spec_given_as_its_argument(monkeypatch: pytest.M
     launcher._client = SimpleNamespace(containers=SimpleNamespace(create=create))
     run = Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED)
 
-    launcher.launch(run, DAGSpec(items=[]), "ilr_x")
+    launcher.launch(run, "ilr_x")
 
     (kwargs,) = created
-    assert kwargs["command"][:4] == ["interloper", "run", "--format", "inline"]
-    assert json.loads(kwargs["command"][4]) == {"items": []}
+    assert kwargs["command"] == ["interloper", "launch", str(run.id)]
     assert kwargs["environment"]["INTERLOPER_RUN_TOKEN"] == "ilr_x"
     assert kwargs["environment"]["INTERLOPER_SERVER_INTERNAL_URL"] == "http://api"
     assert not [name for name in kwargs["environment"] if name.startswith("INTERLOPER_POSTGRES")]
     assert container.started
 
 
-def test_a_container_that_cannot_start_is_removed_with_its_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_container_that_cannot_start_is_removed_with_its_token(monkeypatch: pytest.MonkeyPatch) -> None:
     launcher = _launcher(monkeypatch)
     container = _CreatedContainer(start_fails=True)
     launcher._client = SimpleNamespace(containers=SimpleNamespace(create=lambda **kwargs: container))
 
     with pytest.raises(RuntimeError, match="no such image"):
-        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), DAGSpec(items=[]), "ilr_x")
+        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
 
     assert container.removed

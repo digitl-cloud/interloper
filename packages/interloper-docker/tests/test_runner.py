@@ -189,7 +189,7 @@ class TestContainerRun:
         result, _ = await _run(monkeypatch, asset, container)
 
         environment = container.launched["environment"]
-        assert environment["INTERLOPER_RUN_OPERATION"] == "asset-1"
+        assert "INTERLOPER_RUN_OPERATION" not in environment
         assert (environment["INTERLOPER_RUN_TOKEN"], environment["INTERLOPER_SERVER_INTERNAL_URL"]) == (
             "ilr_x",
             "http://api",
@@ -215,7 +215,7 @@ class TestContainerRun:
 
 
 class TestCommand:
-    """The command a container runs: its operation's mini-DAG through ``interloper run --format inline``."""
+    """The command a container runs: ``interloper launch`` by the run's id, ``interloper run`` with the mini-DAG."""
 
     @staticmethod
     def _command(monkeypatch: pytest.MonkeyPatch, asset: il.Asset, window: Any) -> list[str]:
@@ -227,9 +227,16 @@ class TestCommand:
     def test_an_unscoped_run_adds_no_flags(self, monkeypatch, asset):
         command = self._command(monkeypatch, asset, None)
 
-        assert command[:5] == ["interloper", "run", "--format", "inline", "--run-id=r1"]
-        assert json.loads(command[5])
-        assert len(command) == 6
+        assert command[:4] == ["interloper", "run", "--format", "inline"]
+        assert json.loads(command[4])
+        assert command[5:] == [f"--operation-id={asset.id}"]
+
+    def test_on_the_platform_the_child_executes_the_operation_of_the_run_by_its_id(self, monkeypatch, asset):
+        monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
+
+        command = self._command(monkeypatch, asset, TimePartition(dt.date(2026, 1, 1)))
+
+        assert command == ["interloper", "launch", "r1", f"--operation-id={asset.id}"]
 
     def test_one_partition_is_a_date(self, monkeypatch):
         @il.asset(partitioning=TimePartitionConfig(column="date"))
@@ -262,7 +269,7 @@ class TestCommand:
     def test_an_unpartitioned_operation_gets_no_window(self, monkeypatch, asset):
         command = self._command(monkeypatch, asset, TimePartition(dt.date(2026, 1, 1)))
 
-        assert len(command) == 6
+        assert command[5:] == [f"--operation-id={asset.id}"]
 
 
 def test_the_run_kind_is_named_after_its_runner():

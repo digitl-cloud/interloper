@@ -3,11 +3,10 @@
 The runner hands the recorder every event of its run: it is the ``on_event``
 handler `RunSubscription` wraps. A writer thread delivers them as
 `EventBatch`es to ``ingest``, whatever reaches the platform from where the run
-executes: the store's ingest in the scheduler's process, an `EventClient` from
-a pod. A
-batch is whatever accumulated while the previous delivery was in flight, so
-a quiet run delivers each event as it comes and a burst goes out in a few
-large batches.
+executes: the store's ingest in the scheduler's process, `EventBatch.post`
+from a launched process. A batch is whatever accumulated while the previous
+delivery was in flight, so a quiet run delivers each event as it comes and a
+burst goes out in a few large batches.
 
 Delivery has no deadline. Its only bound is the run's liveness rule: a
 delivery that keeps failing for half the reaper's heartbeat timeout means the
@@ -55,7 +54,8 @@ class EventRecorder:
     """Deliver a run's events to the platform in batches, with no loss while the run lives.
 
     ```py
-    with EventRecorder(client.ingest, run_id=run_id, on_lost=exit_process) as recorder:
+    deliver = partial(EventBatch.post, client=client, run_id=run_id)
+    with EventRecorder(deliver, run_id=run_id, on_lost=exit_process) as recorder:
         result = await runner.model_copy(update={"on_event": recorder}).run(dag)
         recorder.finish(result)
     ```

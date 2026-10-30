@@ -39,6 +39,7 @@ from uuid import UUID
 import interloper as il
 from interloper.errors import ConfigError
 from interloper.partitioning import TimeGranularity, TimePartition
+from interloper.runner.spec import RunSpec
 from sqlalchemy import Engine, and_, exists, func, or_
 from sqlalchemy.orm import aliased, joinedload
 from sqlmodel import col, select
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     from interloper_db.store.backfills import BackfillStore
     from interloper_db.store.components import ComponentStore
     from interloper_db.store.events import EventStore
+    from interloper_db.store.executions import ExecutionStore
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +204,7 @@ class RunStore:
         quotas: QuotaStore,
         backfills: BackfillStore,
         events: EventStore,
+        executions: ExecutionStore,
         components: Callable[[], ComponentStore],
         encrypt: Callable[[bytes], bytes] | None = None,
         decrypt: Callable[[bytes], bytes] | None = None,
@@ -213,6 +216,7 @@ class RunStore:
             quotas: Quota gates it enforces through.
             backfills: Backfill facet a completing run advances its batch through.
             events: Event facet a run's events and a failure's reason are recorded through.
+            executions: Execution facet a failed-scope retry reads its stack's prior successes from.
             components: The component facet a run's effects are applied through, resolved
                 late since it is built after this one.
             encrypt: The platform's cipher, which makes run tokens; ``None`` mints none.
@@ -222,6 +226,7 @@ class RunStore:
         self._quotas = quotas
         self._backfills = backfills
         self._events = events
+        self._executions = executions
         self._components = components
         self._encrypt = encrypt
         self._decrypt = decrypt
@@ -532,6 +537,44 @@ class RunStore:
                 logger.warning(
                     "Canceled run %s: monthly successful-run quota exhausted for org %s", db_run.id, db_run.org_id
                 )
+
+    def spec(self, run_id: UUID) -> RunSpec | None:
+        """What the run executes: its target hydrated into a DAG, the partition it covers and its event metadata.
+
+        Built from the run's row whenever it is asked for: by the queue, to
+        refuse a run before anything is launched, and by the process that
+        executes the run, which loads it once started. A failed-scope retry's
+        prior successes are disabled, so the run re-executes only what had not
+        succeeded.
+
+        Args:
+            run_id: The run UUID.
+
+        Returns:
+            The spec, or ``None`` when the target selects no operations.
+
+        Raises:
+            NotFoundError: If the run, or the component it targets, was deleted.
+            TypeError: If the target's kind declares no workload.
+        """
+        run = self.get(run_id)
+        if run.component_id is None:
+            raise NotFoundError(f"Run {run.id} targets a component that was deleted")
+        target = self._components().load(run.component_id)
+        if not isinstance(target, il.Workload):
+            raise TypeError(f"Component kind '{type(target).kind}' declares no workload")
+        operations = target.operations()
+        if not operations:
+            return None
+        if run.retry_scope == "failed":
+            successes = self._executions.prior_successes(run)
+            for operation in operations:
+                if UUID(operation.id) in successes:
+                    operation.enabled = False
+        dag = il.DAG(*operations)
+        spec = RunSpec(dag=dag.to_spec(), partition_key=run.partition_key, metadata=run.event_metadata(run.target))
+        dag.check_window(spec.window)
+        return spec
 
     def token(self, run_id: UUID) -> str:
         """The token a run's pod reports with: the run's id, encrypted with the platform's key.
