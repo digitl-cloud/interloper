@@ -5,11 +5,13 @@ Providers come from the core registry (``interloper.oauth``): each
 the exchange is performed generically — adding a provider is an
 ``interloper.oauth_providers`` entry point, not a new route.
 
-The in-house *OAuth* credentials (``client_id`` / ``client_secret`` /
-``redirect_uri``) are read from provider-scoped environment variables
-(``INTERLOPER_<PROVIDER>_CLIENT_ID``, …) and used to perform the exchange. They are
-never returned to the browser; connections resolve them from the same env
-at runtime (see ``OAuthCredentialField``).
+The in-house *OAuth* credentials (``client_id`` / ``client_secret``) are read
+from provider-scoped environment variables (``INTERLOPER_<PROVIDER>_CLIENT_ID``, …)
+and used to perform the exchange; the redirect URI is the app's callback page
+for the provider unless ``INTERLOPER_<PROVIDER>_REDIRECT_URI`` overrides it (see
+``OAuthAppCredentials``). The secret is never returned to the browser;
+connections resolve the credentials from the same env at runtime (see
+``OAuthCredentialField``).
 
 The ``GET /providers`` endpoint returns metadata for all providers that
 have credentials configured, so the frontend knows which "Sign in with X"
@@ -27,7 +29,7 @@ from fastapi import APIRouter, HTTPException
 from interloper.oauth import PROVIDERS, OAuthAppCredentials
 from pydantic import BaseModel
 
-from interloper_api.dependencies import CurrentUserDep
+from interloper_api.dependencies import CurrentUserDep, SettingsDep
 
 logger = logging.getLogger(__name__)
 
@@ -35,19 +37,19 @@ router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 
 def log_provider_status() -> None:
-    """Log which OAuth providers are usable, warning on partial credential trios.
+    """Log which OAuth providers are usable, warning on partial configurations.
 
-    Called at app startup: a provider with only some of its three env vars set
-    is invisible everywhere else (it simply isn't offered), so this warning is
-    the one place a typo'd or forgotten variable surfaces.
+    Called at app startup: a provider with some of its env vars set but not
+    its client id and secret is invisible everywhere else (it simply isn't
+    offered), so this warning is the one place a typo'd or forgotten variable
+    surfaces.
     """
     active = []
     for key in PROVIDERS:
-        names = OAuthAppCredentials.env_names(key)
-        missing = [n for n in names.values() if not os.environ.get(n)]
+        missing = OAuthAppCredentials.missing(key)
         if not missing:
             active.append(key)
-        elif len(missing) < len(names):
+        elif any(os.environ.get(name) for name in OAuthAppCredentials.env_names(key).values()):
             logger.warning("OAuth provider '%s' is partially configured — missing %s", key, ", ".join(sorted(missing)))
     logger.info("OAuth sign-in providers: %s", ", ".join(sorted(active)) if active else "none configured")
 
@@ -73,12 +75,16 @@ class ProviderInfo(BaseModel):
 
 
 @router.get("/providers")
-def list_providers() -> list[ProviderInfo]:
+def list_providers(settings: SettingsDep) -> list[ProviderInfo]:
     """Return metadata for all configured OAuth providers.
 
-    Only registered providers with ``CLIENT_ID``, ``CLIENT_SECRET``, and
-    ``REDIRECT_URI`` environment variables set are included.  Metadata
-    (auth_url, label, icon) comes from the provider registry.
+    Only registered providers with ``CLIENT_ID`` and ``CLIENT_SECRET``
+    environment variables set are included.  Metadata (auth_url, label,
+    icon) comes from the provider registry.
+
+    Args:
+        settings: The settings, whose ``server`` gives the public URL each
+            redirect URI defaults under.
 
     Returns:
         One entry per configured provider, carrying the public half of its
@@ -94,7 +100,7 @@ def list_providers() -> list[ProviderInfo]:
             icon=spec.icon,
         )
         for key, spec in PROVIDERS.items()
-        if (creds := OAuthAppCredentials.from_env(key)) is not None
+        if (creds := OAuthAppCredentials.from_env(key, settings.server)) is not None
     ]
 
 
@@ -103,6 +109,7 @@ async def exchange_authorization_code(
     provider: str,
     body: AuthorizationCodeExchangeRequest,
     _user: CurrentUserDep,
+    settings: SettingsDep,
 ) -> dict[str, Any]:
     """Exchange an authorization code for tokens. Requires authentication.
 
@@ -116,6 +123,8 @@ async def exchange_authorization_code(
         body: The authorization code returned by the provider's consent screen.
         _user: The authenticated caller; the route is gated on a session, the
             identity itself is not used.
+        settings: The settings, whose ``server`` gives the public URL the
+            redirect URI defaults under.
 
     Returns:
         The provider's token response, credentials at the top level.
@@ -129,7 +138,7 @@ async def exchange_authorization_code(
     if spec is None:
         raise HTTPException(status_code=400, detail=f"Unknown OAuth provider: {provider}")
 
-    config = OAuthAppCredentials.from_env(provider)
+    config = OAuthAppCredentials.from_env(provider, settings.server)
     if config is None:
         raise HTTPException(status_code=400, detail=f"OAuth provider {provider} is not configured")
 

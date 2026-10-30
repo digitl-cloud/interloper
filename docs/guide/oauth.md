@@ -85,15 +85,20 @@ naming an unregistered provider without an explicit `auth_url` raises `ConfigErr
 
 ## In-house app credentials
 
-Each provider's OAuth app is configured in the environment as a complete trio:
+Each provider's OAuth app is configured in the environment by its client id and secret:
 
 ```
 INTERLOPER_<PROVIDER>_CLIENT_ID
 INTERLOPER_<PROVIDER>_CLIENT_SECRET
-INTERLOPER_<PROVIDER>_REDIRECT_URI
 ```
 
-`OAuthAppCredentials` in `interloper.oauth` resolves them: `from_env("google")` returns the
-trio or `None` when any variable is missing; `is_configured(key)` answers whether sign-in is
-possible; `env_name(key, "CLIENT_ID")` is the single owner of the naming convention.
-Connections read the first two through `OAuthConnection.env_credential()`.
+Its redirect URI is the app's callback page for the provider, `<server.public_url>/auth/<provider>`
+(`https://app.example.com/auth/google`), which is what to register in the provider console. The
+path segment is the provider's registry key, so Bing Ads signs in at `/auth/microsoft`. A
+deployment that registered another URI sets `INTERLOPER_<PROVIDER>_REDIRECT_URI` to override it.
+
+`OAuthAppCredentials` in `interloper.oauth` resolves them: `from_env("google", settings.server)`
+returns the credentials, redirect URI included, or `None` when the client id or secret is
+missing; `is_configured(key)` answers whether sign-in is possible and `missing(key)` names what
+it still needs; `env_name(key, "CLIENT_ID")` is the single owner of the naming convention.
+Connections read the client id and secret through `OAuthConnection.env_credential()`.

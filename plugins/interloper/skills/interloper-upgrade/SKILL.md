@@ -55,7 +55,7 @@ Changelog (raw, complete): https://raw.githubusercontent.com/digitl-cloud/interl
    | 0.49.0 | AUTO with a declared schema validated | AUTO reconciles: coerces, drops extra columns; `STRICT` keeps the rejecting behaviour |
    | earlier | `il.FileIO("data")` passed as `io=` | `il.FileDestination(base_path="data")` passed as `destinations=` |
    | earlier | `il.OAuthConnectionBase` with a hand-declared `refresh_token` and `OAuthConfig(fields={...})` | `il.RefreshTokenOAuthConnection`; the trio and the field mapping are built in |
-   | earlier | `LINKEDIN_CLIENT_ID` / `_SECRET` | `INTERLOPER_LINKEDIN_CLIENT_ID` / `_CLIENT_SECRET`, exported in the environment (a `.env` file is not read), filled into the required `client_id` / `client_secret` fields before validation; `_REDIRECT_URI` only for the platform sign-in tab |
+   | earlier | `LINKEDIN_CLIENT_ID` / `_SECRET` | `INTERLOPER_LINKEDIN_CLIENT_ID` / `_CLIENT_SECRET`, exported in the environment (a `.env` file is not read), filled into the required `client_id` / `client_secret` fields before validation; `_REDIRECT_URI` only overrides the sign-in tab's redirect URI |
    | earlier | `asyncio.run(runner.run(dag))` | `il.run(runner.run(dag))`, or `dag.materialize(partition)` |
    | earlier | `SECRETS_ENCRYPTION_KEY` | `INTERLOPER_ENCRYPTION_KEY` |
 

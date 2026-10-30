@@ -45,6 +45,7 @@ environment, not in `${VAR}` placeholders.
 |----------|---------|---------|
 | `INTERLOPER_RUN_OPERATION` | `interloper run`, telemetry setup | Set by a container runner on a child: the one operation of the host's run it reports events for; its metrics count destination I/O only. |
 | `INTERLOPER_RUN_TOKEN` | `interloper run` | Set by a launcher on a run's pod: the bearer the run's events are reported to the API with. |
-| `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`, `_REDIRECT_URI` | OAuth connections and providers | In-house OAuth app credentials per provider. |
+| `INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET` | OAuth connections and providers | In-house OAuth app credentials per provider. |
+| `INTERLOPER_<PROVIDER>_REDIRECT_URI` | the API's connect flow | Overrides a provider's redirect URI, `<server.external_url>/auth/<provider>` by default. |
 | `TRACEPARENT`, `TRACESTATE` | telemetry propagation | Parent trace context for a spawned process. |
 | `OTEL_EXPORTER_OTLP_*` | OpenTelemetry SDK | Fallbacks for exporter settings left empty in `otel`. |

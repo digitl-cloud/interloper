@@ -215,7 +215,8 @@ dbInit:
 
 # Public base URL of the app (e.g. https://app.example.com), for links built
 # outside a browser request: the connection setup hand-off an MCP tool
-# returns, and the issuer of the OAuth authorization server the API runs,
+# returns, each connector OAuth app's redirect URI (/auth/<provider>), and
+# the issuer of the OAuth authorization server the API runs,
 # whose metadata the API serves at /.well-known/oauth-authorization-server
 # (routed by the HTTPRoute and the Ingress). Injected as
 # INTERLOPER_SERVER_EXTERNAL_URL into every pod; ignored when extraConfig
@@ -347,8 +348,8 @@ extraEnvFrom: []
 # The release Secret, mounted whole: every key reaches the api, scheduler,
 # mcp and db-init pods as the env var of the same name, so its keys are the
 # env var names (INTERLOPER_ENCRYPTION_KEY, INTERLOPER_POSTGRES_PASSWORD, the
-# connector credentials INTERLOPER_<PROVIDER>_CLIENT_ID / _CLIENT_SECRET /
-# _REDIRECT_URI, INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN, ...). Nothing is
+# connector credentials INTERLOPER_<PROVIDER>_CLIENT_ID / _CLIENT_SECRET,
+# INTERLOPER_GOOGLE_ADS_DEVELOPER_TOKEN, ...). Nothing is
 # required here: a deployment whose secrets live elsewhere leaves this
 # empty and maps them with the root-level `extraEnv`. Run pods never get it.
 secrets:
