@@ -2490,9 +2490,14 @@ environment, not in <code>${VAR}</code> placeholders.</p>
 <td>Set by a launcher on a run's pod: the bearer the run's events are reported to the API with.</td>
 </tr>
 <tr>
-<td><code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code>, <code>_REDIRECT_URI</code></td>
+<td><code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code></td>
 <td>OAuth connections and providers</td>
 <td>In-house OAuth app credentials per provider.</td>
+</tr>
+<tr>
+<td><code>INTERLOPER_&lt;PROVIDER&gt;_REDIRECT_URI</code></td>
+<td>the API's connect flow</td>
+<td>Overrides a provider's redirect URI, <code>&lt;server.external_url&gt;/auth/&lt;provider&gt;</code> by default.</td>
 </tr>
 <tr>
 <td><code>TRACEPARENT</code>, <code>TRACESTATE</code></td>

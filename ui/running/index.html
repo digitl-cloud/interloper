@@ -2592,8 +2592,9 @@ variable, which is where secrets go. <code>INTERLOPER_ENCRYPTION_KEY</code> is r
 encrypted at rest. Login is Google OAuth. <code>allowed_domains</code> restricts who may sign up; <code>super_admin_emails</code>
 bootstraps platform administrators, promoted by <code>interloper db init</code> and at login (promote-only). Once
 one exists, super-admins grant and revoke the access from the admin portal's Users page. In-house OAuth app credentials for connectors live in
-<code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code> and <code>_REDIRECT_URI</code>; a provider without them
-has no sign-in tab, only manual credential entry. The full settings list is in
+<code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code> and <code>_CLIENT_SECRET</code>; a provider without them has no sign-in
+tab, only manual credential entry. Its redirect URI, to register in the provider console, is
+<code>&lt;server.external_url&gt;/auth/&lt;provider&gt;</code>, unless <code>INTERLOPER_&lt;PROVIDER&gt;_REDIRECT_URI</code> overrides it. The full settings list is in
 <a href="../../reference/settings/">Settings</a>. With the Helm chart, each key of the release Secret (<code>secrets</code>)
 reaches every interloper pod as the variable of the same name; the root-level <code>extraEnv</code> maps
 keys from other Secrets one by one.</p>

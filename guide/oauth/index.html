@@ -2587,15 +2587,19 @@ point at an instance or at a class that constructs one:</p>
 from installed-package metadata, so no import-order dependence exists. An <code>OAuthConfig</code>
 naming an unregistered provider without an explicit <code>auth_url</code> raises <code>ConfigError</code>.</p>
 <h2 id="in-house-app-credentials">In-house app credentials<a class="headerlink" href="#in-house-app-credentials" title="Permanent link">&para;</a></h2>
-<p>Each provider's OAuth app is configured in the environment as a complete trio:</p>
+<p>Each provider's OAuth app is configured in the environment by its client id and secret:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_SECRET
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>INTERLOPER_&lt;PROVIDER&gt;_REDIRECT_URI
 </span></code></pre></div>
-<p><code>OAuthAppCredentials</code> in <code>interloper.oauth</code> resolves them: <code>from_env("google")</code> returns the
-trio or <code>None</code> when any variable is missing; <code>is_configured(key)</code> answers whether sign-in is
-possible; <code>env_name(key, "CLIENT_ID")</code> is the single owner of the naming convention.
-Connections read the first two through <code>OAuthConnection.env_credential()</code>.</p>
+<p>Its redirect URI is the app's callback page for the provider, <code>&lt;server.public_url&gt;/auth/&lt;provider&gt;</code>
+(<code>https://app.example.com/auth/google</code>), which is what to register in the provider console. The
+path segment is the provider's registry key, so Bing Ads signs in at <code>/auth/microsoft</code>. A
+deployment that registered another URI sets <code>INTERLOPER_&lt;PROVIDER&gt;_REDIRECT_URI</code> to override it.</p>
+<p><code>OAuthAppCredentials</code> in <code>interloper.oauth</code> resolves them: <code>from_env("google", settings.server)</code>
+returns the credentials, redirect URI included, or <code>None</code> when the client id or secret is
+missing; <code>is_configured(key)</code> answers whether sign-in is possible and <code>missing(key)</code> names what
+it still needs; <code>env_name(key, "CLIENT_ID")</code> is the single owner of the naming convention.
+Connections read the client id and secret through <code>OAuthConnection.env_credential()</code>.</p>
 
 
 
