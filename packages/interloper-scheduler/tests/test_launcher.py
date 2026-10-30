@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import threading
+import time
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
@@ -73,6 +76,19 @@ def _spec(run_id: UUID) -> RunSpec:
     return RunSpec(dag=dag, metadata={"run_id": str(run_id), "org_id": "org-1"})
 
 
+def _wait_for(condition: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Wait until *condition* holds, as a launched run's thread gets there on its own.
+
+    Args:
+        condition: What to wait for.
+        timeout: Seconds before giving up.
+    """
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "the run's thread never got there"
+        time.sleep(0.01)
+
+
 class _Store:
     """The store a launched run loads its spec from and reports through, recording every batch."""
 
@@ -131,6 +147,47 @@ class TestInProcessLauncher:
         (failed,) = store.events
         assert failed.type is il.EventType.RUN_FAILED
         assert ("deleted" if served else "selects no operations") in failed.metadata["error"]
+
+    def test_a_run_ended_elsewhere_ends_its_thread_quietly(self, caplog: pytest.LogCaptureFixture) -> None:
+        run = _dispatched_run()
+        store = _Store(_spec(run.id))
+        store.runs.ingest = lambda run_id, batch: store._ingest(run_id, batch) and False
+        launcher = InProcessLauncher(runner_type="serial", store=store)  # ty: ignore[invalid-argument-type]
+
+        with caplog.at_level(logging.INFO, logger="interloper_scheduler.launcher"):
+            launcher.launch(run, "ilr_unused")
+            assert store.done.wait(5)
+            _wait_for(
+                lambda: any(
+                    record.name == "interloper_scheduler.launcher" and "was ended elsewhere" in record.getMessage()
+                    for record in caplog.records
+                )
+            )
+
+        ended = [record for record in caplog.records if record.name == "interloper_scheduler.launcher"]
+        assert [(record.levelno, "was ended elsewhere" in record.getMessage()) for record in ended][-1] == (
+            logging.INFO,
+            True,
+        )
+
+    def test_a_run_that_breaks_is_logged_with_its_traceback(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from interloper.events import EventRecorder
+
+        def finish(self: EventRecorder, *args: Any) -> None:
+            raise RuntimeError("recorder bug")
+
+        monkeypatch.setattr(EventRecorder, "finish", finish)
+        run = _dispatched_run()
+        launcher = InProcessLauncher(runner_type="serial", store=_Store(_spec(run.id)))  # ty: ignore[invalid-argument-type]
+
+        with caplog.at_level(logging.ERROR, logger="interloper_scheduler.launcher"):
+            launcher.launch(run, "ilr_unused")
+            _wait_for(lambda: "did not complete" in caplog.text)
+
+        (record,) = [record for record in caplog.records if "did not complete" in record.getMessage()]
+        assert record.exc_info is not None and "recorder bug" in str(record.exc_info[1])
 
     def test_the_launch_thread_carries_the_launch_context(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from interloper.events import EventRecorder

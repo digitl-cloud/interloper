@@ -1192,6 +1192,15 @@ class TestSpec:
         with pytest.raises(NotFoundError, match="deleted"):
             store.runs.spec(run.id)
 
+    def test_a_target_that_declares_no_workload_cannot_be_built(
+        self, store: Store, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        run = store.runs.create(_ORG_ID, component_id=_component(store, kind="job"))
+        monkeypatch.setattr(store.components, "load", lambda component_id: il.MemoryDestination())
+
+        with pytest.raises(TypeError, match="declares no workload"):
+            store.runs.spec(run.id)
+
     def test_a_window_its_operations_refuse_cannot_be_built(self, store: Store) -> None:
         source = store.components.create(_ORG_ID, kind="source", key="demo_source")
         run = store.runs.create(_ORG_ID, component_id=source.id)

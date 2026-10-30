@@ -167,6 +167,16 @@ class TestContainerRun:
         assert result.executions["asset-1"].status is ExecutionStatus.CANCELED
         assert [event.type for event in events][-1] is EventType.RUN_FAILED
 
+    async def test_a_container_lost_while_followed_fails_its_operation_not_the_run(self, monkeypatch, asset):
+        class LostContainer(FakeContainer):
+            def wait(self) -> dict[str, int]:
+                raise RuntimeError("daemon went away")
+
+        result, _ = await _run(monkeypatch, asset, LostContainer())
+
+        assert result.executions["asset-1"].status is ExecutionStatus.FAILED
+        assert result.executions["asset-1"].error == "RuntimeError: daemon went away"
+
     async def test_a_launch_failure_is_a_failed_operation(self, monkeypatch, asset):
         result, events = await _run(monkeypatch, asset)
 
