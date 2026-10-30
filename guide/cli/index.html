@@ -1338,6 +1338,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#platform-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Platform runs
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#other-commands" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2587,8 +2598,8 @@ destinations fixes it.</p>
 <td>Validate and print the plan (runner, partition, operations by generation) without executing.</td>
 </tr>
 <tr>
-<td><code>--run-id ID</code></td>
-<td>Forward a run id in the metadata.</td>
+<td><code>--operation-id ID</code></td>
+<td>Execute only that operation of the DAG, once, its upstreams read rather than executed, leaving what it came to for the host run that started the process.</td>
 </tr>
 </tbody>
 </table>
@@ -2606,11 +2617,15 @@ destinations fixes it.</p>
 <h2 id="environment">Environment<a class="headerlink" href="#environment" title="Permanent link">&para;</a></h2>
 <p>A <code>.env</code> file in the working directory is loaded when <code>python-dotenv</code> is installed. Telemetry
 is initialized from the <code>otel</code> settings for every command.</p>
-<p>A platform run's pod runs <code>interloper run</code> with <code>INTERLOPER_RUN_TOKEN</code> set: the spec comes from a
-file (<code>--format inline @&lt;path&gt;</code>), <code>--metadata</code> carries the run's ids into every event, and the
-events are reported to the API at <code>server.internal_url</code> instead of being printed; see
-<a href="../events/#persistence">Events</a>. A child a container runner starts for one operation of that run
-also carries <code>INTERLOPER_RUN_OPERATION</code>, and reports that operation's events only.</p>
+<h2 id="platform-runs">Platform runs<a class="headerlink" href="#platform-runs" title="Permanent link">&para;</a></h2>
+<p><code>interloper launch &lt;run-id&gt;</code> is what a launcher starts to execute a platform run, not a command
+authors type. With the run's token in <code>INTERLOPER_RUN_TOKEN</code>, it loads the run from the API at
+<code>server.internal_url</code> (its DAG, its partition and the metadata every event carries) and reports
+its events there instead of printing them; see <a href="../events/#persistence">Events</a>. Without a token,
+it stops with what it needs. A child a container runner starts for one operation of that run runs
+<code>interloper launch &lt;run-id&gt; --operation-id &lt;id&gt;</code>: it executes that operation once and reports only
+what happens inside it. Outside the platform, a container runner's child is handed the
+operation's DAG instead, <code>interloper run --format inline &lt;dag&gt; --operation-id &lt;id&gt;</code>.</p>
 <h2 id="other-commands">Other commands<a class="headerlink" href="#other-commands" title="Permanent link">&para;</a></h2>
 <p>Each platform package contributes its own commands, so a command exists exactly when its
 package is installed:</p>

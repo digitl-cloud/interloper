@@ -1956,6 +1956,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#interloper-launch" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>interloper launch</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#interloper-oauth" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2677,6 +2688,26 @@
 </tr>
 </tbody>
 </table>
+<h2 id="interloper-launch"><code>interloper launch</code><a class="headerlink" href="#interloper-launch" title="Permanent link">&para;</a></h2>
+<p>Execute a platform run by its id: its DAG, partition and metadata are loaded from the API and its events reported back, with the run's token (INTERLOPER_RUN_TOKEN), as the launcher or container runner that started the process sets it. The exit status is non-zero when the run cannot be loaded, is lost, or did not complete.</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_id</code></td>
+<td>The platform run to execute</td>
+</tr>
+<tr>
+<td><code>--operation-id OPERATION_ID</code></td>
+<td>Execute only this operation of the run, once, its upstreams read rather than executed, for the host that executes the run</td>
+</tr>
+</tbody>
+</table>
 <h2 id="interloper-oauth"><code>interloper oauth</code><a class="headerlink" href="#interloper-oauth" title="Permanent link">&para;</a></h2>
 <p>Manage the OAuth clients an operator registers for apps that cannot register themselves (a Slack app, a shared connector). Clients that register dynamically are not listed or deleted here.</p>
 <h3 id="interloper-oauth-create"><code>interloper oauth create</code><a class="headerlink" href="#interloper-oauth-create" title="Permanent link">&para;</a></h3>
@@ -2752,12 +2783,8 @@
 <td>Debug verbosity: include execution and destination I/O events</td>
 </tr>
 <tr>
-<td><code>--run-id RUN_ID</code></td>
-<td>Optional run identifier, forwarded as metadata to the runner</td>
-</tr>
-<tr>
-<td><code>--metadata METADATA</code></td>
-<td>Run metadata as a JSON object, spread into every event (ids and names, never secrets)</td>
+<td><code>--operation-id OPERATION_ID</code></td>
+<td>Execute only this operation of the DAG, once, its upstreams read rather than executed, leaving what it came to for the host run that started this process</td>
 </tr>
 <tr>
 <td><code>--date DATE</code></td>

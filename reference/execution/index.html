@@ -2383,10 +2383,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#interloper.AsyncRunner.Run.attempt" class="md-nav__link">
+  <a href="#interloper.AsyncRunner.Run.execute" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;attempt
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;execute
       </span>
     </span>
   </a>
@@ -2803,10 +2803,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.OperationResult.from_attempt" class="md-nav__link">
+  <a href="#interloper.OperationResult.from_execution" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_attempt
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_execution
       </span>
     </span>
   </a>
@@ -2814,10 +2814,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#interloper.OperationResult.from_execution" class="md-nav__link">
+  <a href="#interloper.OperationResult.from_retries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_execution
+        <code class="doc-symbol doc-symbol-toc doc-symbol-method"></code>&nbsp;from_retries
       </span>
     </span>
   </a>
@@ -4720,12 +4720,12 @@ event loop serves the whole run.</p>
 <div class="doc doc-object doc-function">
 
 
-<h4 id="interloper.AsyncRunner.Run.attempt" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">attempt</span>
+<h4 id="interloper.AsyncRunner.Run.execute" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">execute</span>
 
 
-<a href="#interloper.AsyncRunner.Run.attempt" class="headerlink" title="Permanent link">&para;</a></h4>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">attempt</span><span class="p">(</span><span class="n">operation</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span>
+<a href="#interloper.AsyncRunner.Run.execute" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">execute</span><span class="p">(</span><span class="n">operation</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -4753,7 +4753,7 @@ event loop serves the whole run.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The operation to attempt.</p>
+                <p>The operation to execute.</p>
               </div>
             </td>
             <td>
@@ -4779,7 +4779,7 @@ event loop serves the whole run.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The attempt's result.</p>
+                <p>The execution's result.</p>
               </div>
             </td>
           </tr>
@@ -5299,7 +5299,7 @@ The class bool is a subclass of the class int, and cannot be subclassed.</p>
 
 
 <a href="#interloper.Operation.enabled" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f8cfa715c70</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">enabled</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7fef2a301be0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5457,7 +5457,7 @@ dict(**kwargs) -&gt; new dictionary initialized with the name=value pairs
 
 
 <a href="#interloper.Operation.retry" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7f8cfa7169f0</span><span class="o">&gt;</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">retry</span> <span class="o">=</span> <span class="o">&lt;</span><span class="n">interloper</span><span class="o">.</span><span class="n">component</span><span class="o">.</span><span class="n">inherited</span><span class="o">.</span><span class="n">InheritedSetting</span> <span class="nb">object</span> <span class="n">at</span> <span class="mh">0x7feefdf30ef0</span><span class="o">&gt;</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -5809,8 +5809,8 @@ default formats the error with pydantic input values stripped.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Whether another attempt at this operation is worth making.</p>
-<p>Consulted by the runner before it spends an attempt from
+        <p>Whether executing this operation again is worth it.</p>
+<p>Consulted by the runner before it spends an execution from
 <code>retry</code>. Override to recognise a permanent error, such as a
 vendor rejecting a request it will reject identically every time. The
 default is permissive: the budget, not the classifier, is what bounds
@@ -6002,7 +6002,7 @@ outputs; operations without dependencies ignore it.</p>
 machine-owned state: how an operation's effects reach the row without
 the operation knowing the store. An operation's <code>execute</code> returns one
 carrying its effects, and its <code>failure</code> hook one carrying the
-persistence-safe <code>error</code>. An attempt (<code>from_attempt</code>) completes a
+persistence-safe <code>error</code>. An execution (<code>from_execution</code>) completes a
 failure with the <code>traceback</code> (when the operation's class allows one),
 the original <code>exception</code>, kept in memory only so a runner can re-raise
 it, and whether it is <code>retryable</code>. An unset <code>error</code> means the
@@ -6125,12 +6125,12 @@ The class bool is a subclass of the class int, and cannot be subclassed.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="interloper.OperationResult.from_attempt" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_attempt</span>
+<h3 id="interloper.OperationResult.from_execution" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_execution</span>
 
 
-<a href="#interloper.OperationResult.from_attempt" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_attempt</span><span class="p">(</span>
+<a href="#interloper.OperationResult.from_execution" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_execution</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operation</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationContext&lt;/span&gt;" href="./#interloper.OperationContext">OperationContext</a></span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span>
 </span></code></pre></div>
@@ -6138,11 +6138,11 @@ The class bool is a subclass of the class int, and cannot be subclassed.</p>
     <div class="doc doc-contents ">
 
         <p>Execute an operation once, here, and return what it came to.</p>
-<p>The attempt runs inside the <code>interloper.operation.execute</code> span. A
+<p>The execution runs inside the <code>interloper.operation.execute</code> span. A
 failure becomes the operation's <code>failure</code> result, completed with the
 formatted error when the hook left it empty, the traceback when the
 class's <code>capture_traceback</code> allows, the original exception, and
-whether <code>Operation.retryable</code> thinks another attempt may help.</p>
+whether <code>Operation.retryable</code> thinks another execution may help.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6222,14 +6222,14 @@ whether <code>Operation.retryable</code> thinks another attempt may help.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="interloper.OperationResult.from_execution" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_execution</span>
+<h3 id="interloper.OperationResult.from_retries" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <span class="doc doc-object-name doc-function-name">from_retries</span>
 
 
-<a href="#interloper.OperationResult.from_execution" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_execution</span><span class="p">(</span>
+<a href="#interloper.OperationResult.from_retries" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">from_retries</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">operation</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;Operation&lt;/span&gt;" href="./#interloper.Operation">Operation</a></span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">attempt</span><span class="p">:</span> <span class="n"><span title="Callable">Callable</span></span><span class="p">[[],</span> <span class="n"><span title="Awaitable">Awaitable</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span><span class="p">]],</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">execute</span><span class="p">:</span> <span class="n"><span title="Callable">Callable</span></span><span class="p">[[],</span> <span class="n"><span title="Awaitable">Awaitable</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a></span><span class="p">]],</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">on_retry</span><span class="p">:</span> <span class="n"><span title="Callable">Callable</span></span><span class="p">[[</span><span class="n"><span title="str">str</span></span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">on_restart</span><span class="p">:</span> <span class="n"><span title="Callable">Callable</span></span><span class="p">[[],</span> <span class="kc">None</span><span class="p">],</span>
@@ -6238,11 +6238,11 @@ whether <code>Operation.retryable</code> thinks another attempt may help.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Make attempts at an operation under its retry policy and return what the last came to.</p>
-<p>A failed attempt is retried when the operation's <code>RetryPolicy</code> allows
-another and the attempt says it may help: <code>on_retry</code> is told the
+        <p>Execute an operation under its retry policy and return what the last execution came to.</p>
+<p>A failed execution is retried when the operation's <code>RetryPolicy</code> allows
+another and the execution says it may help: <code>on_retry</code> is told the
 error, the policy's backoff is slept, <code>on_restart</code> is told the next
-attempt starts, and <em>attempt</em> is called again.</p>
+execution starts, and <em>execute</em> is called again.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6265,7 +6265,7 @@ attempt starts, and <em>attempt</em> is called again.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The operation, whose policy bounds the attempts.</p>
+                <p>The operation, whose policy bounds the executions.</p>
               </div>
             </td>
             <td>
@@ -6274,14 +6274,14 @@ attempt starts, and <em>attempt</em> is called again.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>attempt</code>
+                <code>execute</code>
             </td>
             <td>
                   <code><span title="Callable">Callable</span>[[], <span title="Awaitable">Awaitable</span>[<a class="autorefs autorefs-internal" title="&lt;code class=&quot;doc-symbol doc-symbol-heading doc-symbol-class&quot;&gt;&lt;/code&gt;            &lt;span class=&quot;doc doc-object-name doc-class-name&quot;&gt;OperationResult&lt;/span&gt;" href="./#interloper.OperationResult">OperationResult</a>]]</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Makes one attempt; never raises for the operation's own failure.</p>
+                <p>Executes the operation once; never raises for the operation's own failure.</p>
               </div>
             </td>
             <td>
@@ -6297,7 +6297,7 @@ attempt starts, and <em>attempt</em> is called again.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Told the error of each attempt that will be retried, before its backoff.</p>
+                <p>Told the error of each execution that will be retried, before its backoff.</p>
               </div>
             </td>
             <td>
@@ -6313,7 +6313,7 @@ attempt starts, and <em>attempt</em> is called again.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Told when the next attempt starts, after the backoff.</p>
+                <p>Told when the next execution starts, after the backoff.</p>
               </div>
             </td>
             <td>
@@ -6339,7 +6339,7 @@ attempt starts, and <em>attempt</em> is called again.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The last attempt's result.</p>
+                <p>The last execution's result.</p>
               </div>
             </td>
           </tr>
@@ -6366,7 +6366,7 @@ attempt starts, and <em>attempt</em> is called again.</p>
 
     <div class="doc doc-contents ">
 
-        <p>What a child's attempt came to, from the message it left on exit.</p>
+        <p>What a child's execution came to, from the message it left on exit.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -6433,7 +6433,7 @@ the container's exit code.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The attempt's failure; one with no message is retryable, since a</p>
+                <p>The execution's failure; one with no message is retryable, since a</p>
               </div>
             </td>
           </tr>
@@ -6468,7 +6468,7 @@ the container's exit code.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Leave what a child's attempt came to where its host reads it once the child exits.</p>
+        <p>Leave what a child's execution came to where its host reads it once the child exits.</p>
 <p>Only the verdict travels: the error, its tail kept within what a
 Kubernetes termination message holds, and whether a retry may help.
 Effects stay in the child, since a pod's status is readable by

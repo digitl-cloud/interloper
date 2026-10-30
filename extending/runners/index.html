@@ -2490,8 +2490,8 @@ environment), makes the run, walks it, closes it, and re-raises when <code>rerai
 </thead>
 <tbody>
 <tr>
-<td><code>attempt(operation) -&gt; OperationResult</code></td>
-<td>Make one attempt at an operation where this kind of run executes it, and return what it came to. An attempt's own failure is a result with its <code>error</code> and <code>retryable</code> set, never an exception; an <code>attempt</code> that raises is a fault of the run itself and fails the whole run.</td>
+<td><code>execute(operation) -&gt; OperationResult</code></td>
+<td>Execute an operation once where this kind of run executes it, and return what it came to. An execution's own failure is a result with its <code>error</code> and <code>retryable</code> set, never an exception; an <code>execute</code> that raises is a fault of the run itself and fails the whole run.</td>
 </tr>
 <tr>
 <td><code>open()</code></td>
@@ -2512,12 +2512,12 @@ process (a Docker daemon, a cluster) is acquired in <code>open</code>, where a f
 starts every ready operation while fewer than <code>capacity</code> are in flight, records each result as it
 lands, stops starting new ones after a failure under <code>fail_fast</code> (what is in flight always
 finishes), cancels whatever never started, and emits <code>RUN_COMPLETED</code> or <code>RUN_FAILED</code>.</p>
-<p>The walk retries every kind of run the same way: it makes attempts under the operation's
-<code>RetryPolicy</code> while each failed attempt is <code>retryable</code>, reporting each one. An in-process attempt
-is <code>OperationResult.from_attempt(operation, context)</code>: it executes the operation inside its span
+<p>The walk retries every kind of run the same way: it executes the operation again under its
+<code>RetryPolicy</code> while each failed execution is <code>retryable</code>, reporting each one. An in-process
+execution is <code>OperationResult.from_execution(operation, context)</code>: it executes the operation inside its span
 and turns a failure into the operation's <code>failure(error)</code> result, completed with the traceback
 (when the operation's class allows one), the original exception, so <code>reraise</code> can raise it, and
-whether <code>operation.retryable(error)</code> thinks another attempt may help.</p>
+whether <code>operation.retryable(error)</code> thinks another execution may help.</p>
 <h2 id="runstate">RunState<a class="headerlink" href="#runstate" title="Permanent link">&para;</a></h2>
 <p><code>run.state</code> holds every operation's <code>ExecutionInfo</code> and moves it through one verb per transition,
 each emitting its <code>OPERATION_*</code> event with a deterministic id:</p>
@@ -2527,13 +2527,13 @@ each emitting its <code>OPERATION_*</code> event with a deterministic id:</p>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">state</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>           <span class="c1"># the OperationContext it executes with</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">state</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>             <span class="c1"># RUNNING; OPERATION_STARTED</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">state</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>      <span class="c1"># OPERATION_RETRIED; the next attempt</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">state</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>      <span class="c1"># OPERATION_RETRIED; the next execution</span>
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">state</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>    <span class="c1"># COMPLETED or FAILED; promotes or cancels its dependents</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">state</span><span class="o">.</span><span class="n">cancel_pending</span><span class="p">()</span>             <span class="c1"># cancels everything not yet terminal</span>
 </span></code></pre></div>
-<p>The walk calls every transition; a run's <code>attempt</code> calls none. Non-enabled operations start as <code>SKIPPED</code> and count
+<p>The walk calls every transition; a run's <code>execute</code> calls none. Non-enabled operations start as <code>SKIPPED</code> and count
 as satisfied predecessors. <code>RunState</code> is not thread-safe: call it from the run's event loop only,
-never from a thread an <code>attempt</code> hands work to.</p>
+never from a thread an <code>execute</code> hands work to.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.runners"</span><span class="k">]</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">deadline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"my_package.runner:DeadlineRunner"</span>
@@ -2543,29 +2543,31 @@ constructs the class with <code>runner.config</code>, so a registered runner is 
 <code>interloper.yaml</code> and the CLI without further wiring.</p>
 <h2 id="launchers">Launchers<a class="headerlink" href="#launchers" title="Permanent link">&para;</a></h2>
 <p>A runner decides where a run's operations execute; a launcher decides where the run itself
-executes. The scheduler's queue claims a run, mints its token, hydrates its target into a DAG
-spec, and calls <code>launch(run, spec, token)</code> on the configured <code>Launcher</code>. A launcher that starts
-another process (a container, a pod) runs <code>Launcher.command(run, spec)</code> there, <code>spec</code> being the
-spec's JSON or <code>@&lt;path&gt;</code> to a file holding it, with the run's token in <code>INTERLOPER_RUN_TOKEN</code> and
-the API's <code>server.internal_url</code> in <code>INTERLOPER_SERVER_INTERNAL_URL</code>: that process holds no
-database credentials and reports its events through the API. Register a launcher in the <code>interloper.launchers</code> entry-point group and
-give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes launchers do.</p>
+executes. The scheduler's queue claims a run, checks that its spec can be built, mints its token,
+and calls <code>launch(run, token)</code> on the configured <code>Launcher</code>. A launcher that starts another
+process (a container, a pod) runs <code>Launcher.command(run)</code> there, <code>interloper launch &lt;run-id&gt;</code>,
+with the run's token in <code>INTERLOPER_RUN_TOKEN</code> and the API's <code>server.internal_url</code> in
+<code>INTERLOPER_SERVER_INTERNAL_URL</code>. That process holds no database credentials: it loads what the
+run executes from the API (<code>RunSpec</code>: the DAG, connections resolved, its partition and its event
+metadata) and reports its events back there. Register a launcher in the <code>interloper.launchers</code>
+entry-point group and give it a <code>from_settings</code> classmethod, as the Docker and Kubernetes
+launchers do.</p>
 <h2 id="events-from-children">Events from children<a class="headerlink" href="#events-from-children" title="Permanent link">&para;</a></h2>
-<p>A run that makes each attempt in a child process (the Docker and Kubernetes runners) still owns
-its operations' lifecycle: the host reports every start, retry and verdict, and the child only
-what happens inside the operation. Have the child run
-<code>interloper run --format inline --run-id=&lt;id&gt; &lt;spec&gt;</code> with <code>INTERLOPER_RUN_OPERATION</code> set to the
-operation's id, and, on the platform, the host's <code>INTERLOPER_RUN_TOKEN</code> and
-<code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child then makes one attempt, reports that operation's
-asset and destination events to the API, and drops every lifecycle event and its upstreams'
-events. A failed attempt leaves its error and whether a retry may help at
-<code>OperationResult.TERMINATION_MESSAGE_PATH</code>; the host reads it back with
-<code>OperationResult.from_termination_message</code> once the child exits (Kubernetes surfaces it as the
-container's termination message; a Docker host copies it out of the stopped container). A child
-that dies without writing one fails its attempt with its exit code, and may be retried. Pass
-<code>child_process_env()</code> into the child for trace continuity.</p>
-<p>Run the child on the host's interloper version. The spec and the flags it receives are written
-by the host's version and read by the child's, so a child image older than its host can refuse
+<p>A run that executes each operation in a child process (the Docker and Kubernetes runners) still
+owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
+only what happens inside the operation. On the platform, have the child run
+<code>interloper launch &lt;run-id&gt; --operation-id &lt;id&gt;</code> with the host's <code>INTERLOPER_RUN_TOKEN</code>
+and <code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child loads the run, executes that one operation once,
+reports its asset and destination events to the API, and drops every lifecycle event and its
+upstreams' events. Outside the platform, hand the child the operation's DAG instead,
+<code>interloper run --format inline &lt;dag&gt; --operation-id &lt;id&gt;</code>. A failed execution leaves its
+error and whether a retry may help at <code>OperationResult.TERMINATION_MESSAGE_PATH</code>; the host reads
+it back with <code>OperationResult.from_termination_message</code> once the child exits (Kubernetes surfaces
+it as the container's termination message; a Docker host copies it out of the stopped
+container). A child that dies without writing one fails its execution with its exit code, and
+may be retried. Pass <code>child_process_env()</code> into the child for trace continuity.</p>
+<p>Run the child on the host's interloper version. The command it receives is written by the host's
+version and read by the child's, so a child image older than its host can refuse
 a spec field or a flag it does not know yet. Upgrade the runner image together with the host,
 and roll them back together.</p>
 

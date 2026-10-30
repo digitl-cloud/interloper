@@ -2552,10 +2552,10 @@ deliver for half the heartbeat timeout is lost, and the reaper fails it.</p>
 reported, or the reason the platform ended it (the reaper, a failed dispatch, an exhausted
 quota). A run that failed only because operations failed has none of its own; their reasons are
 on their <code>operation_failed</code> events.</p>
-<p>A run's pod holds no database credentials. It delivers its batches to <code>POST
-/api/runs/{run_id}/events</code> on the API's <code>server.internal_url</code>, authenticated by a token the
-scheduler mints when it dispatches the run; in the scheduler's own process the batches go
-straight to the store.</p>
+<p>A run's pod holds no database credentials. With a token the scheduler mints when it dispatches
+the run, it loads the run from <code>GET /api/runs/{run_id}/spec</code> and delivers its batches to <code>POST
+/api/runs/{run_id}/events</code>, both on the API's <code>server.internal_url</code>; in the scheduler's own
+process the run is loaded and its batches go straight through the store.</p>
 <h2 id="event-types">Event types<a class="headerlink" href="#event-types" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

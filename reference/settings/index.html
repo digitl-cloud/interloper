@@ -1989,6 +1989,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>run</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#smtp" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3056,6 +3067,26 @@
 <td><code>dict[str, Any]</code></td>
 <td><code>{}</code></td>
 <td>Keyword arguments for the launcher class.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="run"><code>run</code><a class="headerlink" href="#run" title="Permanent link">&para;</a></h3>
+<p>The platform run this process executes, as the launcher that started it sets it; never set by hand. Prefix <code>INTERLOPER_RUN_</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>token</code></td>
+<td><code>str</code></td>
+<td><code>''</code></td>
+<td>The run's token, with which <code>interloper launch</code> loads the run from the API and reports its events back.</td>
 </tr>
 </tbody>
 </table>

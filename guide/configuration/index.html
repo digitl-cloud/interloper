@@ -2480,14 +2480,9 @@ environment, not in <code>${VAR}</code> placeholders.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>INTERLOPER_RUN_OPERATION</code></td>
-<td><code>interloper run</code>, telemetry setup</td>
-<td>Set by a container runner on a child: the one operation of the host's run it reports events for; its metrics count destination I/O only.</td>
-</tr>
-<tr>
 <td><code>INTERLOPER_RUN_TOKEN</code></td>
-<td><code>interloper run</code></td>
-<td>Set by a launcher on a run's pod: the bearer the run's events are reported to the API with.</td>
+<td><code>interloper launch</code></td>
+<td><code>run.token</code>, set by a launcher on a run's pod and forwarded by a container runner to its children: the bearer the run is loaded from the API and its events are reported with.</td>
 </tr>
 <tr>
 <td><code>INTERLOPER_&lt;PROVIDER&gt;_CLIENT_ID</code>, <code>_CLIENT_SECRET</code></td>
