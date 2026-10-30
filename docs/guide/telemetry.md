@@ -101,7 +101,7 @@ instrumentation is installed, so REST-based sources get egress spans for free.
 Metrics are computed by a subscriber on the [event bus](events.md), so they cost nothing on the
 execution path, and they dedupe on event id so one outcome reported twice counts once. Attributes
 stay low-cardinality by design: ids and partitions never become metric attributes. A child
-container executing one operation of its host's run (`INTERLOPER_RUN_OPERATION`) counts only
+container executing one operation of its host's run (`--operation-id`) counts only
 destination I/O, which happens nowhere else; the host counts its run and every operation's
 verdict, which it authors. Operation durations are therefore not recorded for operations that
 execute in a child.

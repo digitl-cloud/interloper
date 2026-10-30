@@ -81,7 +81,7 @@ destinations fixes it.
 | `-q` | Warnings and errors only. |
 | `--events json` | Stream raw event JSON lines on stdout instead, unaffected by the level. |
 | `--dry-run` | Validate and print the plan (runner, partition, operations by generation) without executing. |
-| `--run-id ID` | Forward a run id in the metadata. |
+| `--operation-id ID` | Execute only that operation of the DAG, once, its upstreams read rather than executed, leaving what it came to for the host run that started the process. |
 
 The process exits non-zero when the run does not complete.
 
@@ -104,11 +104,16 @@ runner:
 A `.env` file in the working directory is loaded when `python-dotenv` is installed. Telemetry
 is initialized from the `otel` settings for every command.
 
-A platform run's pod runs `interloper run` with `INTERLOPER_RUN_TOKEN` set: the spec comes from a
-file (`--format inline @<path>`), `--metadata` carries the run's ids into every event, and the
-events are reported to the API at `server.internal_url` instead of being printed; see
-[Events](events.md#persistence). A child a container runner starts for one operation of that run
-also carries `INTERLOPER_RUN_OPERATION`, and reports that operation's events only.
+## Platform runs
+
+`interloper launch <run-id>` is what a launcher starts to execute a platform run, not a command
+authors type. With the run's token in `INTERLOPER_RUN_TOKEN`, it loads the run from the API at
+`server.internal_url` (its DAG, its partition and the metadata every event carries) and reports
+its events there instead of printing them; see [Events](events.md#persistence). Without a token,
+it stops with what it needs. A child a container runner starts for one operation of that run runs
+`interloper launch <run-id> --operation-id <id>`: it executes that operation once and reports only
+what happens inside it. Outside the platform, a container runner's child is handed the
+operation's DAG instead, `interloper run --format inline <dag> --operation-id <id>`.
 
 ## Other commands
 

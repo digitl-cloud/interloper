@@ -104,7 +104,7 @@ class OperationResult:
     machine-owned state: how an operation's effects reach the row without
     the operation knowing the store. An operation's `execute` returns one
     carrying its effects, and its `failure` hook one carrying the
-    persistence-safe ``error``. An attempt (`from_attempt`) completes a
+    persistence-safe ``error``. An execution (`from_execution`) completes a
     failure with the ``traceback`` (when the operation's class allows one),
     the original ``exception``, kept in memory only so a runner can re-raise
     it, and whether it is ``retryable``. An unset ``error`` means the
@@ -130,33 +130,33 @@ class OperationResult:
         return self.error is None
 
     @classmethod
-    async def from_execution(
+    async def from_retries(
         cls,
         operation: Operation,
-        attempt: Callable[[], Awaitable[OperationResult]],
+        execute: Callable[[], Awaitable[OperationResult]],
         *,
         on_retry: Callable[[str], None],
         on_restart: Callable[[], None],
     ) -> OperationResult:
-        """Make attempts at an operation under its retry policy and return what the last came to.
+        """Execute an operation under its retry policy and return what the last execution came to.
 
-        A failed attempt is retried when the operation's `RetryPolicy` allows
-        another and the attempt says it may help: ``on_retry`` is told the
+        A failed execution is retried when the operation's `RetryPolicy` allows
+        another and the execution says it may help: ``on_retry`` is told the
         error, the policy's backoff is slept, ``on_restart`` is told the next
-        attempt starts, and *attempt* is called again.
+        execution starts, and *execute* is called again.
 
         Args:
-            operation: The operation, whose policy bounds the attempts.
-            attempt: Makes one attempt; never raises for the operation's own failure.
-            on_retry: Told the error of each attempt that will be retried, before its backoff.
-            on_restart: Told when the next attempt starts, after the backoff.
+            operation: The operation, whose policy bounds the executions.
+            execute: Executes the operation once; never raises for the operation's own failure.
+            on_retry: Told the error of each execution that will be retried, before its backoff.
+            on_restart: Told when the next execution starts, after the backoff.
 
         Returns:
-            The last attempt's result.
+            The last execution's result.
         """
         number = 1
         while True:
-            result = await attempt()
+            result = await execute()
             policy = operation.retry
             if result.succeeded or not result.retryable or policy is None or not policy.allows(number + 1):
                 return result
@@ -166,14 +166,14 @@ class OperationResult:
             on_restart()
 
     @classmethod
-    async def from_attempt(cls, operation: Operation, context: OperationContext) -> OperationResult:
+    async def from_execution(cls, operation: Operation, context: OperationContext) -> OperationResult:
         """Execute an operation once, here, and return what it came to.
 
-        The attempt runs inside the ``interloper.operation.execute`` span. A
+        The execution runs inside the ``interloper.operation.execute`` span. A
         failure becomes the operation's `failure` result, completed with the
         formatted error when the hook left it empty, the traceback when the
         class's ``capture_traceback`` allows, the original exception, and
-        whether `Operation.retryable` thinks another attempt may help.
+        whether `Operation.retryable` thinks another execution may help.
 
         Args:
             operation: The operation to execute.
@@ -197,7 +197,7 @@ class OperationResult:
             )
 
     def write_termination_message(self) -> None:
-        """Leave what a child's attempt came to where its host reads it once the child exits.
+        """Leave what a child's execution came to where its host reads it once the child exits.
 
         Only the verdict travels: the error, its tail kept within what a
         Kubernetes termination message holds, and whether a retry may help.
@@ -210,7 +210,7 @@ class OperationResult:
 
     @classmethod
     def from_termination_message(cls, message: str | None, fallback: str) -> OperationResult:
-        """What a child's attempt came to, from the message it left on exit.
+        """What a child's execution came to, from the message it left on exit.
 
         Args:
             message: The child's termination message; ``None`` or empty when
@@ -219,7 +219,7 @@ class OperationResult:
                 the container's exit code.
 
         Returns:
-            The attempt's failure; one with no message is retryable, since a
+            The execution's failure; one with no message is retryable, since a
             killed container says nothing about the operation.
         """
         if not message:
@@ -346,9 +346,9 @@ class Operation(Component, Workload):
         """
 
     def retryable(self, error: Exception) -> bool:
-        """Whether another attempt at this operation is worth making.
+        """Whether executing this operation again is worth it.
 
-        Consulted by the runner before it spends an attempt from
+        Consulted by the runner before it spends an execution from
         `retry`. Override to recognise a permanent error, such as a
         vendor rejecting a request it will reject identically every time. The
         default is permissive: the budget, not the classifier, is what bounds

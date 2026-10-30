@@ -92,6 +92,7 @@ build-backend = "uv_build"
 module-name = "interloper"
 
 [project.entry-points."interloper.cli"]
+launch = "interloper.cli.commands.launch:register"
 run = "interloper.cli.commands.run:register"
 
 [project.scripts]

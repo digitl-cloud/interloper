@@ -12,13 +12,10 @@ from interloper.errors import ConfigError
 from interloper.telemetry.propagation import child_process_env
 
 if TYPE_CHECKING:
-    from interloper.dag import DAGSpec
     from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
     from interloper_db.models import Run
 from interloper_scheduler.launcher import Launcher
 from kubernetes import client, config
-
-_SPEC_DIRECTORY = "/interloper/run"
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +23,10 @@ logger = logging.getLogger(__name__)
 class KubernetesLauncher(Launcher):
     """Launches each run as a Kubernetes Job.
 
-    The Job's container runs ``interloper run`` on the run's DAG spec. The
-    spec and the run's token travel in a Secret the Job owns, so Kubernetes
-    deletes it with the Job. The pod holds no database credentials: it reports
-    its events to the API's ``internal_url`` with that token.
+    The Job's container runs ``interloper launch``: it loads what the
+    run executes from the API's ``internal_url`` and reports its events there,
+    with the run's token. The token travels in a Secret the Job owns, so
+    Kubernetes deletes it with the Job. The pod holds no database credentials.
     """
 
     @classmethod
@@ -146,20 +143,19 @@ class KubernetesLauncher(Launcher):
         self._batch_v1 = client.BatchV1Api()
         self._core_v1 = client.CoreV1Api()
 
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+    def launch(self, run: Run, token: str) -> None:
         """Create the run's Job suspended, the Secret it owns, then start the Job.
 
-        The Secret carries the run's DAG spec, mounted as a file, and its
-        token, read into the environment: neither belongs in the Job's own
-        spec, which every reader of Jobs and Pods sees. Owned by the Job, the
-        Secret is deleted with it. The Job is created suspended because the
-        Secret's owner reference needs the Job's uid, and a pod started before
-        its Secret exists would wait for it forever; a Job whose Secret cannot
-        be created is deleted before it ever starts a pod.
+        The Secret carries the run's token, read into the environment: it does
+        not belong in the Job's own spec, which every reader of Jobs and Pods
+        sees. Owned by the Job, the Secret is deleted with it. The Job is
+        created suspended because the Secret's owner reference needs the Job's
+        uid, and a pod started before its Secret exists would wait for it
+        forever; a Job whose Secret cannot be created is deleted before it ever
+        starts a pod.
 
         Args:
             run: The dispatched run.
-            spec: The DAG it executes, written into the Secret.
             token: The run's token, written into the Secret.
         """
         name = f"interloper-run-{str(run.id)[:8]}"
@@ -171,7 +167,7 @@ class KubernetesLauncher(Launcher):
                 metadata=client.V1ObjectMeta(
                     name=name, namespace=self._namespace, labels=labels, owner_references=[owner]
                 ),
-                string_data={"spec.json": spec.model_dump_json(), "token": token},
+                string_data={"token": token},
             )
             self._core_v1.create_namespaced_secret(namespace=self._namespace, body=secret)
             self._batch_v1.patch_namespaced_job(name=name, namespace=self._namespace, body={"spec": {"suspend": False}})
@@ -181,7 +177,7 @@ class KubernetesLauncher(Launcher):
         logger.info("Created Job %s for run %s", name, run.id)
 
     def _job(self, run: Run, name: str, labels: dict[str, str]) -> client.V1Job:
-        """The suspended Job that runs the run's spec, read from its Secret.
+        """The suspended Job that executes the run, its token read from its Secret.
 
         Args:
             run: The dispatched run.
@@ -191,7 +187,7 @@ class KubernetesLauncher(Launcher):
         Returns:
             The Job to create.
         """
-        command = self.command(run, f"@{_SPEC_DIRECTORY}/spec.json")
+        command = self.command(run)
         token = client.V1EnvVar(
             name="INTERLOPER_RUN_TOKEN",
             value_from=client.V1EnvVarSource(secret_key_ref=client.V1SecretKeySelector(name=name, key="token")),
@@ -207,9 +203,7 @@ class KubernetesLauncher(Launcher):
             if self._env_from
             else None,
             resources=self._build_resources(),
-            volume_mounts=[client.V1VolumeMount(name="spec", mount_path=_SPEC_DIRECTORY, read_only=True)],
         )
-        spec_file = client.V1KeyToPath(key="spec.json", path="spec.json")
         pod_spec = client.V1PodSpec(
             containers=[container],
             restart_policy="Never",
@@ -219,9 +213,6 @@ class KubernetesLauncher(Launcher):
             image_pull_secrets=[client.V1LocalObjectReference(name=s) for s in self._image_pull_secrets]
             if self._image_pull_secrets
             else None,
-            volumes=[
-                client.V1Volume(name="spec", secret=client.V1SecretVolumeSource(secret_name=name, items=[spec_file]))
-            ],
         )
         return client.V1Job(
             api_version="batch/v1",

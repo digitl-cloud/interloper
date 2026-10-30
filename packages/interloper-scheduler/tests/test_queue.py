@@ -8,7 +8,6 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.dag import DAGSpec
 from interloper_assets.demo.basic.source import DemoSource
 from interloper_db import Store
 from interloper_db import engine as engine_module
@@ -34,12 +33,12 @@ _CATALOG = il.Catalog.from_assets([DemoSource, EmptySource])
 class _FakeLauncher(Launcher):
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
-        self.launched: list[tuple[UUID, DAGSpec, str]] = []
+        self.launched: list[tuple[UUID, str]] = []
 
-    def launch(self, run: Run, spec: DAGSpec, token: str) -> None:
+    def launch(self, run: Run, token: str) -> None:
         if self.fail:
             raise RuntimeError("no docker daemon")
-        self.launched.append((run.id, spec, token))
+        self.launched.append((run.id, token))
 
 
 @pytest.fixture
@@ -88,7 +87,7 @@ def _source(store: Store) -> UUID:
     return source_id
 
 
-def test_tick_hands_each_run_its_spec_and_token(store: Store) -> None:
+def test_tick_launches_each_run_with_its_token(store: Store) -> None:
     source_id = _source(store)
     first = store.runs.create(_ORG, component_id=source_id, partition_key="2026-10-25")
     second = store.runs.create(_ORG, component_id=source_id, partition_key="2026-10-25")
@@ -96,11 +95,13 @@ def test_tick_hands_each_run_its_spec_and_token(store: Store) -> None:
 
     QueueController(launcher=launcher, store=store)._tick()
 
-    assert {run_id for run_id, _spec, _token in launcher.launched} == {first.id, second.id}
+    assert {run_id for run_id, _token in launcher.launched} == {first.id, second.id}
     assert set(_statuses(store).values()) == {"dispatched"}
-    _, spec, token = launcher.launched[0]
+    run_id, token = launcher.launched[0]
     assert token.startswith("ilr_")
-    assert len(il.DAG.from_spec(spec, catalog=_CATALOG).operations) == 5
+    spec = store.runs.spec(run_id)
+    assert spec is not None
+    assert len(il.DAG.from_spec(spec.dag, catalog=_CATALOG).operations) == 5
 
 
 def test_empty_queue_is_a_noop(store: Store) -> None:
@@ -123,9 +124,11 @@ def test_a_failed_scope_retry_disables_the_prior_successes(store: Store) -> None
 
     QueueController(launcher=launcher, store=store)._tick()
 
-    ((_run_id, spec, _token),) = launcher.launched
+    ((run_id, _token),) = launcher.launched
+    spec = store.runs.spec(run_id)
+    assert spec is not None
     disabled = {
-        operation.id for operation in il.DAG.from_spec(spec, catalog=_CATALOG).operations if not operation.enabled
+        operation.id for operation in il.DAG.from_spec(spec.dag, catalog=_CATALOG).operations if not operation.enabled
     }
     assert str(asset_id) in disabled
 

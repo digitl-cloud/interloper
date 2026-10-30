@@ -1,9 +1,10 @@
-"""Runs API: queue, inspect, retry and cancel runs, read their executions and events, take in a run's reports.
+"""Runs API: queue, inspect, retry and cancel runs, read their executions and events; serve a run's own process.
 
 Two routers: ``org_router`` is mounted under the organisation's path and serves
-its members; ``router`` is mounted at the API root and serves a run's pod, which
-authenticates as its run (:func:`~interloper_api.dependencies.require_run`) and
-names no organisation.
+its members; ``router`` is mounted at the API root and serves the process that
+executes a run, which authenticates as its run
+(:func:`~interloper_api.dependencies.require_run`), names no organisation,
+loads what the run executes and reports what happened.
 """
 
 from __future__ import annotations
@@ -14,9 +15,10 @@ from uuid import UUID
 
 import interloper as il
 from fastapi import APIRouter, Depends, HTTPException, Query
-from interloper.errors import EventError
-from interloper_db import EventQuery, ExecutionQuery, Page, PageQuery, RunQuery
-from interloper_db.models import Event, Run
+from interloper.errors import EventError, PartitionError
+from interloper.runner.spec import RunSpec
+from interloper_db import EventQuery, ExecutionQuery, NotFoundError, Page, PageQuery, RunQuery
+from interloper_db.models import Event, Run, RunStatus
 from pydantic import BaseModel, Field
 
 from interloper_api.dependencies import (
@@ -338,6 +340,37 @@ def list_run_events(
     """
     run = load_authorized(store.runs.get, run_id, scope, label="Run")
     return store.events.list(run.org_id, query, run_id=run_id).map(EventResponse.from_event)
+
+
+@router.get("/{run_id}/spec")
+def get_spec(run: Annotated[Run, Depends(require_run)], store: StoreDep) -> RunSpec:
+    """What the run executes, built from its row as it stands: the process that executes it loads it once started.
+
+    Only the run's own token is accepted (`require_run`), and only while the
+    run is dispatched or running: a run ended elsewhere is not to be started.
+
+    Args:
+        run: The run its token stands for.
+        store: The Store instance.
+
+    Returns:
+        The run's DAG, its connections resolved, the partition it covers and
+        its event metadata.
+
+    Raises:
+        HTTPException: 409 when the run is no longer live, or can no longer be
+            built (its target deleted, or selecting nothing, or its window
+            refused).
+    """
+    if run.status not in (RunStatus.DISPATCHED, RunStatus.RUNNING):
+        raise HTTPException(status_code=409, detail=f"Run {run.id} is {run.status}, not live")
+    try:
+        spec = store.runs.spec(run.id)
+    except (NotFoundError, TypeError, PartitionError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if spec is None:
+        raise HTTPException(status_code=409, detail=f"Run {run.id} selects no operations")
+    return spec
 
 
 class IngestResponse(BaseModel):

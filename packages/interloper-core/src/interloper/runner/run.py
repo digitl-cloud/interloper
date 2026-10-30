@@ -31,9 +31,9 @@ class Run(ABC):
 
     A runner is configuration; a run is made from it for one DAG and one
     window, walks the DAG once and is closed. Each kind of run says where an
-    attempt at an operation executes (`attempt`) and what it holds while the
-    run lasts (acquired by `open`, released by `close`); the walk, the
-    retries, every lifecycle event and the result are the same for every kind.
+    operation executes (`execute`) and what it holds while the run lasts
+    (acquired by `open`, released by `close`); the walk, the retries, every
+    lifecycle event and the result are the same for every kind.
     """
 
     def __init__(self, runner: Runner, dag: DAG, window: PartitionWindow | None, metadata: dict[str, Any]) -> None:
@@ -112,7 +112,7 @@ class Run(ABC):
         while not self.state.done and self.fault is None:
             for operation in self.state.ready[: self.runner.capacity - len(inflight)]:
                 self.state.start(operation)
-                inflight[asyncio.create_task(self.execute(operation))] = operation
+                inflight[asyncio.create_task(self._execute_with_retries(operation))] = operation
             if not inflight:
                 raise RunnerError(
                     "No operations ready but execution not complete. "
@@ -224,18 +224,18 @@ class Run(ABC):
             raise info.result.exception
         raise RunnerError(f"Operation '{operation.key}' failed: {info.error}")
 
-    async def execute(self, operation: Operation) -> OperationResult:
-        """Execute an operation under its retry policy, reporting each attempt as it happens.
+    async def _execute_with_retries(self, operation: Operation) -> OperationResult:
+        """Execute an operation under its retry policy, reporting each execution as it happens.
 
         Args:
             operation: The operation to execute.
 
         Returns:
-            What its last attempt came to.
+            What its last execution came to.
         """
-        return await OperationResult.from_execution(
+        return await OperationResult.from_retries(
             operation,
-            partial(self.attempt, operation),
+            partial(self.execute, operation),
             on_retry=partial(self.state.retry, operation),
             on_restart=partial(self.state.start, operation),
         )
@@ -243,14 +243,14 @@ class Run(ABC):
     # -- The kind of run ---------------------------------------------------------
 
     @abstractmethod
-    async def attempt(self, operation: Operation) -> OperationResult:
-        """Make one attempt at an operation and return what it came to; never raise for its own failure.
+    async def execute(self, operation: Operation) -> OperationResult:
+        """Execute an operation once and return what it came to; never raise for its own failure.
 
         Args:
-            operation: The operation to attempt.
+            operation: The operation to execute.
 
         Returns:
-            The attempt's result, its ``retryable`` set on a failure.
+            The execution's result, its ``retryable`` set on a failure.
         """
 
     async def open(self) -> None:  # noqa: B027 - a run holding nothing acquires nothing

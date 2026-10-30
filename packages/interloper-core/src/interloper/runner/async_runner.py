@@ -19,16 +19,16 @@ class AsyncRun(Run):
     event loop serves the whole run.
     """
 
-    async def attempt(self, operation: Operation) -> OperationResult:
+    async def execute(self, operation: Operation) -> OperationResult:
         """Execute the operation once, here.
 
         Args:
-            operation: The operation to attempt.
+            operation: The operation to execute.
 
         Returns:
-            The attempt's result.
+            The execution's result.
         """
-        return await OperationResult.from_attempt(operation, self.state.context(operation))
+        return await OperationResult.from_execution(operation, self.state.context(operation))
 
 
 class AsyncRunner(Runner):

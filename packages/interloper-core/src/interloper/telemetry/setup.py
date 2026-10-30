@@ -63,7 +63,7 @@ def _exporter_kwargs(settings: TelemetrySettings) -> dict[str, Any]:
     return kwargs
 
 
-def init_telemetry(settings: TelemetrySettings) -> bool:
+def init_telemetry(settings: TelemetrySettings, *, operation: bool = False) -> bool:
     """Initialize the OpenTelemetry SDK from interloper settings.
 
     Idempotent; a fast no-op when telemetry is disabled. When enabled but
@@ -78,6 +78,10 @@ def init_telemetry(settings: TelemetrySettings) -> bool:
 
     Args:
         settings: The resolved telemetry settings.
+        operation: Whether this process executes one operation for a host run
+            (``interloper run`` or ``launch`` with ``--operation-id``), whose metrics are then only its
+            destination I/O: the host counts its run and every operation's
+            verdict.
 
     Returns:
         True when the SDK was (or already is) active.
@@ -158,7 +162,7 @@ def init_telemetry(settings: TelemetrySettings) -> bool:
         )
         metrics.set_meter_provider(_meter_provider)
 
-        _metrics_handler = _register_metrics_handler()
+        _metrics_handler = _register_metrics_handler(operation=operation)
 
     _instrument_libraries()
 
@@ -231,13 +235,16 @@ def _duration_views() -> list[Any]:
     ]
 
 
-def _register_metrics_handler() -> OtelMetricsHandler:
+def _register_metrics_handler(*, operation: bool) -> OtelMetricsHandler:
     """Subscribe the metrics handler on the event bus.
 
-    A child process executing one operation of its host's run (marked by
-    ``INTERLOPER_RUN_OPERATION``) counts only destination I/O, which happens
-    nowhere else: the host counts its run and authors every operation's
-    verdict. Traces are unaffected: spans exist where code runs.
+    A process executing one operation of its host's run counts only
+    destination I/O, which happens nowhere else: the host counts its run and
+    authors every operation's verdict. Traces are unaffected: spans exist
+    where code runs.
+
+    Args:
+        operation: Whether this process executes one operation for a host run.
 
     Returns:
         The subscribed handler.
@@ -246,8 +253,7 @@ def _register_metrics_handler() -> OtelMetricsHandler:
     from interloper.telemetry.metrics import OtelMetricsHandler
 
     handler = OtelMetricsHandler()
-    child = bool(os.environ.get("INTERLOPER_RUN_OPERATION"))
-    event_types = OtelMetricsHandler.DESTINATION_EVENT_TYPES if child else OtelMetricsHandler.EVENT_TYPES
+    event_types = OtelMetricsHandler.DESTINATION_EVENT_TYPES if operation else OtelMetricsHandler.EVENT_TYPES
     EventBus.subscribe(handler, event_types=event_types)
     return handler
 

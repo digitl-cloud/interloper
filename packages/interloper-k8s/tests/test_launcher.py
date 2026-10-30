@@ -1,15 +1,13 @@
-"""Tests for ``interloper_k8s.launcher``: one Job per run, its spec in a Secret the Job owns, no database in the pod."""
+"""Tests for ``interloper_k8s.launcher``: one Job per run, its token in a Secret it owns, no database in the pod."""
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 from interloper.catalog import Catalog
-from interloper.dag import DAGSpec
 from interloper.settings import LauncherSettings, ReaperSettings, RunnerSettings, ServerSettings
 from interloper_db import RunStatus
 from interloper_db.models import Run
@@ -65,7 +63,7 @@ def _launch(
     launcher._batch_v1 = cast(client.BatchV1Api, batch)
     launcher._core_v1 = cast(client.CoreV1Api, core)
     run = Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED, partition_key=partition_key)
-    launcher.launch(run, DAGSpec(items=[]), "ilr_x")
+    launcher.launch(run, "ilr_x")
     return batch, core
 
 
@@ -94,10 +92,9 @@ def test_the_job_starts_once_the_secret_it_owns_exists(launcher_factory: Callabl
 
     assert job.spec.suspend is True
     assert batch.patches == [(job.metadata.name, {"spec": {"suspend": False}})]
-    assert container.args[:4] == ["run", "--format", "inline", "@/interloper/run/spec.json"]
-    assert container.args[-2:] == ["--date", "2026-10-26"]
-    assert json.loads(secret.string_data["spec.json"]) == {"items": []}
-    assert secret.string_data["token"] == "ilr_x"
+    # The pod loads the run's DAG, partition and metadata by its id: only the token is handed over.
+    assert container.args == ["launch", job.metadata.labels["interloper.run_id"]]
+    assert secret.string_data == {"token": "ilr_x"}
     (owner,) = secret.metadata.owner_references
     assert (owner.kind, owner.name, owner.uid, owner.block_owner_deletion) == (
         "Job",
@@ -105,11 +102,8 @@ def test_the_job_starts_once_the_secret_it_owns_exists(launcher_factory: Callabl
         "job-uid",
         None,
     )
-    (volume,) = job.spec.template.spec.volumes
-    assert volume.secret.secret_name == secret.metadata.name
-    assert [item.key for item in volume.secret.items] == ["spec.json"]
-    (mount,) = container.volume_mounts
-    assert (mount.mount_path, mount.read_only) == ("/interloper/run", True)
+    assert job.spec.template.spec.volumes is None
+    assert container.volume_mounts is None
 
 
 def test_a_job_whose_secret_cannot_be_created_is_deleted_unstarted(
@@ -121,7 +115,7 @@ def test_a_job_whose_secret_cannot_be_created_is_deleted_unstarted(
     launcher._core_v1 = cast(client.CoreV1Api, core)
 
     with pytest.raises(RuntimeError, match="forbidden"):
-        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), DAGSpec(items=[]), "ilr_x")
+        launcher.launch(Run(id=uuid4(), org_id=uuid4(), status=RunStatus.DISPATCHED), "ilr_x")
 
     assert batch.deleted == [batch.jobs[0].metadata.name]
     assert batch.patches == []

@@ -9,7 +9,6 @@ import pytest
 
 import interloper as il
 from interloper.cli.commands.run import _cmd_run, register
-from interloper.events import Event, EventBatch, EventBus, EventType
 from interloper.operation import OperationResult
 
 
@@ -58,8 +57,7 @@ def _args(**overrides: Any) -> argparse.Namespace:
         "format": "paths",
         "file": None,
         "dry_run": False,
-        "run_id": None,
-        "metadata": None,
+        "operation_id": None,
         "date": None,
         "start_date": None,
         "end_date": None,
@@ -279,7 +277,7 @@ class TestRegister:
         assert args.file is None
         assert args.events == "pretty"
         assert (args.dry_run, args.quiet, args.verbose) == (False, False, False)
-        assert (args.date, args.start_date, args.end_date, args.run_id) == (None, None, None, None)
+        assert (args.date, args.start_date, args.end_date, args.operation_id) == (None, None, None, None)
         assert args.handler is _cmd_run
 
     def test_flags_are_parsed(self) -> None:
@@ -287,10 +285,22 @@ class TestRegister:
         register(parser.add_subparsers(dest="command"))
 
         args = parser.parse_args(
-            ["run", "--format", "inline", "--events", "json", "-v", "--run-id", "abc", "--date", "2026-01-01", "{}"]
+            [
+                "run",
+                "--format",
+                "inline",
+                "--events",
+                "json",
+                "-v",
+                "--operation-id",
+                "abc",
+                "--date",
+                "2026-01-01",
+                "{}",
+            ]
         )
 
-        assert (args.format, args.events, args.verbose, args.run_id, args.date) == (
+        assert (args.format, args.events, args.verbose, args.operation_id, args.date) == (
             "inline",
             "json",
             True,
@@ -337,53 +347,13 @@ class TestRunPathsMode:
 
 
 class TestRunOutcome:
-    """Run metadata, exit status, and container event forwarding."""
-
-    def test_run_id_is_forwarded_as_metadata(self) -> None:
-        events: list[Any] = []
-        EventBus.subscribe(events.append)
-        try:
-            _cmd_run(_args(target=[SOURCE_PATH], run_id="cli-run-id"))
-            EventBus.flush(timeout=5.0)
-        finally:
-            EventBus.unsubscribe(events.append)
-
-        assert {event.metadata.get("run_id") for event in events} == {"cli-run-id"}
+    """Exit status."""
 
     def test_a_failed_run_exits_nonzero(self) -> None:
         with pytest.raises(SystemExit) as excinfo:
             _cmd_run(_args(target=[f"{FailingSource.__module__}.FailingSource"]))
 
         assert excinfo.value.code == 1
-
-
-class TestRecordedRun:
-    """A platform run: the spec from a file, the run's metadata, and its events reported with the run's token."""
-
-    @pytest.fixture
-    def sent(self, monkeypatch: pytest.MonkeyPatch) -> list[tuple[list[Event], Any]]:
-        """Report through a fake client, and never exit the test process.
-
-        Args:
-            monkeypatch: Fixture used to swap the client and the exit.
-
-        Returns:
-            Every delivery the run made; the first entry is the client's construction.
-        """
-        deliveries: list[tuple[list[Event], Any]] = []
-
-        class FakeClient:
-            def __init__(self, url: str, token: str, run_id: str) -> None:
-                deliveries.append(([], {"url": url, "token": token, "run_id": run_id}))
-
-            def ingest(self, batch: EventBatch) -> bool:
-                deliveries.append((list(batch.events), batch.effects))
-                return True
-
-        monkeypatch.setenv("INTERLOPER_RUN_TOKEN", "ilr_x")
-        monkeypatch.setattr("interloper.cli.commands.run.EventClient", FakeClient)
-        monkeypatch.setattr("interloper.cli.commands.run._exit_lost", lambda: None)
-        return deliveries
 
     def test_the_inline_spec_can_be_read_from_a_file(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         path = tmp_path / "spec.json"
@@ -393,102 +363,48 @@ class TestRecordedRun:
 
         assert "1. fake_run_source.one" in capsys.readouterr().out
 
-    def test_the_metadata_is_spread_into_every_event(self) -> None:
-        events: list[Any] = []
-        EventBus.subscribe(events.append)
-        try:
-            _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1", metadata='{"org_id": "org-1", "attempt": 2}'))
-            EventBus.flush(timeout=5.0)
-        finally:
-            EventBus.unsubscribe(events.append)
 
-        started = next(event for event in events if event.type is EventType.RUN_STARTED)
-        assert (started.metadata["org_id"], started.metadata["attempt"]) == ("org-1", 2)
+class TestOperation:
+    """``--operation-id``: one operation of the given DAG executed once for its host, its verdict left for it."""
 
-    def test_with_a_run_token_every_event_is_reported_to_the_platform(self, sent: list[Any]) -> None:
-        _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1"))
+    @pytest.fixture
+    def message(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        """Where the operation leaves what it came to.
 
-        assert sent[0][1] == {"url": "http://localhost:3000", "token": "ilr_x", "run_id": "run-1"}
-        delivered = [event for batch, _ in sent[1:] for event in batch]
-        assert delivered[0].type is EventType.RUN_STARTED and delivered[-1].type is EventType.RUN_COMPLETED
+        Args:
+            monkeypatch: Fixture used to move the termination message path.
+            tmp_path: Directory the message is written to.
 
-    def test_a_spec_that_cannot_be_read_is_reported_as_the_runs_failure(self, sent: list[Any]) -> None:
-        with pytest.raises(SystemExit, match="failed to parse inline DAGSpec"):
-            _cmd_run(_args(format="inline", target=["@/nonexistent/spec.json"], run_id="run-1"))
+        Returns:
+            The message's path.
+        """
+        path = tmp_path / "termination-log"
+        monkeypatch.setattr(OperationResult, "TERMINATION_MESSAGE_PATH", str(path))
+        return path
 
-        (failed,) = [event for batch, _ in sent[1:] for event in batch]
-        assert failed.type is EventType.RUN_FAILED
-        assert "failed to parse inline DAGSpec" in failed.metadata["error"]
-
-    def test_a_platform_runs_window_is_its_partition_key(self, sent: list[Any]) -> None:
-        # An unpartitioned DAG given a key: the CLI alone refuses it, a platform run reads the key as the platform does.
-        _cmd_run(_args(target=[SOURCE_PATH], run_id="run-1", date="2026-10-26"))
-
-        delivered = [event for batch, _ in sent[1:] for event in batch]
-        assert delivered[0].metadata["window"] == "2026-10-26"
-        assert delivered[-1].type is EventType.RUN_COMPLETED
-
-    def test_a_child_reports_only_its_own_operation(self, sent: list[Any], monkeypatch: pytest.MonkeyPatch) -> None:
-        dag = il.DAG(FakeRunSource(destinations=[il.MemoryDestination()]))
-        (operation,) = dag.operations
-        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", operation.id)
-
-        _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], run_id="run-1"))
-
-        delivered = [event for batch, _ in sent[1:] for event in batch]
-        assert delivered and all(event.metadata.get("component_id") in (None, operation.id) for event in delivered)
-        assert not [event for event in delivered if event.type.value.startswith(("run_", "operation_"))]
-        assert EventType.ASSET_DATA_COMPLETED in {event.type for event in delivered}
-
-    def test_a_child_makes_one_attempt_and_leaves_its_verdict(
-        self, sent: list[Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        message = tmp_path / "termination-log"
-        monkeypatch.setattr(OperationResult, "TERMINATION_MESSAGE_PATH", str(message))
+    def test_it_executes_once_and_leaves_its_verdict(self, message: Path) -> None:
         dag = il.DAG(FailingSource(destinations=[il.MemoryDestination()]))
         (operation,) = dag.operations
         operation.retry = il.RetryPolicy(max_attempts=3, delay=0)
-        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", operation.id)
 
         with pytest.raises(SystemExit):
-            _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], run_id="run-1"))
+            _cmd_run(_args(format="inline", target=[dag.to_spec().model_dump_json()], operation_id=operation.id))
 
         assert OperationResult.from_termination_message(message.read_text(), "exited") == OperationResult(
             error="RuntimeError: asset blew up"
         )
-        delivered = [event.type for batch, _ in sent[1:] for event in batch]
-        assert delivered.count(EventType.ASSET_DATA_STARTED) == 1
 
-    def test_a_child_that_fails_before_its_attempt_leaves_a_final_verdict(
-        self, sent: list[Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        message = tmp_path / "termination-log"
-        monkeypatch.setattr(OperationResult, "TERMINATION_MESSAGE_PATH", str(message))
-        monkeypatch.setenv("INTERLOPER_RUN_OPERATION", "op-1")
-
+    def test_one_that_cannot_start_leaves_a_final_verdict(self, message: Path) -> None:
         with pytest.raises(SystemExit):
-            _cmd_run(_args(format="inline", target=["{not json"], run_id="run-1"))
+            _cmd_run(_args(format="inline", target=["{not json"], operation_id="op-1"))
 
         left = OperationResult.from_termination_message(message.read_text(), "exited")
         assert (left.error or "").startswith("Error: failed to parse inline DAGSpec")
         assert left.retryable is False
 
-    def test_a_recorded_run_needs_its_run_id(self, sent: list[Any]) -> None:
-        with pytest.raises(SystemExit, match="needs --run-id"):
-            _cmd_run(_args(target=[SOURCE_PATH]))
-
-    def test_a_recorded_run_that_is_lost_exits_nonzero(self, sent: list[Any], monkeypatch: pytest.MonkeyPatch) -> None:
-        class EndedClient:
-            def __init__(self, url: str, token: str, run_id: str) -> None:
-                pass
-
-            def ingest(self, batch: EventBatch) -> bool:
-                return False
-
-        monkeypatch.setattr("interloper.cli.commands.run.EventClient", EndedClient)
-
-        with pytest.raises(SystemExit, match="ended elsewhere"):
-            _cmd_run(_args(target=[f"{FailingSource.__module__}.FailingSource"], run_id="run-1"))
+    def test_an_operation_not_in_the_dag_is_a_clean_error(self, message: Path) -> None:
+        with pytest.raises(SystemExit, match="not found"):
+            _cmd_run(_args(target=[SOURCE_PATH], operation_id="op-unknown"))
 
 
 class TestPrintPlan:

@@ -18,7 +18,9 @@ import interloper as il
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from interloper.errors import ConfigError
+from interloper.dag import DAGSpec
+from interloper.errors import ConfigError, PartitionError
+from interloper.runner.spec import RunSpec
 from interloper_db import (
     ConflictError,
     EventQuery,
@@ -76,6 +78,8 @@ class FakeStore:
         self.run_org_id: UUID = _ORG_ID
         self.members = SimpleNamespace(role_of=self._role_of)
         self.ingested: list[tuple[UUID, il.EventBatch]] = []
+        self.served_spec: RunSpec | None = None
+        self.spec_error: Exception | None = None
         self.organisations = SimpleNamespace(get=lambda org_id: SimpleNamespace(id=org_id))
         self.runs = SimpleNamespace(
             get=self._get_run,
@@ -83,6 +87,7 @@ class FakeStore:
             retry=self._retry_run,
             cancel=self._cancel_run,
             ingest=self._ingest,
+            spec=self._spec,
         )
         self.components = SimpleNamespace()
         self.executions = SimpleNamespace(counts=lambda run_ids: {}, list=self._list_executions)
@@ -114,6 +119,11 @@ class FakeStore:
         retried.attempt = 2
         retried.retry_scope = scope
         return retried
+
+    def _spec(self, run_id: UUID) -> RunSpec | None:
+        if self.spec_error is not None:
+            raise self.spec_error
+        return self.served_spec
 
     def _ingest(self, run_id: UUID, batch: il.EventBatch) -> bool:
         self.ingested.append((run_id, batch))
@@ -729,3 +739,65 @@ def test_ingest_is_not_served_under_the_organisation(store: FakeStore) -> None:
 
     assert response.status_code == 405
     assert store.ingested == []
+
+
+# -- Spec ---------------------------------------------------------------------
+
+
+def _spec_client(store: FakeStore, status: str = "running") -> TestClient:
+    """A client at the API root, as a run's process, whose token stands for a run in *status*.
+
+    Args:
+        store: The fake store the routes resolve against.
+        status: The status of the run the token stands for.
+
+    Returns:
+        The client.
+    """
+    app = _app(store)
+    app.dependency_overrides[require_run] = lambda run_id: SimpleNamespace(id=run_id, status=status)
+    return TestClient(app)
+
+
+@pytest.mark.parametrize("status", ["dispatched", "running"])
+def test_a_live_run_is_served_its_spec(store: FakeStore, status: str) -> None:
+    store.served_spec = RunSpec(dag=DAGSpec(), partition_key="2026-10-25", metadata={"run_id": str(_RUN_ID)})
+
+    response = _spec_client(store, status).get(f"/runs/{_RUN_ID}/spec")
+
+    assert response.status_code == 200
+    assert RunSpec.model_validate(response.json()) == store.served_spec
+
+
+@pytest.mark.parametrize("status", ["success", "failed", "canceled"])
+def test_a_run_no_longer_live_is_not_served(store: FakeStore, status: str) -> None:
+    store.served_spec = RunSpec(dag=DAGSpec())
+
+    response = _spec_client(store, status).get(f"/runs/{_RUN_ID}/spec")
+
+    assert response.status_code == 409
+    assert "not live" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("error", "served"),
+    [
+        (NotFoundError("Run targets a component that was deleted"), None),
+        (PartitionError("The run's window is not valid for every operation"), None),
+        (None, None),
+    ],
+)
+def test_a_run_that_cannot_be_built_is_refused_with_the_reason(
+    store: FakeStore, error: Exception | None, served: RunSpec | None
+) -> None:
+    store.spec_error = error
+    store.served_spec = served
+
+    response = _spec_client(store).get(f"/runs/{_RUN_ID}/spec")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (str(error) if error else f"Run {_RUN_ID} selects no operations")
+
+
+def test_the_spec_is_not_served_under_the_organisation(store: FakeStore) -> None:
+    assert _client(store).get(f"/runs/{_RUN_ID}/spec").status_code in (404, 405)
