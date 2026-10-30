@@ -14,6 +14,8 @@ const { coverage, coverageMonths, coverageWindow, coverageLoading, coverageError
 const calendarWindow = computed(() => coverage.value ?? coverageWindow.value)
 /** A window the user picked is loading: the calendar on screen still shows the previous one. */
 const switching = computed(() => !!coverage.value && coverageLoading.value && coverageWindow.value?.since !== coverage.value.since)
+/** Nothing in the window owes a partition: an all-blank calendar would read as one still loading. */
+const empty = computed(() => !!coverage.value && !coverage.value.sources.length)
 const SKELETON_DETAIL_ROWS = 3
 const colorMode = useColorMode()
 
@@ -164,12 +166,13 @@ watch(coverage, (value) => {
     <UCard>
         <template #header>
             <CardHeader title="Partition coverage"
-                        :description="coverage && !coverageError ? summary : undefined"
+                        :description="coverage && !coverageError && !empty ? summary : undefined"
                         :loading="!coverage && !coverageError">
                 <UIcon v-if="switching"
                        name="i-lucide-loader-circle"
                        class="size-4 animate-spin text-dimmed" />
-                <USelect v-model="typeFilter"
+                <USelect v-if="!empty"
+                         v-model="typeFilter"
                          :items="typeOptions"
                          size="sm"
                          class="w-44" />
@@ -198,6 +201,14 @@ watch(coverage, (value) => {
                         }]"
                         class="mx-auto w-full max-w-xl" />
             </div>
+            <UEmpty v-else-if="empty"
+                    icon="i-lucide-calendar-days"
+                    title="Nothing expected in this window"
+                    :description="`No partitioned asset owed a partition in the last ${coverageMonths} months. Coverage fills in once a job materializes one.`"
+                    variant="naked"
+                    class="transition-opacity"
+                    :class="switching ? 'opacity-50' : ''"
+                    :style="{ minHeight: `${chartHeight}px` }" />
             <VChart v-else-if="coverage"
                     :option="option"
                     class="mx-auto transition-opacity"

@@ -59,8 +59,15 @@ const columns = withSkeletons<Row>([
         </template>
         <UTable :data="items ? rows : skeletonRows(LIMIT)"
                 :columns="columns"
-                empty="Nothing scheduled."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: organisationStore.path(kindPath('job')), query: { q: row.original.job_name } })" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo({ path: organisationStore.path(kindPath('job')), query: { q: row.original.job_name } })">
+            <template #empty>
+                <UEmpty icon="i-lucide-calendar-clock"
+                        title="Nothing scheduled"
+                        description="Enabled jobs list their next firing here."
+                        variant="naked"
+                        size="sm" />
+            </template>
+        </UTable>
     </UCard>
 </template>

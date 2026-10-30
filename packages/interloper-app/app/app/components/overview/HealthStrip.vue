@@ -52,7 +52,8 @@ const jobs = computed(() => {
         <OverviewHealthTile label="Runs · last 24h"
                             :to="organisationStore.path('/executions/runs')"
                             :loading="!overview"
-                            :headline="overview?.runs.total">
+                            :headline="overview?.runs.total"
+                            :empty="overview?.runs.total ? undefined : 'No runs in the last 24h'">
             <template #detail>
                 {{ overview?.runs.succeeded }} succeeded ·
                 <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'failed' } }"
@@ -81,7 +82,8 @@ const jobs = computed(() => {
         <OverviewHealthTile label="Running now"
                             :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'running' } }"
                             :loading="!overview"
-                            :headline="activity.running">
+                            :headline="activity.running"
+                            :empty="activity.running + activity.queued ? undefined : 'Nothing running or queued'">
             <template #detail>
                 <ULink :to="{ path: organisationStore.path('/executions/runs'), query: { status: 'queued' } }"
                        class="relative text-muted hover:underline">{{ activity.queued }} queued</ULink>
@@ -103,8 +105,10 @@ const jobs = computed(() => {
         <OverviewHealthTile label="Backfills in progress"
                             :to="{ path: organisationStore.path('/executions/backfills'), query: { status: 'running', single: 'true' } }"
                             :loading="!overview"
-                            :headline="overview?.backfills.active">
-            <template #detail>{{ overview?.backfills.partitions_done }} of {{ overview?.backfills.partitions_total }} partitions</template>
+                            :headline="overview?.backfills.active"
+                            :empty="overview?.backfills.active ? undefined : 'No backfills in progress'">
+            <template v-if="overview?.backfills.active"
+                      #detail>{{ overview.backfills.partitions_done }} of {{ overview.backfills.partitions_total }} partitions</template>
             <template #footer>
                 <div class="flex h-1.5 overflow-hidden rounded-full bg-accented">
                     <div class="bg-primary"
@@ -121,7 +125,8 @@ const jobs = computed(() => {
                             :to="organisationStore.path(kindPath('job'))"
                             :loading="!overview"
                             :headline="jobs.failing"
-                            :headline-class="jobs.failing ? 'text-error' : ''">
+                            :headline-class="jobs.failing ? 'text-error' : ''"
+                            :empty="overview?.jobs.enabled ? undefined : 'No jobs enabled'">
             <template #detail>of {{ overview?.jobs.enabled }} enabled</template>
             <template #footer>
                 <div class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-accented">

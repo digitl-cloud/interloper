@@ -73,8 +73,15 @@ const columns = withSkeletons<Row>([
         </template>
         <UTable :data="runs ? rows : skeletonRows(SKELETON_ROWS)"
                 :columns="columns"
-                empty="No runs yet."
                 :ui="{ tr: 'cursor-pointer' }"
-                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(organisationStore.path(`/executions/runs/${row.original.run.id}`))" />
+                @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(organisationStore.path(`/executions/runs/${row.original.run.id}`))">
+            <template #empty>
+                <UEmpty icon="i-lucide-history"
+                        title="No runs yet"
+                        description="The latest runs land here as they finish."
+                        variant="naked"
+                        size="sm" />
+            </template>
+        </UTable>
     </UCard>
 </template>

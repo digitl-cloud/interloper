@@ -44,8 +44,12 @@ const table = computed(() => (props.rows ?? []).map(row => ({
     issuesClass: row.failing ? 'text-error' : row.attention ? 'text-warning' : 'text-dimmed',
 })))
 
+const editor = useCanEdit()
+
+const empty = computed(() => !!props.rows && props.rows.every(r => !r.total))
+
 const summary = computed(() => {
-    if (!props.rows) return undefined
+    if (!props.rows || empty.value) return undefined
     const total = props.rows.reduce((n, r) => n + r.total, 0)
     const problems = props.rows.reduce((n, r) => n + r.failing + r.attention, 0)
     return `${total} in the collection · ${problems} need attention`
@@ -94,11 +98,19 @@ const columns = withSkeletons<(typeof table.value)[number]>([
                          size="sm" />
             </CardHeader>
         </template>
-        <UTable :data="rows ? table : skeletonRows(Object.keys(KIND_META).length)"
+        <UEmpty v-if="empty"
+                icon="i-lucide-library"
+                title="Nothing in the collection yet"
+                description="Add a source to start pulling data. Its assets, connections and jobs are counted here."
+                :actions="editor ? [{ label: 'Add a source', icon: 'i-lucide-plus', to: organisationStore.path(kindPath('source')) }] : undefined"
+                variant="naked" />
+        <UTable v-else
+                :data="rows ? table : skeletonRows(Object.keys(KIND_META).length)"
                 :columns="columns"
                 :ui="{ tr: 'cursor-pointer' }"
                 @select="(_e: Event, row: any) => isSkeletonRow(row.original) || navigateTo(row.original.meta.to)" />
-        <template #footer>
+        <template v-if="!empty"
+                  #footer>
             <div class="flex items-center gap-4 text-xs text-muted">
                 <span v-for="state in STATES"
                       :key="state.key"
