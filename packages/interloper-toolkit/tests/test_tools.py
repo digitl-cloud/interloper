@@ -42,6 +42,12 @@ class TestTable:
             "delete_component",
         }
 
+    def test_every_tool_has_its_own_title(self):
+        titles = [tool.title for tool in TOOLS]
+
+        assert all(title and title == title.strip() and title[0].isupper() for title in titles)
+        assert len(titles) == len(set(titles))
+
     def test_the_credential_taking_tool_carries_secrets(self):
         assert {tool.name for tool in TOOLS if tool.carries_secrets} == {"create_connections"}
 
@@ -56,7 +62,7 @@ class TestBind:
     def test_keeps_the_name_docstring_and_parameters_minus_the_context(self):
         leading = inspect.Parameter("run", inspect.Parameter.POSITIONAL_ONLY, annotation=int)
 
-        bound = Tool(scheduling.list_recent_runs, Effect.READ).bind(lambda run: run, leading)
+        bound = Tool(scheduling.list_recent_runs, Effect.READ, "A tool").bind(lambda run: run, leading)
 
         assert bound.__name__ == "list_recent_runs"
         assert bound.__doc__ == scheduling.list_recent_runs.__doc__
@@ -73,19 +79,19 @@ class TestBind:
         run: Any = type("Run", (), {"deps": ctx})()
         leading = inspect.Parameter("run", inspect.Parameter.POSITIONAL_ONLY)
 
-        result = Tool(scheduling.list_jobs, Effect.READ).bind(lambda run: run.deps, leading)(run)
+        result = Tool(scheduling.list_jobs, Effect.READ, "A tool").bind(lambda run: run.deps, leading)(run)
 
         assert result.status == "success"
         assert result.total == 0
 
     def test_takes_the_context_from_a_plain_callable_without_leading_parameters(self, ctx: ToolkitContext):
-        bound = Tool(scheduling.list_jobs, Effect.READ).bind(lambda: ctx)
+        bound = Tool(scheduling.list_jobs, Effect.READ, "A tool").bind(lambda: ctx)
 
         assert list(inspect.signature(bound).parameters) == ["limit", "offset"]
         assert bound(limit=5).status == "success"
 
     async def test_binds_async_tools_too(self, ctx: ToolkitContext):
-        bound = Tool(collection.check_connection, Effect.READ_PROVIDER).bind(lambda: ctx)
+        bound = Tool(collection.check_connection, Effect.READ_PROVIDER, "A tool").bind(lambda: ctx)
 
         assert inspect.iscoroutinefunction(bound)
         assert isinstance(await bound("not-a-uuid"), ToolError)
@@ -95,7 +101,7 @@ class TestBind:
             "organisation", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=str | None
         )
 
-        bound = Tool(scheduling.list_recent_runs, Effect.READ).bind(
+        bound = Tool(scheduling.list_recent_runs, Effect.READ, "A tool").bind(
             lambda **_: ToolError(error="x"), trailing=[trailing]
         )
 
@@ -115,7 +121,7 @@ class TestBind:
 
         leading = inspect.Parameter("run", inspect.Parameter.POSITIONAL_ONLY)
         trailing = inspect.Parameter("organisation", inspect.Parameter.KEYWORD_ONLY, default=None)
-        bound = Tool(scheduling.list_jobs, Effect.READ).bind(context, leading, trailing=[trailing])
+        bound = Tool(scheduling.list_jobs, Effect.READ, "A tool").bind(context, leading, trailing=[trailing])
 
         assert bound("run", limit=5, organisation="acme").status == "success"
         assert bound("run").status == "success"
@@ -129,7 +135,7 @@ class TestBind:
             return "called"
 
         refusal = ToolError(error="x")
-        bound = Tool(fn, Effect.READ).bind(lambda: refusal)
+        bound = Tool(fn, Effect.READ, "A tool").bind(lambda: refusal)
 
         assert bound() is refusal
         assert calls == []
@@ -142,7 +148,7 @@ class TestBind:
             return "called"
 
         refusal = ToolError(error="x")
-        bound = Tool(fn, Effect.READ).bind(lambda: refusal)
+        bound = Tool(fn, Effect.READ, "A tool").bind(lambda: refusal)
 
         assert await bound() is refusal
         assert calls == []
@@ -153,6 +159,6 @@ class TestBind:
 
         trailing = inspect.Parameter("organisation", inspect.Parameter.KEYWORD_ONLY, default=None)
 
-        bound = Tool(fn, Effect.READ).bind(lambda **_: ToolError(error="x"), trailing=[trailing])
+        bound = Tool(fn, Effect.READ, "A tool").bind(lambda **_: ToolError(error="x"), trailing=[trailing])
 
         assert list(inspect.signature(bound).parameters) == ["name", "flag", "organisation"]

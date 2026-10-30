@@ -23,7 +23,10 @@ from pydantic_ai.toolsets.abstract import ToolsetTool
 
 from interloper_agent import interaction
 
-TOOLS: tuple[Tool, ...] = (*TOOLKIT_TOOLS, Tool(interaction.request_user_selection, Effect.READ))
+TOOLS: tuple[Tool, ...] = (
+    *TOOLKIT_TOOLS,
+    Tool(interaction.request_user_selection, Effect.READ, "Ask the user to choose"),
+)
 """Every tool the agent registers: the toolkit's, and the app's selection card."""
 
 RUN_CONTEXT = inspect.Parameter("run_context", inspect.Parameter.POSITIONAL_ONLY, annotation=RunContext[ToolkitContext])

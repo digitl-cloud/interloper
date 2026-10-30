@@ -3,7 +3,7 @@
 Every toolkit tool takes a trailing ``organisation`` argument, the id of the
 organisation the call acts in (see :func:`~interloper_mcp.context.get_ctx`),
 and ``list_organisations``, which this surface adds, lists the ones a user
-can name. Each tool carries the MCP annotations a client keys its behaviour on
+can name. Each tool carries its title and the MCP annotations a client keys its behaviour on
 (``readOnlyHint``, ``destructiveHint``, ``idempotentHint``,
 ``openWorldHint``), mapped from the tool's effect; the spec's defaults are
 the pessimistic ones, so reads say so explicitly. The writes are gated in
@@ -99,7 +99,13 @@ def register_tools(mcp: MCPServer) -> None:
             continue
         mcp.add_tool(
             tool.bind(get_ctx, trailing=[ORGANISATION]),
+            title=tool.title,
             description=tool.fn.__doc__,
             annotations=ANNOTATIONS[tool.effect],
         )
-    mcp.add_tool(list_organisations, description=list_organisations.__doc__, annotations=ANNOTATIONS[Effect.READ])
+    mcp.add_tool(
+        list_organisations,
+        title="List organisations",
+        description=list_organisations.__doc__,
+        annotations=ANNOTATIONS[Effect.READ],
+    )

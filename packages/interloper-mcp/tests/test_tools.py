@@ -57,7 +57,7 @@ WRITES = {
 }
 
 
-async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments(
+async def test_every_tool_is_titled_annotated_and_credentials_never_travel_as_arguments(
     store: Store, catalog: il.Catalog, seeded: dict
 ):
     async with Client(_server(store, catalog, seeded)) as client:
@@ -68,6 +68,9 @@ async def test_every_tool_is_annotated_and_credentials_never_travel_as_arguments
     assert "create_connections" not in by_name
     assert WRITES <= set(by_name)
     assert all(t.annotations is not None for t in tools)
+    assert all(t.title for t in tools)
+    assert by_name["trigger_run"].title == "Trigger a run"
+    assert by_name["list_organisations"].title == "List organisations"
     reads = {name for name, t in by_name.items() if t.annotations and t.annotations.read_only_hint}
     assert reads == set(by_name) - WRITES
     cancel, check = by_name["cancel_backfill"].annotations, by_name["check_connection"].annotations
