@@ -203,7 +203,8 @@ class ServerSettings(BaseSettings):
     external_url: str = Field(
         default="",
         description="Public base URL of the app (`https://app.example.com`), for links built outside a browser "
-        "request such as the setup hand-off an MCP tool returns; empty means the deployment has none.",
+        "request such as the setup hand-off an MCP tool returns, and the base of each connector OAuth app's "
+        "redirect URI (`/auth/<provider>`); empty means the deployment has none.",
     )
     internal_url: str = Field(
         default="http://localhost:3000",

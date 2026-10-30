@@ -12,6 +12,7 @@ from interloper.oauth import (
     OAuthProvider,
     RefreshTokenResponse,
 )
+from interloper.settings import ServerSettings
 
 
 class TestRegistry:
@@ -103,11 +104,20 @@ class TestTokenFlows:
 class TestAppCredentials:
     """In-house app credentials: the INTERLOPER_<PROVIDER>_* env convention."""
 
-    TRIO: ClassVar[dict[str, str]] = {
+    PAIR: ClassVar[dict[str, str]] = {
         "INTERLOPER_ACME_CLIENT_ID": "id",
         "INTERLOPER_ACME_CLIENT_SECRET": "secret",
-        "INTERLOPER_ACME_REDIRECT_URI": "https://cb",
     }
+    SERVER = ServerSettings(external_url="https://app.example.com/")
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        for name in OAuthAppCredentials.env_names("acme").values():
+            monkeypatch.delenv(name, raising=False)
+
+    def _set(self, monkeypatch, variables):
+        for name, value in variables.items():
+            monkeypatch.setenv(name, value)
 
     def test_env_names_own_the_convention(self):
         assert OAuthAppCredentials.env_name("acme", "client_id") == "INTERLOPER_ACME_CLIENT_ID"
@@ -117,25 +127,43 @@ class TestAppCredentials:
             "redirect_uri": "INTERLOPER_ACME_REDIRECT_URI",
         }
 
-    def test_from_env_resolves_complete_trio(self, monkeypatch):
-        for name, value in self.TRIO.items():
-            monkeypatch.setenv(name, value)
-        creds = OAuthAppCredentials.from_env("acme")
-        assert creds == OAuthAppCredentials(client_id="id", client_secret="secret", redirect_uri="https://cb")
+    def test_redirect_uri_defaults_to_the_callback_page_under_the_public_url(self, monkeypatch):
+        self._set(monkeypatch, self.PAIR)
+        creds = OAuthAppCredentials.from_env("acme", self.SERVER)
+        assert creds == OAuthAppCredentials(
+            client_id="id", client_secret="secret", redirect_uri="https://app.example.com/auth/acme"
+        )
         assert OAuthAppCredentials.is_configured("acme")
 
-    def test_partial_trio_resolves_to_nothing(self, monkeypatch):
-        for name, value in list(self.TRIO.items())[:2]:
-            monkeypatch.setenv(name, value)
-        assert OAuthAppCredentials.from_env("acme") is None
+    def test_redirect_uri_defaults_under_the_local_server_without_an_external_url(self, monkeypatch):
+        self._set(monkeypatch, self.PAIR)
+        creds = OAuthAppCredentials.from_env("acme", ServerSettings(external_url="", port=3100))
+        assert creds is not None
+        assert creds.redirect_uri == "http://localhost:3100/auth/acme"
+
+    def test_redirect_uri_variable_overrides_the_default(self, monkeypatch):
+        self._set(monkeypatch, {**self.PAIR, "INTERLOPER_ACME_REDIRECT_URI": "https://cb"})
+        creds = OAuthAppCredentials.from_env("acme", self.SERVER)
+        assert creds == OAuthAppCredentials(client_id="id", client_secret="secret", redirect_uri="https://cb")
+
+    def test_empty_redirect_uri_falls_back_to_the_default(self, monkeypatch):
+        self._set(monkeypatch, {**self.PAIR, "INTERLOPER_ACME_REDIRECT_URI": ""})
+        creds = OAuthAppCredentials.from_env("acme", self.SERVER)
+        assert creds is not None
+        assert creds.redirect_uri == "https://app.example.com/auth/acme"
+
+    def test_missing_secret_resolves_to_nothing(self, monkeypatch):
+        self._set(monkeypatch, {"INTERLOPER_ACME_CLIENT_ID": "id", "INTERLOPER_ACME_REDIRECT_URI": "https://cb"})
+        assert OAuthAppCredentials.from_env("acme", self.SERVER) is None
         assert not OAuthAppCredentials.is_configured("acme")
+        assert OAuthAppCredentials.missing("acme") == ["INTERLOPER_ACME_CLIENT_SECRET"]
 
     def test_empty_value_counts_as_unset(self, monkeypatch):
-        for name, value in self.TRIO.items():
-            monkeypatch.setenv(name, value)
-        monkeypatch.setenv("INTERLOPER_ACME_CLIENT_SECRET", "")
-        assert OAuthAppCredentials.from_env("acme") is None
+        self._set(monkeypatch, {**self.PAIR, "INTERLOPER_ACME_CLIENT_SECRET": ""})
+        assert OAuthAppCredentials.from_env("acme", self.SERVER) is None
+        assert OAuthAppCredentials.missing("acme") == ["INTERLOPER_ACME_CLIENT_SECRET"]
 
     def test_unset_provider_is_not_configured(self):
-        assert OAuthAppCredentials.from_env("acme") is None
+        assert OAuthAppCredentials.from_env("acme", self.SERVER) is None
         assert not OAuthAppCredentials.is_configured("acme")
+        assert OAuthAppCredentials.missing("acme") == ["INTERLOPER_ACME_CLIENT_ID", "INTERLOPER_ACME_CLIENT_SECRET"]

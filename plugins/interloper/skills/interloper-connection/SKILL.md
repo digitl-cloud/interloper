@@ -55,8 +55,8 @@ https://docs.interloper.dev/guide/oauth/
 
    `client_id` and `client_secret` are required and filled before validation from
    `INTERLOPER_GOOGLE_CLIENT_ID` / `INTERLOPER_GOOGLE_CLIENT_SECRET`, whatever `env_prefix`
-   says. A script needs those two; `INTERLOPER_GOOGLE_REDIRECT_URI` is only needed for the
-   sign-in tab in the UI. `refresh_token` is required too, so a local instance needs one even
+   says. The same two give the UI its sign-in tab, whose redirect URI is the app's
+   `/auth/google` page. `refresh_token` is required too, so a local instance needs one even
    for tests of the other fields. Providers shipped: amazon, criteo, facebook, google, linkedin,
    microsoft, pinterest, snapchat, tiktok. `OAuthConfig` also takes `fields`, `auth_url`,
    `label`, `icon`; non-standard token fields go on `il.OAuthConnection` with `fields={...}`.

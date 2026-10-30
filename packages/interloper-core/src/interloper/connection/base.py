@@ -385,8 +385,8 @@ class OAuthConnection(Connection):
         passing as an empty string.
 
         Args:
-            suffix: Credential field suffix — ``CLIENT_ID``, ``CLIENT_SECRET``
-                or ``REDIRECT_URI``; case-insensitive.
+            suffix: Credential field suffix — ``CLIENT_ID`` or ``CLIENT_SECRET``;
+                case-insensitive.
 
         Returns:
             The env credential value, or ``None``.

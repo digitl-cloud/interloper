@@ -59,12 +59,12 @@ and https://docs.interloper.dev/ui/running/
    INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET=...
    INTERLOPER_FACEBOOK_CLIENT_ID=...             # in-house app so users get "Sign in with Facebook" on connections
    INTERLOPER_FACEBOOK_CLIENT_SECRET=...
-   INTERLOPER_FACEBOOK_REDIRECT_URI=https://interloper.example.com/auth/facebook
    ```
 
-   Provider apps need all three variables or the provider counts as unconfigured (manual
-   credential entry only). The provider redirect URI is the app's `/auth/<provider>` page,
-   registered as-is in the provider console. Same pattern for `GOOGLE`, `LINKEDIN`, `TIKTOK`,
+   Provider apps need both variables or the provider counts as unconfigured (manual
+   credential entry only). The provider redirect URI is the app's `/auth/<provider>` page under
+   `server.external_url` (`https://interloper.example.com/auth/facebook`), registered as-is in the
+   provider console; `INTERLOPER_<PROVIDER>_REDIRECT_URI` overrides it. Same pattern for `GOOGLE`, `LINKEDIN`, `TIKTOK`,
    `MICROSOFT`, `PINTEREST`, `SNAPCHAT`, `CRITEO`, `AMAZON`.
 
 3. **Database, then services:**

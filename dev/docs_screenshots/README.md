@@ -16,7 +16,6 @@ uv run python seed.py
 # 2. The app on a non-3000 port; dummy OAuth app credentials make the sign-in tabs render
 INTERLOPER_SERVER_PORT=3100 INTERLOPER_AUTH_COOKIE_SECURE=false \
 INTERLOPER_FACEBOOK_CLIENT_ID=docs INTERLOPER_FACEBOOK_CLIENT_SECRET=docs \
-INTERLOPER_FACEBOOK_REDIRECT_URI=http://localhost:3100/x \
 uv run interloper app --api --cron --worker --reaper --dev &
 
 # 3. Demo content (waits for the worker to run everything, then backdates the runs)

@@ -30,11 +30,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import httpx2
 
 from interloper.registry import Registry
+
+if TYPE_CHECKING:
+    from interloper.settings import ServerSettings
 
 # -- Provider spec -------------------------------------------------------------
 
@@ -235,11 +238,13 @@ PROVIDERS: Registry[OAuthProvider] = Registry("interloper.oauth_providers", adop
 
 @dataclass(frozen=True)
 class OAuthAppCredentials:
-    """The in-house OAuth app credential trio for one provider.
+    """The in-house OAuth app credentials for one provider.
 
-    Resolved from the environment complete-or-nothing: `from_env`
-    never yields a partial set, so consumers cannot observe a
-    half-configured provider.
+    A provider is configured when its client id and secret are set: `from_env`
+    yields nothing otherwise, so consumers cannot observe a half-configured
+    provider. The redirect URI is the app's callback page for the provider,
+    ``<public URL>/auth/<provider>``, unless ``INTERLOPER_<PROVIDER>_REDIRECT_URI``
+    overrides it.
     """
 
     client_id: str
@@ -251,6 +256,7 @@ class OAuthAppCredentials:
         "client_secret": "CLIENT_SECRET",
         "redirect_uri": "REDIRECT_URI",
     }
+    _REQUIRED_FIELDS: ClassVar[tuple[str, ...]] = ("client_id", "client_secret")
 
     @staticmethod
     def env_name(key: str, suffix: str) -> str:
@@ -278,10 +284,24 @@ class OAuthAppCredentials:
             key: Provider registry key (e.g. ``"amazon"``).
 
         Returns:
-            ``{field: env_name}`` for the ``client_id`` / ``client_secret`` /
-            ``redirect_uri`` trio.
+            ``{field: env_name}`` for ``client_id``, ``client_secret`` and the
+            ``redirect_uri`` override.
         """
         return {field: cls.env_name(key, suffix) for field, suffix in cls._ENV_FIELDS.items()}
+
+    @classmethod
+    def missing(cls, key: str) -> list[str]:
+        """The variables provider ``key`` still needs before it is configured.
+
+        Args:
+            key: Provider registry key (e.g. ``"amazon"``).
+
+        Returns:
+            The names of the client id and secret variables that are unset or
+            empty, in that order; empty when the provider is configured.
+        """
+        names = cls.env_names(key)
+        return [names[field] for field in cls._REQUIRED_FIELDS if not os.environ.get(names[field])]
 
     @classmethod
     def is_configured(cls, key: str) -> bool:
@@ -291,26 +311,32 @@ class OAuthAppCredentials:
             key: Provider registry key (e.g. ``"amazon"``).
 
         Returns:
-            True only when the full credential trio is set — the provider is
-            usable for sign-in.
+            True when the client id and secret are set: the provider is usable
+            for sign-in.
         """
-        return cls.from_env(key) is not None
+        return not cls.missing(key)
 
     @classmethod
-    def from_env(cls, key: str) -> OAuthAppCredentials | None:
-        """Resolve the trio for provider ``key`` from the environment.
+    def from_env(cls, key: str, server: ServerSettings) -> OAuthAppCredentials | None:
+        """Resolve the credentials for provider ``key`` from the environment.
 
         Args:
-            key: Provider registry key (e.g. ``"amazon"``).
+            key: Provider registry key (e.g. ``"amazon"``), which is also the
+                path segment of the app's callback page.
+            server: The server settings whose public URL the redirect URI
+                defaults under.
 
         Returns:
-            The credentials, or ``None`` unless all three variables are set
-            and non-empty.
+            The credentials, or ``None`` unless the client id and secret are
+            set and non-empty. The redirect URI is
+            ``INTERLOPER_<PROVIDER>_REDIRECT_URI`` when set and non-empty, else
+            ``<server.public_url>/auth/<key>``.
         """
-        names = cls.env_names(key)
-        client_id = os.environ.get(names["client_id"])
-        client_secret = os.environ.get(names["client_secret"])
-        redirect_uri = os.environ.get(names["redirect_uri"])
-        if not (client_id and client_secret and redirect_uri):
+        if not cls.is_configured(key):
             return None
-        return cls(client_id=client_id, client_secret=client_secret, redirect_uri=redirect_uri)
+        names = cls.env_names(key)
+        return cls(
+            client_id=os.environ[names["client_id"]],
+            client_secret=os.environ[names["client_secret"]],
+            redirect_uri=os.environ.get(names["redirect_uri"]) or f"{server.public_url}/auth/{key}",
+        )

@@ -133,8 +133,8 @@ credential is added by adding a key, whichever component reads it. That
 covers the platform's own (`INTERLOPER_ENCRYPTION_KEY`,
 `INTERLOPER_POSTGRES_PASSWORD`, `INTERLOPER_AUTH_GOOGLE_CLIENT_SECRET`,
 `INTERLOPER_SMTP_PASSWORD`, `INTERLOPER_OTEL_HEADERS`) and the connector
-credentials (`INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`,
-`_REDIRECT_URI`, the Google Ads and Bing Ads developer tokens), which the
+credentials (`INTERLOPER_<PROVIDER>_CLIENT_ID`, `_CLIENT_SECRET`, the
+Google Ads and Bing Ads developer tokens), which the
 api, the scheduler and the MCP server all resolve connections with.
 
 Point the chart at a Secret you manage:
