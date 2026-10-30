@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v0.122.0 (2026-10-30)
+
+### Bug Fixes
+
+- **app**: The overview says when an organisation has no data
+  ([`01647e2`](https://github.com/digitl-cloud/interloper/commit/01647e20d2ecfa8f43cd3bb2590007f3aa08f113))
+
+- **assets**: A raw row without a key reaches no star schema view
+  ([`6d201df`](https://github.com/digitl-cloud/interloper/commit/6d201df919e1cae9ca2b4c3ea15ceaabf30671a3))
+
+- **assets**: Every Facebook request goes through one engine that waits, retries and asks for less
+  ([`7d9c9dd`](https://github.com/digitl-cloud/interloper/commit/7d9c9dd6ce1c1f5751bc759ed1010e2833130376))
+
+### Refactoring
+
+- A connector OAuth app's redirect URI is derived from the app's public URL
+  ([`178d50b`](https://github.com/digitl-cloud/interloper/commit/178d50b864624146fe98a905cb319135af331f82))
+
+- An organisation's slug is its key
+  ([`2c053e3`](https://github.com/digitl-cloud/interloper/commit/2c053e3c8d42b33ed2a04da72afff04624219d60))
+
+### Breaking Changes
+
+- OAuthAppCredentials.from_env takes the server settings whose public URL the redirect URI defaults
+  under: from_env(key, settings.server).
+
+
 ## v0.121.0 (2026-10-29)
 
 ### Bug Fixes
