@@ -16,56 +16,6 @@ from facebook_business.exceptions import FacebookRequestError
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class Usage:
-    """How much of its rate limits a Graph API caller has used, as Meta reports it on every response.
-
-    Attributes:
-        percent: The highest utilization among the reported limits, 0 to 100.
-        wait: How long Meta says the caller must wait before its access returns; zero when it says nothing.
-    """
-
-    percent: float
-    wait: timedelta
-
-    @classmethod
-    def from_headers(cls, headers: Any) -> Usage:
-        """Read the usage headers Meta attaches to responses and errors alike.
-
-        ``x-app-usage`` is the app's share, ``x-ad-account-usage`` the ad
-        account's, ``x-business-use-case-usage`` one entry per rate-limit
-        type (ads management, insights...) per business object, each with the
-        minutes until access returns, and ``x-fb-ads-insights-throttle`` the
-        async insights share. The worst of them is the caller's usage. Each
-        is read by its measures alone: Meta adds labels beside them, such as
-        the access tier (``ads_api_access_tier``).
-
-        Args:
-            headers: A response's or an error's headers; header names are case-insensitive.
-
-        Returns:
-            The worst utilization and the longest announced wait.
-        """
-        percents = [0.0]
-        waits = [timedelta()]
-        if app := headers.get("x-app-usage"):
-            app = json.loads(app)
-            percents.extend(float(app.get(key, 0)) for key in ("call_count", "total_cputime", "total_time"))
-        if account := headers.get("x-ad-account-usage"):
-            account = json.loads(account)
-            percents.append(float(account.get("acc_id_util_pct", 0)))
-            waits.append(timedelta(seconds=float(account.get("reset_time_duration", 0))))
-        if business := headers.get("x-business-use-case-usage"):
-            for limits in json.loads(business).values():
-                for limit in limits:
-                    percents.extend(float(limit.get(key, 0)) for key in ("call_count", "total_cputime", "total_time"))
-                    waits.append(timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0))))
-        if insights := headers.get("x-fb-ads-insights-throttle"):
-            insights = json.loads(insights)
-            percents.extend(float(insights.get(key, 0)) for key in ("app_id_util_pct", "acc_id_util_pct"))
-        return cls(percent=max(percents), wait=max(waits))
-
-
 @dataclass
 class Attempts:
     """What one request has spent waiting out throttling and repeating transient failures.
@@ -121,8 +71,8 @@ class FacebookGraphApi(FacebookAdsApi):
     insights job and its polling, goes through ``call``, so this is the one
     place that decides what a refusal means:
 
-    - **Throttled** (the rate-limit codes): wait as long as Meta's usage
-      headers say, else back off, and repeat, within a total budget.
+    - **Throttled** (the rate-limit codes): wait as long as Meta says the
+      caller is locked out, else back off, and repeat, within a total budget.
     - **Transient** (``is_transient``, code 2, a 5xx, a dropped connection):
       repeat a few times after a short backoff.
     - **Too much data** (code 1, "reduce the amount of data"): ask for less in
@@ -131,8 +81,10 @@ class FacebookGraphApi(FacebookAdsApi):
       is read again in two halves of its fields and the answers merged.
     - Anything else is raised at once.
 
-    Every response is also read for usage, and a caller close to its limits
-    pauses before its next request rather than being refused.
+    A response announcing a lockout also pauses the caller that long before
+    its next request. The usage percentages Meta reports beside it are not
+    acted on: they cover a rolling window, so pausing on them slows every
+    request while Meta still serves them all.
     """
 
     THROTTLE_CODES: ClassVar[frozenset[int]] = frozenset({4, 17, 32, 613, *range(80000, 80015)})
@@ -141,7 +93,6 @@ class FacebookGraphApi(FacebookAdsApi):
         requests.exceptions.ChunkedEncodingError,
         requests.exceptions.Timeout,
     )
-    PACE_ABOVE: ClassVar[float] = 90
     DEFAULT_PAGE: ClassVar[int] = 25
 
     def call(
@@ -192,7 +143,7 @@ class FacebookGraphApi(FacebookAdsApi):
                         return self._read_halves(path, params, headers, url_override, api_version)
                     raise
                 if error.api_error_code() in self.THROTTLE_CODES:
-                    wait = attempts.after_throttle(Usage.from_headers(error.http_headers() or {}).wait)
+                    wait = attempts.after_throttle(self._announced_lockout(error.http_headers() or {}))
                 elif self._is_transient(error):
                     wait = attempts.after_failure()
                 else:
@@ -201,7 +152,7 @@ class FacebookGraphApi(FacebookAdsApi):
                     raise
                 self._wait(wait, f"refused with code {error.api_error_code()}")
             else:
-                self._pace(Usage.from_headers(response.headers()))
+                self._pace(self._announced_lockout(response.headers()))
                 return response
 
     def _shrinks_page(self, method: str, path: Any, params: dict[str, Any]) -> bool:
@@ -257,15 +208,35 @@ class FacebookGraphApi(FacebookAdsApi):
         body = {**halves[0].json(), **halves[1].json()}
         return FacebookResponse(body=json.dumps(body), http_status=200, headers=halves[1].headers(), call=None)
 
-    def _pace(self, usage: Usage) -> None:
-        """Pause before the next request when Meta reports the caller close to its limits.
+    def _pace(self, lockout: timedelta) -> None:
+        """Pause before the next request for as long as Meta says the caller is locked out.
 
         Args:
-            usage: The usage the last response reported.
+            lockout: The lockout the last response announced; zero for none.
         """
-        if usage.percent >= self.PACE_ABOVE:
-            wait = min(max(usage.wait, Attempts.FIRST_BACKOFF), Attempts.LONGEST_WAIT)
-            self._wait(wait, f"usage at {usage.percent:.0f}%")
+        if lockout:
+            self._wait(min(lockout, Attempts.LONGEST_WAIT), "announced a lockout")
+
+    @staticmethod
+    def _announced_lockout(headers: Any) -> timedelta:
+        """How long Meta says the caller is locked out, read from a response's or an error's headers.
+
+        ``x-business-use-case-usage`` holds one entry per rate-limit type
+        (ads management, insights...) per business object, each with the
+        minutes until access returns, zero while it is not locked out.
+
+        Args:
+            headers: The headers; names are case-insensitive.
+
+        Returns:
+            The longest announced lockout, zero when none is.
+        """
+        lockouts = [timedelta()]
+        if business := headers.get("x-business-use-case-usage"):
+            for limits in json.loads(business).values():
+                for limit in limits:
+                    lockouts.append(timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0))))
+        return max(lockouts)
 
     @staticmethod
     def _wait(duration: timedelta, reason: str) -> None:
