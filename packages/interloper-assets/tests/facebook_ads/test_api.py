@@ -103,10 +103,19 @@ class TestThrottling:
         assert sleeps == [60, 240]
 
     def test_the_async_insights_throttle_paces_too(self, sleeps):
-        throttle = {"x-fb-ads-insights-throttle": json.dumps({"app_id_util_pct": 95, "acc_id_util_pct": 10})}
-        api = _api(_ok(headers=throttle))
+        insights = {"app_id_util_pct": 95, "acc_id_util_pct": 10, "ads_api_access_tier": "development_access"}
+        api = _api(_ok(headers={"x-fb-ads-insights-throttle": json.dumps(insights)}))
         api.call("GET", ("act_1", "insights"))
         assert sleeps == [60]
+
+    def test_usage_headers_are_read_by_their_measures_alone(self, sleeps):
+        headers = {
+            "x-app-usage": json.dumps({"call_count": 10, "total_time": 5, "total_cputime": 5, "type": "app"}),
+            "x-ad-account-usage": json.dumps({"acc_id_util_pct": 20, "ads_api_access_tier": "standard_access"}),
+        }
+        api = _api(_ok(headers=headers))
+        api.call("GET", ("act_1", ""))
+        assert sleeps == []
 
 
 class TestTransientFailures:
