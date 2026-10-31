@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v0.123.1 (2026-10-31)
+
+### Bug Fixes
+
+- **assets**: Facebook usage headers are read by their measures, not every value
+  ([`e64a9eb`](https://github.com/digitl-cloud/interloper/commit/e64a9ebe3f290309399c6f106a415f74a58d8d4c))
+
+
 ## v0.123.0 (2026-10-30)
 
 ### Features
