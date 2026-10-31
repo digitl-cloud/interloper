@@ -36,7 +36,9 @@ class Usage:
         account's, ``x-business-use-case-usage`` one entry per rate-limit
         type (ads management, insights...) per business object, each with the
         minutes until access returns, and ``x-fb-ads-insights-throttle`` the
-        async insights share. The worst of them is the caller's usage.
+        async insights share. The worst of them is the caller's usage. Each
+        is read by its measures alone: Meta adds labels beside them, such as
+        the access tier (``ads_api_access_tier``).
 
         Args:
             headers: A response's or an error's headers; header names are case-insensitive.
@@ -47,7 +49,8 @@ class Usage:
         percents = [0.0]
         waits = [timedelta()]
         if app := headers.get("x-app-usage"):
-            percents.extend(float(value) for value in json.loads(app).values())
+            app = json.loads(app)
+            percents.extend(float(app.get(key, 0)) for key in ("call_count", "total_cputime", "total_time"))
         if account := headers.get("x-ad-account-usage"):
             account = json.loads(account)
             percents.append(float(account.get("acc_id_util_pct", 0)))
@@ -58,7 +61,8 @@ class Usage:
                     percents.extend(float(limit.get(key, 0)) for key in ("call_count", "total_cputime", "total_time"))
                     waits.append(timedelta(minutes=float(limit.get("estimated_time_to_regain_access", 0))))
         if insights := headers.get("x-fb-ads-insights-throttle"):
-            percents.extend(float(value) for value in json.loads(insights).values())
+            insights = json.loads(insights)
+            percents.extend(float(insights.get(key, 0)) for key in ("app_id_util_pct", "acc_id_util_pct"))
         return cls(percent=max(percents), wait=max(waits))
 
 
