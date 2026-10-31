@@ -93,27 +93,22 @@ class TestThrottling:
         assert sleeps[:5] == [60, 120, 240, 480, 600]
         assert sum(sleeps) <= Attempts.THROTTLE_BUDGET.total_seconds()
 
-    def test_a_busy_account_is_paced_before_its_next_request(self, sleeps):
-        busy = {"x-app-usage": json.dumps({"call_count": 95, "total_time": 10, "total_cputime": 10})}
-        regain = _business_usage(total_time=91, estimated_time_to_regain_access=4)
-        calm = {"x-ad-account-usage": json.dumps({"acc_id_util_pct": 40, "reset_time_duration": 0})}
-        api = _api(_ok(headers=busy), _ok(headers=regain), _ok(headers=calm))
-        for _ in range(3):
-            api.call("GET", ("act_1", ""))
-        assert sleeps == [60, 240]
+    def test_a_lockout_meta_announces_is_waited_out_before_the_next_request(self, sleeps):
+        api = _api(_ok(headers=_business_usage(total_time=100, estimated_time_to_regain_access=4)))
+        api.call("GET", ("act_1", ""))
+        assert sleeps == [240]
 
-    def test_the_async_insights_throttle_paces_too(self, sleeps):
-        insights = {"app_id_util_pct": 95, "acc_id_util_pct": 10, "ads_api_access_tier": "development_access"}
-        api = _api(_ok(headers={"x-fb-ads-insights-throttle": json.dumps(insights)}))
-        api.call("GET", ("act_1", "insights"))
-        assert sleeps == [60]
-
-    def test_usage_headers_are_read_by_their_measures_alone(self, sleeps):
-        headers = {
-            "x-app-usage": json.dumps({"call_count": 10, "total_time": 5, "total_cputime": 5, "type": "app"}),
-            "x-ad-account-usage": json.dumps({"acc_id_util_pct": 20, "ads_api_access_tier": "standard_access"}),
+    def test_high_usage_without_a_lockout_is_not_paced(self, sleeps):
+        busy = {
+            "x-app-usage": json.dumps({"call_count": 95, "total_time": 10, "total_cputime": 10, "type": "app"}),
+            "x-ad-account-usage": json.dumps({"acc_id_util_pct": 99, "reset_time_duration": 30}),
+            "x-fb-ads-insights-throttle": json.dumps(
+                {"app_id_util_pct": 95, "acc_id_util_pct": 10, "ads_api_access_tier": "development_access"}
+            ),
+            **_business_usage(call_count=96, estimated_time_to_regain_access=0),
         }
-        api = _api(_ok(headers=headers))
+        api = _api(_ok(headers=busy), _ok(headers=busy))
+        api.call("GET", ("act_1", "insights"))
         api.call("GET", ("act_1", ""))
         assert sleeps == []
 
