@@ -5,10 +5,13 @@ import { useChat } from '@ai-sdk/vue'
 /**
  * A conversation with the assistant over the AI SDK.
  *
- * The server owns the history: `useChat` streams each turn from the
- * conversation's chat route and resumes it by itself once the user has
- * approved a call or answered a card. Loading an existing conversation is
- * one GET whose body is already in the SDK's message shape.
+ * The server owns the history, so each request carries only the last
+ * message, the AI SDK's persistence pattern: the new prompt, or the
+ * assistant message holding the user's approvals and card answers.
+ * `useChat` streams each turn from the conversation's chat route and resumes
+ * it by itself once the user has approved a call or answered a card.
+ * Loading an existing conversation is one GET whose body is already in the
+ * SDK's message shape.
  */
 export function useAgentChat(conversationId: string, initialMessages: UIMessage[] = []) {
     const agentStore = useAgentStore()
@@ -20,6 +23,9 @@ export function useAgentChat(conversationId: string, initialMessages: UIMessage[
         transport: new DefaultChatTransport({
             api: `/api/organisations/${organisationStore.requireOrganisation().id}/agent/conversations/${conversationId}/chat`,
             credentials: 'include',
+            prepareSendMessagesRequest: ({ id, messages, trigger, messageId, body }) => ({
+                body: { ...body, id, trigger, messageId, messages: messages.slice(-1) },
+            }),
         }),
         sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
         onFinish: () => {

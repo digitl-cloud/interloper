@@ -4,23 +4,26 @@ A conversation is a member's own, in the organisation the path names: its
 history lives in the store and the server, not the client, is its source of
 truth. Each turn is one
 :meth:`~pydantic_ai.ui.vercel_ai.VercelAIAdapter.dispatch_request`: the
-stored history is passed as ``message_history``, the client's request adds
-the new prompt (or the tool approvals and answers the app collected), and the
-whole history is saved back when the run completes.
+stored history is passed as ``message_history``, the client's last message
+adds the new prompt (or the approvals and card answers the app collected),
+and the whole history is saved back when the run completes.
 
 Available when ``interloper-agent`` is installed.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterable, AsyncIterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from functools import cached_property
+from typing import Annotated, Any, ClassVar
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from interloper.telemetry import meter
 from interloper_agent import TURN_LIMITS, summary_of
 from interloper_db import Page, PageQuery
@@ -50,6 +53,9 @@ org_router = APIRouter(prefix="/agent", tags=["agent"])
 
 SDK_VERSION = 7
 """The AI SDK major version the app speaks; tool approvals need at least 6."""
+
+_END = object()
+"""What :class:`DetachedBody` queues once its body has ended."""
 
 _turns = meter().create_counter("interloper.agent.turns", unit="{turn}", description="Agent turns, by outcome")
 _tokens = meter().create_counter("interloper.agent.tokens", unit="{token}", description="Tokens agent turns spent")
@@ -85,56 +91,56 @@ class LoggedEventStream(VercelAIEventStream[ToolkitContext, Any]):
 class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
     """The Vercel adapter for a stored conversation.
 
-    The app sends its whole message list on every turn, while the stored
-    ``history`` already holds all of it but what the turn adds. Taking the
-    client's copies too would store every earlier message again, so only the
-    additions are kept: the final message's prompt, and the answers to calls
-    the history leaves pending. Approvals reach the run as deferred results.
-    It also builds :class:`LoggedEventStream`.
+    The server holds the history, so the app sends only its last message, as
+    the AI SDK's persistence guide has it: the user's new prompt, or the
+    assistant message carrying their answers to the calls the turn left
+    pending (approvals, and the cards' outputs). A prompt joins the stored
+    ``history``; the answers resume the run as deferred tool results, so
+    nothing the store already holds is taken from the client. It also builds
+    :class:`LoggedEventStream`.
     """
 
     history: Sequence[ModelMessage] = ()
 
+    @cached_property
+    def deferred_tool_results(self) -> DeferredToolResults | None:
+        """The approvals the request carries, and its answers to the calls the history leaves pending.
+
+        Returns:
+            The results to resume the run with, or ``None`` when the request answers nothing.
+        """
+        approved = super().deferred_tool_results
+        called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
+        answered = {part.tool_call_id for part in self._parts(self.history, (ToolReturnPart, RetryPromptPart))}
+        calls = {
+            part.tool_call_id: part.content
+            for part in self._parts(self.messages, ToolReturnPart)
+            if part.tool_call_id in called - answered
+        }
+        if not calls:
+            return approved
+        return DeferredToolResults(calls=calls, approvals=approved.approvals if approved else {})
+
     def sanitize_messages(
         self, messages: Sequence[ModelMessage], *, deferred_tool_results: DeferredToolResults | None = None
     ) -> list[ModelMessage]:
-        """Keep what the client's messages add to the stored history, sanitized.
+        """Keep the user's new prompt, sanitized; the history and the answers come from elsewhere.
 
         Args:
             messages: The client's messages, loaded from the request.
-            deferred_tool_results: The approvals the request carries, if any.
+            deferred_tool_results: The results the run resumes with, if any.
 
         Returns:
-            One request holding the new answers and prompt, or nothing when the
-            client added neither.
+            One request holding the prompt, or nothing when the request carries none.
         """
-        additions = self._additions(messages)
-        return super().sanitize_messages(additions, deferred_tool_results=deferred_tool_results)
-
-    def _additions(self, messages: Sequence[ModelMessage]) -> list[ModelMessage]:
-        """The client's answers to pending calls, then its new prompt.
-
-        Args:
-            messages: The client's messages, loaded from the request.
-
-        Returns:
-            One request holding the additions, or an empty list.
-        """
-        called = {part.tool_call_id for part in self._parts(self.history, ToolCallPart)}
-        answered = {part.tool_call_id for part in self._parts(self.history, (ToolReturnPart, RetryPromptPart))}
-        answers = [
-            part
-            for part in self._parts(messages, (ToolReturnPart, RetryPromptPart))
-            if part.tool_call_id in called - answered
-        ]
         final = messages[-1] if messages else None
         prompts = (
             [part for part in final.parts if isinstance(part, UserPromptPart)]
             if isinstance(final, ModelRequest)
             else []
         )
-        parts = [*answers, *prompts]
-        return [ModelRequest(parts=parts)] if parts else []
+        additions = [ModelRequest(parts=prompts)] if prompts else []
+        return super().sanitize_messages(additions, deferred_tool_results=deferred_tool_results)
 
     @staticmethod
     def _parts(messages: Sequence[ModelMessage], part_type: type | tuple[type, ...]) -> list[Any]:
@@ -158,6 +164,69 @@ class ConversationAdapter(VercelAIAdapter[ToolkitContext, Any]):
         return LoggedEventStream(
             self.run_input, accept=self.accept, sdk_version=self.sdk_version, server_message_id=self.server_message_id
         )
+
+
+class DetachedBody:
+    """A response body produced to its end whether or not the client stays to read it.
+
+    A turn saves its history once its stream completes, and Starlette cancels
+    the body when the client goes away (a closed tab, a dropped connection),
+    which would lose the turn, prompt included. Producing the body in a task
+    of its own lets the turn finish and save regardless, as the AI SDK's
+    ``consumeStream`` does; the client only reads what it stays for.
+    """
+
+    _running: ClassVar[set[asyncio.Task[None]]] = set()
+
+    def __init__(self, body: AsyncIterable[Any]) -> None:
+        """Start producing the body.
+
+        Args:
+            body: The response's own body iterator.
+        """
+        self._chunks: asyncio.Queue[Any] = asyncio.Queue()
+        task = asyncio.create_task(self._produce(body))
+        self._running.add(task)
+        task.add_done_callback(self._running.discard)
+
+    async def _produce(self, body: AsyncIterable[Any]) -> None:
+        """Read the body to its end, queueing each chunk for the client.
+
+        A failure is logged here, where it is seen whether or not the client
+        stayed; the client's stream then just ends.
+
+        Args:
+            body: The response's own body iterator.
+        """
+        try:
+            async for chunk in body:
+                self._chunks.put_nowait(chunk)
+        except Exception:
+            logger.exception("Agent turn response failed")
+        finally:
+            self._chunks.put_nowait(_END)
+
+    def __aiter__(self) -> DetachedBody:
+        """Iterate the chunks produced so far, then the rest as they come.
+
+        Returns:
+            This body.
+        """
+        return self
+
+    async def __anext__(self) -> Any:
+        """The next chunk, once produced.
+
+        Returns:
+            The chunk.
+
+        Raises:
+            StopAsyncIteration: When the body has ended.
+        """
+        chunk = await self._chunks.get()
+        if chunk is _END:
+            raise StopAsyncIteration
+        return chunk
 
 
 class ConversationResponse(BaseModel):
@@ -298,10 +367,10 @@ async def chat(
 ) -> Response:
     """Run one turn of a conversation and stream it as the AI SDK expects.
 
-    The request body is the AI SDK's: the client's message list, of which the
-    adapter takes the new user message and any approvals or tool answers.
+    The request body is the AI SDK's, carrying the client's last message: a
+    new prompt, or the answers to the calls the turn left pending.
     Everything before comes from the stored history, saved back whole once
-    the run completes.
+    the run completes, whether or not the client stayed to the end.
 
     Args:
         conversation_id: The conversation UUID; it must belong to the path's
@@ -339,7 +408,7 @@ async def chat(
         _requests.record(usage.requests, {"model": model})
 
     history = ModelMessagesTypeAdapter.validate_python(conversation.messages)
-    return await ConversationAdapter.dispatch_request(
+    response = await ConversationAdapter.dispatch_request(
         request,
         agent=agent,
         sdk_version=SDK_VERSION,
@@ -350,6 +419,9 @@ async def chat(
         usage_limits=TURN_LIMITS,
         on_complete=save,
     )
+    if isinstance(response, StreamingResponse):
+        response.body_iterator = DetachedBody(response.body_iterator)
+    return response
 
 
 def _model_name(agent: Agent[ToolkitContext, Any]) -> str:

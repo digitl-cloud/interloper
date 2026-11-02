@@ -6,6 +6,7 @@ deterministic test models, so a turn streams end to end without a network.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator
 from types import SimpleNamespace
@@ -242,17 +243,14 @@ class TestChat:
         assert metric_total("interloper.agent.tokens", kind="output") > before["output"]
         assert metric_total("interloper.agent.requests") == before["requests"] + 1
 
-    def test_a_follow_up_sent_with_the_whole_list_stores_each_message_once(self, store: Store, member: SimpleNamespace):
+    def test_a_follow_up_adds_its_prompt_to_the_stored_history(self, store: Store, member: SimpleNamespace):
         agent = _echo_agent()
         client = _client(store, member, agent)
         conversation_id = client.post("/agent/conversations").json()["id"]
-        first = _turn("hi there")
-        reply = {"id": "a1", "role": "assistant", "parts": [{"type": "text", "text": "Hello Ada", "state": "done"}]}
 
         with agent.override(model=TestModel(call_tools=[], custom_output_text="Hello Ada")):
-            client.post(f"/agent/conversations/{conversation_id}/chat", json=first)
-            follow_up = {**_turn("and again"), "messages": [*first["messages"], reply, *_turn("and again")["messages"]]}
-            client.post(f"/agent/conversations/{conversation_id}/chat", json=follow_up)
+            client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("hi there"))
+            client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("and again"))
 
         row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
         history = ModelMessagesTypeAdapter.validate_python(row.messages)
@@ -260,7 +258,7 @@ class TestChat:
         assert prompts == ["hi there", "and again"]
         assert len(history) == 4
 
-    def test_a_card_answer_sent_with_the_whole_list_stores_the_turn_once(self, store: Store, member: SimpleNamespace):
+    def test_a_card_answer_resumes_the_turn_and_stores_it_once(self, store: Store, member: SimpleNamespace):
         selection = {"prompt": "Which one?", "options": [{"label": "X", "value": "x"}], "multi": False}
 
         async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
@@ -295,9 +293,7 @@ class TestChat:
         }
 
         client.post(f"/agent/conversations/{conversation_id}/chat", json=first)
-        answered = client.post(
-            f"/agent/conversations/{conversation_id}/chat", json={**first, "messages": [*first["messages"], card]}
-        )
+        answered = client.post(f"/agent/conversations/{conversation_id}/chat", json={**first, "messages": [card]})
 
         assert "Picked X" in answered.text
         row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
@@ -380,3 +376,30 @@ class TestChat:
         assert '"type":"error"' in response.text
         assert "Agent turn failed: provider exploded" in caplog.text
         assert metric_total("interloper.agent.turns", status="failed") == failed_before + 1
+
+
+class TestDetachedBody:
+    async def test_the_body_runs_to_its_end_after_the_client_leaves(self):
+        finished = asyncio.Event()
+
+        async def body() -> AsyncIterator[str]:
+            yield "first"
+            await asyncio.sleep(0)
+            yield "second"
+            finished.set()
+
+        detached = agent_module.DetachedBody(body())
+
+        assert await anext(detached) == "first"
+        await asyncio.wait_for(finished.wait(), timeout=1)
+
+    async def test_a_failing_body_is_logged_and_ends_the_stream(self, caplog: pytest.LogCaptureFixture):
+        async def body() -> AsyncIterator[str]:
+            yield "first"
+            raise RuntimeError("boom")
+
+        with caplog.at_level("ERROR", logger="interloper_api.routes.agent"):
+            chunks = [chunk async for chunk in agent_module.DetachedBody(body())]
+
+        assert chunks == ["first"]
+        assert "Agent turn response failed" in caplog.text
