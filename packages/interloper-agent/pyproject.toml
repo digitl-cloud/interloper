@@ -49,4 +49,4 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/**" = ["TID251", "ANN", "F811", "D101", "D102", "D103", "D104", "RUF069", "PLW0108"]
-"src/interloper_agent/interaction.py" = ["D417", "DOC201"]
+"src/interloper_agent/interaction.py" = ["D417", "DOC201", "DOC501"]

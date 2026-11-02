@@ -1,11 +1,12 @@
-"""The tool table: every tool the AI surfaces expose, with its effect on the platform.
+"""The tool table: the tools every AI surface exposes alike, with their effect on the platform.
 
-A surface (the agent, the MCP server) registers this table rather than a
-list of its own. The effect is the one fact a surface derives its behaviour
-from: MCP maps it to the annotations a client keys on, the agent to which
-calls wait for the user's approval. ``carries_secrets`` marks a tool whose
-arguments would carry credentials; a surface that transports arguments
-through a third party leaves it out.
+A surface (the agent, the MCP server) registers this table, plus its own
+tools for what only it can do, such as handing the user a form. The effect
+is the one fact a surface derives its behaviour from: MCP maps it to the
+annotations a client keys on, the agent to which calls wait for the user's
+approval. ``carries_secrets`` marks a tool whose arguments would carry
+credentials; a surface that transports arguments through a third party
+leaves it out.
 """
 
 from __future__ import annotations
@@ -171,7 +172,6 @@ TOOLS: tuple[Tool, ...] = (
     Tool(collection.delete_component, Effect.DELETE, "Delete a component"),
     Tool(collection.bind_relation, Effect.EDIT, "Bind a relation"),
     Tool(collection.unbind_relation, Effect.EDIT, "Unbind a relation"),
-    Tool(collection.request_connection_setup, Effect.READ, "Request a connection setup"),
     Tool(collection.check_connection, Effect.READ_PROVIDER, "Check a connection"),
     Tool(collection.create_connections, Effect.CREATE, "Create connections", carries_secrets=True),
     # Sources and jobs

@@ -17,7 +17,7 @@ MCP server never registers a tool whose arguments carry credentials).
 from interloper_toolkit.authz import requires_role
 from interloper_toolkit.collection import bind_relation, unbind_relation
 from interloper_toolkit.context import ToolkitContext, serialize
-from interloper_toolkit.models import ToolError, UserRequest
+from interloper_toolkit.models import ToolError
 from interloper_toolkit.tools import TOOLS, Effect, Tool
 
 __all__ = [
@@ -26,7 +26,6 @@ __all__ = [
     "Tool",
     "ToolError",
     "ToolkitContext",
-    "UserRequest",
     "bind_relation",
     "requires_role",
     "serialize",

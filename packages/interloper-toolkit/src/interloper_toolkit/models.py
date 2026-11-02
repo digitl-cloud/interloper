@@ -270,15 +270,7 @@ class ConnectionsCreated(BaseModel):
     failed: list[FailedInstance]
 
 
-class UserRequest(BaseModel):
-    """A result that asks the user for something the model cannot supply.
-
-    An interactive surface takes it to the user and answers the call with
-    their input; elsewhere it is an ordinary result the model relays.
-    """
-
-
-class ConnectionSetup(UserRequest):
+class ConnectionSetup(BaseModel):
     """The hand-off ``request_connection_setup`` makes.
 
     ``setup_url`` opens the app's connection form for this definition, when

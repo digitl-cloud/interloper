@@ -308,19 +308,40 @@ def unbind_relation(ctx: ToolkitContext, component_id: str, name: str, dst_id: s
 # -- Connections (kind-specific by nature) ---------------------------------------
 
 
+def connection_definition(ctx: ToolkitContext, connection_key: str) -> dict[str, Any] | ToolError:
+    """The catalog's connection definition under a key.
+
+    Not a tool: the surfaces' connection setup tools share it to refuse an
+    unknown key the same way.
+
+    Args:
+        ctx: The toolkit context.
+        connection_key: Catalog key of the connection definition.
+
+    Returns:
+        The definition, or an error listing the valid connection keys.
+    """
+    defn = ctx.catalog.get(connection_key)
+    if defn is None or defn.get("kind") != "connection":
+        return ToolError(
+            error=f"Connection definition '{connection_key}' not found in catalog",
+            valid_values=sorted(k for k, d in ctx.catalog.items() if d.get("kind") == "connection"),
+        )
+    return defn
+
+
 def request_connection_setup(
     ctx: ToolkitContext, connection_key: str, name: str | None = None
 ) -> ConnectionSetup | ToolError:
-    """Hand the user to the app's secure connection setup form.
+    """Hand the user a link to the app's secure connection setup form.
 
-    Call this to let the user create a connection: the app presents the form
-    for the given definition (OAuth sign-in when available, manual credential
-    entry otherwise) and the credentials go directly to the API. Never ask the
-    user to share credentials in the chat instead. In the app the form opens
-    in the conversation; elsewhere, give the user ``setup_url`` to open it,
-    ask them to say when they are done, then verify with check_connection.
-    A null ``setup_url`` means this deployment has no public app URL: the
-    user sets the connection up in the app themselves.
+    Call this to let the user create a connection: the form for the given
+    definition (OAuth sign-in when available, manual credential entry
+    otherwise) sends the credentials directly to the API. Never ask the user
+    to share credentials in the chat instead. Give the user ``setup_url`` to
+    open it, ask them to say when they are done, then verify with
+    check_connection. A null ``setup_url`` means this deployment has no
+    public app URL: the user sets the connection up in the app themselves.
 
     The response notes whether the user can sign in with the provider
     (``oauth_available``) or must enter credentials manually; an unknown key
@@ -332,17 +353,13 @@ def request_connection_setup(
         name: Optional display name to prefill in the form.
     """
     try:
-        defn = ctx.catalog.get(connection_key)
-        if defn is None or defn.get("kind") != "connection":
-            return ToolError(
-                error=f"Connection definition '{connection_key}' not found in catalog",
-                valid_values=sorted(k for k, d in ctx.catalog.items() if d.get("kind") == "connection"),
-            )
+        defn = connection_definition(ctx, connection_key)
+        if isinstance(defn, ToolError):
+            return defn
         oauth = (defn.get("config_schema") or {}).get("x-oauth")
         return ConnectionSetup(
             message=(
-                "Setup form presented to the user. Ask them to complete it "
-                "(and to say so when done), then verify with list_components."
+                "Give the user the setup link, ask them to say when they are done, then verify with list_components."
             ),
             connection_key=connection_key,
             name=name,

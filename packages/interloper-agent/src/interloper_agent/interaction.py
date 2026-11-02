@@ -1,34 +1,27 @@
-"""The agent's own tool: a choice the app puts to the user.
+"""The agent's own tools: what the app puts to the user, as a card in the conversation.
 
-It changes nothing on the platform, so it is not in the toolkit's table; the
-agent's toolset adds it. Its result is a :class:`~interloper_toolkit.UserRequest`,
-which the toolset defers to the app like any other: the app renders the
-card and submits the user's choice as the tool's result.
+Both are client-side tools in the AI SDK's sense: a valid call is deferred
+(pydantic-ai's :class:`~pydantic_ai.CallDeferred`), the app renders the card
+from the call's arguments, and the user's answer comes back as the call's
+result, which resumes the turn. An invalid call returns an error the model
+corrects instead. They are not in the toolkit's table: another surface hands
+the user something else (MCP a link to the connection form).
 """
 
 from __future__ import annotations
 
-from typing import Literal
-
-from interloper_toolkit import ToolkitContext, UserRequest
+from interloper_toolkit import ToolkitContext
+from interloper_toolkit.collection import connection_definition
 from interloper_toolkit.models import ToolError
+from pydantic_ai import CallDeferred
 
 MAX_CHOICES = 50
 """The most options one selection card carries."""
 
 
-class SelectionRequest(UserRequest):
-    """The choice put to the user."""
-
-    status: Literal["success"] = "success"
-    prompt: str
-    options: list[dict[str, str]]
-    multi: bool
-
-
 def request_user_selection(
     ctx: ToolkitContext, prompt: str, options: list[dict[str, str]], multi: bool = False
-) -> SelectionRequest | ToolError:
+) -> ToolError:
     """Ask the user to pick from known options, through a card in the app.
 
     Use this instead of listing choices as text whenever the user must pick
@@ -44,13 +37,30 @@ def request_user_selection(
         multi: True when several options may be selected (e.g. assets);
             False for exactly one (e.g. an account).
     """
-    cleaned = [
-        {"label": str(o.get("label") or o.get("value")), "value": str(o.get("value"))}
-        for o in options
-        if isinstance(o, dict) and o.get("value") is not None
-    ]
-    if not cleaned:
+    if not any(isinstance(option, dict) and option.get("value") is not None for option in options):
         return ToolError(error="options must carry at least one {label, value} entry")
-    if len(cleaned) > MAX_CHOICES:
-        return ToolError(error=f"Too many options ({len(cleaned)} > {MAX_CHOICES}): narrow them down first")
-    return SelectionRequest(prompt=prompt, options=cleaned, multi=multi)
+    if len(options) > MAX_CHOICES:
+        return ToolError(error=f"Too many options ({len(options)} > {MAX_CHOICES}): narrow them down first")
+    raise CallDeferred()
+
+
+def request_connection_setup(ctx: ToolkitContext, connection_key: str, name: str | None = None) -> ToolError:
+    """Present the app's secure connection setup form to the user.
+
+    Call this to let the user create a connection: the app shows the form for
+    the given definition in the conversation (OAuth sign-in when available,
+    manual credential entry otherwise) and the credentials go directly to the
+    API. Never ask the user to share credentials in the chat instead. The
+    created connection comes back as this tool's result,
+    ``{"connection_id": ..., "name": ..., "verified": ...}``; an unknown key
+    fails with the list of valid connection keys.
+
+    Args:
+        connection_key: Catalog key of the connection definition — usually
+            ``<source_key>_connection`` (e.g. 'facebook_ads_connection').
+        name: Optional display name to prefill in the form.
+    """
+    definition = connection_definition(ctx, connection_key)
+    if isinstance(definition, ToolError):
+        return definition
+    raise CallDeferred()
