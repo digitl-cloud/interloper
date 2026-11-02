@@ -12,7 +12,9 @@ from interloper_toolkit import ToolkitContext, analytics, catalog, collection, j
 from interloper_toolkit.models import ToolError
 from interloper_toolkit.tools import TOOLS, Effect, Tool
 
-MODULE_HELPERS = {"normalized_asset_keys", "source_relations", "unresolved_requirements"}
+MODULE_HELPERS = {"connection_definition", "normalized_asset_keys", "source_relations", "unresolved_requirements"}
+SURFACE_TOOLS = {"request_connection_setup"}
+"""Toolkit functions a surface registers itself, outside the shared table: MCP's link to the connection form."""
 
 
 class TestTable:
@@ -26,7 +28,7 @@ class TestTable:
                 for name, member in vars(module).items()
                 if callable(member) and not name.startswith("_") and member.__module__ == module.__name__
             }
-            missing = public - set(names) - MODULE_HELPERS
+            missing = public - set(names) - MODULE_HELPERS - SURFACE_TOOLS
             assert missing == set(), f"{module.__name__}: {missing}"
 
     def test_creates_cancels_and_deletes_need_approval(self):

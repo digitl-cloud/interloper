@@ -15,7 +15,7 @@ from typing import Any
 import interloper as il
 from interloper.settings import McpSettings
 from interloper_db.store import Store
-from interloper_toolkit import TOOLS
+from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
 from mcp import Client
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult
@@ -64,7 +64,8 @@ async def test_every_tool_is_titled_annotated_and_credentials_never_travel_as_ar
         tools = (await client.list_tools()).tools
 
     by_name = {t.name: t for t in tools}
-    assert set(by_name) == {t.name for t in TOOLS if not t.carries_secrets} | {"list_organisations"}
+    shared = {t.name for t in TOOLKIT_TOOLS if not t.carries_secrets}
+    assert set(by_name) == shared | {"request_connection_setup", "list_organisations"}
     assert "create_connections" not in by_name
     assert WRITES <= set(by_name)
     assert all(t.annotations is not None for t in tools)

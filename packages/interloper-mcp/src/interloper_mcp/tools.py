@@ -1,9 +1,10 @@
-"""MCP tool registration: the toolkit's table, bound to the request's context.
+"""MCP tool registration: the toolkit's table and this surface's own tools, bound to the request's context.
 
 Every toolkit tool takes a trailing ``organisation`` argument, the id of the
-organisation the call acts in (see :func:`~interloper_mcp.context.get_ctx`),
-and ``list_organisations``, which this surface adds, lists the ones a user
-can name. Each tool carries its title and the MCP annotations a client keys its behaviour on
+organisation the call acts in (see :func:`~interloper_mcp.context.get_ctx`).
+This surface adds ``request_connection_setup``, which hands the user a link
+to the app's connection form, and ``list_organisations``, which lists the
+organisations a user can name. Each tool carries its title and the MCP annotations a client keys its behaviour on
 (``readOnlyHint``, ``destructiveHint``, ``idempotentHint``,
 ``openWorldHint``), mapped from the tool's effect; the spec's defaults are
 the pessimistic ones, so reads say so explicitly. The writes are gated in
@@ -18,12 +19,19 @@ import inspect
 from typing import Annotated, Literal
 from uuid import UUID
 
-from interloper_toolkit import TOOLS, Effect
+from interloper_toolkit import TOOLS as TOOLKIT_TOOLS
+from interloper_toolkit import Effect, Tool, collection
 from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from interloper_mcp.context import get_ctx, organisations
+
+TOOLS: tuple[Tool, ...] = (
+    *TOOLKIT_TOOLS,
+    Tool(collection.request_connection_setup, Effect.READ, "Request a connection setup"),
+)
+"""Every toolkit tool this surface registers: the shared table, and the link to the app's connection form."""
 
 ORGANISATION = inspect.Parameter(
     "organisation",

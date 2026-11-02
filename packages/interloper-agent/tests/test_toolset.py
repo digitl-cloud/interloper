@@ -32,9 +32,10 @@ def agent_calling(tool_name: str, args: dict) -> Agent[ToolkitContext, str | Def
 
 
 class TestRegistry:
-    def test_the_agent_registers_the_toolkit_table_plus_the_selection_card(self):
+    def test_the_agent_registers_the_toolkit_table_plus_the_cards(self):
         assert TOOLS[: len(TOOLKIT_TOOLS)] == TOOLKIT_TOOLS
-        assert [tool.name for tool in TOOLS[len(TOOLKIT_TOOLS) :]] == ["request_user_selection"]
+        cards = [tool.name for tool in TOOLS[len(TOOLKIT_TOOLS) :]]
+        assert cards == ["request_user_selection", "request_connection_setup"]
 
     async def test_the_toolset_exposes_every_tool_with_its_schema(self, ctx: ToolkitContext):
         run_context = RunContext(deps=ctx, model=TestModel(), usage=RunUsage())
