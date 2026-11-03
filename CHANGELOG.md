@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v0.124.0 (2026-11-03)
+
+### Bug Fixes
+
+- **api**: A chat turn is saved even when the client leaves, and the app sends only its last message
+  ([`f8c8b80`](https://github.com/digitl-cloud/interloper/commit/f8c8b8046778447b6399790405dcaaf1edcdd390))
+
+- **assets**: The Facebook engine waits only for a lockout Meta announces
+  ([`59b90e7`](https://github.com/digitl-cloud/interloper/commit/59b90e7ed47951a50ee5d2854f2d0c8281fbdbba))
+
+### Features
+
+- **agent**: A client attaches its thread as context, framed as quoted data
+  ([`67641b3`](https://github.com/digitl-cloud/interloper/commit/67641b33c37cb11511be277ea5ba1375a955a6f9))
+
+- **agent**: A conversation an OAuth client starts is the client's, hidden from the app and deleted
+  when the grant ends
+  ([`1c86a6b`](https://github.com/digitl-cloud/interloper/commit/1c86a6b473dcba13b92e8994a081dafb752da864))
+
+- **agent**: Clients list the agent's tools with their titles
+  ([`d7d5cd4`](https://github.com/digitl-cloud/interloper/commit/d7d5cd47d415b58db67cf4dcf12caaafc593f535))
+
+- **agent**: Viewers can chat; the toolkit still refuses their writes
+  ([`96d1716`](https://github.com/digitl-cloud/interloper/commit/96d17163b9d7b6d240bbc800685c1473fa14985b))
+
+- **core**: An entity is dated by the period it was observed in
+  ([`d6e057a`](https://github.com/digitl-cloud/interloper/commit/d6e057acfa148be12b6ec581d582d28837a9fd15))
+
+### Refactoring
+
+- **agent**: The cards are deferred tools, and the connection link is MCP's own
+  ([`19f192b`](https://github.com/digitl-cloud/interloper/commit/19f192be64672a9c2957658965f1099b22d21fdf))
+
+
 ## v0.123.1 (2026-10-31)
 
 ### Bug Fixes
