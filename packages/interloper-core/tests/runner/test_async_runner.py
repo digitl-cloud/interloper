@@ -10,7 +10,7 @@ import pytest
 import interloper as il
 from interloper.errors import RunnerError
 from interloper.events import Event
-from interloper.runner import AsyncRun, AsyncRunner, ExecutionStatus, RunState
+from interloper.runner import AsyncRun, AsyncRunner, ExecutionStatus, Run
 
 
 class TestFailFast:
@@ -199,7 +199,7 @@ class TestMachineryErrors:
         Args:
             monkeypatch: Fixture used to neutralize ``ready``.
         """
-        monkeypatch.setattr("interloper.runner.state.RunState.ready", property(lambda self: []))
+        monkeypatch.setattr("interloper.runner.run.Run.ready", property(lambda self: []))
 
     @staticmethod
     def _dag() -> il.DAG:
@@ -276,7 +276,7 @@ async def test_a_retried_attempt_starts_with_its_own_event_id():
 
     started = [event for event in events if event.type is il.EventType.OPERATION_STARTED]
     assert [event.metadata["attempt"] for event in started] == [1, 2]
-    assert started[1].id == RunState.operation_event_id("run-1", "flaky", il.EventType.OPERATION_STARTED, attempt=2)
+    assert started[1].id == Run.operation_event_id("run-1", "flaky", il.EventType.OPERATION_STARTED, attempt=2)
     assert started[0].id != started[1].id
 
 

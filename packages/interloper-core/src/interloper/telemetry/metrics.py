@@ -88,9 +88,6 @@ class OtelMetricsHandler:
         EventType.DEST_WRITE_FAILED: ("write", "failed"),
     }
 
-    #: The destination event types: all a child process counts, since its host counts the rest.
-    DESTINATION_EVENT_TYPES: ClassVar[list[EventType]] = list(_DEST_STATUS)
-
     def __init__(self, max_tracked: int = 4096) -> None:
         """Create the handler and its instruments.
 

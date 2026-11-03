@@ -28,7 +28,7 @@ class AsyncRun(Run):
         Returns:
             The execution's result.
         """
-        return await OperationResult.from_execution(operation, self.state.context(operation))
+        return await OperationResult.from_execution(operation, self.context(operation))
 
 
 class AsyncRunner(Runner):

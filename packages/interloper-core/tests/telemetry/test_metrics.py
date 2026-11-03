@@ -118,18 +118,8 @@ class TestOtelMetricsHandler:
 
 
 class TestRegistration:
-    def test_an_operations_process_counts_only_its_destination_io(self, metric_reader):
-        # The host counts runs and authors every operation verdict; destination I/O happens only in the child.
-        handler = _register_metrics_handler(operation=True)
-        try:
-            assert handler is not None
-            assert EventBus()._handlers[handler] == OtelMetricsHandler.DESTINATION_EVENT_TYPES
-        finally:
-            if handler is not None:
-                EventBus.unsubscribe(handler)
-
-    def test_host_subscribes_the_handler(self, metric_reader):
-        handler = _register_metrics_handler(operation=False)
+    def test_subscribes_the_handler(self, metric_reader):
+        handler = _register_metrics_handler()
         try:
             assert handler is not None
             assert handler in EventBus()._handlers

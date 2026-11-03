@@ -18,7 +18,7 @@ from typing import Any
 from uuid import UUID
 
 import interloper as il
-from interloper.runner import RunState
+from interloper import runner
 from sqlalchemy import Engine
 from sqlmodel import col, select
 
@@ -230,7 +230,7 @@ class EventStore:
                 }
                 if failed:
                     metadata["error"] = error
-                event_id = RunState.operation_event_id(
+                event_id = runner.Run.operation_event_id(
                     str(db_run.id), str(execution.component_id), event_type, attempt=execution.attempts
                 )
                 self.save(il.Event(type=event_type, metadata=metadata, id=event_id), db_run.org_id, db_run.id)

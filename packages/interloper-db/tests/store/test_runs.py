@@ -14,8 +14,8 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
+from interloper import runner
 from interloper.errors import ConfigError, PartitionError
-from interloper.runner import RunState
 from interloper_assets.demo.basic.source import DemoSource
 from pydantic import ValidationError
 from sqlalchemy import event
@@ -156,7 +156,7 @@ def _operation_event(run: Run, event_type: il.EventType, component_id: UUID, *, 
     return il.Event(
         type=event_type,
         metadata={"component_id": str(component_id), "component_key": "a", "attempt": attempt},
-        id=RunState.operation_event_id(str(run.id), str(component_id), event_type, attempt=attempt),
+        id=runner.Run.operation_event_id(str(run.id), str(component_id), event_type, attempt=attempt),
     )
 
 

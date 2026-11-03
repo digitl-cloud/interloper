@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from interloper.runner import RunState
+from interloper import runner
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 
@@ -425,7 +425,7 @@ class TestCloseOperations:
 
         [closing] = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
         assert (closing.data or {})["attempt"] == 2
-        assert str(closing.id) == RunState.operation_event_id(
+        assert str(closing.id) == runner.Run.operation_event_id(
             str(_RUN_ID), str(retried), il.EventType.OPERATION_FAILED, attempt=2
         )
 
@@ -446,6 +446,6 @@ class TestCloseOperations:
         store.events.close_operations(self._run(), error="lost")
         store.events.close_operations(self._run(), error="lost")
 
-        expected = RunState.operation_event_id(str(_RUN_ID), str(started), il.EventType.OPERATION_FAILED)
+        expected = runner.Run.operation_event_id(str(_RUN_ID), str(started), il.EventType.OPERATION_FAILED)
         [closing] = store.events.list(_ORG_ID, EventQuery(event_type=["operation_failed"]), run_id=_RUN_ID).items
         assert str(closing.id) == expected
