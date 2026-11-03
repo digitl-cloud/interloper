@@ -81,7 +81,6 @@ def _cmd_launch(args: argparse.Namespace) -> None:
         heartbeat_interval=settings.reaper.heartbeat_interval,
         heartbeat_timeout=settings.reaper.heartbeat_timeout,
         on_lost=_exit_lost,
-        component_id=args.operation_id,
     )
 
     try:

@@ -160,7 +160,7 @@ class KubernetesRun(Run):
         Returns:
             The Job to create.
         """
-        labels = {"interloper.component_id": operation.id, "interloper.run_id": self.state.run_id}
+        labels = {"interloper.component_id": operation.id, "interloper.run_id": self.run_id}
         command = self.command(operation)
         container = client.V1Container(
             name="interloper",
@@ -212,10 +212,10 @@ class KubernetesRun(Run):
             The argv.
         """
         if AppSettings.get().run.token:
-            return ["interloper", "launch", self.state.run_id, f"--operation-id={operation.id}"]
-        spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
+            return ["interloper", "launch", self.run_id, f"--operation-id={operation.id}"]
+        spec = self.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
-        window = operation.effective_window(self.state.window, self.state.metadata)
+        window = operation.effective_window(self.window, self.metadata)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
         elif window is not None:
@@ -232,8 +232,8 @@ class KubernetesRun(Run):
             ``interloper-run-<run>-<operation>-<n>``, each id cut to 8 characters, ``n`` counting the
             operation's executions.
         """
-        number = self.state.executions[operation.id].attempt
-        return f"interloper-run-{self.state.run_id[:8]}-{operation.id[:8]}-{number}"[:63]
+        number = self.executions[operation.id].attempt
+        return f"interloper-run-{self.run_id[:8]}-{operation.id[:8]}-{number}"[:63]
 
     async def close(self) -> None:
         """Release the polling pool.

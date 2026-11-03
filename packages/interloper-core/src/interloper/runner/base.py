@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import uuid
 from abc import abstractmethod
 from collections.abc import Callable
-from contextlib import nullcontext
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from opentelemetry.trace import StatusCode
 from pydantic import Field
 from typing_extensions import Self
 
@@ -16,13 +13,9 @@ from interloper.errors import ConfigError
 from interloper.events import Event
 from interloper.partitioning.base import Partition, PartitionWindow
 from interloper.registry import Registry
-from interloper.runner.results import ExecutionStatus, RunResult
+from interloper.runner.results import RunResult
 from interloper.runner.run import Run
-from interloper.runner.subscription import RunSubscription
 from interloper.serializable import Serializable
-from interloper.telemetry import attributes
-from interloper.telemetry.propagation import context_from_env, extract_metadata, inject_metadata
-from interloper.telemetry.tracer import tracer
 
 if TYPE_CHECKING:
     from interloper.dag.base import DAG
@@ -114,36 +107,8 @@ class Runner(Serializable):
         Returns:
             The run's result.
         """
-        window = PartitionWindow.of(window)
-        metadata = dict(metadata or {})
-        metadata.setdefault("run_id", str(uuid.uuid4()))
-        subscription = RunSubscription(self.on_event, metadata["run_id"]) if self.on_event else nullcontext()
-        async with subscription:
-            parent = extract_metadata(metadata) or context_from_env()
-            with tracer().start_as_current_span(
-                "interloper.runner.run", context=parent, attributes=self._span_attributes(metadata, window)
-            ) as span:
-                inject_metadata(metadata)
-                async with self.Run(self, dag, window, metadata) as run:
-                    result = await run.walk()
-                if result.status is ExecutionStatus.FAILED:
-                    span.set_status(StatusCode.ERROR, f"{len(result.failed_ids)} operation(s) failed")
-                if self.reraise:
-                    run.reraise()
+        async with self.Run(self, dag, PartitionWindow.of(window), metadata or {}) as run:
+            result = await run.walk()
+            if self.reraise:
+                run.reraise()
         return result
-
-    def _span_attributes(self, metadata: dict[str, Any], window: PartitionWindow | None) -> dict[str, str]:
-        """The run span's attributes: the metadata's, the runner's key and the window.
-
-        Args:
-            metadata: Run-level metadata.
-            window: The run's window.
-
-        Returns:
-            The attributes.
-        """
-        span_attributes = attributes.from_metadata(metadata)
-        span_attributes[attributes.RUNNER_TYPE] = self.key
-        if window is not None:
-            span_attributes[attributes.PARTITION] = str(window)
-        return span_attributes

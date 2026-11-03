@@ -38,10 +38,11 @@ class DeadlineRunner(il.AsyncRunner):
 
 `Runner` is `Serializable`, so its configuration is fields on the class; a new kind of runner
 subclasses `il.Runner`, declares `Run` and the `capacity` property (how many operations a run
-executes at once), and inherits `fail_fast`, `reraise` and `on_event`. `Runner.run` does the rest:
-it assigns a `run_id` when the metadata carries none, delivers the run's events to `on_event`,
-opens the `interloper.runner.run` span (restoring a parent from the metadata or the
-environment), makes the run, walks it, closes it, and re-raises when `reraise` asks.
+executes at once), and inherits `fail_fast`, `reraise` and `on_event`. `Runner.run` makes the
+run, enters it, walks it and re-raises when `reraise` asks. The run does the rest: it assigns a
+`run_id` when the metadata carries none, and while it is entered delivers its events to
+`on_event` and keeps the `interloper.runner.run` span current (restoring a parent from the
+metadata or the environment).
 
 A `Run` implements:
 
@@ -70,25 +71,25 @@ and turns a failure into the operation's `failure(error)` result, completed with
 (when the operation's class allows one), the original exception, so `reraise` can raise it, and
 whether `operation.retryable(error)` thinks another execution may help.
 
-## RunState
+## Operations' records
 
-`run.state` holds every operation's `ExecutionInfo` and moves it through one verb per transition,
-each emitting its `OPERATION_*` event with a deterministic id:
+The run holds every operation's `ExecutionInfo` in `run.executions` and moves it through one verb
+per transition, each emitting its `OPERATION_*` event with a deterministic id:
 
 ```py
-state.ready                        # dependencies met, not started
-state.completed, state.failed      # in DAG order
-state.done                         # every operation terminal
-state.context(operation)           # the OperationContext it executes with
+run.ready                        # dependencies met, not started
+run.completed, run.failed        # in DAG order
+run.done                         # every operation terminal
+run.context(operation)           # the OperationContext it executes with
 
-state.start(operation)             # RUNNING; OPERATION_STARTED
-state.retry(operation, error)      # OPERATION_RETRIED; the next execution
-state.finish(operation, result)    # COMPLETED or FAILED; promotes or cancels its dependents
-state.cancel_pending()             # cancels everything not yet terminal
+run.start(operation)             # RUNNING; OPERATION_STARTED
+run.retry(operation, error)      # OPERATION_RETRIED; the next execution
+run.finish(operation, result)    # COMPLETED or FAILED; promotes or cancels its dependents
+run.cancel_pending()             # cancels everything not yet terminal
 ```
 
 The walk calls every transition; a run's `execute` calls none. Non-enabled operations start as `SKIPPED` and count
-as satisfied predecessors. `RunState` is not thread-safe: call it from the run's event loop only,
+as satisfied predecessors. The transitions are not thread-safe: call them from the run's event loop only,
 never from a thread an `execute` hands work to.
 
 ## Registering
@@ -121,9 +122,9 @@ A run that executes each operation in a child process (the Docker and Kubernetes
 owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
 only what happens inside the operation. On the platform, have the child run
 `interloper launch <run-id> --operation-id <id>` with the host's `INTERLOPER_RUN_TOKEN`
-and `INTERLOPER_SERVER_INTERNAL_URL`: the child loads the run, executes that one operation once,
-reports its asset and destination events to the API, and drops every lifecycle event and its
-upstreams' events. Outside the platform, hand the child the operation's DAG instead,
+and `INTERLOPER_SERVER_INTERNAL_URL`: the child loads the run and executes that one operation once,
+in its own process, walking nothing, so it reports only its asset and destination events to the
+API and no lifecycle event. Outside the platform, hand the child the operation's DAG instead,
 `interloper run --format inline <dag> --operation-id <id>`. A failed execution leaves its
 error and whether a retry may help at `OperationResult.TERMINATION_MESSAGE_PATH`; the host reads
 it back with `OperationResult.from_termination_message` once the child exits (Kubernetes surfaces

@@ -67,9 +67,7 @@ class TestMain:
         """
         recorded: dict[str, list[bool]] = {"init": [], "shutdown": []}
         monkeypatch.setattr(cli_main, "_load_dotenv", lambda: None)
-        monkeypatch.setattr(
-            "interloper.telemetry.init_telemetry", lambda settings, operation: recorded["init"].append(True)
-        )
+        monkeypatch.setattr("interloper.telemetry.init_telemetry", lambda settings: recorded["init"].append(True))
         monkeypatch.setattr("interloper.telemetry.shutdown_telemetry", lambda: recorded["shutdown"].append(True))
         return recorded
 
@@ -128,19 +126,6 @@ class TestMain:
         assert isolated_process_state["init"] == [True]
         assert isolated_process_state["shutdown"] == [True]
         assert AppSettings._active is None
-
-    def test_a_process_executing_one_operation_tells_telemetry(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        seen: list[bool] = []
-        monkeypatch.setattr(cli_main, "_load_dotenv", lambda: None)
-        monkeypatch.setattr("interloper.telemetry.init_telemetry", lambda settings, operation: seen.append(operation))
-        monkeypatch.setattr("interloper.telemetry.shutdown_telemetry", lambda: None)
-        monkeypatch.setattr("interloper.cli.commands.run._cmd_run", lambda args: None)
-
-        for argv, operation in ((["run", "pkg.Asset"], False), (["run", "pkg.Asset", "--operation-id", "op-1"], True)):
-            monkeypatch.setattr(sys, "argv", ["interloper", *argv])
-            cli_main.main()
-
-        assert seen == [False, True]
 
 
 class TestBuildParser:

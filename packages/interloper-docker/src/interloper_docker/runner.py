@@ -176,10 +176,10 @@ class DockerRun(Run):
             The argv.
         """
         if AppSettings.get().run.token:
-            return ["interloper", "launch", self.state.run_id, f"--operation-id={operation.id}"]
-        spec = self.state.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
+            return ["interloper", "launch", self.run_id, f"--operation-id={operation.id}"]
+        spec = self.dag.mini_dag(operation.id).to_spec().model_dump(mode="json")
         command = ["interloper", "run", "--format", "inline", json.dumps(spec), f"--operation-id={operation.id}"]
-        window = operation.effective_window(self.state.window, self.state.metadata)
+        window = operation.effective_window(self.window, self.metadata)
         if window is not None and len(window) == 1:
             command.extend(["--date", window.first.key])
         elif window is not None:
@@ -196,8 +196,8 @@ class DockerRun(Run):
             ``interloper_run_<run>_<operation>_<n>``, each id cut to 8 characters, ``n`` counting the
             operation's executions.
         """
-        number = self.state.executions[operation.id].attempt
-        return f"interloper_run_{self.state.run_id[:8]}_{operation.id[:8]}_{number}"
+        number = self.executions[operation.id].attempt
+        return f"interloper_run_{self.run_id[:8]}_{operation.id[:8]}_{number}"
 
     async def close(self) -> None:
         """Release the polling pool.
