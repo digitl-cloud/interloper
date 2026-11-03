@@ -1089,6 +1089,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#snapshot-partitioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Snapshot partitioning
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#list-partitioning" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2648,12 +2659,37 @@ window a schedule should cover: <code>offset</code> partitions back from the cur
 partitions long, clamped to <code>start</code>, or <code>None</code> when clamping leaves nothing. <code>now</code> may be an
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
 calendar, while hour windows are always UTC because hour keys are UTC labels.</p>
+<h2 id="snapshot-partitioning">Snapshot partitioning<a class="headerlink" href="#snapshot-partitioning" title="Permanent link">&para;</a></h2>
+<p>An asset that reads a vendor's <em>current</em> state, such as its campaigns or ads, cannot read the
+past, so it is partitioned by the period it observed in rather than by the run's window:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">SnapshotPartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">),</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">"Entity"</span><span class="p">])</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">campaigns</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="k">return</span> <span class="p">[{</span><span class="o">**</span><span class="n">row</span><span class="p">,</span> <span class="s2">"date"</span><span class="p">:</span> <span class="n">context</span><span class="o">.</span><span class="n">partition_date</span><span class="p">}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">fetch_campaigns</span><span class="p">()]</span>
+</span></code></pre></div>
+<p>A snapshot accepts any window and ignores it, as an unpartitioned asset does. Its one partition
+is the period holding the run's observation instant, <code>granularity.truncate(observed_at)</code>, and
+<code>context.partition_date</code> returns it. The instant is the run's <code>observed_at</code> metadata, an ISO-8601
+instant with its offset. A platform run states when it became due, on the job's timezone (UTC
+for a run of anything but a job), so every process executing it writes the same period;
+<code>interloper run</code> states when it started, in UTC, and a run stating none observes now, in UTC.
+To pin it by hand, pass it like any metadata:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">campaigns</span><span class="p">()</span><span class="o">.</span><span class="n">materialize</span><span class="p">(</span><span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"observed_at"</span><span class="p">:</span> <span class="s2">"2026-10-29T06:00:00+00:00"</span><span class="p">})</span>
+</span></code></pre></div>
+<p>A backfill or a retry of a past day therefore writes the current period, and a second
+observation in one period replaces the first: a monthly snapshot in a daily job holds the
+month's latest state. A backfill observes once, in the run of its newest partition.</p>
+<p>A snapshot may feed views, and another snapshot of the same granularity, which reads its
+upstream's observation; an asset partitioned on the run's window cannot read one. Coverage owes
+a snapshot only the periods a run observed in, and a past period without a success is missed,
+which no backfill can recover. A snapshot is a time partitioning, so it takes a <code>start</code> too:
+it bounds no window, since a snapshot ignores its run's, but coverage then owes every period
+since, and one that ended with no observation at all is missed as well.</p>
 <h2 id="list-partitioning">List partitioning<a class="headerlink" href="#list-partitioning" title="Permanent link">&para;</a></h2>
 <p>An asset partitioned by a declared list of values, such as regions or markets:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">ListPartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"region"</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="s2">"eu"</span><span class="p">,</span> <span class="s2">"us"</span><span class="p">,</span> <span class="s2">"apac"</span><span class="p">]))</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">sales</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">region</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">partition</span><span class="o">.</span><span class="n">value</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">"region"</span><span class="p">:</span> <span class="n">region</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">fetch_sales</span><span class="p">(</span><span class="n">region</span><span class="p">)]</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">ListPartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"region"</span><span class="p">,</span> <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="s2">"eu"</span><span class="p">,</span> <span class="s2">"us"</span><span class="p">,</span> <span class="s2">"apac"</span><span class="p">]))</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">sales</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">region</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">partition</span><span class="o">.</span><span class="n">value</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">return</span> <span class="p">[{</span><span class="s2">"region"</span><span class="p">:</span> <span class="n">region</span><span class="p">,</span> <span class="o">**</span><span class="n">row</span><span class="p">}</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">fetch_sales</span><span class="p">(</span><span class="n">region</span><span class="p">)]</span>
 </span></code></pre></div>
 <p>The values are the partition keys, in the declared order. A window is a contiguous range of that
 order: <code>config.window("eu", "us")</code> covers <code>eu</code> and <code>us</code>, and a backfill from the first value to
@@ -2668,10 +2704,10 @@ CLI.</p>
 <h2 id="windowed-assets">Windowed assets<a class="headerlink" href="#windowed-assets" title="Permanent link">&para;</a></h2>
 <p>An asset that can fetch a range in one call declares <code>allow_window=True</code> and reads
 <code>context.window</code>:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span> <span class="n">allow_window</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">window</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">window</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">return</span> <span class="n">fetch_stats</span><span class="p">(</span><span class="n">window</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">window</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nd">@il</span><span class="o">.</span><span class="n">asset</span><span class="p">(</span><span class="n">partitioning</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionConfig</span><span class="p">(</span><span class="n">column</span><span class="o">=</span><span class="s2">"date"</span><span class="p">,</span> <span class="n">allow_window</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">ads_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">il</span><span class="o">.</span><span class="n">ExecutionContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">window</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">window</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="k">return</span> <span class="n">fetch_stats</span><span class="p">(</span><span class="n">window</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">window</span><span class="o">.</span><span class="n">end</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Passing a window to a run is then a single execution covering the whole range. A single
 partition still works and is presented to the asset as a one-partition window. Destinations
@@ -2701,7 +2737,7 @@ not allow windows.</p>
 <tr>
 <td><code>context.partition_date</code></td>
 <td><code>partition.value</code> as a <code>date</code></td>
-<td>not time-partitioned at <code>DAY</code>, or the window covers several partitions</td>
+<td>not time- or snapshot-partitioned at <code>DAY</code>, or the window covers several partitions</td>
 </tr>
 </tbody>
 </table>
