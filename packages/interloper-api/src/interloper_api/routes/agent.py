@@ -27,9 +27,10 @@ from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from interloper.telemetry import meter
 from interloper_agent import TURN_LIMITS, summary_of
+from interloper_agent.toolset import TOOLS
 from interloper_db import Page, PageQuery
 from interloper_db.models import Conversation
-from interloper_toolkit import ToolkitContext
+from interloper_toolkit import Tool, ToolkitContext
 from pydantic import AwareDatetime, BaseModel
 from pydantic_ai import Agent, DeferredToolResults
 from pydantic_ai.agent import AgentRunResult
@@ -57,6 +58,7 @@ from interloper_api.dependencies import (
 )
 
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/agent", tags=["agent"])
 org_router = APIRouter(prefix="/agent", tags=["agent"])
 
 SDK_VERSION = 7
@@ -321,6 +323,26 @@ class DetachedBody:
         return chunk
 
 
+class AgentToolResponse(BaseModel):
+    """A tool of the agent as a client labels it: by its title, and whether a call waits for the user's approval."""
+
+    name: str
+    title: str
+    needs_approval: bool
+
+    @classmethod
+    def from_tool(cls, tool: Tool) -> AgentToolResponse:
+        """Project a tool.
+
+        Args:
+            tool: The tool, as the agent registers it.
+
+        Returns:
+            The response model.
+        """
+        return cls(name=tool.name, title=tool.title, needs_approval=tool.needs_approval)
+
+
 class ConversationResponse(BaseModel):
     """A conversation as the list shows it."""
 
@@ -375,6 +397,22 @@ class ConversationDetailResponse(ConversationResponse):
             summary=summary_of(history),
             messages=[message.model_dump(by_alias=True, exclude_none=True) for message in messages],
         )
+
+
+@router.get("/tools")
+def list_tools(user: CurrentUserDep) -> list[AgentToolResponse]:
+    """List the agent's tools with their titles.
+
+    The AI SDK stream carries only a tool's name, so a client that labels its
+    task cards and approval controls with the agent's own titles reads them here.
+
+    Args:
+        user: The authenticated caller, by session or bearer token.
+
+    Returns:
+        Every tool the agent registers, in table order.
+    """
+    return [AgentToolResponse.from_tool(tool) for tool in TOOLS]
 
 
 @org_router.post("/conversations", status_code=201)

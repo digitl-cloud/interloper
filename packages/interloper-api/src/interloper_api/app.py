@@ -234,7 +234,9 @@ def create_app(
 
 
 def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
-    """Mount the optional agent routes under the organisation prefix, reporting whether they are available.
+    """Mount the optional agent routes, reporting whether they are available.
+
+    The conversation routes go under the organisation prefix, the tool list outside it.
 
     Args:
         api: The ``/api`` router to mount onto.
@@ -257,6 +259,7 @@ def _mount_agent(api: APIRouter, settings: Any | None) -> bool:
         )
         return False
 
+    api.include_router(agent_routes.router)
     api.include_router(agent_routes.org_router, prefix=ORG_PREFIX)
     return True
 
