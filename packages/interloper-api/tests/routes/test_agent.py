@@ -15,11 +15,11 @@ from uuid import UUID, uuid4
 
 import interloper as il
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from interloper_agent import build_agent
 from interloper_agent.history import SUMMARY_LEAD
-from interloper_agent.toolset import toolset
+from interloper_agent.toolset import TOOLS, toolset
 from interloper_db import Audience, TokenKind
 from interloper_db import engine as engine_module
 from interloper_db.models import (
@@ -135,6 +135,19 @@ def _client(
     return TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
 
 
+def _tools_client(store: Store, member: SimpleNamespace, *, authenticated: bool) -> TestClient:
+    app = FastAPI()
+    install_error_handlers(app)
+    api = APIRouter(prefix="/api")
+    api.include_router(agent_module.router)
+    app.include_router(api)
+    app.dependency_overrides[get_store] = lambda: store
+    if authenticated:
+        session = Token(user_id=member.id, kind=TokenKind.SESSION, token_prefix="", token_hash="")
+        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member, token=session)  # ty: ignore[invalid-argument-type]
+    return TestClient(app)
+
+
 def _turn(text: str) -> dict[str, Any]:
     return {
         "trigger": "submit-message",
@@ -228,6 +241,21 @@ class TestConversationLifecycle:
         assert client.get(f"/agent/conversations/{mine.id}").status_code == 404
         assert client.post(f"/agent/conversations/{mine.id}/chat", json=_turn("hi")).status_code == 404
         assert client.get("/agent/conversations").json()["total"] == 0
+
+
+class TestTools:
+    def test_the_tools_are_listed_with_their_titles_and_approval(self, store: Store, member: SimpleNamespace):
+        response = _tools_client(store, member, authenticated=True).get("/api/agent/tools")
+
+        assert response.status_code == 200
+        tools = {tool["name"]: tool for tool in response.json()}
+        assert tools["create_job"] == {"name": "create_job", "title": "Create a job", "needs_approval": True}
+        assert tools["trigger_run"]["needs_approval"] is False
+        assert "request_user_selection" in tools
+        assert [tool["name"] for tool in response.json()] == [tool.name for tool in TOOLS]
+
+    def test_an_unauthenticated_call_is_refused(self, store: Store, member: SimpleNamespace):
+        assert _tools_client(store, member, authenticated=False).get("/api/agent/tools").status_code == 401
 
 
 class TestHistory:
