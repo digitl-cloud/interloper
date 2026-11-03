@@ -2554,6 +2554,9 @@ the API as the <code>resource</code> of its authorization request, <code>&lt;iss
 granted for: an API token is refused by the MCP server, and an MCP token by the API. Every
 authorization request names exactly one resource; a trailing slash on it is ignored. Such a client
 usually has a fixed client id and secret, registered as below.</p>
+<p>Conversations such a client starts with the agent belong to the client: the app never lists them.
+They are deleted when the grant ends: when the user revokes the client, or the client revokes its
+refresh token.</p>
 <h2 id="registering-a-client-yourself">Registering a client yourself<a class="headerlink" href="#registering-a-client-yourself" title="Permanent link">&para;</a></h2>
 <p>A client that registers itself needs no setup, and it is shown to the user by the name it gave.
 An application that cannot, because it is configured with a fixed client id and secret (a Slack
