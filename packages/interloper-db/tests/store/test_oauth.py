@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import pytest
 from alembic.migration import MigrationContext
@@ -12,7 +13,16 @@ from sqlalchemy import Engine, inspect, update
 from sqlmodel import col, select
 
 from interloper_db.crypto import hash_token
-from interloper_db.models import Audience, AuthorizationCode, OAuthClient, Profile, RefreshToken, Token, TokenKind
+from interloper_db.models import (
+    Audience,
+    AuthorizationCode,
+    Conversation,
+    OAuthClient,
+    Profile,
+    RefreshToken,
+    Token,
+    TokenKind,
+)
 from interloper_db.session import session_scope
 from interloper_db.store import Store
 
@@ -58,6 +68,45 @@ def _issue_code(store: Store, profile: Profile, client: OAuthClient) -> str:
         code_challenge="challenge",
         resource=Audience.MCP,
     )
+
+
+class _Conversations:
+    """The conversations a grant-ending test seeds around one client and one user."""
+
+    def __init__(self, store: Store, profile: Profile, client: OAuthClient) -> None:
+        """Seed the conversations whose survival each test checks.
+
+        Args:
+            store: The store to seed through.
+            profile: The user whose grant ends.
+            client: The client whose grant ends.
+        """
+        self._store = store
+        other_client, _ = store.oauth.register_client("Other", ["http://localhost/cb"], registered_by="dynamic")
+        other_user = store.profiles.upsert(google_id="g-other", email="other@example.com", name="Other")
+        org_id = store.organisations.create(name="Acme", creator_id=profile.id).id
+        self.ended = store.conversations.create(org_id, profile.id, client.client_id).id
+        self.other_client = store.conversations.create(org_id, profile.id, other_client.client_id).id
+        self.app = store.conversations.create(org_id, profile.id).id
+        self.other_user = store.conversations.create(org_id, other_user.id, client.client_id).id
+
+    def remaining(self) -> set[UUID]:
+        """Read which seeded conversations are still stored.
+
+        Returns:
+            The ids of the seeded conversations that still exist.
+        """
+        with session_scope(self._store.engine) as session:
+            stored = set(session.exec(select(Conversation.id)).all())
+        return stored & {self.ended, self.other_client, self.app, self.other_user}
+
+    def survivors(self) -> set[UUID]:
+        """Name the conversations a revocation for one user and client must spare.
+
+        Returns:
+            The ids of the conversations of another client, of the app and of another user.
+        """
+        return {self.other_client, self.app, self.other_user}
 
 
 class TestClients:
@@ -124,6 +173,15 @@ class TestClients:
         store.oauth.delete_client(client.client_id)
 
         assert store.tokens.resolve(access, Audience.MCP) is not None
+
+    def test_deleting_a_client_deletes_every_users_conversations_of_it(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        conversations = _Conversations(store, profile, client)
+
+        assert store.oauth.delete_client(client.client_id) is True
+
+        assert conversations.remaining() == {conversations.other_client, conversations.app}
 
     def test_delete_unknown_client_is_false(self, store: Store):
         assert store.oauth.delete_client("no-such-client") is False
@@ -351,6 +409,16 @@ class TestAuthorisedClients:
         assert store.oauth.consume_code(mine) is None
         assert store.oauth.consume_code(theirs) is not None
 
+    def test_revoking_a_client_for_a_user_deletes_their_conversations_of_it(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        conversations = _Conversations(store, profile, client)
+        store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+
+        store.oauth.revoke_client_for_user(profile.id, client.client_id)
+
+        assert conversations.remaining() == conversations.survivors()
+
     def test_authorised_clients_are_those_holding_a_live_refresh_token(
         self, store: Store, profile: Profile, client: OAuthClient, auth_db: Engine
     ):
@@ -390,6 +458,55 @@ class TestRevocation:
         assert store.oauth.rotate_refresh(new, client.client_id) is None
         assert store.tokens.resolve(access, Audience.MCP) is None
         assert store.oauth.rotate_refresh(unrelated, other.client_id) is not None
+
+    def test_revoking_a_family_deletes_the_users_conversations_of_its_client(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        conversations = _Conversations(store, profile, client)
+        raw = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        presented = store.oauth.find_refresh(raw)
+        assert presented is not None
+
+        store.oauth.revoke_family(presented)
+
+        assert conversations.remaining() == conversations.survivors()
+
+    def test_a_reused_refresh_token_deletes_the_users_conversations_of_its_client(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        conversations = _Conversations(store, profile, client)
+        old = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        assert store.oauth.rotate_refresh(old, client.client_id) is not None
+
+        assert store.oauth.rotate_refresh(old, client.client_id) is None
+
+        assert conversations.remaining() == conversations.survivors()
+
+    def test_a_reused_code_deletes_the_users_conversations_of_its_client(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        conversations = _Conversations(store, profile, client)
+        raw = _issue_code(store, profile, client)
+        assert store.oauth.consume_code(raw) is not None
+
+        assert store.oauth.consume_code(raw) is None
+
+        assert conversations.remaining() == conversations.survivors()
+
+    def test_a_replay_into_a_revoked_family_spares_a_newer_grants_conversations(
+        self, store: Store, profile: Profile, client: OAuthClient
+    ):
+        old = store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        rotated = store.oauth.rotate_refresh(old, client.client_id)
+        assert rotated is not None
+        store.oauth.revoke_family(rotated)
+        store.oauth.issue_refresh(profile.id, client.client_id, Audience.MCP)
+        org_id = store.organisations.create(name="Acme", creator_id=profile.id).id
+        newer = store.conversations.create(org_id, profile.id, client.client_id)
+
+        assert store.oauth.rotate_refresh(old, client.client_id) is None
+
+        assert store.conversations.get(newer.id, org_id=org_id, user_id=profile.id).client_id == client.client_id
 
     def test_find_refresh_of_an_unknown_token_is_none(self, store: Store):
         assert store.oauth.find_refresh("ilr_no-such-token") is None

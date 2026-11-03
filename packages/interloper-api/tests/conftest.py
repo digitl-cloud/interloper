@@ -14,6 +14,7 @@ from interloper_db import Store
 from interloper_db import engine as engine_module
 from interloper_db.models import (
     AuthorizationCode,
+    Conversation,
     OAuthClient,
     Organisation,
     Profile,
@@ -103,7 +104,16 @@ def oauth_store() -> Iterator[Store]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    for model in (Profile, Organisation, UserOrganisation, Token, OAuthClient, AuthorizationCode, RefreshToken):
+    for model in (
+        Profile,
+        Organisation,
+        UserOrganisation,
+        Token,
+        OAuthClient,
+        AuthorizationCode,
+        RefreshToken,
+        Conversation,
+    ):
         model.__table__.create(engine)  # ty: ignore[unresolved-attribute]
     try:
         yield Store(catalog=il.Catalog(components={}))

@@ -12,6 +12,8 @@ either, once spent, is read as theft: the family it belongs to is revoked.
 Access tokens are ``tokens`` rows and carry no family. Revoking a family
 revokes the access tokens of its user and client, which can end a sibling
 family's access token early; that family's next refresh issues a new one.
+Every path that ends a grant also deletes the conversations its client
+started for the user, since they belong to the access that has ended.
 A family stays revoked: a refresh token saved into it after the revocation
 (the loser of a race on one token) never rotates and never counts as live,
 and a pair issued into it is revoked on the spot. Revoking a family is done
@@ -31,7 +33,15 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
 from interloper_db.crypto import hash_token
-from interloper_db.models import Audience, AuthorizationCode, OAuthClient, RefreshToken, Token, TokenKind
+from interloper_db.models import (
+    Audience,
+    AuthorizationCode,
+    Conversation,
+    OAuthClient,
+    RefreshToken,
+    Token,
+    TokenKind,
+)
 from interloper_db.session import commit, save, session_scope
 from interloper_db.store.tokens import TokenStore
 
@@ -129,7 +139,8 @@ class OAuthStore:
         """Delete a client together with every grant it holds.
 
         Its codes and refresh tokens are removed and its access tokens revoked,
-        for every user, so nothing it was given keeps working.
+        for every user, so nothing it was given keeps working, and the
+        conversations it started for any user are deleted.
 
         Args:
             client_id: The client to delete.
@@ -153,6 +164,7 @@ class OAuthStore:
             )
             session.connection().execute(delete(RefreshToken).where(col(RefreshToken.client_id) == client_id))
             session.connection().execute(delete(AuthorizationCode).where(col(AuthorizationCode.client_id) == client_id))
+            self._delete_conversations(session, client_id, None)
             session.delete(client)
             commit(session)
         return True
@@ -181,8 +193,9 @@ class OAuthStore:
         """Revoke every refresh and access token a client holds for a user, and its unspent codes.
 
         A code approved before the revocation expires with it, so the client
-        cannot exchange it for a fresh grant. Idempotent: tokens already
-        revoked keep their revocation time.
+        cannot exchange it for a fresh grant. The conversations the client
+        started for the user are deleted. Idempotent: tokens already revoked
+        keep their revocation time.
 
         Args:
             user_id: Profile UUID.
@@ -210,6 +223,7 @@ class OAuthStore:
                 .values(revoked_at=now)
             )
             self._revoke_access(session, user_id, client_id, now)
+            self._delete_conversations(session, client_id, user_id)
             commit(session)
 
     # -- Authorization codes ---------------------------------------------------
@@ -392,6 +406,7 @@ class OAuthStore:
     def revoke_family(self, token: RefreshToken) -> None:
         """Revoke a refresh token's family and its client's access tokens for its user.
 
+        The conversations the client started for the user are deleted.
         Idempotent: tokens already revoked keep their revocation time.
 
         Args:
@@ -443,8 +458,10 @@ class OAuthStore:
     def _revoke_family(self, session: Session, family_id: UUID, user_id: UUID, client_id: str, now: datetime) -> None:
         """Revoke a family's refresh tokens and its client's access tokens for its user, once.
 
-        A family already revoked is left alone: its access tokens were revoked
-        with it, and those the client holds now belong to a newer grant.
+        The conversations the client started for the user go with it. A family
+        already revoked is left alone: its access tokens were revoked with it,
+        and the access tokens and conversations the client holds now belong to
+        a newer grant.
 
         Args:
             session: The session to write in; the caller commits.
@@ -461,6 +478,21 @@ class OAuthStore:
             .values(revoked_at=now)
         )
         self._revoke_access(session, user_id, client_id, now)
+        self._delete_conversations(session, client_id, user_id)
+
+    def _delete_conversations(self, session: Session, client_id: str, user_id: UUID | None) -> None:
+        """Delete the conversations a client started.
+
+        Args:
+            session: The session to write in; the caller commits.
+            client_id: The client whose conversations go.
+            user_id: Profile UUID to keep the deletion to; ``None`` deletes the
+                client's conversations for every user.
+        """
+        statement = delete(Conversation).where(col(Conversation.client_id) == client_id)
+        if user_id is not None:
+            statement = statement.where(col(Conversation.user_id) == user_id)
+        session.connection().execute(statement)
 
     def _revoke_access(self, session: Session, user_id: UUID, client_id: str, now: datetime) -> None:
         """Revoke the live access tokens a client holds for a user.

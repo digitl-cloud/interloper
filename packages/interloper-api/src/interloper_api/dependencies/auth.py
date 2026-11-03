@@ -16,7 +16,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Cookie, Depends, Header, HTTPException
-from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store
+from interloper_db import Audience, NotFoundError, Organisation, Profile, Role, Run, Store, Token
 
 from interloper_api.dependencies.state import SettingsDep, StoreDep
 
@@ -52,12 +52,27 @@ def session_user(store: Store, session_token: str | None) -> Profile | None:
     return resolved[0] if resolved else None
 
 
-def get_caller(
+@dataclass(frozen=True)
+class CallerCredential:
+    """The credential a request presented, and the user it stands for.
+
+    Attributes:
+        user: The authenticated user.
+        token: The token row the secret resolved to; its ``client_id`` names
+            the OAuth client for an access token and is ``None`` for a login
+            session or a personal token.
+    """
+
+    user: Profile
+    token: Token
+
+
+def get_caller_credential(
     store: StoreDep,
     session_token: str | None = Cookie(default=None),
     authorization: str | None = Header(default=None),
-) -> Profile:
-    """Resolve the caller from the bearer token, else the session cookie.
+) -> CallerCredential:
+    """Resolve the credential from the bearer token, else the session cookie.
 
     A bearer token resolves as an API credential (personal or access token)
     and the cookie as a login session; a bearer token, when presented, is the
@@ -69,7 +84,7 @@ def get_caller(
         authorization: The ``Authorization`` header value.
 
     Returns:
-        The authenticated Profile.
+        The user and the token row that authenticated them.
 
     Raises:
         HTTPException: 401 when no credential is presented or the secret does
@@ -79,13 +94,27 @@ def get_caller(
     if token is None:
         if not session_token:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        user = session_user(store, session_token)
+        resolved = store.tokens.resolve(session_token, Audience.APP)
     else:
         resolved = store.tokens.resolve(token, Audience.API) if token else None
-        user = resolved[0] if resolved else None
-    if user is None:
+    if resolved is None:
         raise HTTPException(status_code=401, detail="Invalid or expired credentials")
-    return user
+    return CallerCredential(user=resolved[0], token=resolved[1])
+
+
+CallerCredentialDep = Annotated[CallerCredential, Depends(get_caller_credential)]
+
+
+def get_caller(credential: CallerCredentialDep) -> Profile:
+    """Resolve the caller as the user the request's credential stands for.
+
+    Args:
+        credential: The credential the request presented.
+
+    Returns:
+        The authenticated Profile.
+    """
+    return credential.user
 
 
 CurrentUserDep = Annotated[Profile, Depends(get_caller)]

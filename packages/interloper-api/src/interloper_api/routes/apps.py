@@ -64,11 +64,12 @@ def list_apps(user: SessionUserDep, store: StoreDep) -> list[AppResponse]:
 def revoke_app(client_id: str, user: SessionUserDep, store: StoreDep) -> Response:
     """Revoke an application's access for the caller.
 
-    Every refresh and access token it holds for the caller is revoked, and a
-    code approved but not yet exchanged can no longer be. Other users who
-    authorised the same application keep their grants. Idempotent: an
-    application holding nothing for the caller, or unknown, gets the same 204,
-    so client ids don't act as an existence oracle.
+    Every refresh and access token it holds for the caller is revoked, a code
+    approved but not yet exchanged can no longer be, and the conversations it
+    started for the caller are deleted. Other users who authorised the same
+    application keep their grants. Idempotent: an application holding nothing
+    for the caller, or unknown, gets the same 204, so client ids don't act as
+    an existence oracle.
 
     Args:
         client_id: The application's client id.
