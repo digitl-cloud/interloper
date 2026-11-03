@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from interloper_agent import build_agent
 from interloper_agent.history import SUMMARY_LEAD
 from interloper_agent.toolset import toolset
+from interloper_db import Audience, TokenKind
 from interloper_db import engine as engine_module
 from interloper_db.models import (
     Backfill,
@@ -27,10 +28,12 @@ from interloper_db.models import (
     ComponentRelation,
     Conversation,
     Event,
+    OAuthClient,
     Organisation,
     Profile,
     Quota,
     Run,
+    Token,
     Usage,
     UserOrganisation,
 )
@@ -54,7 +57,7 @@ from sqlalchemy import Engine, event
 from sqlalchemy.pool import StaticPool
 
 from interloper_api.app import ORG_PREFIX, install_error_handlers
-from interloper_api.dependencies import get_agent, get_caller, get_catalog, get_store
+from interloper_api.dependencies import CallerCredential, get_agent, get_caller_credential, get_catalog, get_store
 from interloper_api.routes import agent as agent_module
 
 
@@ -72,7 +75,20 @@ def agent_db() -> Iterator[Engine]:
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
         dbapi_connection.create_function("gen_random_uuid", 0, lambda: uuid4().hex)
 
-    models = (Profile, Organisation, UserOrganisation, Component, ComponentRelation, Backfill, Run, Event, Quota, Usage)
+    models = (
+        Profile,
+        Organisation,
+        UserOrganisation,
+        Token,
+        OAuthClient,
+        Component,
+        ComponentRelation,
+        Backfill,
+        Run,
+        Event,
+        Quota,
+        Usage,
+    )
     for model in (*models, Conversation):
         model.__table__.create(eng)  # ty: ignore[unresolved-attribute]
     try:
@@ -100,7 +116,12 @@ def member(store: Store) -> SimpleNamespace:
 
 
 def _client(
-    store: Store, member: SimpleNamespace, agent: Agent[ToolkitContext, Any], org_id: UUID | None = None
+    store: Store,
+    member: SimpleNamespace,
+    agent: Agent[ToolkitContext, Any],
+    org_id: UUID | None = None,
+    *,
+    authenticate_as_member: bool = True,
 ) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
@@ -108,7 +129,9 @@ def _client(
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_catalog] = lambda: il.Catalog(components={})
     app.dependency_overrides[get_agent] = lambda: agent
-    app.dependency_overrides[get_caller] = lambda: member
+    if authenticate_as_member:
+        session = Token(user_id=member.id, kind=TokenKind.SESSION, token_prefix="", token_hash="")
+        app.dependency_overrides[get_caller_credential] = lambda: CallerCredential(user=member, token=session)  # ty: ignore[invalid-argument-type]
     return TestClient(app, base_url=f"http://testserver/organisations/{org_id or member.org_id}")
 
 
@@ -140,6 +163,37 @@ class TestConversationLifecycle:
         assert detail.json()["messages"] == []
         assert deleted.status_code == 204
         assert client.get("/agent/conversations").json() == {"items": [], "total": 0}
+
+    def test_a_conversation_started_with_an_access_token_is_hidden_from_the_list(
+        self, store: Store, member: SimpleNamespace
+    ):
+        registered, _ = store.oauth.register_client(
+            "Chat", ["https://chat.example.com/callback"], registered_by="operator"
+        )
+        bearer = {
+            "Authorization": f"Bearer {store.tokens.create_access(member.id, registered.client_id, Audience.API)}"
+        }
+        client = _client(store, member, _echo_agent(), authenticate_as_member=False)
+
+        created = client.post("/agent/conversations", headers=bearer)
+
+        assert created.status_code == 201
+        assert client.get("/agent/conversations", headers=bearer).json() == {"items": [], "total": 0}
+        assert client.get(f"/agent/conversations/{created.json()['id']}", headers=bearer).status_code == 200
+        stored = store.conversations.get(UUID(created.json()["id"]), org_id=member.org_id, user_id=member.id)
+        assert stored.client_id == registered.client_id
+
+    def test_a_conversation_started_with_a_personal_token_is_listed(self, store: Store, member: SimpleNamespace):
+        _, raw = store.tokens.create_personal(member.id, "laptop")
+        bearer = {"Authorization": f"Bearer {raw}"}
+        client = _client(store, member, _echo_agent(), authenticate_as_member=False)
+
+        created = client.post("/agent/conversations", headers=bearer)
+
+        assert created.status_code == 201
+        assert [row["id"] for row in client.get("/agent/conversations", headers=bearer).json()["items"]] == [
+            created.json()["id"]
+        ]
 
     def test_another_members_conversation_is_not_found(self, store: Store, member: SimpleNamespace):
         other = store.profiles.upsert(google_id="g-2", email="bob@example.com", name="Bob")

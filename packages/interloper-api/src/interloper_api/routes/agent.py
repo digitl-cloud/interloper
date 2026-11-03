@@ -46,7 +46,15 @@ from pydantic_ai.ui.vercel_ai import VercelAIAdapter, VercelAIEventStream
 from pydantic_ai.ui.vercel_ai.request_types import RequestData, UIMessage
 from pydantic_ai.ui.vercel_ai.response_types import BaseChunk
 
-from interloper_api.dependencies import AgentDep, CatalogDep, CurrentUserDep, EditorDep, StoreDep, ViewerDep
+from interloper_api.dependencies import (
+    AgentDep,
+    CallerCredentialDep,
+    CatalogDep,
+    CurrentUserDep,
+    EditorDep,
+    StoreDep,
+    ViewerDep,
+)
 
 logger = logging.getLogger(__name__)
 org_router = APIRouter(prefix="/agent", tags=["agent"])
@@ -286,18 +294,25 @@ class ConversationDetailResponse(ConversationResponse):
 
 
 @org_router.post("/conversations", status_code=201)
-def create_conversation(user: CurrentUserDep, scope: EditorDep, store: StoreDep) -> ConversationResponse:
+def create_conversation(credential: CallerCredentialDep, scope: EditorDep, store: StoreDep) -> ConversationResponse:
     """Start a conversation in the path's organisation.
 
+    A conversation started through an OAuth client's access token records the
+    client and stays out of the app's list.
+
     Args:
-        user: The authenticated caller, who owns the conversation.
+        credential: The caller's credential; its user owns the conversation and
+            its token's client, if any, started it.
         scope: The organisation the path names, the caller at least an editor there.
         store: The Store instance.
 
     Returns:
         The new, empty conversation.
     """
-    return ConversationResponse.from_conversation(store.conversations.create(scope.organisation.id, user.id))
+    conversation = store.conversations.create(
+        scope.organisation.id, credential.user.id, client_id=credential.token.client_id
+    )
+    return ConversationResponse.from_conversation(conversation)
 
 
 @org_router.get("/conversations")

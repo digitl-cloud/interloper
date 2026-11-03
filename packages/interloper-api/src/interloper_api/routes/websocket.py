@@ -24,7 +24,7 @@ import psycopg2
 import psycopg2.extensions
 from fastapi import APIRouter, Cookie, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from interloper_api.dependencies import get_caller, get_org_scope, get_state, get_store
+from interloper_api.dependencies import get_caller_credential, get_org_scope, get_state, get_store
 
 logger = logging.getLogger(__name__)
 org_router = APIRouter(tags=["websocket"])
@@ -186,7 +186,7 @@ async def websocket_endpoint(
     """
     store = get_store(get_state(websocket))
     try:
-        user = get_caller(store, session_token, websocket.headers.get("authorization"))
+        user = get_caller_credential(store, session_token, websocket.headers.get("authorization")).user
         get_org_scope(org_id, user, store)
     except HTTPException as exception:
         unauthenticated = exception.status_code == 401

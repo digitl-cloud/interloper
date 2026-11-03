@@ -6,11 +6,14 @@ the path names per request; ``rbac`` gates handlers on the caller's role there.
 """
 
 from interloper_api.dependencies.auth import (
+    CallerCredential,
+    CallerCredentialDep,
     CurrentUserDep,
     OrgDep,
     OrgScope,
     SessionUserDep,
     get_caller,
+    get_caller_credential,
     get_org_scope,
     get_session_caller,
     require_run,
@@ -49,6 +52,8 @@ __all__ = [
     "AdminDep",
     "AgentDep",
     "AuthorizationServerDep",
+    "CallerCredential",
+    "CallerCredentialDep",
     "CatalogDep",
     "CurrentUserDep",
     "EditorDep",
@@ -65,6 +70,7 @@ __all__ = [
     "get_agent",
     "get_authorization_server",
     "get_caller",
+    "get_caller_credential",
     "get_catalog",
     "get_google_login",
     "get_org_scope",

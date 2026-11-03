@@ -33,18 +33,20 @@ class ConversationStore:
         """
         self._engine = engine
 
-    def create(self, org_id: UUID, user_id: UUID) -> Conversation:
+    def create(self, org_id: UUID, user_id: UUID, client_id: str | None = None) -> Conversation:
         """Start an empty conversation.
 
         Args:
             org_id: Organisation the conversation belongs to.
             user_id: Profile UUID of the member starting it.
+            client_id: The OAuth client starting it through an access token the
+                member granted; ``None`` for the app or a personal token.
 
         Returns:
             The created row.
         """
         with session_scope(self._engine) as session:
-            row = Conversation(org_id=org_id, user_id=user_id)
+            row = Conversation(org_id=org_id, user_id=user_id, client_id=client_id)
             save(session, row)
             return row
 
@@ -70,7 +72,11 @@ class ConversationStore:
             return row
 
     def list(self, org_id: UUID, user_id: UUID, query: PageQuery) -> Page[Conversation]:
-        """A member's conversations in an organisation, most recently updated first.
+        """A member's own conversations in an organisation, most recently updated first.
+
+        This lists the app's own conversations, those no OAuth client started,
+        whoever calls it: a conversation a client started is the client's, so it
+        is left out of the list, and the client reads it by its id.
 
         Args:
             org_id: Organisation UUID.
@@ -82,7 +88,9 @@ class ConversationStore:
         """
         statement = (
             select(Conversation)
-            .where(Conversation.org_id == org_id, Conversation.user_id == user_id)
+            .where(
+                Conversation.org_id == org_id, Conversation.user_id == user_id, col(Conversation.client_id).is_(None)
+            )
             .order_by(col(Conversation.updated_at).desc(), col(Conversation.created_at).desc(), col(Conversation.id))
         )
         with session_scope(self._engine) as session:

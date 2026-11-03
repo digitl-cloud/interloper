@@ -96,6 +96,10 @@ granted for: an API token is refused by the MCP server, and an MCP token by the 
 authorization request names exactly one resource; a trailing slash on it is ignored. Such a client
 usually has a fixed client id and secret, registered as below.
 
+Conversations such a client starts with the agent belong to the client: the app never lists them.
+They are deleted when the grant ends: when the user revokes the client, or the client revokes its
+refresh token.
+
 ## Registering a client yourself
 
 A client that registers itself needs no setup, and it is shown to the user by the name it gave.

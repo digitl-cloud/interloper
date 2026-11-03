@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import Engine, inspect, text
 from sqlmodel import Session
 
 from interloper_db import NotFoundError
@@ -40,6 +44,20 @@ class TestConversations:
         page = store.conversations.list(org_id, user_id, PageQuery())
         assert [c.id for c in page.items] == [second.id, first.id]
         assert page.total == 2
+
+    def test_list_leaves_out_conversations_of_an_oauth_client(self, store: Store):
+        org_id, user_id = _member(store)
+        client, _ = store.oauth.register_client("Chat", ["https://chat.example.com/callback"], registered_by="operator")
+        own = store.conversations.create(org_id, user_id)
+        started_by_client = store.conversations.create(org_id, user_id, client_id=client.client_id)
+
+        page = store.conversations.list(org_id, user_id, PageQuery())
+
+        assert [c.id for c in page.items] == [own.id]
+        assert page.total == 1
+        assert (
+            store.conversations.get(started_by_client.id, org_id=org_id, user_id=user_id).client_id == client.client_id
+        )
 
     def test_another_member_or_org_reads_it_as_missing(self, store: Store):
         org_id, user_id = _member(store)
@@ -84,3 +102,40 @@ class TestConversations:
             store.conversations.delete(row.id)
         with pytest.raises(NotFoundError):
             store.conversations.update(row.id, messages=[])
+
+
+class TestMigration021:
+    @staticmethod
+    def _migrate(auth_db: Engine, step: str) -> None:
+        """Run one step of migration 021 against the fixture database.
+
+        Args:
+            auth_db: The fixture database.
+            step: ``"upgrade"`` or ``"downgrade"``.
+        """
+        migration = importlib.import_module("interloper_db.migrations.versions.021_conversation_client")
+        with auth_db.begin() as connection, Operations.context(MigrationContext.configure(connection)):
+            getattr(migration, step)()
+
+    def test_a_round_trip_drops_the_client_conversations_and_restores_the_column(self, store: Store, auth_db: Engine):
+        org_id, user_id = _member(store)
+        client, _ = store.oauth.register_client("Chat", ["https://chat.example.com/callback"], registered_by="operator")
+        own = store.conversations.create(org_id, user_id)
+        store.conversations.create(org_id, user_id, client_id=client.client_id)
+
+        self._migrate(auth_db, "downgrade")
+        with auth_db.connect() as connection:
+            remaining = connection.execute(text("SELECT id FROM conversations")).scalars().all()
+        assert [UUID(str(row_id)) for row_id in remaining] == [own.id]
+        assert "client_id" not in {column["name"] for column in inspect(auth_db).get_columns("conversations")}
+
+        self._migrate(auth_db, "upgrade")
+        self._migrate(auth_db, "upgrade")
+        assert "client_id" in {column["name"] for column in inspect(auth_db).get_columns("conversations")}
+        indexes = {index["name"] for index in inspect(auth_db).get_indexes("conversations")}
+        assert "ix_conversations_client_updated" in indexes
+        assert store.conversations.get(own.id, org_id=org_id, user_id=user_id).client_id is None
+        started_by_client = store.conversations.create(org_id, user_id, client_id=client.client_id)
+        assert store.conversations.get(started_by_client.id, org_id=org_id, user_id=user_id).client_id == (
+            client.client_id
+        )

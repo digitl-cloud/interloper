@@ -727,7 +727,11 @@ class RefreshTokenGrant(StoreGrant, grants.RefreshTokenGrant):
 
 
 class Revocation(RevocationEndpoint):
-    """Token revocation (RFC 7009): a refresh token ends its family, an access token itself."""
+    """Token revocation (RFC 7009): a refresh token ends its family, an access token itself.
+
+    Ending a family ends the grant, so it also deletes the conversations the
+    client started for the user; revoking an access token alone keeps them.
+    """
 
     CLIENT_AUTH_METHODS = CLIENT_AUTH_METHODS
 
