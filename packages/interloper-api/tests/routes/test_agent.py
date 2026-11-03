@@ -409,6 +409,38 @@ class TestChat:
         assert "Job attempted" in resumed.text
         assert "tool-output-available" in resumed.text
 
+    def test_a_viewer_chats_and_a_write_is_refused_by_the_toolkit(self, store: Store, member: SimpleNamespace):
+        store.members.update(member.org_id, member.id, "viewer")
+
+        async def model(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+            if len(messages) == 1:
+                args = {"component_id": str(uuid4()), "enabled": False}
+                yield {0: DeltaToolCall(name="toggle_job", json_args=json.dumps(args), tool_call_id="call-1")}
+            else:
+                yield "Not allowed"
+
+        agent = Agent[ToolkitContext, str | DeferredToolRequests](
+            FunctionModel(stream_function=model),
+            deps_type=ToolkitContext,
+            output_type=[str, DeferredToolRequests],
+            toolsets=[toolset()],
+        )
+        client = _client(store, member, agent)
+
+        created = client.post("/agent/conversations")
+        conversation_id = created.json()["id"]
+        response = client.post(f"/agent/conversations/{conversation_id}/chat", json=_turn("switch it off"))
+
+        assert created.status_code == 201
+        assert response.status_code == 200
+        row = store.conversations.get(UUID(conversation_id), org_id=member.org_id, user_id=member.id)
+        history = ModelMessagesTypeAdapter.validate_python(row.messages)
+        returns = [p for m in history for p in m.parts if isinstance(p, ToolReturnPart)]
+        assert [r.tool_name for r in returns] == ["toggle_job"]
+        refusal = returns[0].model_response_object()
+        assert refusal["status"] == "error"
+        assert "editor" in refusal["error"]
+
     def test_a_failing_turn_is_logged_server_side(
         self, store: Store, member: SimpleNamespace, caplog: pytest.LogCaptureFixture, metric_total: Any
     ):
