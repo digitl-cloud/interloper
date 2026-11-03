@@ -51,7 +51,6 @@ from interloper_api.dependencies import (
     CallerCredentialDep,
     CatalogDep,
     CurrentUserDep,
-    EditorDep,
     StoreDep,
     ViewerDep,
 )
@@ -294,7 +293,7 @@ class ConversationDetailResponse(ConversationResponse):
 
 
 @org_router.post("/conversations", status_code=201)
-def create_conversation(credential: CallerCredentialDep, scope: EditorDep, store: StoreDep) -> ConversationResponse:
+def create_conversation(credential: CallerCredentialDep, scope: ViewerDep, store: StoreDep) -> ConversationResponse:
     """Start a conversation in the path's organisation.
 
     A conversation started through an OAuth client's access token records the
@@ -303,7 +302,7 @@ def create_conversation(credential: CallerCredentialDep, scope: EditorDep, store
     Args:
         credential: The caller's credential; its user owns the conversation and
             its token's client, if any, started it.
-        scope: The organisation the path names, the caller at least an editor there.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
 
     Returns:
@@ -353,13 +352,13 @@ def get_conversation(
 
 
 @org_router.delete("/conversations/{conversation_id}", status_code=204)
-def delete_conversation(conversation_id: UUID, user: CurrentUserDep, scope: EditorDep, store: StoreDep) -> Response:
+def delete_conversation(conversation_id: UUID, user: CurrentUserDep, scope: ViewerDep, store: StoreDep) -> Response:
     """Delete one of the caller's conversations.
 
     Args:
         conversation_id: The conversation UUID; one of another organisation reads as missing.
         user: The authenticated caller.
-        scope: The organisation the path names, the caller at least an editor there.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
 
     Returns:
@@ -375,7 +374,7 @@ async def chat(
     conversation_id: UUID,
     request: Request,
     user: CurrentUserDep,
-    scope: EditorDep,
+    scope: ViewerDep,
     store: StoreDep,
     catalog: CatalogDep,
     agent: AgentDep,
@@ -392,7 +391,7 @@ async def chat(
             organisation, else it reads as missing.
         request: The raw request, handed to the adapter.
         user: The authenticated caller.
-        scope: The organisation the path names, the caller at least an editor there.
+        scope: The organisation the path names, the caller at least a viewer there.
         store: The Store instance.
         catalog: The Catalog instance.
         agent: The assistant.
