@@ -1694,10 +1694,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#runstate" class="md-nav__link">
+  <a href="#operations-records" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        RunState
+        Operations' records
       </span>
     </span>
   </a>
@@ -2476,10 +2476,11 @@ every in-process operation a deadline:</p>
 </span></code></pre></div>
 <p><code>Runner</code> is <code>Serializable</code>, so its configuration is fields on the class; a new kind of runner
 subclasses <code>il.Runner</code>, declares <code>Run</code> and the <code>capacity</code> property (how many operations a run
-executes at once), and inherits <code>fail_fast</code>, <code>reraise</code> and <code>on_event</code>. <code>Runner.run</code> does the rest:
-it assigns a <code>run_id</code> when the metadata carries none, delivers the run's events to <code>on_event</code>,
-opens the <code>interloper.runner.run</code> span (restoring a parent from the metadata or the
-environment), makes the run, walks it, closes it, and re-raises when <code>reraise</code> asks.</p>
+executes at once), and inherits <code>fail_fast</code>, <code>reraise</code> and <code>on_event</code>. <code>Runner.run</code> makes the
+run, enters it, walks it and re-raises when <code>reraise</code> asks. The run does the rest: it assigns a
+<code>run_id</code> when the metadata carries none, and while it is entered delivers its events to
+<code>on_event</code> and keeps the <code>interloper.runner.run</code> span current (restoring a parent from the
+metadata or the environment).</p>
 <p>A <code>Run</code> implements:</p>
 <table>
 <thead>
@@ -2518,21 +2519,21 @@ execution is <code>OperationResult.from_execution(operation, context)</code>: it
 and turns a failure into the operation's <code>failure(error)</code> result, completed with the traceback
 (when the operation's class allows one), the original exception, so <code>reraise</code> can raise it, and
 whether <code>operation.retryable(error)</code> thinks another execution may help.</p>
-<h2 id="runstate">RunState<a class="headerlink" href="#runstate" title="Permanent link">&para;</a></h2>
-<p><code>run.state</code> holds every operation's <code>ExecutionInfo</code> and moves it through one verb per transition,
-each emitting its <code>OPERATION_*</code> event with a deterministic id:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">state</span><span class="o">.</span><span class="n">ready</span>                        <span class="c1"># dependencies met, not started</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">state</span><span class="o">.</span><span class="n">completed</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">failed</span>      <span class="c1"># in DAG order</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">state</span><span class="o">.</span><span class="n">done</span>                         <span class="c1"># every operation terminal</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">state</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>           <span class="c1"># the OperationContext it executes with</span>
+<h2 id="operations-records">Operations' records<a class="headerlink" href="#operations-records" title="Permanent link">&para;</a></h2>
+<p>The run holds every operation's <code>ExecutionInfo</code> in <code>run.executions</code> and moves it through one verb
+per transition, each emitting its <code>OPERATION_*</code> event with a deterministic id:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">run</span><span class="o">.</span><span class="n">ready</span>                        <span class="c1"># dependencies met, not started</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">run</span><span class="o">.</span><span class="n">completed</span><span class="p">,</span> <span class="n">run</span><span class="o">.</span><span class="n">failed</span>        <span class="c1"># in DAG order</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">run</span><span class="o">.</span><span class="n">done</span>                         <span class="c1"># every operation terminal</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">run</span><span class="o">.</span><span class="n">context</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>           <span class="c1"># the OperationContext it executes with</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">state</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>             <span class="c1"># RUNNING; OPERATION_STARTED</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">state</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>      <span class="c1"># OPERATION_RETRIED; the next execution</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">state</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>    <span class="c1"># COMPLETED or FAILED; promotes or cancels its dependents</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">state</span><span class="o">.</span><span class="n">cancel_pending</span><span class="p">()</span>             <span class="c1"># cancels everything not yet terminal</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">run</span><span class="o">.</span><span class="n">start</span><span class="p">(</span><span class="n">operation</span><span class="p">)</span>             <span class="c1"># RUNNING; OPERATION_STARTED</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">run</span><span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>      <span class="c1"># OPERATION_RETRIED; the next execution</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">run</span><span class="o">.</span><span class="n">finish</span><span class="p">(</span><span class="n">operation</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>    <span class="c1"># COMPLETED or FAILED; promotes or cancels its dependents</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">run</span><span class="o">.</span><span class="n">cancel_pending</span><span class="p">()</span>             <span class="c1"># cancels everything not yet terminal</span>
 </span></code></pre></div>
 <p>The walk calls every transition; a run's <code>execute</code> calls none. Non-enabled operations start as <code>SKIPPED</code> and count
-as satisfied predecessors. <code>RunState</code> is not thread-safe: call it from the run's event loop only,
+as satisfied predecessors. The transitions are not thread-safe: call them from the run's event loop only,
 never from a thread an <code>execute</code> hands work to.</p>
 <h2 id="registering">Registering<a class="headerlink" href="#registering" title="Permanent link">&para;</a></h2>
 <div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">"interloper.runners"</span><span class="k">]</span>
@@ -2557,9 +2558,9 @@ launchers do.</p>
 owns its operations' lifecycle: the host reports every start, retry and verdict, and the child
 only what happens inside the operation. On the platform, have the child run
 <code>interloper launch &lt;run-id&gt; --operation-id &lt;id&gt;</code> with the host's <code>INTERLOPER_RUN_TOKEN</code>
-and <code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child loads the run, executes that one operation once,
-reports its asset and destination events to the API, and drops every lifecycle event and its
-upstreams' events. Outside the platform, hand the child the operation's DAG instead,
+and <code>INTERLOPER_SERVER_INTERNAL_URL</code>: the child loads the run and executes that one operation once,
+in its own process, walking nothing, so it reports only its asset and destination events to the
+API and no lifecycle event. Outside the platform, hand the child the operation's DAG instead,
 <code>interloper run --format inline &lt;dag&gt; --operation-id &lt;id&gt;</code>. A failed execution leaves its
 error and whether a retry may help at <code>OperationResult.TERMINATION_MESSAGE_PATH</code>; the host reads
 it back with <code>OperationResult.from_termination_message</code> once the child exits (Kubernetes surfaces
