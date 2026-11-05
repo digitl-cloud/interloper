@@ -1,4 +1,4 @@
-"""Tests for the Bing Ads star schema: views over every account's ad report, run on DuckDB."""
+"""Tests for the Bing Ads star schema: views over every account's report and entities, run on DuckDB."""
 
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from interloper_assets.bing_ads.star_schema.source import BingAdsStarSchema
 duckdb = pytest.importorskip("interloper_duckdb")
 
 DAY = dt.date(2026, 10, 1)
+SNAPSHOT_DAY = dt.date(2026, 9, 30)
+UPDATED = dt.datetime(2026, 9, 29, 7, 30, tzinfo=dt.timezone.utc)
 FACT_COLUMNS = [
     "date",
     "account_id",
@@ -30,6 +32,16 @@ FACT_COLUMNS = [
     "conversions",
     "conversion_value",
 ]
+ENTITY_COLUMNS = {
+    "accounts": "date DATE, id VARCHAR, name VARCHAR, currency_code VARCHAR, time_zone VARCHAR, "
+    "parent_customer_id VARCHAR",
+    "campaigns": "date DATE, id VARCHAR, campaign VARCHAR, status VARCHAR, campaign_type VARCHAR, budget DOUBLE, "
+    "budget_type VARCHAR, modified_time TIMESTAMPTZ",
+    "ad_groups": "date DATE, id VARCHAR, parent_id VARCHAR, ad_group VARCHAR, status VARCHAR, start_date DATE, "
+    "end_date DATE, modified_time TIMESTAMPTZ",
+    "ads": "date DATE, id VARCHAR, parent_id VARCHAR, status VARCHAR, type VARCHAR, headline VARCHAR, "
+    "modified_time TIMESTAMPTZ",
+}
 REPORT_COLUMNS = (
     "time_period, account_id, account_name, customer_id, currency_code, campaign_id, campaign_name, "
     "campaign_status, campaign_type, ad_group_id, ad_group_name, ad_group_status, ad_id, ad_status, ad_type, "
@@ -70,7 +82,40 @@ def _row(
     )
 
 
-def _seed(warehouse, account_id: str, rows: list[str] | None = None) -> None:
+def _snapshot(account_id: str, day: str = "2026-09-30", *, time_zone: str = "AmsterdamBerlinBernRomeStockholmVienna"):
+    """One snapshot of the account and the campaign, ad group and ads its report names.
+
+    Returns:
+        The rows of each entity table, as SQL value tuples.
+    """
+    stamp = "TIMESTAMPTZ '2026-09-29 07:30:00+00'"
+    return {
+        "accounts": [f"(DATE '{day}', '{account_id}', 'Acct entity', 'EUR', '{time_zone}', '999')"],
+        "campaigns": [
+            f"(DATE '{day}', 'c{account_id}', 'Camp entity', 'Paused', 'Search', 50.0, 'DailyBudgetStandard', {stamp})"
+        ],
+        "ad_groups": [
+            (
+                f"(DATE '{day}', 's{account_id}', 'c{account_id}', 'Group entity', 'Paused', DATE '2026-09-01', "
+                f"NULL, {stamp})"
+            )
+        ],
+        "ads": [
+            f"(DATE '{day}', 'a1', 's{account_id}', 'Paused', 'Responsive Search Ad', '[{{\"text\":\"x\"}}]', {stamp})",
+            f"(DATE '{day}', 'a9', 's{account_id}', 'Active', 'Responsive Ad', 'Big sale', {stamp})",
+        ],
+    }
+
+
+def _seed(
+    warehouse,
+    account_id: str,
+    rows: list[str] | None = None,
+    entities: dict[str, list[str]] | None = None,
+    *,
+    skip: tuple[str, ...] = (),
+) -> None:
+    """Create the account's report and entity tables; an entity without rows is collected but empty."""
     client = warehouse.connection.client
     client.execute("CREATE SCHEMA IF NOT EXISTS bing_ads")
     rows = rows or [_row(account_id)]
@@ -78,6 +123,12 @@ def _seed(warehouse, account_id: str, rows: list[str] | None = None) -> None:
         f"CREATE TABLE bing_ads.ads_stats__{account_id} AS SELECT * FROM (VALUES {', '.join(rows)}) "
         f"AS t({REPORT_COLUMNS})"
     )
+    for key, columns in ENTITY_COLUMNS.items():
+        if key in skip:
+            continue
+        client.execute(f"CREATE TABLE bing_ads.{key}__{account_id} ({columns})")
+        if entities and entities.get(key):
+            client.execute(f"INSERT INTO bing_ads.{key}__{account_id} VALUES {', '.join(entities[key])}")
 
 
 def _materialize(warehouse, *accounts: il.Source) -> il.Source:
@@ -91,6 +142,8 @@ def _rows(warehouse, table: str) -> list[dict]:
     for column in ("date", "as_of_date", "start_date", "end_date"):
         if column in frame:
             frame[column] = frame[column].dt.date
+    if "updated_at" in frame:
+        frame["updated_at"] = frame["updated_at"].dt.tz_convert("UTC")
     frame = frame.sort_values(list(frame.columns))
     return frame.astype(object).where(frame.notna(), None).to_dict("records")
 
@@ -103,37 +156,61 @@ class TestWiring:
         relation = getattr(BingAdsStarSchema, view).relations["ads_stats"]
         assert (relation.key, relation.many, relation.optional) == ("bing_ads.ads_stats", True, True)
 
-    def test_views_publish_only_what_the_ad_report_fills(self):
+    @pytest.mark.parametrize(
+        ("view", "entity"),
+        [
+            ("dim_accounts", "accounts"),
+            ("dim_campaigns", "campaigns"),
+            ("dim_ad_groups", "ad_groups"),
+            ("dim_ads", "ads"),
+        ],
+    )
+    def test_each_dimension_fans_in_its_entity_and_is_optional(self, view: str, entity: str):
+        relation = getattr(BingAdsStarSchema, view).relations[entity]
+        assert (relation.key, relation.many, relation.optional) == (f"bing_ads.{entity}", True, True)
+
+    def test_views_publish_only_what_bing_fills(self):
         assert list(schemas.FactCampaignPerformance.model_fields) == FACT_COLUMNS
         assert list(schemas.DimAccounts.model_fields) == [
             "account_id",
             "account_name",
             "currency",
+            "timezone",
             "as_of_date",
             "customer_id",
         ]
+        # Bing schedules ad groups, not campaigns, and gives no creation time; campaigns have no objective
         assert list(schemas.DimCampaigns.model_fields) == [
             "campaign_id",
             "account_id",
             "campaign_name",
             "status",
             "campaign_type",
+            "budget",
+            "budget_type",
+            "updated_at",
             "as_of_date",
         ]
+        # an ad group has no budget of its own
         assert list(schemas.DimAdGroups.model_fields) == [
             "ad_group_id",
             "campaign_id",
             "account_id",
             "ad_group_name",
             "status",
+            "start_date",
+            "end_date",
+            "updated_at",
             "as_of_date",
         ]
+        # a Bing ad has no name
         assert list(schemas.DimAds.model_fields) == [
             "ad_id",
             "ad_group_id",
             "campaign_id",
             "account_id",
             "status",
+            "updated_at",
             "as_of_date",
             "ad_type",
             "headline",
@@ -191,6 +268,7 @@ class TestOnDuckDB:
                 "account_id": "111",
                 "account_name": "Acct 111",
                 "currency": "EUR",
+                "timezone": None,
                 "as_of_date": DAY,
                 "customer_id": "cust1",
             }
@@ -262,6 +340,131 @@ class TestOnDuckDB:
         }
         for (table, key), expected in keys.items():
             assert {row[key] for row in _rows(warehouse, table)} == expected
+
+    def test_an_account_takes_its_snapshot_over_a_later_report(self, warehouse):
+        first, second = _account("111", warehouse), _account("222", warehouse)
+        _seed(warehouse, "111", entities=_snapshot("111"))
+        _seed(warehouse, "222")
+        _materialize(warehouse, first, second)
+        assert _rows(warehouse, "dim_accounts") == [
+            {
+                "account_id": "111",
+                "account_name": "Acct entity",
+                "currency": "EUR",
+                "timezone": "Europe/Berlin",
+                "as_of_date": SNAPSHOT_DAY,
+                "customer_id": "999",
+            },
+            {
+                "account_id": "222",
+                "account_name": "Acct 222",
+                "currency": "EUR",
+                "timezone": None,
+                "as_of_date": DAY,
+                "customer_id": "cust1",
+            },
+        ]
+
+    def test_a_time_zone_bing_does_not_list_gives_no_timezone(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", entities=_snapshot("111", time_zone="Atlantis"))
+        _materialize(warehouse, first)
+        [row] = _rows(warehouse, "dim_accounts")
+        assert (row["account_name"], row["timezone"]) == ("Acct entity", None)
+
+    def test_a_campaign_takes_its_budget_from_its_snapshot(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", entities=_snapshot("111"))
+        _materialize(warehouse, first)
+        assert _rows(warehouse, "dim_campaigns") == [
+            {
+                "campaign_id": "c111",
+                "account_id": "111",
+                "campaign_name": "Camp entity",
+                "status": "Paused",
+                "campaign_type": "Search",
+                "budget": 50.0,
+                "budget_type": "DailyBudgetStandard",
+                "updated_at": UPDATED,
+                "as_of_date": SNAPSHOT_DAY,
+            }
+        ]
+
+    def test_an_ad_group_takes_its_campaign_and_schedule_from_its_snapshot(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", entities=_snapshot("111"))
+        _materialize(warehouse, first)
+        assert _rows(warehouse, "dim_ad_groups") == [
+            {
+                "ad_group_id": "s111",
+                "campaign_id": "c111",
+                "account_id": "111",
+                "ad_group_name": "Group entity",
+                "status": "Paused",
+                "start_date": dt.date(2026, 9, 1),
+                "end_date": None,
+                "updated_at": UPDATED,
+                "as_of_date": SNAPSHOT_DAY,
+            }
+        ]
+
+    def test_an_ad_takes_its_campaign_from_its_ad_group(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", entities=_snapshot("111"))
+        _materialize(warehouse, first)
+        ads = {row["ad_id"]: row for row in _rows(warehouse, "dim_ads")}
+        assert (ads["a1"]["campaign_id"], ads["a1"]["ad_group_id"], ads["a1"]["status"]) == ("c111", "s111", "Paused")
+        assert (ads["a1"]["ad_type"], ads["a1"]["headline"], ads["a1"]["as_of_date"]) == (
+            "Responsive Search Ad",
+            None,
+            SNAPSHOT_DAY,
+        )
+        assert (ads["a9"]["campaign_id"], ads["a9"]["headline"], ads["a9"]["updated_at"]) == (
+            "c111",
+            "Big sale",
+            UPDATED,
+        )
+
+    def test_the_latest_snapshot_wins(self, warehouse):
+        first = _account("111", warehouse)
+        older, newer = _snapshot("111", "2026-09-28"), _snapshot("111", "2026-09-30")
+        newer["campaigns"] = [row.replace("Camp entity", "Camp renamed") for row in newer["campaigns"]]
+        entities = {key: older[key] + newer[key] for key in older}
+        _seed(warehouse, "111", entities=entities)
+        _materialize(warehouse, first)
+        assert {_rows(warehouse, "dim_campaigns")[0]["campaign_name"] for _ in range(5)} == {"Camp renamed"}
+
+    def test_a_key_missing_from_the_snapshot_falls_back_to_the_report(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", [_row("111"), _row("111", ad_id="a2")], entities=_snapshot("111"))
+        _materialize(warehouse, first)
+        ads = {row["ad_id"]: row for row in _rows(warehouse, "dim_ads")}
+        assert (ads["a2"]["status"], ads["a2"]["ad_type"], ads["a2"]["as_of_date"]) == (
+            "Active",
+            "Responsive search ad",
+            DAY,
+        )
+
+    def test_a_snapshot_row_without_an_id_reaches_no_view(self, warehouse):
+        first = _account("111", warehouse)
+        entities = _snapshot("111")
+        entities["campaigns"].append(
+            "(DATE '2026-09-30', NULL, 'Orphan', 'Active', 'Search', 1.0, 'DailyBudgetStandard', NULL)"
+        )
+        entities["ads"].append("(DATE '2026-09-30', NULL, 's111', 'Active', 'Responsive Ad', 'x', NULL)")
+        _seed(warehouse, "111", entities=entities)
+        _materialize(warehouse, first)
+        assert {row["campaign_id"] for row in _rows(warehouse, "dim_campaigns")} == {"c111"}
+        assert {row["ad_id"] for row in _rows(warehouse, "dim_ads")} == {"a1", "a9"}
+
+    def test_a_missing_entity_table_fails_the_dimension(self, warehouse):
+        first = _account("111", warehouse)
+        _seed(warehouse, "111", skip=("campaigns",))
+        star = BingAdsStarSchema(destinations=[warehouse])
+        result = il.DAG(first, star).materialize()
+        assert result.status is ExecutionStatus.FAILED
+        error = result.executions[star.dim_campaigns.id].error
+        assert error is not None and "campaigns__111" in error
 
     def test_a_missing_account_table_fails_the_view(self, warehouse):
         first = _account("111", warehouse)

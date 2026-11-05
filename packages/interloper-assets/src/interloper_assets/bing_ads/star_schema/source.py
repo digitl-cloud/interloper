@@ -7,10 +7,12 @@ import interloper as il
 from interloper.errors import ConfigError
 from interloper_sql import ibis_view, latest, union
 
+from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.star_schema import schemas
 
 MEASURE_COLUMNS = ("impressions", "clicks", "spend", "conversions", "revenue", "currency_code")
-REPORT, FACT = 1, 2
+INSTANT = "timestamp('UTC')"
+ENTITY, REPORT, FACT = 1, 2, 3
 
 
 def _account(upstream: il.Upstream) -> str:
@@ -42,15 +44,20 @@ class BingAdsStarSchema(il.Source):
     conversions arrive on rows of their own with no delivery, so the sums
     count nothing twice. Conversions are the goals the advertiser counts in
     Bing's Conversions; Bing does not say which goals are purchases, so the
-    facts publish no purchases. The report names every account, campaign and
-    ad group and states their status, so the dimensions take them from the
-    latest report and fall back to the facts' keys. Budgets, schedules and
-    timezones come only from Bing's entity services, which are not collected
-    yet, so the dimensions publish no such column.
-    Days are in the Amsterdam-Berlin zone the connector requests. Every bound
-    upstream's table must exist, or the view fails when it is created. Views
-    are recreated on every run, so they follow the accounts bound to them; an
-    account added to the organisation is absent until it is bound.
+    facts publish no purchases. Days are in the Amsterdam-Berlin zone the
+    connector requests.
+    The dimensions take each account, campaign, ad group and ad from its
+    latest entity snapshot where one is collected, else from its latest
+    report, else from the facts' keys. Only the snapshots know an account's
+    time zone, a campaign's budget, an ad group's schedule and when anything
+    last changed; Bing schedules ad groups, not campaigns, so campaigns
+    publish no schedule, and Bing gives no creation time, so nothing
+    publishes one. An ad's campaign comes from its ad group, since the ad's
+    own snapshot names only the ad group.
+    Every bound upstream's table must exist, or the view fails when it is
+    created. Views are recreated on every run, so they follow the accounts
+    bound to them; an account added to the organisation is absent until it
+    is bound.
     """
 
     @ibis_view(
@@ -126,10 +133,33 @@ class BingAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimAccounts,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True)},
+        relations={
+            "accounts": il.Relation("asset", "bing_ads.accounts", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_accounts(self, ads_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per account with its name, currency and customer: its latest report, else the facts."""
+    def dim_accounts(
+        self,
+        accounts: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per account with its name, currency, time zone and customer.
+
+        Each account comes from its entity snapshot, else its latest report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                account_id=ibis.literal(_account(upstream)),
+                account_name=table["name"],
+                currency=table["currency_code"],
+                timezone=table["time_zone"].substitute(constants.TIME_ZONES, else_=ibis.null("string")),
+                as_of_date=table["date"],
+                customer_id=table["parent_customer_id"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -142,6 +172,7 @@ class BingAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 account_name=days["account_name"],
                 currency=days["currency"],
+                timezone=ibis.null("string"),
                 as_of_date=days["time_period"],
                 customer_id=days["customer_id"],
                 priority=ibis.literal(REPORT),
@@ -153,12 +184,14 @@ class BingAdsStarSchema(il.Source):
                 account_id=days["account_id"],
                 account_name=ibis.null("string"),
                 currency=days["currency"],
+                timezone=ibis.null("string"),
                 as_of_date=days["date"],
                 customer_id=ibis.null("string"),
                 priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in accounts),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
@@ -168,10 +201,36 @@ class BingAdsStarSchema(il.Source):
     @ibis_view(
         schema=schemas.DimCampaigns,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True)},
+        relations={
+            "campaigns": il.Relation("asset", "bing_ads.campaigns", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_campaigns(self, ads_stats: list[il.Upstream], fact_campaign_performance: il.Upstream) -> ibis.Table:
-        """One row per campaign with its name, status and type: its latest report, else the facts."""
+    def dim_campaigns(
+        self,
+        campaigns: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_campaign_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per campaign with its name, status, type and budget.
+
+        Each campaign comes from its entity snapshot, else its latest report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                campaign_id=table["id"],
+                account_id=ibis.literal(_account(upstream)),
+                campaign_name=table["campaign"],
+                status=table["status"],
+                campaign_type=table["campaign_type"],
+                budget=table["budget"],
+                budget_type=table["budget_type"],
+                updated_at=table["modified_time"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -186,6 +245,9 @@ class BingAdsStarSchema(il.Source):
                 campaign_name=days["campaign_name"],
                 status=days["status"],
                 campaign_type=days["campaign_type"],
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["time_period"],
                 priority=ibis.literal(REPORT),
             )
@@ -198,32 +260,54 @@ class BingAdsStarSchema(il.Source):
                 campaign_name=ibis.null("string"),
                 status=ibis.null("string"),
                 campaign_type=ibis.null("string"),
+                budget=ibis.null("float64"),
+                budget_type=ibis.null("string"),
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["date"],
                 priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in campaigns),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_campaign_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "campaign_id",
-            "account_id",
-            "campaign_name",
-            "status",
-            "campaign_type",
-            "as_of_date",
-        )
+        return latest(rows, "campaign_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimAdGroups,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True)},
+        relations={
+            "ad_groups": il.Relation("asset", "bing_ads.ad_groups", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_ad_groups(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad group with its name, campaign and status: its latest report, else the facts."""
+    def dim_ad_groups(
+        self,
+        ad_groups: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_ad_performance: il.Upstream,
+    ) -> ibis.Table:
+        """One row per ad group with its name, campaign, status and schedule.
+
+        Each ad group comes from its entity snapshot, else its latest report, else the facts.
+        """
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            return table.select(
+                ad_group_id=table["id"],
+                campaign_id=table["parent_id"],
+                account_id=ibis.literal(_account(upstream)),
+                ad_group_name=table["ad_group"],
+                status=table["status"],
+                start_date=table["start_date"],
+                end_date=table["end_date"],
+                updated_at=table["modified_time"],
+                as_of_date=table["date"],
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -238,6 +322,9 @@ class BingAdsStarSchema(il.Source):
                 account_id=ibis.literal(_account(upstream)),
                 ad_group_name=days["ad_group_name"],
                 status=days["status"],
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["time_period"],
                 priority=ibis.literal(REPORT),
             )
@@ -252,32 +339,59 @@ class BingAdsStarSchema(il.Source):
                 account_id=days["account_id"],
                 ad_group_name=ibis.null("string"),
                 status=ibis.null("string"),
+                start_date=ibis.null("date"),
+                end_date=ibis.null("date"),
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["date"],
                 priority=ibis.literal(FACT),
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in ad_groups),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_ad_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "ad_group_name",
-            "status",
-            "as_of_date",
-        )
+        return latest(rows, "ad_group_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
 
     @ibis_view(
         schema=schemas.DimAds,
         tags=["Dimension"],
-        relations={"ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True)},
+        relations={
+            "ads": il.Relation("asset", "bing_ads.ads", many=True, optional=True),
+            "ads_stats": il.Relation("asset", "bing_ads.ads_stats", many=True, optional=True),
+        },
     )
-    def dim_ads(self, ads_stats: list[il.Upstream], fact_ad_performance: il.Upstream) -> ibis.Table:
-        """One row per ad with its ad group, campaign, status, type and headline: its latest report, else the facts."""
+    def dim_ads(
+        self,
+        ads: list[il.Upstream],
+        ads_stats: list[il.Upstream],
+        fact_ad_performance: il.Upstream,
+        dim_ad_groups: il.Upstream,
+    ) -> ibis.Table:
+        """One row per ad with its ad group, campaign, status, type and headline.
+
+        Each ad comes from its entity snapshot, else its latest report, else the facts.
+        """
+        groups = dim_ad_groups.data.select("ad_group_id", "campaign_id")
+
+        def from_entity(upstream: il.Upstream) -> ibis.Table:
+            table = upstream.data
+            # the ad's snapshot names its ad group only; the campaign is the ad group's
+            joined = table.left_join(groups, table["parent_id"] == groups["ad_group_id"])
+            return joined.select(
+                ad_id=table["id"],
+                ad_group_id=table["parent_id"],
+                campaign_id=groups["campaign_id"],
+                account_id=ibis.literal(_account(upstream)),
+                status=table["status"],
+                updated_at=table["modified_time"],
+                as_of_date=table["date"],
+                ad_type=table["type"],
+                # only a responsive ad's Headline is one headline; a responsive search ad's lists its assets
+                headline=(table["type"] == "Responsive Ad").ifelse(table["headline"], ibis.null("string")),
+                priority=ibis.literal(ENTITY),
+            )
 
         def from_report(upstream: il.Upstream) -> ibis.Table:
             table = upstream.data
@@ -294,6 +408,7 @@ class BingAdsStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=ibis.literal(_account(upstream)),
                 status=days["status"],
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["time_period"],
                 ad_type=days["ad_type"],
                 headline=days["headline"],
@@ -312,6 +427,7 @@ class BingAdsStarSchema(il.Source):
                 campaign_id=days["campaign_id"],
                 account_id=days["account_id"],
                 status=ibis.null("string"),
+                updated_at=ibis.null(INSTANT),
                 as_of_date=days["date"],
                 ad_type=ibis.null("string"),
                 headline=ibis.null("string"),
@@ -319,18 +435,9 @@ class BingAdsStarSchema(il.Source):
             )
 
         rows = ibis.union(
+            *(from_entity(upstream) for upstream in ads),
             *(from_report(upstream) for upstream in ads_stats),
             from_fact(fact_ad_performance.data),
             distinct=False,
         )
-        kept = latest(rows, "ad_id", rows["priority"].asc(), rows["as_of_date"].desc())
-        return kept.select(
-            "ad_id",
-            "ad_group_id",
-            "campaign_id",
-            "account_id",
-            "status",
-            "as_of_date",
-            "ad_type",
-            "headline",
-        )
+        return latest(rows, "ad_id", rows["priority"].asc(), rows["as_of_date"].desc()).drop("priority")
