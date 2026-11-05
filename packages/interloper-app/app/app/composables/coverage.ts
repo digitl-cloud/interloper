@@ -11,6 +11,7 @@ export interface DayAggregate {
 /** Cell colours from Tailwind's status scales; the low states are their tints. */
 export const CELL = {
     covered: { light: '#00bc7d', dark: '#00d492' },
+    coveredMissed: { light: '#009966', dark: '#00bc7d' },
     partial: { light: '#ffb900', dark: '#ffb900' },
     partialLow: { light: '#fee685', dark: '#8d630e' },
     failed: { light: '#fb2c36', dark: '#ff6467' },
@@ -19,14 +20,17 @@ export const CELL = {
 }
 
 /** Status index order: a day's cell takes the colour at its `cellStatus`. */
-export const CELL_ORDER = ['empty', 'failedLow', 'failed', 'partialLow', 'partial', 'covered'] as const
+export const CELL_ORDER = ['empty', 'failedLow', 'failed', 'partialLow', 'partial', 'covered', 'coveredMissed'] as const
 
-/** What a day's sources delivered, as an index into `CELL_ORDER`; a day that only missed snapshots is neutral. */
-export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5 {
+/**
+ * What a day's sources delivered, as an index into `CELL_ORDER`. A day that only missed snapshots is neutral; a
+ * covered day that also missed some takes the darker green, so the miss shows without reading as owed.
+ */
+export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
     if (!day || !day.expected) return 0
     if (day.failed > 0) return day.failed / day.expected >= 0.5 ? 2 : 1
     const ratio = day.covered / day.expected
-    if (ratio >= 1) return 5
+    if (ratio >= 1) return day.missed ? 6 : 5
     return ratio >= 0.6 ? 4 : 3
 }
 

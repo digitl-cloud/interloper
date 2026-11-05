@@ -27,6 +27,15 @@ const cells = computed(() => {
     })
 })
 
+/** One tooltip per strip, anchored to the hovered cell: a strip can hold a year of cells. */
+const hovered = shallowRef<{ cell: HTMLElement, title: string } | null>(null)
+
+function onPointerOver(event: PointerEvent) {
+    const cell = event.target as HTMLElement
+    const title = cells.value.find(c => c.date === cell.dataset.date)?.title
+    hovered.value = title ? { cell, title } : null
+}
+
 function onClick(event: MouseEvent) {
     const date = (event.target as HTMLElement).dataset.date
     if (date && cells.value.some(cell => cell.date === date && cell.owed)) emit('select', date)
@@ -34,15 +43,22 @@ function onClick(event: MouseEvent) {
 </script>
 
 <template>
-    <div class="grid h-3.5 w-full cursor-pointer"
-         :style="{ gridTemplateColumns: `repeat(${dates.length}, minmax(0, 1fr))`, gap: dates.length >= GAPLESS_FROM ? '0' : '1px' }"
-         @click="onClick">
-        <div v-for="cell in cells"
-             :key="cell.date"
-             :data-date="cell.date"
-             :title="cell.title"
-             class="h-full rounded-[1px]"
-             :class="cell.date === selected ? 'relative z-10 outline-1 outline-offset-1 outline-(--ui-text-highlighted)' : ''"
-             :style="{ backgroundColor: cell.color }" />
-    </div>
+    <UTooltip :open="!!hovered"
+              :reference="hovered?.cell"
+              :text="hovered?.title"
+              :delay-duration="0"
+              :content="{ side: 'top', sideOffset: 6 }">
+        <div class="grid h-3.5 w-full cursor-pointer"
+             :style="{ gridTemplateColumns: `repeat(${dates.length}, minmax(0, 1fr))`, gap: dates.length >= GAPLESS_FROM ? '0' : '1px' }"
+             @click="onClick"
+             @pointerover="onPointerOver"
+             @pointerleave="hovered = null">
+            <div v-for="cell in cells"
+                 :key="cell.date"
+                 :data-date="cell.date"
+                 class="h-full rounded-[1px]"
+                 :class="cell.date === selected ? 'relative z-10 outline-1 outline-offset-1 outline-(--ui-text-highlighted)' : ''"
+                 :style="{ backgroundColor: cell.color }" />
+        </div>
+    </UTooltip>
 </template>
