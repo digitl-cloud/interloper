@@ -60,15 +60,6 @@ function tally(days: (DayAggregate | undefined)[]): DayTally {
     return counts
 }
 
-function dayCounts(counts: DayTally) {
-    return [
-        { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', label: 'successful', value: counts.successful },
-        { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing', value: counts.missing },
-        { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed', value: counts.failed },
-        { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', label: 'missed', value: counts.missed },
-    ].filter(count => count.key !== 'missed' || count.value)
-}
-
 function byTrouble(a: { failed: number, missing: number }, b: { failed: number, missing: number }): number {
     return b.failed - a.failed || b.missing - a.missing
 }
@@ -199,7 +190,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
                         <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
                     </span>
                     <span class="flex gap-2.5 text-xs tabular-nums">
-                        <span v-for="count in dayCounts(group)"
+                        <span v-for="count in stateCounts(group)"
                               :key="count.key"
                               :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
                               class="inline-flex items-center gap-1"
@@ -226,7 +217,7 @@ const ROW = 'grid grid-cols-[1.5rem_minmax(0,16rem)_12.5rem_minmax(0,1fr)_6.5rem
                             <span class="truncate font-mono text-xs text-highlighted">{{ row.source.name }}</span>
                         </span>
                         <span class="flex gap-2.5 text-xs tabular-nums">
-                            <span v-for="count in dayCounts(row)"
+                            <span v-for="count in stateCounts(row)"
                                   :key="count.key"
                                   :title="`${count.value} ${count.value === 1 ? 'day' : 'days'} ${count.label}`"
                                   class="inline-flex items-center gap-1"
