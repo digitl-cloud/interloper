@@ -80,8 +80,7 @@ il.TimePartitionWindow.lookback(now, lookback=3, offset=1, granularity=il.TimeGr
 ```
 
 `offset` is how many partitions back from the current one the window ends; `lookback` is how
-many it spans. Pass `start=` to clamp to an asset's first partition; the result is `None` when
-nothing remains. [Cron jobs](jobs.md) carry these two numbers as fields.
+many it spans. [Cron jobs](jobs.md) carry these two numbers as fields.
 
 ## Scheduled backfills
 
@@ -89,8 +88,9 @@ A cron job's firing is a backfill over its trailing window, the same as one queu
 run per partition, dispatched newest first, with at most the job's `concurrency` of them in flight
 at once. A retry waiting out its delay keeps its partition's slot.
 
-## Bounded history
+## History start
 
-`TimePartitionConfig(start=...)` marks the first partition an asset has data for. A window
-reaching further back is rejected with `PartitionError` rather than fetching empty data, so a
-backfill loop should start at the asset's `start`.
+A source's `start` (its form's *History start*) is the first day its partitions are owed, and
+each asset can override it (see [Partitioning](partitioning.md#history-start)). Coverage reports
+every missing partition since, and offers them as backfill ranges; a backfill of an earlier
+range still runs.

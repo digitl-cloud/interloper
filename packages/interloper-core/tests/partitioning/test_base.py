@@ -98,10 +98,10 @@ class TestPartitionConfig:
         assert [partition.key for partition in window] == ["us", "apac"]
 
     def test_definition_round_trips_through_json_like_values(self):
-        config = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 1))
+        config = TimePartitionConfig(column="date", allow_window=True)
         definition = config.to_definition()
         assert definition["kind"] == "time"
-        loosened = {**definition, "granularity": "day", "start": "2026-01-01"}
+        loosened = {**definition, "granularity": "day"}
         assert PartitionConfig.from_definition(loosened) == config
 
     def test_definition_of_the_list_kind_round_trips(self):
@@ -132,4 +132,4 @@ def test_an_unknown_field_in_a_definition_is_a_config_error():
 def test_a_missing_field_in_a_definition_is_not_reported_as_undeclared():
     """A definition lacking a required field fails on that field, not as an undeclared one."""
     with pytest.raises(TypeError, match=r"column"):
-        PartitionConfig.from_definition({"kind": "time", "start": "2026-01-01"})
+        PartitionConfig.from_definition({"kind": "time", "granularity": "day"})

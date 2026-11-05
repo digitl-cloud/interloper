@@ -751,10 +751,6 @@ class FakeAssetDaily(il.Asset):
     partitioning = TimePartitionConfig(column="date", allow_window=True)
 
 
-class FakeAssetBounded(il.Asset):
-    partitioning = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 10))
-
-
 class TestWindowValidation:
     """The asset defers to its partitioning's check; an unpartitioned asset ignores the window."""
 
@@ -770,8 +766,9 @@ class TestWindowValidation:
             FakeAssetDaily()._check_window(None)
 
     def test_the_message_names_the_asset_and_the_predicate(self):
-        with pytest.raises(PartitionError, match="Asset 'fake_asset_bounded' has no data before 2026-01-10"):
-            FakeAssetBounded()._check_window(TimePartition(dt.date(2026, 1, 9)).window)
+        message = "Asset 'fake_asset_daily' is partitioned by day, but the run was given a month window"
+        with pytest.raises(PartitionError, match=message):
+            FakeAssetDaily()._check_window(TimePartition(dt.date(2026, 1, 1), il.TimeGranularity.MONTH).window)
 
     def test_a_list_asset_accepts_a_declared_partition(self):
         FakeAssetRegional()._check_window(ListPartition("eu").window)

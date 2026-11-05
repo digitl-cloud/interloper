@@ -13,6 +13,7 @@
  *   - cron (expression input with schedule presets and a human-readable rendering)
  *   - timezone (searchable IANA timezone select, defaulting to the user's profile timezone)
  *   - object (default for a nested model: its own fields, behind a switch when optional)
+ *   - date (default for a `date`-formatted string: a date picker, cleared to null)
  *
  * Supports `x-oauth` at the schema root for OAuth sign-in:
  *   - UTabs toggle between "Sign in" and "Manual" modes
@@ -42,6 +43,7 @@ interface FetchMeta {
 
 interface JsonSchemaProperty {
     type?: string
+    format?: string
     title?: string
     description?: string
     default?: unknown
@@ -443,6 +445,7 @@ function resolveWidget(prop: JsonSchemaProperty): string {
     if (prop['x-widget']) return prop['x-widget']
     if (prop['x-options'] || prop['x-options-from'] || prop.enum) return 'select'
     if (prop.type === 'object' && prop.properties) return 'object'
+    if (prop.format === 'date') return 'date'
     switch (prop.type) {
         case 'boolean': return 'switch'
         case 'integer':
@@ -843,6 +846,13 @@ defineExpose({ setErrors })
                                             nested />
                             </div>
                         </div>
+
+                        <!-- Date: an empty picker clears the value -->
+                        <UInput v-else-if="field.widget === 'date'"
+                                :model-value="data[field.key] ?? ''"
+                                type="date"
+                                class="w-full"
+                                @update:model-value="(v: string | number) => data[field.key] = v || null" />
 
                         <!-- JSON / code -->
                         <UTextarea v-else-if="field.widget === 'json'"

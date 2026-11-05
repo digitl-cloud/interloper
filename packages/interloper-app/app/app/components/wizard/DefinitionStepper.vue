@@ -444,7 +444,7 @@ const submitLabel = computed(() => {
     return isEditing.value ? `Save ${props.noun}` : `Create ${props.noun}`
 })
 
-defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, next: handleNext, prev: prevStep })
+defineExpose({ canProceed, hasPrev, isLastStep, submitting, submitLabel, title, definition, next: handleNext, prev: prevStep })
 </script>
 
 <template>

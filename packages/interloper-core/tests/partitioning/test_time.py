@@ -149,18 +149,6 @@ class TestTimePartitionConfig:
     def test_defaults_to_daily(self) -> None:
         assert TimePartitionConfig(column="date").granularity is TimeGranularity.DAY
 
-    def test_start_is_normalized_to_a_period_start(self) -> None:
-        # At daily granularity a date is already a period start; the
-        # normalization only shifts the value at coarser granularities.
-        assert TimePartitionConfig(column="date", start=dt.date(2026, 1, 15)).start == dt.date(2026, 1, 15)
-
-    def test_start_accepts_a_coercible_value(self) -> None:
-        config = TimePartitionConfig(column="date", start="2026-01-15")  # ty: ignore[invalid-argument-type]
-        assert config.start == dt.date(2026, 1, 15)
-
-    def test_start_defaults_to_none(self) -> None:
-        assert TimePartitionConfig(column="date").start is None
-
     def test_granularity_name_is_coerced(self) -> None:
         config = TimePartitionConfig(column="date", granularity="month")  # ty: ignore[invalid-argument-type]
         assert config.granularity is TimeGranularity.MONTH
@@ -173,12 +161,6 @@ class TestTimePartitionConfigContract:
     def test_check_rejects_another_granularity(self) -> None:
         with pytest.raises(PartitionError, match="partitioned by day, but the run was given a month window"):
             TimePartitionConfig(column="date").check(TimePartition(dt.date(2026, 1, 1), TimeGranularity.MONTH).window)
-
-    def test_check_rejects_a_window_before_the_start(self) -> None:
-        config = TimePartitionConfig(column="date", allow_window=True, start=dt.date(2026, 1, 10))
-        with pytest.raises(PartitionError, match="no data before 2026-01-10"):
-            config.check(TimePartitionWindow(dt.date(2026, 1, 5), dt.date(2026, 1, 20)))
-        config.check(TimePartitionWindow(dt.date(2026, 1, 10), dt.date(2026, 1, 20)))
 
     def test_check_rejects_a_list_window(self) -> None:
         from interloper.partitioning import ListPartition
@@ -303,14 +285,6 @@ class TestTimePartitionWindowLookback:
         window = TimePartitionWindow.lookback(self.NOW, lookback=2, offset=3)
         assert window is not None
         assert (window.start, window.end) == (dt.date(2026, 8, 14), dt.date(2026, 8, 15))
-
-    def test_start_clamps_the_window(self) -> None:
-        window = TimePartitionWindow.lookback(self.NOW, lookback=30, start=dt.date(2026, 8, 10))
-        assert window is not None
-        assert (window.start, window.end) == (dt.date(2026, 8, 10), dt.date(2026, 8, 17))
-
-    def test_start_after_the_window_yields_nothing(self) -> None:
-        assert TimePartitionWindow.lookback(self.NOW, lookback=30, start=dt.date(2027, 1, 1)) is None
 
     def test_counts_partitions_not_days(self) -> None:
         window = TimePartitionWindow.lookback(self.NOW, lookback=3, granularity=TimeGranularity.MONTH)

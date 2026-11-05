@@ -340,8 +340,7 @@ class TimePartitionWindow(PartitionWindow):
         lookback: int,
         offset: int = 1,
         granularity: TimeGranularity = TimeGranularity.DAY,
-        start: dt.date | None = None,
-    ) -> TimePartitionWindow | None:
+    ) -> TimePartitionWindow:
         """Build the trailing window a scheduled workload should cover.
 
         The window is counted in partitions, never in days: *offset* is how many partitions back
@@ -360,10 +359,9 @@ class TimePartitionWindow(PartitionWindow):
             lookback: How many partitions the window spans (at least 1).
             offset: How many partitions back from the current one the window ends.
             granularity: The period one partition covers.
-            start: Optional lower bound (an asset's earliest partition) to clamp the window to.
 
         Returns:
-            The window, or ``None`` if clamping to *start* leaves it empty.
+            The window.
 
         Raises:
             ValueError: If *lookback* is below 1, or *offset* is negative.
@@ -375,13 +373,6 @@ class TimePartitionWindow(PartitionWindow):
 
         end = granularity.advance(now, -offset)
         first = granularity.advance(end, -(lookback - 1))
-
-        if start is not None:
-            bound = granularity.truncate(start)
-            if end < bound:
-                return None
-            first = max(first, bound)
-
         return cls(first, end, granularity)
 
 
@@ -389,22 +380,20 @@ class TimePartitionWindow(PartitionWindow):
 class TimePartitionConfig(PartitionConfig):
     """Partitioning by time periods of one granularity.
 
+    How far back an organisation wants the partitions is not the asset's to say: it is the
+    ``start`` of each source, and of each asset that overrides it.
+
     Attributes:
         granularity: The period one partition covers.
-        start: Optional lower bound. Windows reaching before it are rejected, and trailing
-            windows built against this asset are clamped to it.
     """
 
     kind: ClassVar[str] = "time"
 
     granularity: TimeGranularity = TimeGranularity.DAY
-    start: dt.date | None = None
 
     def __post_init__(self) -> None:
-        """Coerce what a definition round trip loosens: the granularity name and the start."""
+        """Coerce what a definition round trip loosens: the granularity name."""
         object.__setattr__(self, "granularity", TimeGranularity(self.granularity))
-        if self.start is not None:
-            object.__setattr__(self, "start", self.granularity.truncate(self.start))
 
     def __str__(self) -> str:
         """Describe the partitioning, as an error message names it.
@@ -415,24 +404,19 @@ class TimePartitionConfig(PartitionConfig):
         return f"partitioned by {self.granularity.value}"
 
     def _check(self, window: PartitionWindow) -> None:
-        """Require a time window of this granularity that does not reach before ``start``.
+        """Require a time window of this granularity.
 
         Args:
             window: The run's window.
 
         Raises:
-            PartitionError: If the window is not a time window, has another granularity, or
-                starts before ``start``.
+            PartitionError: If the window is not a time window, or has another granularity.
         """
         if not isinstance(window, TimePartitionWindow):
             raise PartitionError(f"expects a time window, but the run was given a {type(window).__name__}")
         if window.granularity is not self.granularity:
             raise PartitionError(
                 f"is partitioned by {self.granularity.value}, but the run was given a {window.granularity.value} window"
-            )
-        if self.start is not None and window.start < self.start:
-            raise PartitionError(
-                f"has no data before {self.start.isoformat()}, but the run reaches back to {window.start.isoformat()}"
             )
 
     def partition(self, key: str) -> TimePartition:

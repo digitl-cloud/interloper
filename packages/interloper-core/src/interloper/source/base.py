@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import inspect
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -111,6 +112,12 @@ class Source(Component, Workload):
         title="Retry",
         description="Default attempt budget for this source's assets",
         json_schema_extra={"x-section": "Operation"},
+    )
+    start: dt.date | None = Field(
+        default=None,
+        title="History start",
+        description="The first day this source's partitions are expected; unset, they are from the first run",
+        json_schema_extra={"x-section": "Partitioning"},
     )
     enabled: bool = Field(default=True, description="Whether this source's assets execute")
 

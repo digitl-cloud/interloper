@@ -37,7 +37,22 @@ il.DAG(source).materialize(il.TimePartition(dt.date(2026, 1, 15)))
 | `column` | required | The partition column. |
 | `granularity` | `DAY` | The period one partition covers. |
 | `allow_window` | `False` | Whether one run may cover several partitions. |
-| `start` | `None` | First partition that exists. Earlier runs are rejected; windows are clamped to it. |
+
+### History start
+
+How far back an organisation wants the partitions is not the asset's to declare: it differs per
+connected account. It is the `start` setting of a source (the form's *History start*), a date its
+assets read until one overrides it, like `enabled` and `retry`:
+
+```python
+shop = ShopSource(start=dt.date(2026, 1, 1), assets={"refunds": {"start": "2026-03-01"}})
+shop.orders.start    # 2026-01-01, the source's
+shop.refunds.start   # 2026-03-01, its own
+```
+
+Coverage owes every partition from the history start: a gap since is missing, and the ranges it
+offers for a backfill begin there. Unset, an asset owes from the first partition it attempted.
+The start says what is owed, never what may run: a run of an earlier day is not refused.
 
 ## Granularity
 
@@ -92,9 +107,9 @@ Both bounds of a window are inclusive; a window ending before it starts raises `
 Every entry point (`asset.run`, `asset.materialize`, `dag.materialize`, `runner.run`) accepts a
 bare partition as the window of one.
 
-`TimePartitionWindow.lookback(now, lookback, offset, granularity, start)` builds the trailing
+`TimePartitionWindow.lookback(now, lookback, offset, granularity)` builds the trailing
 window a schedule should cover: `offset` partitions back from the current one, `lookback`
-partitions long, clamped to `start`, or `None` when clamping leaves nothing. `now` may be an
+partitions long. `now` may be an
 aware datetime in the caller's zone; day, month and year windows then follow that zone's
 calendar, while hour windows are always UTC because hour keys are UTC labels.
 
@@ -128,9 +143,8 @@ month's latest state. A backfill observes once, in the run of its newest partiti
 A snapshot may feed views, and another snapshot of the same granularity, which reads its
 upstream's observation; an asset partitioned on the run's window cannot read one. Coverage owes
 a snapshot only the periods a run observed in, and a past period without a success is missed,
-which no backfill can recover. A snapshot is a time partitioning, so it takes a `start` too:
-it bounds no window, since a snapshot ignores its run's, but coverage then owes every period
-since, and one that ended with no observation at all is missed as well.
+which no backfill can recover. Once a history start is set, coverage owes a snapshot every
+period since too, and one that ended with no observation at all is missed as well.
 
 ## List partitioning
 
@@ -185,8 +199,8 @@ not allow windows.
 ## Validation
 
 Before an asset executes, its partitioning checks the run's window: a partitioned asset with no
-window, a window of several partitions without `allow_window`, a window of another kind or
-granularity, or one reaching before `start` raise `PartitionError`, named after the asset. An
+window, a window of several partitions without `allow_window`, or a window of another kind or
+granularity raise `PartitionError`, named after the asset. An
 unpartitioned asset ignores any window. Runners run the same check for every enabled operation
 before starting, listing every failing one, so a run no asset can serve fails without executing
 anything.

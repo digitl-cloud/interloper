@@ -204,6 +204,22 @@ class TestEnabled:
         assert Component(org_id=_ORG, kind="job", key="cron_job", config={"enabled": None}).enabled
 
 
+class TestStart:
+    """An asset row's history start is its own, else its source's."""
+
+    def test_an_asset_reads_its_sources_start_until_it_sets_its_own(self):
+        source = Component(org_id=_ORG, kind="source", key="demo_source", config={"start": "2026-01-01"})
+        plain = Component(org_id=_ORG, kind="asset", key="a", parent_id=source.id, parent=source)
+        own = Component(
+            org_id=_ORG, kind="asset", key="b", parent_id=source.id, parent=source, config={"start": "2026-03-01"}
+        )
+
+        assert (plain.start, own.start) == (dt.date(2026, 1, 1), dt.date(2026, 3, 1))
+
+    def test_no_start_anywhere_is_none(self):
+        assert Component(org_id=_ORG, kind="asset", key="demo_asset").start is None
+
+
 class TestComponentRelation:
     """A relation row is keyed by ``(src_id, name, dst_id)``, no ``type``/``slot``."""
 

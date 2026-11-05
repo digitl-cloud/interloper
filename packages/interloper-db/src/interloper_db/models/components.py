@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, ClassVar, Optional
 from uuid import UUID, uuid4
 
@@ -271,6 +271,23 @@ class Component(SQLModel, table=True):
             job declares none, which leaves the instance default to apply.
         """
         return (self.config or {}).get("timeout") if self.kind == "job" else None
+
+    @property
+    def start(self) -> date | None:
+        """The first day the row's partitions are owed: its own ``start``, else its source's.
+
+        An asset reads its source's while it leaves its own unset, as the
+        framework's inherited settings do. Reads the plain ``config`` column,
+        and the parent the store's listings load alongside.
+
+        Returns:
+            The day, or ``None`` when neither sets one, so the partitions are
+            owed from the first one attempted.
+        """
+        own = (self.config or {}).get("start")
+        if not own and self.parent_id is not None and self.parent is not None:
+            own = (self.parent.config or {}).get("start")
+        return date.fromisoformat(own) if own else None
 
     @property
     def identity(self) -> il.ComponentIdentity:

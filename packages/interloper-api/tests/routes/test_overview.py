@@ -91,9 +91,9 @@ class Warehouse(il.Source):
 
 @il.source
 class Launch(il.Source):
-    """A test source whose daily asset declares where its partitions start."""
+    """A test source with one daily asset, its history started on the 8th."""
 
-    @il.asset(schema=Order, partitioning=il.TimePartitionConfig(column="date", start=dt.date(2026, 8, 8)))
+    @il.asset(schema=Order, partitioning=il.TimePartitionConfig(column="date"))
     def signups(self) -> list[dict]:
         return []
 
@@ -104,20 +104,6 @@ class Clicks(il.Source):
 
     @il.asset(schema=Order, partitioning=il.TimePartitionConfig(column="date", granularity=il.TimeGranularity.HOUR))
     def clicks(self) -> list[dict]:
-        return []
-
-
-@il.source
-class Stream(il.Source):
-    """A test source whose hourly asset declares a start in the middle of a day."""
-
-    @il.asset(
-        schema=Order,
-        partitioning=il.TimePartitionConfig(
-            column="date", granularity=il.TimeGranularity.HOUR, start=dt.datetime(2026, 8, 12, 6)
-        ),
-    )
-    def events(self) -> list[dict]:
         return []
 
 
@@ -178,7 +164,7 @@ def store(engine: Engine) -> Store:
     Returns:
         The store, with an identity cipher.
     """
-    catalog = il.Catalog.from_assets([Shop, Warehouse, Launch, Clicks, Stream, Ledger, Annual, visits, ShopConnection])
+    catalog = il.Catalog.from_assets([Shop, Warehouse, Launch, Clicks, Ledger, Annual, visits, ShopConnection])
     return Store(catalog=catalog, encrypt=lambda b: b, decrypt=lambda b: b)
 
 
@@ -1053,10 +1039,12 @@ class TestCoverage:
 
         assert self._counts(body) == [("2026-08-01", 1, 0, 0), ("2026-08-02", 1, 0, 0), ("2026-08-03", 1, 1, 0)]
 
-    def test_a_scheduled_asset_with_a_declared_start_owes_every_day_from_it(
+    def test_a_scheduled_asset_owes_every_day_from_its_sources_history_start(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
-        source = store.components.create(member.org_id, kind="source", key=Launch.key, name="launch")
+        source = store.components.create(
+            member.org_id, kind="source", key=Launch.key, name="launch", config={"start": "2026-08-08"}
+        )
         _job(store, member.org_id, "daily", targets=[source.children[0].id])
 
         body = self._coverage(client, "2026-08-01", "2026-08-13")
@@ -1067,7 +1055,9 @@ class TestCoverage:
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         shop = store.components.create(member.org_id, kind="source", key=Shop.key, name="shop")
-        launch = store.components.create(member.org_id, kind="source", key=Launch.key, name="launch")
+        launch = store.components.create(
+            member.org_id, kind="source", key=Launch.key, name="launch", config={"start": "2026-08-08"}
+        )
         _job(store, member.org_id, "off", enabled=False, targets=[shop.id, launch.id])
         self._partition_run(store, member, shop, shop.children[0], "2026-08-05", "success")
 
@@ -1207,17 +1197,6 @@ class TestCoverage:
         body = self._coverage(client, "2026-08-12", "2026-08-13")
 
         assert self._counts(body) == [("2026-08-12", 24, 1, 0), ("2026-08-13", 9, 0, 0)]
-
-    def test_an_hourly_asset_owes_only_the_hours_from_its_declared_start(
-        self, client: TestClient, store: Store, member: SimpleNamespace
-    ):
-        source = store.components.create(member.org_id, kind="source", key=Stream.key, name="stream")
-        _job(store, member.org_id, "hourly", targets=[source.id], cron="0 * * * *")
-        self._partition_run(store, member, source, source.children[0], "2026-08-12T07", "success")
-
-        body = self._coverage(client, "2026-08-11", "2026-08-13")
-
-        assert self._counts(body) == [("2026-08-12", 18, 1, 0), ("2026-08-13", 9, 0, 0)]
 
     def test_a_partition_spanning_past_today_stops_at_today(
         self, client: TestClient, store: Store, member: SimpleNamespace
