@@ -1159,10 +1159,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#bounded-history" class="md-nav__link">
+  <a href="#history-start" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Bounded history
+        History start
       </span>
     </span>
   </a>
@@ -2551,16 +2551,16 @@ in partitions, and <code>TimePartitionWindow.lookback</code> computes it:</p>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">il</span><span class="o">.</span><span class="n">TimePartitionWindow</span><span class="o">.</span><span class="n">lookback</span><span class="p">(</span><span class="n">now</span><span class="p">,</span> <span class="n">lookback</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">granularity</span><span class="o">=</span><span class="n">il</span><span class="o">.</span><span class="n">TimeGranularity</span><span class="o">.</span><span class="n">MONTH</span><span class="p">)</span>
 </span></code></pre></div>
 <p><code>offset</code> is how many partitions back from the current one the window ends; <code>lookback</code> is how
-many it spans. Pass <code>start=</code> to clamp to an asset's first partition; the result is <code>None</code> when
-nothing remains. <a href="../jobs/">Cron jobs</a> carry these two numbers as fields.</p>
+many it spans. <a href="../jobs/">Cron jobs</a> carry these two numbers as fields.</p>
 <h2 id="scheduled-backfills">Scheduled backfills<a class="headerlink" href="#scheduled-backfills" title="Permanent link">&para;</a></h2>
 <p>A cron job's firing is a backfill over its trailing window, the same as one queued by hand: one
 run per partition, dispatched newest first, with at most the job's <code>concurrency</code> of them in flight
 at once. A retry waiting out its delay keeps its partition's slot.</p>
-<h2 id="bounded-history">Bounded history<a class="headerlink" href="#bounded-history" title="Permanent link">&para;</a></h2>
-<p><code>TimePartitionConfig(start=...)</code> marks the first partition an asset has data for. A window
-reaching further back is rejected with <code>PartitionError</code> rather than fetching empty data, so a
-backfill loop should start at the asset's <code>start</code>.</p>
+<h2 id="history-start">History start<a class="headerlink" href="#history-start" title="Permanent link">&para;</a></h2>
+<p>A source's <code>start</code> (its form's <em>History start</em>) is the first day its partitions are owed, and
+each asset can override it (see <a href="../partitioning/#history-start">Partitioning</a>). Coverage reports
+every missing partition since, and offers them as backfill ranges; a backfill of an earlier
+range still runs.</p>
 
 
 
