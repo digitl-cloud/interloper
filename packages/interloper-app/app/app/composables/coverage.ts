@@ -40,14 +40,21 @@ export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5
     return ratio >= 0.6 ? 4 : 3
 }
 
-/** A day's cell title: what its sources delivered, missed snapshots named but never counted among its partitions. */
-export function describeDay(date: string, day: DayAggregate | undefined, separator: string): string {
-    if (!day) return `${date}${separator}no partitions`
-    const total = partitionCount(day)
-    const parts = total ? [`${day.successful}/${total} successful`] : []
-    if (day.failed) parts.push(`${day.failed} failed`)
-    if (day.missed) parts.push(`${day.missed} snapshot${day.missed === 1 ? '' : 's'} missed`)
-    return `${date}${separator}${parts.join(' · ')}`
+export type PartitionState = 'successful' | 'missing' | 'failed' | 'missed'
+
+/** How each partition state is drawn wherever it is counted: the day tallies and a day's breakdown. */
+export const PARTITION_STATES: { key: PartitionState, icon: string, color: string, label: string }[] = [
+    { key: 'successful', icon: 'i-lucide-circle-check', color: 'text-success', label: 'successful' },
+    { key: 'missing', icon: 'i-lucide-circle-dashed', color: 'text-warning', label: 'missing' },
+    { key: 'failed', icon: 'i-lucide-circle-alert', color: 'text-error', label: 'failed' },
+    { key: 'missed', icon: 'i-lucide-circle-slash', color: 'text-muted', label: 'missed' },
+]
+
+/** Counts by state, each drawn as its state is; missed only when there is one, since it is never among the partitions. */
+export function stateCounts(counts: Record<PartitionState, number>) {
+    return PARTITION_STATES
+        .map(state => ({ ...state, value: counts[state.key] }))
+        .filter(count => count.key !== 'missed' || count.value)
 }
 
 const DAY_MS = 86_400_000

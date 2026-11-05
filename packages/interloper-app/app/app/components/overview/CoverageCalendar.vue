@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import VChart from 'vue-echarts'
 import { HeatmapChart, ScatterChart } from 'echarts/charts'
-import { CalendarComponent, TooltipComponent, VisualMapComponent } from 'echarts/components'
+import { CalendarComponent, VisualMapComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { use } from 'echarts/core'
 import type { CoverageMonths } from '~/types/overview'
 
-use([CanvasRenderer, HeatmapChart, ScatterChart, CalendarComponent, TooltipComponent, VisualMapComponent])
+use([CanvasRenderer, HeatmapChart, ScatterChart, CalendarComponent, VisualMapComponent])
 
 const overviewStore = useOverviewStore()
 const { coverage, coverageMonths, coverageWindow, coverageLoading, coverageError } = storeToRefs(overviewStore)
@@ -85,15 +85,6 @@ const option = computed(() => {
         cursor.setUTCDate(cursor.getUTCDate() + 1)
     }
     return {
-        tooltip: {
-            backgroundColor: surface,
-            borderColor: line,
-            textStyle: { color: ink },
-            formatter: (params: any) => {
-                const date = params.data.value[0]
-                return describeDay(`<b>${date}</b>`, byDate.value.get(date), '<br/>')
-            },
-        },
         visualMap: {
             show: false,
             type: 'piecewise',
@@ -143,6 +134,27 @@ const chartHeight = computed(() => CALENDAR_TOP + 7 * cell.value + 2)
  * day-label gutter is mirrored on the right so the cells sit in the middle once the canvas is centred.
  */
 const chartWidth = computed(() => 2 * CALENDAR_LEFT + weeks.value * cell.value)
+
+const chart = ref<InstanceType<typeof VChart> | null>(null)
+
+/**
+ * The hovered cell, with the box the tooltip anchors to: ECharts paints cells on a canvas, so there is no element.
+ * It is kept after the pointer leaves, so the tooltip fades out with its content.
+ */
+const hovered = shallowRef<{ date: string, reference: { getBoundingClientRect: () => DOMRect } } | null>(null)
+const tooltipOpen = ref(false)
+
+function onMouseOver(params: any) {
+    const date = params?.data?.value?.[0]
+    const canvas = params?.event?.event?.target as HTMLElement | undefined
+    const center = chart.value?.convertToPixel({ seriesIndex: 0 }, date) as number[] | undefined
+    if (typeof date !== 'string' || !canvas || !center) return
+    const frame = canvas.getBoundingClientRect()
+    const half = cell.value / 2
+    const box = new DOMRect(frame.left + (center[0] ?? 0) - half, frame.top + (center[1] ?? 0) - half, cell.value, cell.value)
+    hovered.value = { date, reference: { getBoundingClientRect: () => box } }
+    tooltipOpen.value = true
+}
 
 function onClick(params: any) {
     const date = params?.data?.value?.[0]
@@ -207,13 +219,28 @@ watch(coverage, (value) => {
                     class="transition-opacity"
                     :class="switching ? 'opacity-50' : ''"
                     :style="{ minHeight: `${chartHeight}px` }" />
-            <VChart v-else-if="coverage"
-                    :option="option"
-                    class="mx-auto transition-opacity"
-                    :class="switching ? 'opacity-50' : ''"
-                    :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
-                    autoresize
-                    @click="onClick" />
+            <UTooltip v-else-if="coverage"
+                      :open="tooltipOpen"
+                      :reference="hovered?.reference"
+                      :delay-duration="0"
+                      :content="{ side: 'top', sideOffset: 6 }"
+                      :ui="{ content: 'h-auto py-1.5 pointer-events-none' }">
+                <VChart ref="chart"
+                        :option="option"
+                        class="mx-auto transition-opacity"
+                        :class="switching ? 'opacity-50' : ''"
+                        :style="{ height: `${chartHeight}px`, width: `${chartWidth}px` }"
+                        autoresize
+                        @click="onClick"
+                        @mouseover="onMouseOver"
+                        @mouseout="tooltipOpen = false"
+                        @globalout="tooltipOpen = false" />
+                <template #content>
+                    <OverviewCoverageDayBreakdown v-if="hovered"
+                                                  :date="hovered.date"
+                                                  :day="byDate.get(hovered.date)" />
+                </template>
+            </UTooltip>
             <div v-else-if="weeks"
                  class="mx-auto"
                  :style="{ height: `${chartHeight}px`, width: `${chartWidth}px`, padding: `${CALENDAR_TOP}px ${CALENDAR_LEFT}px 0` }">
