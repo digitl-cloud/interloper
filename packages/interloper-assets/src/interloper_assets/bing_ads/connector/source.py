@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import logging
 import tempfile
@@ -9,7 +10,7 @@ from interloper_pandas import DataFrameNormalizer
 
 from interloper_assets.bing_ads import constants
 from interloper_assets.bing_ads.connection import BingAdsConnection
-from interloper_assets.bing_ads.connector.schemas import AdsStats
+from interloper_assets.bing_ads.connector.schemas import Accounts, AdGroups, Ads, AdsStats, Campaigns
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,79 @@ def _ad_performance_report(connection: BingAdsConnection, account_id: str, date:
     return _download_report(connection, account_id, request)
 
 
+def _bulk_records(connection: BingAdsConnection, account_id: str, customer_id: str, entities: str) -> pd.DataFrame:
+    """Download the account's Bulk file of one entity type and return its records.
+
+    Used by the campaigns, ad groups and ads assets. The file is read as the
+    Bulk API writes it, every value as text: an id never passes through a
+    float. Its header is shared by every record type, so the columns the
+    downloaded records leave empty are dropped, and its file-level rows
+    (format version, account) are not records. Three serializations are read
+    here, since the conformer would misread them: booleans are ``True`` and
+    ``False``, days are month first (``11/05/2026``), and instants are month
+    first too, in UTC.
+
+    Args:
+        connection: The connection the file is downloaded with.
+        account_id: The account whose entities are downloaded.
+        customer_id: The account's parent customer, which the Bulk service requires.
+        entities: The Bulk ``DownloadEntity`` to download: ``Campaigns``, ``AdGroups`` or ``Ads``.
+
+    Returns:
+        One row per record, under the Bulk file's column names.
+    """
+    from bingads.v13.bulk import DownloadParameters
+
+    with tempfile.TemporaryDirectory() as result_dir:
+        download_parameters = DownloadParameters(
+            result_file_directory=result_dir,
+            result_file_name="entities.csv",
+            overwrite_result_file=True,
+            data_scope=["EntityData"],
+            download_entities=[entities],
+            file_type="Csv",
+            timeout_in_milliseconds=3600000,
+        )
+        try:
+            result_path = connection.bulk_service_manager(account_id, customer_id).download_file(download_parameters)
+        except Exception as error:
+            _translate_soap_fault(error)  # raises RuntimeError for a SOAP fault
+            raise
+        df = pd.read_csv(result_path, dtype=str, encoding="utf-8-sig")
+
+    df = df[~df["Type"].isin(constants.BULK_FILE_RECORDS)].dropna(axis="columns", how="all")
+    for column in df.columns:
+        values = df[column].dropna().str.lower()
+        if values.isin(["true", "false"]).all():
+            df[column] = df[column].str.lower().map({"true": True, "false": False})
+    for column in ("Start Date", "End Date"):
+        if column in df.columns:
+            df[column] = pd.to_datetime(df[column], format="%m/%d/%Y").dt.date
+    if "Modified Time" in df.columns:
+        df["Modified Time"] = pd.to_datetime(df["Modified Time"], format="mixed", utc=True)
+    return df.reset_index(drop=True)
+
+
+async def _bulk_snapshot(connection: BingAdsConnection, account_id: str, entities: str, date: dt.date) -> pd.DataFrame:
+    """Snapshot one entity type of the account, stamped with the snapshot's day.
+
+    Used by the campaigns, ad groups and ads assets. The blocking SDK download
+    runs in a thread, after the account's customer is resolved.
+
+    Args:
+        connection: The connection the file is downloaded with.
+        account_id: The account whose entities are downloaded.
+        entities: The Bulk ``DownloadEntity`` to download, see ``_bulk_records``.
+        date: The snapshot's day, stamped on every row as ``date``.
+
+    Returns:
+        One row per entity.
+    """
+    customer_id = await connection.customer_id(account_id)
+    records = await asyncio.to_thread(_bulk_records, connection, account_id, customer_id, entities)
+    return records.assign(date=date)
+
+
 # -- SOURCE --------------------------------------------------------------------
 @il.source(
     tags=["Advertising"],
@@ -170,7 +244,15 @@ def _ad_performance_report(connection: BingAdsConnection, account_id: str, date:
     normalizer=DataFrameNormalizer(snake_case_digits=True),
 )
 class BingAds(il.Source):
-    """Bing Ads (Microsoft Advertising) platform integration."""
+    """Bing Ads (Microsoft Advertising) platform integration.
+
+    The ad report comes from the Reporting service. The account comes from
+    Customer Management, without its business address and tax registration,
+    and the campaigns, ad groups and ads from the Bulk API, whose records
+    name each entity's parent (an ad group's campaign, an ad's ad group). The
+    Bulk columns are those of the bingads SDK version the connector pins
+    (13.0.29), so a column Bing added since is not collected yet.
+    """
 
     connection: BingAdsConnection
 
@@ -191,3 +273,25 @@ class BingAds(il.Source):
     def ads_stats(self, context: il.ExecutionContext) -> pd.DataFrame:
         """Ad performance report with impressions, clicks, conversions, and revenue metrics."""
         return _ad_performance_report(self.connection, self.account_id, context.partition_date)
+
+    @il.asset(schema=Accounts, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    async def accounts(self, context: il.ExecutionContext) -> list[dict[str, Any]]:
+        """The account with its name, currency, time zone, status and parent customer."""
+        account = await self.connection.account(self.account_id)
+        fields = {name: value for name, value in account.items() if name not in constants.ACCOUNT_EXCLUDED_FIELDS}
+        return [{**fields, "date": context.partition_date}]
+
+    @il.asset(schema=Campaigns, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    async def campaigns(self, context: il.ExecutionContext) -> pd.DataFrame:
+        """Campaigns with their type, status, budget, bid strategy and time zone."""
+        return await _bulk_snapshot(self.connection, self.account_id, "Campaigns", context.partition_date)
+
+    @il.asset(schema=AdGroups, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    async def ad_groups(self, context: il.ExecutionContext) -> pd.DataFrame:
+        """Ad groups with their campaign, status, schedule and bids."""
+        return await _bulk_snapshot(self.connection, self.account_id, "AdGroups", context.partition_date)
+
+    @il.asset(schema=Ads, partitioning=il.SnapshotPartitionConfig(column="date"), tags=["Entity"])
+    async def ads(self, context: il.ExecutionContext) -> pd.DataFrame:
+        """Ads of every type with their ad group, status, texts and landing pages."""
+        return await _bulk_snapshot(self.connection, self.account_id, "Ads", context.partition_date)
