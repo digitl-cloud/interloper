@@ -158,11 +158,11 @@ class OverviewResponse(BaseModel):
 class CoverageSource(BaseModel):
     """A calendar group, a source with its assets or a standalone asset, with its days.
 
-    The arrays run from :attr:`start` to the group's last expected day in the
-    window: index ``i`` is the day ``start + i``, and a day inside that run
-    with nothing expected is a zero in every array. ``missed`` counts the
-    snapshot observations that ended without a success, which are not
-    expected.
+    The arrays run from :attr:`start` to the group's last day in the window
+    with partitions: index ``i`` is the day ``start + i``, and a day inside
+    that run without any is a zero in every array. A day's partitions are its
+    ``successful``, ``failed`` and ``missing`` ones; ``missed`` counts the
+    snapshot periods that ended without a success, which are not among them.
     """
 
     id: UUID
@@ -170,14 +170,14 @@ class CoverageSource(BaseModel):
     name: str
     kind: Literal["source", "asset"]
     start: dt.date
-    expected: list[int]
-    covered: list[int]
+    successful: list[int]
     failed: list[int]
+    missing: list[int]
     missed: list[int]
     failed_run_ids: dict[int, UUID]
 
     @classmethod
-    def from_group(cls, group: insights.CoverageGroup) -> CoverageSource:
+    def from_group(cls, group: insights.GroupCoverage) -> CoverageSource:
         """Name a calendar group after its row, with its definition key, and attach its days.
 
         Args:
@@ -193,9 +193,9 @@ class CoverageSource(BaseModel):
             name=component.name or component.key,
             kind="source" if component.kind == "source" else "asset",
             start=days.start,
-            expected=days.expected,
-            covered=days.covered,
+            successful=days.successful,
             failed=days.failed,
+            missing=days.missing,
             missed=days.missed,
             failed_run_ids=days.failed_run_ids,
         )
@@ -271,7 +271,7 @@ def get_coverage(
         since: First day of the window.
         until: Last day of the window, inclusive.
         now: Reference instant, which decides which periods have closed and
-            how much of today is owed. A test seam: tests pin it; clients omit it.
+            how much of today counts. A test seam: tests pin it; clients omit it.
 
     Returns:
         The coverage calendar's data.

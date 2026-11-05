@@ -208,7 +208,7 @@ def _window(first: dt.date, last: dt.date) -> list[Any]:
     return [partition_keys_overlapping(col(Execution.partition_key), first, last)]
 
 
-class TestCoverageRows:
+class TestPartitionResults:
     """Per asset and time partition, from runs of any target."""
 
     def test_reads_the_keys_of_every_granularity_overlapping_the_window(self, store: Store) -> None:
@@ -217,12 +217,12 @@ class TestCoverageRows:
         for key in [*inside, "2026-06-30", "2026-06", "2025", "2026-08-01T00", "eu"]:
             _execution(_run(job, partition_key=key), asset, "success")
 
-        rows = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31)))
+        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 31)))
 
         assert sorted(row.partition_key for row in rows) == sorted(inside)
         assert all(row.asset_id == asset and row.succeeded for row in rows)
 
-    def test_runs_of_every_target_fold_into_one_row_per_asset_and_partition(self, store: Store) -> None:
+    def test_runs_of_every_target_fold_into_one_result_per_asset_and_partition(self, store: Store) -> None:
         asset = uuid4()
         by_job = _run(uuid4(), partition_key="2026-07-01")
         by_a_deleted_target = _run(None, partition_key="2026-07-01")
@@ -230,17 +230,17 @@ class TestCoverageRows:
         _execution(_run(asset, partition_key="2026-07-01"), asset, "success")
         _execution(by_a_deleted_target, asset, "failed")
 
-        [row] = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
+        [row] = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1)))
 
         assert (row.asset_id, row.partition_key, row.succeeded, row.failed) == (asset, "2026-07-01", True, True)
         assert row.failed_run_id == max(by_job, by_a_deleted_target)
 
-    def test_only_a_failed_execution_marks_the_row_failed(self, store: Store) -> None:
+    def test_only_a_failed_execution_marks_the_result_failed(self, store: Store) -> None:
         job, asset = uuid4(), uuid4()
         for key, status in (("2026-07-01", "failed"), ("2026-07-02", "running"), ("2026-07-03", "canceled")):
             _execution(_run(job, partition_key=key), asset, status)
 
-        rows = store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
+        rows = store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 3)))
 
         assert {row.partition_key: (row.succeeded, row.failed) for row in rows} == {
             "2026-07-01": (False, True),
@@ -253,7 +253,7 @@ class TestCoverageRows:
         _execution(_run(uuid4()), asset, "success")
         _execution(_run(uuid4(), partition_key="2026-07-01", org_id=uuid4()), asset, "success")
 
-        assert store.insights._coverage_rows(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1))) == []
+        assert store.insights._partition_results(_ORG, _window(dt.date(2026, 7, 1), dt.date(2026, 7, 1))) == []
 
 
 class TestAttemptedSpans:
@@ -270,8 +270,8 @@ class TestAttemptedSpans:
 
         spans = store.insights._attempted_spans(_ORG)
 
-        assert spans[monthly] == (dt.date(2025, 11, 1), dt.date(2026, 3, 31))
-        assert spans[daily] == (dt.date(2026, 6, 30), dt.date(2026, 7, 2))
+        assert (spans[monthly].first_day, spans[monthly].last_day) == (dt.date(2025, 11, 1), dt.date(2026, 3, 31))
+        assert (spans[daily].first_day, spans[daily].last_day) == (dt.date(2026, 6, 30), dt.date(2026, 7, 2))
 
     def test_an_asset_never_attempted_or_with_no_time_key_has_none(self, store: Store) -> None:
         source = store.components.create(_ORG, kind="source", key="demo_source")
@@ -285,7 +285,7 @@ class TestAttemptedSpans:
 class TestCoverageByKey:
     """A job's target assets over a key range, any target's runs counting."""
 
-    def test_every_target_asset_reports_its_covered_and_failed_keys(self, store: Store) -> None:
+    def test_every_target_asset_reports_its_successful_failed_and_missing_keys(self, store: Store) -> None:
         source = store.components.create(_ORG, kind="source", key="demo_source")
         job = store.components.create(_ORG, kind="job", key="cron_job", relations={"targets": [source.id]})
         assets = {child.key: child.id for child in source.children}
@@ -299,7 +299,11 @@ class TestCoverageByKey:
         assert coverage.keys == ["2026-07-01", "2026-07-02"]
         by_key = {asset.asset_key: asset for asset in coverage.assets}
         assert set(by_key) == set(assets)
-        assert (by_key["a"].covered, by_key["a"].failed) == ({"2026-07-01"}, {"2026-07-02"})
+        assert (by_key["a"].successful, by_key["a"].failed, by_key["a"].missing) == (
+            {"2026-07-01"},
+            {"2026-07-02"},
+            frozenset(),
+        )
 
     def test_keys_of_different_granularities_are_rejected(self, store: Store) -> None:
         job = store.components.create(_ORG, kind="job", key="cron_job")
@@ -320,9 +324,9 @@ class TestCoverageByKey:
         coverage = store.insights.coverage_by_key(_ORG, job.id, start_key="2026-07-01", end_key="2026-07-03", now=now)
 
         [asset] = coverage.assets
-        assert (asset.expected, asset.covered, asset.failed, asset.missed) == (
+        assert (asset.successful, asset.failed, asset.missing, asset.missed) == (
             {"2026-07-03"},
-            {"2026-07-03"},
+            frozenset(),
             frozenset(),
             {"2026-07-01"},
         )

@@ -898,28 +898,30 @@ class TestCoverage:
         return client.get("/overview/coverage", params={"since": since, "until": until, "now": NOW.isoformat()}).json()
 
     def _days(self, body: dict[str, Any]) -> list[dict[str, Any]]:
-        """Unroll each source's arrays into its days with anything expected.
+        """Unroll each source's arrays into its days with partitions.
 
         Args:
             body: The coverage response body.
 
         Returns:
-            One entry per source and day with ``expected > 0``, by source in
-            response order then date, carrying the source id, the date, the
-            counts and the day's failed run id or ``None``.
+            One entry per source and day with a successful, failed or missing
+            partition, by source in response order then date, carrying the
+            source id, the date, the counts and their total, and the day's
+            failed run id or ``None``.
         """
         days = []
         for source in body["sources"]:
             start = dt.date.fromisoformat(source["start"])
-            for i, expected in enumerate(source["expected"]):
-                if not expected:
+            for i, successful in enumerate(source["successful"]):
+                partitions = successful + source["failed"][i] + source["missing"][i]
+                if not partitions:
                     continue
                 days.append(
                     {
                         "source_id": source["id"],
                         "date": (start + dt.timedelta(days=i)).isoformat(),
-                        "expected": expected,
-                        "covered": source["covered"][i],
+                        "partitions": partitions,
+                        "successful": successful,
                         "failed": source["failed"][i],
                         "failed_run_id": source["failed_run_ids"].get(str(i)),
                     }
@@ -927,16 +929,16 @@ class TestCoverage:
         return days
 
     def _counts(self, body: dict[str, Any]) -> list[tuple[str, int, int, int]]:
-        """Reduce a response's expected days to their date and counts.
+        """Reduce a response's days with partitions to their date and counts.
 
         Args:
             body: The coverage response body.
 
         Returns:
-            One ``(date, expected, covered, failed)`` tuple per day with
-            anything expected, by source then date.
+            One ``(date, partitions, successful, failed)`` tuple per day with
+            partitions, by source then date.
         """
-        return [(day["date"], day["expected"], day["covered"], day["failed"]) for day in self._days(body)]
+        return [(day["date"], day["partitions"], day["successful"], day["failed"]) for day in self._days(body)]
 
     def test_a_scheduled_source_runs_from_its_first_attempt_to_yesterday(
         self, client: TestClient, store: Store, member: SimpleNamespace
@@ -959,9 +961,9 @@ class TestCoverage:
                     "name": "shop",
                     "kind": "source",
                     "start": "2026-08-10",
-                    "expected": [1, 1, 1],
-                    "covered": [1, 0, 0],
+                    "successful": [1, 0, 0],
                     "failed": [0, 1, 0],
+                    "missing": [0, 0, 1],
                     "missed": [0, 0, 0],
                     "failed_run_ids": {"1": str(failed.id)},
                 }
@@ -986,9 +988,9 @@ class TestCoverage:
                 "name": "shop",
                 "kind": "source",
                 "start": "2026-08-12",
-                "expected": [1],
-                "covered": [1],
+                "successful": [1],
                 "failed": [0],
+                "missing": [0],
                 "missed": [0],
                 "failed_run_ids": {},
             }
@@ -1011,7 +1013,7 @@ class TestCoverage:
             ("2026-08-08", 1, 0, 1),
         ]
 
-    def test_a_day_nothing_is_expected_inside_a_source_span_is_a_zero(
+    def test_a_day_without_partitions_inside_a_source_span_is_a_zero(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         source = store.components.create(member.org_id, kind="source", key=Warehouse.key, name="warehouse")
@@ -1024,7 +1026,7 @@ class TestCoverage:
 
         assert (row["key"], row["name"]) == (Warehouse.key, "warehouse")
         assert row["start"] == "2026-08-02"
-        assert (row["expected"], row["covered"], row["failed"]) == ([1, 0, 0, 1], [1, 0, 0, 0], [0, 0, 0, 1])
+        assert (row["successful"], row["failed"], row["missing"]) == ([1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0])
         assert row["failed_run_ids"] == {"3": str(failed.id)}
 
     def test_attempts_before_the_window_still_open_the_span(
@@ -1039,7 +1041,7 @@ class TestCoverage:
 
         assert self._counts(body) == [("2026-08-01", 1, 0, 0), ("2026-08-02", 1, 0, 0), ("2026-08-03", 1, 1, 0)]
 
-    def test_a_scheduled_asset_owes_every_day_from_its_sources_history_start(
+    def test_a_scheduled_asset_counts_every_day_from_its_sources_history_start(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         source = store.components.create(
@@ -1123,7 +1125,7 @@ class TestCoverage:
         body = self._coverage(client, "2026-08-12", "2026-08-12")
 
         [day] = self._days(body)
-        assert (day["expected"], day["covered"], day["failed"]) == (2, 1, 1)
+        assert (day["partitions"], day["successful"], day["failed"]) == (2, 1, 1)
         assert day["failed_run_id"] == str(run.id)
 
     def test_sources_list_by_name_each_with_its_days(self, client: TestClient, store: Store, member: SimpleNamespace):
@@ -1169,12 +1171,12 @@ class TestCoverage:
         days = {(day["source_id"], day["date"]): day for day in self._days(body)}
 
         hour_day = days[(str(clicks.id), "2026-08-12")]
-        assert (hour_day["expected"], hour_day["covered"], hour_day["failed"]) == (24, 1, 1)
-        assert days[(str(ledger.id), "2026-07-30")]["covered"] == 1
-        assert days[(str(ledger.id), "2026-07-31")]["covered"] == 1
+        assert (hour_day["partitions"], hour_day["successful"], hour_day["failed"]) == (24, 1, 1)
+        assert days[(str(ledger.id), "2026-07-30")]["successful"] == 1
+        assert days[(str(ledger.id), "2026-07-31")]["successful"] == 1
         assert (str(ledger.id), "2026-08-01") not in days
 
-    def test_an_hourly_asset_owes_only_the_hours_elapsed_today(
+    def test_an_hourly_asset_counts_only_the_hours_elapsed_today(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         source = store.components.create(member.org_id, kind="source", key=Clicks.key, name="clicks")
@@ -1187,7 +1189,7 @@ class TestCoverage:
 
         assert self._counts(body) == [("2026-08-13", 9, 2, 1)]
 
-    def test_a_scheduled_hourly_asset_owes_today_before_any_attempt_today(
+    def test_a_scheduled_hourly_asset_counts_today_before_any_attempt_today(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         source = store.components.create(member.org_id, kind="source", key=Clicks.key, name="clicks")
@@ -1209,7 +1211,7 @@ class TestCoverage:
 
         assert [day["date"] for day in self._days(body)] == [f"2026-08-{day:02d}" for day in range(1, 14)]
 
-    def test_a_yearly_key_covers_its_days_and_the_open_year_is_not_expected(
+    def test_a_yearly_key_is_successful_over_its_days_and_the_open_year_does_not_count(
         self, client: TestClient, store: Store, member: SimpleNamespace
     ):
         source = store.components.create(member.org_id, kind="source", key=Annual.key, name="annual")
@@ -1218,7 +1220,7 @@ class TestCoverage:
 
         body = self._coverage(client, "2025-12-30", "2026-01-02")
 
-        assert [(day["date"], day["covered"]) for day in self._days(body)] == [("2025-12-30", 1), ("2025-12-31", 1)]
+        assert [(day["date"], day["successful"]) for day in self._days(body)] == [("2025-12-30", 1), ("2025-12-31", 1)]
 
     def test_the_failed_run_kept_for_a_day_does_not_depend_on_row_order(
         self, client: TestClient, store: Store, member: SimpleNamespace

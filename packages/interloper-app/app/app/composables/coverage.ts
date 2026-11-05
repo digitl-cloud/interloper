@@ -2,16 +2,21 @@ import type { MaybeRefOrGetter } from 'vue'
 import type { Coverage, CoverageDay, CoverageSource } from '~/types/overview'
 
 export interface DayAggregate {
-    expected: number
-    covered: number
+    successful: number
     failed: number
+    missing: number
     missed: number
+}
+
+/** A day's partitions: its successful, failed and missing ones, never its missed snapshots. */
+export function partitionCount(day: DayAggregate): number {
+    return day.successful + day.failed + day.missing
 }
 
 /** Cell colours from Tailwind's status scales; the low states are their tints. */
 export const CELL = {
-    covered: { light: '#00bc7d', dark: '#00d492' },
-    coveredMissed: { light: '#009966', dark: '#00bc7d' },
+    successful: { light: '#00bc7d', dark: '#00d492' },
+    successfulMissed: { light: '#009966', dark: '#00bc7d' },
     partial: { light: '#ffb900', dark: '#ffb900' },
     partialLow: { light: '#fee685', dark: '#8d630e' },
     failed: { light: '#fb2c36', dark: '#ff6467' },
@@ -20,24 +25,26 @@ export const CELL = {
 }
 
 /** Status index order: a day's cell takes the colour at its `cellStatus`. */
-export const CELL_ORDER = ['empty', 'failedLow', 'failed', 'partialLow', 'partial', 'covered', 'coveredMissed'] as const
+export const CELL_ORDER = ['empty', 'failedLow', 'failed', 'partialLow', 'partial', 'successful', 'successfulMissed'] as const
 
 /**
  * What a day's sources delivered, as an index into `CELL_ORDER`. A day that only missed snapshots is neutral; a
- * covered day that also missed some takes the darker green, so the miss shows without reading as owed.
+ * successful day that also missed some takes the darker green, so the miss shows without counting among its partitions.
  */
 export function cellStatus(day: DayAggregate | undefined): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
-    if (!day || !day.expected) return 0
-    if (day.failed > 0) return day.failed / day.expected >= 0.5 ? 2 : 1
-    const ratio = day.covered / day.expected
+    const total = day ? partitionCount(day) : 0
+    if (!day || !total) return 0
+    if (day.failed > 0) return day.failed / total >= 0.5 ? 2 : 1
+    const ratio = day.successful / total
     if (ratio >= 1) return day.missed ? 6 : 5
     return ratio >= 0.6 ? 4 : 3
 }
 
-/** A day's cell title: what its sources delivered, missed snapshots named but never counted as owed. */
+/** A day's cell title: what its sources delivered, missed snapshots named but never counted among its partitions. */
 export function describeDay(date: string, day: DayAggregate | undefined, separator: string): string {
-    if (!day) return `${date}${separator}nothing expected`
-    const parts = day.expected ? [`${day.covered}/${day.expected} covered`] : []
+    if (!day) return `${date}${separator}no partitions`
+    const total = partitionCount(day)
+    const parts = total ? [`${day.successful}/${total} successful`] : []
     if (day.failed) parts.push(`${day.failed} failed`)
     if (day.missed) parts.push(`${day.missed} snapshot${day.missed === 1 ? '' : 's'} missed`)
     return `${date}${separator}${parts.join(' · ')}`
@@ -58,21 +65,19 @@ export function windowDates(coverage: Coverage): string[] {
     return dates
 }
 
-/** A source's day on one date, unrolled from its arrays; `null` when it neither owes nor missed anything then. */
+/** A source's day on one date, unrolled from its arrays; `null` when it has neither partitions nor misses then. */
 export function sourceDay(source: CoverageSource, date: string): CoverageDay | null {
     const i = Math.round((epochDay(date) - epochDay(source.start)) / DAY_MS)
-    const expected = source.expected[i] ?? 0
-    const missed = source.missed[i] ?? 0
-    if (expected <= 0 && missed <= 0) return null
-    return {
+    const day = {
         date,
         source_id: source.id,
-        expected,
-        covered: source.covered[i] ?? 0,
+        successful: source.successful[i] ?? 0,
         failed: source.failed[i] ?? 0,
-        missed,
+        missing: source.missing[i] ?? 0,
+        missed: source.missed[i] ?? 0,
         failed_run_id: source.failed_run_ids[String(i)] ?? null,
     }
+    return partitionCount(day) || day.missed ? day : null
 }
 
 /** Sum the days of the sources of the selected type per date, and phrase the window's summary. */
@@ -86,14 +91,17 @@ export function useCoverageCalendar(
         for (const source of toValue(coverage)?.sources ?? []) {
             if (filter !== 'all' && source.key !== filter) continue
             const start = epochDay(source.start)
-            source.expected.forEach((expected, i) => {
-                if (expected <= 0 && (source.missed[i] ?? 0) <= 0) return
+            source.successful.forEach((successful, i) => {
+                const failed = source.failed[i] ?? 0
+                const missing = source.missing[i] ?? 0
+                const missed = source.missed[i] ?? 0
+                if (!successful && !failed && !missing && !missed) return
                 const date = new Date(start + i * DAY_MS).toISOString().slice(0, 10)
-                const agg = map.get(date) ?? { expected: 0, covered: 0, failed: 0, missed: 0 }
-                agg.expected += expected
-                agg.covered += source.covered[i] ?? 0
-                agg.failed += source.failed[i] ?? 0
-                agg.missed += source.missed[i] ?? 0
+                const agg = map.get(date) ?? { successful: 0, failed: 0, missing: 0, missed: 0 }
+                agg.successful += successful
+                agg.failed += failed
+                agg.missing += missing
+                agg.missed += missed
                 map.set(date, agg)
             })
         }
@@ -101,19 +109,19 @@ export function useCoverageCalendar(
     })
 
     const summary = computed(() => {
-        let expected = 0
-        let covered = 0
-        let gaps = 0
+        let total = 0
+        let successful = 0
+        let missingDays = 0
         let failures = 0
         for (const day of byDate.value.values()) {
-            expected += day.expected
-            covered += day.covered
+            total += partitionCount(day)
+            successful += day.successful
             if (day.failed) failures++
-            else if (day.covered < day.expected) gaps++
+            else if (day.missing) missingDays++
         }
-        if (!expected) return 'Nothing expected in this window'
-        const pct = Math.round((100 * covered) / expected)
-        return `${pct}% of ${expected.toLocaleString()} partitions · ${gaps} days with gaps · ${failures} with failures`
+        if (!total) return 'No partitions in this window'
+        const pct = Math.round((100 * successful) / total)
+        return `${pct}% of ${total.toLocaleString()} partitions successful · ${missingDays} days with missing partitions · ${failures} with failures`
     })
 
     return { byDate, summary }
