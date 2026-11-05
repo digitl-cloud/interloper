@@ -1,9 +1,10 @@
 from functools import cached_property
+from typing import Any
 
 import interloper as il
 from pydantic_settings import SettingsConfigDict
 
-from interloper_assets.thetradedesk.constants import BASE_URL
+from interloper_assets.thetradedesk.constants import BASE_URL, GRAPHQL_PAGE_SIZE, GRAPHQL_URL
 
 
 @il.connection(
@@ -44,6 +45,51 @@ class TheTradeDeskConnection(il.Connection):
             }
             for p in response.json().get("Result", [])
         ]
+
+    async def nodes(self, query: str, variables: dict[str, Any], path: tuple[str, ...]) -> list[dict[str, Any]]:
+        """Run a paginated GraphQL query and return every node of the connection at *path*.
+
+        The query declares ``$first`` and ``$after`` and selects ``nodes`` and
+        ``pageInfo { hasNextPage endCursor }`` on the connection; each page
+        asks for the next cursor until the connection says there is none.
+        The Trade Desk answers a failed query with HTTP 200 and an
+        ``errors`` list, so the list is checked on every page.
+
+        Args:
+            query: The GraphQL document.
+            variables: The query's variables, without ``first`` and ``after``.
+            path: The fields leading from ``data`` to the connection, such as
+                ``("partner", "advertisers")``. A null object on the way (an
+                id the key cannot see) reads as no nodes.
+
+        Returns:
+            The nodes of every page, as the API returned them.
+
+        Raises:
+            RuntimeError: If the API answers with GraphQL errors.
+        """
+        nodes: list[dict[str, Any]] = []
+        after: str | None = None
+        while True:
+            response = await self.client.post(
+                GRAPHQL_URL,
+                json={"query": query, "variables": {**variables, "first": GRAPHQL_PAGE_SIZE, "after": after}},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if payload.get("errors"):
+                messages = "; ".join(error.get("message", str(error)) for error in payload["errors"])
+                raise RuntimeError(f"The Trade Desk GraphQL query failed: {messages}")
+            listing = payload.get("data")
+            for field in path:
+                listing = listing.get(field) if listing is not None else None
+            if listing is None:
+                return nodes
+            nodes.extend(listing.get("nodes") or [])
+            page = listing.get("pageInfo") or {}
+            if not page.get("hasNextPage"):
+                return nodes
+            after = page["endCursor"]
 
     async def check(self) -> bool:
         """Prove the credentials work by running the ``partners`` lookup.

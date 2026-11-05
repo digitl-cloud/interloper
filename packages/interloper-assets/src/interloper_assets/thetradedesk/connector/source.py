@@ -73,7 +73,43 @@ class TheTradeDeskNormalizer(DataFrameNormalizer):
         return df
 
 
+# GraphQL nodes nest their parent as an object (``campaign { id }``); one level
+# of flattening gives the parent's id its own column, ``campaign_id``.
+_ENTITY_NORMALIZER = DataFrameNormalizer(flatten_max_level=1)
+
+
 # -- HELPERS -------------------------------------------------------------------
+async def _advertiser_nodes(
+    connection: TheTradeDeskConnection, partner_id: str, query: str, field: str
+) -> list[_Record]:
+    """Run an advertiser-scoped GraphQL query for every advertiser of a partner.
+
+    Used by the ``campaigns`` and ``ad_groups`` assets: GraphQL lists both
+    under an advertiser, so the partner's advertisers are listed first and
+    each one's nodes are fetched concurrently.
+
+    Args:
+        connection: The connection to query through.
+        partner_id: The partner whose advertisers are walked.
+        query: A query taking ``$advertiserId``.
+        field: The advertiser's field the query pages through (``campaigns``, ``adGroups``).
+
+    Returns:
+        Every advertiser's nodes, as the API returned them.
+    """
+    advertisers = await connection.nodes(
+        constants.ADVERTISER_IDS_QUERY, {"partnerId": partner_id}, ("partner", "advertisers")
+    )
+    pages = await il.bounded_gather(
+        (
+            connection.nodes(query, {"advertiserId": advertiser["id"]}, ("advertiser", field))
+            for advertiser in advertisers
+        ),
+        limit=constants.ADVERTISER_CONCURRENCY,
+    )
+    return [node for page in pages for node in page]
+
+
 async def _create_report_schedule(
     connection: TheTradeDeskConnection, template_id: str, partner_id: str, date: dt.date
 ) -> str:
@@ -93,7 +129,7 @@ async def _create_report_schedule(
             "ReportNumericFormat": "International",
             "ReportScheduleName": f"interloper_{template_id}_{date.isoformat()}",
             "ReportTemplateId": template_id,
-            "TimeZone": "UTC",
+            "TimeZone": constants.REPORT_TIMEZONE,
         },
     )
     response.raise_for_status()
@@ -201,3 +237,38 @@ class TheTradeDesk(il.Source):
             partner_id=self.partner_id,
             date=context.partition_date,
         )
+
+    @il.asset(
+        schema=schemas.Advertisers,
+        partitioning=il.SnapshotPartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def advertisers(self, context: il.ExecutionContext) -> list[_Record]:
+        """The partner's advertisers with their currency, category, attribution windows and vetting status."""
+        rows = await self.connection.nodes(
+            constants.ADVERTISERS_QUERY, {"partnerId": self.partner_id}, ("partner", "advertisers")
+        )
+        return [{**row, "date": context.partition_date} for row in rows]
+
+    @il.asset(
+        schema=schemas.Campaigns,
+        partitioning=il.SnapshotPartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def campaigns(self, context: il.ExecutionContext) -> list[_Record]:
+        """The partner's campaigns with their advertiser, status, schedule (UTC instants), budget, pacing and goals."""
+        rows = await _advertiser_nodes(self.connection, self.partner_id, constants.CAMPAIGNS_QUERY, "campaigns")
+        return [{**row, "date": context.partition_date} for row in rows]
+
+    @il.asset(
+        schema=schemas.AdGroups,
+        partitioning=il.SnapshotPartitionConfig(column="date"),
+        tags=["Entity"],
+        normalizer=_ENTITY_NORMALIZER,
+    )
+    async def ad_groups(self, context: il.ExecutionContext) -> list[_Record]:
+        """The partner's ad groups with their campaign, status, channel and budget; template ad groups excluded."""
+        rows = await _advertiser_nodes(self.connection, self.partner_id, constants.AD_GROUPS_QUERY, "adGroups")
+        return [{**row, "date": context.partition_date} for row in rows]
