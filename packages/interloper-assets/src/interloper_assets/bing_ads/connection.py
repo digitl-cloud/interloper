@@ -9,9 +9,9 @@ import interloper as il
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
 
-# Microsoft Advertising OAuth + Customer Management SOAP endpoints. These are
-# used only by the ``accounts`` fetch provider, which talks raw SOAP over httpx2
-# (see below) instead of the ``bingads`` SDK.
+# Microsoft Advertising OAuth + Customer Management SOAP endpoints, which the
+# connection talks raw SOAP to over httpx2 instead of the ``bingads`` SDK (see
+# ``accounts`` below).
 _TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 _OAUTH_SCOPE = "https://ads.microsoft.com/msads.manage offline_access"
 _CUSTOMER_MANAGEMENT_URL = (
@@ -49,6 +49,25 @@ def _first_descendant(root: ET.Element, name: str) -> ET.Element | None:
         if _local_name(node.tag) == name:
             return node
     return None
+
+
+def _element_value(element: ET.Element) -> Any:
+    """Read one field of a SOAP entity: a leaf's text, or a nested array's records.
+
+    A field with child elements is an array of records, such as an account's
+    ``LinkedAgencies`` listing ``CustomerInfo`` records, read as one dict per
+    record. A nil field has no text and reads as ``None``.
+
+    Args:
+        element: The field's element.
+
+    Returns:
+        The text, or a list of ``{field: text}`` dicts.
+
+    """
+    if len(element) == 0:
+        return element.text
+    return [{_local_name(field.tag): field.text for field in record} for record in element]
 
 
 @il.connection(
@@ -120,12 +139,19 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
             oauth_tokens=oauth_tokens,
         )
 
-    def authorization_data(self, account_id: str) -> Any:
+    def authorization_data(self, account_id: str, customer_id: str | None = None) -> Any:
         """Return ``AuthorizationData`` for the Bing Ads SDK scoped to *account_id*.
 
-        The customer id is left unset on purpose: the Reporting service
-        authorizes on the account alone, so the parent customer is not needed
-        to submit or download a report.
+        The Reporting service authorizes on the account alone; the Bulk
+        service also needs the account's parent customer, which the SDK
+        otherwise sends as the string ``"None"``.
+
+        Args:
+            account_id: The account every call is made for.
+            customer_id: The account's parent customer, see ``customer_id``; None leaves it unset.
+
+        Returns:
+            The SDK's authorization data.
         """
         from bingads import AuthorizationData
 
@@ -134,6 +160,7 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
             authentication=self._authentication,
         )
         auth_data.account_id = account_id
+        auth_data.customer_id = customer_id
         return auth_data
 
     def reporting_service(self, account_id: str) -> Any:
@@ -156,6 +183,69 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
             working_directory=tempfile.mkdtemp(prefix="bingads-"),
         )
 
+    def bulk_service_manager(self, account_id: str, customer_id: str) -> Any:
+        """Return a BulkServiceManager for downloading the account's entities.
+
+        A fresh ``working_directory`` per manager, for the same reason as
+        ``reporting_service_manager``.
+
+        Args:
+            account_id: The account whose entities are downloaded.
+            customer_id: The account's parent customer, see ``customer_id``.
+
+        Returns:
+            The SDK's bulk service manager.
+        """
+        from bingads.v13.bulk import BulkServiceManager
+
+        return BulkServiceManager(
+            self.authorization_data(account_id, customer_id),
+            working_directory=tempfile.mkdtemp(prefix="bingads-"),
+        )
+
+    async def account(self, account_id: str) -> dict[str, Any]:
+        """Fetch one account as Customer Management's ``GetAccount`` returns it.
+
+        Args:
+            account_id: The account to fetch.
+
+        Returns:
+            The ``AdvertiserAccount``'s fields by their Bing names, see ``_element_value``.
+
+        Raises:
+            RuntimeError: If the response carries no account.
+        """
+        request = (
+            f'<GetAccountRequest xmlns="{_CUSTOMER_NS}"><AccountId>{int(account_id)}</AccountId></GetAccountRequest>'
+        )
+        async with httpx2.AsyncClient(timeout=30) as client:
+            access_token = await self._access_token(client)
+            response = await self._soap_call(client, access_token, "GetAccount", request)
+        account = _first_descendant(response, "Account")
+        if account is None:
+            raise RuntimeError(f"Bing Ads returned no account for {account_id}")
+        return {_local_name(field.tag): _element_value(field) for field in account}
+
+    async def customer_id(self, account_id: str) -> str:
+        """Resolve the customer an account belongs to, which the Bulk service requires.
+
+        The source names only the account, so its parent customer is read
+        from the account itself rather than configured beside it.
+
+        Args:
+            account_id: The account whose customer is resolved.
+
+        Returns:
+            The account's parent customer id.
+
+        Raises:
+            RuntimeError: If the account names no parent customer.
+        """
+        customer_id = (await self.account(account_id)).get("ParentCustomerId")
+        if not customer_id:
+            raise RuntimeError(f"Bing Ads account {account_id} names no parent customer")
+        return customer_id
+
     @il.fetch_field_provider
     async def accounts(self) -> list[dict[str, str]]:
         """Fetch the accounts this connection's token can access.
@@ -171,19 +261,7 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
 
         """
         async with httpx2.AsyncClient(timeout=30) as client:
-            token_response = await client.post(
-                _TOKEN_URL,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self.refresh_token,
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                    "scope": _OAUTH_SCOPE,
-                },
-            )
-            token_response.raise_for_status()
-            access_token = token_response.json()["access_token"]
-
+            access_token = await self._access_token(client)
             user = await self._soap_call(
                 client,
                 access_token,
@@ -216,6 +294,28 @@ class BingAdsConnection(il.RefreshTokenOAuthConnection):
             for account in accounts_root.iter()
             if _local_name(account.tag) == "AdvertiserAccount"
         ]
+
+    async def _access_token(self, client: httpx2.AsyncClient) -> str:
+        """Exchange the refresh token for an access token the SOAP calls carry.
+
+        Args:
+            client: The HTTP client the exchange is made with.
+
+        Returns:
+            The access token.
+        """
+        response = await client.post(
+            _TOKEN_URL,
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": self.refresh_token,
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "scope": _OAUTH_SCOPE,
+            },
+        )
+        response.raise_for_status()
+        return response.json()["access_token"]
 
     async def _soap_call(
         self,
